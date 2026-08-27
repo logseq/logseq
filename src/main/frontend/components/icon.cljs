@@ -65,12 +65,12 @@
           "hash"
           (entity/property? node-entity)
           "letter-p"
-          (entity/page? node-entity)
-          "file"
           (= asset-type "pdf")
           "book"
           (some? first-tag-icon)
           first-tag-icon
+          (entity/page? node-entity)
+          "file"
           :else
           "point-filled"))))
 

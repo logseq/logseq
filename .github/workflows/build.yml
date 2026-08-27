@@ -15,7 +15,7 @@ env:
   JAVA_VERSION: '21'
   # This is the latest node version we can run.
   NODE_VERSION: '24'
-  OCAML_VERSION: '5.4.0'
+  OCAML_VERSION: '5.1.1'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:

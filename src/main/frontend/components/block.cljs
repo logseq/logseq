@@ -18,6 +18,7 @@
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.block.selection :as block-selection]
+            [frontend.components.block.video :as block-video]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -38,6 +39,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.sci :as sci]
+            [frontend.extensions.video :as video]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
@@ -77,6 +79,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -198,6 +201,14 @@
           (fn []
             (on-dimensions (.-naturalWidth img) (.-naturalHeight img))))
     (set! (.-src img) url)))
+
+(defn measure-video! [url on-dimensions]
+  (let [video (js/document.createElement "video")]
+    (set! (.-preload video) "metadata")
+    (set! (.-onloadedmetadata video)
+          (fn []
+            (on-dimensions (.-videoWidth video) (.-videoHeight video))))
+    (set! (.-src video) url)))
 
 (defn- normalize-asset-align
   [asset-align]
@@ -457,6 +468,48 @@
          :m4a [:audio opts [:source {:src src :type "audio/mp4"}]]
          [:audio (assoc opts :src src)])))))
 
+(defn- asset-video-style
+  [metadata asset-width asset-height]
+  (let [width (or (:width metadata) asset-width)
+        height (or (:height metadata) asset-height)
+        max-width (min (- (util/get-width) 96) 560)
+        max-height 557]
+    (if (and (number? width) (number? height) (pos? width) (pos? height))
+      (let [width' (min width max-width)
+            height' (* width' (/ height width))
+            [width' height'] (if (> height' max-height)
+                               [(* max-height (/ width height)) max-height]
+                               [width' height'])]
+        {:width width'
+         :height height'})
+      {:max-width max-width})))
+
+(hsx/defc asset-video
+  [config src metadata]
+  (let [asset-block (:asset-block config)
+        asset-width (:logseq.property.asset/width asset-block)
+        asset-height (:logseq.property.asset/height asset-block)
+        metadata (block-image/effective-image-metadata config asset-block metadata)]
+    (hooks/use-effect!
+     (fn []
+       (when (and (seq src) (:block/uuid asset-block))
+         (when-not (or asset-width asset-height)
+           (measure-video!
+            src
+            (fn [width height]
+              (when (and (pos? width)
+                         (pos? height)
+                         (nil? (:logseq.property.asset/width asset-block)))
+                (property-handler/set-block-properties! (:block/uuid asset-block)
+                                                        {:logseq.property.asset/width width
+                                                         :logseq.property.asset/height height}))))))
+       (fn []))
+     [src (:block/uuid asset-block)])
+    [:video.asset-video
+     {:src src
+      :controls true
+      :style (asset-video-style metadata asset-width asset-height)}]))
+
 (defn- open-pdf-file
   [e block href]
   (let [href (if-let [url (:logseq.property.asset/external-url block)]
@@ -531,8 +584,7 @@
           (audio-cp src ext)
 
           (contains? config/video-formats ext)
-          [:video {:src src
-                   :controls true}]
+          (asset-video config src metadata)
 
           (contains? (common-config/img-formats) ext)
           (resizable-image config title src metadata full_text true)
@@ -1037,8 +1089,7 @@
      (cond
        ;; https://en.wikipedia.org/wiki/HTML5_video
        (contains? config/video-formats (keyword ext-name))
-       [:video {:src real-path-url
-                :controls true}]
+       (asset-video config real-path-url nil)
 
        :else
        [:a.asset-ref {:target "_blank" :href real-path-url}
@@ -1576,110 +1627,233 @@
           :map-inline map-inline
           :inline inline}))
 
+(hsx/defc macro-function-fallback-cp
+  [arguments]
+  [:span.warning
+   (util/format "{{function %s}}" (first arguments))])
+
+(hsx/defc macro-function-result-cp
+  [query-result arguments]
+  (or (some-> query-result
+              (block-macros/function-macro arguments)
+              block-macros/function-result->hiccup)
+      (macro-function-fallback-cp arguments)))
+
 (hsx/defc macro-function-cp
   [config arguments]
   (let [fallback* (hooks/use-memo #(atom nil) [])
         query-result* (or (:query-result config) fallback*)
         [query-result] (hooks/use-atom query-result*)]
-    (or
-     (some-> query-result (block-macros/function-macro arguments))
-     [:span.warning
-      (util/format "{{function %s}}" (first arguments))])))
+    (ui/catch-error
+     (macro-function-fallback-cp arguments)
+     (macro-function-result-cp query-result arguments))))
 
-(defn- macro-vimeo-cp
-  [_config arguments]
-  (when-let [url (first arguments)]
-    (when-let [vimeo-id (nth (util/safe-re-find text-util/vimeo-regex url) 5)]
-      (when-not (string/blank? vimeo-id)
-        (let [width (min (- (util/get-width) 96)
-                         560)
-              height (int (* width (/ 315 560)))]
-          [:iframe
-           {:allow-full-screen "allowfullscreen"
-            :allow
-            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-            :frame-border "0"
-            :src (str "https://player.vimeo.com/video/" vimeo-id)
-            :height height
-            :width width}])))))
+(def ^:private default-video-embed-width 560)
+(def ^:private min-video-embed-width 160)
 
-(defn- macro-bilibili-cp
-  [_config arguments]
-  (when-let [url (first arguments)]
-    (when-let [id (cond
-                    (<= (count url) 15) url
-                    :else
-                    (nth (util/safe-re-find text-util/bilibili-regex url) 5))]
-      (when-not (string/blank? id)
-        (let [width (min (- (util/get-width) 96)
-                         560)
-              height (int (* width (/ 360 560)))]
-          [:iframe
-           {:allowfullscreen true
-            :framespacing "0"
-            :frameborder "no"
-            :border "0"
-            :scrolling "no"
-            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-            :width width
-            :height (max 500 height)}])))))
+(defn- video-embed-parent-width
+  [*shell-ref]
+  (some-> (hooks/deref *shell-ref)
+          (.-parentElement)
+          (.-clientWidth)))
+
+(defn- clamp-video-embed-width
+  [width max-width]
+  (let [max-width (or max-width default-video-embed-width)
+        upper-bound (max min-video-embed-width max-width)]
+    (-> width
+        js/Math.round
+        (max min-video-embed-width)
+        (min upper-bound))))
+
+(hsx/defc video-resize-handle
+  [{:keys [width *shell-ref set-width! on-width-change!]}]
+  (let [*drag (hooks/use-ref nil)]
+    (hooks/use-effect!
+     (fn []
+       #(dom/remove-class! js/document.documentElement "is-resizing-video"))
+     [])
+    [:div.video-embed-resize-handle
+     {:role "separator"
+      :aria-orientation "vertical"
+      :on-double-click (fn [e]
+                         (util/stop e)
+                         (hooks/set-ref! *drag nil)
+                         (set-width! default-video-embed-width)
+                         (when on-width-change!
+                           (on-width-change! nil e)))
+      :on-pointer-down (fn [^js e]
+                         (util/stop e)
+                         (.preventDefault e)
+                         (some-> (.-currentTarget e)
+                                 (.setPointerCapture (.-pointerId e)))
+                         (dom/add-class! js/document.documentElement "is-resizing-video")
+                         (hooks/set-ref! *drag {:pointer-id (.-pointerId e)
+                                                :start-x (.-clientX e)
+                                                :start-width width}))
+      :on-pointer-move (fn [^js e]
+                         (when-let [{:keys [pointer-id start-x start-width]} (hooks/deref *drag)]
+                           (when (= pointer-id (.-pointerId e))
+                             (let [dx (- (.-clientX e) start-x)
+                                   width' (clamp-video-embed-width
+                                           (+ start-width dx)
+                                           (video-embed-parent-width *shell-ref))]
+                               (hooks/set-ref! *drag (assoc (hooks/deref *drag)
+                                                            :current-width width'))
+                               (set-width! width')))))
+      :on-pointer-up (fn [^js e]
+                       (when (= (:pointer-id (hooks/deref *drag)) (.-pointerId e))
+                         (when-let [current-width (:current-width (hooks/deref *drag))]
+                           (when on-width-change!
+                             (on-width-change! current-width e)))
+                         (hooks/set-ref! *drag nil)
+                         (dom/remove-class! js/document.documentElement "is-resizing-video")
+                         (let [target (.-currentTarget e)
+                               pointer-id (.-pointerId e)]
+                           (when (and target
+                                      (.hasPointerCapture target pointer-id))
+                             (.releasePointerCapture target pointer-id)))))
+      :on-pointer-cancel (fn [^js e]
+                           (when (= (:pointer-id (hooks/deref *drag)) (.-pointerId e))
+                             (hooks/set-ref! *drag nil)
+                             (dom/remove-class! js/document.documentElement "is-resizing-video")))}]))
+
+(hsx/defc video-embed-cp
+  [{:keys [render id src start aspect-ratio width on-width-change!] :as _embed}]
+  (let [embed-width width
+        [local-width set-local-width!] (hooks/use-state nil)
+        *shell-ref (hooks/use-ref nil)
+        resizable? (not (mobile-util/native-platform?))
+        max-width (or (video-embed-parent-width *shell-ref)
+                    (max 0 (- (util/get-width) 96)))
+        width (clamp-video-embed-width
+                (or local-width embed-width default-video-embed-width)
+                max-width)
+        [ratio-width ratio-height] (or aspect-ratio [16 9])
+        frame-style {:width width
+                     :aspect-ratio (str ratio-width " / " ratio-height)}]
+    (hooks/use-layout-effect!
+     (fn []
+       (set-local-width! nil))
+     [embed-width])
+    (when-let [iframe
+               (case render
+                 :youtube-player
+                 (let [opts (cond-> {:iframe-only? true}
+                              (seq start)
+                              (assoc :start start))]
+                   [youtube/youtube-video id opts])
+
+                 :iframe
+                 [:iframe
+                  {:allow-full-screen true
+                   :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                   :framespacing "0"
+                   :frame-border "no"
+                   :border "0"
+                   :scrolling "no"
+                   :src src}]
+
+                 nil)]
+      [:div.video-embed-shell
+       {:ref *shell-ref}
+       [:div.video-embed-frame
+        {:style frame-style}
+        iframe]
+       (when resizable?
+         (video-resize-handle {:width width
+                               :*shell-ref *shell-ref
+                               :set-width! set-local-width!
+                               :on-width-change! on-width-change!}))])))
+
+(defn- video-macro-dom-occurrence
+  [event name arguments]
+  (let [target (.-target event)
+        current (some-> target (.closest ".video-embed-block"))
+        block-node (or (some-> current (.closest ".ls-block"))
+                       (some-> current (.closest "[blockid]")))
+        nodes (some-> block-node (.querySelectorAll ".video-embed-block"))
+        url-or-id (first arguments)]
+    (some->> nodes
+             array-seq
+             (filter (fn [node]
+                       (and (= name (.getAttribute node "data-video-macro-name"))
+                            (= url-or-id (.getAttribute node "data-video-macro-id")))))
+             (keep-indexed (fn [idx node]
+                             (when (= current node) idx)))
+             first)))
+
+(defn- editing-block-input
+  [block]
+  (when (= (:block/uuid block)
+           (:block/uuid (state/get-edit-block)))
+    (some-> (state/get-edit-input-id)
+            gdom/getElement)))
+
+(defn- remap-video-edit-position
+  [content content' position]
+  (when (number? position)
+    (let [change-start (count (take-while true? (map = content content')))
+          length-delta (- (count content') (count content))]
+      (if (<= position change-start)
+        position
+        (max change-start (+ position length-delta))))))
+
+(defn- save-video-macro-width!
+  [config name arguments width event]
+  (when-let [block (:block config)]
+    (let [input (editing-block-input block)
+          content (or (some-> input .-value)
+                      (:block/title block))
+          selection-start (some-> input .-selectionStart)
+          selection-end (some-> input .-selectionEnd)
+          selection-direction (some-> input .-selectionDirection)
+          occurrence (or (video-macro-dom-occurrence event name arguments) 0)
+          content' (block-video/update-video-macro-width-in-content
+                    content
+                    {:name name
+                     :arguments arguments
+                     :occurrence occurrence}
+                    width)]
+      (when (and (seq content)
+                 (not= content content'))
+        (when input
+          (let [selection-start' (remap-video-edit-position content content' selection-start)
+                selection-end' (remap-video-edit-position content content' selection-end)]
+            (state/set-edit-content! (.-id input) content')
+            (when (and selection-start' selection-end')
+              (.setSelectionRange input selection-start' selection-end' selection-direction))))
+        (editor-handler/save-block-if-changed! block content')))))
 
 (defn- macro-video-cp
-  [_config arguments]
-  (if-let [url (first arguments)]
-    (if (common-util/url? url)
-      (let [results (text-util/get-matched-video url)
-            src (match results
-                  [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                  (if (= (count id) 11) ["youtube-player" id] url)
-
-                  [_ _ _ "youtube-nocookie.com" _ id _]
-                  (str "https://www.youtube-nocookie.com/embed/" id)
-
-                  [_ _ _ "loom.com" _ id _]
-                  (str "https://www.loom.com/embed/" id)
-
-                  [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                  (str "https://player.vimeo.com/video/" id)
-
-                  [_ _ _ "bilibili.com" _ id & query]
-                  (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1&autoplay=0"
-                       (when-let [page (second query)]
-                         (str "&page=" page)))
-
-                  :else
-                  url)]
-        (if (and (coll? src)
-                 (= (first src) "youtube-player"))
-          (let [t (re-find #"&t=(\d+)" url)
-                opts (when (seq t)
-                       {:start (nth t 1)})]
-            (youtube/youtube-video (last src) opts))
-          (when src
-            (let [width (min (- (util/get-width) 96) 560)
-                  height (int (* width (/ (if (string/includes? src "player.bilibili.com")
-                                            360 315)
-                                          560)))]
-              [:iframe
-               {:allow-full-screen true
-                :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                :framespacing "0"
-                :frame-border "no"
-                :border "0"
-                :scrolling "no"
-                :src src
-                :width width
-                :height height}]))))
-      [:span.warning.mr-1 {:title (t :block/invalid-url)}
-       (macro->text "video" arguments)])
-    [:span.warning.mr-1 {:title (t :block/empty-url)}
-     (macro->text "video" arguments)]))
+  ([config name arguments]
+   (macro-video-cp config name arguments nil))
+  ([config name arguments provider-hint]
+   (if-let [url-or-id (first arguments)]
+     (if (or provider-hint (common-util/url? url-or-id))
+       (let [width (block-video/video-width arguments)]
+         (some-> (video/matched-video-embed url-or-id provider-hint)
+                 (cond-> width
+                   (assoc :width width)
+                   true
+                   (assoc :on-width-change!
+                          (fn [width event]
+                            (save-video-macro-width! config name arguments width event))))
+                 video-embed-cp))
+       [:span.warning.mr-1 {:title (t :block/invalid-url)}
+        (macro->text "video" arguments)])
+     (when-not provider-hint
+       [:span.warning.mr-1 {:title (t :block/empty-url)}
+        (macro->text "video" arguments)]))))
 
 (defn- macro-else-cp
   [name config arguments]
   (let [macro-content (or
                        (get (state/get-macros) name)
                        (get (state/get-macros) (keyword name)))
+        macro-content (if (and (seq arguments) macro-content)
+                        (macro-util/macro-subs macro-content arguments)
+                        macro-content)
         format (get-in config [:block :block/format] :markdown)]
     (render-macro config name arguments macro-content format)))
 
@@ -1703,13 +1877,7 @@
       [:div.warning (t :block.macro/namespace-deprecated (t :library/title))]
 
       (= name "youtube")
-      (when-let [url (first arguments)]
-        (when-let [youtube-id (cond
-                                (== 11 (count url)) url
-                                :else
-                                (nth (util/safe-re-find text-util/youtube-regex url) 5))]
-          (when-not (string/blank? youtube-id)
-            (youtube/youtube-video youtube-id nil))))
+      (macro-video-cp config name arguments :youtube)
 
       (= name "youtube-timestamp")
       (when-let [timestamp' (first arguments)]
@@ -1726,14 +1894,14 @@
         [:span.ml-1 (zotero/zotero-linked-file path)])
 
       (= name "vimeo")
-      (macro-vimeo-cp config arguments)
+      (macro-video-cp config name arguments :vimeo)
 
       ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
       (= name "bilibili")
-      (macro-bilibili-cp config arguments)
+      (macro-video-cp config name arguments :bilibili)
 
       (= name "video")
-      (macro-video-cp config arguments)
+      (macro-video-cp config name arguments)
 
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
@@ -1903,6 +2071,13 @@
     (macro-cp config options)
 
     :else ""))
+
+(defn- video-inline-segments-cp
+  [config items]
+  (block-video/video-inline-segments-cp
+   #(inline config %)
+   #(map-inline config %)
+   items))
 
 (hsx/defc block-child
   [block]
@@ -2239,9 +2414,18 @@
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         heading (block-heading-level block level)
-        elem (if heading
+        video-title? (block-video/contains-video-macro? block-ast-title)
+        elem (cond
+               video-title?
+               (keyword (str "div.block-title-wrap.has-video-embed"
+                             (when heading ".as-heading")
+                             (when block-ref? ".as-inline")))
+
+               heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
+
+               :else
                :span.block-title-wrap)]
     (->elem
      elem
@@ -2286,7 +2470,9 @@
                          (assoc :node-ref-link-only? true)
                          (integer? heading)
                          (assoc :parent-heading heading))]
-           (map-inline config' block-ast-title))))))))
+           (if video-title?
+             (video-inline-segments-cp config' block-ast-title)
+             (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
@@ -2441,6 +2627,14 @@
   [target]
   (boolean (util/rec-get-node target "ls-comments-area")))
 
+(defn- video-embed-target?
+  [target]
+  (boolean
+   (or
+    (dom/closest target ".video-embed-shell")
+    (dom/closest target ".video-embed-frame")
+    (dom/closest target ".video-embed-resize-handle"))))
+
 (defn- caret-range-from-point
   [e block-dom-element]
   (when-let [node (some-> block-dom-element
@@ -2499,7 +2693,9 @@
                 button (gobj/get e "buttons")
                 shift? (gobj/get e "shiftKey")
                 meta? (util/meta-key? e)
-                forbidden-edit? (target-forbidden-edit? target)
+                video-embed? (video-embed-target? target)
+                forbidden-edit? (and (not video-embed?)
+                                     (target-forbidden-edit? target))
                 get-cursor-range #(some-> block-dom-element
                                           (dom/by-class "block-content-inner")
                                           first
@@ -2537,30 +2733,34 @@
                   (state/set-selection-start-block! block-dom-element))
 
                 :else
-                (let [point-cursor-range (when-not mobile?
-                                           (caret-range-from-point e block-dom-element))]
-                  (when-not mobile?
-                    (.preventDefault e))
-                  (mobile-util/mobile-focus-hidden-input)
-                  (editor-handler/clear-selection!)
-                  (editor-handler/unhighlight-blocks!)
-                  (when-let [editing-block (state/get-edit-block)]
-                    (when-not (= (:block/uuid editing-block) (:block/uuid block))
-                      (editor-handler/save-current-block!)))
-                  (p/do!
-                   (state/pub-event! [:editor/save-code-editor])
+                (if video-embed?
+                  (do
+                    (util/stop e)
+                    (editor-handler/edit-block! block :max {:container-id (:container-id config)}))
+                  (let [point-cursor-range (when-not mobile?
+                                             (caret-range-from-point e block-dom-element))]
+                    (when-not mobile?
+                      (.preventDefault e))
+                    (mobile-util/mobile-focus-hidden-input)
+                    (editor-handler/clear-selection!)
+                    (editor-handler/unhighlight-blocks!)
+                    (when-let [editing-block (state/get-edit-block)]
+                      (when-not (= (:block/uuid editing-block) (:block/uuid block))
+                        (editor-handler/save-current-block!)))
+                    (p/do!
+                     (state/pub-event! [:editor/save-code-editor])
 
-                   (let [cursor-range (or point-cursor-range
-                                          (if mobile? mobile-range (get-cursor-range)))]
-                     (state/set-editing!
-                      edit-input-id
-                      (:block/title block)
-                      block
-                      cursor-range
-                      {:move-cursor? false
-                       :container-id (:container-id config)}))
+                     (let [cursor-range (or point-cursor-range
+                                            (if mobile? mobile-range (get-cursor-range)))]
+                       (state/set-editing!
+                        edit-input-id
+                        (:block/title block)
+                        block
+                        cursor-range
+                        {:move-cursor? false
+                         :container-id (:container-id config)}))
 
-                   (state/set-selection-start-block! block-dom-element)))))))))))
+                     (state/set-selection-start-block! block-dom-element))))))))))))
 
 (hsx/defc dnd-separator-wrapper
   [_block block-id top?]
@@ -3315,6 +3515,11 @@
                          {:on-click #(edit-block-content config block edit-input-id)}})])
      (or custom-block-content (block-content config block edit-input-id block-id *show-query?)))))
 
+(defn- video-macro-block?
+  [block]
+  (block-video/contains-video-macro? [(:block.temp/ast-title block)
+                                      (:block.temp/ast-body block)]))
+
 (hsx/defc ^:large-vars/cleanup-todo block-content-or-editor
   [config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? *hide-block-refs? *show-query?]}]
   (let [format :markdown
@@ -3330,7 +3535,8 @@
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
-        bg-color (pu/lookup block :logseq.property/background-color)]
+        bg-color (pu/lookup block :logseq.property/background-color)
+        video-macro? (video-macro-block? block)]
     [:div.block-content-or-editor-wrap
      (merge
       {:class (util/classnames [{"ls-page-title-container" (:page-title? config)
@@ -3402,6 +3608,12 @@
                (assoc block-asset/read-mode-title-attrs
                       :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])]
+
+           video-macro?
+           [:div.flex.flex-col.video-macro-block-wrap.w-full
+            (block-content-f {})
+            (when show-editor?
+              [:div.mt-1 editor-cp])]
 
            show-editor?
            editor-cp
@@ -4734,9 +4946,12 @@
 
       ["Paragraph" l]
            ;; TODO: speedup
-      (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-        (->elem :div (map-inline config l))
-        (->elem :div.is-paragraph (map-inline config l)))
+      (let [items (if (block-video/contains-video-macro? l)
+                    (video-inline-segments-cp config l)
+                    (map-inline config l))]
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+          (->elem :div items)
+          (->elem :div.is-paragraph items)))
 
       ["Horizontal_Rule"]
       [:hr]

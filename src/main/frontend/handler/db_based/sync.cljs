@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
@@ -116,7 +115,7 @@
   (p/let [e2ee? (when repo (<get-rtc-graph-e2ee? repo))]
     (when (and repo e2ee?)
       (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
-                               repo graph-uuid email))))
+                              repo graph-uuid email))))
 
 (defn- should-start-rtc?
   [repo]
@@ -164,8 +163,8 @@
     (if @state/*db-worker
       (-> (p/let [_ (<sync-auth-state-to-db-worker!)]
             (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                     {:ensure-server? true
-                                      :server-rsa-keys-exists? false}))
+                                    {:ensure-server? true
+                                     :server-rsa-keys-exists? false}))
           (p/catch (fn [error]
                      (log/error :db-sync/ensure-user-rsa-keys-failed
                                 {:error error
@@ -197,21 +196,28 @@
 
 (defn <rtc-stop!
   []
-  (log/info :db-sync/stop true)
-  (state/<invoke-db-worker :thread-api/db-sync-stop))
+  (if @state/*db-worker
+    (do
+      (log/info :db-sync/stop true)
+      (state/<invoke-db-worker :thread-api/db-sync-stop))
+    (do
+      (log/info :db-sync/stop-skipped {:reason :db-worker-not-ready})
+      (p/resolved nil))))
 
 (defn- sync-app-state-payload
   []
-  (cond-> (common-util/remove-nils-non-nested
-           (select-keys (state/get-state) [:git/current-repo :config
-                                      :auth/id-token :auth/access-token :auth/refresh-token
-                                      :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
-                                      :user/info]))
-    (seq config/OAUTH-DOMAIN)
-    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+  (let [payload (select-keys (state/get-state) [:git/current-repo :config
+                                                 :auth/id-token :auth/access-token :auth/refresh-token
+                                                 :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
+                                                 :user/info])]
+    (cond-> (if (nil? (:git/current-repo payload))
+              (dissoc payload :git/current-repo)
+              payload)
+      (seq config/OAUTH-DOMAIN)
+      (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
-    (seq config/COGNITO-CLIENT-ID)
-    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+      (seq config/COGNITO-CLIENT-ID)
+      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
 
 (defn- <sync-auth-state-to-db-worker!
   []
@@ -282,7 +288,7 @@
    (<rtc-create-graph! repo graph-e2ee? true))
   ([repo graph-e2ee? graph-ready-for-use?]
    (state/<invoke-db-worker :thread-api/db-sync-create-remote-graph
-                            repo graph-e2ee? graph-ready-for-use?)))
+                           repo graph-e2ee? graph-ready-for-use?)))
 
 (defn <rtc-delete-graph!
   [graph-uuid _schema-version]
@@ -317,10 +323,10 @@
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                                  graph graph-uuid graph-e2ee?)
+                                                 graph graph-uuid graph-e2ee?)
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
-                                                    graph graph-uuid))]
+                                                   graph graph-uuid))]
                  true)
                (p/rejected (ex-info "db-sync missing graph info"
                                     {:type :db-sync/invalid-graph

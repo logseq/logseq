@@ -103,6 +103,26 @@
    [:h2 title]
    (html-content description)])
 
+(defn invoke-button-action!
+  [pid button-action key]
+  (plugin-handler/call-plugin-user-model!
+   pid button-action [{:type "click"
+                       :dataset {:key key}}]))
+
+(hsx/defc render-item-button
+  [pid {:keys [key title buttonText buttonAction description]}]
+
+  [:div.desc-item.as-button
+   {:data-key key}
+   [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
+
+   [:div.form-control
+    (when description (html-content description))
+    (shui/button {:type "button"
+                  :size :sm
+                  :on-click #(invoke-button-action! pid buttonAction key)}
+                 buttonText)]])
+
 (hsx/defc render-item-not-handled
   [s]
   [:p.text-red-500 (t :plugin/setting-not-handled s)])
@@ -111,17 +131,20 @@
   [schema ^js pl]
   (let [^js plugin-settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings!] (hooks/use-state (bean/->clj (.toJSON plugin-settings)))
+        [settings, set-settings!] (hooks/use-state (some-> plugin-settings (.toJSON) (bean/->clj)))
         [edit-mode, set-edit-mode!] (hooks/use-state nil) ;; code
-        update-setting! (fn [k v] (.set plugin-settings (name k) (bean/->js v)))]
+        update-setting! (fn [k v]
+                          (when plugin-settings
+                            (.set plugin-settings (name k) (bean/->js v))))]
 
     (hooks/use-effect!
      (fn []
-       (let [on-change (fn [^js s]
-                         (when-let [s (bean/->clj s)]
-                           (set-settings! s)))]
-         (.on plugin-settings "change" on-change)
-         #(.off plugin-settings "change" on-change)))
+       (when plugin-settings
+         (let [on-change (fn [^js s]
+                           (when-let [s (bean/->clj s)]
+                             (set-settings! s)))]
+           (.on plugin-settings "change" on-change)
+           #(.off plugin-settings "change" on-change))))
      [pid])
 
     (if (seq schema)
@@ -183,6 +206,9 @@
 
               #{:heading}
               ^{:key key} [render-item-heading desc]
+
+              #{:button}
+              ^{:key key} [render-item-button pid desc]
 
               ^{:key key} [render-item-not-handled key])))]]
 

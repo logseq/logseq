@@ -157,7 +157,10 @@
       "(and \"for #clojure\")"
 
       "(and \"for #clojure\" #foo)"
-      "(and \"for #clojure\" #tag foo)")))
+      "(and \"for #clojure\" #tag foo)"
+
+      "(and [[outside]] (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"
+      "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))")))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -175,6 +178,7 @@
               {:block/title "b3"
                :build/properties {:prop-d #{[:build/page {:block/title "no-space-link"}]}
                                   :prop-c #{[:build/page {:block/title "page a"}] [:build/page {:block/title "page b"}] [:build/page {:block/title "page c"}]}
+                                  :prop-linked-title #{[:build/page {:block/title "2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]"}]}
                                   :prop-linked-num #{[:build/page {:block/title "3000"}]}}}
               {:block/title "b4", :build/properties {:prop-d #{[:build/page {:block/title "nada"}]}}}]}])
 
@@ -217,6 +221,11 @@
          (map (comp first string/split-lines :block/title)
               (dsl-query "(property prop-linked-num 3000)")))
       "Blocks have property with integer page value")
+
+  (is (= ["b3"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(and (property prop-linked-title \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))")))
+      "Page-reference syntax in quoted property values remains literal")
 
   (is (= ["b3"]
          (map (comp first string/split-lines :block/title)

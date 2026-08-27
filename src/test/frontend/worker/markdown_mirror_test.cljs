@@ -448,6 +448,55 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-emits-todo-for-task-with-default-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Tasks"}
+                                     :blocks [{:block/title "default todo"
+                                               :build/tags [:logseq.class/Task]}
+                                              {:block/title "doing task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                                              {:block/title "done task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.done}}
+                                              {:block/title "canceled task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.canceled}}]}]})
+          page (db-test/find-page-by-title @conn "Tasks")
+          default-block (db-test/find-block-by-content @conn "default todo")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (empty? (d/datoms @conn :eavt (:db/id default-block) :logseq.property/status)))
+                    (is (= :logseq.property/status.todo
+                           (:db/ident (:logseq.property/status default-block))))
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- TODO default todo\n"
+                                "- DOING doing task\n"
+                                "- DONE done task\n"
+                                "- CANCELED canceled task")
+                           (get @files (page-path "pages/Tasks.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-skips-empty-placeholder-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Cleared"}
+                                     :blocks [{:block/title "cleared status"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/empty-placeholder}}]}]})
+          page (db-test/find-page-by-title @conn "Cleared")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- cleared status")
+                           (get @files (page-path "pages/Cleared.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-preserves-numbered-list-markers-status-and-tags-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -527,6 +576,73 @@
                                   "- Target #Project\n"
                                   "  - Target child")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-default-property-value-children-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333342"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "Text Prop Children"
+                                             :block/uuid page-uuid
+                                             :build/properties
+                                             {:user.property/notes
+                                              {:build/property-value :block
+                                               :block/title "page value"
+                                               :build/children [{:block/title "page value child"}]}}}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/notes
+                                                {:build/property-value :block
+                                                 :block/title "block value"
+                                                 :build/children
+                                                 [{:block/title "child of value"
+                                                   :build/children [{:block/title "grandchild"}]}]}}}
+                                              {:block/title "after"}]}]})
+          page (db-test/find-page-by-title @conn "Text Prop Children")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n"
+                                "* notes::\n"
+                                "  - page value\n"
+                                "    - page value child\n\n"
+                                "- body\n"
+                                "  * notes::\n"
+                                "    - block value\n"
+                                "      - child of value\n"
+                                "        - grandchild\n"
+                                "- after")
+                           (get @files (page-path "pages/Text Prop Children.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-does-not-export-url-property-value-children-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333343"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/website {:logseq.property/type :url}}
+                 :pages-and-blocks [{:page {:block/title "Url Prop Children"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/website
+                                                {:build/property-value :block
+                                                 :block/title "https://example.com"
+                                                 :build/children [{:block/title "should not appear"}]}}}
+                                              {:block/title "after"}]}]})
+          page (db-test/find-page-by-title @conn "Url Prop Children")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Url Prop Children.md"))]
+                      (is (= (str (page-marker page-uuid) "\n\n"
+                                  "- body\n"
+                                  "  * website:: https://example.com\n"
+                                  "- after")
+                             content))
+                      (is (not (re-find #"should not appear" content))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 

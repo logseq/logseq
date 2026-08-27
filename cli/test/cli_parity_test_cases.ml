@@ -5324,6 +5324,94 @@ let () =
       in
       Js.Promise.resolve pass);
 
+  test_promise
+    "CLI parity graph validate error includes structured errors context"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/validate-db" body then
+              "[\"^ \",\"~:errors\",[[\"^ \",\"~:entity\",[\"^ \
+               \",\"~:db/id\",1],\"^0\",[\"^ \",\"~:foo\",[\"bad\"]]]]]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Graph.Graph_validate
+              { graph = Cli_config.repo_to_graph repo; repo; fix = false }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Graph.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "invalid graph status" true (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | None -> fail_test "expected graph validation error"
+          | Some err -> (
+              expect_equal "validation error code" "graph-validation-failed"
+                (Error.code_to_string err.Error.code);
+              expect_named_contains "validation error message still has EDN"
+                err.message "Found 1 entity with errors:";
+              match err.Error.context with
+              | None ->
+                  fail_test
+                    "graph_validate_result Error.make should include structured \
+                     context, not only message"
+              | Some context -> (
+                  match
+                    Option.bind (Edn_util.get context "errors") Edn_util.as_seq
+                  with
+                  | Some errors ->
+                      expect_int "structured entity errors" 1
+                        (Vec.length errors)
+                  | None ->
+                      fail_test
+                        "validation context should carry :errors sequence")));
+          let json_output = Format_types.to_json result in
+          let root =
+            match Js.Json.decodeObject (parse_json json_output) with
+            | Some object_ -> object_
+            | None ->
+                fail_test ("expected json object: " ^ json_output);
+                Js.Dict.empty ()
+          in
+          expect_none "json data key" (Js.Dict.get root "data");
+          let error =
+            match
+              Option.bind (Js.Dict.get root "error") Js.Json.decodeObject
+            with
+            | Some object_ -> object_
+            | None ->
+                fail_test ("expected error object: " ^ json_output);
+                Js.Dict.empty ()
+          in
+          (match
+             Option.bind (Js.Dict.get error "errors") Js.Json.decodeArray
+           with
+          | Some errors ->
+              expect_int "json error.errors" 1 (Array.length errors)
+          | None ->
+              fail_test
+                "json error should include structured errors, not only message");
+          let edn_output = Format_types.to_edn result in
+          let edn_value = Melange_edn_melange.of_edn_string edn_output in
+          (match
+             Option.bind (Edn_util.get edn_value "error") (fun error ->
+                 Option.bind (Edn_util.get error "errors") Edn_util.as_seq)
+           with
+          | Some errors ->
+              expect_int "edn error.errors" 1 (Vec.length errors)
+          | None ->
+              fail_test
+                "edn error should include structured errors, not only message");
+          Js.Promise.resolve pass));
+
   test_promise "CLI parity graph info queries kv rows with thread api q"
     (fun () ->
       let q_called = ref false in
@@ -6026,6 +6114,42 @@ let () =
       expect_parse_error_code "completion unsupported shell" ":invalid-options"
         [| "completion"; "fish" |]);
 
+  test "CLI parity path-specific short aliases resolve to command specific meanings"
+    (fun () ->
+      let validate =
+        expect_parse_ok "graph validate -f" [| "graph"; "validate"; "-f" |]
+      in
+      (match validate.command with
+      | Cli_request.Graph (Graph.Parsed_validate { fix }) ->
+          expect_bool "validate -f is fix" true fix
+      | _ -> fail_test "expected graph validate");
+      let export =
+        expect_parse_ok "graph export -f"
+          [| "graph"; "export"; "-t"; "edn"; "-f"; "/tmp/export.edn" |]
+      in
+      (match export.command with
+      | Cli_request.Graph (Graph.Parsed_export opts) ->
+          expect_equal "export -f is file" "/tmp/export.edn"
+            (expect_some "export file" opts.file)
+      | _ -> fail_test "expected graph export");
+      let export_eq =
+        expect_parse_ok "graph export -f= form"
+          [| "graph"; "export"; "-t"; "edn"; "-f=/tmp/export.edn" |]
+      in
+      (match export_eq.command with
+      | Cli_request.Graph (Graph.Parsed_export opts) ->
+          expect_equal "export -f= is file" "/tmp/export.edn"
+            (expect_some "export file eq" opts.file)
+      | _ -> fail_test "expected graph export");
+      let page = expect_parse_ok "list page -e" [| "list"; "page"; "-e" |] in
+      (match page.command with
+      | Cli_request.List (List_command.Parsed_page opts) ->
+          expect_bool "list page -e is expand" true opts.expand
+      | _ -> fail_test "expected list page");
+      expect_parse_error_code "graph validate rejects --fields"
+        ":invalid-options"
+        [| "graph"; "validate"; "--fields"; "id" |]);
+
   test "CLI parity completion generation includes top nested and value cases"
     (fun () ->
       let registry = (Cli.make_app_context ()).Cli.registry in
@@ -6034,8 +6158,24 @@ let () =
       expect_named_contains "zsh graph group" zsh "_logseq_graph()";
       expect_named_contains "zsh nested backup" zsh "_logseq_graph_backup()";
       expect_named_contains "zsh graph completions" zsh "_logseq_graphs";
+      expect_named_contains "zsh graph compadd" zsh "compadd -a graphs";
+      expect_named_contains "zsh graph short alias" zsh
+        "'(-g --graph)'{-g=,--graph=}'[Graph name]:graph:{_logseq_graphs}'";
       expect_named_contains "zsh output choices" zsh
-        "--output=[Output format]:value:(human json edn)";
+        "'(-o --output)'{-o=,--output=}'[Output format]:mode:(human json edn)'";
+      expect_named_contains "zsh nested leaf function" zsh "_logseq_graph_list()";
+      expect_named_contains "zsh show id option" zsh "'--id=[Entity id]::id:'";
+      expect_named_contains "zsh show level option" zsh
+        "'--level=[Tree depth]:n:'";
+      expect_named_contains "zsh query group dispatcher keeps own options" zsh
+        "'--query=[Datascript query]:edn:'";
+      expect_named_contains "zsh comma separated fields completion" zsh
+        "'--fields=[Comma-separated fields to include]:fields:{_values -s , \
+         fields id title ident uuid created-at updated-at}'";
+      expect_named_contains "zsh export file short alias" zsh
+        "'(-f --file)'{-f=,--file=}'[Output file]:path:_files'";
+      expect_named_contains "zsh list expand short alias" zsh
+        "'(-e --expand)'{-e,--expand}'[Expand page data]'";
       let bash = Completion.generate Cli_primitive.Bash registry in
       expect_named_contains "bash header" bash
         "# Auto-generated by `logseq completion bash`";
@@ -6071,13 +6211,10 @@ let () =
       expect_named_contains "zsh top dispatcher" zsh "_logseq()";
       expect_named_contains "zsh graph helper" zsh "_logseq_graphs";
       expect_named_contains "zsh global output option" zsh
-        "--output=[Output format]:value:(human json edn)";
-      expect_named_not_contains "zsh graph export edn options removed" zsh
-        "--edn-options";
-      expect_named_not_contains "zsh graph create sync option removed" zsh
-        "--enable-sync";
-      expect_named_not_contains "zsh search content option removed" zsh
-        "--content";
+        "'(-o --output)'{-o=,--output=}'[Output format]:mode:(human json edn)'";
+      expect_named_contains "zsh graph export edn options" zsh "--edn-options";
+      expect_named_contains "zsh graph create sync option" zsh "--enable-sync";
+      expect_named_contains "zsh search content option" zsh "--content";
       expect_named_not_contains "zsh content short alias removed" zsh "-c[";
       expect_named_not_contains "zsh command boolean negation removed" zsh
         "--no-include-built-in";

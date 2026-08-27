@@ -57,7 +57,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
   JAVA_VERSION: '21'
-  OCAML_VERSION: '5.4.0'
+  OCAML_VERSION: '5.1.1'
 
 jobs:
   compile-cljs:

@@ -1,7 +1,8 @@
 (ns frontend.components.query.result-test
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.query.result :as query-result]
-            [frontend.db.hooks :as db-hooks]))
+            [frontend.db.hooks :as db-hooks]
+            [logseq.shui.hooks :as hooks]))
 
 (deftest custom-query-subscribes-to-serialized-worker-resources-test
   (let [current-block-uuid (random-uuid)
@@ -26,7 +27,8 @@
                     (swap! resource-keys conj resource-key)
                     {:rows [(if (= :dsl (get-in resource-key [1 :kind]))
                               dsl-row-uuid
-                              datalog-row-uuid)]})]
+                              datalog-row-uuid)]})
+                  hooks/use-effect! (fn [& _args])]
       (is (= [dsl-row-uuid]
              (query-result/use-query-result
               {:dsl-query? true
@@ -57,3 +59,25 @@
                 :today-day 20260721
                 :current-block-uuid current-block-uuid}]]
              @resource-keys)))))
+
+(deftest use-query-result-shares-rows-after-render-test
+  (let [rows [(random-uuid)]
+        query-result (atom :unset)
+        effect (atom nil)
+        current-block-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-resource (fn [_] {:rows rows})
+                  hooks/use-effect! (fn [setup-fn deps]
+                                      (reset! effect [setup-fn deps]))]
+      (is (= rows
+             (query-result/use-query-result
+              {:dsl-query? true
+               :query-result query-result
+               :current-block-uuid current-block-uuid}
+              {:query "(task TODO)"})))
+      (is (= :unset @query-result)
+          "Rendering must not update consumers of the shared atom.")
+      (is (= [query-result rows] (second @effect)))
+      (when-let [setup-fn (first @effect)]
+        (setup-fn))
+      (is (= rows @query-result)
+          "Child {{function}} blocks read this atom from shared block config."))))
