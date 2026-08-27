@@ -201,6 +201,64 @@
              (is false (str "Import failure must be normalized: " error))))
           (p/finally done)))))
 
+(deftest file-graph-import-preserves-staging-after-target-rollback-failure-test
+  (async done
+    (let [import-file-graph (some-> (resolve 'frontend.components.imports/<import-file-graph)
+                                    deref)
+          state-values (atom {})
+          staging-repo (atom nil)
+          lifecycle-ops (atom [])]
+      (is (fn? import-file-graph))
+      (-> (p/with-redefs
+            [repo-handler/<new-file-graph-import-staging-db!
+             (fn [run-id]
+               (let [repo (file-graph-import/staging-repo run-id)]
+                 (reset! staging-repo repo)
+                 (p/resolved repo)))
+             persist-db/<publish-file-graph-import!
+             (fn [_staging-repo _target-repo]
+               (p/rejected
+                (ex-info "target rollback failed"
+                         {:code :import/target-rollback-failed
+                          :preserve-staging? true})))
+             persist-db/<discard-file-graph-import!
+             (fn [repo]
+               (swap! lifecycle-ops conj [:discard repo])
+               (p/resolved nil))
+             state/<invoke-db-worker
+             (fn [_method _repo _config _files options]
+               (p/resolved
+                (file-graph-import/completed-result
+                 (:run-id options)
+                 {:validation {:status :passed}
+                  :files []
+                  :import-state {}
+                  :notifications []
+                  :issues []
+                  :staged-assets []})))
+             state/get-state
+             (fn [path]
+               (get-in @state-values (if (coll? path) path [path])))
+             state/set-state!
+             (fn [path value & _]
+               (swap! state-values assoc-in (if (coll? path) path [path]) value))
+             notification/show! (fn [& _] nil)
+             shui/dialog-close! (fn [& _] nil)
+             util/web-platform? false]
+            (import-file-graph [] {:graph-name "target"} nil))
+          (p/then
+           (fn [result]
+             (is (= :failed (:status result)))
+             (is (= :import/target-rollback-failed
+                    (some-> result :issues first :code)))
+             (is (= {:status :rollback-failed
+                     :repo "logseq_db_target"
+                     :staging-repo @staging-repo}
+                    (:publication result)))
+             (is (empty? @lifecycle-ops))))
+          (p/catch #(is false (str "unexpected error: " %)))
+          (p/finally done)))))
+
 (deftest file-graph-import-cleans-up-rejected-staging-creation-test
   (async done
     (let [import-file-graph (some-> (resolve 'frontend.components.imports/<import-file-graph)

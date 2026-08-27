@@ -400,10 +400,20 @@
           (p/catch
            (fn [error]
              (if @target-owned?
-               (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db target-repo)
-                   (p/catch (constantly nil))
-                   (p/then (fn [_]
-                             (throw error))))
+               (p/let [rollback-result
+                       (-> (state/<invoke-db-worker :thread-api/unsafe-unlink-db target-repo)
+                           (p/then (fn [_] {:status :completed}))
+                           (p/catch (fn [rollback-error]
+                                      {:status :failed
+                                       :error rollback-error})))]
+                 (if (= :failed (:status rollback-result))
+                   (throw (ex-info "incomplete import target rollback failed"
+                                   {:code :import/target-rollback-failed
+                                    :repo target-repo
+                                    :preserve-staging? true
+                                    :publication-code (:code (ex-data error))}
+                                   (:error rollback-result)))
+                   (throw error)))
                (throw error))))))))
 
 (defn <export-db

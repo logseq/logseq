@@ -1645,7 +1645,7 @@
 (def ^:private publication-payload (.from js/Buffer "sqlite-bytes"))
 
 (defn- <run-browser-file-graph-publication
-  [{:keys [failure-method staging-cleanup-fails?]}]
+  [{:keys [failure-method staging-cleanup-fails? target-cleanup-fails?]}]
   (let [calls (atom [])]
     (-> (p/with-redefs
           [state/<invoke-db-worker
@@ -1661,9 +1661,16 @@
                (= method :thread-api/import-db-binary) (p/resolved nil)
                (= method :thread-api/search-build-blocks-indice-in-worker) (p/resolved nil)
                (= method :thread-api/unsafe-unlink-db)
-               (if (and staging-cleanup-fails?
-                        (= publication-staging-repo (first args)))
+               (cond
+                 (and staging-cleanup-fails?
+                      (= publication-staging-repo (first args)))
                  (p/rejected (ex-info "cleanup failed" {:repo publication-staging-repo}))
+
+                 (and target-cleanup-fails?
+                      (= publication-target-repo (first args)))
+                 (p/rejected (ex-info "cleanup failed" {:repo publication-target-repo}))
+
+                 :else
                  (p/resolved nil))
                :else
                (p/rejected (ex-info "unexpected worker call" {:method method}))))]
@@ -1707,12 +1714,20 @@
                                 {:failure-method :thread-api/import-db-binary})
                 search-failure (<run-browser-file-graph-publication
                                 {:failure-method
-                                 :thread-api/search-build-blocks-indice-in-worker})]
+                                 :thread-api/search-build-blocks-indice-in-worker})
+                rollback-failure (<run-browser-file-graph-publication
+                                  {:failure-method
+                                   :thread-api/search-build-blocks-indice-in-worker
+                                   :target-cleanup-fails? true})]
             (doseq [{:keys [result calls]} [import-failure search-failure]]
               (is (= :rejected (:status result)))
               (is (some #(= [:thread-api/unsafe-unlink-db [publication-target-repo]] %)
                         calls))
               (is (not-any? #(= [:thread-api/unsafe-unlink-db [publication-staging-repo]] %)
-                            calls))))
+                            calls)))
+            (is (= :import/target-rollback-failed
+                   (:code (ex-data (get-in rollback-failure [:result :error])))))
+            (is (true? (:preserve-staging?
+                        (ex-data (get-in rollback-failure [:result :error]))))))
         (p/catch #(is false (str "unexpected error: " %)))
         (p/finally done))))
