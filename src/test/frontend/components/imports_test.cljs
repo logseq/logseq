@@ -29,6 +29,26 @@
         (is (= #{"Project" "Area"} (get-in options [:user-options :tag-classes])))
         (is (not (contains? options :notify-user)))))))
 
+(deftest import-file-serialization-preserves-modified-time-test
+  (async done
+    (let [serialize-file (some-> (resolve 'frontend.components.imports/<serialize-import-file)
+                                 deref)
+          modified-at (js/Date. "2024-05-06T07:08:09.000Z")
+          file {:path "pages/note.md"
+                :last-modified-at modified-at
+                :file-object #js {:text (fn [] (p/resolved "- note"))}}]
+      (is (fn? serialize-file))
+      (-> (serialize-file file)
+          (p/then (fn [serialized]
+                    (let [round-tripped (-> serialized ldb/write-transit-str ldb/read-transit-str)]
+                      (is (= "pages/note.md" (:path round-tripped)))
+                      (is (= "- note" (:file/content round-tripped)))
+                      (is (= (.getTime modified-at)
+                             (.getTime (:last-modified-at round-tripped)))))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
 (deftest staged-assets-wait-for-directory-and-all-writes-test
   (async done
     (let [write-staged-assets! (some-> (resolve 'frontend.components.imports/<write-staged-assets!)

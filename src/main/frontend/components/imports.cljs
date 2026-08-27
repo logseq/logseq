@@ -341,7 +341,7 @@
                  :asset/payload (js/Uint8Array. buffer)
                  :asset/size (.-size file-object))))
       (p/let [content (.text file-object)]
-        (assoc (select-keys file [:path])
+        (assoc (select-keys file [:path :last-modified-at])
                :file/content content)))))
 
 (defn- <serialize-import-files
