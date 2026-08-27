@@ -415,7 +415,7 @@
                   repo
                   {:runtime-opts (select-keys opts [:file-graph-import-staging?])})
                  (p/resolved (get-impl)))
-          _ (protocol/<new impl repo (assoc opts :create-new? true))]
+          _ (protocol/<new impl repo opts)]
     (<export-db repo {})))
 
 (defn export-current-graph!

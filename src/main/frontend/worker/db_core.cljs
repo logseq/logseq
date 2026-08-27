@@ -83,11 +83,6 @@
 (def ^:private file-graph-import-staging-owner-prefix
   "file-graph-import-staging-owner:")
 
-(defn- file-graph-import-publication-lock-name
-  [repo]
-  (str file-graph-import-publication-lock-prefix
-       (graph-dir/repo->graph-dir-key repo)))
-
 (defn- resolve-initial-config
   [config]
   (if (some? config)
@@ -1063,25 +1058,12 @@
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (let [open! (fn []
-                (p/let [_ (start-db! repo (dissoc opts :create-new?))
-                        conn (or (worker-state/get-datascript-conn repo)
-                                 (throw (ex-info "Missing worker graph connection"
-                                                 {:type :db/missing-connection
-                                                  :repo repo})))]
-                  {:schema (:schema @conn)}))]
-    (if (and (:create-new? opts) (not (node-runtime?)))
-      (platform/<with-exclusive-lock
-       (platform/current)
-       (file-graph-import-publication-lock-name repo)
-       (fn []
-         (p/let [exists? (<db-exists? repo)
-                 _ (when exists?
-                     (throw (ex-info "target graph already exists"
-                                     {:code :graph-already-exists
-                                      :repo repo})))]
-           (open!))))
-      (open!))))
+  (p/let [_ (start-db! repo opts)
+          conn (or (worker-state/get-datascript-conn repo)
+                   (throw (ex-info "Missing worker graph connection"
+                                   {:type :db/missing-connection
+                                    :repo repo})))]
+    {:schema (:schema @conn)}))
 
 (defn- <unsafe-unlink-db!
   [repo]
@@ -1243,7 +1225,8 @@
     :else
     (platform/<with-exclusive-lock
      (platform/current)
-     (file-graph-import-publication-lock-name target-repo)
+     (str file-graph-import-publication-lock-prefix
+          (graph-dir/repo->graph-dir-key target-repo))
      (fn []
        (let [target-owned? (atom false)]
          (-> (p/let [staging-owned? (<file-graph-import-staging-owned? staging-repo)
