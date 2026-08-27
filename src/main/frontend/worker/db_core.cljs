@@ -227,6 +227,39 @@
       (:content file)
       ""))
 
+(defn- file-needs-lazy-read?
+  [file]
+  (and (string? (:fs-path file))
+       (string/blank? (file-content file))))
+
+(defn- node-fs-promises
+  []
+  (try
+    (js/require "fs/promises")
+    (catch :default _
+      nil)))
+
+(defn- <read-import-file-content
+  [file]
+  (if-not (file-needs-lazy-read? file)
+    (p/resolved (file-content file))
+    (if-let [^js fsp (node-fs-promises)]
+      (-> (.readFile fsp (:fs-path file) "utf8")
+          (p/catch (fn [e]
+                     (log/error :read-import-file {:fs-path (:fs-path file) :error e})
+                     "")))
+      (p/resolved ""))))
+
+(defn- <import-file-stat
+  [file]
+  (if-let [fs-path (:fs-path file)]
+    (if-let [^js fsp (node-fs-promises)]
+      (-> (.stat fsp fs-path)
+          (p/then bean/->clj)
+          (p/catch (constantly nil)))
+      (p/resolved nil))
+    (p/resolved nil)))
+
 (defn- import-file-payload
   [payload]
   (cond
@@ -242,28 +275,42 @@
     :else
     nil))
 
+(defn- <read-import-asset-payload
+  [file]
+  (if-let [payload (some-> file :asset/payload import-file-payload)]
+    (p/resolved payload)
+    (when-let [fs-path (:fs-path file)]
+      (if-let [^js fsp (node-fs-promises)]
+        (-> (.readFile fsp fs-path)
+            (p/then #(js/Uint8Array. %))
+            (p/catch (fn [e]
+                       (log/error :read-import-asset {:fs-path fs-path :error e})
+                       nil)))
+        (p/resolved nil)))))
+
 (defn- <read-and-stage-import-asset
   [file assets buffer-handler staged-assets]
-  (when-let [payload (some-> file :asset/payload import-file-payload)]
-    (let [buffer (.-buffer payload)
-          asset-type (db-asset/asset-path->type (:path file))
-          asset-id (d/squuid)
-          asset-name (some-> (:path file) gp-exporter/asset-path->name)
-          size (or (:asset/size file) (.-byteLength payload))]
-      (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
-              {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
-              asset-data (with-edn-content
-                           {:size size
-                            :type asset-type
-                            :path (:path file)
-                            :checksum checksum
-                            :asset-id asset-id})]
-        (swap! assets assoc asset-name asset-data)
-        (when-not pdf-annotation?
-          (swap! staged-assets conj {:path (:path file)
-                                     :asset-id asset-id
-                                     :asset-type asset-type
-                                     :payload payload}))))))
+  (p/let [payload (<read-import-asset-payload file)]
+    (when payload
+      (let [buffer (.-buffer payload)
+            asset-type (db-asset/asset-path->type (:path file))
+            asset-id (d/squuid)
+            asset-name (some-> (:path file) gp-exporter/asset-path->name)
+            size (or (:asset/size file) (.-byteLength payload))]
+        (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+                {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
+                asset-data (with-edn-content
+                             {:size size
+                              :type asset-type
+                              :path (:path file)
+                              :checksum checksum
+                              :asset-id asset-id})]
+          (swap! assets assoc asset-name asset-data)
+          (when-not pdf-annotation?
+            (swap! staged-assets conj {:path (:path file)
+                                       :asset-id asset-id
+                                       :asset-type asset-type
+                                       :payload payload})))))))
 
 (defn- finalize-import-render-revisions!
   [conn]
@@ -292,8 +339,8 @@
                       (assoc :notify-user #(swap! notifications conj %)
                              :log-fn (fn [& args]
                                        (log/info :import-file-graph {:args args}))
-                             :<read-file (fn [file] (p/resolved (file-content file)))
-                             :<get-file-stat (constantly nil)
+                             :<read-file <read-import-file-content
+                             :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
                                                      (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
                       (dissoc :set-ui-state))]
