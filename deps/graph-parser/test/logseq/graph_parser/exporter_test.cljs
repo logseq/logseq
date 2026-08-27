@@ -943,16 +943,13 @@ abc
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn
-                                   {:convert-all-tags? true
-                                    :import-timeout-ms (if js/process.env.CI 60000 30000)
-                                    :import-heartbeat-ms 5000
-                                    :log-fn (fn [tag data]
-                                              (println "[import-debug]" (name tag) (pr-str data)))})
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true
+                                                       :import-timeout-ms (if js/process.env.CI 60000 30000)
+                                                       :import-heartbeat-ms 5000})
           end-time (cljs.core/system-time)]
 
     ;; Add multiplicative factor for CI as it runs about twice as slow
-    (let [max-time (-> 25 (* (if js/process.env.CI 2 1)))]
+    (let [max-time (-> 10 (* (if js/process.env.CI 2 1)))]
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Importing large graph takes less than " max-time "s")))
 
