@@ -3210,7 +3210,6 @@
   (let [property-context (bulk-property-context (:user-config options))
         set-ui-state (or (:set-ui-state options) (constantly nil))
         _ (set-ui-state [:graph/importing-state :total] (count doc-files))]
-    #_{:clj-kondo/ignore [:unresolved-var]}
     (p/loop [remaining-files doc-files
              simple-files []
              fallback-files []]
