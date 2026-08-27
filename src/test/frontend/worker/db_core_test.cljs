@@ -3473,6 +3473,7 @@
     (restoring-worker-state
      (fn []
        (let [publish! (get-thread-api :thread-api/publish-file-graph-import)
+             create! (get-thread-api :thread-api/create-or-open-db)
              staging-repo (file-graph-import/staging-repo
                            "00000000-0000-4000-8000-000000000004")
              target-repo "logseq_db_publication-target"
@@ -3480,6 +3481,10 @@
              import-count (atom 0)
              fail-finalize? (atom false)
              rollback-fails? (atom false)
+             pause-export? (atom false)
+             export-entered (p/deferred)
+             release-export (p/deferred)
+             normal-create-count (atom 0)
              deleted-repos (atom [])
              lock-tail (atom (p/resolved nil))
              with-exclusive-lock
@@ -3500,7 +3505,12 @@
                     (p/let [_ (p/delay 10)]
                       exists?)))
                 db-core/<export-db-binary!
-                (fn [_repo _strict?] (p/resolved (js/Uint8Array. 0)))
+                (fn [_repo _strict?]
+                  (if @pause-export?
+                    (p/let [_ (p/resolve! export-entered nil)
+                            _ release-export]
+                      (js/Uint8Array. 0))
+                    (p/resolved (js/Uint8Array. 0))))
                 db-core/<file-graph-import-staging-owned?
                 (fn [_repo] (p/resolved true))
                 db-core/<import-db-binary!
@@ -3514,6 +3524,13 @@
                     (p/rejected (ex-info "finalization failed"
                                          {:code :import/finalization-failed}))
                     (p/resolved nil)))
+                db-core/start-db!
+                (fn [repo _opts]
+                  (swap! normal-create-count inc)
+                  (reset! target-exists? true)
+                  (swap! worker-state/*datascript-conns
+                         assoc repo (d/create-conn db-schema/schema))
+                  (p/resolved nil))
                 db-core/<unsafe-unlink-db!
                 (fn [repo]
                   (swap! deleted-repos conj repo)
@@ -3533,14 +3550,28 @@
                        finalize-deletes @deleted-repos
                        _ (reset! target-exists? false)
                        _ (reset! rollback-fails? true)
-                       rollback-failure (capture (publish! staging-repo target-repo))]
+                       rollback-failure (capture (publish! staging-repo target-repo))
+                       _ (reset! rollback-fails? false)
+                       _ (reset! fail-finalize? false)
+                       _ (reset! target-exists? false)
+                       _ (reset! pause-export? true)
+                       target-race-results
+                       (let [publication-result (capture (publish! staging-repo target-repo))]
+                         (p/let [_ export-entered
+                                 results
+                                 (let [create-result
+                                       (capture (create! target-repo {:create-new? true}))]
+                                   (p/resolve! release-export nil)
+                                   (p/all [publication-result create-result]))]
+                           results))]
                  {:concurrent-results concurrent-results
                   :finalize-failure finalize-failure
                   :finalize-deletes finalize-deletes
-                  :rollback-failure rollback-failure}))
+                  :rollback-failure rollback-failure
+                  :target-race-results target-race-results}))
              (p/then
               (fn [{:keys [concurrent-results finalize-failure
-                           finalize-deletes rollback-failure]}]
+                           finalize-deletes rollback-failure target-race-results]}]
                 (is (= 1 (count (filter #(= :resolved (:status %))
                                         concurrent-results))))
                 (is (= [:graph-already-exists]
@@ -3552,7 +3583,11 @@
                        (some-> rollback-failure :error ex-data :code)))
                 (is (true? (some-> rollback-failure :error ex-data
                                    :preserve-staging?)))
-                (is (= 3 @import-count))))
+                (is (= [:graph-already-exists]
+                       (keep #(some-> % :error ex-data :code)
+                             target-race-results)))
+                (is (zero? @normal-create-count))
+                (is (= 4 @import-count))))
              (p/catch #(is false (str "unexpected error: " %)))
              (p/finally #(complete-after-promise-finalizers! done))))))))
 

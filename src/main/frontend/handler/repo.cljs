@@ -168,11 +168,11 @@
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
   (->
    (p/let [config config/config-default-content
-           _ (persist-db/<new full-graph-name
-                              (cond-> {:config config
-                                       :graph-git-sha (build-version/revision)
-                                       :creating-remote-graph? creating-remote-graph?}
-                                file-graph-import? (assoc :import-type :file-graph)))
+           _ (when-not file-graph-import?
+               (persist-db/<new full-graph-name
+                                {:config config
+                                 :graph-git-sha (build-version/revision)
+                                 :creating-remote-graph? creating-remote-graph?}))
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
