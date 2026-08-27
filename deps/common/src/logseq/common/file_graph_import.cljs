@@ -39,6 +39,10 @@
    :validation {:status :not-run}
    :publication {:status :blocked}})
 
+(defn- recoverable-issues?
+  [issues]
+  (every? #(true? (:recoverable? %)) issues))
+
 (defn completed-result
   [run-id result]
   (when-not (= :passed (get-in result [:validation :status]))
@@ -46,6 +50,10 @@
                     {:code :import/invalid-completed-result
                      :run-id run-id})))
   (let [issues (vec (:issues result))]
+    (when-not (recoverable-issues? issues)
+      (throw (ex-info "completed import result requires recoverable issues"
+                      {:code :import/invalid-completed-result
+                       :run-id run-id})))
     (assoc result
            :contract-version terminal-contract-version
            :run-id run-id
@@ -85,7 +93,8 @@
            :completed-with-errors
            (and (= :completed (:phase result))
                 (= :passed (get-in result [:validation :status]))
-                (seq issues))
+                (seq issues)
+                (recoverable-issues? issues))
 
            :failed
            (and (keyword? (:phase result))

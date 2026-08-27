@@ -50,6 +50,18 @@
                    :publication {:status :blocked}}
                   {:contract-version 1
                    :run-id "run"
+                   :status :completed-with-errors
+                   :phase :completed
+                   :summary {:issue-count 1}
+                   :issues [{:code :import/fatal
+                             :severity :error
+                             :recoverable? false
+                             :phase :import-file
+                             :parameters {}}]
+                   :validation {:status :passed}
+                   :publication {:status :pending}}
+                  {:contract-version 1
+                   :run-id "run"
                    :status :unknown}]]
     (is (= {:status :failed
             :phase :worker-import
