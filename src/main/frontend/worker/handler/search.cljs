@@ -466,7 +466,9 @@
                                         :elapsed-ms (- (.now js/performance) conversion-started)
                                         :input-entities (count batch)
                                         :output-rows (count indexed)}))
-               indexed-blocks' (into indexed-blocks indexed)
+               indexed-blocks' (if vector-index
+                                 (into indexed-blocks indexed)
+                                 indexed-blocks)
                progress (progress-for-fts processed')
                should-report? (> progress last-progress)]
            (p/let [write-started (.now js/performance)
