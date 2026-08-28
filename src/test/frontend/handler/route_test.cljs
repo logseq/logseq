@@ -3,6 +3,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.date :as date]
+            [electron.ipc :as ipc]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
@@ -185,6 +186,87 @@
              (is (= "Page" (.-page (.-dataset (.-body document)))))
              (is (= (str (subs block-title 0 48) "...")
                     (.-title document)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
+(defn- page-route
+  [page-name]
+  {:data {:name :page}
+   :path-params {:name page-name}})
+
+(deftest stale-route-title-resolve-does-not-overwrite-current-page-test
+  (async done
+    (let [left-route (page-route "Left")
+          current-route (page-route "Current")
+          left-title (p/deferred)
+          document #js {:title "stale"
+                        :body #js {:dataset #js {:page ""}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker
+          window-titles (atom [])]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [_api _repo route-name]
+                (case route-name
+                  "Left" left-title
+                  "Current" (p/resolved {:page-title "Current"})
+                  (p/resolved nil))))
+      (-> (p/with-redefs [ipc/ipc (fn [channel title]
+                                    (when (= :set-window-title channel)
+                                      (swap! window-titles conj title)))]
+            (route-handler/update-page-title! left-route)
+            (p/do!
+             (route-handler/update-page-title! current-route)
+             (is (= "Current" (.-title document)))
+             (p/resolve! left-title {:page-title "Left"})
+             (p/delay 10)
+             (is (= "Current" (.-title document))
+                 "A stale Back/forward title resolve must not overwrite the current page.")
+             (is (= ["Current"] (vec (distinct @window-titles))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
+(deftest set-route-match-updates-title-after-back-navigation-test
+  (async done
+    (let [left-route (page-route "Left")
+          previous-route (page-route "Previous")
+          document #js {:title ""
+                        :body #js {:dataset #js {:page ""}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [_api _repo route-name]
+                (p/resolved {:page-title route-name})))
+      (-> (p/do!
+           (route-handler/set-route-match! left-route)
+           (p/delay 0)
+           (is (= "Left" (.-title document)))
+           ;; popstate / history.back uses the same on-navigate -> set-route-match! path
+           (route-handler/set-route-match! previous-route)
+           (p/delay 0)
+           (is (= "Previous" (.-title document)))
+           (route-handler/set-route-match! left-route)
+           (p/delay 0)
+           (is (= "Left" (.-title document))))
           (p/catch
            (fn [error]
              (is false (str error))))
