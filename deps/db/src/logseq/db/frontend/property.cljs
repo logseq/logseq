@@ -529,6 +529,12 @@
                                              :hide? true
                                              :public? false}}
 
+     :logseq.property.table/show-row-number? {:title "Show table row numbers"
+                                              :schema
+                                              {:type :checkbox
+                                               :hide? true
+                                               :public? false}}
+
      :logseq.property.table/ordered-columns {:title "View ordered columns"
                                              :schema
                                              {:type :coll

@@ -491,3 +491,66 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
+
+(deftest table-visible-columns-default-hides-row-number
+  (is (= false
+         (:id (#'views/table-visible-columns {} [{:id :block/title}])))))
+
+(deftest table-visible-columns-restores-row-number-and-hidden-columns
+  (let [columns [{:id :select}
+                 {:id :id}
+                 {:id :block/title}
+                 {:id :user.property/status}
+                 {:id :block/created-at}]
+        view {:logseq.property.table/hidden-columns [:user.property/status]
+              :logseq.property.table/show-row-number? true}
+        visible (#'views/table-visible-columns view columns)]
+    (is (true? (:id visible)))
+    (is (false? (:user.property/status visible)))
+    (is (nil? (:block/title visible)))))
+
+(deftest table-visible-columns-keeps-row-number-hidden-when-flag-is-false
+  (is (= false
+         (:id (#'views/table-visible-columns
+               {:logseq.property.table/show-row-number? false}
+               [{:id :id}])))))
+
+(deftest table-visible-columns-hides-imported-columns-not-in-ordered-columns
+  (let [columns [{:id :select}
+                 {:id :id}
+                 {:id :block/title}
+                 {:id :user.property/status}
+                 {:id :block/created-at}
+                 {:id :block/updated-at}]
+        view {:logseq.property.table/ordered-columns [:block/title]}
+        visible (#'views/table-visible-columns view columns)]
+    (is (false? (:id visible)))
+    (is (false? (:user.property/status visible)))
+    (is (nil? (:block/title visible)))
+    (is (nil? (:block/created-at visible)))
+    (is (nil? (:block/updated-at visible)))))
+
+(deftest table-visibility-to-persist-saves-row-number-separately
+  (is (= {:hidden-columns [:user.property/status]
+          :show-row-number? true}
+         (#'views/table-visibility-to-persist
+          {:id true
+           :user.property/status false
+           :block/title true})))
+  (is (= {:hidden-columns []
+          :show-row-number? false}
+         (#'views/table-visibility-to-persist {:id false}))))
+
+(deftest table-row-number-visibility-round-trips-across-remount
+  (let [columns [{:id :select} {:id :id} {:id :block/title} {:id :user.property/status}]
+        persisted (#'views/table-visibility-to-persist
+                   {:id true
+                    :user.property/status false})
+        remounted (#'views/table-visible-columns
+                   {:logseq.property.table/hidden-columns (:hidden-columns persisted)
+                    :logseq.property.table/show-row-number? (:show-row-number? persisted)}
+                   columns)]
+    (is (true? (:show-row-number? persisted)))
+    (is (= [:user.property/status] (:hidden-columns persisted)))
+    (is (true? (:id remounted)))
+    (is (false? (:user.property/status remounted)))))

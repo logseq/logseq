@@ -2003,6 +2003,34 @@
          [property operator])))
    filters))
 
+(defn- table-hidden-columns
+  [view-entity columns]
+  (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+    hidden-columns
+    (when (seq (:logseq.property.table/ordered-columns view-entity))
+      (vec (set/difference (set (map :id columns))
+                           (set (:logseq.property.table/ordered-columns view-entity))
+                           #{:select :block/created-at :block/updated-at})))))
+
+(defn- table-visible-columns
+  "Restore column visibility from a view entity.
+  The # row-number column defaults to hidden and is stored separately because
+  hidden-columns only records columns the user turned off."
+  [view-entity columns]
+  (-> (if-let [hidden-columns (table-hidden-columns view-entity columns)]
+        (zipmap hidden-columns (repeat false))
+        {})
+      (assoc :id (true? (:logseq.property.table/show-row-number? view-entity)))))
+
+(defn- table-visibility-to-persist
+  [visible-columns]
+  {:hidden-columns (vec (keep (fn [[column visible?]]
+                                (when (and (false? visible?)
+                                           (not= :id column))
+                                  column))
+                              visible-columns))
+   :show-row-number? (true? (get visible-columns :id))})
+
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters!]}]
   {:set-sorting!
@@ -2019,10 +2047,11 @@
         (set-filters! filters))))
    :set-visible-columns!
    (fn [columns]
-     (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                       (when (false? visible?)
-                                         column)) columns))]
-       (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)))
+     (let [{:keys [hidden-columns show-row-number?]} (table-visibility-to-persist columns)]
+       (db-property-handler/set-block-properties!
+        (:db/id entity)
+        {:logseq.property.table/hidden-columns hidden-columns
+         :logseq.property.table/show-row-number? show-row-number?})))
    :set-ordered-columns!
    (fn [ordered-columns]
      (let [ids (vec (remove #{:select} ordered-columns))]
@@ -2863,16 +2892,7 @@
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
-        visible-columns (-> (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
-                              (zipmap hidden-columns (repeat false))
-                              ;; This case can happen for imported tables
-                              (if (seq (:logseq.property.table/ordered-columns view-entity))
-                                (zipmap (set/difference (set (map :id columns))
-                                                        (set (:logseq.property.table/ordered-columns view-entity))
-                                                        #{:select :block/created-at :block/updated-at})
-                                        (repeat false))
-                                {}))
-                            (assoc :id false))
+        visible-columns (table-visible-columns view-entity columns)
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}

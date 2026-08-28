@@ -75,6 +75,15 @@
     (is (= true (get-in props [property :schema :hide?])))
     (is (db-property/logseq-property? property))))
 
+(deftest table-show-row-number-built-in-property
+  (let [property (get db-property/built-in-properties :logseq.property.table/show-row-number?)]
+    (is (some? property))
+    (is (= "Show table row numbers" (:title property)))
+    (is (= :checkbox (get-in property [:schema :type])))
+    (is (= false (get-in property [:schema :public?])))
+    (is (= true (get-in property [:schema :hide?])))
+    (is (db-property/logseq-property? :logseq.property.table/show-row-number?))))
+
 (deftest assignee-built-in-property
   (let [property (get db-property/built-in-properties :logseq.property/assignee)]
     (testing "schema"

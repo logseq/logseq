@@ -405,3 +405,21 @@
     (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
+
+(deftest migrate-65-34-adds-table-show-row-number-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 33}}])
+
+    (is (nil? (d/entity @conn :logseq.property.table/show-row-number?)))
+
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 34})]
+      (is (= {:major 65 :minor 34}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (let [property (d/entity @conn :logseq.property.table/show-row-number?)]
+        (is (some? property))
+        (is (= "Show table row numbers" (:block/title property)))
+        (is (= :checkbox (:logseq.property/type property))))
+      (is (some #(= {:properties [:logseq.property.table/show-row-number?]}
+                    (:migrate-updates %))
+                (:upgrade-result-coll result))))))
