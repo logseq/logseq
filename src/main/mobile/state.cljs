@@ -9,15 +9,13 @@
 (defonce *tab (atom "home"))
 
 (defn set-tab! [tab]
-  (let [prev @*tab]
-    ;; When leaving the search tab, clear its stack so reopening starts fresh.
-    ;; Native search UI owns query/result clearing on each platform; doing it here
-    ;; makes the Search UI redraw during the Home tab transition on iOS.
-    (when (and (= prev "search")
-            (not= tab "search"))
-      (mobile-nav/reset-stack-history! "search"))
+  (let [prev @*tab
+        search->home? (and (= prev "search")
+                           (= tab "home"))]
     (reset! *tab tab)
-    (mobile-nav/switch-stack! tab)))
+    (if search->home?
+      (mobile-nav/pop-to-root! tab)
+      (mobile-nav/switch-stack! tab))))
 (defn use-tab [] (hooks/use-atom *tab))
 
 (defonce *popup-data (atom nil))

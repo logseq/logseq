@@ -226,6 +226,9 @@ private struct LiquidTabs26View: View {
 
     @State private var selectedTab: LiquidTabsTabSelection = .content(0)
     @State private var searchPath = NavigationPath()
+    @State private var deferredWebSelection: LiquidTabsTabSelection?
+    @State private var notifiedSelectionId: String?
+    @State private var suppressedSelectionId: String?
 
     private let maxMainTabs = 6
 
@@ -234,8 +237,7 @@ private struct LiquidTabs26View: View {
             get: { selectedTab },
             set: { newValue in
                 if newValue != selectedTab {
-                    prepareForSelectionChange(to: newValue)
-                    selectedTab = newValue
+                    selectTab(newValue)
                 }
             }
         )
@@ -287,18 +289,59 @@ private struct LiquidTabs26View: View {
         }
     }
 
+    private func selectTab(_ selection: LiquidTabsTabSelection, notify: Bool = true) {
+        prepareForSelectionChange(to: selection)
+
+        if let id = webBackedTabId(for: selection) {
+            deferredWebSelection = selection
+            if notify {
+                notifiedSelectionId = id
+                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+            } else {
+                suppressedSelectionId = id
+            }
+            return
+        }
+
+        deferredWebSelection = nil
+        if let id = store.tabId(for: selection), !notify {
+            suppressedSelectionId = id
+        }
+        selectedTab = selection
+    }
+
+    private func applyDeferredWebSelectionIfReady() {
+        guard store.pendingWebTabId == nil,
+              let selection = deferredWebSelection else {
+            return
+        }
+
+        deferredWebSelection = nil
+        selectedTab = selection
+    }
+
+    private func notifySelectedTabIfNeeded(_ id: String) {
+        store.selectedId = id
+
+        if notifiedSelectionId == id {
+            notifiedSelectionId = nil
+        } else if suppressedSelectionId == id {
+            suppressedSelectionId = nil
+        } else {
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+        }
+    }
+
     private func prepareForSelectionChange(to selection: LiquidTabsTabSelection) {
         waitForWebBackedTab(selection)
 
         switch selection {
         case .search:
             store.suppressSearchNotifications = true
-            resetSearchState()
             isSearchFocused = true
         case .content:
             if selectedTab == .search {
                 store.suppressSearchNotifications = true
-                searchPath = NavigationPath()
                 isSearchFocused = false
             }
         }
@@ -391,13 +434,12 @@ private struct LiquidTabs26View: View {
                     })
                     .frame(width: 0, height: 0)
                 }
-                .overlay {
-                    if store.pendingWebTabId != nil {
-                        Color.logseqBackground
-                            .ignoresSafeArea()
-                    }
-                }
 
+                if store.pendingWebTabId != nil {
+                    Color.logseqBackground
+                        .ignoresSafeArea()
+                        .zIndex(1)
+                }
             }
             .onAppear {
                 let initial = initialSelection()
@@ -428,8 +470,7 @@ private struct LiquidTabs26View: View {
             }
             .onChange(of: selectedTab) { newValue in
                 if let id = store.tabId(for: newValue) {
-                    store.selectedId = id
-                    LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                    notifySelectedTabIfNeeded(id)
                 }
 
                 switch newValue {
@@ -439,7 +480,6 @@ private struct LiquidTabs26View: View {
 
                 case .content:
                     store.suppressSearchNotifications = true
-                    searchPath = NavigationPath()
                     isSearchFocused = false
                 }
             }
@@ -452,10 +492,14 @@ private struct LiquidTabs26View: View {
                 if newSelection != selectedTab {
                     let isExternalSelectionChange = store.tabId(for: selectedTab) != id
                     if isExternalSelectionChange {
-                        prepareForSelectionChange(to: newSelection)
+                        selectTab(newSelection, notify: false)
+                    } else {
+                        selectedTab = newSelection
                     }
-                    selectedTab = newSelection
                 }
+            }
+            .onChange(of: store.pendingWebTabId) { _ in
+                applyDeferredWebSelectionIfReady()
             }
             .animation(nil, value: selectedTab)
         }
@@ -845,6 +889,9 @@ private struct LiquidTabs16View: View {
     let navController: UINavigationController
 
     @State private var searchPath = NavigationPath()
+    @State private var deferredWebTabId: String?
+    @State private var notifiedSelectionId: String?
+    @State private var suppressedSelectionId: String?
 
     private var searchTextBinding: Binding<String> {
         Binding(
@@ -853,10 +900,75 @@ private struct LiquidTabs16View: View {
         )
     }
 
+    private func webBackedTabId(_ id: String) -> String? {
+        guard id != "graphs",
+              id != "search" else {
+            return nil
+        }
+
+        return id
+    }
+
     private func resetSearchState() {
         searchPath = NavigationPath()
         store.searchText = ""
         store.searchResults = []
+    }
+
+    private func prepareForSelectionChange(to id: String) {
+        store.beginWebTabTransitionIfNeeded(id)
+
+        if id == "search" {
+            store.suppressSearchNotifications = true
+        }
+
+        if store.selectedId == "search" {
+            store.suppressSearchNotifications = true
+        }
+    }
+
+    private func selectTab(_ id: String, notify: Bool = true) {
+        guard id != store.selectedId || deferredWebTabId != nil else { return }
+
+        let deferred = webBackedTabId(id) != nil
+
+        prepareForSelectionChange(to: id)
+
+        if deferred {
+            deferredWebTabId = id
+            if notify {
+                notifiedSelectionId = id
+                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+            } else {
+                suppressedSelectionId = id
+            }
+        } else {
+            deferredWebTabId = nil
+            if !notify {
+                suppressedSelectionId = id
+            }
+            store.selectedId = id
+        }
+    }
+
+    private func applyDeferredWebSelectionIfReady() {
+        guard store.pendingWebTabId == nil,
+              let id = deferredWebTabId else {
+            return
+        }
+
+        deferredWebTabId = nil
+        store.selectedId = id
+    }
+
+    private func notifySelectedTabIfNeeded(_ id: String) {
+        if notifiedSelectionId == id {
+            notifiedSelectionId = nil
+        } else if suppressedSelectionId == id {
+            suppressedSelectionId = nil
+        } else {
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+        }
     }
 
     var body: some View {
@@ -880,18 +992,7 @@ private struct LiquidTabs16View: View {
                             guard let id = newValue else { return }
 
                             if id != store.selectedId {
-                                store.beginWebTabTransitionIfNeeded(id)
-
-                                if id == "search" {
-                                    store.suppressSearchNotifications = true
-                                    resetSearchState()
-                                }
-                                if store.selectedId == "search" {
-                                    store.suppressSearchNotifications = true
-                                    searchPath = NavigationPath()
-                                }
-                                store.selectedId = id
-                                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                                selectTab(id)
                             }
                         }
                     )) {
@@ -938,8 +1039,14 @@ private struct LiquidTabs16View: View {
                             }
                         } else {
                             store.suppressSearchNotifications = true
-                            searchPath = NavigationPath()
                         }
+
+                        if let id = newId {
+                            notifySelectedTabIfNeeded(id)
+                        }
+                    }
+                    .onChange(of: store.pendingWebTabId) { _ in
+                        applyDeferredWebSelectionIfReady()
                     }
                     .background {
                         TabReselectObserver(selectedId: {
@@ -947,11 +1054,11 @@ private struct LiquidTabs16View: View {
                         })
                         .frame(width: 0, height: 0)
                     }
-                    .overlay {
-                        if store.pendingWebTabId != nil {
-                            Color.logseqBackground
-                                .ignoresSafeArea()
-                        }
+
+                    if store.pendingWebTabId != nil {
+                        Color.logseqBackground
+                            .ignoresSafeArea()
+                            .zIndex(1)
                     }
                 }
                 .onAppear {
