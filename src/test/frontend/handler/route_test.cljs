@@ -223,8 +223,8 @@
       (-> (p/with-redefs [ipc/ipc (fn [channel title]
                                     (when (= :set-window-title channel)
                                       (swap! window-titles conj title)))]
-            (route-handler/update-page-title! left-route)
             (p/do!
+             (do (route-handler/update-page-title! left-route) nil)
              (route-handler/update-page-title! current-route)
              (is (= "Current" (.-title document)))
              (p/resolve! left-title {:page-title "Left"})
