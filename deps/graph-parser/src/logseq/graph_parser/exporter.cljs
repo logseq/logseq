@@ -1445,6 +1445,62 @@
           block-title
           asset-name-to-uuids))
 
+(defn- image-asset-type?
+  "True when asset type string is an image format (png/jpg/gif/...)."
+  [asset-type]
+  (contains? (common-config/img-formats) (keyword asset-type)))
+
+(defn- strip-image-asset-links
+  "Remove image markdown links (![alt](path){...}) for the given asset names
+  from title. Only strips links with a leading '!' so non-image [name](path)
+  links remain intact."
+  [title asset-names]
+  (reduce (fn [acc asset-name]
+            (string/replace acc
+                            (re-pattern (str "!\\[[^\\]]*?\\]\\([^\\)]*?"
+                                             (common-util/escape-regex-chars asset-name)
+                                             "\\)(\\{[^}]*\\})?"))
+                            ""))
+          (or title "")
+          asset-names))
+
+(defn- build-asset-embed-block
+  "Creates a child block that embeds an asset via :block/link (Node embed).
+  Modeled after build-code-snippet-child-blocks / handle-embeds."
+  [parent-block asset-uuid]
+  (sqlite-util/block-with-timestamps
+   {:block/uuid (d/squuid)
+    :block/title ""
+    :block/link [:block/uuid asset-uuid]
+    :block/parent [:block/uuid (:block/uuid parent-block)]
+    :block/page (:block/page parent-block)
+    :block/order (db-order/gen-key)}))
+
+(defn- classify-image-assets
+  "Classify image assets present in a block title.
+  Returns:
+  - {:type :pure-single-image :uuid u} when title is only one image link
+  - {:type :images-present :image-uuids [...] :image-names [...]} otherwise
+  - nil when there are no image assets"
+  [title asset-name->uuid asset-uuid->type]
+  (let [image-entries (filter (fn [[_name uuid]]
+                                (image-asset-type? (get asset-uuid->type uuid)))
+                              asset-name->uuid)
+        image-uuids (mapv second image-entries)
+        image-names (mapv first image-entries)]
+    (cond
+      (empty? image-uuids)
+      nil
+
+      (and (= 1 (count image-uuids))
+           (string/blank? (string/trim (strip-image-asset-links title image-names))))
+      {:type :pure-single-image :uuid (first image-uuids)}
+
+      :else
+      {:type :images-present
+       :image-uuids image-uuids
+       :image-names image-names})))
+
 (defn find-annotation-children-blocks
   "Given a list of blocks and a set of parent uuids, return all blocks that are
    descendants via :block/parent of given parent uuids"
@@ -1689,8 +1745,11 @@
      :asset-tx asset-tx}))
 
 (defn- <handle-assets-in-block
-  "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links zotero-imported-files zotero-linked-files]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
+  "If a block contains assets, creates them as #Asset nodes in the Asset page.
+  Image assets are referenced as Node embeds (:block/link) so publish/sync can
+  collect them via collect-embedded-blocks. Non-image assets (e.g. PDF links)
+  remain as [[uuid]] page-refs."
+  [block {:keys [asset-links zotero-imported-files zotero-linked-files embeds]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
   (let [linked-files (when (seq zotero-linked-files) (atom zotero-linked-files))
         linked-base-dir (when linked-files
                           (get-in user-config [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory]))]
@@ -1723,11 +1782,62 @@
               asset-maps (remove nil? asset-maps*)
               asset-blocks (mapcat :asset-tx asset-maps)
               asset-names-to-uuids
-              (into {} (map :asset-name-uuid asset-maps))]
-        (cond-> {:block
-                 (update block :block/title update-asset-links-in-block-title asset-names-to-uuids ignored-assets)}
-          (seq asset-blocks)
-          (assoc :asset-blocks-tx asset-blocks)))
+              (into {} (map :asset-name-uuid asset-maps))
+              ;; Map asset-uuid -> type from both already-known assets and newly built txs
+              asset-uuid->type
+              (merge
+               (into {}
+                     (keep (fn [[asset-name asset-uuid]]
+                             (when-let [t (:type (get @assets asset-name))]
+                               [asset-uuid t]))
+                           asset-names-to-uuids))
+               (into {}
+                     (keep (fn [asset-tx]
+                             (when-let [t (:logseq.property.asset/type asset-tx)]
+                               [(:block/uuid asset-tx) t]))
+                           asset-blocks)))
+              has-embeds? (seq embeds)
+              classification (classify-image-assets (:block/title block)
+                                                    asset-names-to-uuids
+                                                    asset-uuid->type)]
+        (cond
+          ;; No images, or block already has {{embed}} (avoid :block/link collision):
+          ;; fall back to legacy [[uuid]] page-refs for all assets.
+          (or (nil? classification) has-embeds?)
+          (cond-> {:block
+                   (update block :block/title update-asset-links-in-block-title asset-names-to-uuids ignored-assets)}
+            (seq asset-blocks)
+            (assoc :asset-blocks-tx asset-blocks))
+
+          ;; Pure single-image block → convert whole block to Node embed
+          (= :pure-single-image (:type classification))
+          (cond-> {:block (merge block
+                                 {:block/title ""
+                                  :block/link [:block/uuid (:uuid classification)]})}
+            (seq asset-blocks)
+            (assoc :asset-blocks-tx asset-blocks))
+
+          ;; Mixed text+images or multi-image: strip image markdown, keep non-image
+          ;; links as [[uuid]], and add child embed blocks for each image.
+          :else
+          (let [{:keys [image-uuids image-names]} classification
+                image-name-set (set image-names)
+                non-image-entries (into {}
+                                        (remove (fn [[name _uuid]]
+                                                  (contains? image-name-set name))
+                                                asset-names-to-uuids))
+                stripped-title (strip-image-asset-links (:block/title block) image-names)
+                title-with-non-image-refs (if (seq non-image-entries)
+                                            (update-asset-links-in-block-title stripped-title
+                                                                               non-image-entries
+                                                                               ignored-assets)
+                                            stripped-title)
+                embed-blocks (mapv #(build-asset-embed-block block %) image-uuids)]
+            (cond-> {:block (assoc block :block/title title-with-non-image-refs)}
+              (seq asset-blocks)
+              (assoc :asset-blocks-tx asset-blocks)
+              (seq embed-blocks)
+              (assoc :embed-blocks-tx embed-blocks)))))
       (p/resolved {:block block}))))
 
 (defn- quote-node->markdown
@@ -1890,28 +2000,31 @@
         code-segs))
 
 (defn- handle-embeds
-  "If a block contains page or block embeds, converts block to a :block/link based embed"
+  "If a block contains page or block embeds, converts block to a :block/link based embed.
+  Skips when :block/link is already set (e.g. image asset Node embed from handle-assets)."
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
-  (if-let [embed-node (first embeds)]
-    (cond
-      (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
-      (let [page-uuid (get-page-uuid page-names-to-uuids
-                                     (some-> (text/get-page-name (first (:arguments (second embed-node))))
-                                             common-util/page-name-sanity-lc)
-                                     {:block block})]
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid page-uuid]}))
-      (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
-      (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
-        (merge block
-               {:block/title ""
-                :block/link [:block/uuid block-uuid]}))
-      :else
-      (do
-        (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
-        block))
-    block))
+  (if (:block/link block)
+    block
+    (if-let [embed-node (first embeds)]
+      (cond
+        (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
+        (let [page-uuid (get-page-uuid page-names-to-uuids
+                                       (some-> (text/get-page-name (first (:arguments (second embed-node))))
+                                               common-util/page-name-sanity-lc)
+                                       {:block block})]
+          (merge block
+                 {:block/title ""
+                  :block/link [:block/uuid page-uuid]}))
+        (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
+        (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
+          (merge block
+                 {:block/title ""
+                  :block/link [:block/uuid block-uuid]}))
+        :else
+        (do
+          (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
+          block))
+      block)))
 
 (defn- dissoc-nil-block-refs
   [block]
@@ -1977,7 +2090,7 @@
           (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
           {block-after-built-in-props :block deadline-properties-tx :properties-tx}
           (update-block-deadline-and-scheduled db block page-names-to-uuids options)
-          {block-after-assets :block :keys [asset-blocks-tx]}
+          {block-after-assets :block :keys [asset-blocks-tx embed-blocks-tx]}
           (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))
           ;; :block/page should be [:block/page NAME]
 
@@ -2000,9 +2113,18 @@
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
-    (let [[final-block code-children-tx] (handle-code-blocks block' options)]
+    (let [[final-block code-children-tx] (handle-code-blocks block' options)
+          ;; embed-blocks-tx is built before page name lookup-refs are rewritten to
+          ;; uuids; re-bind page/parent from the fully prepared parent block.
+          fixed-embed-blocks-tx
+          (mapv (fn [embed-block]
+                  (assoc embed-block
+                         :block/page (:block/page final-block)
+                         :block/parent [:block/uuid (:block/uuid final-block)]))
+                (or embed-blocks-tx []))]
       ;; Order matters as previous txs are referenced in block
-      (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
+      (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block]
+              fixed-embed-blocks-tx code-children-tx))))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
