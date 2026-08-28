@@ -423,7 +423,8 @@
 (def db-default-config
   "Default repo config for DB graphs"
   (merge common-default-config
-         ;; The "DOING" query returns tasks with "Doing" status for recent past days
+         ;; The "DOING" query returns Doing blocks on recent journal pages,
+         ;; plus pages whose status is Doing (pages have no :block/page).
          ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
@@ -433,10 +434,13 @@
                       :in $ ?start ?today
                       :where
                       (task ?b #{"Doing"})
-                      [?b :block/page ?p]
-                      [?p :block/journal-day ?d]
-                      [(>= ?d ?start)]
-                      [(<= ?d ?today)]]
+                      (or-join [?b ?start ?today]
+                               (and
+                                [?b :block/page ?p]
+                                [?p :block/journal-day ?d]
+                                [(>= ?d ?start)]
+                                [(<= ?d ?today)])
+                               [?b :block/name])]
              :inputs [:14d :today]
              :collapsed? true}
             {:title-key :journal.default-query/todo
