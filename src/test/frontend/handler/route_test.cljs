@@ -1,9 +1,9 @@
 (ns frontend.handler.route-test
   (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [electron.ipc :as ipc]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.date :as date]
-            [electron.ipc :as ipc]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
