@@ -540,6 +540,10 @@
 (defmethod handle :window-close [^js win]
   (.close win))
 
+(defmethod handle :set-window-title [^js win [_ title]]
+  (when (and win (string? title) (not (.isDestroyed win)))
+    (.setTitle win title)))
+
 (defmethod handle :theme-loaded [^js win]
   (.manage (windowStateKeeper) win))
 
