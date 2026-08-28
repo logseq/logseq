@@ -1,6 +1,7 @@
 (ns frontend.handler.route
   "Provides fns used for routing throughout the app"
   (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -206,12 +207,30 @@
     (<page-route-title (:name path-params))
     (p/resolved (static-title name path-params))))
 
+(defonce ^:private *page-title-update-id (atom 0))
+
+(defn- apply-page-title!
+  [title]
+  (util/set-title! title)
+  (ipc/ipc :set-window-title title))
+
 (defn update-page-title!
   [route]
-  (let [{:keys [data path-params]} route]
+  (let [update-id (swap! *page-title-update-id inc)
+        {:keys [data path-params]} route]
     (p/let [title (get-title (:name data) path-params)
-            hls? (pdf-utils/hls-file? title)]
-      (util/set-title! (if hls? (pdf-utils/fix-local-asset-pagename title) title)))))
+            hls? (pdf-utils/hls-file? title)
+            title (if hls? (pdf-utils/fix-local-asset-pagename title) title)]
+      (when (= update-id @*page-title-update-id)
+        (apply-page-title! title)
+        ;; Chromium can restore the history-entry title after popstate and
+        ;; overwrite a same-turn document.title write. Re-apply on the next
+        ;; tick so Back/Forward keep the current page title.
+        (js/setTimeout
+         (fn []
+           (when (= update-id @*page-title-update-id)
+             (apply-page-title! title)))
+         0)))))
 
 (defn update-page-label!
   [route]
