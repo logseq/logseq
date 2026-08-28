@@ -43,30 +43,18 @@
          (string/join))))
 
 (defn- inline-nodes->plain-text
-  "Collect visible text from mldoc inline AST, stripping Emphasis/Code wrappers.
+  "Collect visible text from mldoc inline AST, stripping Emphasis wrappers.
    File-link labels can be Plain or nested Emphasis; page-name->map requires a string."
   [nodes]
-  (letfn [(node->text [node]
-            (if-not (and (vector? node) (string? (first node)))
-              (if (sequential? node)
-                (apply str (map node->text node))
-                "")
-              (let [[typ value] node]
-                (case typ
-                  ("Plain" "Spaces" "Verbatim" "Code")
-                  (str value)
-                  "Emphasis"
-                  (node->text (second value))
-                  "Link"
-                  (node->text (:label value))
-                  "Nested_link"
-                  (str (:content value))
-                  ("Subscript" "Superscript" "Tag")
-                  (node->text value)
-                  ""))))]
-    (let [text (string/trim (node->text nodes))]
-      (when-not (string/blank? text)
-        text))))
+  (->> (tree-seq sequential? seq nodes)
+       (keep (fn [form]
+               (when (and (vector? form)
+                          (#{"Plain" "Spaces" "Verbatim" "Code"} (first form))
+                          (string? (second form)))
+                 (second form))))
+       (apply str)
+       string/trim
+       not-empty))
 
 (defn get-page-reference
   [block format]
@@ -94,7 +82,7 @@
 
                   (and
                    (= url-type "File")
-                   (inline-nodes->plain-text (:label (second block)))))))
+                   (inline-nodes->plain-text (:label (second block))))))
 
                (and (vector? block) (= "Nested_link" (first block)))
                (let [content (:content (last block))]
