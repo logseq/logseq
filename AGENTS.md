@@ -44,8 +44,7 @@
 - Use repo-local skills discovered under `.agents/skills/`; load the matching `SKILL.md` before editing files or proposing changes.
 - **i18n (mandatory)**: Always load `.agents/skills/logseq-i18n/SKILL.md` before any change that adds, edits, or removes user-facing UI text, regardless of whether other skills also apply.
 - Review notes live in `prompts/review.md`; check them when preparing changes.
-- DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
-- DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
+- Runtime, sync, CLI, rendering, search, and Graph View engineering guidance is consolidated in `docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md`; current source and tests remain authoritative.
 - For db-sync D1 schema changes, add or update a Cloudflare worker SQL migration under `deps/db-sync/worker/migrations/`; do not rely on ad hoc runtime-only schema migration code.
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
@@ -53,3 +52,5 @@
 - Avoid using `js/Buffer` in browser related code.
 - Git commits should include a concise summary.
 - When deleting properties in db migration, those properties should be added to `logseq.db-sync.tx-sanitize/migration-deleted-attrs`
+- Use spec-dev-tool to manage agent decision documents; run `spec-dev-tool --help` and follow its AGENT WORKFLOW.
+- When asked to find simplifications, run `spec-dev-tool guide find-simplifications` from inside this Git worktree and follow the emitted workflow.

@@ -18,6 +18,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as frontend-outliner-op]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -178,6 +179,32 @@
               :pos 1}
              @captured-state)
           "Enter must use the textarea that received the keydown event."))))
+
+(deftest enter-on-page-title-saves-and-exits-instead-of-splitting-test
+  (let [target #js {:value "Alpha Beta Gamma"
+                    :selectionStart 5}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block {:db/id 1
+                                                        :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                                        :block/title "Alpha Beta Gamma"}
+                                                :config {:page-title? true}
+                                                :node target
+                                                :value "Alpha Beta Gamma"
+                                                :pos 5})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a page title must save and exit without splitting the page entity."))))
 
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
@@ -1023,6 +1050,36 @@
                        (state/set-state! :editor/block nil)
                        (done)))))))
 
+(deftest page-search-includes-public-built-ins
+  (async done
+    (let [matched-pages (atom nil)
+          search-options (atom nil)
+          task {:db/id 1
+                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                :block/title "Task"
+                :logseq.property/built-in? true}
+          original-<get-block db-async/<get-block
+          original-block-search search/block-search]
+      (set! db-async/<get-block (fn [& _args] (p/resolved nil)))
+      (set! search/block-search
+            (fn [_repo _query options]
+              (reset! search-options options)
+              (p/resolved [task])))
+      (-> (#'editor-component/search-pages "Ta" false #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (true? (:built-in? @search-options))
+                 "Page reference search should request the same public built-ins as Cmd+K")
+             (is (some #(= "Task" (:block/title %)) @matched-pages))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-<get-block)
+             (set! search/block-search original-block-search)
+             (done)))))))
+
 (deftest tag-search-does-not-convert-class-aliases
   (async done
     (let [matched-pages (atom nil)
@@ -1236,7 +1293,7 @@
                                                    :cursor-pos 8}))))
 
 (defn- delete-block-at-zero-pos-result
-  [block]
+  [block & {:keys [left-sibling]}]
   (let [deleted? (atom false)
         stopped? (atom false)
         input #js {:value ""}
@@ -1259,7 +1316,7 @@
     (set! util/stop (fn [_] (reset! stopped? true)))
     (set! state/get-current-repo (constantly test-helper/test-db))
     (set! state/get-edit-block (constantly block))
-    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved left-sibling)))
     (set! editor/get-state (constantly {:config {}}))
     (set! editor/delete-block-inner! (fn [_ _] (reset! deleted? true)))
     (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
@@ -1300,6 +1357,32 @@
                          :block/page {:db/id 10}})]
           (is (= {:deleted? true :stopped? true} result)))
         (p/finally done))))
+
+(deftest first-empty-journal-block-backspace-does-not-edit-the-journal-title-test
+  (async done
+    (let [journal {:db/id 10
+                   :block/uuid #uuid "00000000-0000-0000-0000-000000000010"
+                   :block/name "aug 20th, 2026"
+                   :block/title "Aug 20th, 2026"
+                   :block/tags [{:db/ident :logseq.class/Journal}]}
+          previous {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/title "previous"
+                    :block/parent journal
+                    :block/page journal}
+          empty-block {:db/id 2
+                       :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                       :block/title ""
+                       :block/parent journal
+                       :block/page journal}]
+      (-> (p/let [first-result (delete-block-at-zero-pos-result empty-block)
+                  later-result (delete-block-at-zero-pos-result
+                                empty-block :left-sibling previous)]
+            (is (= {:deleted? false :stopped? true} first-result)
+                "Backspace must not move editing from the first empty block to a journal title.")
+            (is (= {:deleted? true :stopped? true} later-result)
+                "Backspace must preserve normal joins when a journal block has a previous block."))
+          (p/finally done)))))
 
 (deftest delete-block-when-zero-pos-keeps-the-keydown-editor-state-test
   (async done
@@ -1343,6 +1426,39 @@
                     (is (= editor-state @*deleted-editor-state)
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
+
+(deftest repeated-backspace-does-not-restore-erased-current-title-test
+  (let [current {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "Foo"
+                 :block/raw-title "Foo"
+                 :block/parent {:db/id 10}}
+        previous {:db/id 1
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title ""
+                  :block/parent {:db/id 20}}
+        tx-meta (atom nil)
+        edited (atom nil)]
+    (with-redefs [db-transact/apply-outliner-ops (fn [_ _ opts]
+                                                    (reset! tx-meta opts))
+                  frontend-outliner-op/move-blocks! (fn [& _] :move)
+                  editor/delete-block-aux! (fn [& _] :delete)
+                  editor/edit-block! (fn [block pos opts]
+                                       (reset! edited [block pos opts]))]
+      (#'editor/delete-block-with-previous!
+       {:block current
+        :current-block current
+        :prev-block previous
+        :new-content ""
+        :input-empty? true
+        :delete-concat? false})
+      ((:editor/edit-block-fn @tx-meta) [])
+      (is (= [(assoc current :block/title "" :block/raw-title "")
+              0
+              {:save-code-editor? false
+               :skip-load? true}]
+             @edited)
+          "Deleting an empty predecessor must not restore the erased mounted title."))))
 
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"

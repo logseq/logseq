@@ -5324,6 +5324,94 @@ let () =
       in
       Js.Promise.resolve pass);
 
+  test_promise
+    "CLI parity graph validate error includes structured errors context"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/validate-db" body then
+              "[\"^ \",\"~:errors\",[[\"^ \",\"~:entity\",[\"^ \
+               \",\"~:db/id\",1],\"^0\",[\"^ \",\"~:foo\",[\"bad\"]]]]]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Graph.Graph_validate
+              { graph = Cli_config.repo_to_graph repo; repo; fix = false }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Graph.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "invalid graph status" true (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | None -> fail_test "expected graph validation error"
+          | Some err -> (
+              expect_equal "validation error code" "graph-validation-failed"
+                (Error.code_to_string err.Error.code);
+              expect_named_contains "validation error message still has EDN"
+                err.message "Found 1 entity with errors:";
+              match err.Error.context with
+              | None ->
+                  fail_test
+                    "graph_validate_result Error.make should include structured \
+                     context, not only message"
+              | Some context -> (
+                  match
+                    Option.bind (Edn_util.get context "errors") Edn_util.as_seq
+                  with
+                  | Some errors ->
+                      expect_int "structured entity errors" 1
+                        (Vec.length errors)
+                  | None ->
+                      fail_test
+                        "validation context should carry :errors sequence")));
+          let json_output = Format_types.to_json result in
+          let root =
+            match Js.Json.decodeObject (parse_json json_output) with
+            | Some object_ -> object_
+            | None ->
+                fail_test ("expected json object: " ^ json_output);
+                Js.Dict.empty ()
+          in
+          expect_none "json data key" (Js.Dict.get root "data");
+          let error =
+            match
+              Option.bind (Js.Dict.get root "error") Js.Json.decodeObject
+            with
+            | Some object_ -> object_
+            | None ->
+                fail_test ("expected error object: " ^ json_output);
+                Js.Dict.empty ()
+          in
+          (match
+             Option.bind (Js.Dict.get error "errors") Js.Json.decodeArray
+           with
+          | Some errors ->
+              expect_int "json error.errors" 1 (Array.length errors)
+          | None ->
+              fail_test
+                "json error should include structured errors, not only message");
+          let edn_output = Format_types.to_edn result in
+          let edn_value = Melange_edn_melange.of_edn_string edn_output in
+          (match
+             Option.bind (Edn_util.get edn_value "error") (fun error ->
+                 Option.bind (Edn_util.get error "errors") Edn_util.as_seq)
+           with
+          | Some errors ->
+              expect_int "edn error.errors" 1 (Vec.length errors)
+          | None ->
+              fail_test
+                "edn error should include structured errors, not only message");
+          Js.Promise.resolve pass));
+
   test_promise "CLI parity graph info queries kv rows with thread api q"
     (fun () ->
       let q_called = ref false in

@@ -993,8 +993,10 @@
                      (block-handler/outliner-tx-meta prev-block))
               :editor/edit-block-fn
               (fn [_rows]
-                (edit-block! current-block 0 {:save-code-editor? false
-                                              :skip-load? true})))
+                (edit-block! (current-block-with-title current-block new-content)
+                             0
+                             {:save-code-editor? false
+                              :skip-load? true})))
        (when-not (= (block-parent-id block) (block-parent-id prev-block))
          (outliner-op/move-blocks! [block] prev-block {:sibling? true}))
        (delete-block-aux! prev-block))
@@ -1981,10 +1983,10 @@
         (search/fuzzy-search classes q {:extract-fn :block/title})))))
 
 (defn <get-matched-blocks
-  "Return matched blocks that are not built-in"
-  [q & [{:keys [nlp-pages? page-only?]}]]
+  "Return matched blocks, optionally including public built-ins"
+  [q & [{:keys [nlp-pages? page-only? built-in?]}]]
   (p/let [block (state/get-edit-block)
-          result (search/block-search (state/get-current-repo) q {:built-in? false
+          result (search/block-search (state/get-current-repo) q {:built-in? (boolean built-in?)
                                                                   :limit 20
                                                                   :search-limit 100
                                                                   :enable-snippet? false
@@ -2592,6 +2594,8 @@
   [el]
   (some? (dom/closest el ".block-editor")))
 
+(declare escape-editing)
+
 (defn keydown-new-block-handler [^js e]
   (let [target (when e (.-target e))
         state (cond-> (get-state)
@@ -2603,11 +2607,21 @@
               (inside-of-editor-block target))
       (if (pending-new-block?)
         (when e (.preventDefault e))
-        (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
-          (keydown-new-line)
-          (do
-            (when e (.preventDefault e))
-            (keydown-new-block state)))))))
+        (let [new-line? (or (state/doc-mode-enter-for-new-line?)
+                            (inside-of-single-block (:node state)))]
+          (cond
+            (get-in state [:config :page-title?])
+            (do
+              (when e (.preventDefault e))
+              (escape-editing))
+
+            new-line?
+            (keydown-new-line)
+
+            :else
+            (do
+              (when e (.preventDefault e))
+              (keydown-new-block state))))))))
 
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
@@ -3142,7 +3156,9 @@
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
-            (when (and (not (and top-block? (not (string/blank? value))))
+            (when (and (not (and top-block?
+                                 (or (entity/journal? left-or-parent)
+                                     (not (string/blank? value)))))
                        (not (editor-block-preserved-on-empty-title-merge? block))
                        (not root-block?)
                        (not single-block?)
@@ -3583,8 +3599,8 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (when-not (:active? (state/get-state :ui/find-in-page))
-    (cut-selection-blocks copy?)
-    (clear-selection!)))
+    (p/do! (cut-selection-blocks copy?)
+           (clear-selection!))))
 
 (defn shortcut-copy-selection
   [e]

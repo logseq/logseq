@@ -1,6 +1,4 @@
 ;; API
-logseq.db-sync.cycle/fix-cycle!
-;; API
 logseq.db-sync.node.entry/main
 ;; API (CLI entrypoint)
 logseq.db-sync.node.show-checksum/main
