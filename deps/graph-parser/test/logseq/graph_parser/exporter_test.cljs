@@ -1798,6 +1798,21 @@ abc
                   set))
             "Block has correct task tag and property :block/refs")))))
 
+(deftest-async import-file-graph-rebuilds-refs-without-per-file-listener
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db file-graph-dir conn {})
+          block (db-test/find-block-by-content @conn "old todo block")]
+    (is (some? (:block/tx-id block))
+        "Finalize stamps :block/tx-id")
+    (is (set/subset?
+         #{:logseq.property/status :logseq.class/Task}
+         (->> block
+              :block/refs
+              (map #(:db/ident (d/entity @conn (:db/id %))))
+              set))
+        "One-shot rebuild writes property and class :block/refs without a per-file listener")))
+
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)

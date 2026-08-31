@@ -45,20 +45,3 @@
                       (str "self " (page-ref/->page-ref (:block/uuid block))))]
     (is (empty? (outliner-pipeline/db-rebuild-block-refs @conn block'))
         "A block should not rebuild a recursive ref to itself")))
-
-(deftest finalize-imported-graph-stamps-tx-id-and-rebuilds-refs
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               [{:page {:block/title "page1"}
-                 :blocks [{:block/title "todo block"
-                           :build/tags [:logseq.class/Task]}]}]})
-        block-id (:db/id (db-test/find-block-by-content @conn "todo block"))
-        task-id (:db/id (d/entity @conn :logseq.class/Task))]
-    (d/transact! conn [[:db/retract block-id :block/tx-id]
-                       [:db/retract block-id :block/refs]])
-    (outliner-pipeline/finalize-imported-graph! conn)
-    (let [block (d/entity @conn block-id)]
-      (is (some? (:block/tx-id block))
-          "Finalize stamps :block/tx-id")
-      (is (contains? (set (map :db/id (:block/refs block))) task-id)
-          "Finalize rebuilds class tag into :block/refs"))))

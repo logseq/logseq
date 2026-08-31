@@ -2900,6 +2900,41 @@
                      [:db/retract ref-id :block/uuid ref-uuid])))]
      (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx))))
 
+(defn finalize-imported-graph!
+  "Stamp :block/tx-id and rebuild :block/refs once after file import.
+
+  Per-file import txs set ::new-graph?, so the CLI listener and worker
+  transact-pipeline skip refs. CLI has no worker pipeline, so this pass
+  writes both in one transact."
+  [conn]
+  (let [db @conn
+        entity-ids (d/q '[:find [?e ...]
+                          :where
+                          [?e :block/uuid]
+                          [?e :block/title]
+                          [(missing? $ ?e :block/tx-id)]]
+                        db)]
+    (when (seq entity-ids)
+      (let [tx-id (inc (:max-tx db))
+            tx-id-tx (mapv (fn [entity-id]
+                             {:db/id entity-id
+                              :block/tx-id tx-id})
+                           entity-ids)
+            refs-tx (into []
+                          (mapcat (fn [id]
+                                    (let [block (d/entity db id)]
+                                      (when (and block
+                                                 (not (:logseq.property.reaction/target block)))
+                                        (let [refs (outliner-pipeline/db-rebuild-block-refs db block)]
+                                          (when (seq refs)
+                                            [[:db/retract id :block/refs]
+                                             {:db/id id
+                                              :block/refs refs}]))))))
+                          entity-ids)]
+        (ldb/transact! conn
+                       (into tx-id-tx refs-tx)
+                       {::imported-data? true ::new-graph? true :transact-new-graph-refs? true})))))
+
 (defn- cleanup-missing-block-refs!
   ([conn] (cleanup-missing-block-refs! conn nil))
   ([conn import-state]
@@ -3002,7 +3037,7 @@
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
-                                (outliner-pipeline/finalize-imported-graph! conn)
+                                (finalize-imported-graph! conn)
                                 (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
                                                {:entities :post-doc-files})))]
                     cleanup-tx-report)))
@@ -3292,7 +3327,7 @@
    (move-top-parent-pages-to-library conn repo-or-conn)
    (import-progress! doc-options {:phase :finalize-imported-graph})
    (let [finalize-start (when log-fn (import-profile/now-ms))]
-     (outliner-pipeline/finalize-imported-graph! conn)
+     (finalize-imported-graph! conn)
      (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
    {:import-state (-> (:import-state doc-options)
                       (dissoc :assets))
