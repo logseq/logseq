@@ -2668,6 +2668,13 @@
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))
     (index-saved-page-names! import-state nodes)))
 
+(defn- transact-imported-data!
+  [conn tx tx-meta options]
+  (when (seq tx)
+    (let [tx-report (ldb/transact! conn tx tx-meta)]
+      (save-from-tx tx options)
+      tx-report)))
+
 (defn- track-placeholder-ref-uuids!
   [{:keys [placeholder-ref-uuids] :as _import-state} blocks-tx]
   (when-let [ref-uuids (seq (into #{}
@@ -2764,10 +2771,7 @@
           tx-meta {::imported-data? true ::path file ::new-graph? true}
           _ (import-progress! options {:phase :property-transact :file file})
           prop-tx-start (when log-fn (import-profile/now-ms))
-          _ (when (seq property-pages-tx)
-              (ldb/transact! conn property-pages-tx tx-meta))
-          _ (when (seq property-pages-tx)
-              (save-from-tx property-pages-tx options))
+          _ (transact-imported-data! conn property-pages-tx tx-meta options)
           _ (log-phase-ms! log-fn :prop-tx prop-tx-start {:file file :tx-count (count property-pages-tx)})
           classes-tx @(:classes-tx tx-options)
           clean-start (when log-fn (import-profile/now-ms))
@@ -2792,10 +2796,7 @@
           upstream-start (when log-fn (import-profile/now-ms))
           upstream-properties-tx
           (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-          upstream-tx-report (when (seq upstream-properties-tx)
-                               (ldb/transact! conn upstream-properties-tx tx-meta))
-          _ (when (seq upstream-properties-tx)
-              (save-from-tx upstream-properties-tx options))
+          upstream-tx-report (transact-imported-data! conn upstream-properties-tx tx-meta options)
           _ (log-phase-ms! log-fn :upstream upstream-start {:file file})
           _ (log-phase-ms! log-fn :file file-start {:file file})]
     [main-tx-report upstream-tx-report]))
