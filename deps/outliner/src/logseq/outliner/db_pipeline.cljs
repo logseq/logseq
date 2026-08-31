@@ -8,7 +8,7 @@
   (:require [datascript.core :as d]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
-(defn skip-imported-graph-refs?
+(defn- skip-imported-graph-refs?
   "File-graph import rebuilds :block/refs once after export-file-graph.
   Skip the per-transact listener for those txs, matching worker pipeline
   which does not run when ::new-graph? is set."

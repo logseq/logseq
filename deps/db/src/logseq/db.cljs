@@ -120,7 +120,9 @@
             (:skip-validate-db? tx-meta false)
             ;; used by `batch-transact-with-temp-conn!`
             (:skip-validate-db? @conn)
-            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+            (:logseq.graph-parser.exporter/new-graph? tx-meta)
+            ;; Finalize already wrote :block/refs; skip pipeline rebuild.
+            (:transact-new-graph-refs? tx-meta)))))
 
 (defn- should-validate-pipeline-result?
   [tx-meta]

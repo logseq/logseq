@@ -325,7 +325,6 @@
                                                      (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
                       (dissoc :set-ui-state))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-              _ (gp-exporter/finalize-imported-graph! conn)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
          :import-state (import-state-summary (:import-state result))
