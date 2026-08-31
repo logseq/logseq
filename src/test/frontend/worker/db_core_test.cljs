@@ -2562,6 +2562,38 @@
          (is (= [:user.property/a :user.property/b :logseq.property/icon :logseq.property/private]
                 (map :db/ident with-built-ins))))))))
 
+(defn- last-ui-state-value
+  [ui-state path]
+  (->> @ui-state
+       (filter #(= path (first %)))
+       last
+       second))
+
+(deftest import-file-graph-remote-function-skips-result-transit
+  (async done
+         (let [orig (get @thread-api/*thread-apis :thread-api/import-file-graph)
+               write-orig ldb/write-transit-str
+               written (atom [])]
+           (vswap! thread-api/*thread-apis assoc :thread-api/import-file-graph
+                   (fn [& _] {:org-file-count 1 :ignored-properties ["huge"]}))
+           (-> (p/with-redefs [ldb/write-transit-str
+                               (fn [v]
+                                 (swap! written conj v)
+                                 (write-orig v))]
+                 (thread-api/remote-function
+                  "thread-api/import-file-graph"
+                  (write-orig ["repo" {} [] {}])))
+               (p/then (fn [reply]
+                         (is (nil? reply)
+                             "Import worker reply must not be a transit string.")
+                         (is (empty? @written)
+                             "Import must not transit-encode the handler result.")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally (fn []
+                            (vswap! thread-api/*thread-apis assoc :thread-api/import-file-graph orig)
+                            (done)))))))
+
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
          (->
@@ -2571,6 +2603,7 @@
                    conn (d/create-conn db-schema/schema)
                    pipeline-before @ldb/*transact-pipeline-fn
                    renderer-payloads (atom [])
+                   ui-state (atom [])
                    config-file {:path "logseq/config.edn"
                                 :file/content "{}"}
                    files [config-file
@@ -2579,6 +2612,11 @@
                (is (fn? import-file-graph!))
                (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
                (reset! worker-state/*datascript-conns {test-repo conn})
+               (reset! worker-state/*main-thread
+                       (fn [qkw & args]
+                         (when (= qkw :thread-api/set-ui-state)
+                           (swap! ui-state conj (vec args)))
+                         (p/resolved nil)))
                (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
                (p/with-redefs
                  [db-sync/update-local-sync-checksum! (fn [& _] nil)
@@ -2591,20 +2629,24 @@
                                                  :handler-keys [:sync-db-to-main-thread])
                  (->
                   (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
-                          encoded (ldb/write-transit-str result)
+                          import-result (last-ui-state-value ui-state [:graph/importing-result])
                           page (some->> (d/q '[:find [?e ...]
                                                 :where [?e :block/name "home"]]
                                               @conn)
                                               first
                                          (d/entity @conn))
                           block (db-test/find-block-by-content @conn "imported block")]
-                    (is (= result (ldb/read-transit-str encoded))
-                        "Import reply must round-trip through transit.")
-                    (is (not (contains? result :files)))
-                    (is (not (contains? result :import-state)))
-                    (is (not (contains? result :staged-assets)))
-                    (is (not (contains? result :validation)))
-                    (is (= 0 (:org-file-count result)))
+                    (is (nil? result)
+                        "Import must not return a worker reply payload.")
+                    (is (map? import-result)
+                        "Import summary is published through UI state.")
+                    (is (not (contains? import-result :files)))
+                    (is (not (contains? import-result :import-state)))
+                    (is (not (contains? import-result :staged-assets)))
+                    (is (not (contains? import-result :validation)))
+                    (is (not (contains? import-result :ignored-properties)))
+                    (is (= 0 (:org-file-count import-result)))
+                    (is (= 0 (:ignored-properties-count import-result)))
                     (is (= "Home" (:block/title page)))
                     (is (= "imported block" (:block/title block)))
                     (doseq [entity [page block]]
@@ -2688,7 +2730,10 @@
                         "Linked-references API returns the referring block.")
                     (is (empty? @renderer-payloads)
                         "File-graph import must not broadcast renderer deltas to clients.")
-                    (is (not (contains? result :files)))
+                    (is (nil? result)
+                        "Import must not return a worker reply payload.")
+                    (is (map? (last-ui-state-value ui-state [:graph/importing-result]))
+                        "Import summary is published through UI state.")
                     (is (contains? current-pages "logseq/config.edn")
                         "Import progress shows the config file being read.")
                     (is (contains? current-pages "pages/source.md")

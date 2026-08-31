@@ -207,14 +207,25 @@
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
            wrapped-worker (fn [qkw & args]
-                            (if (contains? #{:thread-api/export-db-binary
-                                             :thread-api/export-client-ops-db-binary
-                                             :thread-api/import-db-binary}
-                                           qkw)
+                            (cond
+                              (contains? #{:thread-api/export-db-binary
+                                           :thread-api/export-client-ops-db-binary
+                                           :thread-api/import-db-binary}
+                                         qkw)
                               (let [method (str (namespace qkw) "/" (name qkw))]
                                 (if (= :thread-api/import-db-binary qkw)
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
+
+                              (contains? thread-api/skip-result-transit-apis qkw)
+                              (-> (.remoteInvoke ^js wrapped-worker*
+                                                 (str (namespace qkw) "/" (name qkw))
+                                                 (ldb/write-transit-str args))
+                                  (p/catch (fn [error]
+                                             (js/console.error "DB worker API failed:" (str qkw) error)
+                                             (throw error))))
+
+                              :else
                               (-> (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                                  (str (namespace qkw) "/" (name qkw))
                                                                  (ldb/write-transit-str args))]

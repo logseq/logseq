@@ -183,8 +183,8 @@
          on-submit-valid (handle-submit
                           (fn [^js e]
                             ;; (js/console.log "[form] submit: " e (js->clj e))
-                            (on-submit-fn (js->clj e :keywordize-keys true))
-                            (shui/dialog-close!)))
+                            (shui/dialog-close!)
+                            (on-submit-fn (js->clj e :keywordize-keys true))))
          [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state true)]
 
      (shui/form-provider form-ctx
@@ -264,7 +264,7 @@
                           (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
 (defn- validate-imported-data
-  [{:keys [org-file-count ignored-files-count ignored-assets-count ignored-properties validation-error-count]}]
+  [{:keys [org-file-count ignored-files-count ignored-assets-count ignored-properties-count validation-error-count]}]
   (when (pos? (or org-file-count 0))
     (notification/show! (t :import/org-files-imported org-file-count)
                         :info false))
@@ -274,26 +274,12 @@
   (when (pos? (or ignored-assets-count 0))
     (notification/show! (t :import/ignored-assets ignored-assets-count)
                         :info false))
-  (when-let [ignored-props (seq ignored-properties)]
+  (when (pos? (or ignored-properties-count 0))
     (notification/show!
      [:.mb-2
-      [:.text-lg.mb-2 (t :import/ignored-properties (count ignored-props))]
+      [:.text-lg.mb-2 (t :import/ignored-properties ignored-properties-count)]
       [:span.text-xs
-       (t :import/ignored-properties-fix)]
-      (->> ignored-props
-           (map (fn [{:keys [property value schema location]}]
-                  [(str "Property " (pr-str property) " with value " (pr-str value))
-                   (if (= property :icon)
-                     (if (:page location)
-                       (t :import/page-icons-cannot-be-imported (pr-str (:page location)))
-                       (t :import/block-icons-cannot-be-imported (pr-str (:block location))))
-                     (if (not= (get-in schema [:type :to]) (get-in schema [:type :from]))
-                       (t :import/property-type-mismatch (get-in schema [:type :to]) (get-in schema [:type :from]))
-                       (t :import/property-import-manually)))]))
-           (map (fn [[k v]]
-                  [:dl.my-2.mb-0
-                   [:dt.m-0 [:strong k]]
-                   [:dd {:class "text-warning"} v]])))]
+       (t :import/ignored-properties-fix)]]
      :warning false))
   (if (pos? (or validation-error-count 0))
     (notification/show! (t :import/invalid-blocks-detected validation-error-count)
@@ -355,27 +341,35 @@
      :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
    :default-config default-config})
 
+(def ^:private file-graph-import-initial-ui-state
+  {:step :importing
+   :label :import/loading
+   :current-idx 0})
+
+(declare ^:private open-import-indicator!)
+
 (defn- import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
    config-file]
   (state/set-state! :graph/importing :file-graph)
-  (state/set-state! :graph/importing-state {:step :config
-                                           :label :import/loading
-                                           :current-idx 0})
+  (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
+  (open-import-indicator!)
   (p/let [start-time (t/now)
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           serialized-files (<serialize-import-files *files)
           serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
           options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+          _ (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+          import-result (or (state/get-state :graph/importing-result) {})
           _ (doseq [notification (:notifications import-result)]
               (show-notification notification))
           _ (do
               (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
               (state/set-state! :graph/importing nil)
               (state/set-state! :graph/importing-state nil)
+              (state/set-state! :graph/importing-result nil)
               (validate-imported-data import-result)
               (state/pub-event! [:graph/ready (state/get-current-repo)]))
           ;; Import txs do not broadcast renderer deltas (a large graph would freeze
@@ -427,6 +421,7 @@
   []
   (let [{:keys [total current-idx current-page label step]} (rfx/use-sub [:graph/importing-state])
         label (or (case step
+                    (:importing :config :pages) (t :import/loading)
                     :assets (t :import/copying-assets)
                     :finishing (t :import/finishing)
                     :validating (t :import/validating-graph)
@@ -448,16 +443,21 @@
     [:div.p-5
      (ui/progress-bar-with-label (or width 0) left-label process)]))
 
+(defn- open-import-indicator!
+  []
+  (when-not (shui-dialog/get-dialog :import-indicator)
+    (shui/dialog-open! indicator-progress
+                       {:id :import-indicator
+                        :content-props
+                        {:onPointerDownOutside #(.preventDefault %)
+                         :onOpenAutoFocus #(.preventDefault %)}})))
+
 (hsx/defc import-indicator
   [importing?]
   (hooks/use-effect!
    (fn []
-     (when (and importing? (not (shui-dialog/get-dialog :import-indicator)))
-       (shui/dialog-open! indicator-progress
-                          {:id :import-indicator
-                           :content-props
-                           {:onPointerDownOutside #(.preventDefault %)
-                            :onOpenAutoFocus #(.preventDefault %)}})))
+     (when importing?
+       (open-import-indicator!)))
    [importing?])
   [:<>])
 

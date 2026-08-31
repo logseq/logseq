@@ -29,8 +29,16 @@
         (validate-imported-data {:org-file-count 2
                                  :ignored-files-count 1
                                  :ignored-assets-count 0
-                                 :ignored-properties []
+                                 :ignored-properties-count 4
                                  :validation-error-count 3
                                  :notifications []})
-        (is (= 3 (count @shown)))
+        (is (= 4 (count @shown)))
         (is (= #{:info :warning} (set (map second @shown))))))))
+
+(deftest file-graph-import-initial-ui-state-is-importing-test
+  (let [initial-ui-state (some-> (resolve 'frontend.components.imports/file-graph-import-initial-ui-state)
+                                 deref)]
+    (is (map? initial-ui-state))
+    (is (= :importing (:step initial-ui-state)))
+    (is (= :import/loading (:label initial-ui-state))
+        "Progress starts as Importing before the worker sends file names.")))

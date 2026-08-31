@@ -8,6 +8,8 @@
 #?(:cljs
    (def *thread-apis (volatile! {})))
 
+#?(:cljs (def *profile (volatile! {})))
+
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defmacro defkeyword [& _args])
 
@@ -21,7 +23,12 @@
            ~qualified-keyword-name
            (fn ~(symbol (str "thread-api--" (name qualified-keyword-name))) ~params ~@body)))
 
-#?(:cljs (def *profile (volatile! {})))
+#?(:cljs
+   (def skip-result-transit-apis
+     "APIs whose handler result must not be transit-encoded or decoded.
+     File-graph import can exceed V8 string length if the worker replies
+     with files, assets, ignored property values, or the import index."
+     #{:thread-api/import-file-graph}))
 
 #?(:cljs (defonce ^:private *worker-thread-api-call-id (atom 0)))
 
@@ -42,7 +49,8 @@
 
 #?(:cljs
    (defn remote-function
-     "Return a promise whose value is transit-str."
+     "Return a promise whose value is a transit string, or nil when the API
+     is in `skip-result-transit-apis`."
      [qualified-kw-str args-transit-str]
      (let [qkw (keyword qualified-kw-str)
            call-id (swap! *worker-thread-api-call-id inc)
@@ -52,11 +60,13 @@
          (let [args (ldb/read-transit-str args-transit-str)
                handler-started-at (.now js/performance)]
            (try
-             (let [result-promise (apply f args)]
+             (let [result-promise (apply f args)
+                   skip-result-transit? (contains? skip-result-transit-apis qkw)]
                (->
                 (p/let [result result-promise
                         handler-completed-at (.now js/performance)
-                        result-transit-str (write-transit-str-with-catch result qualified-kw-str)
+                        result-transit-str (when-not skip-result-transit?
+                                             (write-transit-str-with-catch result qualified-kw-str))
                         completed-at (.now js/performance)]
                   (log-worker-thread-api-call!
                    {:worker-call-id call-id
@@ -69,18 +79,20 @@
                   result-transit-str)
                 (p/catch
                  (fn [error]
-                   (let [handler-completed-at (.now js/performance)
-                         error-transit-str (write-transit-str-with-catch error qualified-kw-str)
-                         completed-at (.now js/performance)]
-                     (log-worker-thread-api-call!
-                      {:worker-call-id call-id
-                       :api qkw
-                       :status :error
-                       :deserialize-ms (- handler-started-at started-at)
-                       :handler-ms (- handler-completed-at handler-started-at)
-                       :serialize-ms (- completed-at handler-completed-at)
-                       :total-ms (- completed-at started-at)})
-                     error-transit-str)))))
+                   (if skip-result-transit?
+                     (throw (js/Error. (or (.-message error) (str error))))
+                     (let [handler-completed-at (.now js/performance)
+                           error-transit-str (write-transit-str-with-catch error qualified-kw-str)
+                           completed-at (.now js/performance)]
+                       (log-worker-thread-api-call!
+                        {:worker-call-id call-id
+                         :api qkw
+                         :status :error
+                         :deserialize-ms (- handler-started-at started-at)
+                         :handler-ms (- handler-completed-at handler-started-at)
+                         :serialize-ms (- completed-at handler-completed-at)
+                         :total-ms (- completed-at started-at)})
+                       error-transit-str))))))
              (catch :default error
                (log-worker-thread-api-call!
                 {:worker-call-id call-id

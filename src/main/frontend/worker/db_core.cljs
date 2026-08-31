@@ -226,21 +226,15 @@
       (satisfies? IDeref v) @v
       :else v)))
 
-(defn- compact-ignored-property
-  [{:keys [property value schema location]}]
-  {:property property
-   :value value
-   :schema schema
-   :location location})
-
 (defn- compact-error-notification
   [{:keys [msg level]}]
   {:msg msg
    :level level})
 
 (defn- compact-import-result
-  "Keep the worker->renderer reply small. File contents, asset bytes,
-  and full import indexes must not cross the transit boundary."
+  "Counts-only summary for UI state. Must stay small enough for set-ui-state
+  transit. File contents, asset bytes, property values, and import indexes
+  must not leave the worker."
   [result notifications validation]
   (let [import-state (:import-state result)
         files (:files result)
@@ -252,12 +246,14 @@
       (log/error :import-ignored-files {:count (count ignored-files)}))
     (when (seq ignored-assets)
       (log/error :import-ignored-assets {:count (count ignored-assets)}))
+    (when (seq ignored-props)
+      (log/error :import-ignored-properties {:count (count ignored-props)}))
     (when (seq (:errors validation))
       (log/error :import-validation-errors {:count (count (:errors validation))}))
     {:org-file-count (count (filter org-file? files))
      :ignored-files-count (count ignored-files)
      :ignored-assets-count (count ignored-assets)
-     :ignored-properties (mapv compact-ignored-property ignored-props)
+     :ignored-properties-count (count ignored-props)
      :validation-error-count (count (:errors validation))
      :notifications (mapv compact-error-notification error-notifications)}))
 
@@ -372,8 +368,11 @@
               _ (set-import-ui-state! [:graph/importing-state :step] :validating)
               _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
               _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
-              validation (worker-db-validate/validate-db conn :fix false)]
-        (compact-import-result result @notifications validation)))))
+              validation (worker-db-validate/validate-db conn :fix false)
+              _ (set-import-ui-state! [:graph/importing-result]
+                                      (compact-import-result result @notifications validation))]
+        ;; Do not return a transit payload. The renderer reads the summary from UI state.
+        nil))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
