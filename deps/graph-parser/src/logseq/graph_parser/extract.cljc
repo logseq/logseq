@@ -281,9 +281,7 @@
     {}
     (let [format (common-util/get-format file-path)
           _ (when verbose (println "Parsing start: " file-path))
-          ast (gp-mldoc/->edn content (gp-mldoc/default-config format
-                                        ;; {:parse_outline_only? true}
-                                                               ))]
+          ast (gp-mldoc/->edn content (gp-mldoc/default-config format {:parse_outline_only? true}))]
       (when verbose (println "Parsing finished: " file-path))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
