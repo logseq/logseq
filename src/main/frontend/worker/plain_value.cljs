@@ -4,7 +4,8 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- ref-value->summary
   [db value]
@@ -153,8 +154,13 @@
                         (update m a (fnil conj []) v')
                         (assoc m a v'))))
                   {:db/id (:db/id entity)}
-                  datoms)]
-      (cond-> result
+                  datoms)
+          own-property-keys (->> (d/datoms db :eavt (:db/id entity))
+                                 (map :a)
+                                 distinct
+                                 (filter db-property/property?)
+                                 vec)]
+      (cond-> (assoc result :block.temp/property-keys own-property-keys)
         raw-title
         (assoc :block/title raw-title
                :block/raw-title raw-title)

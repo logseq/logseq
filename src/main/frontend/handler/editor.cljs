@@ -52,6 +52,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.utf8 :as utf8]
@@ -3848,8 +3849,10 @@
 
 (defn db-collapsable?
   [block & _opts]
-  (let [properties (->> (:block.temp/property-keys block)
-                        (remove #{:block/alias})
+  (let [property-keys (or (seq (:block.temp/property-keys block))
+                          (filter db-property/property? (keys block)))
+        properties (->> property-keys
+                        (remove db-property/db-attribute-properties)
                         (remove nil?))]
     (or (seq properties)
         (:logseq.property/query block))))
