@@ -40,6 +40,7 @@
             [logseq.graph-parser.import-profile :as import-profile]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [promesa.core :as p]))
 
 (defn- add-missing-timestamps
@@ -2997,7 +2998,13 @@
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
                           _ (import-progress! options {:phase :cleanup-missing-block-refs})
                           cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
-                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
+                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))
+                          _ (when (not (false? (:finalize-imported-graph? options)))
+                              (import-progress! options {:phase :finalize-imported-graph})
+                              (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
+                                (outliner-pipeline/finalize-imported-graph! conn)
+                                (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
+                                               {:entities :post-doc-files})))]
                     cleanup-tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
@@ -3276,13 +3283,17 @@
                               (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
                                      {:assets (get-in doc-options [:import-state :assets])}))
    (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
-   (export-doc-files conn doc-files <read-file doc-options)
+   (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
    (import-progress! doc-options {:step :favorites})
    (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
    (import-progress! doc-options {:step :class-properties})
    (export-class-properties conn repo-or-conn)
    (import-progress! doc-options {:step :move-to-library})
    (move-top-parent-pages-to-library conn repo-or-conn)
+   (import-progress! doc-options {:phase :finalize-imported-graph})
+   (let [finalize-start (when log-fn (import-profile/now-ms))]
+     (outliner-pipeline/finalize-imported-graph! conn)
+     (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
    {:import-state (-> (:import-state doc-options)
                       (dissoc :assets))
     :files files}))

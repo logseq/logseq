@@ -20,6 +20,7 @@
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
@@ -56,7 +57,7 @@
 (def *tx-depth (atom 0))
 (def *profiling? (atom false))
 (def *profile-db-path (atom nil))
-(def tracked-phases [:parse :prep :pages-tx :blocks-tx :split :prop-tx :clean-tags :main-tx :transact :save-tx :upstream :file])
+(def tracked-phases [:parse :prep :pages-tx :blocks-tx :split :prop-tx :clean-tags :main-tx :transact :save-tx :upstream :finalize-imported-graph :file])
 
 (defn- now-ms []
   (js/Date.now))
@@ -295,7 +296,7 @@
   (d/unlisten! conn :pipeline-updates)
   (d/listen! conn :pipeline-updates
              (fn profile-pipeline-updates [tx-report]
-               (when-not (:transact-new-graph-refs? (:tx-meta tx-report))
+               (when-not (db-pipeline/skip-imported-graph-refs? conn (:tx-meta tx-report))
                  (let [t0 (now-ms)
                        {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
                        get-ms (- (now-ms) t0)
