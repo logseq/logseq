@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.storage :as storage]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -3308,6 +3309,7 @@
         options (cond-> (assoc options :log-fn log-fn)
                   watchdog (assoc :import-watchdog watchdog))]
     (reset! gp-block/*export-to-db-graph? true)
+    (swap! conn assoc :skip-store? true)
     (-> (p/let [_ (import-progress! options {:step :config :phase :read-config})
                 config (export-config-file
                         repo-or-conn config-file <read-file
@@ -3319,6 +3321,12 @@
                                     <read-file <read-and-copy-asset doc-options options log-fn))
         (import-profile/with-import-watchdog watchdog)
         (p/finally (fn [_]
+                     (swap! conn dissoc :skip-store?)
+                     (when (storage/storage @conn)
+                       (d/store @conn)
+                       (swap! (:atom conn) assoc
+                              :tx-tail []
+                              :db-last-stored @conn))
                      (reset! gp-block/*export-to-db-graph? false)))
         (p/catch (fn [e]
                    (reset! gp-block/*export-to-db-graph? false)
