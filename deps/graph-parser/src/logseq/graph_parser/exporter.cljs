@@ -2458,44 +2458,68 @@
                 [:db/retract eid :block/tags :logseq.class/Page]]))
            col)))
 
+(defn- existing-named-page-is-class?
+  [import-state uuid]
+  (let [p (get @(:all-existing-page-uuids import-state) uuid)]
+    (boolean (or (some #{:logseq.class/Tag} (:block/tags p))
+                 (some-> (:db/ident p) namespace db-class/user-class-namespace?)))))
+
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
-  pages that are now properties"
+  pages that are now properties. Existing classes with the same title stay
+  classes; a distinct property entity is created instead."
   [pages-tx old-properties existing-pages import-state upstream-properties]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
-        ;; _ (when (seq new-properties) (prn :new-properties new-properties))
-        [properties-tx pages-tx'] ((juxt filter remove)
-                                   #(contains? new-properties (keyword (:block/name %))) pages-tx)
+        class-occupied-property-names
+        (into #{}
+              (keep (fn [kw-name]
+                      (when-let [uuid (get existing-pages (name kw-name))]
+                        (when (existing-named-page-is-class? import-state uuid)
+                          kw-name))))
+              new-properties)
+        page-tx-for-new-property?
+        (fn [page]
+          (let [property-name (keyword (:block/name page))]
+            (and (contains? new-properties property-name)
+                 (not (contains? class-occupied-property-names property-name))
+                 (not (existing-named-page-is-class? import-state (:block/uuid page))))))
+        [properties-tx pages-tx'] ((juxt filter remove) page-tx-for-new-property? pages-tx)
+        build-property-page
+        (fn [title block-uuid]
+          (let [property-name (keyword (string/lower-case title))
+                db-ident (get-ident @(:all-idents import-state) property-name)
+                upstream-property (get upstream-properties property-name)]
+            (sqlite-util/build-new-property
+             db-ident
+             ;; Tweak new properties that have upstream changes in flight to behave like
+             ;; existing properties i.e. they should be defined by the upstream property
+             (if (and upstream-property
+                      (#{:date :node} (:from-type upstream-property))
+                      (= :default (get-in upstream-property [:schema :logseq.property/type])))
+               ;; Assumes :many for :date and :node like infer-property-schema-and-get-property-change
+               {:logseq.property/type (:from-type upstream-property) :db/cardinality :many}
+               (get-property-schema @(:property-schemas import-state) property-name))
+             (cond-> {:title title}
+               block-uuid (assoc :block-uuid block-uuid)))))
         property-pages-tx (map (fn [{block-uuid :block/uuid :block/keys [title]}]
-                                 (let [property-name (keyword (string/lower-case title))
-                                       db-ident (get-ident @(:all-idents import-state) property-name)
-                                       upstream-property (get upstream-properties property-name)]
-                                   (sqlite-util/build-new-property
-                                    db-ident
-                                    ;; Tweak new properties that have upstream changes in flight to behave like
-                                    ;; existing properties i.e. they should be defined by the upstream property
-                                    (if (and upstream-property
-                                             (#{:date :node} (:from-type upstream-property))
-                                             (= :default (get-in upstream-property [:schema :logseq.property/type])))
-                                      ;; Assumes :many for :date and :node like infer-property-schema-and-get-property-change
-                                      {:logseq.property/type (:from-type upstream-property) :db/cardinality :many}
-                                      (get-property-schema @(:property-schemas import-state) property-name))
-                                    {:title title :block-uuid block-uuid})))
+                                 (build-property-page title block-uuid))
                                properties-tx)
         converted-property-pages-tx
+        (keep (fn [kw-name]
+                (when-not (contains? class-occupied-property-names kw-name)
+                  (let [existing-page-uuid (get existing-pages (name kw-name))
+                        new-prop (build-property-page (name kw-name) existing-page-uuid)]
+                    (assert existing-page-uuid)
+                    (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
+                           {:block/uuid existing-page-uuid}))))
+              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
+        class-occupied-property-pages-tx
         (map (fn [kw-name]
-               (let [existing-page-uuid (get existing-pages (name kw-name))
-                     db-ident (get-ident @(:all-idents import-state) kw-name)
-                     new-prop (sqlite-util/build-new-property db-ident
-                                                              (get-property-schema @(:property-schemas import-state) kw-name)
-                                                              {:title (name kw-name)})]
-                 (assert existing-page-uuid)
-                 (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
-                        {:block/uuid existing-page-uuid})))
-             (set/intersection new-properties (set (map keyword (keys existing-pages)))))
+               (build-property-page (name kw-name) nil))
+             class-occupied-property-names)
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
-        retract-page-tag-from-properties-tx (retract-parent-and-page-tag (concat property-pages-tx converted-property-pages-tx))
+        retract-page-tag-from-properties-tx (retract-parent-and-page-tag (concat property-pages-tx converted-property-pages-tx class-occupied-property-pages-tx))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
@@ -2505,7 +2529,10 @@
                                                                                       (conj :logseq.class/Property))})))
                                           properties-tx)]
     {:pages-tx pages-tx'
-     :property-pages-tx (concat property-pages-tx converted-property-pages-tx retract-page-tag-from-properties-tx)
+     :property-pages-tx (concat property-pages-tx
+                                converted-property-pages-tx
+                                class-occupied-property-pages-tx
+                                retract-page-tag-from-properties-tx)
      :property-page-properties-tx property-page-properties-tx}))
 
 (defn- fix-extracted-block-tags-and-refs
