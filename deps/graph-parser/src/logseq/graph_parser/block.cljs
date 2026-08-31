@@ -588,11 +588,6 @@
           (some-> custom-id parse-uuid)))
       (d/squuid)))
 
-(defn get-page-refs-from-properties
-  [properties db date-formatter user-config]
-  (let [page-refs (get-page-ref-names-from-properties properties user-config)]
-    (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
-
 (defn- with-page-block-refs
   [block db date-formatter opts]
   (some-> block
@@ -622,7 +617,7 @@
     (mapv macro->block @*result)))
 
 (defn with-pre-block-if-exists
-  [blocks body pre-block-properties encoded-content {:keys [db date-formatter user-config]}]
+  [blocks body pre-block-properties encoded-content {:keys [db date-formatter]}]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
@@ -632,12 +627,12 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         {:keys [properties properties-order properties-text-values invalid-properties]} pre-block-properties
+                         {:keys [properties properties-order properties-text-values invalid-properties page-refs]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties
-                                             properties db date-formatter
-                                             user-config)
-                                            (map :block/title))
+                         ;; extract-properties already collected these from the drawer AST
+                         property-refs (->> page-refs
+                                            (map (fn [page]
+                                                   (:block/title (page-name->map page db true date-formatter)))))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
                                 :block/title content
