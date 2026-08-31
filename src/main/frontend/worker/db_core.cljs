@@ -337,8 +337,6 @@
           staged-assets (atom [])
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
-                             :log-fn (fn [& args]
-                                       (log/info :import-file-graph {:args args}))
                              :<read-file <read-import-file-content
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]

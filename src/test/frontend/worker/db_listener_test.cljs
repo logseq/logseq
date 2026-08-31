@@ -6,6 +6,7 @@
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
             [frontend.worker.render-delta :as render-delta]
+            [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.sync :as db-sync]
             [logseq.db :as ldb]
@@ -77,6 +78,21 @@
        tx-report))
     (is (= [["repo" nil tx-report {:defer? true}]]
            @calls))))
+
+(deftest db-listener-skips-search-sync-for-imported-data-test
+  (doseq [tx-meta [{:logseq.graph-parser.exporter/imported-data? true}
+                   {:logseq.db.sqlite.export/imported-data? true}
+                   {:from-disk? true}]]
+    (let [calls (atom 0)]
+      (with-redefs [search/sync-search-indice
+                    (fn [& _]
+                      (swap! calls inc)
+                      {})]
+        ((get-method db-listener/listen-db-changes :search)
+         :search
+         {:repo "repo"}
+         {:tx-meta tx-meta :tx-data [:tx]}))
+      (is (zero? @calls) (str tx-meta)))))
 
 (deftest db-listener-persists-local-tx-before-broadcasting-ui-refresh-test
   (let [conn (db-test/create-conn)
