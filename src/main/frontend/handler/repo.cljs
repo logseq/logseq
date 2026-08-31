@@ -77,7 +77,8 @@
   conn, or replace the conn in state with a new one."
   [repo & {:as opts}]
   (p/do!
-   (state/set-db-restoring! true)
+   (when-not (true? (:file-graph-import? opts))
+     (state/set-db-restoring! true))
    (db-restore/restore-graph! repo opts)
    (p/let [date-formatter (db-async/<get-date-formatter repo)]
      (state/set-date-formatter! repo date-formatter))
@@ -87,7 +88,8 @@
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
    (when-not (true? (:ignore-style? opts))
      (ui-handler/add-style-if-exists!))
-   (when-not config/publishing?
+   (when-not (or config/publishing?
+                 (true? (:file-graph-import? opts)))
      (state/set-db-restoring! false))))
 
 (defn get-repos
@@ -169,8 +171,9 @@
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
      (state/pub-event! [:shortcut/refresh])
-     (route-handler/redirect-to-home!)
-     (ui-handler/re-render-root!)
+     (when-not file-graph-import?
+       (route-handler/redirect-to-home!)
+       (ui-handler/re-render-root!))
      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
      (prn "New db created: " full-graph-name)
      full-graph-name)
