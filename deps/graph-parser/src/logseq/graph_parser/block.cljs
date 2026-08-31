@@ -178,19 +178,6 @@
      properties)
     []))
 
-(defn- extract-refs-from-property-value
-  [value format]
-  (cond
-    (coll? value)
-    (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
-    (and (string? value) (= \" (first value) (last value)))
-    nil
-    (string? value)
-    (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
-      (text/extract-refs-from-mldoc-ast ast))
-    :else
-    nil))
-
 (defn- get-page-ref-names-from-properties
   [properties user-config]
   (let [page-refs (->>
@@ -202,14 +189,13 @@
                                                 gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
-                   ;; get links ast
-                   (map last)
-                   (mapcat (fn [value]
-                             (extract-refs-from-property-value value (get user-config :format :markdown))))
-                   ;; comma separated collections
-                   (concat (->> (map second properties)
-                                (filter coll?)
-                                (apply concat))))
+                   (mapcat (fn [[_k v mldoc-ast]]
+                             (concat (when (seq mldoc-ast)
+                                       (text/extract-refs-from-mldoc-ast mldoc-ast))
+                                     (when (coll? v)
+                                       (filter (fn [x]
+                                                 (and (string? x) (not (string/blank? x))))
+                                               v))))))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
