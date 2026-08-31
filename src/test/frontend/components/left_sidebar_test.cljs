@@ -1,18 +1,30 @@
 (ns frontend.components.left-sidebar-test
-  (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.left-sidebar-util :as sidebar-util]
+  (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
+            [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
+            [frontend.components.left-sidebar :as left-sidebar]
+            [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
+            [frontend.db.hooks :as db-hooks]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
-            [logseq.common.uuid :as common-uuid]))
+            [frontend.storage :as storage]
+            [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.ui :as shui]
+            [reitit.frontend.easy :as rfe]))
 
-(def ^:private checked-tag-navs
-  [:flashcards :all-pages :graph-view :tag/tasks :tag/assets])
-
-(defn- uuids-from-unready-pull
-  "What the old one-shot :thread-api/pull effect stored when the worker threw
-   or the datascript conn was not ready yet."
-  [pulled-classes]
-  (zipmap [:logseq.class/Asset :logseq.class/Task]
-          (map :block/uuid pulled-classes)))
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest mobile-sidebar-navigation-target-test
   (let [target (fn [matching-selector]
@@ -24,61 +36,55 @@
                         ".favorites .bd"
                         ".recent .bd"
                         ".nav-header"]]
-        (is (true? (sidebar-util/mobile-navigation-target? (target selector)))
+        (is (true? (left-sidebar/mobile-navigation-target? (target selector)))
             selector)))
     (testing "popup triggers and unrelated sidebar controls"
-      (is (false? (sidebar-util/mobile-navigation-target?
+      (is (false? (left-sidebar/mobile-navigation-target?
                    (target ".dropdown-wrapper"))))
-      (is (false? (sidebar-util/mobile-navigation-target? (target nil)))))))
+      (is (false? (left-sidebar/mobile-navigation-target? (target nil)))))))
 
-(deftest checked-tag-navs-skip-when-class-uuids-missing-test
-  (testing "empty or nil lookup skips Tasks and Assets"
-    (is (= [] (sidebar-util/visible-tag-navs checked-tag-navs {})))
-    (is (= [] (sidebar-util/visible-tag-navs checked-tag-navs nil))))
-  (testing "a nil uuid from an early worker pull also skips the item"
-    (is (nil? (sidebar-util/tag-nav-page-uuid
-               :tag/tasks
-               {:logseq.class/Task nil
-                :logseq.class/Asset nil})))
-    (is (= [] (sidebar-util/visible-tag-navs
-               [:tag/tasks :tag/assets]
-               (uuids-from-unready-pull [nil nil])))))
-  (testing "partial lookup only mounts the nav whose class uuid exists"
-    (let [task-uuid (sidebar-util/built-in-class-uuid :logseq.class/Task)]
-      (is (= [:tag/tasks]
-             (sidebar-util/visible-tag-navs
-              checked-tag-navs
-              {:logseq.class/Task task-uuid}))))))
-
-(deftest checked-tag-navs-render-once-class-uuids-exist-test
-  (let [task-uuid (sidebar-util/built-in-class-uuid :logseq.class/Task)
-        asset-uuid (sidebar-util/built-in-class-uuid :logseq.class/Asset)
-        class-ident->uuid {:logseq.class/Task task-uuid
-                           :logseq.class/Asset asset-uuid}]
-    (is (= task-uuid (sidebar-util/tag-nav-page-uuid :tag/tasks class-ident->uuid)))
-    (is (= asset-uuid (sidebar-util/tag-nav-page-uuid :tag/assets class-ident->uuid)))
-    (is (= [:tag/tasks :tag/assets]
-           (sidebar-util/visible-tag-navs checked-tag-navs class-ident->uuid)))))
-
-(deftest built-in-nav-class-uuids-do-not-need-db-worker-test
-  (testing "file graphs have no Task/Asset class pages"
-    (is (nil? (sidebar-util/nav-class-ident->uuid false))))
-  (testing "db-graph uuids stay available when worker invoke would throw"
-    (with-redefs [state/<invoke-db-worker
-                  (fn [& _args]
-                    (throw (ex-info "db-worker has not been initialized" {})))]
-      (let [uuids (sidebar-util/nav-class-ident->uuid true)
-            task-uuid (get uuids :logseq.class/Task)
-            asset-uuid (get uuids :logseq.class/Asset)]
-        (is (= (common-uuid/gen-uuid :db-ident-block-uuid :logseq.class/Task)
-               task-uuid))
-        (is (= (common-uuid/gen-uuid :db-ident-block-uuid :logseq.class/Asset)
-               asset-uuid))
-        (is (= [:tag/tasks :tag/assets]
-               (sidebar-util/visible-tag-navs [:tag/tasks :tag/assets] uuids))))))
-  (testing "an unready conn pull leaves checked tag navs hidden; built-in uuids do not"
-    (let [from-pull (uuids-from-unready-pull [nil nil])
-          from-idents (sidebar-util/nav-class-ident->uuid true)]
-      (is (= [] (sidebar-util/visible-tag-navs [:tag/tasks :tag/assets] from-pull)))
-      (is (= [:tag/tasks :tag/assets]
-             (sidebar-util/visible-tag-navs [:tag/tasks :tag/assets] from-idents))))))
+(deftest tag-navigations-use-persisted-class-uuids-test
+  (let [task-uuid (random-uuid)
+        asset-uuid (random-uuid)
+        db-graph? (atom true)
+        resource-keys (atom [])
+        render! (fn []
+                  (with-redefs [config/db-based-graph? (constantly @db-graph?)
+                                db-hooks/use-resource-snapshot
+                                (fn [resource-key]
+                                  (swap! resource-keys conj resource-key)
+                                  {:status :ready
+                                   :value (case (second resource-key)
+                                            :logseq.class/Task task-uuid
+                                            :logseq.class/Asset asset-uuid
+                                            nil)})
+                                hooks/use-effect! (fn [& _args])
+                                hooks/use-state (fn [initial] [initial (fn [& _args])])
+                                i18n/t name
+                                left-sidebar/sidebar-content-group
+                                (fn [_title _opts child] child)
+                                rfe/href (fn [_route {:keys [name]}]
+                                           (str "/page/" name))
+                                rfx/use-sub (constantly nil)
+                                shui/tabler-icon (fn [& _args])
+                                state/get-current-repo (constantly "test-repo")
+                                storage/get (constantly [:tag/tasks :tag/assets])]
+                    (render-static
+                     (left-sidebar/sidebar-navigations
+                      {:default-home nil
+                       :route-match nil
+                       :route-name nil
+                       :srs-open? false}))))]
+    (testing "DB graphs render tag links from the actual class entities"
+      (let [markup (render!)]
+        (is (= [[:page-uuid-by-ident :logseq.class/Task]
+                [:page-uuid-by-ident :logseq.class/Asset]]
+               @resource-keys))
+        (is (string/includes? markup (str "/page/" task-uuid)))
+        (is (string/includes? markup (str "/page/" asset-uuid)))))
+    (testing "file graphs do not request or render built-in class pages"
+      (reset! db-graph? false)
+      (reset! resource-keys [])
+      (let [markup (render!)]
+        (is (= [nil nil] @resource-keys))
+        (is (not (string/includes? markup "tag-view-nav")))))))

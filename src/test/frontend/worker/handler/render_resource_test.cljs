@@ -743,13 +743,25 @@
 (deftest page-identity-resource-resolves-only-the-page-uuid-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn page]} (render-resource-fixture)
+          task-uuid (random-uuid)
+          _ (d/transact! conn [{:db/ident :logseq.class/Task
+                                :block/uuid task-uuid
+                                :block/title "Task"}])
           resource-key [:page-identity "page identity"]
           response (call-resource api conn resource-key)]
       (assert-resource-envelope @conn
                                 resource-key
                                 #{[:page-lookup "page identity"]}
                                 page
-                                response))))
+                                response)
+      (let [ident-key [:page-uuid-by-ident :logseq.class/Task]
+            ident-response (call-resource api conn ident-key)]
+        (assert-resource-envelope @conn
+                                  ident-key
+                                  #{[:attr :db/ident]
+                                    [:attr :block/uuid]}
+                                  task-uuid
+                                  ident-response)))))
 
 (deftest sidebar-page-resources-track-favorites-status-and-recent-page-content-test
   (when-let [api (render-resource-api)]
