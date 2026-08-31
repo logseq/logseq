@@ -214,12 +214,52 @@
   (let [storage (platform/storage (platform/current))]
     ((:import-db storage) pool repo-path data)))
 
-(defn- import-state-summary
-  [import-state]
-  (into {}
-        (map (fn [[k v]]
-               [k (if (satisfies? IDeref v) @v v)]))
-        import-state))
+(defn- org-file?
+  [file]
+  (string/ends-with? (string/lower-case (str (:path file))) ".org"))
+
+(defn- deref-import-state-key
+  [import-state k]
+  (let [v (get import-state k)]
+    (cond
+      (nil? v) nil
+      (satisfies? IDeref v) @v
+      :else v)))
+
+(defn- compact-ignored-property
+  [{:keys [property value schema location]}]
+  {:property property
+   :value value
+   :schema schema
+   :location location})
+
+(defn- compact-error-notification
+  [{:keys [msg level]}]
+  {:msg msg
+   :level level})
+
+(defn- compact-import-result
+  "Keep the worker->renderer reply small. File contents, asset bytes,
+  and full import indexes must not cross the transit boundary."
+  [result notifications validation]
+  (let [import-state (:import-state result)
+        files (:files result)
+        ignored-files (deref-import-state-key import-state :ignored-files)
+        ignored-assets (deref-import-state-key import-state :ignored-assets)
+        ignored-props (deref-import-state-key import-state :ignored-properties)
+        error-notifications (filterv #(= :error (:level %)) notifications)]
+    (when (seq ignored-files)
+      (log/error :import-ignored-files {:count (count ignored-files)}))
+    (when (seq ignored-assets)
+      (log/error :import-ignored-assets {:count (count ignored-assets)}))
+    (when (seq (:errors validation))
+      (log/error :import-validation-errors {:count (count (:errors validation))}))
+    {:org-file-count (count (filter org-file? files))
+     :ignored-files-count (count ignored-files)
+     :ignored-assets-count (count ignored-assets)
+     :ignored-properties (mapv compact-ignored-property ignored-props)
+     :validation-error-count (count (:errors validation))
+     :notifications (mapv compact-error-notification error-notifications)}))
 
 (defn- file-content
   [file]
@@ -288,8 +328,8 @@
                        nil)))
         (p/resolved nil)))))
 
-(defn- <read-and-stage-import-asset
-  [file assets buffer-handler staged-assets]
+(defn- <read-and-copy-import-asset
+  [repo file assets buffer-handler]
   (p/let [payload (<read-import-asset-payload file)]
     (when payload
       (let [buffer (.-buffer payload)
@@ -307,10 +347,10 @@
                               :asset-id asset-id})]
           (swap! assets assoc asset-name asset-data)
           (when-not pdf-annotation?
-            (swap! staged-assets conj {:path (:path file)
-                                       :asset-id asset-id
-                                       :asset-type asset-type
-                                       :payload payload})))))))
+            (platform/asset-write-bytes! (platform/current)
+                                         repo
+                                         (str asset-id "." asset-type)
+                                         payload)))))))
 
 (defn- set-import-ui-state!
   [path value]
@@ -321,22 +361,19 @@
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [notifications (atom [])
-          staged-assets (atom [])
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
                              :set-ui-state set-import-ui-state!
                              :<read-file <read-import-file-content
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets))))]
+                                                     (<read-and-copy-import-asset repo file assets buffer-handler))))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+              _ (set-import-ui-state! [:graph/importing-state :step] :validating)
+              _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
+              _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
               validation (worker-db-validate/validate-db conn :fix false)]
-        {:files (:files result)
-         :import-state (import-state-summary (:import-state result))
-         :notifications @notifications
-         :staged-assets @staged-assets
-         :validation {:errors (:errors validation)
-                      :invalid-entity-ids (:invalid-entity-ids validation)}}))))
+        (compact-import-result result @notifications validation)))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"

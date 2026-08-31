@@ -2,14 +2,12 @@
   "Import data into Logseq."
   (:require ["path" :as node-path]
             [cljs-time.core :as t]
-            [cljs.pprint :as pprint]
             [clojure.string :as string]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t t-en]]
-            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.notification :as notification]
@@ -22,7 +20,6 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
@@ -267,22 +264,17 @@
                           (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
 (defn- validate-imported-data
-  [{:keys [import-state files validation]}]
-  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
-    (log/info :org-files (mapv :path org-files))
-    (notification/show! (t :import/org-files-imported (count org-files))
+  [{:keys [org-file-count ignored-files-count ignored-assets-count ignored-properties validation-error-count]}]
+  (when (pos? (or org-file-count 0))
+    (notification/show! (t :import/org-files-imported org-file-count)
                         :info false))
-  (when-let [ignored-files (seq (:ignored-files import-state))]
-    (notification/show! (t :import/ignored-files (count ignored-files))
-                        :info false)
-    (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
-    (pprint/pprint ignored-files))
-  (when-let [ignored-assets (seq (:ignored-assets import-state))]
-    (notification/show! (t :import/ignored-assets (count ignored-assets))
-                        :info false)
-    (log/error :import-ignored-assets {:msg (str "Import ignored " (count ignored-assets) " asset(s)")})
-    (pprint/pprint ignored-assets))
-  (when-let [ignored-props (seq (:ignored-properties import-state))]
+  (when (pos? (or ignored-files-count 0))
+    (notification/show! (t :import/ignored-files ignored-files-count)
+                        :info false))
+  (when (pos? (or ignored-assets-count 0))
+    (notification/show! (t :import/ignored-assets ignored-assets-count)
+                        :info false))
+  (when-let [ignored-props (seq ignored-properties)]
     (notification/show!
      [:.mb-2
       [:.text-lg.mb-2 (t :import/ignored-properties (count ignored-props))]
@@ -303,12 +295,9 @@
                    [:dt.m-0 [:strong k]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
-  (if-let [errors (seq (:errors validation))]
-    (do
-      (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
-      (pprint/pprint errors)
-      (notification/show! (t :import/invalid-blocks-detected (count errors))
-                          :warning false))
+  (if (pos? (or validation-error-count 0))
+    (notification/show! (t :import/invalid-blocks-detected validation-error-count)
+                        :warning false)
     (log/info :import-valid {:msg "Valid import!"})))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
@@ -355,16 +344,6 @@
   [files]
   (<prepare-import-files files))
 
-(defn- write-staged-assets!
-  [repo staged-assets]
-  (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
-    (when (seq staged-assets)
-      (p/let [_ (fs/mkdir-if-not-exists assets-dir)]
-        (p/all
-         (mapv (fn [{:keys [asset-id asset-type payload]}]
-                 (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true}))
-               staged-assets))))))
-
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
    default-config]
@@ -381,7 +360,8 @@
    {:keys [graph-name] :as user-options}
    config-file]
   (state/set-state! :graph/importing :file-graph)
-  (state/set-state! :graph/importing-state {:current-page "Config files"
+  (state/set-state! :graph/importing-state {:step :config
+                                           :label :import/loading
                                            :current-idx 0})
   (p/let [start-time (t/now)
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
@@ -392,7 +372,6 @@
           import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
           _ (doseq [notification (:notifications import-result)]
               (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))
           _ (do
               (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
               (state/set-state! :graph/importing nil)
@@ -446,21 +425,28 @@
 
 (hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (rfx/use-sub [:graph/importing-state])
-        label (or label (t :import/loading))
-        left-label (if (and current-idx total (= current-idx total))
-                     [:div.flex.flex-row.font-bold (t :ui/loading)]
-                     [:div.flex.flex-row.font-bold
-                      label
+  (let [{:keys [total current-idx current-page label step]} (rfx/use-sub [:graph/importing-state])
+        label (or (case step
+                    :assets (t :import/copying-assets)
+                    :finishing (t :import/finishing)
+                    :validating (t :import/validating-graph)
+                    nil)
+                  (when (keyword? label) (t label))
+                  (when (seq label) label)
+                  (t :import/loading))
+        left-label [:div.flex.flex-row.font-bold
+                    label
+                    (when (seq current-page)
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                        current-page]]])
-        width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
+                        current-page]])]
+        width (when (and total current-idx (pos? total))
+                (js/Math.round (* (.toFixed (/ current-idx total) 2) 100)))
         process (when (and total current-idx)
                   (str current-idx "/" total))]
     [:div.p-5
-     (ui/progress-bar-with-label width left-label process)]))
+     (ui/progress-bar-with-label (or width 0) left-label process)]))
 
 (hsx/defc import-indicator
   [importing?]

@@ -915,6 +915,7 @@
  :import/assets-skipped "Skipped {1} assets. See console for details."
  :import/block-icons-cannot-be-imported "Block icons can't be imported. Manually import it at the block: {1}"
  :import/cannot-import-block-into-non-block-entity "Can't import block into a non-block entity. Please import block elsewhere."
+ :import/copying-assets "Copying assets"
  :import/db-edn-desc "Import a DB graph's EDN export into a new DB graph"
  :import/db-edn-title "EDN to DB graph"
  :import/debug-transit-desc "Import debug transit file into a new DB graph"
@@ -925,6 +926,7 @@
  :import/file-finished "Import finished!"
  :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"
+ :import/finishing "Finishing import"
  :import/graph-name-conflict "Please specify another name as another graph with this name already exists!"
  :import/graph-name-placeholder "Graph name"
  :import/ignored-assets (fn [count] (str "Import ignored " count " " (if (= 1 count) "asset" "assets") ". See the javascript console for more details."))
@@ -957,6 +959,7 @@
  :import/tags-case-insensitive "Tags are case insensitive"
  :import/title "Import"
  :import/unexpected-error "Unexpected error: {1}"
+ :import/validating-graph "Validating graph"
  :import/zip-import-error "Zip import failed: {1}"
  :import/zip-missing-db-sqlite "Zip missing db.sqlite. Please check the archive structure."
 

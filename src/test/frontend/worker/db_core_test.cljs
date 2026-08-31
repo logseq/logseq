@@ -2591,14 +2591,20 @@
                                                  :handler-keys [:sync-db-to-main-thread])
                  (->
                   (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                          encoded (ldb/write-transit-str result)
                           page (some->> (d/q '[:find [?e ...]
                                                 :where [?e :block/name "home"]]
                                               @conn)
                                               first
                                          (d/entity @conn))
                           block (db-test/find-block-by-content @conn "imported block")]
-                    (is (= #{"pages/Home.md" "logseq/config.edn"}
-                           (set (map :path (:files result)))))
+                    (is (= result (ldb/read-transit-str encoded))
+                        "Import reply must round-trip through transit.")
+                    (is (not (contains? result :files)))
+                    (is (not (contains? result :import-state)))
+                    (is (not (contains? result :staged-assets)))
+                    (is (not (contains? result :validation)))
+                    (is (= 0 (:org-file-count result)))
                     (is (= "Home" (:block/title page)))
                     (is (= "imported block" (:block/title block)))
                     (doseq [entity [page block]]
@@ -2654,7 +2660,15 @@
                  (db-listener/listen-db-changes! test-repo conn
                                                  :handler-keys [:sync-db-to-main-thread])
                  (->
-                  (p/let [_result (import-file-graph! test-repo config-file files {:user-options {}})
+                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                          current-pages (->> @ui-state
+                                             (filter #(= [:graph/importing-state :current-page] (first %)))
+                                             (map second)
+                                             set)
+                          last-label (->> @ui-state
+                                          (filter #(= [:graph/importing-state :label] (first %)))
+                                          last
+                                          second)
                           target (db-test/find-page-by-title @conn "Target")
                           block (or (db-test/find-block-by-content @conn #"see ")
                                     (db-test/find-block-by-content @conn (re-pattern (str (:block/uuid target)))))
@@ -2674,6 +2688,20 @@
                         "Linked-references API returns the referring block.")
                     (is (empty? @renderer-payloads)
                         "File-graph import must not broadcast renderer deltas to clients.")
+                    (is (not (contains? result :files)))
+                    (is (contains? current-pages "logseq/config.edn")
+                        "Import progress shows the config file being read.")
+                    (is (contains? current-pages "pages/source.md")
+                        "Import progress shows the current markdown file.")
+                    (is (contains? current-pages "pages/Target.md")
+                        "Import progress shows each imported markdown file.")
+                    (is (some #{:import/finishing}
+                              (->> @ui-state
+                                   (filter #(= [:graph/importing-state :label] (first %)))
+                                   (map second)))
+                        "After files are written, progress shows finishing work.")
+                    (is (= :import/validating-graph last-label)
+                        "After files are written, progress shows graph validation.")
                     (is (= 2 (->> @ui-state
                                   (filter #(= [:graph/importing-state :total] (first %)))
                                   last

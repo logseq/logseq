@@ -2274,8 +2274,6 @@
          page))
      pages)))
 
-(declare update-block-refs)
-
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
@@ -2306,9 +2304,7 @@
         page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
-        all-pages-m (mapv (fn [page]
-                            (let [result (handle-page-properties page @conn per-file-state all-pages options)]
-                              (update result :block #(update-block-refs % page-names-to-uuids))))
+        all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (into [] (keep (fn [{m :block _properties-tx :properties-tx}]
                          (let [page (if-let [page-uuid (if (::original-name m)
@@ -2831,7 +2827,9 @@
                              :phase :read-file
                              :file path
                              :file-idx (inc idx)})
-  (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
+  (-> (p/let [_ (set-ui-state [:graph/importing-state :step] :pages)
+              _ (set-ui-state [:graph/importing-state :label] :import/loading)
+              _ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
               stat (when (fn? <get-file-stat)
@@ -3030,6 +3028,8 @@
                                :or {set-ui-state (constantly nil) notify-user prn
                                     on-tx-report (constantly nil)}
                                :as options}]
+  (set-ui-state [:graph/importing-state :step] :pages)
+  (set-ui-state [:graph/importing-state :label] :import/loading)
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (import-progress! options {:step :doc-files :total-files (count *doc-files)})
   (let [doc-files (mapv #(assoc %1 :idx %2)
@@ -3189,27 +3189,32 @@
                                                                     :file path
                                                                     :file-idx (inc idx)
                                                                     :total-files (count asset-files)})
-                              (-> (<read-and-copy-asset-file
-                                   file assets
-                                   (fn [buffer]
-                                     (let [edn? (= "edn" (path/file-ext path))
-                                           edn-content (when edn? (common-util/safe-read-map-string (utf8/decode buffer)))
-                                           ;; Have to assume edn file with :highlights is annotation or
-                                           ;; this import step becomes coupled to build-pdf-annotations-tx
-                                           pdf-annotation? (some #{:highlights} (keys edn-content))
-                                           with-edn-content (fn [m]
-                                                              (cond-> m
-                                                                edn-content
-                                                                (assoc :edn-content edn-content)))]
-                                       {:with-edn-content with-edn-content
-                                        :pdf-annotation? pdf-annotation?})))
+                              (-> (p/do!
+                                   (set-ui-state [:graph/importing-state :step] :assets)
+                                   (set-ui-state [:graph/importing-state :label] :import/copying-assets)
+                                   (set-ui-state [:graph/importing-state :total] (count asset-files))
+                                   (set-ui-state [:graph/importing-state :current-idx] (inc idx))
+                                   (set-ui-state [:graph/importing-state :current-page] path)
+                                   (<read-and-copy-asset-file
+                                    file assets
+                                    (fn [buffer]
+                                      (let [edn? (= "edn" (path/file-ext path))
+                                            edn-content (when edn? (common-util/safe-read-map-string (utf8/decode buffer)))
+                                            ;; Have to assume edn file with :highlights is annotation or
+                                            ;; this import step becomes coupled to build-pdf-annotations-tx
+                                            pdf-annotation? (some #{:highlights} (keys edn-content))
+                                            with-edn-content (fn [m]
+                                                               (cond-> m
+                                                                 edn-content
+                                                                 (assoc :edn-content edn-content)))]
+                                        {:with-edn-content with-edn-content
+                                         :pdf-annotation? pdf-annotation?}))))
                                   (p/catch
                                    (fn [error]
                                      (notify-user {:msg (str "Import failed to read and copy " (pr-str path) " with error:\n" (.-message error))
                                                    :level :error
                                                    :ex-data {:path path :error error}})))))]
     (when (seq asset-files)
-      (set-ui-state [:graph/importing-state :current-page] "Read and copy asset files")
       (<safe-async-loop read-and-copy-asset asset-files notify-user))))
 
 (defn- insert-favorites
@@ -3326,32 +3331,36 @@
 (defn- <export-file-graph-steps
   [repo-or-conn conn config {:keys [files logseq-files asset-files doc-files]}
    <read-file <read-and-copy-asset doc-options options log-fn]
-  (when log-fn (log-fn "Importing" (count doc-files) "files ..."))
-  (p/do!
-   (import-progress! doc-options {:step :logseq-files})
-   (export-logseq-files repo-or-conn logseq-files <read-file
-                        (-> (select-keys options [:notify-user :<save-logseq-file])
-                            (set/rename-keys {:<save-logseq-file :<save-file})))
-   (import-progress! doc-options {:step :assets})
-   (read-and-copy-asset-files asset-files
-                              <read-and-copy-asset
-                              (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
-                                     {:assets (get-in doc-options [:import-state :assets])}))
-   (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
-   (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
-   (import-progress! doc-options {:step :favorites})
-   (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
-   (import-progress! doc-options {:step :class-properties})
-   (export-class-properties conn repo-or-conn)
-   (import-progress! doc-options {:step :move-to-library})
-   (move-top-parent-pages-to-library conn repo-or-conn)
-   (import-progress! doc-options {:phase :finalize-imported-graph})
-   (let [finalize-start (when log-fn (import-profile/now-ms))]
-     (finalize-imported-graph! conn)
-     (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
-   {:import-state (-> (:import-state doc-options)
-                      (dissoc :assets))
-    :files files}))
+  (let [set-ui-state (or (:set-ui-state options) (constantly nil))]
+    (when log-fn (log-fn "Importing" (count doc-files) "files ..."))
+    (p/do!
+     (import-progress! doc-options {:step :logseq-files})
+     (export-logseq-files repo-or-conn logseq-files <read-file
+                          (-> (select-keys options [:notify-user :<save-logseq-file])
+                              (set/rename-keys {:<save-logseq-file :<save-file})))
+     (import-progress! doc-options {:step :assets})
+     (read-and-copy-asset-files asset-files
+                                <read-and-copy-asset
+                                (merge (select-keys options [:notify-user :set-ui-state :rpath-key :import-watchdog])
+                                       {:assets (get-in doc-options [:import-state :assets])}))
+     (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
+     (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
+     (set-ui-state [:graph/importing-state :step] :finishing)
+     (set-ui-state [:graph/importing-state :label] :import/finishing)
+     (set-ui-state [:graph/importing-state :current-page] nil)
+     (import-progress! doc-options {:step :favorites})
+     (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
+     (import-progress! doc-options {:step :class-properties})
+     (export-class-properties conn repo-or-conn)
+     (import-progress! doc-options {:step :move-to-library})
+     (move-top-parent-pages-to-library conn repo-or-conn)
+     (import-progress! doc-options {:phase :finalize-imported-graph})
+     (let [finalize-start (when log-fn (import-profile/now-ms))]
+       (finalize-imported-graph! conn)
+       (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
+     {:import-state (-> (:import-state doc-options)
+                        (dissoc :assets))
+      :files files})))
 
 (defn export-file-graph
   "Exports a file graph into a DB graph. Files is a seq of maps with :path.
@@ -3374,6 +3383,10 @@
     (reset! gp-block/*export-to-db-graph? true)
     (swap! conn assoc :skip-store? true)
     (-> (p/let [_ (import-progress! options {:step :config :phase :read-config})
+                set-ui-state (or (:set-ui-state options) (constantly nil))
+                _ (set-ui-state [:graph/importing-state :step] :config)
+                _ (set-ui-state [:graph/importing-state :label] :import/loading)
+                _ (set-ui-state [:graph/importing-state :current-page] (get config-file rpath-key))
                 config (export-config-file
                         repo-or-conn config-file <read-file
                         (-> (select-keys options [:notify-user :default-config :<save-config-file])
