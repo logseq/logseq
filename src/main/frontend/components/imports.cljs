@@ -25,6 +25,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
             [logseq.shui.hooks :as hooks]
@@ -326,12 +327,14 @@
                   (p/catch (ipc/ipc :stat fs-path)
                            (fn [error]
                              (log/warn :import-file-stat-failed {:path fs-path :error error})
-                             nil)))]
+                             nil)))
+          created-at (common-util/timestamp-ms (:birthtime stat))
+          updated-at (common-util/timestamp-ms (or (:mtime stat) last-modified-at))]
     (cond-> {}
-      (:birthtime stat)
-      (assoc :file-created-at (.getTime (:birthtime stat)))
-      (or (:mtime stat) last-modified-at)
-      (assoc :file-updated-at (.getTime (or (:mtime stat) last-modified-at))))))
+      created-at
+      (assoc :file-created-at created-at)
+      updated-at
+      (assoc :file-updated-at updated-at))))
 
 (defn- <serialize-import-file
   [file]

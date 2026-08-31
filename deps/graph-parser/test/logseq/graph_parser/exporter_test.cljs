@@ -792,31 +792,109 @@ abc
        (catch :default e
          (assert-failure e))))))
 
+(defn- export-in-memory-doc-files
+  "Import in-memory file maps. `path->stat` is a path-> {:birthtime :mtime} map.
+   Pass `:file-created-at` / `:file-updated-at` on a file map to simulate the UI
+   worker path, where `<get-file-stat` is unavailable."
+  [files path->stat]
+  (p/let [conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          doc-options (gp-exporter/build-doc-options
+                       {:macros {} :file/name-format :triple-lowbar}
+                       (merge default-export-options
+                              {:user-options {:convert-all-tags? false}
+                               :<get-file-stat (fn [path] (get path->stat path))
+                               :<export-file (fn [conn' file-map opts]
+                                               (gp-exporter/<add-file-to-db-graph
+                                                conn' (:file/path file-map) (:file/content file-map) opts))}))
+          _ (gp-exporter/export-doc-files conn files
+                                          #(p/resolved (:content %))
+                                          doc-options)]
+    conn))
+
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         source-file {:path "pages/A.md" :content "- [[Timestamps]]\n"}
         file {:path "pages/timestamps.md" :content "- timestamped\n"}]
-    (p/let [conn (db-test/create-conn)
-            _ (db-pipeline/add-listener conn)
-            doc-options (gp-exporter/build-doc-options
-                         {:macros {} :file/name-format :triple-lowbar}
-                         (merge default-export-options
-                                {:user-options {:convert-all-tags? false}
-                                 :<get-file-stat (fn [path]
-                                                   (when (= path (:path file))
-                                                     {:birthtime created-at
-                                                      :mtime modified-at}))
-                                 :<export-file (fn [conn' file-map opts]
-                                                 (gp-exporter/<add-file-to-db-graph
-                                                  conn' (:file/path file-map) (:file/content file-map) opts))}))
-            _ (gp-exporter/export-doc-files conn [source-file file]
-                                            #(p/resolved (:content %))
-                                            doc-options)
+    (p/let [conn (export-in-memory-doc-files
+                  [source-file file]
+                  {(:path file) {:birthtime created-at :mtime modified-at}})
             page (ldb/get-page @conn "timestamps")
             block (db-test/find-block-by-content @conn "timestamped")]
       (is (= (.getTime created-at) (:block/created-at page) (:block/created-at block)))
       (is (= (.getTime modified-at) (:block/updated-at page) (:block/updated-at block)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-uses-serialized-file-timestamps-without-stat
+  (let [created-at (.getTime (js/Date. "2020-01-02T03:04:05.000Z"))
+        modified-at (.getTime (js/Date. "2021-06-07T08:09:10.000Z"))
+        file {:path "pages/sport.md"
+              :content "alias:: sportlich\n"
+              :file-created-at created-at
+              :file-updated-at modified-at}]
+    (p/let [conn (export-in-memory-doc-files [file] {})
+            page (ldb/get-page @conn "sport")]
+      (is (= created-at (:block/created-at page)))
+      (is (= modified-at (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-preserves-alias-only-page-file-timestamps
+  (let [created-at (js/Date. "2024-03-09T19:03:41.000Z")
+        modified-at (js/Date. "2024-03-08T21:19:12.000Z")
+        mention {:path "journals/2024_01_01.md" :content "- [[Sport]]\n"}
+        file {:path "pages/Sport.md" :content "alias:: sportlich\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [mention file]
+                  {(:path file) {:birthtime created-at :mtime modified-at}})
+            page (ldb/get-page @conn "sport")]
+      (is (= (.getTime created-at) (:block/created-at page)))
+      (is (= (.getTime modified-at) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-preserves-multi-alias-page-file-timestamps
+  (let [created-at (js/Date. "2025-01-03T13:45:32.000Z")
+        modified-at (js/Date. "2025-03-02T03:31:18.000Z")
+        mention {:path "journals/2024_01_01.md" :content "- [[schlafe]]\n"}
+        file {:path "pages/Schlaf.md"
+              :content "alias:: schlafe, schlafen, geschlafen, Schlafrhythmus, wach\n\n- ## Probleme\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [mention file]
+                  {(:path file) {:birthtime created-at :mtime modified-at}})
+            page (ldb/get-page @conn "schlaf")]
+      (is (= (.getTime created-at) (:block/created-at page)))
+      (is (= (.getTime modified-at) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-uses-first-journal-mention-for-fileless-pages
+  (let [journal-day 20240308
+        expected (date-time-util/journal-day->ms journal-day)
+        journal {:path "journals/2024_03_08.md" :content "- first mention [[Referenced Only]]\n"}
+        later {:path "journals/2024_06_01.md" :content "- later mention [[Referenced Only]]\n"}]
+    (p/let [conn (export-in-memory-doc-files [journal later] {})
+            page (ldb/get-page @conn "referenced only")]
+      (is (= expected (:block/created-at page)))
+      (is (= expected (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-file-ignores-epoch-zero-birthtime
+  (let [modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        file {:path "pages/epoch.md" :content "- epoch birth\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [file]
+                  {(:path file) {:birthtime (js/Date. 0) :mtime modified-at}})
+            page (ldb/get-page @conn "epoch")]
+      (is (= (.getTime modified-at) (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-file-accepts-numeric-last-modified-at
+  (let [modified-at (.getTime (js/Date. "2021-06-07T08:09:10.000Z"))
+        file {:path "pages/numeric.md"
+              :content "- numeric mtime\n"
+              :last-modified-at modified-at}]
+    (p/let [conn (export-in-memory-doc-files [file] {})
+            page (ldb/get-page @conn "numeric")]
+      (is (= modified-at (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest update-asset-links-in-block-title
