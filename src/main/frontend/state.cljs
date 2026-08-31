@@ -18,6 +18,7 @@
             [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.dialog.core :as shui-dialog]
@@ -54,8 +55,16 @@
                     :en)
                 name)))))
 
+(def db-worker-uninitialized-message
+  "db-worker has not been initialized")
+
+(defn db-worker-uninitialized-error?
+  "True when a call failed because `*db-worker` was nil."
+  [error]
+  (= db-worker-uninitialized-message (ex-message error)))
+
 (def db-worker-ready?
-  "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
+  "`<invoke-db-worker` rejects if `*db-worker` is not ready yet.
   Use this atom to wait till db-worker ready."
   (let [ready? (atom (fn? @*db-worker))]
     (add-watch *db-worker ::db-worker-ready?
@@ -64,17 +73,22 @@
     ready?))
 
 (defn <invoke-db-worker
-  "invoke db-worker thread api"
+  "invoke db-worker thread api.
+
+  Always returns a promise. When the worker is missing this rejects instead of
+  throwing, so React render / RFX handlers can recover instead of hitting
+  ErrorBoundary."
   [qkw & args]
   (let [worker @*db-worker]
-    (when (nil? worker)
-      (prn :<invoke-db-worker-error qkw)
-      (throw (ex-info "db-worker has not been initialized" {})))
-    (p/let [result (apply worker qkw args)]
-      (if (or (instance? ExceptionInfo result)
-              (instance? js/Error result))
-        (p/rejected result)
-        result))))
+    (if (nil? worker)
+      (do
+        (log/warn :db-worker/not-initialized {:qkw qkw})
+        (p/rejected (ex-info db-worker-uninitialized-message {:qkw qkw})))
+      (p/let [result (apply worker qkw args)]
+        (if (or (instance? ExceptionInfo result)
+                (instance? js/Error result))
+          (p/rejected result)
+          result)))))
 
 (def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
 
