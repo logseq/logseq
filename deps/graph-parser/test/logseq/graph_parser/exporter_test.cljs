@@ -1999,6 +1999,38 @@ abc
            (set (map :block/uuid (:block/refs source-block))))
         "Missing ordinary page ref points at the created page")))
 
+(deftest-async import-page-drawer-properties-write-refs-on-the-page
+  (p/let [file (write-temp-graph-file
+                "pages/Zorba the Greek (1964).md"
+                (str "tags:: movies\n"
+                     "title:: Zorba the Greek (1964)\n"
+                     "genre:: [[Comedy]], [[Drama]]\n"
+                     "actors:: [[Anthony Quinn]], [[Alan Bates]]\n"))
+          conn (db-test/create-conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})
+          page (db-test/find-page-by-title @conn "Zorba the Greek (1964)")
+          comedy (db-test/find-page-by-title @conn "Comedy")
+          drama (db-test/find-page-by-title @conn "Drama")
+          quinn (db-test/find-page-by-title @conn "Anthony Quinn")
+          bates (db-test/find-page-by-title @conn "Alan Bates")
+          props (db-test/readable-properties page)
+          ref-titles (set (map :block/title (:block/refs page)))]
+    (is (some? page) "Movie page is imported")
+    (is (= #{"Comedy" "Drama"} (:user.property/genre props))
+        "Genre page refs are stored on the movie page")
+    (is (= #{"Anthony Quinn" "Alan Bates"} (:user.property/actors props))
+        "Actor page refs are stored on the movie page")
+    (is (set/subset? #{"Comedy" "Drama" "Anthony Quinn" "Alan Bates"} ref-titles)
+        "Page drawer refs are written onto the page :block/refs")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id comedy))))
+        "Comedy linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id drama))))
+        "Drama linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id quinn))))
+        "Actor linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id bates))))
+        "Actor linked references include the movie page")))
+
 (deftest-async import-favorites-from-og-config-edn
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn"
