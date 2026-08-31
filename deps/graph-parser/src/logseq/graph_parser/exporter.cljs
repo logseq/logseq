@@ -49,7 +49,8 @@
   ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
    (let [journal-ref-page? (and current-journal-created-at
                                 (:block/name block)
-                                (not (:block/journal-day block)))
+                                (not (:block/journal-day block))
+                                (not (::file-page? block)))
          updated-at (cond
                       journal-ref-page? current-journal-created-at
                       file-updated-at file-updated-at
@@ -2031,7 +2032,8 @@
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       (add-missing-timestamps options)
-      (update-page-tags db user-options per-file-state all-idents)))
+      (update-page-tags db user-options per-file-state all-idents)
+      (dissoc ::file-page?)))
 
 (defn- get-page-parents
   "Like ldb/get-page-parents but using all-existing-page-uuids"
@@ -2077,6 +2079,13 @@
     (second (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
                      normalized-path))))
 
+(defn- journal-file-created-at
+  "Created-at for pages first mentioned in this journal file, from the filename day."
+  [file]
+  (when-let [journal-title (journal-file-title file)]
+    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
+      (date-time-util/journal-day->ms journal-day))))
+
 (defn- journal-page-name-uuid-entries
   [{:keys [path]}]
   (when-let [journal-title (journal-file-title path)]
@@ -2095,7 +2104,7 @@
          (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
-  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
+  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
   (let [file-page? (::file-page? m)
         m (dissoc m ::file-page?)
         ;; These attributes are ignored by default because they must not change across files
@@ -2104,7 +2113,8 @@
         allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                         (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                               m))
-                             file-page?
+                             ;; Only overwrite first-mention timestamps when this file has real stats.
+                             (and file-page? (or file-created-at file-updated-at))
                              (into [:block/created-at :block/updated-at]))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
@@ -2276,7 +2286,7 @@
                                                 ;; TODO: Enable this when it's valid for all test graphs because
                                                 ;; pages with properties must be built or else properties-tx is invalid
                                                 #_(seq properties-tx))
-                                        (build-new-page-or-class (dissoc m ::original-name ::original-title ::file-page?)
+                                        (build-new-page-or-class (dissoc m ::original-name ::original-title)
                                                                  @conn per-file-state (:all-idents import-state) options)))]
                            ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                            page))
@@ -2526,9 +2536,11 @@
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
                   (update :pages (fn [pages]
-                                   (map #(-> %
-                                             (dissoc :block.temp/original-page-name)
-                                             with-file-timestamps)
+                                   (map (fn [page]
+                                          (let [page (dissoc page :block.temp/original-page-name)]
+                                            (if (:block/file page)
+                                              (with-file-timestamps page)
+                                              page)))
                                         pages)))
                   (update :blocks (fn [blocks]
                                     (fix-extracted-block-tags-and-refs
@@ -2636,8 +2648,7 @@
           journal-created-ats (build-journal-created-ats pages)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats journal-created-ats
-                             :current-journal-created-at (when (= 1 (count journal-created-ats))
-                                                           (first (vals journal-created-ats)))
+                             :current-journal-created-at (journal-file-created-at file)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
