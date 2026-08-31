@@ -6,10 +6,22 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
-(defn- expected-crypto-operation-error?
+(defn- operation-error-label?
+  [value]
+  (= "OperationError" value))
+
+(defn expected-crypto-operation-error?
+  "WebCrypto AES-GCM/RSA-OAEP failures surface as DOMException OperationError.
+  Some runtimes put that string on `.name`; others only on `.message` or the cause.
+  Do not use `(or name cause-name)` — a truthy non-matching `.name` such as
+  `Error` would hide the OperationError on the cause."
   [e]
-  (= "OperationError" (or (some-> e .-name)
-                          (some-> e ex-cause .-name))))
+  (boolean
+   (when e
+     (or (operation-error-label? (some-> e .-name))
+         (operation-error-label? (some-> e .-message))
+         (operation-error-label? (ex-message e))
+         (expected-crypto-operation-error? (ex-cause e))))))
 
 (defn <export-aes-key
   [aes-key]
@@ -156,10 +168,11 @@
               (let [invalid-password? (expected-crypto-operation-error? e)]
                 (when-not invalid-password?
                   (log/error "decrypt-private-key" e))
-                (ex-info "decrypt-private-key"
-                         (cond-> {}
-                           invalid-password? (assoc :invalid-password? true))
-                         e))))))
+                (p/rejected
+                 (ex-info "decrypt-private-key"
+                          (cond-> {}
+                            invalid-password? (assoc :invalid-password? true))
+                          e)))))))
 
 (defn <encrypt-aes-key
   "Encrypts an AES key with a public key."
