@@ -2086,12 +2086,16 @@
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
-  (let [;; These attributes are not allowed to be transacted because they must not change across files
+  (let [file-page? (::file-page? m)
+        m (dissoc m ::file-page?)
+        ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                       m))
+        allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
+                                        (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                              m))
+                             file-page?
+                             (into [:block/created-at :block/updated-at]))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
       (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
@@ -2227,7 +2231,9 @@
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
                             ;; remove file path relative
-                            (map #(dissoc % :block/file)))
+                            (map #(cond-> (dissoc % :block/file)
+                                    (:block/file %)
+                                    (assoc ::file-page? true))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
@@ -2260,7 +2266,7 @@
                                                 ;; TODO: Enable this when it's valid for all test graphs because
                                                 ;; pages with properties must be built or else properties-tx is invalid
                                                 #_(seq properties-tx))
-                                        (build-new-page-or-class (dissoc m ::original-name ::original-title)
+                                        (build-new-page-or-class (dissoc m ::original-name ::original-title ::file-page?)
                                                                  @conn per-file-state (:all-idents import-state) options)))]
                            ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                            page))
@@ -2690,12 +2696,14 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
-              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
+              created-at (or (:file-created-at file)
+                             (some-> (or (:birthtime stat) (some-> ^js stat .-birthtime)) .getTime))
+              modified-at (or (:file-updated-at file)
+                              (some-> (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file)) .getTime))
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
-                               created-at (assoc :file-created-at (.getTime created-at))
-                               modified-at (assoc :file-updated-at (.getTime modified-at)))
+                               created-at (assoc :file-created-at created-at)
+                               modified-at (assoc :file-updated-at modified-at))
               _ (<export-file conn m export-options)]
         ;; returning val results in smoother ui updates
         m)

@@ -794,21 +794,25 @@ abc
 
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
-        modified-at (js/Date. "2021-06-07T08:09:10.000Z")]
-    (p/let [file (write-temp-graph-file "pages/timestamps.md" "- timestamped\n")
-            conn (db-test/create-conn)
+        modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        source-file {:path "pages/A.md" :content "- [[Timestamps]]\n"}
+        file {:path "pages/timestamps.md" :content "- timestamped\n"}]
+    (p/let [conn (db-test/create-conn)
             _ (db-pipeline/add-listener conn)
             doc-options (gp-exporter/build-doc-options
                          {:macros {} :file/name-format :triple-lowbar}
                          (merge default-export-options
                                 {:user-options {:convert-all-tags? false}
-                                 :<get-file-stat (fn [_]
-                                                   {:birthtime created-at
-                                                    :mtime modified-at})
+                                 :<get-file-stat (fn [path]
+                                                   (when (= path (:path file))
+                                                     {:birthtime created-at
+                                                      :mtime modified-at}))
                                  :<export-file (fn [conn' file-map opts]
                                                  (gp-exporter/<add-file-to-db-graph
                                                   conn' (:file/path file-map) (:file/content file-map) opts))}))
-            _ (gp-exporter/export-doc-files conn [{:path file}] <read-file doc-options)
+            _ (gp-exporter/export-doc-files conn [source-file file]
+                                            #(p/resolved (:content %))
+                                            doc-options)
             page (ldb/get-page @conn "timestamps")
             block (db-test/find-block-by-content @conn "timestamped")]
       (is (= (.getTime created-at) (:block/created-at page) (:block/created-at block)))
