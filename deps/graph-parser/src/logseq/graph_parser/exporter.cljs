@@ -2008,6 +2008,11 @@
   (import-profile/set-import-progress! options m)
   nil)
 
+(defn- log-phase-ms!
+  [log-fn phase start extra]
+  (when (and log-fn start)
+    (import-profile/log-phase! log-fn phase start extra)))
+
 (defn- build-block-tx-sync
   [db block* pre-blocks per-file-state walked-ast-blocks options]
   (let [core (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)]
@@ -2732,7 +2737,8 @@
           _ (import-progress! options {:phase :parse :file file})
           parse-start (when log-fn (import-profile/now-ms))
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
-          _ (when log-fn (import-profile/log-phase! log-fn :parse parse-start {:file file}))
+          _ (log-phase-ms! log-fn :parse parse-start {:file file})
+          prep-start (when log-fn (import-profile/now-ms))
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           walked-by-uuid (index-walked-ast-blocks (or (:user-config options)
                                                       (get-in options [:extract-options :user-config])
@@ -2742,46 +2748,57 @@
                             {:journal-created-ats (build-journal-created-ats pages)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
+          _ (log-phase-ms! log-fn :prep prep-start {:file file})
           _ (import-progress! options {:phase :pages-tx :file file})
           pages-start (when log-fn (import-profile/now-ms))
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
-          _ (when log-fn (import-profile/log-phase! log-fn :pages-tx pages-start {:file file}))
+          _ (log-phase-ms! log-fn :pages-tx pages-start {:file file})
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
           _ (import-progress! options {:phase :blocks-tx :file file})
           blocks-start (when log-fn (import-profile/now-ms))
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
-          _ (when log-fn (import-profile/log-phase! log-fn :blocks-tx blocks-start {:file file
-                                                                                    :blocks (count blocks)}))
+          _ (log-phase-ms! log-fn :blocks-tx blocks-start {:file file
+                                                           :blocks (count blocks)})
           _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
+          split-start (when log-fn (import-profile/now-ms))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
+          _ (log-phase-ms! log-fn :split split-start {:file file})
           tx-meta {::imported-data? true ::path file ::new-graph? true}
           _ (import-progress! options {:phase :property-transact :file file})
+          prop-tx-start (when log-fn (import-profile/now-ms))
           _ (when (seq property-pages-tx)
               (ldb/transact! conn property-pages-tx tx-meta))
           _ (when (seq property-pages-tx)
               (save-from-tx property-pages-tx options))
+          _ (log-phase-ms! log-fn :prop-tx prop-tx-start {:file file :tx-count (count property-pages-tx)})
           classes-tx @(:classes-tx tx-options)
+          clean-start (when log-fn (import-profile/now-ms))
           {:keys [retract-page-tags-tx] pages-tx'' :pages-tx}
           (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
+          _ (log-phase-ms! log-fn :clean-tags clean-start {:file file})
           classes-tx' (concat classes-tx retract-page-tags-tx)
           custom-status-tx @(:custom-status-tx tx-options)
+          main-tx-start (when log-fn (import-profile/now-ms))
           tx' (build-file-import-main-tx pages-tx'' page-properties-tx property-page-properties-tx
                                          classes-tx classes-tx' custom-status-tx blocks-tx)
+          _ (log-phase-ms! log-fn :main-tx main-tx-start {:file file :tx-count (count tx')})
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))
           main-tx-report (ldb/transact! conn tx' tx-meta)
           _ (save-from-tx tx' options)
-          _ (when log-fn (import-profile/log-phase! log-fn :transact transact-start {:file file
-                                                                                    :tx-count (count tx')}))
+          _ (log-phase-ms! log-fn :transact transact-start {:file file
+                                                            :tx-count (count tx')})
           _ (import-progress! options {:phase :upstream-properties :file file})
+          upstream-start (when log-fn (import-profile/now-ms))
           upstream-properties-tx
           (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
           upstream-tx-report (when (seq upstream-properties-tx)
                                (ldb/transact! conn upstream-properties-tx tx-meta))
           _ (when (seq upstream-properties-tx)
               (save-from-tx upstream-properties-tx options))
-          _ (when log-fn (import-profile/log-phase! log-fn :file file-start {:file file}))]
+          _ (log-phase-ms! log-fn :upstream upstream-start {:file file})
+          _ (log-phase-ms! log-fn :file file-start {:file file})])
 
     [main-tx-report upstream-tx-report]))
 
