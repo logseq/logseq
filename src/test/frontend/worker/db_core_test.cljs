@@ -2564,58 +2564,59 @@
 
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
-         (restoring-worker-state
-          (fn []
-            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
-                  conn (d/create-conn db-schema/schema)
-                  pipeline-before @ldb/*transact-pipeline-fn
-                  renderer-payloads (atom [])
-                  config-file {:path "logseq/config.edn"
-                               :file/content "{}"}
-                  files [config-file
-                         {:path "pages/Home.md"
-                          :file/content "- imported block"}]]
-              (is (fn? import-file-graph!))
-              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-              (p/with-redefs
-                [db-sync/update-local-sync-checksum! (fn [& _] nil)
-                 db-sync/handle-local-tx! (fn [& _] nil)
-                 shared-service/broadcast-to-clients!
-                 (fn [event payload]
-                   (when (= :sync-db-changes event)
-                     (swap! renderer-payloads conj payload)))]
-                (db-listener/listen-db-changes! test-repo conn
-                                                :handler-keys [:sync-db-to-main-thread])
-                (->
-                 (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
-                         page (some->> (d/q '[:find [?e ...]
-                                               :where [?e :block/name "home"]]
-                                             @conn)
-                                             first
-                                        (d/entity @conn))
-                         block (db-test/find-block-by-content @conn "imported block")
-                         published-block-uuids
-                         (into #{}
-                               (mapcat #(keys (get-in % [:delta :blocks])))
-                               @renderer-payloads)]
-                   (is (= #{"pages/Home.md" "logseq/config.edn"}
-                          (set (map :path (:files result)))))
-                   (is (= "Home" (:block/title page)))
-                   (is (= "imported block" (:block/title block)))
-                   (doseq [entity [page block]]
-                     (is (nat-int? (:block/tx-id entity)))
-                     (is (= (:block/uuid entity)
-                            (:block/uuid (block-handler/canonical-block @conn entity))))
-                     (is (contains? published-block-uuids (:block/uuid entity))
-                         "Live file imports must publish complete canonical replacements.")))
-                 (p/catch
-                  (fn [error]
-                    (is false (str error))))
-                 (p/finally (fn []
-                              (reset! ldb/*transact-pipeline-fn pipeline-before)
-                              (done))))))))))
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   renderer-payloads (atom [])
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
+                   files [config-file
+                          {:path "pages/Home.md"
+                           :file/content "- imported block"}]]
+               (is (fn? import-file-graph!))
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients!
+                  (fn [event payload]
+                    (when (= :sync-db-changes event)
+                      (swap! renderer-payloads conj payload)))]
+                 (db-listener/listen-db-changes! test-repo conn
+                                                 :handler-keys [:sync-db-to-main-thread])
+                 (->
+                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                          page (some->> (d/q '[:find [?e ...]
+                                                :where [?e :block/name "home"]]
+                                              @conn)
+                                              first
+                                         (d/entity @conn))
+                          block (db-test/find-block-by-content @conn "imported block")
+                          published-block-uuids
+                          (into #{}
+                                (mapcat #(keys (get-in % [:delta :blocks])))
+                                @renderer-payloads)]
+                    (is (= #{"pages/Home.md" "logseq/config.edn"}
+                           (set (map :path (:files result)))))
+                    (is (= "Home" (:block/title page)))
+                    (is (= "imported block" (:block/title block)))
+                    (doseq [entity [page block]]
+                      (is (nat-int? (:block/tx-id entity)))
+                      (is (= (:block/uuid entity)
+                             (:block/uuid (block-handler/canonical-block @conn entity))))
+                      (is (contains? published-block-uuids (:block/uuid entity))
+                          "Live file imports must publish complete canonical replacements.")))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
 
 (defn- imported-ref-uuids
   [entity]
@@ -2623,81 +2624,82 @@
 
 (deftest import-file-graph-publishes-page-refs-and-progress
   (async done
-         (restoring-worker-state
-          (fn []
-            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
-                  get-block-refs! (get @thread-api/*thread-apis :thread-api/get-block-refs)
-                  conn (d/create-conn db-schema/schema)
-                  pipeline-before @ldb/*transact-pipeline-fn
-                  renderer-payloads (atom [])
-                  ui-state (atom [])
-                  config-file {:path "logseq/config.edn"
-                               :file/content "{}"}
-                  files [config-file
-                         {:path "pages/source.md"
-                          :file/content "- see [[Target]]"}
-                         {:path "pages/Target.md"
-                          :file/content "- target"}]]
-              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (reset! worker-state/*main-thread
-                      (fn [qkw & args]
-                        (when (= qkw :thread-api/set-ui-state)
-                          (swap! ui-state conj (vec args)))
-                        (p/resolved nil)))
-              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-              (p/with-redefs
-                [db-sync/update-local-sync-checksum! (fn [& _] nil)
-                 db-sync/handle-local-tx! (fn [& _] nil)
-                 shared-service/broadcast-to-clients!
-                 (fn [event payload]
-                   (when (= :sync-db-changes event)
-                     (swap! renderer-payloads conj payload)))]
-                (db-listener/listen-db-changes! test-repo conn
-                                                :handler-keys [:sync-db-to-main-thread])
-                (->
-                 (p/let [_result (import-file-graph! test-repo config-file files {:user-options {}})
-                         target (db-test/find-page-by-title @conn "Target")
-                         block (or (db-test/find-block-by-content @conn #"see ")
-                                   (db-test/find-block-by-content @conn (re-pattern (str (:block/uuid target)))))
-                         canonical-block (when block (block-handler/canonical-block @conn block))
-                         canonical-target (when target (block-handler/canonical-block @conn target))
-                         linked (when target (get-block-refs! test-repo (:db/id target)))
-                         published-blocks
-                         (into {}
-                               (mapcat #(get-in % [:delta :blocks]))
-                               @renderer-payloads)
-                         published-block (get published-blocks (:block/uuid block))
-                         published-target (get published-blocks (:block/uuid target))]
-                   (is (some? target) "Target page is imported.")
-                   (is (some? block) "Referring block is imported.")
-                   (is (contains? (imported-ref-uuids block) (:block/uuid target))
-                       "Imported block refs are stored on the worker conn.")
-                   (is (contains? (imported-ref-uuids canonical-block) (:block/uuid target))
-                       "UI canonical blocks include the same page refs.")
-                   (is (pos? (:block.temp/refs-count canonical-target))
-                       "UI linked-reference counts are present on the referenced page.")
-                   (is (contains? (set (map :block/uuid linked))
-                                  (:block/uuid block))
-                       "Linked-references API returns the referring block.")
-                   (is (contains? (imported-ref-uuids published-block) (:block/uuid target))
-                       "Renderer replacements include the same page refs.")
-                   (is (pos? (:block.temp/refs-count published-target))
-                       "Linked-reference counts are present on the referenced page.")
-                   (is (= 2 (->> @ui-state
-                                 (filter #(= [:graph/importing-state :total] (first %)))
-                                 last
-                                 second))
-                       "Progress total is the number of markdown files.")
-                   (is (seq (filter #(= [:graph/importing-state :current-idx] (first %))
-                                    @ui-state))
-                       "Progress current-idx updates during import."))
-                 (p/catch
-                  (fn [error]
-                    (is false (str error))))
-                 (p/finally (fn []
-                              (reset! ldb/*transact-pipeline-fn pipeline-before)
-                              (done))))))))))
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   get-block-refs! (get @thread-api/*thread-apis :thread-api/get-block-refs)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   renderer-payloads (atom [])
+                   ui-state (atom [])
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
+                   files [config-file
+                          {:path "pages/source.md"
+                           :file/content "- see [[Target]]"}
+                          {:path "pages/Target.md"
+                           :file/content "- target"}]]
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (reset! worker-state/*main-thread
+                       (fn [qkw & args]
+                         (when (= qkw :thread-api/set-ui-state)
+                           (swap! ui-state conj (vec args)))
+                         (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients!
+                  (fn [event payload]
+                    (when (= :sync-db-changes event)
+                      (swap! renderer-payloads conj payload)))]
+                 (db-listener/listen-db-changes! test-repo conn
+                                                 :handler-keys [:sync-db-to-main-thread])
+                 (->
+                  (p/let [_result (import-file-graph! test-repo config-file files {:user-options {}})
+                          target (db-test/find-page-by-title @conn "Target")
+                          block (or (db-test/find-block-by-content @conn #"see ")
+                                    (db-test/find-block-by-content @conn (re-pattern (str (:block/uuid target)))))
+                          canonical-block (when block (block-handler/canonical-block @conn block))
+                          canonical-target (when target (block-handler/canonical-block @conn target))
+                          linked (when target (get-block-refs! test-repo (:db/id target)))
+                          published-blocks
+                          (into {}
+                                (mapcat #(get-in % [:delta :blocks]))
+                                @renderer-payloads)
+                          published-block (get published-blocks (:block/uuid block))
+                          published-target (get published-blocks (:block/uuid target))]
+                    (is (some? target) "Target page is imported.")
+                    (is (some? block) "Referring block is imported.")
+                    (is (contains? (imported-ref-uuids block) (:block/uuid target))
+                        "Imported block refs are stored on the worker conn.")
+                    (is (contains? (imported-ref-uuids canonical-block) (:block/uuid target))
+                        "UI canonical blocks include the same page refs.")
+                    (is (pos? (:block.temp/refs-count canonical-target))
+                        "UI linked-reference counts are present on the referenced page.")
+                    (is (contains? (set (map :block/uuid linked))
+                                   (:block/uuid block))
+                        "Linked-references API returns the referring block.")
+                    (is (contains? (imported-ref-uuids published-block) (:block/uuid target))
+                        "Renderer replacements include the same page refs.")
+                    (is (pos? (:block.temp/refs-count published-target))
+                        "Linked-reference counts are present on the referenced page.")
+                    (is (= 2 (->> @ui-state
+                                  (filter #(= [:graph/importing-state :total] (first %)))
+                                  last
+                                  second))
+                        "Progress total is the number of markdown files.")
+                    (is (seq (filter #(= [:graph/importing-state :current-idx] (first %))
+                                     @ui-state))
+                        "Progress current-idx updates during import."))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
