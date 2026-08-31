@@ -67,7 +67,10 @@
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
   [block & {:as opts}]
-  (db-block-title/block-unique-title (:db opts) block (dissoc opts :db)))
+  (db-block-title/block-unique-title
+   (:db opts)
+   block
+   (merge {:with-parents? (state/show-hierarchy?)} (dissoc opts :db))))
 
 (defn block-title-with-icon
   "Used for select item"

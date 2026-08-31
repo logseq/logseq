@@ -484,6 +484,12 @@
           show-full-blocks?
           config-handler/toggle-show-full-blocks!))
 
+(defn show-hierarchy-row [t show-hierarchy?]
+  (toggle "show_hierarchy"
+          (t :settings.editor/show-hierarchy)
+          show-hierarchy?
+          config-handler/toggle-ui-show-hierarchy!))
+
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           [(t :settings.editor/preferred-pasting-file)
@@ -897,11 +903,13 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
         show-brackets? (state/show-brackets?)
+        show-hierarchy? (state/show-hierarchy?)
         wide-mode? (rfx/use-sub [:ui/wide-mode?])]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
      (show-brackets-row t show-brackets?)
+     (show-hierarchy-row t show-hierarchy?)
      (toggle-wide-mode-row t wide-mode?)
 
      (when (util/electron?) (switch-spell-check-row t))

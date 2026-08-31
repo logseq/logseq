@@ -684,6 +684,13 @@ should be done through this fn in order to get global config and config defaults
   []
   (not (false? (:ui/show-brackets? (get-config)))))
 
+;; Disabled by default
+(defn show-hierarchy?
+  "Whether page references show the page's full hierarchy, e.g. `Superhuman/Docs`
+  instead of `Docs`. Display only, stored content is unaffected."
+  []
+  (boolean (:ui/show-hierarchy (get-config))))
+
 (defn- get-selected-block-ids
   [blocks]
   (->> blocks
