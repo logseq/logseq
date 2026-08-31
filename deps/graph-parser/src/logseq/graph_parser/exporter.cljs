@@ -41,24 +41,28 @@
             [promesa.core :as p]))
 
 (defn- add-missing-timestamps
-  "Add updated-at or created-at timestamps if they doesn't exist"
+  "Add updated-at or created-at timestamps if they doesn't exist.
+   Reference-only pages created from a journal keep the journal date, even when
+   extract already stamped them with import time."
   ([block]
    (add-missing-timestamps block nil))
   ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
-   (let [ref-from-journal? (and current-journal-created-at
-                                (nil? (:block/created-at block)))
-         updated-at (if ref-from-journal?
-                      current-journal-created-at
-                      (or file-updated-at (common-util/time-ms)))
-         created-at (if ref-from-journal?
-                      current-journal-created-at
-                      (or file-created-at updated-at))
-         block (cond-> block
-                 (nil? (:block/updated-at block))
-                 (assoc :block/updated-at updated-at)
-                 (nil? (:block/created-at block))
-                 (assoc :block/created-at created-at))]
-     block)))
+   (let [journal-ref-page? (and current-journal-created-at
+                                (:block/name block)
+                                (not (:block/journal-day block)))
+         updated-at (cond
+                      journal-ref-page? current-journal-created-at
+                      file-updated-at file-updated-at
+                      :else (common-util/time-ms))
+         created-at (cond
+                      journal-ref-page? current-journal-created-at
+                      file-created-at file-created-at
+                      :else updated-at)]
+     (cond-> block
+       (or journal-ref-page? (nil? (:block/updated-at block)))
+       (assoc :block/updated-at updated-at)
+       (or journal-ref-page? (nil? (:block/created-at block)))
+       (assoc :block/created-at created-at)))))
 
 (defn- build-new-namespace-page [block]
   (let [new-title (ns-util/get-last-part (:block/title block))]
@@ -2505,7 +2509,8 @@
         journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
-                                 file-created-at (assoc :block/created-at file-created-at)
+                                 (or file-created-at file-updated-at)
+                                 (assoc :block/created-at (or file-created-at file-updated-at))
                                  file-updated-at (assoc :block/updated-at file-updated-at)))
         extract-options' (merge {:block-pattern (get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
