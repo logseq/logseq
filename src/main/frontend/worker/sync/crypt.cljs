@@ -567,7 +567,7 @@
                                                  :retry-error retry-error})
                                       (throw (if (invalid-e2ee-password-error? retry-error)
                                                (invalid-e2ee-password-ex retry-error)
-                                               retry-error)))))))))
+                                               retry-error))))))))
           (p/then (fn [key-material]
                     (if-let [password (when (seq @ui-password*)
                                        @ui-password*)]

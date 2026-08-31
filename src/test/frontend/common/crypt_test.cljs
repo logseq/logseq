@@ -45,7 +45,7 @@
        (-> (p/do! (crypt/<decrypt-private-key "wrong-password" encrypted-private-key))
            (p/catch (fn [e]
                       (is (= "decrypt-private-key" (ex-message e)))
-                      (is (true? (:invalid-password? (ex-data e))))))))
+                      (is (true? (:invalid-password? (ex-data e)))))))
        (-> (p/let [another-rsa-key-pair (crypt/<generate-rsa-key-pair)]
              (crypt/<decrypt-aes-key (:privateKey another-rsa-key-pair) encrypted-aes-key))
            (p/catch (fn [e] (is (= "decrypt-aes-key" (ex-message e))))))))))
