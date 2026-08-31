@@ -2577,6 +2577,14 @@
   (let [format' (keyword format)]
     (if (= format' :org) "*" "-")))
 
+(defn- import-parse-outline-only?
+  "File-to-db import uses outline parse for headings, properties, refs and tags.
+   Full parse is required when later import steps walk Src, Macro, Quote, Drawer,
+   org blocks, or markdown links. Render/editor never call this path."
+  [format content]
+  (and (contains? #{:markdown :md} format)
+       (not (re-find #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*>|\]\(" content))))
+
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state file-created-at file-updated-at]}]
@@ -2591,7 +2599,8 @@
                                  :uri-encoded? false
                                  ;; Alters behavior in gp-block
                                  :export-to-db-graph? true
-                                 :filename-format :legacy}
+                                 :filename-format :legacy
+                                 :parse-outline-only? (import-parse-outline-only? format content)}
                                 extract-options
                                 {:db db
                                  ;; File graph journals have a fixed path and filename independent of their display format.
