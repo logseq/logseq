@@ -42,27 +42,33 @@
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist.
+   File-backed pages always use the file's birthtime/mtime when those exist,
+   including when the page was first mentioned from a journal.
    Reference-only pages created from a journal keep the journal date, even when
    extract already stamped them with import time."
   ([block]
    (add-missing-timestamps block nil))
   ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
-   (let [journal-ref-page? (and current-journal-created-at
+   (let [file-page? (::file-page? block)
+         file-times? (and file-page? (or file-created-at file-updated-at))
+         journal-ref-page? (and current-journal-created-at
                                 (:block/name block)
                                 (not (:block/journal-day block))
-                                (not (::file-page? block)))
+                                (not file-page?))
          updated-at (cond
+                      file-times? (or file-updated-at file-created-at)
                       journal-ref-page? current-journal-created-at
                       file-updated-at file-updated-at
                       :else (common-util/time-ms))
          created-at (cond
+                      file-times? (or file-created-at file-updated-at)
                       journal-ref-page? current-journal-created-at
                       file-created-at file-created-at
                       :else updated-at)]
      (cond-> block
-       (or journal-ref-page? (nil? (:block/updated-at block)))
+       (or file-times? journal-ref-page? (nil? (:block/updated-at block)))
        (assoc :block/updated-at updated-at)
-       (or journal-ref-page? (nil? (:block/created-at block)))
+       (or file-times? journal-ref-page? (nil? (:block/created-at block)))
        (assoc :block/created-at created-at)))))
 
 (defn- build-new-namespace-page [block]
@@ -2073,6 +2079,13 @@
                                    (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
+(defn- existing-page-uuid
+  "Uuid for a page already in this import or already in the db."
+  [db all-existing-page-uuids page-name]
+  (or (get all-existing-page-uuids page-name)
+      (when page-name
+        (:block/uuid (ldb/get-page db page-name)))))
+
 (defn- journal-file-title
   [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
@@ -2106,15 +2119,19 @@
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
   (let [file-page? (::file-page? m)
-        m (dissoc m ::file-page?)
+        file-times? (and file-page? (or file-created-at file-updated-at))
+        m (cond-> (dissoc m ::file-page?)
+            file-times?
+            (assoc :block/created-at (or file-created-at file-updated-at)
+                   :block/updated-at (or file-updated-at file-created-at)))
         ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
         allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                         (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                               m))
-                             ;; Only overwrite first-mention timestamps when this file has real stats.
-                             (and file-page? (or file-created-at file-updated-at))
+                             ;; File stats replace first-mention / journal dates.
+                             file-times?
                              (into [:block/created-at :block/updated-at]))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
@@ -2240,9 +2257,11 @@
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [import-state user-options]
+  [conn pages blocks {:keys [import-state user-options file-created-at file-updated-at]
                       :as options}]
   (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
+        file-page-created-at (or file-created-at file-updated-at)
+        file-page-updated-at (or file-updated-at file-created-at)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
                                           (contains? journal-page-name-uuids (:block/name %))))
@@ -2250,10 +2269,16 @@
                             (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
-                            ;; remove file path relative
-                            (map #(cond-> (dissoc % :block/file)
-                                    (:block/file %)
-                                    (assoc ::file-page? true))))
+                            ;; remove file path relative. Re-apply file stats after
+                            ;; with-ref-pages, which merges refs over the file page.
+                            (map #(let [file-page? (boolean (:block/file %))]
+                                    (cond-> (dissoc % :block/file)
+                                      file-page?
+                                      (assoc ::file-page? true)
+                                      (and file-page? file-page-created-at)
+                                      (assoc :block/created-at file-page-created-at)
+                                      (and file-page? file-page-updated-at)
+                                      (assoc :block/updated-at file-page-updated-at)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
@@ -2261,8 +2286,10 @@
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
+        existing-uuid #(existing-page-uuid @conn all-existing-page-uuids
+                                           (or (::original-name %) (:block/name %)))
         all-new-page-uuids (->> all-pages
-                                (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
+                                (remove existing-uuid)
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
@@ -2272,9 +2299,7 @@
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
-                         (let [page (if-let [page-uuid (if (::original-name m)
-                                                         (all-existing-page-uuids (::original-name m))
-                                                         (all-existing-page-uuids (:block/name m)))]
+                         (let [page (if-let [page-uuid (existing-uuid m)]
                                       (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
                                       (when (or (ldb/class? m)
                                                 ;; Don't build a new page if it overwrites an existing class
