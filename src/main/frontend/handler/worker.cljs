@@ -57,6 +57,10 @@
      :assets/asset-file-write-finish
      (fn [m] (assoc-in m [repo asset-id] (or ts (.now js/Date)))))))
 
+(defmethod handle :thread-api/set-ui-state [_ _worker args]
+  (when-let [f (get @thread-api/*thread-apis :thread-api/set-ui-state)]
+    (apply f args)))
+
 (defmethod handle :thread-api/search-index-build-progress [_ _worker args]
   (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
     (apply f args)))

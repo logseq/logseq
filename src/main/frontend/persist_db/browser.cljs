@@ -48,6 +48,11 @@
     (state/set-state! [:search/index-build-notify-repos repo] false)
     (notification/show! (t :search/indices-rebuilt-success) :success)))
 
+(def-thread-api :thread-api/set-ui-state
+  [path value]
+  (state/set-state! path value)
+  nil)
+
 (def-thread-api :thread-api/search-index-build-progress
   [repo {:keys [build-id status progress processed total]
          input-stage :stage}]
@@ -145,6 +150,7 @@
                  :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing (state/get-state))
+                 :web-platform? util/web-platform?
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]

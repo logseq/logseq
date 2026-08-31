@@ -61,7 +61,11 @@
   (not (or (:rtc-download-graph? tx-meta)
            (:sync-download-graph? tx-meta)
            (:skip-validate-db? tx-meta)
-           (:logseq.graph-parser.exporter/new-graph? tx-meta))))
+           (:logseq.graph-parser.exporter/new-graph? tx-meta)
+           ;; Web reloads after file-graph import; skip the giant finalize
+           ;; delta so the UI stays responsive. SQLite restore has the refs.
+           (and (:logseq.graph-parser.exporter/imported-data? tx-meta)
+                (:web-platform? (worker-state/get-context))))))
 
 (defn- tagged-with-ident?
   [db block ident]

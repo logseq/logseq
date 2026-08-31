@@ -8,6 +8,7 @@
             [frontend.worker.render-delta :as render-delta]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
@@ -285,6 +286,36 @@
                      tx-meta))
       (is (empty? @build-inputs) (str tx-meta))
       (is (empty? @broadcast-payloads) (str tx-meta)))))
+
+(deftest db-listener-skips-imported-render-deltas-on-web-platform-test
+  (let [conn (db-test/create-conn)
+        context-prev (worker-state/get-context)
+        build-inputs (atom [])
+        broadcast-payloads (atom [])]
+    (worker-state/set-context! {:web-platform? true})
+    (try
+      (with-redefs [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                    db-sync/handle-local-tx! (fn [& _] nil)
+                    worker-pipeline/invoke-hooks
+                    (fn [_conn tx-report _context]
+                      {:tx-report tx-report})
+                    render-delta/build
+                    (fn [input]
+                      (swap! build-inputs conj input)
+                      {:rev 1})
+                    shared-service/broadcast-to-clients!
+                    (fn [event payload]
+                      (when (= :sync-db-changes event)
+                        (swap! broadcast-payloads conj payload)))]
+        (db-listener/listen-db-changes! "repo" conn
+                                        :handler-keys [:sync-db-to-main-thread :db-sync])
+        (d/transact! conn
+                     [{:db/id -1 :block/title "imported"}]
+                     {:logseq.graph-parser.exporter/imported-data? true}))
+      (is (empty? @build-inputs))
+      (is (empty? @broadcast-payloads))
+      (finally
+        (worker-state/set-context! context-prev)))))
 
 (deftest db-listener-does-not-publish-skip-validation-render-deltas-test
   (let [conn (db-test/create-conn-with-blocks
