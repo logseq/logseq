@@ -301,7 +301,7 @@
                        get-ms (- (now-ms) t0)
                        t1 (now-ms)
                        refs-tx (when (seq blocks)
-                                 (profiled-rebuild-block-refs-tx tx-report blocks))
+                                 (vec (profiled-rebuild-block-refs-tx tx-report blocks)))
                        rebuild-ms (- (now-ms) t1)
                        nested-before (get @profile-stats :tx-nested-ms 0)
                        result (when (seq refs-tx)
