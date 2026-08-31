@@ -47,60 +47,18 @@
                       (fn [metadata]
                         (swap! calls conj [:metadata (keys metadata)])
                         (p/resolved nil))]
-        (-> (#'repo-handler/create-db "logseq_db_created" {})
-            (p/then
-             (fn [repo]
-               (is (= "logseq_db_created" repo))
-               (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
-               (is (some #{[:redirect-home]} @calls))
-               (is (some #{[:rerender]} @calls))))
-            (p/catch
-             (fn [error]
-               (is false (str error))))
-            (p/finally done))))))
-
-(deftest create-db-file-graph-import-does-not-leave-import-ui
-  (async done
-    (let [calls (atom [])]
-      (p/with-redefs [persist-db/<new
-                      (fn [repo opts]
-                        (swap! calls conj [:persist-new repo opts])
-                        (p/resolved nil))
-                      state/add-repo!
-                      (fn [repo]
-                        (swap! calls conj [:add-repo repo])
-                        (p/resolved nil))
-                      repo-handler/restore-and-setup-repo!
-                      (fn [repo opts]
-                        (swap! calls conj [:restore repo opts])
-                        (p/resolved nil))
-                      route-handler/redirect-to-home!
-                      (fn []
-                        (swap! calls conj [:redirect-home])
-                        nil)
-                      repo-config-handler/set-repo-config-state!
-                      (fn [repo _content]
-                        (swap! calls conj [:repo-config repo])
-                        nil)
-                      state/pub-event!
-                      (fn [event]
-                        (swap! calls conj [:event event])
-                        nil)
-                      ui-handler/re-render-root!
-                      (fn []
-                        (swap! calls conj [:rerender])
-                        nil)
-                      graph-handler/settle-metadata-to-local!
-                      (fn [metadata]
-                        (swap! calls conj [:metadata (keys metadata)])
-                        (p/resolved nil))]
-        (-> (#'repo-handler/create-db "logseq_db_imported" {:file-graph-import? true})
-            (p/then
-             (fn [repo]
-               (is (= "logseq_db_imported" repo))
-               (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %) @calls))
-               (is (not-any? #{[:redirect-home] [:rerender]} @calls)
-                   "File-graph import must keep the Importing UI instead of leaving for home.")))
+        (-> (p/let [created (#'repo-handler/create-db "logseq_db_created" {})
+                    _ (do
+                        (is (= "logseq_db_created" created))
+                        (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
+                        (is (some #{[:redirect-home]} @calls))
+                        (is (some #{[:rerender]} @calls))
+                        (reset! calls []))
+                    imported (#'repo-handler/create-db "logseq_db_imported" {:file-graph-import? true})]
+              (is (= "logseq_db_imported" imported))
+              (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %) @calls))
+              (is (not-any? #{[:redirect-home] [:rerender]} @calls)
+                  "File-graph import must keep the Importing UI instead of leaving for home."))
             (p/catch
              (fn [error]
                (is false (str error))))
