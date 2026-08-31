@@ -815,6 +815,25 @@ abc
       (is (= [first-file] @fatal-attempts)
           "A fatal file error stops the import immediately"))))
 
+(deftest-async simple-page-property-classifier-errors-stop-the-import
+  (let [classifier-error (ex-info "classifier failed" {:code :classifier-failed})]
+    (p/let [result
+            (p/with-redefs
+              [gp-exporter/simple-page-property-file
+               (fn [& _]
+                 (throw classifier-error))]
+              (-> (#'gp-exporter/<partition-simple-page-property-files
+                   [{:path "pages/A.md" ::rpath "pages/A.md"}]
+                   (fn [_] (p/resolved "title:: A"))
+                   ::rpath
+                   {})
+                  (p/then (constantly :unexpected-success))
+                  (p/catch #(hash-map :error %))))]
+      (is (= :classifier-failed
+             (let [error (:error result)]
+               (or (:code (ex-data error))
+                   (:code (ex-data (.-cause error))))))))))
+
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")]
