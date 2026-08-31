@@ -9,6 +9,7 @@
             [cljs.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.conn :as dc]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
@@ -17,6 +18,7 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
             [promesa.core :as p]))
@@ -33,12 +35,24 @@
          :tx-outer-n 0
          :tx-nested-ms 0
          :tx-nested-n 0
+         :tx-with-ms 0
+         :tx-with-n 0
+         :tx-reset-ms 0
+         :tx-store-after-ms 0
+         :tx-listen-ms 0
+         :tx-refs-total-ms 0
+         :tx-refs-cpu-ms 0
+         :tx-refs-nested-ms 0
+         :tx-refs-n 0
+         :tx-with-series []
+         :tx-listen-series []
+         :tx-refs-cpu-series []
          :tx-outer-sizes []
          :snapshots []}))
 (def *tx-depth (atom 0))
 (def *profiling? (atom false))
 (def *profile-db-path (atom nil))
-(def tracked-phases [:parse :prep :pages-tx :blocks-tx :split :prop-tx :clean-tags :main-tx :transact :upstream :file])
+(def tracked-phases [:parse :prep :pages-tx :blocks-tx :split :prop-tx :clean-tags :main-tx :transact :save-tx :upstream :file])
 
 (defn- now-ms []
   (js/Date.now))
@@ -134,7 +148,20 @@
                       :nested-ms (:tx-nested-ms s)
                       :nested-n (:tx-nested-n s)
                       :core-ms (max 0 (- (:tx-outer-ms s) (:tx-nested-ms s)))
-                      :outer-size (summarize-ms (:tx-outer-sizes s))}
+                      :with-ms (:tx-with-ms s)
+                      :with-n (:tx-with-n s)
+                      :reset-ms (:tx-reset-ms s)
+                      :store-after-ms (:tx-store-after-ms s)
+                      :listen-ms (:tx-listen-ms s)
+                      :refs-total-ms (:tx-refs-total-ms s)
+                      :refs-cpu-ms (:tx-refs-cpu-ms s)
+                      :refs-nested-ms (:tx-refs-nested-ms s)
+                      :refs-n (:tx-refs-n s)
+                      :listen-other-ms (max 0 (- (:tx-listen-ms s) (:tx-refs-total-ms s)))
+                      :outer-size (summarize-ms (:tx-outer-sizes s))
+                      :with-series (summarize-ms (:tx-with-series s))
+                      :listen-series (summarize-ms (:tx-listen-series s))
+                      :refs-cpu-series (summarize-ms (:tx-refs-cpu-series s))}
                  :snapshots (:snapshots s)
                  :named-pages (count (d/datoms @conn :avet :block/name))
                  :datoms (count (d/datoms @conn :eavt))
@@ -150,14 +177,137 @@
              "mean-ms=" (when (pos? (or (:n store) 0)) (js/Math.round (/ (:ms store) (:n store)))))
     (println "d/transact outer-ms=" (:tx-outer-ms s) "nested-ms=" (:tx-nested-ms s)
              "core-ms=" (max 0 (- (:tx-outer-ms s) (:tx-nested-ms s))))
+    (println "  with-ms=" (:tx-with-ms s) "n=" (:tx-with-n s)
+             "mean=" (when (pos? (or (:tx-with-n s) 0)) (js/Math.round (/ (:tx-with-ms s) (:tx-with-n s)))))
+    (println "  reset-ms=" (:tx-reset-ms s)
+             "store-after-ms=" (:tx-store-after-ms s)
+             "listen-ms=" (:tx-listen-ms s)
+             "listen-mean=" (when (pos? (or (:tx-with-n s) 0)) (js/Math.round (/ (:tx-listen-ms s) (:tx-with-n s)))))
+    (println "  refs-total-ms=" (:tx-refs-total-ms s)
+             "refs-cpu-ms=" (:tx-refs-cpu-ms s)
+             "refs-nested-ms=" (:tx-refs-nested-ms s)
+             "refs-n=" (:tx-refs-n s)
+             "listen-other-ms=" (get-in payload [:tx :listen-other-ms]))
+    (println "  with p50/p95/max=" (get-in payload [:tx :with-series :p50])
+             (get-in payload [:tx :with-series :p95])
+             (get-in payload [:tx :with-series :max])
+             "listen p50/p95/max=" (get-in payload [:tx :listen-series :p50])
+             (get-in payload [:tx :listen-series :p95])
+             (get-in payload [:tx :listen-series :max])
+             "refs-cpu p50/p95/max=" (get-in payload [:tx :refs-cpu-series :p50])
+             (get-in payload [:tx :refs-cpu-series :p95])
+             (get-in payload [:tx :refs-cpu-series :max]))
+    (println "  outer tx-size mean/p50/p95=" (get-in payload [:tx :outer-size :mean])
+             (get-in payload [:tx :outer-size :p50])
+             (get-in payload [:tx :outer-size :p95]))
     (println "named-pages=" (:named-pages payload) "datoms=" (:datoms payload)
              "sqlite-bytes=" (:sqlite-bytes payload))
     (println "rolling mean ms/file by 50:")
     (doseq [w (:windows-50 payload)]
       (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w)))
+    (when-let [tx-series (get-in s [:phase-series :transact])]
+      (println "rolling transact ms by 50:")
+      (doseq [w (window-means tx-series 50)]
+        (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w))))
+    (when-let [with-series (:tx-with-series s)]
+      (println "rolling d/with ms by 50:")
+      (doseq [w (window-means with-series 50)]
+        (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w))))
+    (when-let [listen-series (:tx-listen-series s)]
+      (println "rolling listen/refs ms by 50:")
+      (doseq [w (window-means listen-series 50)]
+        (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w))))
+    (when-let [refs-series (:tx-refs-cpu-series s)]
+      (println "rolling refs-cpu ms by 50:")
+      (doseq [w (window-means refs-series 50)]
+        (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w))))
+    (when-let [save-series (get-in s [:phase-series :save-tx])]
+      (println "rolling save-tx ms by 50:")
+      (doseq [w (window-means save-series 50)]
+        (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w))))
     (when profile-out
       (fs/writeFileSync profile-out (js/JSON.stringify (clj->js payload) nil 2))
       (println "wrote" profile-out))))
+
+(defn- record-tx-split! [depth with-ms reset-ms store-ms listen-ms tx-count]
+  (when (= depth 1)
+    (swap! profile-stats
+           (fn [s]
+             (-> s
+                 (update :tx-with-ms (fnil + 0) with-ms)
+                 (update :tx-with-n (fnil inc 0))
+                 (update :tx-reset-ms (fnil + 0) reset-ms)
+                 (update :tx-store-after-ms (fnil + 0) store-ms)
+                 (update :tx-listen-ms (fnil + 0) listen-ms)
+                 (update :tx-with-series (fnil conj []) with-ms)
+                 (update :tx-listen-series (fnil conj []) listen-ms)
+                 (update :tx-outer-sizes conj tx-count))))))
+
+(defn- empty-profile-stats []
+  {:phase-ms {}
+   :phase-n {}
+   :phase-series {}
+   :file-ms []
+   :tx-outer-ms 0
+   :tx-outer-n 0
+   :tx-nested-ms 0
+   :tx-nested-n 0
+   :tx-with-ms 0
+   :tx-with-n 0
+   :tx-reset-ms 0
+   :tx-store-after-ms 0
+   :tx-listen-ms 0
+   :tx-refs-total-ms 0
+   :tx-refs-cpu-ms 0
+   :tx-refs-nested-ms 0
+   :tx-refs-n 0
+   :tx-with-series []
+   :tx-listen-series []
+   :tx-refs-cpu-series []
+   :tx-outer-sizes []
+   :snapshots []})
+
+(defn- install-profile-refs-listener!
+  "Replace the CLI pipeline listener so refs rebuild is timed separately from d/with.
+   Nested refs transact time is subtracted into refs-nested-ms (already in tx-nested-ms)."
+  [conn]
+  (d/unlisten! conn :pipeline-updates)
+  (d/listen! conn :pipeline-updates
+             (fn profile-pipeline-updates [tx-report]
+               (when-not (:transact-new-graph-refs? (:tx-meta tx-report))
+                 (let [t0 (now-ms)
+                       nested-before (get @profile-stats :tx-nested-ms 0)
+                       result (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
+                       total (- (now-ms) t0)
+                       nested-during (- (get @profile-stats :tx-nested-ms 0) nested-before)
+                       cpu (max 0 (- total nested-during))]
+                   (swap! profile-stats
+                          (fn [s]
+                            (-> s
+                                (update :tx-refs-total-ms (fnil + 0) total)
+                                (update :tx-refs-cpu-ms (fnil + 0) cpu)
+                                (update :tx-refs-nested-ms (fnil + 0) nested-during)
+                                (update :tx-refs-n (fnil inc 0))
+                                (update :tx-refs-cpu-series (fnil conj []) cpu))))
+                   result)))))
+
+(defn- profiled-d-transact! [conn tx-data tx-meta]
+  (let [depth @*tx-depth
+        tx-meta' (dissoc tx-meta :skip-store?)
+        t0 (now-ms)
+        tx-report (d/with @conn tx-data tx-meta')
+        with-ms (- (now-ms) t0)
+        t1 (now-ms)
+        _ (reset! conn (:db-after tx-report))
+        reset-ms (- (now-ms) t1)
+        t2 (now-ms)
+        _ (dc/store-after-transact! conn tx-report)
+        store-ms (- (now-ms) t2)
+        t3 (now-ms)
+        _ (dc/run-callbacks conn tx-report)
+        listen-ms (- (now-ms) t3)]
+    (record-tx-split! depth with-ms reset-ms store-ms listen-ms (count tx-data))
+    tx-report))
 
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
@@ -171,18 +321,16 @@
     (let [start (now-ms)
           depth (swap! *tx-depth inc)]
       (try
-        (original-transact! conn tx-data tx-meta)
+        (profiled-d-transact! conn tx-data tx-meta)
         (finally
-          (let [ms (- (now-ms) start)
-                n (count tx-data)]
+          (let [ms (- (now-ms) start)]
             (swap! *tx-depth dec)
             (if (= depth 1)
               (swap! profile-stats
                      (fn [s]
                        (-> s
                            (update :tx-outer-ms (fnil + 0) ms)
-                           (update :tx-outer-n (fnil inc 0))
-                           (update :tx-outer-sizes conj n))))
+                           (update :tx-outer-n (fnil inc 0)))))
               (swap! profile-stats
                      (fn [s]
                        (-> s
@@ -386,16 +534,8 @@
                                                                  :import-type :cli/db-import}))
         _ (when (:profile options)
             (reset! sqlite-cli/store-profile-state {:ms 0 :n 0 :nodes 0 :series []})
-            (reset! profile-stats {:phase-ms {}
-                                   :phase-n {}
-                                   :phase-series {}
-                                   :file-ms []
-                                   :tx-outer-ms 0
-                                   :tx-outer-n 0
-                                   :tx-nested-ms 0
-                                   :tx-nested-n 0
-                                   :tx-outer-sizes []
-                                   :snapshots []}))
+            (reset! profile-stats (empty-profile-stats))
+            (install-profile-refs-listener! conn))
         directory? (.isDirectory (fs/statSync file-graph'))
         user-options (cond-> (merge {:all-tags false}
                                     (dissoc options :verbose :files :help :continue :profile :profile-out))
