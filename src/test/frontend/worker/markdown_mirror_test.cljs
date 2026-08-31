@@ -975,7 +975,7 @@
                       (is (= (str (page-marker (:block/uuid source)) "\n\n"
                                   "- See [[TargetNew]]")
                              content))
-                      (is (not (re-find #"\[\[TargetOld\]\]" content)))))))
+                      (is (not (re-find #"\[\[TargetOld\]\]" content))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
