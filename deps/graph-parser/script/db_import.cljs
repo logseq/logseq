@@ -13,11 +13,13 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
+            [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
@@ -44,6 +46,8 @@
          :tx-refs-cpu-ms 0
          :tx-refs-nested-ms 0
          :tx-refs-n 0
+         :tx-refs-get-blocks-ms 0
+         :tx-refs-rebuild-ms 0
          :tx-with-series []
          :tx-listen-series []
          :tx-refs-cpu-series []
@@ -157,6 +161,8 @@
                       :refs-cpu-ms (:tx-refs-cpu-ms s)
                       :refs-nested-ms (:tx-refs-nested-ms s)
                       :refs-n (:tx-refs-n s)
+                      :refs-get-blocks-ms (:tx-refs-get-blocks-ms s)
+                      :refs-rebuild-ms (:tx-refs-rebuild-ms s)
                       :listen-other-ms (max 0 (- (:tx-listen-ms s) (:tx-refs-total-ms s)))
                       :outer-size (summarize-ms (:tx-outer-sizes s))
                       :with-series (summarize-ms (:tx-with-series s))
@@ -185,6 +191,8 @@
              "listen-mean=" (when (pos? (or (:tx-with-n s) 0)) (js/Math.round (/ (:tx-listen-ms s) (:tx-with-n s)))))
     (println "  refs-total-ms=" (:tx-refs-total-ms s)
              "refs-cpu-ms=" (:tx-refs-cpu-ms s)
+             "get-blocks-ms=" (:tx-refs-get-blocks-ms s)
+             "rebuild-refs-ms=" (:tx-refs-rebuild-ms s)
              "refs-nested-ms=" (:tx-refs-nested-ms s)
              "refs-n=" (:tx-refs-n s)
              "listen-other-ms=" (get-in payload [:tx :listen-other-ms]))
@@ -261,23 +269,45 @@
    :tx-refs-cpu-ms 0
    :tx-refs-nested-ms 0
    :tx-refs-n 0
+   :tx-refs-get-blocks-ms 0
+   :tx-refs-rebuild-ms 0
    :tx-with-series []
    :tx-listen-series []
    :tx-refs-cpu-series []
    :tx-outer-sizes []
    :snapshots []})
 
+(defn- profiled-rebuild-block-refs-tx
+  [{:keys [db-after]} blocks]
+  (mapcat (fn [block]
+            (when (d/entity db-after (:db/id block))
+              (let [refs (outliner-pipeline/db-rebuild-block-refs db-after block)]
+                (when (seq refs)
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:db/id (:db/id block)
+                    :block/refs refs}]))))
+          blocks))
+
 (defn- install-profile-refs-listener!
   "Replace the CLI pipeline listener so refs rebuild is timed separately from d/with.
-   Nested refs transact time is subtracted into refs-nested-ms (already in tx-nested-ms)."
+   Splits get-blocks-and-pages (d/pull) from db-rebuild-block-refs and the nested transact."
   [conn]
   (d/unlisten! conn :pipeline-updates)
   (d/listen! conn :pipeline-updates
              (fn profile-pipeline-updates [tx-report]
                (when-not (:transact-new-graph-refs? (:tx-meta tx-report))
                  (let [t0 (now-ms)
+                       {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+                       get-ms (- (now-ms) t0)
+                       t1 (now-ms)
+                       refs-tx (when (seq blocks)
+                                 (profiled-rebuild-block-refs-tx tx-report blocks))
+                       rebuild-ms (- (now-ms) t1)
                        nested-before (get @profile-stats :tx-nested-ms 0)
-                       result (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
+                       result (when (seq refs-tx)
+                                (ldb/transact! conn refs-tx
+                                               (-> (:tx-meta tx-report)
+                                                   (assoc :transact-new-graph-refs? true))))
                        total (- (now-ms) t0)
                        nested-during (- (get @profile-stats :tx-nested-ms 0) nested-before)
                        cpu (max 0 (- total nested-during))]
@@ -286,6 +316,8 @@
                             (-> s
                                 (update :tx-refs-total-ms (fnil + 0) total)
                                 (update :tx-refs-cpu-ms (fnil + 0) cpu)
+                                (update :tx-refs-get-blocks-ms (fnil + 0) get-ms)
+                                (update :tx-refs-rebuild-ms (fnil + 0) rebuild-ms)
                                 (update :tx-refs-nested-ms (fnil + 0) nested-during)
                                 (update :tx-refs-n (fnil inc 0))
                                 (update :tx-refs-cpu-series (fnil conj []) cpu))))
