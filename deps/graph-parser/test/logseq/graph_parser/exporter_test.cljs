@@ -862,7 +862,7 @@ abc
         modified-at (js/Date. "2025-03-02T03:31:18.000Z")
         mention {:path "journals/2024_01_01.md" :content "- [[schlafe]]\n"}
         file {:path "pages/Schlaf.md"
-              :content "alias:: schlafe, schlafen, geschlafen, Schlafrhythmus, wach\n\n- ## Probleme\n"}]
+              :content "alias:: schlafe, schlafen, geschlafen, Schlafrhythmus, wach\n\n- ## Problems\n"}]
     (p/let [conn (export-in-memory-doc-files
                   [mention file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
