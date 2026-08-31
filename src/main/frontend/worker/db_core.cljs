@@ -312,6 +312,11 @@
                                        :asset-type asset-type
                                        :payload payload})))))))
 
+(defn- set-import-ui-state!
+  [path value]
+  (-> (worker-state/<invoke-main-thread :thread-api/set-ui-state path value)
+      (p/catch (fn [_error] nil))))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -319,11 +324,11 @@
           staged-assets (atom [])
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
+                             :set-ui-state set-import-ui-state!
                              :<read-file <read-import-file-content
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-                      (dissoc :set-ui-state))]
+                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets))))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)

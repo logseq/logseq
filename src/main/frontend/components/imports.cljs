@@ -381,7 +381,8 @@
    {:keys [graph-name] :as user-options}
    config-file]
   (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] "Config files")
+  (state/set-state! :graph/importing-state {:current-page "Config files"
+                                           :current-idx 0})
   (p/let [start-time (t/now)
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
@@ -397,6 +398,10 @@
     (state/set-state! :graph/importing-state nil)
     (validate-imported-data import-result)
     (state/pub-event! [:graph/ready (state/get-current-repo)])
+    ;; Web reloads and rebuilds search from :graph/restored. Desktop stays on
+    ;; this graph, so start the yielding worker rebuild without awaiting it.
+    (when-not util/web-platform?
+      (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo))
     (finished-cb)))
 
 (defn import-file-to-db-handler
