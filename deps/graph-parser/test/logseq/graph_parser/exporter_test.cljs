@@ -795,22 +795,27 @@ abc
 (defn- export-in-memory-doc-files
   "Import in-memory file maps. `path->stat` is a path-> {:birthtime :mtime} map.
    Pass `:file-created-at` / `:file-updated-at` on a file map to simulate the UI
-   worker path, where `<get-file-stat` is unavailable."
-  [files path->stat]
-  (p/let [conn (db-test/create-conn)
-          _ (db-pipeline/add-listener conn)
-          doc-options (gp-exporter/build-doc-options
-                       {:macros {} :file/name-format :triple-lowbar}
-                       (merge default-export-options
-                              {:user-options {:convert-all-tags? false}
-                               :<get-file-stat (fn [path] (get path->stat path))
-                               :<export-file (fn [conn' file-map opts]
-                                               (gp-exporter/<add-file-to-db-graph
-                                                conn' (:file/path file-map) (:file/content file-map) opts))}))
-          _ (gp-exporter/export-doc-files conn files
-                                          #(p/resolved (:content %))
-                                          doc-options)]
-    conn))
+   worker path, where `<get-file-stat` is unavailable.
+   Pass an existing `conn` to import more files into the same graph."
+  ([files path->stat]
+   (export-in-memory-doc-files files path->stat nil))
+  ([files path->stat conn]
+   (p/let [existing-conn? (some? conn)
+           conn (or conn (db-test/create-conn))
+           _ (when-not existing-conn?
+               (db-pipeline/add-listener conn))
+           doc-options (gp-exporter/build-doc-options
+                        {:macros {} :file/name-format :triple-lowbar}
+                        (merge default-export-options
+                               {:user-options {:convert-all-tags? false}
+                                :<get-file-stat (fn [path] (get path->stat path))
+                                :<export-file (fn [conn' file-map opts]
+                                                (gp-exporter/<add-file-to-db-graph
+                                                 conn' (:file/path file-map) (:file/content file-map) opts))}))
+           _ (gp-exporter/export-doc-files conn files
+                                           #(p/resolved (:content %))
+                                           doc-options)]
+     conn)))
 
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
@@ -941,6 +946,33 @@ abc
                   {(:path file) {:mtime modified-at}})
             page (ldb/get-page @conn "mtime-only")]
       (is (= (.getTime modified-at) (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-uses-file-mtime-when-journal-mentions-page
+  (let [journal-day-ms (date-time-util/journal-day->ms 20240308)
+        modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        mention {:path "journals/2024_03_08.md" :content "- [[Mtime Page]]\n"}
+        file {:path "pages/Mtime Page.md" :content "- see [[Mtime Page]]\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [mention file]
+                  {(:path file) {:mtime modified-at}})
+            page (ldb/get-page @conn "mtime page")]
+      (is (= (.getTime modified-at) (:block/created-at page) (:block/updated-at page)))
+      (is (not= journal-day-ms (:block/created-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-keeps-existing-file-timestamps-when-journal-mentions-page
+  (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
+        modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        file {:path "pages/Existing File.md" :content "- existing file\n"}
+        mention {:path "journals/2024_03_08.md" :content "- [[Existing File]]\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [file]
+                  {(:path file) {:birthtime created-at :mtime modified-at}})
+            _ (export-in-memory-doc-files [mention] {} conn)
+            page (ldb/get-page @conn "existing file")]
+      (is (= (.getTime created-at) (:block/created-at page)))
+      (is (= (.getTime modified-at) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest-async export-doc-file-accepts-numeric-last-modified-at
