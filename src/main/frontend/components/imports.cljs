@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -319,6 +320,19 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
+(defn- <file-timestamps
+  [{:keys [fs-path last-modified-at]}]
+  (p/let [stat (when (and fs-path (util/electron?) (path/absolute? fs-path))
+                  (p/catch (ipc/ipc :stat fs-path)
+                           (fn [error]
+                             (log/warn :import-file-stat-failed {:path fs-path :error error})
+                             nil)))]
+    (cond-> {}
+      (:birthtime stat)
+      (assoc :file-created-at (.getTime (:birthtime stat)))
+      (or (:mtime stat) last-modified-at)
+      (assoc :file-updated-at (.getTime (or (:mtime stat) last-modified-at))))))
+
 (defn- <serialize-import-file
   [file]
   (let [^js file-object (:file-object file)]
@@ -332,9 +346,11 @@
           (assoc (select-keys file [:path])
                  :asset/payload (js/Uint8Array. buffer)
                  :asset/size (.-size file-object))))
-      (p/let [content (.text file-object)]
-        (assoc (select-keys file [:path])
-               :file/content content)))))
+      (p/let [content (.text file-object)
+              timestamps (<file-timestamps file)]
+        (merge (select-keys file [:path])
+               timestamps
+               {:file/content content})))))
 
 (defn- <serialize-import-files
   [files]
