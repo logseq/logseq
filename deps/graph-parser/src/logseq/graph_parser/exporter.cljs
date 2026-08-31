@@ -2288,12 +2288,17 @@
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         existing-uuid #(existing-page-uuid @conn all-existing-page-uuids
                                            (or (::original-name %) (:block/name %)))
+        db-existing-page-uuids (->> all-pages
+                                    (keep (fn [page]
+                                            (when-let [page-uuid (existing-uuid page)]
+                                              [(or (::original-name page) (:block/name page)) page-uuid])))
+                                    (into {}))
         all-new-page-uuids (->> all-pages
                                 (remove existing-uuid)
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids db-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
