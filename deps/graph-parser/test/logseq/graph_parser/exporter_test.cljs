@@ -877,6 +877,48 @@ abc
       (is (= expected (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async export-doc-files-keeps-journal-day-when-journal-has-file-stats
+  (let [expected (date-time-util/journal-day->ms 20240308)
+        file-created-at (js/Date. "2025-08-01T00:00:00.000Z")
+        file-updated-at (js/Date. "2025-08-02T00:00:00.000Z")
+        journal {:path "journals/2024_03_08.md" :content "- first mention [[Referenced Only]]\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [journal]
+                  {(:path journal) {:birthtime file-created-at :mtime file-updated-at}})
+            page (ldb/get-page @conn "referenced only")]
+      (is (= expected (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-keeps-journal-day-when-journal-mentions-another-date
+  (let [expected (date-time-util/journal-day->ms 20240308)
+        journal {:path "journals/2024_03_08.md"
+                 :content "- first mention [[Referenced Only]] [[Mar 9th, 2024]]\n"}]
+    (p/let [conn (export-in-memory-doc-files [journal] {})
+            page (ldb/get-page @conn "referenced only")]
+      (is (= expected (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-keeps-file-timestamps-when-page-mentions-one-journal
+  (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
+        modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        file {:path "pages/foo.md" :content "- [[Mar 8th, 2024]]\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [file]
+                  {(:path file) {:birthtime created-at :mtime modified-at}})
+            page (ldb/get-page @conn "foo")]
+      (is (= (.getTime created-at) (:block/created-at page)))
+      (is (= (.getTime modified-at) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async export-doc-files-keeps-journal-mention-when-later-file-has-no-stats
+  (let [expected (date-time-util/journal-day->ms 20240308)
+        mention {:path "journals/2024_03_08.md" :content "- [[Later File]]\n"}
+        file {:path "pages/Later File.md" :content "- later file\n"}]
+    (p/let [conn (export-in-memory-doc-files [mention file] {})
+            page (ldb/get-page @conn "later file")]
+      (is (= expected (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
 (deftest-async export-doc-file-ignores-epoch-zero-birthtime
   (let [modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         file {:path "pages/epoch.md" :content "- epoch birth\n"}]
