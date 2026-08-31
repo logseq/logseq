@@ -2462,8 +2462,8 @@
            col)))
 
 (defn- existing-named-page-is-class?
-  [import-state uuid]
-  (let [p (get @(:all-existing-page-uuids import-state) uuid)]
+  [import-state page-uuid]
+  (let [p (get @(:all-existing-page-uuids import-state) page-uuid)]
     (boolean (or (some #{:logseq.class/Tag} (:block/tags p))
                  (some-> (:db/ident p) namespace db-class/user-class-namespace?)))))
 
@@ -2477,8 +2477,8 @@
         class-occupied-property-names
         (into #{}
               (keep (fn [kw-name]
-                      (when-let [uuid (get existing-pages (name kw-name))]
-                        (when (existing-named-page-is-class? import-state uuid)
+                      (when-let [existing-uuid (get existing-pages (name kw-name))]
+                        (when (existing-named-page-is-class? import-state existing-uuid)
                           kw-name))))
               new-properties)
         page-tx-for-new-property?
@@ -2903,9 +2903,11 @@
 (defn finalize-imported-graph!
   "Stamp :block/tx-id and rebuild :block/refs once after file import.
 
-  Per-file import txs set ::new-graph?, so the CLI listener and worker
-  transact-pipeline skip refs. CLI has no worker pipeline, so this pass
-  writes both in one transact."
+  Per-file import txs set ::new-graph?, so CLI listeners and worker
+  transact-pipeline skip refs. This pass writes both in one transact.
+  Do not set ::new-graph? here: the worker must publish render deltas
+  for the stamped :block/tx-id datoms. :transact-new-graph-refs? skips
+  the worker pipeline so refs are not rebuilt a second time."
   [conn]
   (let [db @conn
         entity-ids (d/q '[:find [?e ...]
@@ -2933,7 +2935,7 @@
                           entity-ids)]
         (ldb/transact! conn
                        (into tx-id-tx refs-tx)
-                       {::imported-data? true ::new-graph? true :transact-new-graph-refs? true})))))
+                       {::imported-data? true :transact-new-graph-refs? true})))))
 
 (defn- cleanup-missing-block-refs!
   ([conn] (cleanup-missing-block-refs! conn nil))
