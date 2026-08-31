@@ -2089,6 +2089,9 @@
                      pages)))))
 
 (defn- get-page-names-to-uuids
+  "Saved pages only. Journal name->uuid stays in :journal-page-name-uuids and is
+   merged last onto the per-file lookup atom so unpublished journal files are
+   still created via build-new-page-or-class."
   [{:keys [page-names-to-uuids]}]
   @page-names-to-uuids)
 
@@ -2132,9 +2135,9 @@
 
 (defn- index-journal-page-name-uuids!
   [doc-files import-state]
-  (let [entries (into {} (mapcat journal-page-name-uuid-entries) doc-files)]
-    (swap! (:journal-page-name-uuids import-state) merge entries)
-    (swap! (:page-names-to-uuids import-state) merge entries)))
+  (swap! (:journal-page-name-uuids import-state)
+         merge
+         (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
