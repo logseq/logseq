@@ -2581,10 +2581,11 @@
   "File-to-db import uses outline parse for headings, properties, refs and tags.
    Full parse is required when later import steps walk Src, Macro, Quote, Drawer,
    org blocks, or markdown links, and when a heading line is itself a property.
+   Quote detection includes list-item quotes (`- > ...`), not only line-start `>`.
    Render/editor never call this path."
   [format content]
   (and (contains? #{:markdown :md} format)
-       (not (re-find #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*>|\]\(|^\s*-\s+\S+::" content))))
+       (not (re-find #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::" content))))
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
