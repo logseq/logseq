@@ -2596,11 +2596,7 @@
                                               @conn)
                                               first
                                          (d/entity @conn))
-                          block (db-test/find-block-by-content @conn "imported block")
-                          published-block-uuids
-                          (into #{}
-                                (mapcat #(keys (get-in % [:delta :blocks])))
-                                @renderer-payloads)]
+                          block (db-test/find-block-by-content @conn "imported block")]
                     (is (= #{"pages/Home.md" "logseq/config.edn"}
                            (set (map :path (:files result)))))
                     (is (= "Home" (:block/title page)))
@@ -2608,9 +2604,9 @@
                     (doseq [entity [page block]]
                       (is (nat-int? (:block/tx-id entity)))
                       (is (= (:block/uuid entity)
-                             (:block/uuid (block-handler/canonical-block @conn entity))))
-                      (is (contains? published-block-uuids (:block/uuid entity))
-                          "Live file imports must publish complete canonical replacements.")))
+                             (:block/uuid (block-handler/canonical-block @conn entity)))))
+                    (is (empty? @renderer-payloads)
+                        "File-graph import must not broadcast renderer deltas to clients."))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch
@@ -2622,7 +2618,7 @@
   [entity]
   (set (map :block/uuid (:block/refs entity))))
 
-(deftest import-file-graph-publishes-page-refs-and-progress
+(deftest import-file-graph-stores-page-refs-and-progress
   (async done
          (->
           (restoring-worker-state
@@ -2664,13 +2660,7 @@
                                     (db-test/find-block-by-content @conn (re-pattern (str (:block/uuid target)))))
                           canonical-block (when block (block-handler/canonical-block @conn block))
                           canonical-target (when target (block-handler/canonical-block @conn target))
-                          linked (when target (get-block-refs! test-repo (:db/id target)))
-                          published-blocks
-                          (into {}
-                                (mapcat #(get-in % [:delta :blocks]))
-                                @renderer-payloads)
-                          published-block (get published-blocks (:block/uuid block))
-                          published-target (get published-blocks (:block/uuid target))]
+                          linked (when target (get-block-refs! test-repo (:db/id target)))]
                     (is (some? target) "Target page is imported.")
                     (is (some? block) "Referring block is imported.")
                     (is (contains? (imported-ref-uuids block) (:block/uuid target))
@@ -2682,10 +2672,8 @@
                     (is (contains? (set (map :block/uuid linked))
                                    (:block/uuid block))
                         "Linked-references API returns the referring block.")
-                    (is (contains? (imported-ref-uuids published-block) (:block/uuid target))
-                        "Renderer replacements include the same page refs.")
-                    (is (pos? (:block.temp/refs-count published-target))
-                        "Linked-reference counts are present on the referenced page.")
+                    (is (empty? @renderer-payloads)
+                        "File-graph import must not broadcast renderer deltas to clients.")
                     (is (= 2 (->> @ui-state
                                   (filter #(= [:graph/importing-state :total] (first %)))
                                   last
