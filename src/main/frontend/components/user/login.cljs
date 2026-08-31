@@ -74,7 +74,7 @@
 (defn- <load-session!
   [set-session-user! on-session-callback]
   (-> (Auth/fetchAuthSession)
-      (.then (fn [session]
+      (.then (fn [^js session]
                (if-not (.-userSub session)
                  (throw (js/Error. "No session"))
                  (-> (Auth/getCurrentUser)
@@ -116,7 +116,7 @@
               username (string/trim (or email ""))]
           (set-loading! true)
           (-> (Auth/signIn (bean/->js {:username username :password password}))
-              (.then (fn [ret]
+              (.then (fn [^js ret]
                        (let [next-step (some-> ret .-nextStep .-signInStep)]
                          (case next-step
                            ("CONFIRM_SIGN_UP" "CONFIRM_SIGN_IN_WITH_EMAIL_CODE" "CONFIRM_SIGN_IN_WITH_TOTP_CODE")
@@ -165,7 +165,7 @@
             (-> (Auth/signUp (bean/->js {:username username
                                           :password password
                                           :options {:userAttributes {:email email}}}))
-                (.then (fn [ret]
+                (.then (fn [^js ret]
                          (if (= "CONFIRM_SIGN_UP" (some-> ret .-nextStep .-signUpStep))
                            (set-current-tab! {:type :confirm-code
                                               :user (merge (bean/->clj ret :keywordize-keys true) {:username username})
