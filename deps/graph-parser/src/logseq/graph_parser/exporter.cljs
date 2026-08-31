@@ -2798,8 +2798,7 @@
           _ (when (seq upstream-properties-tx)
               (save-from-tx upstream-properties-tx options))
           _ (log-phase-ms! log-fn :upstream upstream-start {:file file})
-          _ (log-phase-ms! log-fn :file file-start {:file file})])
-
+          _ (log-phase-ms! log-fn :file file-start {:file file})]
     [main-tx-report upstream-tx-report]))
 
 ;; Higher level export fns
