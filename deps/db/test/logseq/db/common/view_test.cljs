@@ -62,6 +62,27 @@
         titles (map (fn [id] (:block/title (d/entity @conn id))) ids)]
     (is (= ["alpha" "beta" "gamma"] titles))))
 
+(deftest get-view-data-query-assets-include-asset-type-property-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "image.png"
+                        :build/tags [:logseq.class/Asset]
+                        :build/properties {:logseq.property.asset/type "png"
+                                           :logseq.property.asset/size 1
+                                           :logseq.property.asset/checksum "checksum"}}}]})
+        asset-id (d/q '[:find ?e .
+                        :where [?e :block/title "image.png"]]
+                      @conn)
+        view-id (create-view-id conn :query-result)
+        query '[:find (pull ?b [:block/title])
+                :where [?b :logseq.property.asset/type]]
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :query-result
+                                       :query query
+                                       :query-entity-ids [asset-id]})]
+    (is (= [:block/title :logseq.property.asset/type]
+           (:properties result)))))
+
 (deftest get-view-data-class-objects-sort-keeps-rows-with-missing-sort-value-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}

@@ -7,7 +7,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -22,38 +21,16 @@
     (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
 
-(defn- build-asset-file-column
-  [config]
-  {:id :file
-   :name (t :file/label)
-   :type :string
-   :header views/header-cp
-   :cell (fn [_table row _column]
-           (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.block-content.overflow-hidden
-              {:style {:max-height 30}}
-              (asset-cp (assoc config :disable-resize? true) row)]))
-   :disable-hide? true})
-
 (defn build-class-object-columns
   [config class properties]
   (let [properties' (remove nil? properties)
         columns* (views/build-columns (assoc config :view-parent class)
                                       properties'
                                       {:add-tags-column? true
-                                       :add-page-column? true})
-        columns (cond
-                  (= (:db/ident class) :logseq.class/Pdf-annotation)
-                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
-                  (= (:db/ident class) :logseq.class/Asset)
-                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
-                  :else
-                  columns*)]
-    (if (= (:db/ident class) :logseq.class/Asset)
-      ;; Insert in front of tag's properties
-      (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
-        (concat before-cols [(build-asset-file-column config)] after-cols))
-      columns)))
+                                       :add-page-column? true})]
+    (if (= (:db/ident class) :logseq.class/Pdf-annotation)
+      (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
+      columns*)))
 
 (defn build-property-object-columns
   [config property properties]
