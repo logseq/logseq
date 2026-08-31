@@ -93,6 +93,15 @@
       [#{[:page-lookup watch-lookup]}
        (some-> (ldb/get-page db lookup) :block/uuid)])))
 
+(defn- page-uuid-by-ident
+  [db resource-key _runtime]
+  (let [ident (second resource-key)]
+    (when-not (qualified-keyword? ident)
+      (common/fail! "Invalid page ident" {:ident ident}))
+    [#{[:attr :db/ident]
+       [:attr :block/uuid]}
+     (some-> (d/entity db ident) :block/uuid)]))
+
 (defn- page-preview-source
   [db resource-key _runtime]
   (let [page-uuid (common/require-uuid! :page-uuid (second resource-key))
@@ -391,6 +400,7 @@
    :favorite-status (common/renderer 2 favorite-status)
    :recent-pages (common/renderer 2 recent-pages)
    :page-identity (common/renderer 2 page-identity)
+   :page-uuid-by-ident (common/renderer 2 page-uuid-by-ident)
    :page-preview-source (common/renderer 2 page-preview-source)
    :block-breadcrumb (common/renderer 3 block-breadcrumb)
    :journals (common/renderer 1 journals)

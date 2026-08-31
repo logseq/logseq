@@ -4,7 +4,6 @@
             [frontend.components.block :as block]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
-            [frontend.components.left-sidebar-util :as sidebar-util]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -171,6 +170,15 @@
     :tag/tasks :nav/tasks
     :tag/assets :nav/assets))
 
+(defn mobile-navigation-target?
+  [target]
+  (boolean
+   (some (fn [selector] (.closest target selector))
+         [".sidebar-navigations a"
+          ".favorites .bd"
+          ".recent .bd"
+          ".nav-header"])))
+
 (hsx/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]
   (let [[local-navs set-local-navs!] (hooks/use-state checked-navs)]
@@ -221,8 +229,15 @@
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
         repo (state/get-current-repo)
-        class-ident->uuid (sidebar-util/nav-class-ident->uuid
-                           (config/db-based-graph? repo))
+        db-graph? (config/db-based-graph? repo)
+        task-uuid (:value (db-hooks/use-resource-snapshot
+                           (when db-graph?
+                             [:page-uuid-by-ident :logseq.class/Task])))
+        asset-uuid (:value (db-hooks/use-resource-snapshot
+                            (when db-graph?
+                              [:page-uuid-by-ident :logseq.class/Asset])))
+        tag-nav->uuid {:tag/tasks task-uuid
+                       :tag/assets asset-uuid}
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
@@ -305,7 +320,7 @@
             :icon "files"})
 
           (= (namespace nav) "tag")
-          (when-let [tag-uuid (sidebar-util/tag-nav-page-uuid nav class-ident->uuid)]
+          (when-let [tag-uuid (get tag-nav->uuid nav)]
             (sidebar-item
              {:class (str "tag-view-nav " (name nav))
               :title (t (navigation-label-key nav))
@@ -438,7 +453,7 @@
                               (set-local-closing? false)
                               (close-modal-fn)))
        :on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
-                    (when (sidebar-util/mobile-navigation-target? target)
+                    (when (mobile-navigation-target? target)
                       (close-fn)))}
 
       [:div.wrap
