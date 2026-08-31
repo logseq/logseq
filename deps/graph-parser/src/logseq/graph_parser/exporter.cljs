@@ -240,30 +240,26 @@
        (not (contains? #{"tags"} tag-name))))
 
 (defn- find-existing-class
-  "Finds a class entity by unique name and parents and returns its :block/uuid if found.
-  db is searched because there is no in-memory index only for created classes by unique name"
+  "Finds a class by :block/name (indexed, not unique) and, for namespaced tags, parent path.
+  Returns its :block/uuid if found."
   [db {full-name :block/name block-ns :block/namespace}]
-  (if block-ns
-    (->> (d/q '[:find [?b ...]
-                :in $ ?name
-                :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
-              db
-              (ns-util/get-last-part full-name))
-         (map #(d/entity db %))
-         (some #(let [parent (->> (ldb/get-class-extends %)
-                                  (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                                  first)
-                      parent-ancestors (when parent (ldb/get-page-parents parent))
-                      parents (cond-> (or parent-ancestors [])
-                                parent (conj parent))]
-                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
-                    (:block/uuid %)))))
-    (first
-     (d/q '[:find [?uuid ...]
-            :in $ ?name
-            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
-          db
-          full-name))))
+  (let [name-entities (fn [page-name]
+                        (keep (fn [datom]
+                                (let [e (d/entity db (:e datom))]
+                                  (when (ldb/class? e) e)))
+                              (d/datoms db :avet :block/name page-name)))]
+    (if block-ns
+      (some (fn [e]
+              (let [parent (->> (ldb/get-class-extends e)
+                                (remove (fn [p] (= :logseq.class/Root (:db/ident p))))
+                                first)
+                    parent-ancestors (when parent (ldb/get-page-parents parent))
+                    parents (cond-> (or parent-ancestors [])
+                              parent (conj parent))]
+                (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents e))))
+                  (:block/uuid e))))
+            (name-entities (ns-util/get-last-part full-name)))
+      (some :block/uuid (name-entities full-name)))))
 
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
@@ -2309,7 +2305,7 @@
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
-        pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
+        pages-tx (into [] (keep (fn [{m :block _properties-tx :properties-tx}]
                          (let [page (if-let [page-uuid (if (::original-name m)
                                                          (all-existing-page-uuids (::original-name m))
                                                          (all-existing-page-uuids (:block/name m)))]
@@ -2328,7 +2324,7 @@
                                                                  @conn per-file-state (:all-idents import-state) options)))]
                            ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
                            page))
-                       all-pages-m)]
+                       all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
@@ -2514,12 +2510,11 @@
         converted-property-pages-tx
         (keep (fn [kw-name]
                 (when-not (contains? class-occupied-property-names kw-name)
-                  (let [existing-page-uuid (get existing-pages (name kw-name))
-                        new-prop (build-property-page (name kw-name) existing-page-uuid)]
-                    (assert existing-page-uuid)
-                    (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
-                           {:block/uuid existing-page-uuid}))))
-              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
+                  (when-let [existing-page-uuid (get existing-pages (name kw-name))]
+                    (let [new-prop (build-property-page (name kw-name) existing-page-uuid)]
+                      (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
+                             {:block/uuid existing-page-uuid})))))
+              new-properties)
         class-occupied-property-pages-tx
         (map (fn [kw-name]
                (build-property-page (name kw-name) nil))
