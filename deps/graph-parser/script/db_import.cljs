@@ -110,7 +110,7 @@
 
 (defn- print-profile-report! [elapsed-ms conn profile-out]
   (let [s @profile-stats
-        store @sqlite-cli/*store-profile
+        store @sqlite-cli/store-profile-state
         file-ms (:file-ms s)
         file-summary (summarize-ms file-ms)
         phase-rows (into {}
@@ -378,14 +378,14 @@
         file-graph' (resolve-path file-graph)
         _ (when (:profile options)
             (reset! *profiling? true)
-            (reset! sqlite-cli/*store-profile {:ms 0 :n 0 :nodes 0 :series []})
+            (reset! sqlite-cli/store-profile-state {:ms 0 :n 0 :nodes 0 :series []})
             (reset! *profile-db-path (if (= 1 (count init-conn-args))
                                        (first init-conn-args)
                                        (apply node-path/join init-conn-args))))
         conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)
                                                                  :import-type :cli/db-import}))
         _ (when (:profile options)
-            (reset! sqlite-cli/*store-profile {:ms 0 :n 0 :nodes 0 :series []})
+            (reset! sqlite-cli/store-profile-state {:ms 0 :n 0 :nodes 0 :series []})
             (reset! profile-stats {:phase-ms {}
                                    :phase-n {}
                                    :phase-series {}
