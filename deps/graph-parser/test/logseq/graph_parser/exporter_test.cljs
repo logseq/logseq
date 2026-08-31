@@ -861,9 +861,13 @@ abc
     (p/let [conn (export-in-memory-doc-files
                   [mention file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
-            page (ldb/get-page @conn "schlaf")]
+            page (ldb/get-page @conn "schlaf")
+            alias-page (ldb/get-page @conn "schlafe")]
       (is (= (.getTime created-at) (:block/created-at page)))
       (is (= (.getTime modified-at) (:block/updated-at page)))
+      (is (= #{"schlafe" "schlafen" "geschlafen" "schlafrhythmus" "wach"}
+             (set (map :block/name (:block/alias page)))))
+      (is (= (:db/id page) (:db/id (ldb/get-alias-source-page @conn (:db/id alias-page)))))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest-async export-doc-files-uses-first-journal-mention-for-fileless-pages
