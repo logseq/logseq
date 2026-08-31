@@ -289,7 +289,7 @@
                        {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)}
                        (when (:profile options)
                          {:log-fn profile-log-fn
-                          :import-heartbeat-ms 5000}))
+                          :import-heartbeat-ms 5000}))]
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 
