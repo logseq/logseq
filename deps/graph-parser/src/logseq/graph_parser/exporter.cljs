@@ -2782,9 +2782,11 @@
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))
           main-tx-report (ldb/transact! conn tx' tx-meta)
-          _ (save-from-tx tx' options)
           _ (log-phase-ms! log-fn :transact transact-start {:file file
                                                             :tx-count (count tx')})
+          save-start (when log-fn (import-profile/now-ms))
+          _ (save-from-tx tx' options)
+          _ (log-phase-ms! log-fn :save-tx save-start {:file file})
           _ (import-progress! options {:phase :upstream-properties :file file})
           upstream-start (when log-fn (import-profile/now-ms))
           upstream-properties-tx
