@@ -162,9 +162,15 @@
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
+(defn- skip-search-sync?
+  [tx-meta]
+  (or (:from-disk? tx-meta)
+      (:logseq.graph-parser.exporter/imported-data? tx-meta)
+      (:logseq.db.sqlite.export/imported-data? tx-meta)))
+
 (defmethod listen-db-changes :search
   [_ {:keys [repo]} {:keys [tx-meta] :as tx-report}]
-  (when-not (:from-disk? tx-meta)
+  (when-not (skip-search-sync? tx-meta)
     (p/do!
      (let [{:keys [blocks-to-remove-set blocks-to-add]}
            (search/sync-search-indice tx-report

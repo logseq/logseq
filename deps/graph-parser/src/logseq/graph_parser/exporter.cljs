@@ -2073,22 +2073,24 @@
     (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
     (:block/name p)))
 
-(defn- get-all-existing-page-uuids
-  "Returns a map of unique page names mapped to their uuids. The page names
-   are in a format that is compatible with extract/extract e.g. namespace pages have
-   their full hierarchy in the name"
-  [classes-from-property-parents all-existing-page-uuids]
-  (->> all-existing-page-uuids
-       (map (fn [[_ p]]
-              [(page-name-lookup-key p classes-from-property-parents all-existing-page-uuids)
-               (or (:block/uuid p)
-                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
-                                   (select-keys p [:block/name :block/tags]))))]))
-       (into {})))
+(defn- index-saved-page-names!
+  "Index only the pages saved from the current file. Rebuilding name->uuid from
+   every existing page on each file is O(files * pages)."
+  [import-state pages]
+  (let [uuid->page @(:all-existing-page-uuids import-state)
+        classes @(:classes-from-property-parents import-state)]
+    (swap! (:page-names-to-uuids import-state)
+           (fn [m]
+             (reduce (fn [acc p]
+                       (if-let [uuid (:block/uuid p)]
+                         (assoc acc (page-name-lookup-key p classes uuid->page) uuid)
+                         acc))
+                     m
+                     pages)))))
 
 (defn- get-page-names-to-uuids
-  [{:keys [classes-from-property-parents all-existing-page-uuids]}]
-  (get-all-existing-page-uuids @classes-from-property-parents @all-existing-page-uuids))
+  [{:keys [page-names-to-uuids]}]
+  @page-names-to-uuids)
 
 (defn- index-walked-ast-blocks
   [user-config blocks]
@@ -2130,9 +2132,9 @@
 
 (defn- index-journal-page-name-uuids!
   [doc-files import-state]
-  (swap! (:journal-page-name-uuids import-state)
-         merge
-         (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
+  (let [entries (into {} (mapcat journal-page-name-uuid-entries) doc-files)]
+    (swap! (:journal-page-name-uuids import-state) merge entries)
+    (swap! (:page-names-to-uuids import-state) merge entries)))
 
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
@@ -2398,6 +2400,8 @@
    :property-schemas (atom {})
    ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
    :all-existing-page-uuids (atom {})
+   ;; Incremental extract-compatible page name -> uuid index. Updated in save-from-tx.
+   :page-names-to-uuids (atom {})
    ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
    :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
@@ -2625,7 +2629,8 @@
   [txs {:keys [import-state] :as _opts}]
   ;; (when (string/includes? (:file _opts) "some-file.md") (cljs.pprint/pprint txs))
   (when-let [nodes (seq (filter :block/name txs))]
-    (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
+    (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))
+    (index-saved-page-names! import-state nodes)))
 
 (defn- track-placeholder-ref-uuids!
   [{:keys [placeholder-ref-uuids] :as _import-state} blocks-tx]
