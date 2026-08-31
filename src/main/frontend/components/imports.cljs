@@ -322,14 +322,16 @@
     (notification/show! msg :warning false)))
 
 (defn- <file-timestamps
+  "Prefer birthtime when present. Fall back to mtime / File.lastModified."
   [{:keys [fs-path last-modified-at]}]
   (p/let [stat (when (and fs-path (util/electron?) (path/absolute? fs-path))
                   (p/catch (ipc/ipc :stat fs-path)
                            (fn [error]
                              (log/warn :import-file-stat-failed {:path fs-path :error error})
                              nil)))
-          created-at (common-util/timestamp-ms (:birthtime stat))
-          updated-at (common-util/timestamp-ms (or (:mtime stat) last-modified-at))]
+          updated-at (common-util/timestamp-ms (or (:mtime stat) last-modified-at))
+          created-at (or (common-util/timestamp-ms (:birthtime stat))
+                         updated-at)]
     (cond-> {}
       created-at
       (assoc :file-created-at created-at)
