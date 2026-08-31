@@ -228,14 +228,10 @@
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
-        repo (state/get-current-repo)
-        db-graph? (config/db-based-graph? repo)
         task-uuid (:value (db-hooks/use-resource-snapshot
-                           (when db-graph?
-                             [:page-uuid-by-ident :logseq.class/Task])))
+                           [:page-uuid-by-ident :logseq.class/Task]))
         asset-uuid (:value (db-hooks/use-resource-snapshot
-                            (when db-graph?
-                              [:page-uuid-by-ident :logseq.class/Asset])))
+                            [:page-uuid-by-ident :logseq.class/Asset]))
         tag-nav->uuid {:tag/tasks task-uuid
                        :tag/assets asset-uuid}
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
