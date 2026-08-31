@@ -2079,7 +2079,7 @@
                                    (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
-(defn- existing-page-uuid
+(defn- lookup-imported-page-uuid
   "Uuid for a page already in this import or already imported into the db.
    Ignore built-in pages so names like alias do not collide with the schema."
   [db all-existing-page-uuids page-name]
@@ -2289,8 +2289,8 @@
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
-        existing-uuid #(existing-page-uuid @conn all-existing-page-uuids
-                                           (or (::original-name %) (:block/name %)))
+        existing-uuid #(lookup-imported-page-uuid @conn all-existing-page-uuids
+                                                  (or (::original-name %) (:block/name %)))
         db-existing-page-uuids (->> all-pages
                                     (keep (fn [page]
                                             (when-let [page-uuid (existing-uuid page)]
@@ -2660,6 +2660,13 @@
   [ref]
   {:block/uuid (second ref)})
 
+(defn- file-graph-tx-options
+  [options pages file preserve-empty-properties-uuids]
+  (merge (build-tx-options options)
+         {:journal-created-ats (build-journal-created-ats pages)
+          :current-journal-created-at (journal-file-created-at file)
+          :preserve-empty-property-block-uuids preserve-empty-properties-uuids}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2678,11 +2685,7 @@
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
-          journal-created-ats (build-journal-created-ats pages)
-          tx-options (merge (build-tx-options options)
-                            {:journal-created-ats journal-created-ats
-                             :current-journal-created-at (journal-file-created-at file)
-                             :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
+          tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
