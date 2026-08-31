@@ -44,9 +44,15 @@
   "Add updated-at or created-at timestamps if they doesn't exist"
   ([block]
    (add-missing-timestamps block nil))
-  ([block {:keys [file-created-at file-updated-at]}]
-   (let [updated-at (or file-updated-at (common-util/time-ms))
-         created-at (or file-created-at updated-at)
+  ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
+   (let [ref-from-journal? (and current-journal-created-at
+                                (nil? (:block/created-at block)))
+         updated-at (if ref-from-journal?
+                      current-journal-created-at
+                      (or file-updated-at (common-util/time-ms)))
+         created-at (if ref-from-journal?
+                      current-journal-created-at
+                      (or file-created-at updated-at))
          block (cond-> block
                  (nil? (:block/updated-at block))
                  (assoc :block/updated-at updated-at)
@@ -2622,8 +2628,11 @@
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
+          journal-created-ats (build-journal-created-ats pages)
           tx-options (merge (build-tx-options options)
-                            {:journal-created-ats (build-journal-created-ats pages)
+                            {:journal-created-ats journal-created-ats
+                             :current-journal-created-at (when (= 1 (count journal-created-ats))
+                                                           (first (vals journal-created-ats)))
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
@@ -2696,10 +2705,10 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:file-created-at file)
-                             (some-> (or (:birthtime stat) (some-> ^js stat .-birthtime)) .getTime))
-              modified-at (or (:file-updated-at file)
-                              (some-> (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file)) .getTime))
+              created-at (or (common-util/timestamp-ms (:file-created-at file))
+                             (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime))))
+              modified-at (or (common-util/timestamp-ms (:file-updated-at file))
+                              (common-util/timestamp-ms (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))))
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
                                created-at (assoc :file-created-at created-at)
