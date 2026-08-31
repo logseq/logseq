@@ -142,6 +142,22 @@
     (is (= #{(:db/id page)}
            (markdown-mirror/affected-page-ids tx-report)))))
 
+(deftest affected-page-ids-includes-linking-pages-on-page-rename-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "TargetOld"}
+                                   :blocks [{:block/title "target"}]}
+                                  {:page {:block/title "Source"}
+                                   :blocks [{:block/title "See [[TargetOld]]"}]}]})
+        target (db-test/find-page-by-title @conn "TargetOld")
+        source (db-test/find-page-by-title @conn "Source")
+        tx-report (d/with @conn [{:db/id (:db/id target)
+                                  :block/title "TargetNew"
+                                  :block/name "targetnew"}])]
+    (is (contains? (set (map :db/id (:block/refs (first-block source))))
+                   (:db/id target)))
+    (is (= #{(:db/id target) (:db/id source)}
+           (markdown-mirror/affected-page-ids tx-report)))))
+
 (deftest block-db-id-comments-are-not-written-to-block-lines-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -930,6 +946,36 @@
                                 "- body")
                            (get @files (page-path "pages/New Name.md"))))
                     (is (nil? (get @files old-path)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest rename-updates-linking-page-mirror-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "TargetOld"}
+                                     :blocks [{:block/title "target"}]}
+                                    {:page {:block/title "Source"}
+                                     :blocks [{:block/title "See [[TargetOld]]"}]}]})
+          source (db-test/find-page-by-title @conn "Source")
+          target (db-test/find-page-by-title @conn "TargetOld")]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id source) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid source)) "\n\n"
+                                "- See [[TargetOld]]")
+                           (get @files (page-path "pages/Source.md"))))
+                    (let [tx-report (d/with @conn [{:db/id (:db/id target)
+                                                    :block/title "TargetNew"
+                                                    :block/name "targetnew"}])
+                          _ (d/reset-conn! conn (:db-after tx-report))]
+                      (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform}))))
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Source.md"))]
+                      (is (= (str (page-marker (:block/uuid source)) "\n\n"
+                                  "- See [[TargetNew]]")
+                             content))
+                      (is (not (re-find #"\[\[TargetOld\]\]" content)))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
