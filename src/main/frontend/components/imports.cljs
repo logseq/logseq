@@ -392,16 +392,21 @@
           import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
           _ (doseq [notification (:notifications import-result)]
               (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    ;; Web reloads and rebuilds search from :graph/restored. Desktop stays on
-    ;; this graph, so start the yielding worker rebuild without awaiting it.
-    (when-not util/web-platform?
-      (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo))
+          _ (write-staged-assets! repo (:staged-assets import-result))
+          _ (do
+              (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+              (state/set-state! :graph/importing nil)
+              (state/set-state! :graph/importing-state nil)
+              (validate-imported-data import-result)
+              (state/pub-event! [:graph/ready (state/get-current-repo)]))
+          ;; Import txs do not broadcast renderer deltas (a large graph would freeze
+          ;; Comlink). Web reloads from sqlite. Desktop restores the current graph
+          ;; from the worker so this client sees page properties and refs.
+          _ (when-not util/web-platform?
+              (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+              nil)
+          _ (when-not util/web-platform?
+              (repo-handler/restore-and-setup-repo! repo))]
     (finished-cb)))
 
 (defn import-file-to-db-handler

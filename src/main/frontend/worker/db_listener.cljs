@@ -62,10 +62,12 @@
            (:sync-download-graph? tx-meta)
            (:skip-validate-db? tx-meta)
            (:logseq.graph-parser.exporter/new-graph? tx-meta)
-           ;; Web reloads after file-graph import; skip the giant finalize
-           ;; delta so the UI stays responsive. SQLite restore has the refs.
-           (and (:logseq.graph-parser.exporter/imported-data? tx-meta)
-                (:web-platform? (worker-state/get-context))))))
+           ;; File-graph import persists into the worker conn (and sqlite at
+           ;; the end on web). The renderer reloads or re-renders from that
+           ;; graph. Do not broadcast imported entities to any client — a
+           ;; large graph posts a giant Comlink payload and can freeze or
+           ;; crash (`RangeError: Too many properties to enumerate`).
+           (:logseq.graph-parser.exporter/imported-data? tx-meta))))
 
 (defn- tagged-with-ident?
   [db block ident]

@@ -266,7 +266,12 @@
              (:block/invalid-properties (first blocks))
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
-          page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
+          page-map (cond-> (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
+                     (and (:block/pre-block? (first blocks))
+                          (seq (:block/refs (first blocks))))
+                     ;; Keep page-drawer refs on the page. Pre-blocks are dropped
+                     ;; in DB import; otherwise genre/actors never land on the page.
+                     (assoc :block/refs (:block/refs (first blocks))))
           pages (build-pages-aux db page-map ref-pages date-formatter format)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]

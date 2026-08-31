@@ -2274,6 +2274,8 @@
          page))
      pages)))
 
+(declare update-block-refs)
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
@@ -2304,7 +2306,9 @@
         page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
-        all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
+        all-pages-m (mapv (fn [page]
+                            (let [result (handle-page-properties page @conn per-file-state all-pages options)]
+                              (update result :block #(update-block-refs % page-names-to-uuids))))
                           all-pages)
         pages-tx (into [] (keep (fn [{m :block _properties-tx :properties-tx}]
                          (let [page (if-let [page-uuid (if (::original-name m)
@@ -2917,8 +2921,8 @@
 
   Per-file import txs set ::new-graph?, so CLI listeners and worker
   transact-pipeline skip refs. This pass writes both in one transact.
-  Do not set ::new-graph? here: the worker must publish render deltas
-  for the stamped :block/tx-id datoms. :transact-new-graph-refs? skips
+  File-graph import does not notify renderer clients; ::imported-data?
+  skips worker render-delta broadcast. :transact-new-graph-refs? skips
   the worker pipeline so refs are not rebuilt a second time."
   [conn]
   (let [db @conn
@@ -3064,7 +3068,8 @@
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
                         :file/content content
-                        :file/last-modified-at (js/Date.)}]))
+                        :file/last-modified-at (js/Date.)}]
+                 {::imported-data? true}))
 
 (defn- export-logseq-files
   "Exports files under logseq/"
@@ -3114,7 +3119,8 @@
                 (let [config (resolve-zotero-config-path (edn/read-string %) config-file)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
-                                                  :logseq.property.journal/title-format title-format}]))
+                                                  :logseq.property.journal/title-format title-format}]
+                                   {::imported-data? true}))
                   ;; Return original config as import process depends on original config e.g. :hidden
                   config)))
       (p/catch (fn [err]
@@ -3149,7 +3155,7 @@
                    {:db/id class-id
                     :logseq.property.class/properties (vec prop-ids)})
                  class-to-prop-uuids)]
-    (ldb/transact! repo-or-conn tx)))
+    (ldb/transact! repo-or-conn tx {::imported-data? true})))
 
 (defn- <safe-async-loop
   "Calls async-fn with each element in args-to-loop. Catches an unexpected error in loop and notifies user"
@@ -3300,7 +3306,7 @@
                     :block/parent [:block/uuid library-id]
                     :block/order (db-order/gen-key)})
                  top-parent-pages)]
-    (ldb/transact! repo-or-conn tx-data)))
+    (ldb/transact! repo-or-conn tx-data {::imported-data? true})))
 
 (defn- partition-graph-files
   [*files config rpath-key]
