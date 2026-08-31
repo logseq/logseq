@@ -44,13 +44,16 @@
   "Add updated-at or created-at timestamps if they doesn't exist.
    File-backed pages always use the file's birthtime/mtime when those exist,
    including when the page was first mentioned from a journal.
+   Journal pages and their blocks keep the journal day, not filesystem times.
    Reference-only pages created from a journal keep the journal date, even when
    extract already stamped them with import time."
   ([block]
    (add-missing-timestamps block nil))
   ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
    (let [file-page? (::file-page? block)
-         file-times? (and file-page? (or file-created-at file-updated-at))
+         file-times? (and file-page?
+                          (not (:block/journal-day block))
+                          (or file-created-at file-updated-at))
          journal-ref-page? (and current-journal-created-at
                                 (:block/name block)
                                 (not (:block/journal-day block))
@@ -2122,7 +2125,9 @@
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
   (let [file-page? (::file-page? m)
-        file-times? (and file-page? (or file-created-at file-updated-at))
+        file-times? (and file-page?
+                         (not (:block/journal-day m))
+                         (or file-created-at file-updated-at))
         m (cond-> (dissoc m ::file-page?)
             file-times?
             (assoc :block/created-at (or file-created-at file-updated-at)
@@ -2274,13 +2279,14 @@
                                           (not (:block/file %))))
                             ;; remove file path relative. Re-apply file stats after
                             ;; with-ref-pages, which merges refs over the file page.
-                            (map #(let [file-page? (boolean (:block/file %))]
+                            (map #(let [file-page? (boolean (:block/file %))
+                                        apply-file-times? (and file-page? (not (:block/journal-day %)))]
                                     (cond-> (dissoc % :block/file)
                                       file-page?
                                       (assoc ::file-page? true)
-                                      (and file-page? file-page-created-at)
+                                      (and apply-file-times? file-page-created-at)
                                       (assoc :block/created-at file-page-created-at)
-                                      (and file-page? file-page-updated-at)
+                                      (and apply-file-times? file-page-updated-at)
                                       (assoc :block/updated-at file-page-updated-at)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
@@ -2571,7 +2577,8 @@
                   (update :pages (fn [pages]
                                    (map (fn [page]
                                           (let [page (dissoc page :block.temp/original-page-name)]
-                                            (if (:block/file page)
+                                            (if (and (:block/file page)
+                                                     (not (:block/journal-day page)))
                                               (with-file-timestamps page)
                                               page)))
                                         pages)))

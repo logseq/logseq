@@ -898,6 +898,20 @@ abc
       (is (= expected (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async export-doc-files-keeps-journal-page-created-at-on-journal-day
+  (let [expected (date-time-util/journal-day->ms 20240308)
+        modified-at (js/Date. "2025-08-02T00:00:00.000Z")
+        journal {:path "journals/2024_03_08.md" :content "- journal block\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [journal]
+                  {(:path journal) {:mtime modified-at}})
+            page (db-test/find-page-by-title @conn "Mar 8th, 2024")
+            block (db-test/find-block-by-content @conn "journal block")]
+      (is (= expected (:block/created-at page)))
+      (is (= expected (:block/created-at block)))
+      (is (not= (.getTime modified-at) (:block/created-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
 (deftest-async export-doc-files-keeps-journal-day-when-journal-mentions-another-date
   (let [expected (date-time-util/journal-day->ms 20240308)
         journal {:path "journals/2024_03_08.md"
