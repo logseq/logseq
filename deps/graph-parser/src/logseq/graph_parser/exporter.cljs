@@ -2075,15 +2075,19 @@
 
 (defn- index-saved-page-names!
   "Index only the pages saved from the current file. Rebuilding name->uuid from
-   every existing page on each file is O(files * pages)."
+   every existing page on every file is O(files * pages).
+   Properties are omitted so a later #tag cannot reuse a property uuid when
+   convert-all-tags? is on (property and class may share a title)."
   [import-state pages]
   (let [uuid->page @(:all-existing-page-uuids import-state)
         classes @(:classes-from-property-parents import-state)]
     (swap! (:page-names-to-uuids import-state)
            (fn [m]
              (reduce (fn [acc p]
-                       (if-let [uuid (:block/uuid p)]
-                         (assoc acc (page-name-lookup-key p classes uuid->page) uuid)
+                       (if (and (:block/uuid p)
+                                (not (some #{:logseq.class/Property} (:block/tags p)))
+                                (not (some-> (:db/ident p) db-malli-schema/user-property?)))
+                         (assoc acc (page-name-lookup-key p classes uuid->page) (:block/uuid p))
                          acc))
                      m
                      pages)))))
