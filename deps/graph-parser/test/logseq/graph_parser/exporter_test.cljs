@@ -933,6 +933,16 @@ abc
       (is (= (.getTime modified-at) (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async export-doc-file-uses-mtime-when-birthtime-missing
+  (let [modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+        file {:path "pages/mtime-only.md" :content "- mtime only\n"}]
+    (p/let [conn (export-in-memory-doc-files
+                  [file]
+                  {(:path file) {:mtime modified-at}})
+            page (ldb/get-page @conn "mtime-only")]
+      (is (= (.getTime modified-at) (:block/created-at page) (:block/updated-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
 (deftest-async export-doc-file-accepts-numeric-last-modified-at
   (let [modified-at (.getTime (js/Date. "2021-06-07T08:09:10.000Z"))
         file {:path "pages/numeric.md"

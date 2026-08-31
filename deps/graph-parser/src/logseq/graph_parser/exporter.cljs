@@ -2721,10 +2721,13 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (common-util/timestamp-ms (:file-created-at file))
-                             (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime))))
+              ;; Prefer birthtime when it is a real time. Fall back to mtime when
+              ;; birthtime is missing or invalid (e.g. epoch-0 on ext4).
               modified-at (or (common-util/timestamp-ms (:file-updated-at file))
                               (common-util/timestamp-ms (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))))
+              created-at (or (common-util/timestamp-ms (:file-created-at file))
+                             (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime)))
+                             modified-at)
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
                                created-at (assoc :file-created-at created-at)
