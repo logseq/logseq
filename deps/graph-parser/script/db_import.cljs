@@ -20,7 +20,6 @@
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
@@ -296,33 +295,38 @@
   (d/unlisten! conn :pipeline-updates)
   (d/listen! conn :pipeline-updates
              (fn profile-pipeline-updates [tx-report]
-               (when-not (db-pipeline/skip-imported-graph-refs? conn (:tx-meta tx-report))
-                 (let [t0 (now-ms)
-                       {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-                       get-ms (- (now-ms) t0)
-                       t1 (now-ms)
-                       refs-tx (when (seq blocks)
-                                 (vec (profiled-rebuild-block-refs-tx tx-report blocks)))
-                       rebuild-ms (- (now-ms) t1)
-                       nested-before (get @profile-stats :tx-nested-ms 0)
-                       result (when (seq refs-tx)
-                                (ldb/transact! conn refs-tx
-                                               (-> (:tx-meta tx-report)
-                                                   (assoc :transact-new-graph-refs? true))))
-                       total (- (now-ms) t0)
-                       nested-during (- (get @profile-stats :tx-nested-ms 0) nested-before)
-                       cpu (max 0 (- total nested-during))]
-                   (swap! profile-stats
-                          (fn [s]
-                            (-> s
-                                (update :tx-refs-total-ms (fnil + 0) total)
-                                (update :tx-refs-cpu-ms (fnil + 0) cpu)
-                                (update :tx-refs-get-blocks-ms (fnil + 0) get-ms)
-                                (update :tx-refs-rebuild-ms (fnil + 0) rebuild-ms)
-                                (update :tx-refs-nested-ms (fnil + 0) nested-during)
-                                (update :tx-refs-n (fnil inc 0))
-                                (update :tx-refs-cpu-series (fnil conj []) cpu))))
-                   result)))))
+               (let [tx-meta (:tx-meta tx-report)]
+                 (when-not (or (:transact-new-graph-refs? tx-meta)
+                               (:skip-store? @conn)
+                               (:logseq.graph-parser.exporter/new-graph? tx-meta)
+                               (:logseq.graph-parser.exporter/imported-data? tx-meta)
+                               (:logseq.db.sqlite.export/imported-data? tx-meta))
+                   (let [t0 (now-ms)
+                         {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+                         get-ms (- (now-ms) t0)
+                         t1 (now-ms)
+                         refs-tx (when (seq blocks)
+                                   (vec (profiled-rebuild-block-refs-tx tx-report blocks)))
+                         rebuild-ms (- (now-ms) t1)
+                         nested-before (get @profile-stats :tx-nested-ms 0)
+                         result (when (seq refs-tx)
+                                  (ldb/transact! conn refs-tx
+                                                 (-> tx-meta
+                                                     (assoc :transact-new-graph-refs? true))))
+                         total (- (now-ms) t0)
+                         nested-during (- (get @profile-stats :tx-nested-ms 0) nested-before)
+                         cpu (max 0 (- total nested-during))]
+                     (swap! profile-stats
+                            (fn [s]
+                              (-> s
+                                  (update :tx-refs-total-ms (fnil + 0) total)
+                                  (update :tx-refs-cpu-ms (fnil + 0) cpu)
+                                  (update :tx-refs-get-blocks-ms (fnil + 0) get-ms)
+                                  (update :tx-refs-rebuild-ms (fnil + 0) rebuild-ms)
+                                  (update :tx-refs-nested-ms (fnil + 0) nested-during)
+                                  (update :tx-refs-n (fnil inc 0))
+                                  (update :tx-refs-cpu-series (fnil conj []) cpu))))
+                     result))))))
 
 (defn- profiled-d-transact! [conn tx-data tx-meta]
   (let [depth @*tx-depth
