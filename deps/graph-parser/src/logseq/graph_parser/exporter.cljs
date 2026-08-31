@@ -2080,11 +2080,14 @@
        (into {})))
 
 (defn- existing-page-uuid
-  "Uuid for a page already in this import or already in the db."
+  "Uuid for a page already in this import or already imported into the db.
+   Ignore built-in pages so names like alias do not collide with the schema."
   [db all-existing-page-uuids page-name]
   (or (get all-existing-page-uuids page-name)
       (when page-name
-        (:block/uuid (ldb/get-page db page-name)))))
+        (when-let [page (ldb/get-page db page-name)]
+          (when-not (ldb/built-in? page)
+            (:block/uuid page))))))
 
 (defn- journal-file-title
   [path]
