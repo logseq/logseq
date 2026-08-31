@@ -24,6 +24,141 @@
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 ;; This is a lower-level dev hook to inspect txs and shouldn't hook into ldb/transact!
 (def original-transact! d/transact!)
+(def profile-stats
+  (atom {:phase-ms {}
+         :phase-n {}
+         :phase-series {}
+         :file-ms []
+         :tx-outer-ms 0
+         :tx-outer-n 0
+         :tx-nested-ms 0
+         :tx-nested-n 0
+         :tx-outer-sizes []
+         :snapshots []}))
+(def *tx-depth (atom 0))
+(def *profiling? (atom false))
+(def *profile-db-path (atom nil))
+(def tracked-phases [:parse :prep :pages-tx :blocks-tx :split :prop-tx :clean-tags :main-tx :transact :upstream :file])
+
+(defn- now-ms []
+  (js/Date.now))
+
+(defn- percentile [xs p]
+  (let [sorted (vec (sort xs))
+        n (count sorted)]
+    (when (pos? n)
+      (nth sorted (min (dec n) (int (Math/floor (* p (dec n)))))))))
+
+(defn- summarize-ms [xs]
+  (let [xs (vec xs)]
+    (if (empty? xs)
+      {:n 0 :sum 0 :mean 0 :p50 0 :p95 0 :max 0}
+      (let [sum (reduce + 0 xs)
+            n (count xs)]
+        {:n n :sum sum :mean (/ sum n)
+         :p50 (percentile xs 0.50) :p95 (percentile xs 0.95) :max (reduce max xs)}))))
+
+(defn- window-means [xs size]
+  (map-indexed
+   (fn [i chunk]
+     {:start (inc (* i size))
+      :end (+ (* i size) (count chunk))
+      :n (count chunk)
+      :mean-ms (js/Math.round (/ (reduce + 0 chunk) (count chunk)))})
+   (partition-all size xs)))
+
+(defn- sqlite-bytes []
+  (when-let [p @*profile-db-path]
+    (when (fs/existsSync p)
+      (.-size (fs/statSync p)))))
+
+(defn- record-profile-phase! [{:keys [phase ms]}]
+  (when (and phase ms)
+    (let [s' (swap! profile-stats
+                    (fn [s]
+                      (cond-> s
+                        true (update-in [:phase-ms phase] (fnil + 0) ms)
+                        true (update-in [:phase-n phase] (fnil inc 0))
+                        (contains? (set tracked-phases) phase)
+                        (update-in [:phase-series phase] (fnil conj []) ms)
+                        (= phase :file) (update :file-ms conj ms))))]
+      (when (and (= phase :file)
+                 (let [n (count (:file-ms s'))]
+                   (or (= n 1) (zero? (mod n 50)))))
+        (let [snap {:n (count (:file-ms s'))
+                    :sqlite-bytes (sqlite-bytes)
+                    :heap-mb (js/Math.round (/ (.-heapUsed (js/process.memoryUsage)) 1048576))}]
+          (swap! profile-stats update :snapshots conj snap)
+          (println "[snap]" (pr-str snap)))))))
+
+(defn- profile-log-fn
+  ([event data]
+   (cond
+     (= event :import-profile)
+     (record-profile-phase! data)
+
+     (= event :import-heartbeat)
+     (println "[heartbeat]"
+              "elapsed-ms=" (:elapsed-ms data)
+              "files=" (count (:file-ms @profile-stats))
+              "phase=" (:phase data)
+              "file=" (:file data))
+
+     :else nil))
+  ([_a _b _c] nil)
+  ([_a _b _c _d] nil))
+
+(defn- print-profile-report! [elapsed-ms conn profile-out]
+  (let [s @profile-stats
+        store @sqlite-cli/*store-profile
+        file-ms (:file-ms s)
+        file-summary (summarize-ms file-ms)
+        phase-rows (into {}
+                         (map (fn [[phase ms]]
+                                [phase {:ms ms
+                                        :n (get-in s [:phase-n phase] 0)
+                                        :mean (when (pos? (get-in s [:phase-n phase] 0))
+                                                (/ ms (get-in s [:phase-n phase])))}]))
+                         (:phase-ms s))
+        payload {:elapsed-ms elapsed-ms
+                 :files (:n file-summary)
+                 :file-ms file-summary
+                 :windows-50 (window-means file-ms 50)
+                 :phase-ms phase-rows
+                 :sqlite-store {:ms (:ms store)
+                                :n (:n store)
+                                :nodes (:nodes store)
+                                :series (summarize-ms (:series store))}
+                 :tx {:outer-ms (:tx-outer-ms s)
+                      :outer-n (:tx-outer-n s)
+                      :nested-ms (:tx-nested-ms s)
+                      :nested-n (:tx-nested-n s)
+                      :core-ms (max 0 (- (:tx-outer-ms s) (:tx-nested-ms s)))
+                      :outer-size (summarize-ms (:tx-outer-sizes s))}
+                 :snapshots (:snapshots s)
+                 :named-pages (count (d/datoms @conn :avet :block/name))
+                 :datoms (count (d/datoms @conn :eavt))
+                 :sqlite-bytes (sqlite-bytes)}]
+    (println "========== cli import profile ==========")
+    (println "elapsed-ms:" elapsed-ms "elapsed-s:" (js/Math.round (/ elapsed-ms 1000)))
+    (println "files:" (:n file-summary) "mean-ms:" (js/Math.round (:mean file-summary))
+             "p50:" (:p50 file-summary) "p95:" (:p95 file-summary) "max:" (:max file-summary))
+    (println "phase totals (ms):")
+    (doseq [[phase {:keys [ms n mean]}] (sort-by (comp - :ms val) phase-rows)]
+      (println " " phase "ms=" ms "n=" n "mean=" (when mean (js/Math.round mean))))
+    (println "sqlite-store ms=" (:ms store) "n=" (:n store) "nodes=" (:nodes store)
+             "mean-ms=" (when (pos? (or (:n store) 0)) (js/Math.round (/ (:ms store) (:n store)))))
+    (println "d/transact outer-ms=" (:tx-outer-ms s) "nested-ms=" (:tx-nested-ms s)
+             "core-ms=" (max 0 (- (:tx-outer-ms s) (:tx-nested-ms s))))
+    (println "named-pages=" (:named-pages payload) "datoms=" (:datoms payload)
+             "sqlite-bytes=" (:sqlite-bytes payload))
+    (println "rolling mean ms/file by 50:")
+    (doseq [w (:windows-50 payload)]
+      (println " " (:start w) "-" (:end w) "mean-ms=" (:mean-ms w)))
+    (when profile-out
+      (fs/writeFileSync profile-out (js/JSON.stringify (clj->js payload) nil 2))
+      (println "wrote" profile-out))))
+
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
                     (let [new-queue (conj queue {:tx-data tx-data :tx-meta tx-meta})]
@@ -31,7 +166,28 @@
                       (if (> (count new-queue) 10)
                         (pop new-queue)
                         new-queue))))
-  (original-transact! conn tx-data tx-meta))
+  (if-not @*profiling?
+    (original-transact! conn tx-data tx-meta)
+    (let [start (now-ms)
+          depth (swap! *tx-depth inc)]
+      (try
+        (original-transact! conn tx-data tx-meta)
+        (finally
+          (let [ms (- (now-ms) start)
+                n (count tx-data)]
+            (swap! *tx-depth dec)
+            (if (= depth 1)
+              (swap! profile-stats
+                     (fn [s]
+                       (-> s
+                           (update :tx-outer-ms (fnil + 0) ms)
+                           (update :tx-outer-n (fnil inc 0))
+                           (update :tx-outer-sizes conj n))))
+              (swap! profile-stats
+                     (fn [s]
+                       (-> s
+                           (update :tx-nested-ms (fnil + 0) ms)
+                           (update :tx-nested-n (fnil inc 0))))))))))))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -130,7 +286,10 @@
         options (merge options
                        (default-export-options file-graph-dir options)
                         ;; asset file options
-                       {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)})]
+                       {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)}
+                       (when (:profile options)
+                         {:log-fn profile-log-fn
+                          :import-heartbeat-ms 5000}))
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 
@@ -198,7 +357,11 @@
     :desc "Extract code fence(s) to #Code"}
    :validate
    {:alias :V
-    :desc "Validate db after creation"}})
+    :desc "Validate db after creation"}
+   :profile
+   {:desc "Print per-phase CLI import timings (sqlite persist included)"}
+   :profile-out
+   {:desc "Write profile JSON to this path"}})
 
 (defn -main [args]
   (let [[file-graph db-graph-dir] args
@@ -213,10 +376,29 @@
                       (node-path/dirname (first init-conn-args))
                       (apply node-path/join init-conn-args))
         file-graph' (resolve-path file-graph)
+        _ (when (:profile options)
+            (reset! *profiling? true)
+            (reset! sqlite-cli/*store-profile {:ms 0 :n 0 :nodes 0 :series []})
+            (reset! *profile-db-path (if (= 1 (count init-conn-args))
+                                       (first init-conn-args)
+                                       (apply node-path/join init-conn-args))))
         conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)
                                                                  :import-type :cli/db-import}))
+        _ (when (:profile options)
+            (reset! sqlite-cli/*store-profile {:ms 0 :n 0 :nodes 0 :series []})
+            (reset! profile-stats {:phase-ms {}
+                                   :phase-n {}
+                                   :phase-series {}
+                                   :file-ms []
+                                   :tx-outer-ms 0
+                                   :tx-outer-n 0
+                                   :tx-nested-ms 0
+                                   :tx-nested-n 0
+                                   :tx-outer-sizes []
+                                   :snapshots []}))
         directory? (.isDirectory (fs/statSync file-graph'))
-        user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help :continue))
+        user-options (cond-> (merge {:all-tags false}
+                                    (dissoc options :verbose :files :help :continue :profile :profile-out))
                        ;; coerce option collection into strings
                        (:tag-classes options)
                        (update :tag-classes (partial mapv str))
@@ -224,7 +406,8 @@
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
         options' (merge {:user-options user-options}
-                        (select-keys options [:files :verbose :continue :debug :validate]))]
+                        (select-keys options [:files :verbose :continue :debug :validate :profile :profile-out]))
+        profile-started (when (:profile options) (now-ms))]
     (p/let [{:keys [import-state]}
             (if directory?
               (import-file-graph-to-db file-graph' db-full-dir conn options')
@@ -238,6 +421,8 @@
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
       (println "Created graph" (str db-name "!"))
+      (when (:profile options)
+        (print-profile-report! (- (now-ms) profile-started) conn (:profile-out options)))
       (when (:validate options') (validate-db @conn db-name {})))))
 
 (when (= nbb/*file* (nbb/invoked-file))
