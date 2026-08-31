@@ -230,6 +230,21 @@
       (finally
         (state/replace-state! original-state)))))
 
+(deftest set-ui-state-updates-nested-app-state
+  (let [set-ui-state! (get @thread-api/*thread-apis :thread-api/set-ui-state)
+        original-state (state/get-state)]
+    (try
+      (state/replace-state! (assoc original-state :graph/importing-state {}))
+      (set-ui-state! [:graph/importing-state :total] 3)
+      (set-ui-state! [:graph/importing-state :current-idx] 1)
+      (set-ui-state! [:graph/importing-state :current-page] "pages/Home.md")
+      (is (= {:total 3
+              :current-idx 1
+              :current-page "pages/Home.md"}
+             (:graph/importing-state (state/get-state))))
+      (finally
+        (state/replace-state! original-state)))))
+
 (deftest search-index-build-progress-marks-current-graph-ready-after-fts-completed
   (let [repo "logseq_db_graph_a"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
