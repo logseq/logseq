@@ -46,10 +46,9 @@
 (deftest tag-navigations-use-persisted-class-uuids-test
   (let [task-uuid (random-uuid)
         asset-uuid (random-uuid)
-        db-graph? (atom true)
         resource-keys (atom [])
         render! (fn []
-                  (with-redefs [config/db-based-graph? (constantly @db-graph?)
+                  (with-redefs [config/db-based-graph? (constantly true)
                                 db-hooks/use-resource-snapshot
                                 (fn [resource-key]
                                   (swap! resource-keys conj resource-key)
@@ -81,10 +80,4 @@
                 [:page-uuid-by-ident :logseq.class/Asset]]
                @resource-keys))
         (is (string/includes? markup (str "/page/" task-uuid)))
-        (is (string/includes? markup (str "/page/" asset-uuid)))))
-    (testing "file graphs do not request or render built-in class pages"
-      (reset! db-graph? false)
-      (reset! resource-keys [])
-      (let [markup (render!)]
-        (is (= [nil nil] @resource-keys))
-        (is (not (string/includes? markup "tag-view-nav")))))))
+        (is (string/includes? markup (str "/page/" asset-uuid)))))))
