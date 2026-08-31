@@ -2570,9 +2570,13 @@
          (let [sql (test-sql/make-sql)
                checksum "1be70518babe8784"
                conn (d/create-conn db-schema/schema)
+               closed (atom [])
+               socket #js {:close (fn [code reason]
+                                    (swap! closed conj [code reason]))}
                self #js {:sql sql
                          :conn conn
                          :schema-ready true
+                         :state #js {:getWebSockets (fn [] #js [socket])}
                          :env #js {"DB" nil}}
                request (js/Request. (str "http://localhost/sync/graph-1/snapshot/upload?graph-id=graph-1&finished=true&checksum=" checksum)
                                     #js {:method "POST"
@@ -2592,6 +2596,7 @@
                          body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                    (is (= 200 (.-status resp)))
                    (is (= {:ok true :count 0} body))
+                   (is (= [[1012 "snapshot replaced"]] @closed))
                    (is (= checksum (storage/get-checksum sql)))))
                (p/then (fn []
                          (done)))

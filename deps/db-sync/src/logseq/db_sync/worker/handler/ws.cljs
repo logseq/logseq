@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.handler.ws
   (:require [logseq.db-sync.protocol :as protocol]
+            [logseq.db-sync.common :as common]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.http :as http]
@@ -35,6 +36,21 @@
           (if (or (and (some? raw-since) (not (number? since))) (neg? since))
             (ws/send! ws {:type "error" :message "invalid since"})
             (ws/send! ws (sync-handler/pull-response self since))))
+
+        "entity/pull"
+        (let [since (:since message)]
+          (if (neg? since)
+            (ws/send! ws {:type "error" :message "invalid since"})
+            (let [current-t (sync-handler/t-now self)]
+              (if (> since current-t)
+                (ws/send! ws {:type "reset"
+                              :data (common/write-transit
+                                     {:reason "cursor-ahead"
+                                      :snapshot-required true})})
+                (let [result (sync-handler/latest-entity-changes
+                              self (aget self "graph-id") since)]
+                  (ws/send! ws {:type (if (:reason result) "reset" "graph-changes")
+                                :data (common/write-transit result)}))))))
 
         ;; "snapshot"
         ;; (send! ws (snapshot-response self))

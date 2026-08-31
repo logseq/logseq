@@ -27,9 +27,6 @@
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 (def ^:private large-tx-min-items 500)
 (def ^:private large-tx-max-chunk-items 500)
-(def ^:private sse-heartbeat-ms 15000)
-(def ^:private sse-content-type "text/event-stream")
-(def ^:private sse-text-encoder (js/TextEncoder.))
 ;; 10m
 ;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
@@ -439,145 +436,6 @@
          :t t-now
          :upserts upserts
          :deleted deleted}))))
-
-(defn- encode-sse-event
-  [event-name id data]
-  (str (when (some? id) (str "id: " id "\n"))
-       "event: " event-name "\n"
-       "data: " (common/write-transit data) "\n\n"))
-
-(defn- enqueue-change-result!
-  [controller result]
-  (let [text (if (:reason result)
-               (encode-sse-event "reset" nil result)
-               (encode-sse-event "graph-changes" (:t result) result))]
-    (.enqueue controller (.encode sse-text-encoder text))))
-
-(defn- sse-subscribers
-  [^js self]
-  (or (.-sse-subscribers self)
-      (let [subscribers (atom #{})]
-        (set! (.-sse-subscribers self) subscribers)
-        subscribers)))
-
-(defn- remove-sse-subscriber!
-  [^js self subscriber]
-  (when-let [timer (:heartbeat-timer subscriber)]
-    (js/clearInterval timer))
-  (swap! (sse-subscribers self) disj subscriber))
-
-(defn- notify-sse-subscriber!
-  [^js self subscriber]
-  (try
-    (let [cursor @(:cursor subscriber)
-          result (latest-entity-changes self (:graph-id subscriber) cursor)
-          next-t (:t result)]
-      (cond
-        (:reason result)
-        (do
-          (enqueue-change-result! (:controller subscriber) result)
-          (.close (:controller subscriber))
-          (remove-sse-subscriber! self subscriber))
-
-        (> next-t cursor)
-        (do
-          (enqueue-change-result! (:controller subscriber) result)
-          (reset! (:cursor subscriber) next-t))))
-    (catch :default error
-      (log/error :db-sync/sse-notify-failed {:error error})
-      (try
-        (.error (:controller subscriber) error)
-        (catch :default _))
-      (remove-sse-subscriber! self subscriber))))
-
-(defn- notify-sse-subscribers!
-  [^js self]
-  (doseq [subscriber @(sse-subscribers self)]
-    (notify-sse-subscriber! self subscriber)))
-
-(defn- ensure-sse-listener!
-  [^js self]
-  (ensure-conn! self)
-  (when-not (true? (.-sse-listener-ready self))
-    (d/listen! (.-conn self) ::sse-events
-               (fn [_tx-report]
-                 ;; The storage listener persists the server t in the same
-                 ;; transaction callback. Run after all DataScript listeners.
-                 (js/queueMicrotask #(notify-sse-subscribers! self))))
-    (set! (.-sse-listener-ready self) true)))
-
-(defn- sse-stream
-  [^js self graph-id since]
-  (ensure-sse-listener! self)
-  (let [subscriber* (atom nil)]
-    (js/ReadableStream.
-     (clj->js
-      {:start (fn [controller]
-                (let [result (latest-entity-changes self graph-id since)
-                      cursor (atom since)
-                      heartbeat-timer (js/setInterval
-                                       (fn []
-                                         (try
-                                           (.enqueue controller
-                                                     (.encode sse-text-encoder ": heartbeat\n\n"))
-                                           (catch :default _
-                                             (when-let [subscriber @subscriber*]
-                                               (remove-sse-subscriber! self subscriber)))))
-                                       sse-heartbeat-ms)
-                      subscriber {:controller controller
-                                  :cursor cursor
-                                  :graph-id graph-id
-                                  :heartbeat-timer heartbeat-timer}]
-                  (reset! subscriber* subscriber)
-                  (swap! (sse-subscribers self) conj subscriber)
-                  (if (:reason result)
-                    (do
-                      (enqueue-change-result! controller result)
-                      (.close controller)
-                      (remove-sse-subscriber! self subscriber))
-                    (if (> (:t result) since)
-                      (do
-                        (enqueue-change-result! controller result)
-                        (reset! cursor (:t result)))
-                      (.enqueue controller
-                                (.encode sse-text-encoder ": connected\n\n"))))))
-       :cancel (fn []
-                 (when-let [subscriber @subscriber*]
-                   (remove-sse-subscriber! self subscriber)))}))))
-
-(defn- strict-cursor
-  [value]
-  (when (and (string? value)
-             (re-matches #"[0-9]+" value))
-    (parse-int value)))
-
-(defn- handle-sync-events
-  [^js self request ^js url]
-  (let [last-event-id (.get (.-headers request) "last-event-id")
-        raw-since (or last-event-id (.get (.-searchParams url) "since") "0")
-        since (strict-cursor raw-since)
-        graph-id (graph-id-from-request request)
-        current-t (t-now self)]
-    (cond
-      (not (seq graph-id))
-      (http/bad-request "missing graph id")
-
-      (or (not (number? since)) (> since current-t))
-      (http/bad-request "invalid since")
-
-      :else
-      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
-        (if-not ready-for-sync?
-          (http/error-response "graph not ready" 409)
-          (js/Response.
-           (sse-stream self graph-id since)
-           #js {:status 200
-                :headers (js/Object.assign
-                          #js {"content-type" sse-content-type
-                               "cache-control" "no-cache"
-                               "connection" "keep-alive"
-                               "x-accel-buffering" "no"}
-                          (common/cors-headers))}))))))
 
 (defn- block-uuid-lookup-ref
   [entity-id]
@@ -1072,14 +930,20 @@
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 
+(defn- close-websockets!
+  [^js self code reason]
+  (when-let [state (some-> self .-state)]
+    (when (fn? (.-getWebSockets state))
+      (doseq [^js socket (.getWebSockets state)]
+        (.close socket code reason)))))
+
 (defn- handle-sync-admin-reset
   [^js self]
   (let [^js state (.-state self)
         ^js storage (.-storage state)
         delete-all (.-deleteAll storage)
         delete-alarm (.-deleteAlarm storage)]
-    (doseq [^js ws (.getWebSockets state)]
-      (.close ws 1000 "graph deleted"))
+    (close-websockets! self 1000 "graph deleted")
     (p/let [_ (when (fn? delete-alarm)
                 (.deleteAlarm storage))]
       (if (fn? delete-all)
@@ -1169,7 +1033,9 @@
                  (not (exists? js/DecompressionStream)))
           (http/error-response "gzip not supported" 500)
           (p/catch
-           (p/let [_ (ensure-schema! self)
+           (p/let [_ (when reset?
+                       (close-websockets! self 1012 "snapshot replaced"))
+                   _ (ensure-schema! self)
                    _ (when reset?
                        (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
                    _ (when reset?
@@ -1197,9 +1063,6 @@
 
     :sync/pull
     (handle-sync-pull self url)
-
-    :sync/events
-    (handle-sync-events self request url)
 
     :sync/checksum-diagnostics
     (handle-sync-checksum-diagnostics self request)

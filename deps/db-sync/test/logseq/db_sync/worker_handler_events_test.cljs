@@ -1,12 +1,10 @@
 (ns logseq.db-sync.worker-handler-events-test
-  (:require [cljs.test :refer [async deftest is testing]]
-            [clojure.string :as string]
+  (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
-            [logseq.db-sync.worker.handler.sync :as sync-handler]
-            [promesa.core :as p]))
+            [logseq.db-sync.worker.handler.sync :as sync-handler]))
 
 (defn- make-server []
   (let [sql (test-sql/make-sql)
@@ -17,17 +15,6 @@
 
 (defn- entity-change [changes entity-id]
   (some #(when (= entity-id (:id %)) %) (:upserts changes)))
-
-(defn- request [path & [headers]]
-  (js/Request. (str "http://localhost" path)
-               (clj->js {:method "GET"
-                         :headers (or headers {})})))
-
-(defn- first-stream-text [response]
-  (let [reader (.getReader (.-body response))]
-    (p/let [chunk (.read reader)
-            _ (.cancel reader)]
-      (.decode (js/TextDecoder.) (.-value chunk)))))
 
 (deftest latest-entity-changes-deduplicates-and-preserves-current-types-test
   (let [{:keys [sql conn self]} (make-server)
@@ -117,64 +104,3 @@
       (common/sql-exec sql "delete from tx_log where t = ?" (inc since))
       (is (= {:reason "cursor-expired" :snapshot-required true}
              (sync-handler/latest-entity-changes self "graph-1" since))))))
-
-(deftest events-route-uses-last-event-id-and-emits-transit-without-tx-data-test
-  (async done
-         (let [{:keys [sql conn self]} (make-server)
-               block-id (random-uuid)]
-           (d/transact! conn [{:block/uuid block-id :block/title "Before"}])
-           (let [since (storage/get-t sql)]
-             (d/transact! conn [[:db/add [:block/uuid block-id] :block/title "After"]])
-             (-> (p/let [response (sync-handler/handle-http
-                                   self
-                                   (request "/sync/graph-1/events?since=999999"
-                                            {"last-event-id" (str since)}))
-                         text (first-stream-text response)
-                         data-line (some #(when (string/starts-with? % "data: ")
-                                            (subs % 6))
-                                         (string/split-lines text))
-                         event (common/read-transit data-line)]
-                   (is (= 200 (.-status response)))
-                   (is (= "text/event-stream" (.get (.-headers response) "content-type")))
-                   (is (= "no-cache" (.get (.-headers response) "cache-control")))
-                   (is (= "graph-changes" (some #(when (string/starts-with? % "event: ")
-                                                    (subs % 7))
-                                                 (string/split-lines text))))
-                   (is (= (storage/get-t sql) (:t event)))
-                   (is (= "After" (get-in (first (:upserts event)) [:attrs :block/title])))
-                   (is (not (string/includes? text ":db/add")))
-                   (is (not (string/includes? text "tx-data"))))
-                 (p/then (fn [] (done)))
-                 (p/catch (fn [error]
-                            (is false (str error))
-                            (done))))))))
-
-(deftest events-route-rejects-invalid-and-future-cursors-test
-  (let [{:keys [self]} (make-server)
-        invalid (sync-handler/handle-http self (request "/sync/graph-1/events?since=nope"))
-        negative (sync-handler/handle-http self (request "/sync/graph-1/events?since=-1"))
-        future (sync-handler/handle-http self (request "/sync/graph-1/events?since=1"))]
-    (is (= 400 (.-status invalid)))
-    (is (= 400 (.-status negative)))
-    (is (= 400 (.-status future)))))
-
-(deftest events-route-emits-reset-for-cursor-gap-test
-  (async done
-         (let [{:keys [sql conn self]} (make-server)
-               block-id (random-uuid)]
-           (d/transact! conn [{:block/uuid block-id :block/title "One"}])
-           (let [since (storage/get-t sql)]
-             (d/transact! conn [[:db/add [:block/uuid block-id] :block/title "Two"]])
-             (d/transact! conn [[:db/add [:block/uuid block-id] :block/title "Three"]])
-             (common/sql-exec sql "delete from tx_log where t = ?" (inc since))
-             (-> (p/let [response (sync-handler/handle-http
-                                   self
-                                   (request (str "/sync/graph-1/events?since=" since)))
-                         text (first-stream-text response)]
-                   (is (= 200 (.-status response)))
-                   (is (string/includes? text "event: reset"))
-                   (is (string/includes? text "cursor-expired")))
-                 (p/then (fn [] (done)))
-                 (p/catch (fn [error]
-                            (is false (str error))
-                            (done))))))))
