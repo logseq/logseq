@@ -43,8 +43,8 @@
         (assoc data :addresses addresses)
         data))))
 
-(def *store-profile
-  "Optional atom. When set, each sqlite -store records {:ms :n :nodes :series}."
+(def store-profile-state
+  "Optional map. When set, each sqlite -store records {:ms :n :nodes :series}."
   (atom nil))
 
 (defn- store-addr-content!
@@ -67,12 +67,12 @@
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
       ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
-      (if @*store-profile
+      (if @store-profile-state
         (let [start (js/Date.now)
               n (count addr+data-seq)]
           (store-addr-content! db addr+data-seq)
           (let [ms (- (js/Date.now) start)]
-            (swap! *store-profile
+            (swap! store-profile-state
                    (fn [s]
                      (-> s
                          (update :ms (fnil + 0) ms)
