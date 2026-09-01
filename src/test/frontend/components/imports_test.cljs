@@ -202,3 +202,70 @@
                (p/catch (fn [error]
                           (is false (str error))))
                (p/finally done)))))
+
+(deftest file-graph-import-fetch-failure-after-files-keeps-new-graph
+  (async done
+         (let [import-file-graph (file-graph-import-fn)
+               previous-repo "logseq_db_old"
+               graph-name "4k-movies"
+               expected-repo (str config/db-version-prefix graph-name)
+               ui (atom {:git/current-repo previous-repo})
+               calls (atom [])]
+           (-> (p/with-redefs [util/electron? (constantly true)
+                               state/set-state! (fn [path value]
+                                                  (if (vector? path)
+                                                    (swap! ui assoc-in path value)
+                                                    (swap! ui assoc path value)))
+                               state/get-state (fn [path]
+                                                 (if (vector? path)
+                                                   (get-in @ui path)
+                                                   (get @ui path)))
+                               state/get-current-repo (fn [] (:git/current-repo @ui))
+                               state/pub-event! (fn [event]
+                                                  (swap! calls conj [:event event]))
+                               repo-handler/new-db!
+                               (fn [name _opts]
+                                 (let [repo (str config/db-version-prefix name)]
+                                   (swap! ui assoc :git/current-repo repo)
+                                   (p/resolved repo)))
+                               state/<invoke-db-worker
+                               (fn [api & _args]
+                                 (if (= api :thread-api/import-file-graph)
+                                   (do
+                                     (swap! ui assoc :graph/importing-state
+                                            {:step :finishing
+                                             :label :import/finishing
+                                             :total 3886
+                                             :current-idx 3886})
+                                     (p/rejected (js/Error. "Failed to fetch")))
+                                   (p/resolved nil)))
+                               repo-handler/restore-and-setup-repo!
+                               (fn [repo opts]
+                                 (swap! calls conj [:restore repo opts])
+                                 (p/resolved nil))
+                               notification/show! (fn [content status & _]
+                                                    (swap! calls conj [:notify status content]))
+                               shui/dialog-open! (fn [& _] nil)
+                               shui/dialog-close! (fn [id]
+                                                    (swap! calls conj [:dialog-close id]))
+                               shui-dialog/get-dialog (fn [_] nil)
+                               route-handler/redirect-to-home! (fn []
+                                                                 (swap! calls conj [:redirect-home]))
+                               ui-handler/re-render-root! (fn []
+                                                            (swap! calls conj [:rerender]))]
+                 (import-file-graph [{:path "logseq/config.edn"
+                                      :fs-path "/tmp/graph/logseq/config.edn"}]
+                                    {:graph-name graph-name}
+                                    {:path "logseq/config.edn"}))
+               (p/then (fn [_]
+                         (is (some #(= :restore (first %)) @calls)
+                             "After files are written, a dropped invoke still restores the new graph.")
+                         (is (not-any? #(= [:event [:graph/switch previous-repo {:persist? false}]] %) @calls)
+                             "Finished import must not switch away from the new graph.")
+                         (is (some #{[:dialog-close :import-indicator]} @calls))
+                         (is (some #{[:redirect-home]} @calls))
+                         (is (= expected-repo (:git/current-repo @ui)))
+                         (is (nil? (:graph/importing @ui)))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))

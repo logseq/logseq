@@ -46,15 +46,23 @@
           {:remote-db @persist-db/remote-db
            :remote-repo @persist-db/remote-repo
            :remote-runtime-state @persist-db/remote-runtime-state
+           :ensure-remote-chain @persist-db/*ensure-remote-chain
+           :remote-ensure-epoch @persist-db/*remote-ensure-epoch
+           :pending-remote-session @persist-db/*pending-remote-session
            :db-worker @state/*db-worker
            :transact-fn @ldb/*transact-fn}))
 
 (defn- restore-runtime-state!
   []
-  (let [{:keys [remote-db remote-repo remote-runtime-state db-worker transact-fn]} @*previous-runtime-state]
+  (let [{:keys [remote-db remote-repo remote-runtime-state ensure-remote-chain
+                remote-ensure-epoch pending-remote-session db-worker transact-fn]}
+        @*previous-runtime-state]
     (reset! persist-db/remote-db remote-db)
     (reset! persist-db/remote-repo remote-repo)
     (reset! persist-db/remote-runtime-state remote-runtime-state)
+    (reset! persist-db/*ensure-remote-chain ensure-remote-chain)
+    (reset! persist-db/*remote-ensure-epoch remote-ensure-epoch)
+    (reset! persist-db/*pending-remote-session pending-remote-session)
     (reset! state/*db-worker db-worker)
     (reset! ldb/*transact-fn transact-fn)
     (reset! *previous-runtime-state nil)))
@@ -68,6 +76,9 @@
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
   (reset! persist-db/remote-runtime-state nil)
+  (reset! persist-db/*ensure-remote-chain nil)
+  (reset! persist-db/*remote-ensure-epoch 0)
+  (reset! persist-db/*pending-remote-session nil)
   (reset! state/*db-worker nil)
   (reset! ldb/*transact-fn nil)
   (state/swap-state! assoc :electron/user-cfgs {}))
@@ -370,6 +381,60 @@
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
                        (done)))))))
+
+(deftest electron-ensure-remote-in-flight-old-repo-does-not-keep-event-stream-after-switch
+  (async done
+    (let [ensure-remote! #'persist-db/<ensure-remote!
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!
+          a-ipc-resolve (atom nil)
+          still-active-fns (atom {})
+          start-calls (atom [])
+          stop-calls (atom [])]
+      (reset-runtime-state!)
+      (set! ipc/ipc (fn [channel repo]
+                      (is (= "db-worker-runtime" channel))
+                      (if (= repo "logseq_db_graph_a")
+                        (js/Promise. (fn [resolve _]
+                                       (reset! a-ipc-resolve
+                                               (fn []
+                                                 (resolve {:base-url "http://127.0.0.1:54668"
+                                                           :auth-token nil
+                                                           :repo repo})))))
+                        (p/resolved {:base-url "http://127.0.0.1:54669"
+                                     :auth-token nil
+                                     :repo repo}))))
+      (set! remote/start! (fn [{:keys [repo still-active?]}]
+                            (swap! start-calls conj repo)
+                            (swap! still-active-fns assoc repo still-active?)
+                            (->FakeRemote repo (fn [& _] (p/resolved nil)))))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (p/resolved true)))
+      (let [p-a (ensure-remote! "logseq_db_graph_a")]
+        (-> (p/delay 0)
+            (p/then (fn []
+                      (is (fn? @a-ipc-resolve))
+                      (let [p-b (ensure-remote! "logseq_db_graph_b")]
+                        (@a-ipc-resolve)
+                        (p/all [p-a p-b]))))
+            (p/then (fn []
+                      (is (= ["logseq_db_graph_a" "logseq_db_graph_b"] @start-calls))
+                      (is (= ["logseq_db_graph_a"] @stop-calls)
+                          "Switching graphs must stop the previous remote EventSource client.")
+                      (is (= "logseq_db_graph_b" @persist-db/remote-repo))
+                      (is (false? ((get @still-active-fns "logseq_db_graph_a")))
+                          "Old graph SSE must not stay live after db-worker-node has exited.")
+                      (is (true? ((get @still-active-fns "logseq_db_graph_b"))))))
+            (p/catch (fn [e]
+                       (is false (str "unexpected error: " e))))
+            (p/finally (fn []
+                         (set! ipc/ipc original-ipc)
+                         (set! remote/start! original-start!)
+                         (set! remote/stop! original-stop!)
+                         (reset-runtime-state!)
+                         (done))))))))
 
 (deftest electron-ensure-remote-reuses-prefix-equivalent-runtime
   (async done
@@ -1418,6 +1483,50 @@
                             (set! remote/start! original-start!)
                             (set! remote/stop! original-stop!)
                             (set! notification/show! original-notification-show!)
+                            (reset-runtime-state!)
+                            (done)))))))
+
+(deftest electron-import-in-progress-skips-runtime-recovery
+  (async done
+         (let [record-failure! #'persist-db/record-active-request-failure!
+               repo "logseq_db_graph_a"
+               session-id "session-a"
+               ipc-calls (atom [])
+               stop-calls (atom [])
+               wrapped-worker (fn [& _] nil)
+               old-client (->FakeRemote repo wrapped-worker)
+               transport-error (js/Error. "Failed to fetch")
+               original-state (state/get-state)
+               original-ipc ipc/ipc
+               original-stop! remote/stop!]
+           (reset-runtime-state!)
+           (state/replace-state! (assoc original-state
+                                        :git/current-repo repo
+                                        :graph/importing :file-graph))
+           (reset! persist-db/remote-db old-client)
+           (reset! persist-db/remote-repo repo)
+           (reset! persist-db/remote-runtime-state {:repo repo
+                                                    :client old-client
+                                                    :session-id session-id
+                                                    :request-failures 0
+                                                    :recovery-triggered? false})
+           (set! ipc/ipc (fn [channel runtime-repo]
+                           (swap! ipc-calls conj [channel runtime-repo])
+                           (p/resolved nil)))
+           (set! remote/stop! (fn [client]
+                                (swap! stop-calls conj (:repo client))
+                                (p/resolved true)))
+           (-> (p/let [_ (record-failure! repo session-id transport-error)
+                       _ (p/delay 0)]
+                 (is (= [] @ipc-calls)
+                     "Import must not kill db-worker-node after a dropped invoke.")
+                 (is (= [] @stop-calls)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (state/replace-state! original-state)
+                            (set! ipc/ipc original-ipc)
+                            (set! remote/stop! original-stop!)
                             (reset-runtime-state!)
                             (done)))))))
 

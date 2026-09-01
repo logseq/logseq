@@ -1200,6 +1200,11 @@
                      "Desktop import-file-graph must not reply with a transit payload.")
                  (is (contains? current-pages "pages/Home.md")
                      "Desktop import progress is delivered over SSE.")
+                 (is (some #{:import/finishing}
+                           (->> ui-state
+                                (filter #(= [:graph/importing-state :label] (first %)))
+                                (map second)))
+                     "Desktop import shows Finishing graph import after files are written.")
                  (is (seq page-result)
                      "The new graph is created before import and contains imported pages."))
                (p/catch (fn [e]
