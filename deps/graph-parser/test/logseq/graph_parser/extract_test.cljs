@@ -129,3 +129,17 @@
     - line2
       - line3
      - line4"))))
+
+(deftest extract-file-links-with-formatted-labels
+  (doseq [content ["- [k](a.md)"
+                   "- [~~k~~](a.md)"
+                   "- [**k**](a.md)"
+                   "- [*k*](a.md)"]]
+    (let [{:keys [pages blocks]} (extract "note.md" content)
+          ref-names (mapcat #(map :block/name (:block/refs %)) blocks)]
+      (is (seq blocks)
+          (str "imports block for " content))
+      (is (seq pages)
+          (str "imports pages for " content))
+      (is (= ["k"] (vec ref-names))
+          (str "plain page-ref for " content)))))
