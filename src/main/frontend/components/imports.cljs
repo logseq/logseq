@@ -352,7 +352,6 @@
   []
   (state/set-state! :graph/importing nil)
   (state/set-state! :graph/importing-state nil)
-  (state/set-state! :graph/importing-result nil)
   (shui/dialog-close! :import-indicator))
 
 (defn- start-imported-graph-search-index!
@@ -401,9 +400,8 @@
                                   (transport-error? error)
                                   (import-files-finished?))]
     (if keep-imported-graph?
-      (let [import-result (or (state/get-state :graph/importing-result) {})]
-        (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
-          (finish-file-graph-import! current-repo import-result)))
+      (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
+        (finish-file-graph-import! current-repo {}))
       (do
         (clear-file-graph-importing-ui!)
         (when created-new-graph?

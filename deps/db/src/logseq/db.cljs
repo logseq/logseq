@@ -98,7 +98,7 @@
                                   (= (:v d) (:db/id parent))
                                   (not (entity-util/page? (d/entity db (:v d)))))))) tx-data)
     (throw (ex-info "Page can't have block as parent"
-                    {:tx-data tx-data}))))
+                    {:tx-count (count tx-data)}))))
 
 (comment
   (defn debounced-store-db
@@ -128,27 +128,27 @@
   [tx-meta]
   (not (:fix-db? tx-meta)))
 
-(defn- tx-report-pipeline-data
-  [tx-report]
-  (map (fn [[e a v t]]
-         [e a v t])
-       (:tx-data tx-report)))
+(defn- transact-failed-log-data
+  [tx-meta tx-data error]
+  {:tx-meta tx-meta
+   :tx-count (count tx-data)
+   :error (str error)})
 
-(defn- invalid-tx-debug-data
+(defn- invalid-tx-log-data
   [tx-meta tx-data errors tx-report]
   {:tx-meta tx-meta
-   :tx-data tx-data
-   :errors errors
-   :pipeline-tx-data (tx-report-pipeline-data tx-report)})
+   :tx-count (count tx-data)
+   :pipeline-tx-count (count (:tx-data tx-report))
+   :error-count (count errors)
+   :errors errors})
 
 (defn- throw-invalid-tx!
   [tx-meta tx-data errors tx-report]
   ;; notify ui
   (when-let [f @*transact-invalid-callback]
     (f tx-report errors))
-  (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
-    (prn :debug :invalid-data debug-data)
-    (prn :debug :errors errors)
+  (let [debug-data (invalid-tx-log-data tx-meta tx-data errors tx-report)]
+    (log/error :invalid-data debug-data)
     (throw (ex-info "DB write failed with invalid data" debug-data))))
 
 (defn- transact-sync
@@ -186,10 +186,7 @@
       (when-not (or (:db-sync/suppress-transact-failed-log? tx-meta)
                     (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
                          (= :entity-id/missing (:error (ex-data e)))))
-        (prn :debug :transact-failed
-             :tx-meta tx-meta
-             :tx-data tx-data
-             :error (str e))
+        (log/error :transact-failed (transact-failed-log-data tx-meta tx-data e))
         (js/console.error e))
       (throw e))))
 
