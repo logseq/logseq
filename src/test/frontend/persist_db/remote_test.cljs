@@ -28,6 +28,50 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest invoke-skip-result-api-does-not-decode-null-transit
+  (async done
+    (let [client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :fetch-fn (fn [_req]
+                               (p/resolved {:status 200
+                                            :body (js/JSON.stringify
+                                                   #js {:ok true
+                                                        :resultTransit nil})}))})]
+      (-> (p/let [result (remote/invoke! client "thread-api/import-file-graph" ["repo" {} [] {}])]
+            (is (nil? result)
+                "Desktop import invoke must not read-transit a null worker reply."))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest connect-events-dispatches-set-ui-state-progress
+  (async done
+    (let [events (atom [])
+          wrapped-worker (fn [& _] nil)
+          latest-handlers (atom nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :event-handler (fn [event-type wrapped-worker' payload]
+                                    (swap! events conj [event-type wrapped-worker' payload]))
+                   :open-sse-fn (fn [{:keys [on-message]}]
+                                  (reset! latest-handlers {:on-message on-message})
+                                  {:close! (fn [] nil)})
+                   :schedule-fn (fn [_f _delay-ms] nil)})
+          sub (remote/connect-events! client wrapped-worker)
+          payload (ldb/write-transit-str [[:graph/importing-state :current-page] "pages/Home.md"])]
+      (-> (p/let [_ ((:on-message @latest-handlers)
+                     (str "data: " (js/JSON.stringify #js {:type "thread-api/set-ui-state"
+                                                           :payload payload})
+                          "\n\n"))]
+            (is (= [[:thread-api/set-ui-state wrapped-worker
+                     [[:graph/importing-state :current-page] "pages/Home.md"]]]
+                   @events)
+                "Desktop SSE import progress keeps path and page name for the renderer.")
+            ((:disconnect! sub)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest invoke-error-propagates-status-and-error-code
   (async done
     (let [client (remote/create-client

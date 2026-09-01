@@ -753,7 +753,7 @@ abc
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
 
-(deftest export-doc-files-aborts-on-export-file-failure
+(deftest export-doc-files-continues-after-export-file-failure
   (cljs.test/async
    done
    (let [attempted-paths (atom [])
@@ -763,34 +763,38 @@ abc
          first-file (node-path/join graph-dir "pages/A.md")
          second-file (node-path/join graph-dir "pages/B.md")
          conn (db-test/create-conn)
+         notifications (atom [])
          doc-options (gp-exporter/build-doc-options
                       {:macros {} :file/name-format :triple-lowbar}
                       (merge default-export-options
-                             {:notify-user (constantly nil)
+                             {:notify-user #(swap! notifications conj %)
                               :user-options {:convert-all-tags? false}
-                              :<export-file (fn [_conn {:file/keys [path]} _opts]
+                              :<export-file (fn [conn' {:file/keys [path content]} opts]
                                               (swap! attempted-paths conj path)
-                                              (p/rejected failed-error))}))
-         assert-failure (fn [result]
-                          (is (= :worker-transact-failed
-                                 (or (:code (ex-data result))
-                                     (:code (ex-data (.-cause result)))))
-                              "Export file failure is propagated to the caller")
-                          (is (= [first-file] @attempted-paths)
-                              "Import stops after the first export file failure")
-                          (done))]
-     (try
-       (-> (gp-exporter/export-doc-files
-            conn
-            [{:path first-file} {:path second-file}]
-            <read-file
-            doc-options)
-           (.then (fn [_]
-                    (is false "Export file failure should reject")
-                    (done)))
-           (.catch assert-failure))
-       (catch :default e
-         (assert-failure e))))))
+                                              (if (= path first-file)
+                                                (p/rejected failed-error)
+                                                (gp-exporter/<add-file-to-db-graph conn' path content opts)))}))]
+     (-> (gp-exporter/export-doc-files
+          conn
+          [{:path first-file} {:path second-file}]
+          <read-file
+          doc-options)
+         (p/then (fn [_]
+                   (is (= [first-file second-file] @attempted-paths)
+                       "Import continues with later files after one export failure")
+                   (is (= [first-file]
+                          (map :path @(:ignored-files (:import-state doc-options))))
+                       "Failed files are recorded in import state")
+                   (is (some #(= :error (:level %)) @notifications)
+                       "The failed file is reported to the user")
+                   (is (some? (db-test/find-block-by-content @conn "second"))
+                       "Later files are still imported")
+                   (is (nil? (db-test/find-block-by-content @conn "first"))
+                       "The failed file is not imported")
+                   (done)))
+         (p/catch (fn [error]
+                    (is false (str "Single file failure should not abort import: " error))
+                    (done)))))))
 
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")

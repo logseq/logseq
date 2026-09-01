@@ -78,6 +78,50 @@
       (is (:ok parsed))
       (ldb/read-transit-str (:resultTransit parsed)))))
 
+(defn- open-sse-events
+  [host port]
+  (let [events (atom [])
+        buffer (atom "")]
+    (p/create
+     (fn [resolve reject]
+       (let [req (.request http #js {:hostname host
+                                     :port port
+                                     :path "/v1/events"
+                                     :method "GET"}
+                           (fn [^js res]
+                             (.on res "data"
+                                  (fn [chunk]
+                                    (swap! buffer str (.toString chunk "utf8"))
+                                    (loop []
+                                      (when-let [idx (string/index-of @buffer "\n\n")]
+                                        (let [event-str (subs @buffer 0 idx)]
+                                          (reset! buffer (subs @buffer (+ idx 2)))
+                                          (when-let [line (some (fn [l]
+                                                                  (when (string/starts-with? l "data: ")
+                                                                    (subs l 6)))
+                                                                (string/split-lines event-str))]
+                                            (let [parsed (js->clj (js/JSON.parse line) :keywordize-keys true)
+                                                  payload (when (string? (:payload parsed))
+                                                            (ldb/read-transit-str (:payload parsed)))]
+                                              (swap! events conj {:type (keyword (:type parsed))
+                                                                  :payload payload}))))
+                                        (recur)))))
+                             (resolve {:events events
+                                       :close! (fn []
+                                                 (try (.destroy req)
+                                                      (catch :default _)))})))]
+         (.on req "error" reject)
+         (.end req))))))
+
+(defn- wait-for-sse!
+  [events pred max-tries]
+  (p/loop [remaining max-tries]
+    (if (or (pred @events)
+            (zero? remaining))
+      nil
+      (p/let [_ (p/delay 50)]
+        (p/recur (dec remaining))))))
+
 (defn- invoke-raw
   [host port method args]
   (let [payload (js/JSON.stringify
@@ -1106,6 +1150,64 @@
 
                                 :else
                                 (done)))))))))
+
+(deftest db-worker-node-import-file-graph-posts-progress-over-sse
+  (async done
+         (let [daemon (atom nil)
+               sse (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-file-graph")
+               repo (str "logseq_db_import_file_" (subs (str (random-uuid)) 0 8))
+               config-file {:path "logseq/config.edn"
+                            :file/content "{}"}
+               files [config-file
+                      {:path "pages/Home.md"
+                       :file/content "- imported from desktop"}]]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       sse-client (open-sse-events host port)
+                       _ (reset! sse sse-client)
+                       result (invoke host port "thread-api/import-file-graph"
+                                      [repo config-file files {:user-options {}}])
+                       _ (wait-for-sse!
+                          (:events sse-client)
+                          (fn [events]
+                            (some (fn [{:keys [type payload]}]
+                                    (and (= type :thread-api/set-ui-state)
+                                         (= [:graph/importing-result] (first payload))))
+                                  events))
+                          80)
+                       ui-state (->> @(:events sse-client)
+                                     (keep (fn [{:keys [type payload]}]
+                                             (when (= type :thread-api/set-ui-state)
+                                               payload))))
+                       current-pages (->> ui-state
+                                          (filter #(= [:graph/importing-state :current-page] (first %)))
+                                          (map second)
+                                          set)
+                       page-result (invoke host port "thread-api/q"
+                                           [repo
+                                            ['[:find ?e
+                                               :in $ ?title
+                                               :where [?e :block/title ?title]]
+                                             "imported from desktop"]])]
+                 (is (nil? result)
+                     "Desktop import-file-graph must not reply with a transit payload.")
+                 (is (contains? current-pages "pages/Home.md")
+                     "Desktop import progress is delivered over SSE.")
+                 (is (seq page-result)
+                     "The new graph is created before import and contains imported pages."))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] import-file-graph error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (when-let [close! (:close! @sse)]
+                              (close!))
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
 
 (deftest db-worker-node-import-db-binary
   (async done

@@ -2847,7 +2847,9 @@
                  (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
                                :level :error
                                :ex-data {:path path :error error}})
-                 (throw error)))))
+                 (when-let [ignored-files (get-in options [:import-state :ignored-files])]
+                   (swap! ignored-files conj {:path path :reason :export-failed}))
+                 nil)))))
 
 (defn- remove-block-ref-from-title
   [title block-uuid]

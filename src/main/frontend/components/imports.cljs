@@ -348,39 +348,81 @@
 
 (declare ^:private open-import-indicator!)
 
+(defn- clear-file-graph-importing-ui!
+  []
+  (state/set-state! :graph/importing nil)
+  (state/set-state! :graph/importing-state nil)
+  (state/set-state! :graph/importing-result nil)
+  (shui/dialog-close! :import-indicator))
+
+(defn- start-imported-graph-search-index!
+  [repo]
+  (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+  nil)
+
+(defn- finish-file-graph-import!
+  [repo import-result]
+  (clear-file-graph-importing-ui!)
+  (doseq [notification (:notifications import-result)]
+    (show-notification notification))
+  (validate-imported-data import-result)
+  (notification/show! (t :import/file-finished) :success)
+  (state/pub-event! [:graph/sync-context])
+  (state/pub-event! [:graph/ready repo])
+  (route-handler/redirect-to-home!)
+  (ui-handler/re-render-root!)
+  (start-imported-graph-search-index! repo)
+  nil)
+
+(defn- abort-file-graph-import!
+  [error previous-repo]
+  (log/error :import-file-graph-failed {:error error})
+  (let [current-repo (state/get-current-repo)
+        created-new-graph? (and previous-repo
+                                (not= previous-repo current-repo))]
+    (clear-file-graph-importing-ui!)
+    (when created-new-graph?
+      (notification/show! (t :import/unexpected-error
+                             (or (.-message error) (str error)))
+                          :error)
+      (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
+    (when (and (not created-new-graph?)
+               (= :file-graph-import/graph-not-created (:code (ex-data error))))
+      (notification/show! (t :import/unexpected-error
+                             (or (.-message error) (str error)))
+                          :error)))
+  nil)
+
 (defn- import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
    config-file]
-  (state/set-state! :graph/importing :file-graph)
-  (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
-  (open-import-indicator!)
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          _ (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          import-result (or (state/get-state :graph/importing-result) {})
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (do
-              (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-              (state/set-state! :graph/importing nil)
-              (state/set-state! :graph/importing-state nil)
-              (state/set-state! :graph/importing-result nil)
-              (validate-imported-data import-result)
-              (state/pub-event! [:graph/ready (state/get-current-repo)]))
-          ;; Import txs do not broadcast renderer deltas (a large graph would freeze
-          ;; Comlink). Web reloads from sqlite. Desktop restores the current graph
-          ;; from the worker so this client sees page properties and refs.
-          _ (when-not util/web-platform?
-              (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
-              nil)
-          _ (when-not util/web-platform?
-              (repo-handler/restore-and-setup-repo! repo))]
-    (finished-cb)))
+  (let [previous-repo (state/get-current-repo)
+        expected-repo (str config/db-version-prefix graph-name)]
+    (state/set-state! :graph/importing :file-graph)
+    (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
+    (open-import-indicator!)
+    (-> (p/let [start-time (t/now)
+                created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                repo (or created-repo (state/get-current-repo))]
+          (when-not (= repo expected-repo)
+            (throw (ex-info "File-graph import did not create a new graph"
+                            {:code :file-graph-import/graph-not-created
+                             :expected expected-repo
+                             :repo repo})))
+          (p/let [serialized-files (<serialize-import-files *files)
+                  serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+                  options (build-file-graph-worker-options user-options config/config-default-content)
+                  _ (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+                  import-result (or (state/get-state :graph/importing-result) {})
+                  ;; Import txs do not broadcast renderer deltas. Restore after
+                  ;; import so this client sees pages and refs. Keep importing
+                  ;; set so :graph/restored does not start a second search build.
+                  _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
+            (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+            (finish-file-graph-import! repo import-result)))
+        (p/catch (fn [error]
+                   (abort-file-graph-import! error previous-repo))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"

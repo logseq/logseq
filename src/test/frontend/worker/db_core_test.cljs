@@ -2762,6 +2762,71 @@
              (is false (str error))))
           (p/finally done))))
 
+(deftest import-file-graph-reports-progress-via-node-post-message
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   posted (atom [])
+                   main-thread-calls (atom [])
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
+                   files [config-file
+                          {:path "pages/Home.md"
+                           :file/content "- imported on node"}]]
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (platform/set-platform!
+                (build-test-platform
+                 {:runtime :node
+                  :post-message! (fn [type payload]
+                                   (swap! posted conj [type payload]))}))
+               (reset! worker-state/*main-thread
+                       (fn [qkw & _args]
+                         (swap! main-thread-calls conj qkw)
+                         (p/rejected (ex-info "main-thread is not available in db-worker-node"
+                                              {:method qkw}))))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 (db-listener/listen-db-changes! test-repo conn
+                                                 :handler-keys [:sync-db-to-main-thread])
+                 (->
+                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                          ui-state (keep (fn [[type payload]]
+                                           (when (= type :thread-api/set-ui-state)
+                                             payload))
+                                         @posted)
+                          current-pages (->> ui-state
+                                             (filter #(= [:graph/importing-state :current-page] (first %)))
+                                             (map second)
+                                             set)
+                          last-label (->> ui-state
+                                          (filter #(= [:graph/importing-state :label] (first %)))
+                                          last
+                                          second)]
+                    (is (nil? result)
+                        "Desktop import must not return a worker reply payload.")
+                    (is (empty? @main-thread-calls)
+                        "Desktop db-worker-node must not use the main-thread stub for import progress.")
+                    (is (contains? current-pages "pages/Home.md")
+                        "Desktop import progress is posted over the node event channel.")
+                    (is (= :import/validating-graph last-label)
+                        "Desktop import progress reaches graph validation.")
+                    (is (some #(= [:graph/importing-result] (first %)) ui-state)
+                        "Desktop import summary is posted through UI state."))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
    (fn []
