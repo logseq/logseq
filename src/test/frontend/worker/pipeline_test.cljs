@@ -1152,3 +1152,84 @@
               "No :logseq.property.history entries are added for an imported transaction")))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest empty-tag-template-on-asset-allows-asset-create-test
+  (testing "inserting an asset succeeds when a childless Template is applied to Asset"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Home"}}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "empty asset template"
+                             :build/tags [:logseq.class/Template]}]}]})
+          home (ldb/get-page @conn "Home")
+          template-root (db-test/find-block-by-content @conn "empty asset template")
+          asset-class (d/entity @conn :logseq.class/Asset)
+          asset-uuid (random-uuid)]
+      (ldb/transact! conn [[:db/add (:db/id template-root)
+                            :logseq.property/template-applied-to
+                            (:db/id asset-class)]])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (outliner-op/apply-ops! conn
+                                [[:insert-blocks [[{:block/uuid asset-uuid
+                                                    :block/title "ableton"
+                                                    :block/tags #{:logseq.class/Asset}
+                                                    :logseq.property.asset/type "png"
+                                                    :logseq.property.asset/size 10
+                                                    :logseq.property.asset/checksum "abc123"}]
+                                                  (:block/uuid home)
+                                                  {:outliner-op :insert-blocks
+                                                   :keep-uuid? true
+                                                   :bottom? true}]]]
+                                {})
+        (let [asset (d/entity @conn [:block/uuid asset-uuid])]
+          (is (some? asset)
+              "The asset block is stored")
+          (is (= "ableton" (:block/title asset)))
+          (is (= "png" (:logseq.property.asset/type asset)))
+          (is (contains? (set (map :db/ident (:block/tags asset))) :logseq.class/Asset))
+          (is (empty? (filter :logseq.property/used-template (:block/_parent asset)))
+              "A childless template does not invent a used-template child")
+          (is (not-any? #(nil? (:block/title %)) (:block/_parent asset))
+              "No nil-title child is created under the asset"))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity)))))
+
+  (testing "a template with children still inserts them under the new asset"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Home"}}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "asset caption template"
+                             :build/tags [:logseq.class/Template]
+                             :build/children [{:block/title "caption"}]}]}]})
+          home (ldb/get-page @conn "Home")
+          template-root (db-test/find-block-by-content @conn "asset caption template")
+          asset-class (d/entity @conn :logseq.class/Asset)
+          asset-uuid (random-uuid)]
+      (ldb/transact! conn [[:db/add (:db/id template-root)
+                            :logseq.property/template-applied-to
+                            (:db/id asset-class)]])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (outliner-op/apply-ops! conn
+                                [[:insert-blocks [[{:block/uuid asset-uuid
+                                                    :block/title "ableton"
+                                                    :block/tags #{:logseq.class/Asset}
+                                                    :logseq.property.asset/type "png"
+                                                    :logseq.property.asset/size 10
+                                                    :logseq.property.asset/checksum "abc123"}]
+                                                  (:block/uuid home)
+                                                  {:outliner-op :insert-blocks
+                                                   :keep-uuid? true
+                                                   :bottom? true}]]]
+                                {})
+        (let [asset (d/entity @conn [:block/uuid asset-uuid])
+              caption (db-test/find-block-by-content @conn "caption")]
+          (is (some? asset))
+          (is (some? caption))
+          (is (= (:db/id asset) (:db/id (:block/parent caption))))
+          (is (= (:db/id template-root)
+                 (:db/id (:logseq.property/used-template caption)))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
