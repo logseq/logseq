@@ -232,9 +232,8 @@
    :level level})
 
 (defn- compact-import-result
-  "Counts-only summary for UI state. Must stay small enough for set-ui-state
-  transit. File contents, asset bytes, property values, and import indexes
-  must not leave the worker."
+  "Counts-only summary. File contents, asset bytes, property values, and
+  import indexes must not leave the worker."
   [result notifications validation]
   (let [import-state (:import-state result)
         files (:files result)
@@ -256,6 +255,25 @@
      :ignored-properties-count (count ignored-props)
      :validation-error-count (count (:errors validation))
      :notifications (mapv compact-error-notification error-notifications)}))
+
+(defn- import-issue-count
+  [{:keys [ignored-files-count ignored-assets-count ignored-properties-count validation-error-count]}]
+  (+ ignored-files-count ignored-assets-count ignored-properties-count validation-error-count))
+
+(defn- terminal-import-result
+  "Small RPC contract for the renderer. Keep this transit-safe: no files,
+  assets, ignored property values, or import indexes."
+  [run-id compact]
+  (let [issue-count (import-issue-count compact)
+        validation-error-count (:validation-error-count compact)]
+    (assoc compact
+           :run-id run-id
+           :status (if (pos? issue-count) :completed-with-errors :completed)
+           :persisted? true
+           :validation {:status (if (pos? validation-error-count) :failed :passed)
+                        :error-count validation-error-count}
+           :issue-count issue-count)))
+
 
 (defn- file-content
   [file]
@@ -287,14 +305,13 @@
       (p/resolved ""))))
 
 (defn- <import-file-stat
-  [file]
-  (if-let [fs-path (:fs-path file)]
-    (if-let [^js fsp (node-fs-promises)]
-      (-> (.stat fsp fs-path)
-          (p/then bean/->clj)
-          (p/catch (constantly nil)))
-      (p/resolved nil))
+  [fs-path]
+  (if-let [^js fsp (node-fs-promises)]
+    (-> (.stat fsp fs-path)
+        (p/then bean/->clj)
+        (p/catch (constantly nil)))
     (p/resolved nil)))
+
 
 (defn- import-file-payload
   [payload]
@@ -362,7 +379,8 @@
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [notifications (atom [])
+    (let [run-id (str (random-uuid))
+          notifications (atom [])
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
                              :set-ui-state set-import-ui-state!
@@ -374,11 +392,9 @@
               _ (set-import-ui-state! [:graph/importing-state :step] :validating)
               _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
               _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
-              validation (worker-db-validate/validate-db conn :fix false)
-              _ (set-import-ui-state! [:graph/importing-result]
-                                      (compact-import-result result @notifications validation))]
-        ;; Do not return a transit payload. The renderer reads the summary from UI state.
-        nil))))
+              validation (worker-db-validate/validate-db conn :fix false)]
+        (terminal-import-result run-id (compact-import-result result @notifications validation))))))
+
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"

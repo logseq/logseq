@@ -86,9 +86,19 @@
                                state/<invoke-db-worker
                                (fn [api & args]
                                  (swap! calls conj (into [api] args))
-                                 (when (= api :thread-api/import-file-graph)
-                                   (swap! ui assoc :graph/importing-result {:org-file-count 0}))
-                                 (p/resolved nil))
+                                 (if (= api :thread-api/import-file-graph)
+                                   (p/resolved {:run-id "import-1"
+                                                :status :completed
+                                                :persisted? true
+                                                :validation {:status :passed :error-count 0}
+                                                :issue-count 0
+                                                :org-file-count 0
+                                                :ignored-files-count 0
+                                                :ignored-assets-count 0
+                                                :ignored-properties-count 0
+                                                :validation-error-count 0
+                                                :notifications []})
+                                   (p/resolved nil)))
                                repo-handler/restore-and-setup-repo!
                                (fn [repo opts]
                                  (swap! calls conj [:restore repo opts :importing (:graph/importing @ui)])

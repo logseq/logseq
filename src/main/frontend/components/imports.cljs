@@ -386,8 +386,7 @@
 (defn- import-files-finished?
   []
   (let [{:keys [total current-idx step]} (state/get-state :graph/importing-state)]
-    (or (some? (state/get-state :graph/importing-result))
-        (contains? #{:finishing :validating} step)
+    (or (contains? #{:finishing :validating} step)
         (and (number? total) (pos? total)
              (number? current-idx)
              (>= current-idx total)))))
@@ -439,8 +438,7 @@
           (p/let [serialized-files (<serialize-import-files *files)
                   serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
                   options (build-file-graph-worker-options user-options config/config-default-content)
-                  _ (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-                  import-result (or (state/get-state :graph/importing-result) {})
+                  import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
                   ;; Import txs do not broadcast renderer deltas. Restore after
                   ;; import so this client sees pages and refs. Keep importing
                   ;; set so :graph/restored does not start a second search build.
