@@ -186,8 +186,7 @@
       (when-not (or (:db-sync/suppress-transact-failed-log? tx-meta)
                     (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
                          (= :entity-id/missing (:error (ex-data e)))))
-        (log/error :transact-failed (transact-failed-log-data tx-meta tx-data e))
-        (js/console.error e))
+        (log/error :transact-failed (transact-failed-log-data tx-meta tx-data e)))
       (throw e))))
 
 (defn transact!
