@@ -109,8 +109,9 @@
                              journal-page
                              (map (fn [t] (assoc t :journal journal-page))))))
         raw-template-blocks (fn [template]
-                              (let [template-children (rest (ldb/get-block-and-children db (:block/uuid template)
-                                                                                        {:include-property-block? true}))]
+                              ;; Skip childless templates; (assoc nil ...) would create a nil-title block.
+                              (when-let [template-children (seq (rest (ldb/get-block-and-children db (:block/uuid template)
+                                                                                                  {:include-property-block? true})))]
                                 (->> (cons (assoc (first template-children)
                                                   :logseq.property/used-template (:db/id template))
                                            (rest template-children))
