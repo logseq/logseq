@@ -374,24 +374,50 @@
   (start-imported-graph-search-index! repo)
   nil)
 
+(defn- transport-error?
+  [error]
+  (let [message (or (.-message error) (str error))
+        code (:code (ex-data error))]
+    (or (nil? (ex-data error))
+        (contains? #{:fetch-failed :network-error :db-worker-unavailable :server-unavailable} code)
+        (and (string? message)
+             (string/includes? message "Failed to fetch")))))
+
+(defn- import-files-finished?
+  []
+  (let [{:keys [total current-idx step]} (state/get-state :graph/importing-state)]
+    (or (some? (state/get-state :graph/importing-result))
+        (contains? #{:finishing :validating} step)
+        (and (number? total) (pos? total)
+             (number? current-idx)
+             (>= current-idx total)))))
+
 (defn- abort-file-graph-import!
   [error previous-repo]
   (log/error :import-file-graph-failed {:error error})
   (let [current-repo (state/get-current-repo)
         created-new-graph? (and previous-repo
-                                (not= previous-repo current-repo))]
-    (clear-file-graph-importing-ui!)
-    (when created-new-graph?
-      (notification/show! (t :import/unexpected-error
-                             (or (.-message error) (str error)))
-                          :error)
-      (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
-    (when (and (not created-new-graph?)
-               (= :file-graph-import/graph-not-created (:code (ex-data error))))
-      (notification/show! (t :import/unexpected-error
-                             (or (.-message error) (str error)))
-                          :error)))
-  nil)
+                                (not= previous-repo current-repo))
+        keep-imported-graph? (and created-new-graph?
+                                  (transport-error? error)
+                                  (import-files-finished?))]
+    (if keep-imported-graph?
+      (let [import-result (or (state/get-state :graph/importing-result) {})]
+        (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
+          (finish-file-graph-import! current-repo import-result)))
+      (do
+        (clear-file-graph-importing-ui!)
+        (when created-new-graph?
+          (notification/show! (t :import/unexpected-error
+                                 (or (.-message error) (str error)))
+                              :error)
+          (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
+        (when (and (not created-new-graph?)
+                   (= :file-graph-import/graph-not-created (:code (ex-data error))))
+          (notification/show! (t :import/unexpected-error
+                                 (or (.-message error) (str error)))
+                              :error))
+        nil))))
 
 (defn- import-file-graph
   [*files

@@ -2916,6 +2916,33 @@
                      [:db/retract ref-id :block/uuid ref-uuid])))]
      (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx))))
 
+(def ^:private finalize-imported-graph-batch-size 500)
+
+(defn- finalize-imported-graph-batch-tx
+  [db entity-ids tx-id]
+  (let [tx-id-tx (mapv (fn [entity-id]
+                         {:db/id entity-id
+                          :block/tx-id tx-id})
+                       entity-ids)
+        refs-tx (into []
+                      (mapcat (fn [id]
+                                (let [block (d/entity db id)]
+                                  (when (and block
+                                             (not (:logseq.property.reaction/target block)))
+                                    (let [refs (outliner-pipeline/db-rebuild-block-refs db block)]
+                                      (when (seq refs)
+                                        [[:db/retract id :block/refs]
+                                         {:db/id id
+                                          :block/refs refs}]))))))
+                      entity-ids)]
+    (into tx-id-tx refs-tx)))
+
+(defn- set-finishing-import-ui!
+  [set-ui-state]
+  (set-ui-state [:graph/importing-state :step] :finishing)
+  (set-ui-state [:graph/importing-state :label] :import/finishing)
+  (set-ui-state [:graph/importing-state :current-page] nil))
+
 (defn finalize-imported-graph!
   "Stamp :block/tx-id and rebuild :block/refs once after file import.
 
@@ -2923,35 +2950,32 @@
   transact-pipeline skip refs. This pass writes both in one transact.
   File-graph import does not notify renderer clients; ::imported-data?
   skips worker render-delta broadcast. :transact-new-graph-refs? skips
-  the worker pipeline so refs are not rebuilt a second time."
+  the worker pipeline so refs are not rebuilt a second time.
+
+  Work is streamed in 500-entity batches with `p/delay 0` so the worker
+  event loop can flush Finishing graph import UI and keep HTTP/SSE alive."
   [conn]
   (let [db @conn
-        entity-ids (d/q '[:find [?e ...]
-                          :where
-                          [?e :block/uuid]
-                          [?e :block/title]
-                          [(missing? $ ?e :block/tx-id)]]
-                        db)]
-    (when (seq entity-ids)
+        entity-ids (vec (d/q '[:find [?e ...]
+                               :where
+                               [?e :block/uuid]
+                               [?e :block/title]
+                               [(missing? $ ?e :block/tx-id)]]
+                             db))]
+    (if (empty? entity-ids)
+      (p/resolved nil)
       (let [tx-id (inc (:max-tx db))
-            tx-id-tx (mapv (fn [entity-id]
-                             {:db/id entity-id
-                              :block/tx-id tx-id})
-                           entity-ids)
-            refs-tx (into []
-                          (mapcat (fn [id]
-                                    (let [block (d/entity db id)]
-                                      (when (and block
-                                                 (not (:logseq.property.reaction/target block)))
-                                        (let [refs (outliner-pipeline/db-rebuild-block-refs db block)]
-                                          (when (seq refs)
-                                            [[:db/retract id :block/refs]
-                                             {:db/id id
-                                              :block/refs refs}]))))))
-                          entity-ids)]
-        (ldb/transact! conn
-                       (into tx-id-tx refs-tx)
-                       {::imported-data? true :transact-new-graph-refs? true})))))
+            total (count entity-ids)]
+        (p/loop [offset 0]
+          (if (>= offset total)
+            nil
+            (let [end (min (+ offset finalize-imported-graph-batch-size) total)
+                  batch (subvec entity-ids offset end)]
+              (ldb/transact! conn
+                             (finalize-imported-graph-batch-tx @conn batch tx-id)
+                             {::imported-data? true :transact-new-graph-refs? true})
+              (p/do! (p/delay 0)
+                     (p/recur end)))))))))
 
 (defn- cleanup-missing-block-refs!
   ([conn] (cleanup-missing-block-refs! conn nil))
@@ -3048,7 +3072,8 @@
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/then (fn [_]
-                  (p/let [_ (import-progress! options {:phase :normalize-journal-uuids})
+                  (p/let [_ (set-finishing-import-ui! set-ui-state)
+                          _ (import-progress! options {:phase :normalize-journal-uuids})
                           normalize-tx-report (normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
                           _ (import-progress! options {:phase :cleanup-missing-block-refs})
@@ -3057,9 +3082,10 @@
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
-                                (finalize-imported-graph! conn)
-                                (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
-                                               {:entities :post-doc-files})))]
+                                (p/do!
+                                 (finalize-imported-graph! conn)
+                                 (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
+                                                {:entities :post-doc-files}))))]
                     cleanup-tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
@@ -3347,9 +3373,7 @@
                                        {:assets (get-in doc-options [:import-state :assets])}))
      (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
      (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
-     (set-ui-state [:graph/importing-state :step] :finishing)
-     (set-ui-state [:graph/importing-state :label] :import/finishing)
-     (set-ui-state [:graph/importing-state :current-page] nil)
+     (set-finishing-import-ui! set-ui-state)
      (import-progress! doc-options {:step :favorites})
      (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
      (import-progress! doc-options {:step :class-properties})
@@ -3357,8 +3381,8 @@
      (import-progress! doc-options {:step :move-to-library})
      (move-top-parent-pages-to-library conn repo-or-conn)
      (import-progress! doc-options {:phase :finalize-imported-graph})
-     (let [finalize-start (when log-fn (import-profile/now-ms))]
-       (finalize-imported-graph! conn)
+     (p/let [finalize-start (when log-fn (import-profile/now-ms))
+             _ (finalize-imported-graph! conn)]
        (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
      {:import-state (-> (:import-state doc-options)
                         (dissoc :assets))
