@@ -3,6 +3,7 @@
             [frontend.db.persist :as db-persist]
             [frontend.db.subs :as db-subs]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
@@ -62,6 +63,24 @@
             (p/catch
              (fn [error]
                (is false (str error))))
+            (p/finally done))))))
+
+(deftest create-db-file-graph-import-rethrows-persist-failure-test
+  (async done
+    (let [shown (atom [])]
+      (p/with-redefs [persist-db/<new
+                      (fn [_repo _opts]
+                        (p/rejected (ex-info "persist failed" {:code :persist-failed})))
+                      notification/show!
+                      (fn [content status & _]
+                        (swap! shown conj [content status]))]
+        (-> (#'repo-handler/create-db "logseq_db_import_fail" {:file-graph-import? true})
+            (p/then (fn [_]
+                      (is false "File-graph import must not continue after graph creation fails.")))
+            (p/catch (fn [error]
+                       (is (= :persist-failed (:code (ex-data error))))
+                       (is (seq @shown)
+                           "Graph creation failure is shown to the user.")))
             (p/finally done))))))
 
 (deftest removing-current-repo-pauses-renderer-subscriptions-test
