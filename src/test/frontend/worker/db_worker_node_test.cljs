@@ -14,6 +14,8 @@
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.path :as path]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.db-worker.log :as db-worker-log]
@@ -1217,6 +1219,66 @@
                      "The new graph is created before import and contains imported pages."))
                (p/catch (fn [e]
                           (println "[db-worker-node-test] import-file-graph error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (when-let [close! (:close! @sse)]
+                              (close!))
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
+
+(defn- electron-lazy-import-files
+  [graph-dir]
+  (mapv (fn [abs-path]
+          {:path (path/trim-dir-prefix graph-dir abs-path)
+           :fs-path abs-path})
+        (common-graph/get-files graph-dir)))
+
+(defn- write-electron-lazy-file-graph
+  []
+  (let [graph-dir (node-helper/create-tmp-dir "electron-lazy-file-graph")
+        logseq-dir (node-path/join graph-dir "logseq")
+        pages-dir (node-path/join graph-dir "pages")]
+    (fs/mkdirSync logseq-dir #js {:recursive true})
+    (fs/mkdirSync pages-dir #js {:recursive true})
+    (fs/writeFileSync (node-path/join logseq-dir "config.edn") "{}")
+    (fs/writeFileSync (node-path/join pages-dir "Home.md") "- imported via fs-path\n")
+    graph-dir))
+
+(deftest db-worker-node-import-file-graph-electron-lazy-fs-path
+  (async done
+         (let [daemon (atom nil)
+               sse (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-electron-lazy")
+               graph-dir (write-electron-lazy-file-graph)
+               repo (str "logseq_db_import_lazy_" (subs (str (random-uuid)) 0 8))
+               files (electron-lazy-import-files graph-dir)
+               config-file (first (filter #(= "logseq/config.edn" (:path %)) files))]
+           (is (some? config-file))
+           (is (every? #(and (string? (:fs-path %)) (nil? (:file/content %))) files)
+               "Electron lazy import sends filesystem paths without file contents.")
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       sse-client (open-sse-events host port)
+                       _ (reset! sse sse-client)
+                       result (invoke host port "thread-api/import-file-graph"
+                                      [repo config-file files {:user-options {}}])
+                       page-result (invoke host port "thread-api/q"
+                                           [repo
+                                            ['[:find ?e
+                                               :in $ ?title
+                                               :where [?e :block/title ?title]]
+                                             "imported via fs-path"]])]
+                 (is (map? result))
+                 (is (true? (:persisted? result)))
+                 (is (contains? #{:completed :completed-with-errors} (:status result)))
+                 (is (seq page-result)
+                     "Worker reads markdown from fs-path during Electron lazy import."))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] electron lazy import error:" e)
                           (is false (str e))))
                (p/finally (fn []
                             (when-let [close! (:close! @sse)]
