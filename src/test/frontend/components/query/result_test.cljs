@@ -95,4 +95,4 @@
           {:dsl-query? true
            :current-block-uuid (random-uuid)}
           {:query "(task TODO)"}))
-        "Query syntax errors stay in the query error boundary instead of emptying the page."))))
+        "Query syntax errors stay in the query error boundary instead of emptying the page.")))
