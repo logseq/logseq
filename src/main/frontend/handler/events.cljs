@@ -376,6 +376,14 @@
     (p/resolved lang)
     (state/<invoke-db-worker :thread-api/get-key-value repo :logseq.kv/latest-code-lang)))
 
+(defn- refocus-upsert-type-block!
+  [source-block converted-block update-current-block?]
+  (when (or (not update-current-block?)
+            (and (nil? (state/get-state :editor/pending-new-block))
+                 (= (:block/uuid source-block)
+                    (:block/uuid (state/get-edit-block)))))
+    (editor-handler/edit-block! converted-block :max)))
+
 (defevent! :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
   (p/let [_ (when-not update-current-block?
               (editor-handler/save-current-block!))
@@ -411,7 +419,7 @@
                                 (p/let [_ (apply-requested-title! db-block)
                                         _ (turn-type! db-block)]
                                   (<get-upsert-type-block repo (:block/uuid db-block))))]
-        (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
+        (js/setTimeout #(refocus-upsert-type-block! db-block converted-block update-current-block?) 100)))))
 
 (defn- editing-users-by-block
   [online-users current-user-uuid]
