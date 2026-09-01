@@ -76,6 +76,14 @@
         (p/rejected result)
         result))))
 
+(defn <invoke-db-worker-when-ready
+  "Skip the thread-api request when db-worker is not initialized.
+  Returns nil in that case. UI effects that need the result should
+  depend on `db-worker-ready?` so they re-run after the worker starts."
+  [qkw & args]
+  (when @db-worker-ready?
+    (apply <invoke-db-worker qkw args)))
+
 (def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
 
 (def ^:private legacy-export-block-text-indent-styles
