@@ -1492,6 +1492,39 @@
                   (unsubscribe-missing)
                   (unsubscribe-present))))))))
 
+(deftest resource-error-wire-does-not-fail-sibling-resources-test
+  (async done
+         (let [ok-key [:journals]
+               bad-key [:query {:kind :dsl :query "broken"}]]
+           (finish-async!
+            done
+            (p/with-redefs [state/<invoke-db-worker
+                            (fn [_api _graph-id _request]
+                              (p/resolved
+                               {:basis-rev 1
+                                :slots
+                                {[:resource ok-key]
+                                 {:watch {:keys #{} :all? false}
+                                  :value []}
+                                 [:resource bad-key]
+                                 {:watch {:keys #{} :all? false}
+                                  :value nil
+                                  :error {:message "Query today input requires :today-day"}}}
+                                :groups
+                                {[:resource ok-key] #{[:resource ok-key]}
+                                 [:resource bad-key] #{[:resource bad-key]}}}))]
+              (let [unsubscribe-ok (subs/subscribe-resource! ok-key (fn []))
+                    unsubscribe-bad (subs/subscribe-resource! bad-key (fn []))]
+                (p/let [_ (p/delay 0)
+                        ok-snapshot (subs/resource-snapshot ok-key)
+                        bad-snapshot (subs/resource-snapshot bad-key)]
+                  (is (= {:status :ready :value []} ok-snapshot))
+                  (is (= :error (:status bad-snapshot)))
+                  (is (= "Query today input requires :today-day"
+                         (ex-message (:error bad-snapshot))))
+                  (unsubscribe-bad)
+                  (unsubscribe-ok))))))))
+
 (deftest reset-rejects-queued-resource-load-before-worker-dispatch-test
   (async done
          (let [resource-key [:page-identity "queued"]
