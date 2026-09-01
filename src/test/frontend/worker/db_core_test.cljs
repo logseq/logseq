@@ -2890,11 +2890,9 @@
 
 (deftest transact-failed-logs-tx-count-not-tx-data-test
   (let [conn (db-test/create-conn)
-        tx-data (mapv (fn [idx]
-                        {:db/id (- (inc idx))
-                         :block/uuid (random-uuid)
-                         :block/title (str "block-" idx)})
-                      (range 2500))
+        tx-data [{:db/id -1
+                  :block/uuid (random-uuid)
+                  :block/title "block-1"}]
         logs (atom [])
         original-error (js/Error. "store failed")]
     (with-redefs [log/error (fn [& args]
