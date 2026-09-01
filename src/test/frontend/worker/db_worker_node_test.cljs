@@ -81,7 +81,8 @@
 (defn- open-sse-events
   [host port]
   (let [events (atom [])
-        buffer (atom "")]
+        buffer (atom "")
+        *req (atom nil)]
     (p/create
      (fn [resolve reject]
        (let [req (.request http #js {:hostname host
@@ -108,8 +109,10 @@
                                         (recur)))))
                              (resolve {:events events
                                        :close! (fn []
-                                                 (try (.destroy req)
-                                                      (catch :default _)))})))]
+                                                 (when-let [^js r @*req]
+                                                   (try (.destroy r)
+                                                        (catch :default _))))})))]
+         (reset! *req req)
          (.on req "error" reject)
          (.end req))))))
 
