@@ -1,7 +1,6 @@
 (ns frontend.persist-db.remote
   "Remote `PersistentDB` implementation for Electron renderer via db-worker-node HTTP and SSE."
   (:require [clojure.string :as string]
-            [frontend.common.thread-api :as thread-api]
             [frontend.persist-db.protocol :as protocol]
             [logseq.db :as ldb]
             [promesa.core :as p]
@@ -53,17 +52,9 @@
     :else :invoke-failed))
 
 (defn- decode-invoke-result
-  [method result-transit]
-  (let [qkw (keyword method)]
-    (cond
-      (contains? thread-api/skip-result-transit-apis qkw)
-      nil
-
-      (string? result-transit)
-      (ldb/read-transit-str result-transit)
-
-      :else
-      nil)))
+  [result-transit]
+  (when (string? result-transit)
+    (ldb/read-transit-str result-transit)))
 
 (defn- decode-event
   [{:keys [type payload]}]
@@ -138,7 +129,7 @@
                              (cond-> {:status status
                                       :code (normalize-code (:code error))}
                                error (assoc :error error)))))
-           (let [result (decode-invoke-result method (:resultTransit parsed))]
+           (let [result (decode-invoke-result (:resultTransit parsed))]
              (when on-invoke-success
                (on-invoke-success method args result))
              result))

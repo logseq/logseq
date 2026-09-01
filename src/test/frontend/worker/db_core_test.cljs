@@ -2569,13 +2569,32 @@
        last
        second))
 
-(deftest import-file-graph-remote-function-skips-result-transit
+(defn- assert-terminal-import-result
+  [result]
+  (is (string? (:run-id result)))
+  (is (contains? #{:completed :completed-with-errors} (:status result)))
+  (is (true? (:persisted? result)))
+  (is (map? (:validation result)))
+  (is (nat-int? (:issue-count result)))
+  (is (nat-int? (:org-file-count result)))
+  (is (not (contains? result :files)))
+  (is (not (contains? result :import-state)))
+  (is (not (contains? result :staged-assets)))
+  (is (not (contains? result :ignored-properties))))
+
+(deftest import-file-graph-remote-function-encodes-terminal-result
   (async done
          (let [orig (get @thread-api/*thread-apis :thread-api/import-file-graph)
                write-orig ldb/write-transit-str
-               written (atom [])]
+               written (atom [])
+               terminal {:run-id "import-1"
+                         :status :completed
+                         :persisted? true
+                         :validation {:status :passed :error-count 0}
+                         :issue-count 0
+                         :org-file-count 1}]
            (vswap! thread-api/*thread-apis assoc :thread-api/import-file-graph
-                   (fn [& _] {:org-file-count 1 :ignored-properties ["huge"]}))
+                   (fn [& _] terminal))
            (-> (p/with-redefs [ldb/write-transit-str
                                (fn [v]
                                  (swap! written conj v)
@@ -2584,10 +2603,11 @@
                   "thread-api/import-file-graph"
                   (write-orig ["repo" {} [] {}])))
                (p/then (fn [reply]
-                         (is (nil? reply)
-                             "Import worker reply must not be a transit string.")
-                         (is (empty? @written)
-                             "Import must not transit-encode the handler result.")))
+                         (is (string? reply)
+                             "Import worker reply is a transit string.")
+                         (is (= terminal (ldb/read-transit-str reply)))
+                         (is (= [terminal] @written)
+                             "Import transit-encodes the small terminal result.")))
                (p/catch (fn [error]
                           (is false (str error))))
                (p/finally (fn []
@@ -2629,24 +2649,19 @@
                                                  :handler-keys [:sync-db-to-main-thread])
                  (->
                   (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
-                          import-result (last-ui-state-value ui-state [:graph/importing-result])
                           page (some->> (d/q '[:find [?e ...]
                                                 :where [?e :block/name "home"]]
                                               @conn)
                                               first
                                          (d/entity @conn))
                           block (db-test/find-block-by-content @conn "imported block")]
-                    (is (nil? result)
-                        "Import must not return a worker reply payload.")
-                    (is (map? import-result)
-                        "Import summary is published through UI state.")
-                    (is (not (contains? import-result :files)))
-                    (is (not (contains? import-result :import-state)))
-                    (is (not (contains? import-result :staged-assets)))
-                    (is (not (contains? import-result :validation)))
-                    (is (not (contains? import-result :ignored-properties)))
-                    (is (= 0 (:org-file-count import-result)))
-                    (is (= 0 (:ignored-properties-count import-result)))
+                    (assert-terminal-import-result result)
+                    (is (= :completed (:status result)))
+                    (is (= 0 (:org-file-count result)))
+                    (is (= 0 (:ignored-properties-count result)))
+                    (is (= {:status :passed :error-count 0} (:validation result)))
+                    (is (nil? (last-ui-state-value ui-state [:graph/importing-result]))
+                        "Terminal import summary is returned by RPC, not UI state.")
                     (is (= "Home" (:block/title page)))
                     (is (= "imported block" (:block/title block)))
                     (doseq [entity [page block]]
@@ -2655,6 +2670,51 @@
                              (:block/uuid (block-handler/canonical-block @conn entity)))))
                     (is (empty? @renderer-payloads)
                         "File-graph import must not broadcast renderer deltas to clients."))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
+(deftest import-file-graph-reads-file-stat-from-path-string
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   stat-paths (atom [])
+                   created-at (js/Date. "2020-01-02T03:04:05.000Z")
+                   modified-at (js/Date. "2021-06-07T08:09:10.000Z")
+                   fake-fsp #js {:stat (fn [path]
+                                         (swap! stat-paths conj path)
+                                         (p/resolved #js {:birthtime created-at
+                                                          :mtime modified-at}))}
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
+                   files [config-file
+                          {:path "pages/Home.md"
+                           :fs-path "/tmp/graph/pages/Home.md"
+                           :file/content "- timestamped"}]]
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-core/node-fs-promises (fn [] fake-fsp)
+                  db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 (->
+                  (p/let [_result (import-file-graph! test-repo config-file files {:user-options {}})
+                          page (ldb/get-page @conn "home")
+                          block (db-test/find-block-by-content @conn "timestamped")]
+                    (is (= ["/tmp/graph/pages/Home.md"] @stat-paths)
+                        "Exporter passes a filesystem path string to <get-file-stat.")
+                    (is (= (.getTime created-at) (:block/created-at page) (:block/created-at block)))
+                    (is (= (.getTime modified-at) (:block/updated-at page) (:block/updated-at block))))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch
@@ -2730,10 +2790,9 @@
                         "Linked-references API returns the referring block.")
                     (is (empty? @renderer-payloads)
                         "File-graph import must not broadcast renderer deltas to clients.")
-                    (is (nil? result)
-                        "Import must not return a worker reply payload.")
-                    (is (map? (last-ui-state-value ui-state [:graph/importing-result]))
-                        "Import summary is published through UI state.")
+                    (assert-terminal-import-result result)
+                    (is (nil? (last-ui-state-value ui-state [:graph/importing-result]))
+                        "Terminal import summary is returned by RPC, not UI state.")
                     (is (contains? current-pages "logseq/config.edn")
                         "Import progress shows the config file being read.")
                     (is (contains? current-pages "pages/source.md")
@@ -2810,16 +2869,17 @@
                                           (filter #(= [:graph/importing-state :label] (first %)))
                                           last
                                           second)]
-                    (is (nil? result)
-                        "Desktop import must not return a worker reply payload.")
+                    (is (map? result)
+                        "Desktop import returns the terminal worker reply.")
+                    (assert-terminal-import-result result)
                     (is (empty? @main-thread-calls)
                         "Desktop db-worker-node must not use the main-thread stub for import progress.")
                     (is (contains? current-pages "pages/Home.md")
                         "Desktop import progress is posted over the node event channel.")
                     (is (= :import/validating-graph last-label)
                         "Desktop import progress reaches graph validation.")
-                    (is (some #(= [:graph/importing-result] (first %)) ui-state)
-                        "Desktop import summary is posted through UI state."))
+                    (is (not-any? #(= [:graph/importing-result] (first %)) ui-state)
+                        "Desktop import summary is not posted through UI state."))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch

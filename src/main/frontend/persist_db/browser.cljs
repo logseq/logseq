@@ -217,14 +217,6 @@
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
 
-                              (contains? thread-api/skip-result-transit-apis qkw)
-                              (-> (.remoteInvoke ^js wrapped-worker*
-                                                 (str (namespace qkw) "/" (name qkw))
-                                                 (ldb/write-transit-str args))
-                                  (p/catch (fn [error]
-                                             (js/console.error "DB worker API failed:" (str qkw) error)
-                                             (throw error))))
-
                               :else
                               (-> (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                                  (str (namespace qkw) "/" (name qkw))
