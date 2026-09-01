@@ -72,6 +72,24 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest invoke-ok-false-on-http-200-is-an-error
+  (async done
+    (let [client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :fetch-fn (fn [_req]
+                               (p/resolved {:status 200
+                                            :body (str "  "
+                                                       (js/JSON.stringify
+                                                        #js {:ok false
+                                                             :error #js {:code "exception"
+                                                                         :message "import failed"}}))}))})]
+      (-> (remote/invoke! client "thread-api/import-file-graph" ["repo" {} [] {}])
+          (p/then (fn [_]
+                    (is false "expected invoke! to reject when ok is false")))
+          (p/catch (fn [e]
+                     (is (= :exception (:code (ex-data e))))))
+          (p/finally (fn [] (done)))))))
+
 (deftest invoke-error-propagates-status-and-error-code
   (async done
     (let [client (remote/create-client
@@ -187,6 +205,37 @@
                   _ (when (fn? scheduled-fn)
                       (scheduled-fn))]
             (is (= 1 @open-count)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest connect-events-does-not-reconnect-when-session-is-no-longer-active
+  (async done
+    (let [open-count (atom 0)
+          scheduled (atom nil)
+          latest-handlers (atom nil)
+          live? (atom true)
+          wrapped-worker (fn [& _] nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:54668"
+                   :still-active? (fn [] @live?)
+                   :open-sse-fn (fn [{:keys [on-error]}]
+                                  (swap! open-count inc)
+                                  (reset! latest-handlers {:on-error on-error})
+                                  {:close! (fn [] nil)})
+                   :schedule-fn (fn [f _delay-ms]
+                                  (reset! scheduled f)
+                                  :scheduled)
+                   :reconnect-delay-ms 1})
+          sub (remote/connect-events! client wrapped-worker)]
+      (-> (p/let [_ (reset! live? false)
+                  _ ((:on-error @latest-handlers) (js/Error. "connection refused"))
+                  _ (is (nil? @scheduled)
+                        "Stale EventSource must not reschedule after the graph has switched.")
+                  _ (when-let [scheduled-fn @scheduled]
+                      (scheduled-fn))]
+            (is (= 1 @open-count))
+            ((:disconnect! sub)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))

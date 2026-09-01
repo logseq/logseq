@@ -925,7 +925,7 @@
  :import/file-finished "Import finished!"
  :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"
- :import/finishing "Finishing import"
+ :import/finishing "Finishing graph import"
  :import/graph-name-conflict "Please specify another name as another graph with this name already exists!"
  :import/graph-name-placeholder "Graph name"
  :import/ignored-assets (fn [count] (str "Import ignored " count " " (if (= 1 count) "asset" "assets") ". See the javascript console for more details."))
