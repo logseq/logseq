@@ -1965,10 +1965,10 @@
         journals-key [:journals]
         failing-query
         [:query {:kind :datalog
-                 :query '[:find ?b
-                          :in $ ?today
-                          :where [(identity ?today) ?b]]
-                 :inputs [:today]}]
+                 :query '[:find ?regex
+                          :in $ ?matcher
+                          :where [(re-pattern ?matcher) ?regex]]
+                 :inputs ["("]}]
         response (render-engine/render-snapshots
                   @conn
                   {:blocks []
@@ -1978,8 +1978,9 @@
     (is (nil? (get-in response [:slots [:resource journals-key] :error]))
         "A failing query must not fail sibling resources in the same snapshot.")
     (is (vector? (get-in response [:slots [:resource journals-key] :value])))
-    (is (= "Query today input requires :today-day"
-           (get-in response [:slots [:resource failing-query] :error :message])))
+    (is (re-find #"Invalid regular expression"
+                 (get-in response [:slots [:resource failing-query] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
     (is (= response
            (-> response ldb/write-transit-str ldb/read-transit-str)))))
 
