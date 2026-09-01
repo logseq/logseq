@@ -3064,10 +3064,9 @@
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
-                                (p/do!
-                                 (finalize-imported-graph! conn)
-                                 (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
-                                                {:entities :post-doc-files}))))]
+                                (finalize-imported-graph! conn)
+                                (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
+                                               {:entities :post-doc-files})))]
                     cleanup-tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
@@ -3363,8 +3362,8 @@
      (import-progress! doc-options {:step :move-to-library})
      (move-top-parent-pages-to-library conn repo-or-conn)
      (import-progress! doc-options {:phase :finalize-imported-graph})
-     (p/let [finalize-start (when log-fn (import-profile/now-ms))
-             _ (finalize-imported-graph! conn)]
+     (let [finalize-start (when log-fn (import-profile/now-ms))]
+       (finalize-imported-graph! conn)
        (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
      {:import-state (-> (:import-state doc-options)
                         (dissoc :assets))

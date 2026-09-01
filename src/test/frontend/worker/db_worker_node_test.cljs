@@ -1248,7 +1248,6 @@
 (deftest db-worker-node-import-file-graph-electron-lazy-fs-path
   (async done
          (let [daemon (atom nil)
-               sse (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-import-electron-lazy")
                graph-dir (write-electron-lazy-file-graph)
                repo (str "logseq_db_import_lazy_" (subs (str (random-uuid)) 0 8))
@@ -1262,8 +1261,6 @@
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       sse-client (open-sse-events host port)
-                       _ (reset! sse sse-client)
                        result (invoke host port "thread-api/import-file-graph"
                                       [repo config-file files {:user-options {}}])
                        page-result (invoke host port "thread-api/q"
@@ -1281,8 +1278,6 @@
                           (println "[db-worker-node-test] electron lazy import error:" e)
                           (is false (str e))))
                (p/finally (fn []
-                            (when-let [close! (:close! @sse)]
-                              (close!))
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally done))
                               (done))))))))

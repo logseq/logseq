@@ -274,6 +274,14 @@
                              "Finished import must not switch away from the new graph.")
                          (is (some #{[:dialog-close :import-indicator]} @calls))
                          (is (some #{[:redirect-home]} @calls))
+                         (is (some (fn [[op status]]
+                                     (and (= :notify op) (= :success status)))
+                                   @calls)
+                             "Keep-graph still shows import finished.")
+                         (is (not-any? (fn [[op status]]
+                                         (and (= :notify op) (contains? #{:warning :error} status)))
+                                       @calls)
+                             "A dropped RPC must not invent validation or ignored-file notifications.")
                          (is (= expected-repo (:git/current-repo @ui)))
                          (is (nil? (:graph/importing @ui)))))
                (p/catch (fn [error]
