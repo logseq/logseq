@@ -179,7 +179,9 @@
      full-graph-name)
    (p/catch (fn [error]
               (notification/show! (t :graph/create-error) :error)
-              (js/console.error error)))))
+              (js/console.error error)
+              (when file-graph-import?
+                (throw error))))))
 
 (defn new-db!
   "Handler for creating a new database graph"
