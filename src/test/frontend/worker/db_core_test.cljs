@@ -2000,7 +2000,16 @@
        (let [broken-refs-matcher "\\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\)"]
          (is (= [broken-refs-matcher]
                 (resolve-inputs! test-repo [broken-refs-matcher] {}))
-             "Regex query inputs that start with an escaped paren stay strings."))))))
+             "Regex query inputs that start with an escaped paren stay strings.")
+         (is (= [tag-uuid]
+                (resolve-inputs! test-repo [(str "#uuid \"" tag-uuid "\"")] {}))
+             "Plugin EDN UUID inputs stay UUIDs.")
+         (is (= ["target-page"]
+                (resolve-inputs! test-repo ["\"target-page\""] {}))
+             "Quoted EDN string inputs are unquoted.")
+         (is (= [["a" "b" "c"]]
+                (resolve-inputs! test-repo ["[\"a\" \"b\" \"c\"]"] {}))
+             "EDN collection inputs stay collections."))))))
 
 (deftest query-dsl-worker-apis-run-against-worker-db
   (restoring-worker-state
