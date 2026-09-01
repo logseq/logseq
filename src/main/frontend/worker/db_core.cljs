@@ -350,8 +350,14 @@
 
 (defn- set-import-ui-state!
   [path value]
-  (-> (worker-state/<invoke-main-thread :thread-api/set-ui-state path value)
-      (p/catch (fn [_error] nil))))
+  (if (node-runtime?)
+    (do
+      (platform/post-message! (platform/current)
+                              :thread-api/set-ui-state
+                              [path value])
+      (p/resolved nil))
+    (-> (worker-state/<invoke-main-thread :thread-api/set-ui-state path value)
+        (p/catch (fn [_error] nil)))))
 
 (defn- <import-file-graph!
   [repo config-file files opts]

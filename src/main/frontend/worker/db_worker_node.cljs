@@ -376,8 +376,11 @@
                       (p/let [_ (when-not (contains? non-repo-methods method-kw)
                                   (let [{:keys [path lock]} @*lock-info]
                                     (db-lock/assert-lock-owner! path lock)))
-                              result (<invoke! proxy method-str method-kw args')]
-                        (send-json! res 200 {:ok true :resultTransit result}))))
+                              result (<invoke! proxy method-str method-kw args')
+                              result-transit (if (string? result)
+                                               result
+                                               (ldb/write-transit-str result))]
+                        (send-json! res 200 {:ok true :resultTransit result-transit}))))
                   (p/catch (fn [error]
                              (log-invoke-error! res error method-kw)))))
             (p/catch (fn [error]
