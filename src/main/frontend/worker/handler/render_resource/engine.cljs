@@ -59,7 +59,7 @@
      :slots (or slots {})}))
 
 (def ^:private snapshot-request-limits
-  {:blocks 1000 :children 25 :resources 25})
+  {:blocks common/max-blocks-per-snapshot :children 25 :resources 25})
 
 (defn- require-snapshot-request!
   [request]

@@ -10,6 +10,7 @@
         datalog-row-uuid (random-uuid)
         resource-keys (atom [])
         dsl-query {:query "(task TODO)"
+                   :query/eager-load-results? true
                    :remove-block-children? false
                    :result-transform '(partial sort-by :block/title)}
         datalog-form '[:find (pull ?block [:block/uuid])
@@ -20,6 +21,7 @@
         rules '[[(journal-block ?block)
                  [?block :block/journal-day]]]
         datalog-query {:query datalog-form
+                       :query/eager-load-results? false
                        :inputs [:today]
                        :rules rules}]
     (with-redefs [db-hooks/use-resource
@@ -48,12 +50,14 @@
                 :query "(task TODO)"
                 :cards? true
                 :current-block-uuid current-block-uuid
+                :query/eager-load-results? true
                 :remove-block-children? false
                 :result-transform-edn
                 "(partial sort-by :block/title)"}]
               [:query
                {:kind :datalog
                 :query datalog-form
+                :query/eager-load-results? false
                 :inputs [:today]
                 :rules rules
                 :today-day 20260721

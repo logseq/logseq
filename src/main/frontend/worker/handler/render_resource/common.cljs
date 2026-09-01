@@ -5,6 +5,10 @@
 
 (def watch-all ::watch-all)
 
+(def max-blocks-per-snapshot
+  "Maximum number of root blocks loaded by one renderer snapshot."
+  1000)
+
 (defn fail!
   [message data]
   (throw (ex-info message data)))
