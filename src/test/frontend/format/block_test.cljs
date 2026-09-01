@@ -1,5 +1,6 @@
 (ns frontend.format.block-test
   (:require [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [frontend.format.block :as block]))
 
 (def ^:private latex-only-title "$$ x^2 + y^2 = z^2 $$")
@@ -37,7 +38,7 @@
              (some (fn [form]
                      (when (and (vector? form)
                                 (= "Displayed_Math" (first form)))
-                       (second form)))
+                       (string/trim (str (second form)))))
                    (tree-seq coll? seq (:block.temp/ast-body parsed)))))))
 
   (testing "mixed-title latex keeps a usable heading title"

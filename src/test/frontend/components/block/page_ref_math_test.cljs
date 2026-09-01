@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.db.hooks :as db-hooks]
-            [frontend.format.block :as format-block]
+            [frontend.format.block :refer [displayed-math-formula parse-title-and-body]]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -85,10 +85,10 @@
     (is (= formula
            (#'block/page-ref-math-formula
             (merge (latex-only-block)
-                   (format-block/parse-title-and-body nil :markdown latex-only-title))))))
+                   (parse-title-and-body nil :markdown latex-only-title))))))
 
   (testing "mixed-title latex is not treated as a standalone formula"
-    (is (nil? (format-block/displayed-math-formula mixed-title)))))
+    (is (nil? (displayed-math-formula mixed-title)))))
 
 (deftest latex-only-page-ref-renders-formula-test
   (testing "a reference to an unconverted latex-only block shows the formula"
