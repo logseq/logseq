@@ -1179,7 +1179,8 @@
                           (fn [events]
                             (some (fn [{:keys [type payload]}]
                                     (and (= type :thread-api/set-ui-state)
-                                         (= [:graph/importing-result] (first payload))))
+                                         (= [:graph/importing-state :label] (first payload))
+                                         (= :import/validating-graph (second payload))))
                                   events))
                           80)
                        ui-state (->> @(:events sse-client)
@@ -1196,8 +1197,15 @@
                                                :in $ ?title
                                                :where [?e :block/title ?title]]
                                              "imported from desktop"]])]
-                 (is (nil? result)
-                     "Desktop import-file-graph must not reply with a transit payload.")
+                 (is (map? result)
+                     "Desktop import-file-graph replies with the terminal contract.")
+                 (is (true? (:persisted? result)))
+                 (is (contains? #{:completed :completed-with-errors} (:status result)))
+                 (is (nat-int? (:issue-count result)))
+                 (is (not-any? (fn [payload]
+                                 (= [:graph/importing-result] (first payload)))
+                               ui-state)
+                     "Desktop import summary is not delivered over SSE.")
                  (is (contains? current-pages "pages/Home.md")
                      "Desktop import progress is delivered over SSE.")
                  (is (some #{:import/finishing}
