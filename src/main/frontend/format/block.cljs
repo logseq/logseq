@@ -124,6 +124,13 @@ and handles unexpected failure."
      [[format raw-content content] [format raw-content content]])
    parse-title-and-body-helper))
 
+(defn displayed-math-formula
+  "Return the inner formula when `title` is standalone display math, else nil."
+  [title]
+  (when (string? title)
+    (when-let [[_ formula] (re-matches #"(?s)^\$\$(.*)\$\$$" (string/trim title))]
+      (not-empty (string/trim formula)))))
+
 (defn parse-title-and-body
   ([block]
    (when (map? block)

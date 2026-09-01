@@ -93,6 +93,21 @@ html.is-mobile .ls-block-content-indent {
   .block-title-wrap.as-heading {
     @apply inline text-[length:inherit];
   }
+
+  .math-block {
+    display: inline-block;
+    width: auto;
+  }
+
+  .latex,
+  .latex-inline {
+    display: inline;
+  }
+
+  .katex svg {
+    width: auto;
+    height: inherit;
+  }
 }
 
 .breadcrumb {
