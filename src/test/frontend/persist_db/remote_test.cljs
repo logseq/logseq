@@ -83,6 +83,20 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest invoke-ok-without-result-transit-is-an-error
+  (async done
+    (let [client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :fetch-fn (fn [_req]
+                               (p/resolved {:status 200
+                                            :body (js/JSON.stringify #js {:ok true})}))})]
+      (-> (remote/invoke! client "thread-api/import-file-graph" ["repo" {} [] {}])
+          (p/then (fn [_]
+                    (is false "expected invoke! to reject when resultTransit is missing")))
+          (p/catch (fn [e]
+                     (is (= :invoke-result-missing (:code (ex-data e))))))
+          (p/finally (fn [] (done)))))))
+
 (deftest invoke-ok-false-on-http-200-is-an-error
   (async done
     (let [client (remote/create-client
