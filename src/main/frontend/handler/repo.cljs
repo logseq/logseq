@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
@@ -179,7 +180,7 @@
      full-graph-name)
    (p/catch (fn [error]
               (notification/show! (t :graph/create-error) :error)
-              (js/console.error error)
+              (log/error :graph-create-failed {:error error})
               (when file-graph-import?
                 (throw error))))))
 
