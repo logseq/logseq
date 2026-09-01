@@ -98,18 +98,25 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (task-spent-time @conn block-id (common-util/time-ms))))
 
+(defn- reader-character-literal?
+  "cljs.reader treats \\\\X as a character, which is a 1-char string in CLJS."
+  [input value]
+  (and (string? input)
+       (string/starts-with? input "\\")
+       (char? value)))
+
 (defn- query-input-value
   "Parse stringified EDN query inputs from plugin/JSON callers (e.g. \":today\").
-  Keep literal strings. cljs.reader treats a leading backslash as a character
-  literal, so regex patterns such as \"\\\\(uuid\\\\)\" would otherwise become \"(\"."
+  Keep the original string when cljs.reader reads a character literal, so regex
+  patterns such as \"\\\\(uuid\\\\)\" are not reduced to \"(\"."
   [input]
   (if (and (string? input)
            (not (page-ref/page-ref? input)))
     (try
       (let [value (cljs.reader/read-string input)]
-        (if (or (keyword? value) (number? value) (boolean? value))
-          value
-          input))
+        (if (reader-character-literal? input value)
+          input
+          value))
       (catch :default _
         input))
     input))
