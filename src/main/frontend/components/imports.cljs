@@ -286,12 +286,9 @@
                         :warning false)
     (log/info :import-valid {:msg "Valid import!"})))
 
-(defn- show-notification [{:keys [msg level ex-data]}]
+(defn- show-notification [{:keys [msg level]}]
   (if (= :error level)
-    (do
-      (notification/show! msg :error)
-      (when ex-data
-        (log/error :import-error ex-data)))
+    (notification/show! msg :error)
     (notification/show! msg :warning false)))
 
 (defn- electron-lazy-import?
@@ -320,15 +317,11 @@
         (p/resolved (assoc (select-keys file [:path :fs-path])
                            :file/content content))))))
 
-(defn- <prepare-import-files
+(defn- <serialize-import-files
   [files]
   (if (electron-lazy-import? files)
     (p/resolved (mapv import-file-descriptor files))
     (p/all (mapv <serialize-import-file files))))
-
-(defn- <serialize-import-files
-  [files]
-  (<prepare-import-files files))
 
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
@@ -362,9 +355,10 @@
 (defn- finish-file-graph-import!
   [repo import-result]
   (clear-file-graph-importing-ui!)
-  (doseq [notification (:notifications import-result)]
-    (show-notification notification))
-  (validate-imported-data import-result)
+  (when (seq import-result)
+    (doseq [notification (:notifications import-result)]
+      (show-notification notification))
+    (validate-imported-data import-result))
   (notification/show! (t :import/file-finished) :success)
   (state/pub-event! [:graph/sync-context])
   (state/pub-event! [:graph/ready repo])
