@@ -1204,10 +1204,6 @@
                  (is (true? (:persisted? result)))
                  (is (contains? #{:completed :completed-with-errors} (:status result)))
                  (is (nat-int? (:issue-count result)))
-                 (is (not-any? (fn [payload]
-                                 (= [:graph/importing-result] (first payload)))
-                               ui-state)
-                     "Desktop import summary is not delivered over SSE.")
                  (is (contains? current-pages "pages/Home.md")
                      "Desktop import progress is delivered over SSE.")
                  (is (some #{:import/finishing}

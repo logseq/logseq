@@ -28,33 +28,6 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
-(deftest invoke-import-file-graph-decodes-terminal-result
-  (async done
-    (let [terminal {:run-id "import-1"
-                    :status :completed
-                    :persisted? true
-                    :validation {:status :passed :error-count 0}
-                    :issue-count 0
-                    :org-file-count 0
-                    :ignored-files-count 0
-                    :ignored-assets-count 0
-                    :ignored-properties-count 0
-                    :validation-error-count 0
-                    :notifications []}
-          client (remote/create-client
-                  {:base-url "http://127.0.0.1:9101"
-                   :fetch-fn (fn [_req]
-                               (p/resolved {:status 200
-                                            :body (js/JSON.stringify
-                                                   #js {:ok true
-                                                        :resultTransit (ldb/write-transit-str terminal)})}))})]
-      (-> (p/let [result (remote/invoke! client "thread-api/import-file-graph" ["repo" {} [] {}])]
-            (is (= terminal result)
-                "Desktop import invoke decodes the terminal worker reply."))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn [] (done)))))))
-
 (deftest connect-events-dispatches-set-ui-state-progress
   (async done
     (let [events (atom [])

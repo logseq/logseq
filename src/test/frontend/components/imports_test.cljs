@@ -88,22 +88,24 @@
                                  (swap! calls conj (into [api] args))
                                  (if (= api :thread-api/import-file-graph)
                                    (p/resolved {:run-id "import-1"
-                                                :status :completed
+                                                :status :completed-with-errors
                                                 :persisted? true
                                                 :validation {:status :passed :error-count 0}
-                                                :issue-count 0
+                                                :issue-count 1
                                                 :org-file-count 0
-                                                :ignored-files-count 0
+                                                :ignored-files-count 1
                                                 :ignored-assets-count 0
                                                 :ignored-properties-count 0
                                                 :validation-error-count 0
-                                                :notifications []})
+                                                :notifications [{:msg "Import failed on \"pages/Skip.md\""
+                                                                 :level :error}]})
                                    (p/resolved nil)))
                                repo-handler/restore-and-setup-repo!
                                (fn [repo opts]
                                  (swap! calls conj [:restore repo opts :importing (:graph/importing @ui)])
                                  (p/resolved nil))
-                               notification/show! (fn [& _] nil)
+                               notification/show! (fn [content status & _]
+                                                    (swap! calls conj [:notify status content]))
                                shui/dialog-open! (fn [& _] nil)
                                shui/dialog-close! (fn [id]
                                                     (swap! calls conj [:dialog-close id]))
@@ -133,11 +135,31 @@
                                                 first)
                                search-calls (filter #(= :thread-api/search-build-blocks-indice-in-worker (first %))
                                                     @calls)
-                               restore-call (first (filter #(= :restore (first %)) @calls))]
+                               restore-call (first (filter #(= :restore (first %)) @calls))
+                               import-call (first (filter #(= :thread-api/import-file-graph (first %)) @calls))
+                               import-files (nth import-call 3)]
                            (is (< new-db-idx import-idx)
                                "The new graph is created before worker import.")
                            (is (< import-idx restore-idx)
                                "Renderer restore happens after worker import.")
+                           (is (every? #(and (string? (:path %))
+                                             (string? (:fs-path %))
+                                             (nil? (:file/content %))
+                                             (nil? (:asset/payload %)))
+                                       import-files)
+                               "Electron lazy import sends filesystem paths without file contents.")
+                           (is (some (fn [[op status]]
+                                       (and (= :notify op) (= :error status)))
+                                     @calls)
+                               "Worker error notifications from the terminal result are shown.")
+                           (is (some (fn [[op status]]
+                                       (and (= :notify op) (= :info status)))
+                                     @calls)
+                               "Ignored-file counts from the terminal result are shown.")
+                           (is (some (fn [[op status]]
+                                       (and (= :notify op) (= :success status)))
+                                     @calls)
+                               "Import finished is still shown after a partial import.")
                            (is (= :file-graph (last restore-call))
                                "Importing stays set during restore so :graph/restored does not start search.")
                            (is (= 1 (count search-calls))
