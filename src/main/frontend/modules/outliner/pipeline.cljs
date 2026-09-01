@@ -1,7 +1,6 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.string :as string]
             [frontend.db.subs :as db-subs]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
