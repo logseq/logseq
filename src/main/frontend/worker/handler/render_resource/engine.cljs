@@ -7,8 +7,7 @@
             [frontend.worker.handler.render-resource.property :as property]
             [frontend.worker.handler.render-resource.query :as query]
             [frontend.worker.handler.render-resource.view :as view]
-            [frontend.worker.state :as worker-state]
-            [lambdaisland.glogi :as log]))
+            [frontend.worker.state :as worker-state]))
 
 (def resource-renderers
   (merge basic/resource-renderers
@@ -46,31 +45,18 @@
         (common/fail! "Unknown renderer resource key"
                       {:resource-key resource-key})))))
 
-(defn- resource-error-wire
-  [error]
-  (cond-> {:message (or (ex-message error) (str error))}
-    (ex-data error) (assoc :data (ex-data error))))
-
 (defn- resource-entry
   [db resource-key runtime]
-  (try
-    (let [[watch value slots] (resource-value db resource-key runtime)
-          watch-all? (= common/watch-all watch)
-          watch-keys (if watch-all? #{} watch)]
-      (when-not (set? watch-keys)
-        (common/fail! "Invalid renderer resource watch keys"
-                      {:resource-key resource-key :watch watch}))
-      {:watch-keys watch-keys
-       :watch-all? watch-all?
-       :value value
-       :slots (or slots {})})
-    (catch :default error
-      (log/error :renderer-resource-failed {:resource-key resource-key :error error})
-      {:watch-keys #{}
-       :watch-all? false
-       :value nil
-       :slots {}
-       :error (resource-error-wire error)})))
+  (let [[watch value slots] (resource-value db resource-key runtime)
+        watch-all? (= common/watch-all watch)
+        watch-keys (if watch-all? #{} watch)]
+    (when-not (set? watch-keys)
+      (common/fail! "Invalid renderer resource watch keys"
+                    {:resource-key resource-key :watch watch}))
+    {:watch-keys watch-keys
+     :watch-all? watch-all?
+     :value value
+     :slots (or slots {})}))
 
 (def ^:private snapshot-request-limits
   {:blocks 1000 :children 25 :resources 25})
@@ -147,11 +133,9 @@
                      (merge-slots (:slots entry))
                      (merge-slots
                       {[:resource resource-key]
-                       (cond-> {:watch {:keys (:watch-keys entry)
-                                        :all? (:watch-all? entry)}
-                                :value (:value entry)}
-                         (some? (:error entry))
-                         (assoc :error (:error entry)))})))
+                       {:watch {:keys (:watch-keys entry)
+                                :all? (:watch-all? entry)}
+                        :value (:value entry)}})))
                base-slots
                resource-entries)
         groups (into {}

@@ -81,3 +81,18 @@
         (setup-fn))
       (is (= rows @query-result)
           "Child {{function}} blocks read this atom from shared block config."))))
+
+(deftest use-query-result-throws-worker-query-errors-test
+  (with-redefs [db-hooks/use-resource
+                (fn [_]
+                  {:rows []
+                   :error {:message "Invalid regular expression: /(/: Unterminated group"}})
+                hooks/use-effect! (fn [& _args])]
+    (is (thrown-with-msg?
+         js/Error
+         #"Invalid regular expression"
+         (query-result/use-query-result
+          {:dsl-query? true
+           :current-block-uuid (random-uuid)}
+          {:query "(task TODO)"})))
+        "Query syntax errors stay in the query error boundary instead of emptying the page.")))
