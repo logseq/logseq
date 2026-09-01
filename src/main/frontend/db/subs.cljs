@@ -125,12 +125,17 @@
       (ready-slot basis-rev (mapv first items) {:tx-id tx-id :items items}))
 
     :resource
-    (let [{:keys [keys all?] :as watch} (:watch wire)]
-      (when-not (and (= #{:keys :all?} (set (clojure.core/keys watch)))
-                     (set? keys) (boolean? all?))
-        (throw (ex-info "Invalid resource watch descriptor"
-                        {:resource-key key :watch watch})))
-      (ready-slot basis-rev (:value wire) {:watch watch}))
+    (if-let [error-wire (:error wire)]
+      {:snapshot {:status :error
+                  :error (ex-info (or (:message error-wire)
+                                      "Renderer resource failed")
+                                  (or (:data error-wire) {}))}}
+      (let [{:keys [keys all?] :as watch} (:watch wire)]
+        (when-not (and (= #{:keys :all?} (set (clojure.core/keys watch)))
+                       (set? keys) (boolean? all?))
+          (throw (ex-info "Invalid resource watch descriptor"
+                          {:resource-key key :watch watch})))
+        (ready-slot basis-rev (:value wire) {:watch watch})))
 
     (throw (ex-info "Invalid renderer snapshot slot" {:slot-key slot-key}))))
 
