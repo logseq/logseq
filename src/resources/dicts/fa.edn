@@ -818,7 +818,6 @@
  :import/assets-imported "{1} فایل وارد شد."
  :import/assets-skipped "{1} فایل نادیده گرفته شد. جزئیات در کنسول."
  :import/block-icons-cannot-be-imported "آیکون‌های بلوک قابل وارد کردن نیستند. به صورت دستی در بلوک {1} وارد کنید."
- :import/cannot-import-block-into-non-block-entity "نمی‌توان بلوک را به موجودیت غیربلوکی وارد کرد."
  :import/db-edn-desc "وارد کردن صادرات EDN یک گراف DB به گراف DB جدید"
  :import/db-edn-title "EDN به گراف DB"
  :import/debug-transit-desc "وارد کردن فایل transit اشکال‌زدایی به گراف DB جدید"

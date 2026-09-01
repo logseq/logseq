@@ -1123,7 +1123,7 @@
                                       (when-not shift?
                                         (shui/shortcut-press! "return" true))
                                       (handle-action :default state e)
-                                      (util/stop-propagation e))
+                                      (util/stop e))
       esc? (let [filter' @(::filter state)
                  action (get-action)
                  move-blocks? (= :move-blocks action)]

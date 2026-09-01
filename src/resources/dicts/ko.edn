@@ -818,7 +818,6 @@
  :import/assets-imported "{1}개 에셋을 가져왔습니다."
  :import/assets-skipped "{1}개 에셋을 건너뛰었습니다. 자세한 내용은 콘솔을 확인하세요."
  :import/block-icons-cannot-be-imported "블록 아이콘을 가져올 수 없습니다. 블록 {1}에서 수동으로 가져오세요."
- :import/cannot-import-block-into-non-block-entity "블록이 아닌 엔티티에 블록을 가져올 수 없습니다. 다른 위치에서 가져오세요."
  :import/db-edn-desc "DB 그래프의 EDN 내보내기를 새 DB 그래프로 가져오기"
  :import/db-edn-title "EDN에서 DB 그래프로"
  :import/debug-transit-desc "디버그 transit 파일을 새 DB 그래프로 가져오기"

@@ -1,6 +1,7 @@
 (ns logseq.db.sqlite.export-test
   (:require [cljs.pprint]
             [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
@@ -42,18 +43,21 @@
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
-  [export-conn import-conn export-block-content import-block-content]
-  (let [export-block (db-test/find-block-by-content @export-conn export-block-content)
-        import-block (db-test/find-block-by-content @import-conn import-block-content)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @export-conn {:export-type :block
-                                                      :block-id [:block/uuid (:block/uuid export-block)]})
-            (sqlite-export/build-import @import-conn {:current-block import-block}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn (concat init-tx block-props-tx))]
-    (validate-db @import-conn)
-    (sqlite-export/build-export @import-conn {:export-type :block
-                                              :block-id (:db/id import-block)})))
+  ([export-conn import-conn export-block-content import-block-content]
+   (export-block-and-import-to-another-block
+    export-conn import-conn export-block-content import-block-content {}))
+  ([export-conn import-conn export-block-content import-block-content import-options]
+   (let [export-block (db-test/find-block-by-content @export-conn export-block-content)
+         import-block (db-test/find-block-by-content @import-conn import-block-content)
+         {:keys [init-tx block-props-tx] :as _txs}
+         (-> (sqlite-export/build-export @export-conn {:export-type :block
+                                                       :block-id [:block/uuid (:block/uuid export-block)]})
+             (sqlite-export/build-import @import-conn
+                                          (assoc import-options :current-block import-block)))
+         _ (d/transact! import-conn (concat init-tx block-props-tx))]
+     (validate-db @import-conn)
+     (sqlite-export/build-export @import-conn {:export-type :block
+                                               :block-id (:db/id import-block)}))))
 
 (defn- export-page-and-import-to-another-graph
   "Exports given page from one graph/conn, imports it to a 2nd graph, validates
@@ -181,7 +185,10 @@
                      :build/tags #{:user.class/MyClass}}
                     {:block/title "import"}]}]}
         conn (db-test/create-conn-with-blocks original-data)
-        imported-block (export-block-and-import-to-another-block conn conn "export" "import")]
+        imported-block (export-block-and-import-to-another-block
+                        conn conn "export" "import"
+                        {:existing-pages-keep-properties? true
+                         :import-edn-data? true})]
 
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
            (::sqlite-export/block imported-block))
@@ -615,6 +622,65 @@
     (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))
     (is (not (some #{[:db/add (:db/id plugin-property-ent) :hide? true]} tx-data)))
     (is (not (some #{[:db/add (:db/id plugin-property-ent) :public? false]} tx-data)))))
+
+(deftest import-edn-data-validates-unsupported-attributes
+  (let [conn (sqlite-export/create-conn)
+        validate (fn [export-map]
+                   (sqlite-export/validate-import-txs
+                    (sqlite-export/build-import
+                     export-map
+                     @conn
+                     {:existing-pages-keep-properties? true
+                      :import-edn-data? true})
+                    @conn
+                    {:import-edn-data? true
+                     :validate-full-db? false}))
+        legacy-result (validate {:pages-and-blocks
+                                 [{:page {:block/title "Legacy attributes"
+                                          :hide? true
+                                          :public? false}}]})
+        unsupported-attr :plugin.schema/unsupported-field
+        invalid-result (validate {:pages-and-blocks
+                                  [{:page {:block/title "Unsupported attribute"
+                                           unsupported-attr true}}]})
+        invalid-url-result
+        (validate {:properties {:user.property/url {:logseq.property/type :url}}
+                   :pages-and-blocks
+                   [{:page {:block/title "Invalid URL"
+                            :build/properties {:user.property/url "not a url"}}}]})]
+    (is (nil? (:error legacy-result)))
+    (is (not-any? #(contains? % :hide?) (:tx-data legacy-result)))
+    (is (not-any? #(contains? % :public?) (:tx-data legacy-result)))
+    (is (string/includes? (:error invalid-result) "Unsupported attribute"))
+    (is (string/includes? (:error invalid-result) (str unsupported-attr)))
+    (is (string/includes? (:error invalid-url-result) "should be a URL"))))
+
+(deftest import-edn-data-rejects-unsupported-export-metadata
+  (let [unsupported-key :logseq.db.sqlite.export/unsupported
+        conn (sqlite-export/create-conn)]
+    (doseq [[field export-map]
+            [[unsupported-key {unsupported-key true}]
+             [:plugin.import/unsupported {:plugin.import/unsupported true}]
+             [::sqlite-export/import-options
+              {::sqlite-export/import-options {:unsupported true}}]
+             [::sqlite-export/export-type
+              {::sqlite-export/export-type :unsupported}]]]
+      (let [result (sqlite-export/build-import
+                    (assoc export-map
+                           :pages-and-blocks [{:page {:block/title "Valid page"}}])
+                    @conn
+                    {:import-edn-data? true})]
+        (is (string/includes? (:error result) (str field)))))))
+
+(deftest import-edn-data-rejects-full-graph-exports
+  (let [conn (sqlite-export/create-conn)]
+    (doseq [export-map [{::sqlite-export/export-type :graph-human
+                         ::sqlite-export/schema-version {:major 1 :minor 0}
+                         :pages-and-blocks []}
+                        {::sqlite-export/graph-format :datoms :datoms []}]]
+      (is (string/includes? (:error (sqlite-export/build-import
+                                    export-map @conn {:import-edn-data? true}))
+                            "Full-graph EDN")))))
 
 (deftest graph-export-keeps-referenced-recycled-closed-value-config
   (let [property-id :plugin.property.degrande-colors/tldraw
@@ -1352,12 +1418,15 @@
 (defn- test-import-existing-page [import-options expected-page-properties]
   (let [original-data
         {:properties {:user.property/node {:logseq.property/type :node
-                                           :db/cardinality :db.cardinality/many}}
+                                           :db/cardinality :db.cardinality/many}
+                      :user.property/enabled {:logseq.property/type :checkbox
+                                              :db/cardinality :db.cardinality/one}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/node
                                      #{[:build/page {:block/title "existing page"
-                                                     :build/properties {:logseq.property/description "first description"}}]}}}}]}
+                                                     :build/properties {:logseq.property/description "first description"
+                                                                        :user.property/enabled false}}]}}}}]}
         conn (db-test/create-conn-with-blocks original-data)
         page-uuid (:block/uuid (db-test/find-page-by-title @conn "existing page"))
         _ (validate-db @conn)
@@ -1365,13 +1434,16 @@
         temp-uuid (random-uuid)
         import-data
         {:properties {:user.property/node {:logseq.property/type :node
-                                           :db/cardinality :db.cardinality/many}}
+                                           :db/cardinality :db.cardinality/many}
+                      :user.property/enabled {:logseq.property/type :checkbox
+                                              :db/cardinality :db.cardinality/one}}
          :pages-and-blocks
          [{:page {:block/title "existing page"
                   :block/uuid temp-uuid
                   :build/keep-uuid? true
                   :build/properties {:logseq.property/description "second description"
-                                     :logseq.property/exclude-from-graph-view true}}}
+                                     :logseq.property/exclude-from-graph-view true
+                                     :user.property/enabled true}}}
           {:page {:block/title "page2"
                   :build/properties {:user.property/node #{[:block/uuid temp-uuid]}}}}]
          ::sqlite-export/import-options import-options}
@@ -1398,11 +1470,122 @@
   (testing "By default any properties passed to an existing page are upserted"
     (test-import-existing-page {}
                                {:logseq.property/description "second description"
-                                :logseq.property/exclude-from-graph-view true}))
+                                :logseq.property/exclude-from-graph-view true
+                                :user.property/enabled true}))
   (testing "With ::existing-pages-keep-properties?, existing properties on existing pages are not overwritten by imported data"
     (test-import-existing-page {:existing-pages-keep-properties? true}
                                {:logseq.property/description "first description"
-                                :logseq.property/exclude-from-graph-view true})))
+                                :logseq.property/exclude-from-graph-view true
+                                :user.property/enabled false})))
+
+(deftest build-import-preserves-existing-page-metadata
+  (let [property-id :user.property/imported-text
+        page-uuid (random-uuid)
+        properties {property-id {:logseq.property/type :default
+                                 :db/cardinality :db.cardinality/one}}
+        conn (db-test/create-conn-with-blocks
+              {:properties properties
+               :pages-and-blocks
+               [{:page {:build/journal 20250101
+                        :block/uuid page-uuid
+                        :build/keep-uuid? true
+                        :block/created-at 100
+                        :block/updated-at 200
+                        :block/collapsed? false}}
+                {:page {:build/journal 20250102}}]})
+        page-before (d/entity @conn [:block/uuid page-uuid])
+        preserved-attrs [:block/uuid :block/title :block/name :block/journal-day
+                         :block/created-at :block/collapsed?]
+        import-data
+        {:properties properties
+         :pages-and-blocks
+         [{:page {:build/journal 20250102
+                  :block/uuid page-uuid
+                  :block/title "Imported title"
+                  :block/name "imported title"
+                  :block/journal-day 20250102
+                  :block/created-at 900
+                  :block/updated-at 901
+                  :block/collapsed? true
+                  :build/properties {property-id "Added"}}}]}
+        import! (fn [now]
+                  (with-redefs [common-util/time-ms (constantly now)]
+                    (let [txs (sqlite-export/build-import
+                               import-data @conn {:existing-pages-keep-properties? true
+                                                  :import-edn-data? true})]
+                      (d/transact! conn (sqlite-export/import-tx-data txs)))))]
+    (import! 500)
+    (let [page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= (select-keys page-before preserved-attrs)
+             (select-keys page preserved-attrs)))
+      (is (= 500 (:block/updated-at page)))
+      (is (= "Added" (get (db-test/readable-properties page) property-id))))
+    (is (nil? (get (db-test/readable-properties
+                    (db-test/find-journal-by-journal-day @conn 20250102))
+                   property-id)))
+    (import! 600)
+    (is (= 500 (:block/updated-at (d/entity @conn [:block/uuid page-uuid]))))))
+
+(deftest build-import-merges-existing-page-tags-and-aliases
+  (let [existing-tag :user.class/ExistingTag
+        imported-tag :user.class/ImportedTag
+        existing-alias-uuid (random-uuid)
+        imported-alias-uuid (random-uuid)
+        source-alias-uuid (random-uuid)
+        existing-data
+        {:classes {existing-tag {} imported-tag {}}
+         :pages-and-blocks
+         [{:page {:block/title "Existing alias"
+                  :block/uuid existing-alias-uuid
+                  :build/keep-uuid? true}}
+          {:page {:block/title "Imported alias"
+                  :block/uuid imported-alias-uuid
+                  :build/keep-uuid? true}}
+          {:page {:block/title "Tagged page"
+                  :build/tags #{existing-tag}
+                  :block/alias #{[:block/uuid existing-alias-uuid]}}}]}
+        conn (db-test/create-conn-with-blocks existing-data)
+        import-data
+        {:classes {existing-tag {} imported-tag {}}
+         :pages-and-blocks
+         [{:page {:block/title "Tagged page"
+                  :build/tags #{existing-tag imported-tag}
+                  :block/alias #{[:block/uuid existing-alias-uuid]
+                                 [:block/uuid source-alias-uuid]}}}
+          {:page {:block/title "Imported alias"
+                  :block/uuid source-alias-uuid
+                  :build/keep-uuid? true}}]}
+        import! (fn [now]
+                  (with-redefs [common-util/time-ms (constantly now)]
+                    (let [txs (sqlite-export/build-import
+                               import-data @conn {:existing-pages-keep-properties? true
+                                                  :import-edn-data? true})]
+                      (d/transact! conn (sqlite-export/import-tx-data txs)))))]
+    (import! 700)
+    (let [page (db-test/find-page-by-title @conn "Tagged page")
+          tags (->> (:block/tags page)
+                    (keep :db/ident)
+                    (filter #(= "user.class" (namespace %))))
+          aliases (map :block/uuid (:block/alias page))]
+      (is (= #{existing-tag imported-tag} (set tags)))
+      (is (= #{existing-alias-uuid imported-alias-uuid}
+             (set aliases)))
+      (is (= 700 (:block/updated-at page))))
+    (import! 800)
+    (is (= 700 (:block/updated-at (db-test/find-page-by-title @conn "Tagged page"))))
+    (let [normal-conn (db-test/create-conn-with-blocks existing-data)
+          normal-import-data
+          {:pages-and-blocks
+           [{:page {:block/title "Tagged page"
+                    :block/alias #{[:block/uuid source-alias-uuid]}}}
+            {:page {:block/title "Imported alias"
+                    :block/uuid source-alias-uuid
+                    :build/keep-uuid? true}}]}
+          txs (sqlite-export/build-import normal-import-data @normal-conn {})]
+      (d/transact! normal-conn (sqlite-export/import-tx-data txs))
+      (is (= #{existing-alias-uuid}
+             (set (map :block/uuid
+                       (:block/alias (db-test/find-page-by-title @normal-conn "Tagged page")))))))))
 
 (deftest build-export-omits-empty-build-properties
   (let [conn (db-test/create-conn-with-blocks

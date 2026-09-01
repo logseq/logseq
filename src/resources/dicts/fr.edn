@@ -818,7 +818,6 @@
  :import/assets-imported "{1} ressources importées."
  :import/assets-skipped "{1} ressources ignorées. Détails dans la console."
  :import/block-icons-cannot-be-imported "Les icônes de bloc ne peuvent pas être importées. Veuillez les importer manuellement au bloc {1}."
- :import/cannot-import-block-into-non-block-entity "Impossible d'importer un bloc dans une entité non-bloc."
  :import/db-edn-desc "Importer l'export EDN d'un graphe DB dans un nouveau graphe DB"
  :import/db-edn-title "EDN vers graphe DB"
  :import/debug-transit-desc "Importer un fichier transit de débogage dans un nouveau graphe DB"

@@ -818,7 +818,6 @@
  :import/assets-imported "{1} berkas diimpor."
  :import/assets-skipped "{1} berkas dilewati. Detail di konsol."
  :import/block-icons-cannot-be-imported "Ikon blok tidak dapat diimpor. Impor secara manual di blok {1}."
- :import/cannot-import-block-into-non-block-entity "Tidak dapat mengimpor blok ke entitas non-blok."
  :import/db-edn-desc "Impor ekspor EDN graf DB ke graf DB baru"
  :import/db-edn-title "EDN ke graf DB"
  :import/debug-transit-desc "Impor file debug transit ke graf DB baru"

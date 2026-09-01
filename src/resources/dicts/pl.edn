@@ -818,7 +818,6 @@
  :import/assets-imported "{1} zasobów zaimportowano."
  :import/assets-skipped "{1} zasobów pominięto. Szczegóły w konsoli."
  :import/block-icons-cannot-be-imported "Ikony bloków nie mogą być zaimportowane. Zaimportuj ręcznie w bloku {1}."
- :import/cannot-import-block-into-non-block-entity "Nie można zaimportować bloku do encji niebędącej blokiem."
  :import/db-edn-desc "Zaimportuj eksport EDN grafu DB do nowego grafu DB"
  :import/db-edn-title "EDN do grafu DB"
  :import/debug-transit-desc "Zaimportuj plik debug transit do nowego grafu DB"

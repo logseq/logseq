@@ -1129,24 +1129,67 @@
 
 ;; Import fns
 ;; ==========
+(def ^:private existing-page-protected-attributes
+  #{:block/uuid :block/title :block/name :block/journal-day :build/journal
+    :block/created-at :block/updated-at :block/collapsed? :build/keep-uuid?})
+
+(def ^:private existing-page-preserved-attributes
+  (disj existing-page-protected-attributes
+        :block/updated-at :build/journal :build/keep-uuid?))
+
+(defn- existing-page-entity
+  [db page import-edn-data?]
+  (or (when import-edn-data?
+        (some-> (:block/uuid page)
+                (#(d/entity db [:block/uuid %]))
+                (#(when (entity-util/page? %) %))))
+      (if-let [journal-day (:build/journal page)]
+        (some->> journal-day
+                 (d/datoms db :avet :block/journal-day)
+                 first
+                 :e
+                 (d/entity db))
+        (some->> (:block/title page) (ldb/get-case-page db)))))
+
 (defn- add-uuid-to-page-if-exists
-  [db import-to-existing-page-uuids {:keys [existing-pages-keep-properties?]} m]
-  (if-let [ent (if (:build/journal m)
-                 (some->> (:build/journal m)
-                          (d/datoms db :avet :block/journal-day)
-                          first
-                          :e
-                          (d/entity db))
-                 ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-                 (some->> (:block/title m) (ldb/get-case-page db)))]
-    (do
-      (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-      (cond-> (assoc m :block/uuid (:block/uuid ent))
-        (and (:build/properties m) existing-pages-keep-properties?)
-        (update :build/properties (fn [props]
-                                    (->> props
-                                         (remove (fn [[k _v]] (get ent k)))
-                                         (into {}))))))
+  [db page-uuid-map
+   {:keys [existing-pages-keep-properties? import-edn-data?]} m]
+  (if-let [ent (or (some-> (get page-uuid-map (:block/uuid m))
+                           (#(d/entity db [:block/uuid %])))
+                   (existing-page-entity db m import-edn-data?))]
+    (let [existing-tag-idents (set (keep :db/ident (:block/tags ent)))
+            existing-alias-uuids (set (map :block/uuid (:block/alias ent)))
+            page (if import-edn-data?
+                   (-> (apply dissoc m existing-page-protected-attributes)
+                       (merge (select-keys ent existing-page-preserved-attributes))
+                       (assoc :block/uuid (:block/uuid ent)))
+                   (assoc m :block/uuid (:block/uuid ent)))
+            page' (cond-> page
+                    (and (:build/properties page) existing-pages-keep-properties?)
+                    (update :build/properties (fn [props]
+                                                (->> props
+                                                     (remove (fn [[k _v]]
+                                                               (contains? ent k)))
+                                                     (into {}))))
+                    (and (:build/tags page) import-edn-data?)
+                    (update :build/tags
+                            #(set (remove (fn [tag]
+                                            (contains? existing-tag-idents tag)) %)))
+                    (and (:block/alias page) import-edn-data?)
+                    (update :block/alias
+                            #(set (remove (fn [[attr page-uuid]]
+                                            (and (= :block/uuid attr)
+                                               (contains? existing-alias-uuids
+                                                          (get page-uuid-map
+                                                               page-uuid page-uuid))))
+                                          %))))
+            page'' (cond-> page'
+                     (and import-edn-data? (empty? (:build/properties page'))) (dissoc :build/properties)
+                     (and import-edn-data? (empty? (:build/tags page'))) (dissoc :build/tags)
+                     (and import-edn-data? (empty? (:block/alias page'))) (dissoc :block/alias))]
+      (cond-> page''
+        (and import-edn-data? (:block/alias page''))
+        (vary-meta assoc ::sqlite-build/merge-existing-aliases? true)))
     m))
 
 (defn- update-existing-properties
@@ -1167,18 +1210,39 @@
                 [k v])))
        (into {})))
 
-(defn- check-for-existing-entities
+(defn- ^:large-vars/cleanup-todo check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
-  (let [import-to-existing-page-uuids (atom {})
+  [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map}
+   property-conflicts import-options]
+  (let [graph-export? (#{:graph :graph-human} export-type)
+        page-maps (concat
+                   (keep :page pages-and-blocks)
+                   (when-not graph-export?
+                     (keep (fn [form]
+                             (when (and (vector? form)
+                                        (= :build/page (first form))
+                                        (map? (second form)))
+                               (second form)))
+                           (tree-seq coll? seq export-map))))
+        page-uuid-map
+        (into {}
+              (keep (fn [page]
+                      (when-let [source-uuid (:block/uuid page)]
+                        (when-let [existing-page
+                                   (existing-page-entity
+                                    db page (:import-edn-data? import-options))]
+                          [source-uuid (:block/uuid existing-page)]))))
+              page-maps)
         export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options)))
+                         (update m :page (partial add-uuid-to-page-if-exists
+                                                  db page-uuid-map
+                                                  import-options)))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -1191,24 +1255,25 @@
           (seq properties)
           (assoc :properties (update-existing-properties db property-conflicts properties))
           ;; Graph exports don't use :build/page so this speeds up build
-          (#{:graph :graph-human} export-type)
+          graph-export?
           (assoc :translate-property-values? false)
-          (#{:graph :graph-human} export-type)
+          graph-export?
           ;; Currently all graph-files are created by app so no need to distinguish between user and built-in ones yet
           (merge (dissoc export-map :pages-and-blocks :classes :properties)))
-        export-map' (if (#{:graph :graph-human} export-type)
+        export-map' (if graph-export?
                       export-map
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
                                          [:build/page
-                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options (second f))]
+                                          (add-uuid-to-page-if-exists
+                                           db page-uuid-map import-options (second f))]
                                          f))
                                      export-map))
         ;; Update uuid references of all pages that had their uuids updated to reference an existing page
         export-map''
         (walk/postwalk (fn [f]
                          (if-let [new-uuid (and (vector? f) (= :block/uuid (first f))
-                                                (get @import-to-existing-page-uuids (second f)))]
+                                                (get page-uuid-map (second f)))]
                            [:block/uuid new-uuid]
                            f))
                        export-map')]
@@ -1282,7 +1347,41 @@
    :block-props-tx []
    :misc-tx []})
 
-(defn build-import
+(def ^:private supported-export-metadata-keys
+  #{::auto-include-namespaces ::block ::export-type ::graph-files ::graph-format
+    ::import-options ::kv-values ::property-history ::schema-version})
+
+(defn- unsupported-import-edn-metadata-keys
+  [export-map]
+  (->> export-map
+       (keep (fn [[k v]]
+               (when (and (qualified-keyword? k)
+                          (or (not (supported-export-metadata-keys k))
+                              (= ::import-options k)
+                              (and (= ::export-type k)
+                                   (not (#{:block :graph-ontology :page
+                                           :selected-nodes :view-nodes} v)))
+                              (and (= ::graph-format k) (not= :datoms v))))
+                 k)))
+       sort
+       vec))
+
+(defn- full-graph-import?
+  [export-map]
+  (or (datom-export? export-map)
+      (#{:graph :graph-human} (::export-type export-map))
+      (some #(contains? export-map %)
+            [::auto-include-namespaces ::graph-files ::kv-values ::property-history ::schema-version])))
+
+(defn import-edn-data-shape
+  "Classifies EDN accepted by the Import EDN Data dialog."
+  [export-map]
+  (cond
+    (full-graph-import? export-map) :full-graph
+    (some #(contains? export-map %) [::block :pages-and-blocks :properties :classes]) :partial
+    :else :unsupported))
+
+(defn ^:large-vars/cleanup-todo build-import
   "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
@@ -1300,32 +1399,44 @@
    * :init-tx - Txs that must be transacted first, usually because they define new properties
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
    * :misc-tx - Txs to transact unrelated to other txs"
-  [export-map* db {:keys [current-block]}]
-  (cond
-    (datom-export? export-map*)
-    (build-datom-import export-map* db)
+  [export-map* db {:keys [current-block] :as import-options}]
+  (let [unsupported-metadata-keys
+        (when (:import-edn-data? import-options)
+          (unsupported-import-edn-metadata-keys export-map*))]
+    (cond
+      (and (:import-edn-data? import-options)
+           (= :full-graph (import-edn-data-shape export-map*)))
+      {:error "Full-graph EDN is not supported by Import EDN Data."}
 
-    :else
-    (let [export-map (if (and (::block export-map*) current-block)
-                       (build-block-import-options current-block export-map*)
-                       export-map*)
-          export-map' (if (and (#{:graph :graph-human} (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
-                        (merge (dissoc export-map :properties ::auto-include-namespaces)
-                               (add-ontology-for-include-namespaces db export-map))
-                        export-map)
-          property-conflicts (atom [])
-          export-map'' (check-for-existing-entities db export-map' property-conflicts)]
-      (if (seq @property-conflicts)
-        (do
-          (js/console.error :property-conflicts @property-conflicts)
-          {:error (str "The following imported properties conflict with the current graph: "
-                       (pr-str (mapv :property-id @property-conflicts)))})
-        (if (#{:graph :graph-human} (::export-type export-map''))
-          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
-              (assoc :misc-tx (vec (concat (::graph-files export-map'')
-                                           (::kv-values export-map'')
-                                           (::property-history export-map'')))))
-          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
+      (seq unsupported-metadata-keys)
+      {:error (str "The imported EDN contains unsupported field(s): "
+                   (pr-str unsupported-metadata-keys))}
+
+      (datom-export? export-map*)
+      (build-datom-import export-map* db)
+
+      :else
+      (let [import-options' (merge (dissoc (::import-options export-map*) :import-edn-data?) import-options)
+            export-map (if (and (::block export-map*) current-block)
+                         (build-block-import-options current-block export-map*)
+                         export-map*)
+            export-map' (if (and (#{:graph :graph-human} (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
+                          (merge (dissoc export-map :properties ::auto-include-namespaces)
+                                 (add-ontology-for-include-namespaces db export-map))
+                          export-map)
+            property-conflicts (atom [])
+            export-map'' (check-for-existing-entities db export-map' property-conflicts import-options')]
+        (if (seq @property-conflicts)
+          (do
+            (js/console.error :property-conflicts @property-conflicts)
+            {:error (str "The following imported properties conflict with the current graph: "
+                         (pr-str (mapv :property-id @property-conflicts)))})
+          (if (#{:graph :graph-human} (::export-type export-map''))
+            (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
+                (assoc :misc-tx (vec (concat (::graph-files export-map'')
+                                             (::kv-values export-map'')
+                                             (::property-history export-map'')))))
+            (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))))
 
 (defn import-tx-data
   [{:keys [init-tx block-props-tx misc-tx]}]
@@ -1364,40 +1475,99 @@
                  (contains? (get eid->attrs (second tx)) (nth tx 2))))
           tx-data))
 
+(def ^:private legacy-disallowed-attributes
+  #{:hide? :public?})
+
+(defn- remove-legacy-disallowed-attributes
+  [tx-data]
+  (into []
+        (keep (fn [tx]
+                (cond
+                  (map? tx)
+                  (apply dissoc tx legacy-disallowed-attributes)
+
+                  (and (vector? tx)
+                       (= :db/add (first tx))
+                       (contains? legacy-disallowed-attributes (nth tx 2 nil)))
+                  nil
+
+                  :else
+                  tx)))
+        tx-data))
+
+(defn- validation-error-details
+  [errors]
+  (->> errors
+       (mapcat (fn [{:keys [entity] entity-errors :errors}]
+                 (map (fn [[attr error]]
+                        (str (pr-str (or (:block/title entity) (:db/ident entity) (:db/id entity)))
+                             " " (pr-str attr) ": "
+                             (string/join ", " (filter string? (tree-seq coll? seq error)))))
+                      entity-errors)))
+       (string/join "; ")))
+
+(defn- changed-entity-validation-errors
+  [tx-report]
+  (let [[valid? schema-errors]
+        (db-validate/validate-tx-report
+         tx-report
+         {:closed-schema? true
+          :closed-values-validate? true
+          :skip-strict-url-validate? false})]
+    (when-not valid?
+      (mapv (fn [{:keys [entity-map errors]}]
+              {:entity entity-map
+               :errors (first errors)})
+            schema-errors))))
+
 (defn- validate-import-tx-data
-  [txs db edn-label]
-  (loop [tx-data (import-tx-data txs)]
-    (let [db-after (:db-after (d/with db tx-data))
-          validation (db-validate/validate-local-db! db-after)]
+  [txs db edn-label import-edn-data? validate-full-db?]
+  (loop [tx-data (cond-> (import-tx-data txs)
+                   import-edn-data? remove-legacy-disallowed-attributes)]
+    (let [tx-report (d/with db tx-data)
+          db-after (:db-after tx-report)
+          validation (if validate-full-db?
+                       (db-validate/validate-local-db! db-after)
+                       {:errors (changed-entity-validation-errors tx-report)})]
       (if-let [errors (seq (:errors validation))]
-        (let [eid->attrs (disallowed-key-attrs errors)
-              tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
-          (if (and (all-disallowed-key-errors? errors)
-                   (seq eid->attrs)
-                   (not= (count tx-data) (count tx-data')))
-            (recur (vec tx-data'))
-            {:error (str "The " edn-label " has " (count errors) " validation error(s)")
-             :errors errors}))
-        {:db db-after
-         :tx-data tx-data}))))
+        (if import-edn-data?
+          {:error (str "The " edn-label " has " (count errors) " validation error(s): "
+                       (validation-error-details errors))
+           :errors errors}
+          (let [eid->attrs (disallowed-key-attrs errors)
+                tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
+            (if (and (all-disallowed-key-errors? errors)
+                     (seq eid->attrs)
+                     (not= (count tx-data) (count tx-data')))
+              (recur (vec tx-data'))
+              {:error (str "The " edn-label " has " (count errors) " validation error(s)")
+               :errors errors})))
+        (if (and import-edn-data? (empty? (:tx-data tx-report)))
+          {:error "The imported EDN does not contain any importable data."}
+          {:db db-after
+           :tx-data tx-data})))))
 
 (defn validate-import-txs
   "Dry-runs import txs against db and validates the resulting local DB.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
    (validate-import-txs txs db {:edn-label "Imported EDN"}))
-  ([txs db {:keys [edn-label]
-            :or {edn-label "Imported EDN"}}]
+  ([txs db {:keys [edn-label import-edn-data? validate-full-db?]
+            :or {edn-label "Imported EDN"
+                 validate-full-db? true}}]
    (if-let [error (:error txs)]
      {:error error}
      (try
-       (let [result (validate-import-tx-data txs db edn-label)]
-         (if-let [errors (seq (:errors result))]
+       (let [result (validate-import-tx-data
+                     txs db edn-label import-edn-data? validate-full-db?)
+             errors (seq (:errors result))]
+         (cond
+           errors
            (do
              (js/console.error (str edn-label " has " (count errors) " validation error(s)"))
              (pprint/pprint
               (mapv
-                (fn [{:keys [entity dispatch-key] entity-errors :errors}]
+               (fn [{:keys [entity dispatch-key] entity-errors :errors}]
                  {:entity (select-keys entity
                                        [:db/id
                                         :db/ident
@@ -1407,6 +1577,8 @@
                   :errors entity-errors})
                errors))
              (dissoc result :errors))
+
+           :else
            result))
        (catch :default e
          (js/console.error (str "Unexpected " edn-label " validation error:") e)

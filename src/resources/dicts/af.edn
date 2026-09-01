@@ -818,7 +818,6 @@
  :import/assets-imported "{1} lêers geïmporteerd."
  :import/assets-skipped "{1} lêers overgeslagen. Details in console."
  :import/block-icons-cannot-be-imported "Blokpictogrammen kunnen nie worden geïmporteerd. Importeer handmatig in blok {1}."
- :import/cannot-import-block-into-non-block-entity "Kan blok nie voer in in niet-blokentiteit."
  :import/db-edn-desc "Voer 'n DB-grafiek se EDN-uitvoer in na 'n nuwe DB-grafiek"
  :import/db-edn-title "EDN na DB-grafiek"
  :import/debug-transit-desc "Voer ontfoutings-transit-lêer in na 'n nuwe DB-grafiek"

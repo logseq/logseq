@@ -818,7 +818,6 @@
  :import/assets-imported "{1}個のアセットをインポートしました。"
  :import/assets-skipped "{1}個のアセットをスキップしました。詳細はコンソールを確認してください。"
  :import/block-icons-cannot-be-imported "ブロックアイコンはインポートできません。ブロック{1}で手動でインポートしてください。"
- :import/cannot-import-block-into-non-block-entity "ブロック以外のエンティティにブロックをインポートできません。他の場所にインポートしてください。"
  :import/db-edn-desc "DBグラフのEDNエクスポートを新しいDBグラフにインポート"
  :import/db-edn-title "EDNからDBグラフ"
  :import/debug-transit-desc "デバッグ用transitファイルを新しいDBグラフにインポート"

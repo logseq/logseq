@@ -818,7 +818,6 @@
  :import/assets-imported "{1} dosya içe aktarıldı."
  :import/assets-skipped "{1} dosya atlandı. Ayrıntılar konsolda."
  :import/block-icons-cannot-be-imported "Blok simgeleri içe aktarılamaz. {1} bloğunda elle içe aktarın."
- :import/cannot-import-block-into-non-block-entity "Blok olmayan varlığa blok içe aktarılamaz."
  :import/db-edn-desc "Bir DB grafiğinin EDN dışa aktarımını yeni bir DB grafiğine içe aktar"
  :import/db-edn-title "EDN'den DB grafiğine"
  :import/debug-transit-desc "Hata ayıklama transit dosyasını yeni bir DB grafiğine içe aktar"

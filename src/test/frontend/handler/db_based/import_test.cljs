@@ -1,11 +1,15 @@
 (ns frontend.handler.db-based.import-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.context.i18n :as i18n]
+            [frontend.db.transact :as db-transact]
             [frontend.handler.db-based.import :as import-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 (deftest import-from-sqlite-db-persists-import-marker-through-worker-test
@@ -35,10 +39,7 @@
                       state/<invoke-db-worker
                       (fn [& args]
                         (swap! calls conj (vec args))
-                        (p/resolved nil))
-                      db/transact!
-                      (fn [& _]
-                        (throw (js/Error. "renderer DB transact should not be used")))]
+                        (p/resolved nil))]
         (-> (import-handler/import-from-sqlite-db! "buffer" "imported" #(swap! calls conj [:finished]))
             (p/then
              (fn []
@@ -59,3 +60,74 @@
              (fn [error]
                (is false (str error))))
             (p/finally done))))))
+
+(deftest import-edn-data-preserves-command-editor-target-test
+  (async done
+    (let [dialog-content (atom nil)
+          submitted (atom nil)
+          graph "logseq_db_target"
+          target-uuid (random-uuid)
+          export-map {::sqlite-export/block {:block/title "Imported block"}}]
+      (-> (p/with-redefs
+            [i18n/t identity
+             state/get-editor-info (constantly nil)
+             state/get-current-repo (constantly graph)
+             state/get-state (fn [key & _]
+                               (when (= :search/args key)
+                                 {:editing-block {:repo graph
+                                                  :block-uuid target-uuid}}))
+             shui/dialog-open! (fn [content & _]
+                                 (when (vector? content)
+                                   (reset! dialog-content content)))
+             shui/dialog-close! (constantly nil)
+             shui/textarea (fn [props] [:textarea props])
+             shui/button (fn [props child] [:button props child])
+             notification/show! (constantly nil)
+             db-transact/apply-outliner-ops (fn [_conn ops _opts]
+                                              (reset! submitted ops)
+                                              (p/resolved {}))]
+            (import-handler/import-edn-data-dialog)
+            (let [[_ _ textarea button] @dialog-content]
+              ((:on-change (second textarea))
+               #js {:target #js {:value (pr-str export-map)}})
+              ((:on-click (second button))
+               #js {:currentTarget #js {:disabled false}})))
+          (p/then (fn []
+                    (is (= {:existing-pages-keep-properties? true
+                            :import-edn-data? true
+                            :current-block-uuid target-uuid}
+                           (get-in @submitted [0 1 1])))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest import-edn-data-prevents-concurrent-submission-test
+  (async done
+    (let [dialog-content (atom nil)
+          request-count (atom 0)
+          request (p/deferred)
+          button-element #js {:disabled false}
+          export-map {:pages-and-blocks [{:page {:block/title "Page"}}]}]
+      (-> (p/with-redefs
+            [i18n/t identity
+             shui/dialog-open! (fn [content & _] (reset! dialog-content content))
+             shui/textarea (fn [props] [:textarea props])
+             shui/button (fn [props child] [:button props child])
+             notification/show! (constantly nil)
+             db-transact/apply-outliner-ops (fn [& _]
+                                              (swap! request-count inc)
+                                              request)]
+            (import-handler/import-edn-data-dialog)
+            (let [[_ _ textarea button] @dialog-content
+                  click! (:on-click (second button))]
+              ((:on-change (second textarea))
+               #js {:target #js {:value (pr-str export-map)}})
+              (let [result (click! #js {:currentTarget button-element})]
+                (click! #js {:currentTarget button-element})
+                (is (true? (.-disabled button-element)))
+                (p/resolve! request {})
+                result)))
+          (p/then (fn []
+                    (is (= 1 @request-count))
+                    (is (false? (.-disabled button-element)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
