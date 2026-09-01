@@ -1114,6 +1114,35 @@ abc
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-special-content-in-quote-blocks
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          file (path/path-join file-graph-dir "journals/2025_09_14.md")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (= (string/join "\n" ["| Tray | Seedling | Ready month |"
+                                "| --- | --- | --- |"
+                                "| A1 | Tomato | March |"
+                                "| B4 | Thyme | April |"])
+           (:block/title (db-test/find-block-by-content @conn #"Tray")))
+        "Markdown tables are retained in imported quote blocks")
+
+    (is (= {:block/title "$$\na^2 + b^2 = c^2\n$$"
+            :block/tags [:logseq.class/Quote-block]
+            :logseq.property.node/display-type :quote}
+           (-> (db-test/find-block-by-content @conn #"a\^2")
+               (select-keys [:block/title :block/tags :logseq.property.node/display-type])
+               (update :block/tags #(mapv :db/ident %))))
+        "Displayed math does not replace the containing Quote-block type")
+
+    (is (= {:block/title "```clojure\n(map inc [1 2 3])\n```"
+            :block/tags [:logseq.class/Quote-block]
+            :logseq.property.node/display-type :quote}
+           (-> (db-test/find-block-by-content @conn #"map inc")
+               (select-keys [:block/title :block/tags :logseq.property.node/display-type])
+               (update :block/tags #(mapv :db/ident %))))
+        "Source blocks do not replace the containing Quote-block type")))
+
 (deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
@@ -1130,7 +1159,7 @@ abc
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 34 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 35 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -1140,7 +1169,7 @@ abc
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
-      (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 8 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
