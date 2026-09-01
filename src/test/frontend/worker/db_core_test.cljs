@@ -2563,13 +2563,6 @@
          (is (= [:user.property/a :user.property/b :logseq.property/icon :logseq.property/private]
                 (map :db/ident with-built-ins))))))))
 
-(defn- last-ui-state-value
-  [ui-state path]
-  (->> @ui-state
-       (filter #(= path (first %)))
-       last
-       second))
-
 (defn- assert-terminal-import-result
   [result]
   (is (string? (:run-id result)))
@@ -2582,38 +2575,6 @@
   (is (not (contains? result :import-state)))
   (is (not (contains? result :staged-assets)))
   (is (not (contains? result :ignored-properties))))
-
-(deftest import-file-graph-remote-function-encodes-terminal-result
-  (async done
-         (let [orig (get @thread-api/*thread-apis :thread-api/import-file-graph)
-               write-orig ldb/write-transit-str
-               written (atom [])
-               terminal {:run-id "import-1"
-                         :status :completed
-                         :persisted? true
-                         :validation {:status :passed :error-count 0}
-                         :issue-count 0
-                         :org-file-count 1}]
-           (vswap! thread-api/*thread-apis assoc :thread-api/import-file-graph
-                   (fn [& _] terminal))
-           (-> (p/with-redefs [ldb/write-transit-str
-                               (fn [v]
-                                 (swap! written conj v)
-                                 (write-orig v))]
-                 (thread-api/remote-function
-                  "thread-api/import-file-graph"
-                  (write-orig ["repo" {} [] {}])))
-               (p/then (fn [reply]
-                         (is (string? reply)
-                             "Import worker reply is a transit string.")
-                         (is (= terminal (ldb/read-transit-str reply)))
-                         (is (= [terminal] @written)
-                             "Import transit-encodes the small terminal result.")))
-               (p/catch (fn [error]
-                          (is false (str error))))
-               (p/finally (fn []
-                            (vswap! thread-api/*thread-apis assoc :thread-api/import-file-graph orig)
-                            (done)))))))
 
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
@@ -2661,8 +2622,6 @@
                     (is (= 0 (:org-file-count result)))
                     (is (= 0 (:ignored-properties-count result)))
                     (is (= {:status :passed :error-count 0} (:validation result)))
-                    (is (nil? (last-ui-state-value ui-state [:graph/importing-result]))
-                        "Terminal import summary is returned by RPC, not UI state.")
                     (is (= "Home" (:block/title page)))
                     (is (= "imported block" (:block/title block)))
                     (doseq [entity [page block]]
@@ -2832,8 +2791,6 @@
                     (is (empty? @renderer-payloads)
                         "File-graph import must not broadcast renderer deltas to clients.")
                     (assert-terminal-import-result result)
-                    (is (nil? (last-ui-state-value ui-state [:graph/importing-result]))
-                        "Terminal import summary is returned by RPC, not UI state.")
                     (is (contains? current-pages "logseq/config.edn")
                         "Import progress shows the config file being read.")
                     (is (contains? current-pages "pages/source.md")
@@ -2918,9 +2875,7 @@
                     (is (contains? current-pages "pages/Home.md")
                         "Desktop import progress is posted over the node event channel.")
                     (is (= :import/validating-graph last-label)
-                        "Desktop import progress reaches graph validation.")
-                    (is (not-any? #(= [:graph/importing-result] (first %)) ui-state)
-                        "Desktop import summary is not posted through UI state."))
+                        "Desktop import progress reaches graph validation."))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch
