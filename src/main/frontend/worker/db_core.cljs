@@ -277,9 +277,7 @@
 
 (defn- file-content
   [file]
-  (or (:file/content file)
-      (:content file)
-      ""))
+  (:file/content file))
 
 (defn- file-needs-lazy-read?
   [file]
@@ -295,21 +293,31 @@
 
 (defn- <read-import-file-content
   [file]
-  (if-not (file-needs-lazy-read? file)
-    (p/resolved (file-content file))
+  (cond
+    (file-needs-lazy-read? file)
     (if-let [^js fsp (node-fs-promises)]
       (-> (.readFile fsp (:fs-path file) "utf8")
           (p/catch (fn [e]
                      (log/error :read-import-file {:fs-path (:fs-path file) :error e})
-                     "")))
-      (p/resolved ""))))
+                     (throw e))))
+      (p/rejected (ex-info "Filesystem is unavailable for lazy import"
+                           {:fs-path (:fs-path file)})))
+
+    (string? (file-content file))
+    (p/resolved (file-content file))
+
+    :else
+    (p/rejected (ex-info "Import file is missing content and fs-path"
+                         {:path (:path file)}))))
 
 (defn- <import-file-stat
   [fs-path]
   (if-let [^js fsp (node-fs-promises)]
     (-> (.stat fsp fs-path)
         (p/then bean/->clj)
-        (p/catch (constantly nil)))
+        (p/catch (fn [e]
+                   (log/error :import-file-stat {:fs-path fs-path :error e})
+                   nil)))
     (p/resolved nil)))
 
 

@@ -53,8 +53,10 @@
 
 (defn- decode-invoke-result
   [result-transit]
-  (when (string? result-transit)
-    (ldb/read-transit-str result-transit)))
+  (if (string? result-transit)
+    (ldb/read-transit-str result-transit)
+    (throw (ex-info "db-worker invoke returned no transit result"
+                    {:code :invoke-result-missing}))))
 
 (defn- decode-event
   [{:keys [type payload]}]

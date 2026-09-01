@@ -371,18 +371,16 @@
   [error]
   (let [message (or (.-message error) (str error))
         code (:code (ex-data error))]
-    (or (nil? (ex-data error))
-        (contains? #{:fetch-failed :network-error :db-worker-unavailable :server-unavailable} code)
+    (or (contains? #{:fetch-failed :network-error :db-worker-unavailable :server-unavailable} code)
         (and (string? message)
              (string/includes? message "Failed to fetch")))))
 
 (defn- import-files-finished?
+  "Keep-graph is safe only after export-file-graph returns (sqlite store +
+  finalize). :finishing is set before those steps; current-idx reaches total
+  when the last file starts."
   []
-  (let [{:keys [total current-idx step]} (state/get-state :graph/importing-state)]
-    (or (contains? #{:finishing :validating} step)
-        (and (number? total) (pos? total)
-             (number? current-idx)
-             (>= current-idx total)))))
+  (= :validating (:step (state/get-state :graph/importing-state))))
 
 (defn- abort-file-graph-import!
   [error previous-repo]

@@ -2723,6 +2723,46 @@
              (is false (str error))))
           (p/finally done))))
 
+(deftest import-file-graph-lazy-read-failure-is-ignored-not-empty-page
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   fake-fsp #js {:readFile (fn [_path _encoding]
+                                             (p/rejected (js/Error. "ENOENT")))
+                                 :stat (fn [_path]
+                                         (p/rejected (js/Error. "ENOENT")))}
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{}"}
+                   files [config-file
+                          {:path "pages/Missing.md"
+                           :fs-path "/tmp/graph/pages/Missing.md"}]]
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-core/node-fs-promises (fn [] fake-fsp)
+                  db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 (->
+                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})]
+                    (is (nil? (ldb/get-page @conn "missing"))
+                        "A missing lazy file is not imported as an empty page.")
+                    (is (pos? (:ignored-files-count result))
+                        "Read failure is recorded as an ignored file.")
+                    (is (= :completed-with-errors (:status result))))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
 (defn- imported-ref-uuids
   [entity]
   (set (map :block/uuid (:block/refs entity))))
