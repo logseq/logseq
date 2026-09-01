@@ -2849,7 +2849,7 @@
                                :ex-data {:path path :error error}})
                  (when-let [ignored-files (get-in options [:import-state :ignored-files])]
                    (swap! ignored-files conj {:path path :reason :export-failed}))
-                 nil)))))
+                 nil))))
 
 (defn- remove-block-ref-from-title
   [title block-uuid]
