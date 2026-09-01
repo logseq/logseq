@@ -1225,11 +1225,13 @@
                                                    :bottom? true}]]]
                                 {})
         (let [asset (d/entity @conn [:block/uuid asset-uuid])
-              caption (db-test/find-block-by-content @conn "caption")]
+              inserted (->> (:block/_parent asset)
+                            (filter #(= "caption" (:block/title %)))
+                            first)]
           (is (some? asset))
-          (is (some? caption))
-          (is (= (:db/id asset) (:db/id (:block/parent caption))))
+          (is (some? inserted)
+              "Template children are copied under the new asset")
           (is (= (:db/id template-root)
-                 (:db/id (:logseq.property/used-template caption)))))
+                 (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
