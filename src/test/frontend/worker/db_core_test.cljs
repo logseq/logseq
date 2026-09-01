@@ -1996,7 +1996,11 @@
        (is (= ["current worker page"]
               (resolve-inputs! test-repo [":current-page"]
                                {:current-page page-uuid
-                                :today-title "Today"})))))))
+                                :today-title "Today"})))
+       (let [broken-refs-matcher "\\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\)"]
+         (is (= [broken-refs-matcher]
+                (resolve-inputs! test-repo [broken-refs-matcher] {}))
+             "Regex query inputs that start with an escaped paren stay strings."))))))
 
 (deftest query-dsl-worker-apis-run-against-worker-db
   (restoring-worker-state

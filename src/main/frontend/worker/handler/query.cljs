@@ -99,14 +99,17 @@
     (task-spent-time @conn block-id (common-util/time-ms))))
 
 (defn- query-input-value
+  "Parse stringified EDN query inputs from plugin/JSON callers (e.g. \":today\").
+  Keep literal strings. cljs.reader treats a leading backslash as a character
+  literal, so regex patterns such as \"\\\\(uuid\\\\)\" would otherwise become \"(\"."
   [input]
   (if (and (string? input)
            (not (page-ref/page-ref? input)))
     (try
       (let [value (cljs.reader/read-string input)]
-        (if (symbol? value)
-          input
-          value))
+        (if (or (keyword? value) (number? value) (boolean? value))
+          value
+          input))
       (catch :default _
         input))
     input))
