@@ -28,6 +28,7 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.common.log :as log]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -2886,6 +2887,32 @@
            (fn [error]
              (is false (str error))))
           (p/finally done))))
+
+(deftest transact-failed-logs-tx-count-not-tx-data-test
+  (let [conn (db-test/create-conn)
+        tx-data (mapv (fn [idx]
+                        {:db/id (- (inc idx))
+                         :block/uuid (random-uuid)
+                         :block/title (str "block-" idx)})
+                      (range 2500))
+        logs (atom [])
+        original-error (js/Error. "store failed")]
+    (with-redefs [log/error (fn [& args]
+                              (swap! logs conj args))
+                  d/transact! (fn [& _] (throw original-error))]
+      (try
+        (ldb/transact! conn tx-data {:skip-validate-db? true})
+        (is false "expected transact! to throw")
+        (catch :default e
+          (is (identical? original-error e)
+              "Original transaction error is rethrown, not a printer overflow."))))
+    (let [payload (some (fn [args]
+                          (some #(when (and (map? %) (:tx-count %)) %) args))
+                        @logs)]
+      (is (some? payload))
+      (is (pos? (:tx-count payload)))
+      (is (not (contains? payload :tx-data)))
+      (is (string/includes? (:error payload) "store failed")))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
