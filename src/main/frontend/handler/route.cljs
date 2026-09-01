@@ -39,6 +39,22 @@
    (when pub-event? (state/pub-event! [:redirect-to-home]))
    (redirect! {:to :home})))
 
+(defn- history-length
+  []
+  (.-length js/window.history))
+
+(defn- history-go-back!
+  []
+  (.back js/window.history))
+
+(defn redirect-to-previous!
+  "Leave the current history entry by going back to the previous page/block.
+   Replaces the current entry with home when there is no previous history entry."
+  []
+  (if (> (history-length) 1)
+    (history-go-back!)
+    (redirect! {:to :home :push false})))
+
 (defn redirect-to-all-pages!
   []
   (redirect! {:to :all-pages}))
