@@ -20,6 +20,8 @@
 (defonce ^:private *sse-clients (atom #{}))
 (defonce ^:private *lock-info (atom nil))
 (defonce ^:private *server-list-file (atom nil))
+(def ^:private invoke-heartbeat-ms 10000)
+(def ^:private sse-keepalive-ms 15000)
 
 (defn- server-list-file-path
   [root-dir]
@@ -136,8 +138,37 @@
                                               "Connection" "keep-alive"}))
   (.write res "\n")
   (swap! *sse-clients conj res)
-  (.on req "close" (fn []
-                     (swap! *sse-clients disj res))))
+  (let [keepalive-id (atom nil)]
+    (reset! keepalive-id
+            (js/setInterval
+             (fn []
+               (try
+                 (.write res ": keepalive\n\n")
+                 (catch :default _
+                   (js/clearInterval @keepalive-id))))
+             sse-keepalive-ms))
+    (.on req "close" (fn []
+                       (js/clearInterval @keepalive-id)
+                       (swap! *sse-clients disj res)))))
+
+(defn- begin-json-response!
+  [^js res]
+  (.writeHead res 200 (response-headers #js {"Content-Type" "application/json"}))
+  (js/setInterval
+   (fn []
+     (try
+       (.write res " ")
+       (catch :default _)))
+   invoke-heartbeat-ms))
+
+(defn- end-json-response!
+  [^js res heartbeat-id payload]
+  (when heartbeat-id
+    (js/clearInterval heartbeat-id))
+  (try
+    (.end res (js/JSON.stringify (clj->js payload)))
+    (catch :default e
+      (log/error :json-response-end-failed e))))
 
 (defn- <invoke!
   [^js proxy method-str method-kw args]
@@ -309,7 +340,8 @@
 
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
-  (http/createServer
+  (let [server
+        (http/createServer
    (fn [^js req ^js res]
      (let [url (.-url req)
            parsed-url (js/URL. url "http://127.0.0.1")
@@ -373,14 +405,28 @@
                                                 args')]
                     (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                       (send-json! res status {:ok false :error error})
-                      (p/let [_ (when-not (contains? non-repo-methods method-kw)
-                                  (let [{:keys [path lock]} @*lock-info]
-                                    (db-lock/assert-lock-owner! path lock)))
-                              result (<invoke! proxy method-str method-kw args')
-                              result-transit (if (string? result)
-                                               result
-                                               (ldb/write-transit-str result))]
-                        (send-json! res 200 {:ok true :resultTransit result-transit}))))
+                      (let [heartbeat-id (begin-json-response! res)]
+                        (-> (p/let [_ (when-not (contains? non-repo-methods method-kw)
+                                        (let [{:keys [path lock]} @*lock-info]
+                                          (db-lock/assert-lock-owner! path lock)))
+                                    result (<invoke! proxy method-str method-kw args')
+                                    result-transit (if (string? result)
+                                                     result
+                                                     (ldb/write-transit-str result))]
+                              (end-json-response! res heartbeat-id {:ok true :resultTransit result-transit}))
+                            (p/catch (fn [error]
+                                       (let [data (ex-data error)
+                                             code (invoke-error-code data)
+                                             message (invoke-error-message error data)]
+                                         (log/error :db-worker-node-invoke-failed
+                                                    {:code code
+                                                     :error error
+                                                     :message message
+                                                     :method method-kw})
+                                         (end-json-response! res heartbeat-id
+                                                             {:ok false
+                                                              :error {:code code
+                                                                      :message message}}))))))))
                   (p/catch (fn [error]
                              (log-invoke-error! res error method-kw)))))
             (p/catch (fn [error]
@@ -398,7 +444,11 @@
            (send-text! res 405 "method-not-allowed"))
 
          :else
-         (send-text! res 404 "not-found"))))))
+         (send-text! res 404 "not-found")))))]
+    (set! (.-requestTimeout server) 0)
+    (set! (.-headersTimeout server) 0)
+    (set! (.-timeout server) 0)
+    server))
 
 (defn- show-help!
   []
