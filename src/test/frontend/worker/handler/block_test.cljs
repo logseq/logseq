@@ -551,6 +551,65 @@
       (is (thrown? js/Error
                    (direct-children-membership @conn page-uuid))))))
 
+(deftest direct-children-membership-allows-missing-child-order-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          ordered-uuid (random-uuid)
+          orderless-uuid (random-uuid)]
+      ;; :block/order is {:optional true} for pages in normal-page, so a
+      ;; parented page may legitimately carry none. It must not fail the
+      ;; whole membership read for its siblings.
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid ordered-uuid
+                     :block/tx-id 11
+                     :block/title "Ordered child"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -2
+                     :block/uuid orderless-uuid
+                     :block/tx-id 11
+                     :block/title "Child page without order"
+                     :block/name "child page without order"
+                     :block/tags :logseq.class/Page
+                     :block/parent -1}])
+      (let [response (direct-children-membership @conn page-uuid)]
+        (is (= 2 (count (:items response)))
+            "the order-less child does not remove its siblings")
+        (is (= [[orderless-uuid nil] [ordered-uuid "a0"]]
+               (:items response))
+            "a nil order sorts first, matching ldb/sort-by-order")))))
+
+(deftest direct-children-membership-rejects-non-string-child-order-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)]
+      ;; Absent is legal; a non-string value is still a real defect.
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid (random-uuid)
+                     :block/tx-id 11
+                     :block/title "Child"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order 42}])
+      (is (thrown? js/Error
+                   (direct-children-membership @conn page-uuid))))))
+
 (deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
         direct-children-membership (direct-children-membership-api)

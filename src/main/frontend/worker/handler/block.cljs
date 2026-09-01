@@ -215,7 +215,11 @@
                      (fail-render-read! "Invalid direct-child UUID"
                                         {:parent-uuid parent-uuid
                                          :block-uuid child-uuid}))
-                   (when-not (string? order)
+                   ;; :block/order is {:optional true} for pages in
+                   ;; normal-page, so a parented page may legitimately have
+                   ;; none. Sort those first, matching ldb/sort-by-order,
+                   ;; rather than failing the whole membership read.
+                   (when-not (or (nil? order) (string? order))
                      (fail-render-read! "Invalid direct-child order"
                                         {:parent-uuid parent-uuid
                                          :block-uuid child-uuid
