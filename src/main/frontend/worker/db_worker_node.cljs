@@ -20,7 +20,6 @@
 (defonce ^:private *sse-clients (atom #{}))
 (defonce ^:private *lock-info (atom nil))
 (defonce ^:private *server-list-file (atom nil))
-(def ^:private invoke-heartbeat-ms 10000)
 (def ^:private sse-keepalive-ms 15000)
 
 (defn- server-list-file-path
@@ -150,25 +149,6 @@
     (.on req "close" (fn []
                        (js/clearInterval @keepalive-id)
                        (swap! *sse-clients disj res)))))
-
-(defn- begin-json-response!
-  [^js res]
-  (.writeHead res 200 (response-headers #js {"Content-Type" "application/json"}))
-  (js/setInterval
-   (fn []
-     (try
-       (.write res " ")
-       (catch :default _)))
-   invoke-heartbeat-ms))
-
-(defn- end-json-response!
-  [^js res heartbeat-id payload]
-  (when heartbeat-id
-    (js/clearInterval heartbeat-id))
-  (try
-    (.end res (js/JSON.stringify (clj->js payload)))
-    (catch :default e
-      (log/error :json-response-end-failed e))))
 
 (defn- <invoke!
   [^js proxy method-str method-kw args]
@@ -338,113 +318,101 @@
                 :method method-kw})
     (send-json! res status payload)))
 
+(defn- handle-import-db-binary!
+  [proxy bound-repo ^js parsed-url ^js req ^js res]
+  (let [repo (.get (.-searchParams parsed-url) "repo")
+        method-kw :thread-api/import-db-binary
+        method-str (normalize-method-str method-kw)]
+    (-> (p/let [binary (<read-body-buffer req)
+                args-for-validation [repo binary]]
+          (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+            (send-json! res status {:ok false :error error})
+            (p/let [_ (let [{:keys [path lock]} @*lock-info]
+                        (db-lock/assert-lock-owner! path lock))
+                    result (<invoke-binary! proxy method-str method-kw repo binary)]
+              (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
+        (p/catch (fn [error]
+                   (log-invoke-error! res error method-kw))))))
+
+(defn- handle-invoke!
+  [proxy bound-repo ^js req ^js res]
+  (->
+   (p/let [body (<read-body req)
+           payload (js/JSON.parse body)
+           {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
+           method-kw (normalize-method-kw method)
+           method-str (normalize-method-str method)]
+     (-> (p/let [args' (or argsTransit args)
+                 args-for-validation (if (string? args')
+                                       (ldb/read-transit-str args')
+                                       args')]
+           (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+             (send-json! res status {:ok false :error error})
+             (p/let [_ (when-not (contains? non-repo-methods method-kw)
+                         (let [{:keys [path lock]} @*lock-info]
+                           (db-lock/assert-lock-owner! path lock)))
+                     result (<invoke! proxy method-str method-kw args')
+                     result-transit (if (string? result)
+                                      result
+                                      (ldb/write-transit-str result))]
+               (send-json! res 200 {:ok true :resultTransit result-transit}))))
+         (p/catch (fn [error]
+                    (log-invoke-error! res error method-kw)))))
+   (p/catch (fn [error]
+              (log-invoke-error! res error nil)))))
+
+(defn- handle-shutdown!
+  [stop-fn ^js res]
+  (send-json! res 200 {:ok true})
+  (js/setTimeout (fn []
+                   (when stop-fn
+                     (stop-fn)))
+                 10))
+
+(defn- handle-request!
+  [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]} ^js req ^js res]
+  (let [url (.-url req)
+        parsed-url (js/URL. url "http://127.0.0.1")
+        request-path (.-pathname parsed-url)
+        method (.-method req)]
+    (cond
+      (= method "OPTIONS")
+      (send-no-content! res)
+
+      (= request-path "/healthz")
+      (send-json! res (if @*ready? 200 503)
+                  (health-payload {:bound-repo bound-repo
+                                   :host host
+                                   :port port
+                                   :owner-source owner-source
+                                   :root-dir root-dir}))
+
+      (= request-path "/v1/events")
+      (sse-handler req res)
+
+      (= request-path "/v1/import-db-binary")
+      (if (= method "POST")
+        (handle-import-db-binary! proxy bound-repo parsed-url req res)
+        (send-text! res 405 "method-not-allowed"))
+
+      (= request-path "/v1/invoke")
+      (if (= method "POST")
+        (handle-invoke! proxy bound-repo req res)
+        (send-text! res 405 "method-not-allowed"))
+
+      (= url "/v1/shutdown")
+      (if (= method "POST")
+        (handle-shutdown! stop-fn res)
+        (send-text! res 405 "method-not-allowed"))
+
+      :else
+      (send-text! res 404 "not-found"))))
+
 (defn- make-server
-  [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
-  (let [server
-        (http/createServer
-   (fn [^js req ^js res]
-     (let [url (.-url req)
-           parsed-url (js/URL. url "http://127.0.0.1")
-           request-path (.-pathname parsed-url)
-           method (.-method req)]
-       (cond
-         (= method "OPTIONS")
-         (send-no-content! res)
-
-         (= request-path "/healthz")
-         (send-json! res (if @*ready? 200 503)
-                     (health-payload {:bound-repo bound-repo
-                                      :host host
-                                      :port port
-                                      :owner-source owner-source
-                                      :root-dir root-dir}))
-
-         (= request-path "/v1/events")
-         (sse-handler req res)
-
-         (= request-path "/v1/import-db-binary")
-         (if (= method "POST")
-           (let [repo (.get (.-searchParams parsed-url) "repo")
-                 method-kw :thread-api/import-db-binary
-                 method-str (normalize-method-str method-kw)]
-             (-> (p/let [binary (<read-body-buffer req)
-                         args-for-validation [repo binary]]
-                   (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                     (send-json! res status {:ok false :error error})
-                     (p/let [_ (let [{:keys [path lock]} @*lock-info]
-                                 (db-lock/assert-lock-owner! path lock))
-                             result (<invoke-binary! proxy method-str method-kw repo binary)]
-                       (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
-                 (p/catch (fn [error]
-                            (let [data (ex-data error)
-                                  status (invoke-error-status data)
-                                  code (invoke-error-code data)
-                                  message (invoke-error-message error data)
-                                  payload {:ok false
-                                           :error {:code code
-                                                   :message message}}]
-                              (log/error :db-worker-node-invoke-failed
-                                         {:status status
-                                          :code code
-                                          :method method-str
-                                          :error error})
-                              (send-json! res status payload))))))
-           (send-text! res 405 "method-not-allowed"))
-
-         (= request-path "/v1/invoke")
-         (if (= method "POST")
-           (->
-            (p/let [body (<read-body req)
-                    payload (js/JSON.parse body)
-                    {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
-                    method-kw (normalize-method-kw method)
-                    method-str (normalize-method-str method)]
-              (-> (p/let [args' (or argsTransit args)
-                          args-for-validation (if (string? args')
-                                                (ldb/read-transit-str args')
-                                                args')]
-                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                      (send-json! res status {:ok false :error error})
-                      (let [heartbeat-id (begin-json-response! res)]
-                        (-> (p/let [_ (when-not (contains? non-repo-methods method-kw)
-                                        (let [{:keys [path lock]} @*lock-info]
-                                          (db-lock/assert-lock-owner! path lock)))
-                                    result (<invoke! proxy method-str method-kw args')
-                                    result-transit (if (string? result)
-                                                     result
-                                                     (ldb/write-transit-str result))]
-                              (end-json-response! res heartbeat-id {:ok true :resultTransit result-transit}))
-                            (p/catch (fn [error]
-                                       (let [data (ex-data error)
-                                             code (invoke-error-code data)
-                                             message (invoke-error-message error data)]
-                                         (log/error :db-worker-node-invoke-failed
-                                                    {:code code
-                                                     :error error
-                                                     :message message
-                                                     :method method-kw})
-                                         (end-json-response! res heartbeat-id
-                                                             {:ok false
-                                                              :error {:code code
-                                                                      :message message}}))))))))
-                  (p/catch (fn [error]
-                             (log-invoke-error! res error method-kw)))))
-            (p/catch (fn [error]
-                       (log-invoke-error! res error nil))))
-           (send-text! res 405 "method-not-allowed"))
-
-         (= url "/v1/shutdown")
-         (if (= method "POST")
-           (do
-             (send-json! res 200 {:ok true})
-             (js/setTimeout (fn []
-                              (when stop-fn
-                                (stop-fn)))
-                            10))
-           (send-text! res 405 "method-not-allowed"))
-
-         :else
-         (send-text! res 404 "not-found")))))]
+  [proxy opts]
+  (let [server (http/createServer
+                (fn [^js req ^js res]
+                  (handle-request! proxy opts req res)))]
     (set! (.-requestTimeout server) 0)
     (set! (.-headersTimeout server) 0)
     (set! (.-timeout server) 0)
