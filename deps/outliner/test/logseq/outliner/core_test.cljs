@@ -4,7 +4,9 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
-            [logseq.common.config :as common-config]))
+            [logseq.outliner.page :as outliner-page]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]))
 
 (deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
@@ -95,6 +97,58 @@
     (is (= (str "#[[" class-uuid "]]") (:block/title block)))
     (is (= class-uuid (-> block :block/refs first :block/uuid)))
     (is (= class-uuid (-> block :block/tags first :block/uuid)))))
+
+(defn- page-uuids-named
+  [db title]
+  (d/q '[:find [?uuid ...]
+         :in $ ?name
+         :where
+         [?e :block/name ?name]
+         [?e :block/uuid ?uuid]
+         [?e :block/tags :logseq.class/Page]]
+       db
+       (common-util/page-name-sanity-lc title)))
+
+(deftest resolve-page-refs-recognizes-db-graph-journal-tags
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        title "2026-07-27"
+        {:keys [block page-txs]}
+        (#'outliner-core/resolve-page-refs
+         @conn
+         {:block/title (str "[[" title "]]")
+          :block/refs [{:block/name title
+                        :block/title title
+                        :block/uuid (random-uuid)
+                        :block/tags [:logseq.class/Journal]}]})]
+    (d/transact! conn page-txs)
+    (let [journal (d/entity @conn [:block/uuid (-> block :block/refs first :block/uuid)])]
+      (is (ldb/journal? journal))
+      (is (= 20260727 (:block/journal-day journal))))))
+
+(deftest insert-blocks-does-not-duplicate-existing-page-ref
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        [_ existing-uuid] (outliner-page/create! conn "Esc Dup" {})
+        host (db-test/find-block-by-content @conn "host")
+        parsed-uuid (random-uuid)
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title "[[Esc Dup]]"
+                  :block/refs [{:block/name "esc dup"
+                                :block/title "Esc Dup"
+                                :block/uuid parsed-uuid
+                                :block/tags [:logseq.class/Page]}]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
+    (is (= existing-uuid
+           (:block/uuid (first (:block/refs (first (:blocks result)))))))))
 
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"

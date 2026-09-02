@@ -606,7 +606,9 @@
       {:id (keyword :editor.commands id)
        :align :start
        :root-props (merge {:onOpenChange #(when-not % (state/clear-editor-action!))} root-props)
-       :content-props (merge {:onOpenAutoFocus #(.preventDefault %)
+       :content-props (merge {:onEscapeKeyDown #(editor-handler/dismiss-editor-popup-on-escape!
+                                                 % (some-> input .-id))
+                              :onOpenAutoFocus #(.preventDefault %)
                               :onCloseAutoFocus #(.preventDefault %)
                               :data-editor-popup-ref (name id)} content-props)
        :force-popover? true}
@@ -683,7 +685,7 @@
 
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :datepicker}
+             :datepicker :select-code-block-mode}
            action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))

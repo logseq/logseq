@@ -2575,3 +2575,58 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(defn- escape-event
+  [calls]
+  (doto (js-obj)
+    (aset "preventDefault" #(swap! calls conj :prevent-default))
+    (aset "stopPropagation" #(swap! calls conj :stop-propagation))))
+
+(defn- with-preserved-state
+  [f]
+  (let [previous-state (state/get-state)]
+    (try
+      (f)
+      (finally
+        (state/replace-state! previous-state)))))
+
+(deftest dismiss-editor-popup-on-escape-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)]
+        (state/set-editor-action! :page-search)
+        (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+        (is (nil? (state/get-editor-action)))
+        (is (= [:prevent-default :stop-propagation] @calls))))))
+
+(deftest dismiss-editor-input-popup-on-escape-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)
+            input (js-obj "id" "editor-input")]
+        (state/set-editor-action-data! {:pos 5})
+        (state/set-editor-show-input! [{:command :link}])
+        (with-redefs [state/get-editor-last-pos (constantly 5)
+                    gdom/getElement (fn [id]
+                                      (when (= "editor-input" id) input))
+                    cursor/move-cursor-to (fn [& args]
+                                            (swap! calls conj (into [:move-cursor] args)))]
+          (is (true? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+          (is (nil? (state/get-editor-action)))
+          (is (nil? (state/get-editor-action-data)))
+          (is (= [:prevent-default :stop-propagation
+                  [:move-cursor input 5 true]]
+                 @calls)))))))
+
+(deftest escape-during-ime-composition-keeps-editor-popup-test
+  (with-preserved-state
+    (fn []
+      (let [calls (atom [])
+            event (escape-event calls)]
+        (state/set-editor-action! :page-search)
+        (with-redefs [state/editor-in-composition? (constantly true)]
+          (is (false? (editor/dismiss-editor-popup-on-escape! event "editor-input")))
+          (is (= :page-search (state/get-editor-action)))
+          (is (empty? @calls)))))))
