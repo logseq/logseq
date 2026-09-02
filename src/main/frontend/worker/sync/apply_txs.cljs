@@ -4,6 +4,7 @@
    [clojure.set :as set]
    [clojure.string :as string]
    [datascript.core :as d]
+   [frontend.worker.pipeline :as worker-pipeline]
    [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
@@ -1514,11 +1515,19 @@
           page-uuid (:uuid opts)
           existing-page (or (when (uuid? page-uuid)
                               (d/entity @conn [:block/uuid page-uuid]))
-                            (ldb/get-page @conn title))]
-      (if (and existing-page
-               (not (ldb/recycled? existing-page)))
-        [(:block/title existing-page) (:block/uuid existing-page)]
-        (outliner-page/create! conn title opts)))
+                            (ldb/get-page @conn title))
+          [title' page-uuid'] (if (and existing-page
+                                       (not (ldb/recycled? existing-page)))
+                                [(:block/title existing-page) (:block/uuid existing-page)]
+                                (outliner-page/create! conn title opts))
+          page (or (when (uuid? page-uuid')
+                     (d/entity @conn [:block/uuid page-uuid']))
+                   (ldb/get-page @conn title'))]
+      (when-let [tx-data (seq (worker-pipeline/insert-tag-templates-for-entity @conn page))]
+        (ldb/transact! conn tx-data {:outliner-op :insert-template-blocks
+                                     :persist-op? false
+                                     :gen-undo-ops? false}))
+      [title' page-uuid'])
 
     :delete-page
     (let [[page-uuid opts] args]

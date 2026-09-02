@@ -90,6 +90,15 @@
     :tx-data []}
    (outliner-template/dynamic-template-journal-days blocks)))
 
+(defn- entity-used-template?
+  [entity template]
+  (let [template-id (:db/id template)]
+    (some (fn [block]
+            (let [used (:logseq.property/used-template block)]
+              (or (= template-id used)
+                  (= template-id (:db/id used)))))
+          (:block/_parent entity))))
+
 (defn- insert-tag-templates
   [tx-report]
   (let [db (:db-after tx-report)
@@ -127,14 +136,16 @@
                            (group-by :e))
         insertion-inputs (mapcat
                           (fn [[e datoms]]
-                            (let [templates (->> (set (map :v datoms))
+                            (let [object (d/entity db e)
+                                  templates (->> (set (map :v datoms))
                                                  (mapcat tag->templates)
                                                  distinct
                                                  (sort-by :block/created-at))]
-                              (map (fn [template]
-                                     {:object-id e
-                                      :blocks (raw-template-blocks template)})
-                                   templates)))
+                              (keep (fn [template]
+                                      (when-not (entity-used-template? object template)
+                                        {:object-id e
+                                         :blocks (raw-template-blocks template)}))
+                                    templates)))
                           tag-additions)
         {db-with-pages :db page-tx-data :tx-data} (ensure-template-journal-pages db (mapcat :blocks insertion-inputs))
         insert-tx-data (mapcat
@@ -156,6 +167,27 @@
                                          (:blocks result)))))))
                         insertion-inputs)]
     (concat page-tx-data insert-tx-data)))
+
+(defn insert-tag-templates-for-entity
+  "Tx-data that applies missing tag templates to an existing entity.
+  Skips templates that already have a `:logseq.property/used-template` child."
+  [db entity]
+  (when entity
+    (let [tag-datoms (mapv (fn [tag]
+                             {:e (:db/id entity)
+                              :a :block/tags
+                              :v (:db/id tag)
+                              :added true})
+                           (:block/tags entity))
+          journal-datoms (when-let [day (:block/journal-day entity)]
+                           [{:e (:db/id entity)
+                             :a :block/journal-day
+                             :v day
+                             :added true}])]
+      (when (seq tag-datoms)
+        (seq (insert-tag-templates
+              {:db-after db
+               :tx-data (into tag-datoms journal-datoms)}))))))
 
 (defn- fix-page-tags
   "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
