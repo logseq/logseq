@@ -64,11 +64,54 @@
            (server-list/read-entries file-path)))
     (is (not (fs/existsSync lock-file)))))
 
-(deftest append-entry-times-out-on-malformed-server-list-lock
-  (let [root-dir (node-helper/create-tmp-dir "server-list-malformed-lock")
+(deftest lock-stale-treats-malformed-and-unreadable-locks-as-stale
+  (is (true? (#'server-list/lock-stale? {:parse-error (js/Error. "bad")})))
+  (is (true? (#'server-list/lock-stale? {:read-error (js/Error. "EPERM")})))
+  (is (true? (#'server-list/lock-stale? {:raw "" :metadata nil})))
+  (is (true? (#'server-list/lock-stale? {:metadata {}})))
+  (is (true? (#'server-list/lock-stale? {:metadata {:pid "12"}})))
+  (is (true? (#'server-list/lock-stale? {:metadata {:pid 0}})))
+  (is (true? (#'server-list/lock-stale? {:metadata {:pid 999999}})))
+  (is (false? (#'server-list/lock-stale? {:metadata {:pid (.-pid js/process)}}))))
+
+(deftest append-entry-repairs-malformed-server-list-lock
+  (doseq [[label contents] [["empty" ""]
+                            ["garbage" "not-json"]
+                            ["missing-pid" "{\"lock-id\":\"x\"}"]
+                            ["non-int-pid" "{\"pid\":\"abc\"}"]]]
+    (let [root-dir (node-helper/create-tmp-dir (str "server-list-malformed-" label))
+          file-path (server-list/path root-dir)
+          lock-file (server-list/lock-path file-path)]
+      (fs/writeFileSync lock-file contents "utf8")
+      (server-list/append-entry! file-path {:pid 123 :port 456})
+      (is (= [{:pid 123 :port 456}]
+             (server-list/read-entries file-path))
+          label)
+      (is (not (fs/existsSync lock-file))
+          label))))
+
+(deftest append-entry-repairs-unreadable-server-list-lock
+  (let [root-dir (node-helper/create-tmp-dir "server-list-unreadable-lock")
         file-path (server-list/path root-dir)
         lock-file (server-list/lock-path file-path)]
-    (fs/writeFileSync lock-file "not-json" "utf8")
+    (fs/writeFileSync lock-file "{\"pid\":1}" "utf8")
+    (fs/chmodSync lock-file 0o000)
+    (try
+      (server-list/append-entry! file-path {:pid 123 :port 456})
+      (is (= [{:pid 123 :port 456}]
+             (server-list/read-entries file-path)))
+      (is (not (fs/existsSync lock-file)))
+      (finally
+        (when (fs/existsSync lock-file)
+          (fs/chmodSync lock-file 0o644))))))
+
+(deftest append-entry-times-out-on-live-server-list-lock
+  (let [root-dir (node-helper/create-tmp-dir "server-list-live-lock")
+        file-path (server-list/path root-dir)
+        lock-file (server-list/lock-path file-path)
+        lock-payload (js/JSON.stringify (clj->js {:pid (.-pid js/process)
+                                                  :lock-id "live-lock"}))]
+    (fs/writeFileSync lock-file lock-payload "utf8")
     (try
       (server-list/append-entry! file-path {:pid 123 :port 456})
       (is false "expected server-list lock timeout")
@@ -76,5 +119,5 @@
         (is (= :server-list-lock-timeout (:code (ex-data e))))
         (is (= file-path (:file-path (ex-data e))))
         (is (= lock-file (:lock-path (ex-data e))))
-        (is (= "not-json"
+        (is (= lock-payload
                (.toString (fs/readFileSync lock-file) "utf8")))))))
