@@ -1152,3 +1152,43 @@
               "No :logseq.property.history entries are added for an imported transaction")))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest enable-history-records-non-status-property-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/tracked {:logseq.property/type :checkbox
+                                                    :build/properties {:logseq.property/enable-history? true}}
+                            :user.property/untracked {:logseq.property/type :checkbox}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "history node"}]}]})
+        block (db-test/find-block-by-content @conn "history node")
+        history-for (fn [property-ident]
+                      (d/q '[:find [?e ...]
+                             :in $ ?block ?property
+                             :where
+                             [?e :logseq.property.history/block ?block]
+                             [?e :logseq.property.history/property ?prop]
+                             [?prop :db/ident ?property]]
+                           @conn
+                           (:db/id block)
+                           property-ident))]
+    (is (true? (:logseq.property/enable-history? (d/entity @conn :user.property/tracked))))
+    (is (not (true? (:logseq.property/enable-history? (d/entity @conn :user.property/untracked)))))
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id block)
+                            :user.property/tracked true]
+                           [:db/add (:db/id block)
+                            :user.property/untracked true]
+                           [:db/add (:db/id block)
+                            :logseq.property/priority :logseq.property/priority.high]])
+      (is (= 1 (count (history-for :user.property/tracked)))
+          "A non-status property with enable-history records a history row")
+      (is (= [true]
+             (mapv :logseq.property.history/scalar-value
+                   (map #(d/entity @conn %) (history-for :user.property/tracked)))))
+      (is (empty? (history-for :user.property/untracked))
+          "A property without enable-history stays hidden from history")
+      (is (= 1 (count (history-for :logseq.property/priority)))
+          "Built-in Priority records history because enable-history is on")
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
