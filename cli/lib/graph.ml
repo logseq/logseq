@@ -363,6 +363,7 @@ let decode_legacy_graph_dir_name dir_name =
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
   || starts_with ~prefix:"file-version-" name
+  || starts_with ~prefix:".cli-" name
 
 let canonical_dir_name dir_name graph_name =
   dir_name = Graph_dir.encode_graph_dir_name graph_name
