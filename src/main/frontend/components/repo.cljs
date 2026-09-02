@@ -43,7 +43,8 @@
            (mobile-util/native-platform?))
        (not remote?)
        (not rtc-graph?)
-       (user-handler/logged-in?)
+       (or (user-handler/logged-in?)
+           (user-handler/local-sync-mode?))
        (user-handler/rtc-group?)))
 
 (defn <invoke-db-worker
@@ -246,7 +247,8 @@
                 (t :graph/delete-local-action))))
 
            (when (and root
-                      (user-handler/logged-in?)
+                      (or (user-handler/logged-in?)
+                          (user-handler/local-sync-mode?))
                       (user-handler/rtc-group?)
                       (not remote?)
                       (= url (state/get-current-repo)))

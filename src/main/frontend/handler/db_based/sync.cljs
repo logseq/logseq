@@ -31,8 +31,17 @@
       (ws->http-base (config/db-sync-ws-url))))
 
 (defn- auth-headers []
-  (when-let [token (state/get-auth-id-token)]
+  (when-let [token (or (config/local-sync-token)
+                       (state/get-auth-id-token))]
     {"authorization" (str "Bearer " token)}))
+
+(defn- <ensure-sync-token!
+  "Ensure a usable sync credential. With a self-hosted server token there is
+   nothing to refresh; otherwise ensure fresh Cognito id/access tokens."
+  []
+  (if (config/local-sync-token)
+    (p/resolved nil)
+    (user-handler/<ensure-id&access-token!)))
 
 (defn- with-auth-headers [opts]
   (if-let [auth (auth-headers)]
@@ -108,7 +117,7 @@
 
 (defn- <ensure-invite-auth!
   []
-  (user-handler/<ensure-id&access-token!))
+  (<ensure-sync-token!))
 
 (defn- <grant-graph-access-for-invite!
   [repo graph-uuid email]
@@ -217,11 +226,16 @@
       (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
       (seq config/COGNITO-CLIENT-ID)
-      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
+      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)
+
+      ;; Always set (nil clears a previously pushed token) so the worker never
+      ;; keeps a stale self-hosted token after settings change.
+      true
+      (assoc :auth/static-sync-token (config/local-sync-token)))))
 
 (defn- <sync-auth-state-to-db-worker!
   []
-  (p/let [_ (user-handler/<ensure-id&access-token!)
+  (p/let [_ (<ensure-sync-token!)
           payload (sync-app-state-payload)]
     (state/<invoke-db-worker :thread-api/sync-app-state payload)))
 
@@ -262,7 +276,7 @@
              (p/resolved cached-users)
 
              base
-             (p/let [_ (user-handler/<ensure-id&access-token!)
+             (p/let [_ (<ensure-sync-token!)
                      resp (fetch-json (str base "/graphs/" graph-uuid "/members")
                                       {:method "GET"}
                                       {:response-schema :graph-members/list})
@@ -294,7 +308,7 @@
   [graph-uuid _schema-version]
   (let [base (http-base)]
     (if (and graph-uuid base)
-      (p/let [_ (user-handler/<ensure-id&access-token!)]
+      (p/let [_ (<ensure-sync-token!)]
         (fetch-json (str base "/graphs/" graph-uuid)
                     {:method "DELETE"}
                     {:response-schema :graphs/delete}))
@@ -319,7 +333,7 @@
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
              base (http-base)]
          (-> (if (and graph-uuid base)
-               (p/let [_ (user-handler/<ensure-id&access-token!)
+               (p/let [_ (<ensure-sync-token!)
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
@@ -344,7 +358,7 @@
     (if-not base
       (p/resolved [])
       (-> (p/let [_ (state/set-state! :rtc/loading-graphs? true)
-                  _ (user-handler/<ensure-id&access-token!)
+                  _ (<ensure-sync-token!)
                   resp (fetch-json (str base "/graphs")
                                    {:method "GET"}
                                    {:response-schema :graphs/list})
@@ -419,7 +433,7 @@
         graph-uuid (some-> graph-uuid str)
         member-id (some-> member-id str)]
     (if (and base (string? graph-uuid) (string? member-id))
-      (p/let [_ (user-handler/<ensure-id&access-token!)]
+      (p/let [_ (<ensure-sync-token!)]
         (fetch-json (str base "/graphs/" graph-uuid "/members/" member-id)
                     {:method "DELETE"}
                     {:response-schema :graph-members/delete}))
@@ -455,7 +469,16 @@
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? true)]
+  ;; local-mode fix: push the self-hosted token into this repo's worker BEFORE
+  ;; the very first RTC call fires. Unlike <rtc-upload-graph!/<rtc-start!, this
+  ;; function never pushed auth state itself; a freshly-spawned worker for a
+  ;; brand-new repo has no :auth/static-sync-token yet, so its first call
+  ;; (list-remote-graphs, inside create) fails with :missing-field :auth-token,
+  ;; the graph never registers, and every later attempt cascades into a
+  ;; :user-rsa-key-pair error (a never-registered graph defaults to e2ee=true
+  ;; locally, and local mode has no RSA/Cognito identity to satisfy it).
+  (p/let [_ (<sync-auth-state-to-db-worker!)
+          graph-id (<rtc-create-graph! repo graph-e2ee? true)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))
     (p/do!

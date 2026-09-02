@@ -133,7 +133,9 @@
    :reversed-datoms (reverse-tx-data db-before db-after tx-data)})
 
 (defn- auth-headers []
-  (sync-auth/auth-headers (worker-state/get-id-token)))
+  ;; self-hosted/local mode has no Cognito id-token; sync-util/auth-token
+  ;; prefers the static sync token and falls back to id/access tokens.
+  (sync-auth/auth-headers (sync-util/auth-token)))
 
 (defn- send! [ws message]
   (sync-transport/send! sync-transport/coerce-ws-client-message ws message))
