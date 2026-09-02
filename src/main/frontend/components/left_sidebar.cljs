@@ -4,11 +4,9 @@
             [frontend.components.block :as block]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
-            [frontend.components.left-sidebar-util :as sidebar-util]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
@@ -24,7 +22,6 @@
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -173,6 +170,15 @@
     :tag/tasks :nav/tasks
     :tag/assets :nav/assets))
 
+(defn mobile-navigation-target?
+  [target]
+  (boolean
+   (some (fn [selector] (.closest target selector))
+         [".sidebar-navigations a"
+          ".favorites .bd"
+          ".recent .bd"
+          ".nav-header"])))
+
 (hsx/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]
   (let [[local-navs set-local-navs!] (hooks/use-state checked-navs)]
@@ -222,25 +228,20 @@
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
-        repo (state/get-current-repo)
-        [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
+        task-uuid (:value (db-hooks/use-resource-snapshot
+                           [:page-uuid-by-ident :logseq.class/Task]))
+        asset-uuid (:value (db-hooks/use-resource-snapshot
+                            [:page-uuid-by-ident :logseq.class/Asset]))
+        tag-nav->uuid {:tag/tasks task-uuid
+                       :tag/assets asset-uuid}
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
-	       (when (vector? checked-navs)
-	         (storage/set :ls-sidebar-navigations checked-navs)))
-	     [checked-navs])
-    (hooks/use-effect!
-     (fn []
-       (p/let [classes (p/all (map (fn [class-ident]
-                                     (db-async/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
-                                   [:logseq.class/Asset :logseq.class/Task]))]
-         (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
-                                         (map :block/uuid classes))))
-       nil)
-     [repo])
+       (when (vector? checked-navs)
+         (storage/set :ls-sidebar-navigations checked-navs)))
+     [checked-navs])
 
     (sidebar-content-group
       [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]
@@ -314,16 +315,14 @@
             :active (and (not srs-open?) (= route-name :all-pages))
             :icon "files"})
 
-	          (= (namespace nav) "tag")
-	          (let [name'' (name nav)
-	                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
-	            (when-let [tag-uuid (and class-ident (get class-ident->uuid class-ident))]
-	              (sidebar-item
-               {:class (str "tag-view-nav " name'')
-                :title (t (navigation-label-key nav))
-                :href (rfe/href :page {:name tag-uuid})
-                :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-                :icon "hash"})))))])))
+          (= (namespace nav) "tag")
+          (when-let [tag-uuid (get tag-nav->uuid nav)]
+            (sidebar-item
+             {:class (str "tag-view-nav " (name nav))
+              :title (t (navigation-label-key nav))
+              :href (rfe/href :page {:name tag-uuid})
+              :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+              :icon "hash"}))))])))
 
 (hsx/defc sidebar-favorites-loaded
   []
@@ -450,7 +449,7 @@
                               (set-local-closing? false)
                               (close-modal-fn)))
        :on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
-                    (when (sidebar-util/mobile-navigation-target? target)
+                    (when (mobile-navigation-target? target)
                       (close-fn)))}
 
       [:div.wrap
