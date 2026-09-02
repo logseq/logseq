@@ -1507,6 +1507,27 @@
                @calls)
             "Insert metadata and operations must use one transaction."))))
 
+(deftest api-insert-skips-waiting-on-ui-publish-test
+  (let [current-block {:db/id 1
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "parent"
+                       :block/page {:db/id 10}}
+        next-block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                    :block/title "child"}
+        apply-opts (atom nil)]
+    (with-redefs [frontend-outliner-op/save-block! (fn [& _])
+                  frontend-outliner-op/insert-blocks! (fn [& _])
+                  db-transact/apply-outliner-ops (fn [_ _opts opts]
+                                                   (reset! apply-opts opts)
+                                                   :tx)]
+      (editor/outliner-insert-block!
+       {:edit-block? false}
+       current-block
+       next-block
+       {:sibling? true :keep-uuid? true})
+      (is (false? (:await-ui-publish? @apply-opts))
+          "HTTP/plugin inserts must not wait on renderer flushSync."))))
+
 (deftest split-current-block-keeps-rendered-title-in-sync-test
   (let [block {:block/title "Performance row 2"
                :block/raw-title "Performance row 2"}]

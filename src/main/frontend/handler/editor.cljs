@@ -417,7 +417,10 @@
        (assoc :source-outliner-op outliner-op)
 
        (:editor/edit-block-fn config)
-       (assoc :editor/edit-block-fn (:editor/edit-block-fn config)))
+       (assoc :editor/edit-block-fn (:editor/edit-block-fn config))
+
+       (false? (:edit-block? config))
+       (assoc :await-ui-publish? false))
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block'] current-block insert-opts))))
 
@@ -785,8 +788,7 @@
                                               :outliner-op outliner-op}))
                    (when edit-existing-block?
                      (edit-block! last-block :max))
-                   (when-let [id (:block/uuid new-block)]
-                     (db-async/<get-block repo id {:children? false}))))))))))))
+                   new-block))))))))))
 
 (defn get-selected-blocks
   []
