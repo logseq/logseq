@@ -38,17 +38,27 @@
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
     env))
 
+(defn- parse-url-origin
+  [base-url]
+  (let [url (js/URL. base-url)
+        protocol (.-protocol url)
+        scheme (if (string/ends-with? protocol ":")
+                 (subs protocol 0 (dec (count protocol)))
+                 protocol)]
+    {:scheme scheme
+     :host (.-host url)}))
+
 (defn- request-origin-opts
+  "Returns a vector of {:scheme :host} maps for all configured base URLs.
+  DB_SYNC_BASE_URL may be a comma-separated list of URLs so the server accepts
+  requests arriving via different addresses (e.g. LAN IP over HTTP and a
+  Tailscale / reverse-proxy domain over HTTPS pointing at the same process).
+  The first entry is used as the default when the Host header does not match
+  any of the configured origins."
   [cfg]
-  (if-let [base-url (:base-url cfg)]
-    (let [url (js/URL. base-url)
-          protocol (.-protocol url)
-          scheme (if (string/ends-with? protocol ":")
-                   (subs protocol 0 (dec (count protocol)))
-                   protocol)]
-      {:scheme scheme
-       :host (.-host url)})
-    {:scheme "http"}))
+  (if-let [base-urls (:base-urls cfg)]
+    (mapv parse-url-origin base-urls)
+    [{:scheme "http"}]))
 
 (defn- access-allowed?
   [env graph-id request]
