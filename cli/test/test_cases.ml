@@ -493,10 +493,10 @@ let () =
              "{:open-browser false\n\
              \ :logout-timeout-ms 5000\n\
              \ :auth-path %S\n\
-             \ :http-base %S\n\
+             \ :oauth-logout-endpoint %S\n\
              \ :oauth-client-id \"test-client\"\n\
              \ :oauth-logout-state %S}\n"
-             auth_path base_url state);
+             auth_path (base_url ^ "/logout") state);
         let logout =
           run_cli_p
             [|
