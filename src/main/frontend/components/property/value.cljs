@@ -474,6 +474,33 @@
       (.focus selected-day)
       (js/setTimeout #(focus-selected-day! id (dec remaining)) 16))))
 
+(defn- calendar-enter-commit-day
+  "Day the property calendar should commit on Enter.
+  Prefer the react-day-picker focused day over the initially selected day."
+  [focused-day initial-day]
+  (or focused-day initial-day))
+
+(defn- calendar-window-enter?
+  "Whether the window-level Enter handler should commit a date.
+  Skip NLP input and focused calendar days; those are handled locally."
+  [^js e]
+  (and (= "Enter" (util/ekey e))
+       (not (some-> (.-target e)
+                    (.closest ".ls-nlp-calendar input")))
+       (not (some-> (.-target e)
+                    (.closest "[role='gridcell']")))))
+
+(defn- hide-property-date-picker!
+  "Hide the calendar popup, or the parent property dialog when the calendar is inlined."
+  [id]
+  (if (= id :date-picker)
+    (do
+      (shui/popup-hide!)
+      (shui/dialog-close! :property-dialog))
+    (when id
+      (shui/popup-hide! id)))
+  (ui/hide-popups-until-preview-popup!))
+
 (hsx/defc calendar-inner
   [id {:keys [block property datetime? on-change del-btn? on-delete]}]
   (let [value (get block (:db/ident property))
@@ -491,6 +518,7 @@
                   (.setHours d 0 0 0)
                   d))
         *ident (hooks/use-memo #(atom (str "calendar-inner-" (js/Date.now))) [])
+        *focused-day (hooks/use-ref nil)
         initial-day value
         initial-month (when value (calendar-default-month value))
         select-handler! (hooks/use-callback
@@ -501,16 +529,12 @@
                                 (when (fn? on-change)
                                   (let [value (if datetime? (tc/to-long d) journal-page)]
                                     (on-change value)))
-                                (when-not datetime?
-                                  (shui/popup-hide! id)
-                                  (ui/hide-popups-until-preview-popup!))))))
+                                (hide-property-date-picker! id)))))
                          [id datetime? on-change])]
     (hooks/use-window-keydown
      (fn [^js e]
-       (when (and (= "Enter" (util/ekey e))
-                  (not (some-> (.-target e)
-                               (.closest ".ls-nlp-calendar input"))))
-         (select-handler! initial-day)
+       (when (calendar-window-enter? e)
+         (select-handler! (calendar-enter-commit-day (hooks/deref *focused-day) initial-day))
          (util/stop e)))
      [initial-day select-handler!])
     (hooks/use-effect!
@@ -531,7 +555,12 @@
           :id @*ident
           :del-btn? del-btn?
           :on-delete on-delete
-          :on-day-click select-handler!}
+          :on-day-click select-handler!
+          :on-day-key-down (fn [^js d _ ^js e]
+                             (hooks/set-ref! *focused-day d)
+                             (when (= "Enter" (.-key e))
+                               (select-handler! d)
+                               (util/stop e)))}
          initial-month
          (assoc :default-month initial-month)))]
      [:div.hidden.sm:initial
