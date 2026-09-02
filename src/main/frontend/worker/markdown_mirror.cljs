@@ -122,14 +122,25 @@
       (and (:block/parent entity) (ldb/page? (:block/parent entity))) (:db/id (:block/parent entity))
       (some-> entity :block/parent :block/page) (:db/id (:block/page (:block/parent entity))))))
 
+(defn- referring-page-ids
+  "Page ids of blocks that reference `page-eid` via :block/refs."
+  [db page-eid]
+  (keep (fn [ref-block]
+          (page-id-for-entity db (:db/id ref-block)))
+        (:block/_refs (d/entity db page-eid))))
+
 (defn affected-page-ids
   [{:keys [db-before db-after tx-data]}]
   (->> tx-data
-       (mapcat (fn [{:keys [e a v]}]
+       (mapcat (fn [{:keys [e a v added]}]
                  (cond-> [(page-id-for-entity db-before e)
                           (page-id-for-entity db-after e)]
                    (= a :block/page)
-                   (conj v))))
+                   (conj v)
+                   (and added
+                        (#{:block/title :block/name} a)
+                        (some-> (d/entity db-after e) ldb/page?))
+                   (into (referring-page-ids db-after e)))))
        (remove nil?)
        set))
 
