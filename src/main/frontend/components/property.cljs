@@ -639,6 +639,23 @@
               :else item))]
     (restore value)))
 
+(defn- property-value-hydration-ready?
+  "display-properties stores value-entity UUIDs. Those UUIDs are authoritative
+   for whether a value exists; use-blocks is only a hydration hop.
+   :loading (nil entities) and :missing (nil slots) are not empty values."
+  [value-uuids value-entities]
+  (or (empty? value-uuids)
+      (and (some? value-entities)
+           (every? some? value-entities))))
+
+(defn- hydrated-display-property-value
+  "Restore value-entity snapshots when they are ready. Otherwise keep the
+   resource UUID so callers can tell a pending value from a true empty."
+  [raw-value value-uuids value-entities]
+  (if (property-value-hydration-ready? value-uuids value-entities)
+    (restore-resource-entity-values raw-value (zipmap value-uuids value-entities))
+    raw-value))
+
 (hsx/defc class-schema-property-value
   [property description-property-uuid opts]
   (let [description-property (db-hooks/use-block description-property-uuid)]
@@ -650,15 +667,14 @@
   (let [property (db-hooks/use-block property-uuid)
         value-uuids (->> (entity-value-uuids value) distinct (sort-by str) vec)
         value-entities (db-hooks/use-blocks value-uuids)
-        value-ready? (or (empty? value-uuids) (some? value-entities))
-        entities-by-uuid (zipmap value-uuids value-entities)]
+        value-ready? (property-value-hydration-ready? value-uuids value-entities)
+        value (when value-ready?
+                (hydrated-display-property-value value value-uuids value-entities))]
     (when (and (keyword? property-ident) property)
-      (let [value (when value-ready?
-                    (restore-resource-entity-values value entities-by-uuid))
-            type (get property :logseq.property/type :default)
-          empty-value? (empty-panel-property-value? value)
-          show-panel-bullet? (show-property-panel-bullet? property value)
-          property-key-cp' (property-key-cp block property (select-keys opts [:class-schema?]))]
+      (let [type (get property :logseq.property/type :default)
+            empty-value? (and value-ready? (empty-panel-property-value? value))
+            show-panel-bullet? (show-property-panel-bullet? property value)
+            property-key-cp' (property-key-cp block property (select-keys opts [:class-schema?]))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (util/classnames ["property-pair property-panel-row"
                                         {:property-panel-row-empty empty-value?}])

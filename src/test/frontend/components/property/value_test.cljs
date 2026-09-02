@@ -9,6 +9,21 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(deftest keep-local-scalar-input-during-value-entity-hydration-test
+  (let [keep-local? #'property-value/keep-local-scalar-input?]
+    (is (true? (keep-local? nil "42"))
+        "A just-typed number must survive a nil hydration gap.")
+    (is (true? (keep-local? nil "3.14"))
+        "Decimal input must not be replaced with an empty string.")
+    (is (false? (keep-local? 42 "42"))
+        "A hydrated number is authoritative.")
+    (is (false? (keep-local? 7 "42"))
+        "A later hydrated number replaces optimistic local state.")
+    (is (false? (keep-local? nil ""))
+        "A truly empty property may sync to an empty input.")
+    (is (false? (keep-local? nil "   "))
+        "Blank local state is not treated as optimistic input.")))
+
 (deftest alias-node-selection-preserves-entity-id-semantics-test
   (async done
          (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
