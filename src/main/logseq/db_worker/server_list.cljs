@@ -115,11 +115,19 @@
         nil
         {:read-error e}))))
 
-(defn- lock-stale?
+(defn- lock-pid
   [lock-info]
   (let [pid (get-in lock-info [:metadata :pid])]
-    (and (pos-int? pid)
-         (= :not-found (process-status pid)))))
+    (when (pos-int? pid)
+      pid)))
+
+(defn- lock-stale?
+  "True when the lock file cannot identify a still-running holder.
+  Malformed, empty, or unreadable locks are stale; a valid live pid is not."
+  [lock-info]
+  (if-let [pid (lock-pid lock-info)]
+    (= :not-found (process-status pid))
+    true))
 
 (defn- unlink-if-exists!
   [file-path]
