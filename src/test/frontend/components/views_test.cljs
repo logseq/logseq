@@ -8,8 +8,10 @@
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "view-resource-test")
@@ -285,6 +287,118 @@
                        :rows [row-a row-b]}
                       {:value {:kind :scalar :value "B"}
                        :rows [row-b row-c]}]})))))
+
+(deftest eager-table-cells-follow-virtualization-test
+  (is (true? (#'views/eager-table-cells? {:view-feature-type :class-objects})))
+  (is (true? (#'views/eager-table-cells? {:view-feature-type :all-pages})))
+  (is (false? (#'views/eager-table-cells? {:disable-virtualized? true
+                                          :view-feature-type :class-objects}))
+      "Grouped tables keep lazy cells because every row stays mounted."))
+
+(deftest table-viewport-overscan-stays-near-list-overscan-test
+  (is (= {:top 96 :bottom 96} @#'views/table-viewport-overscan))
+  (is (< (:top @#'views/table-viewport-overscan) 300)
+      "Table overscan must not keep a 300px extra row band mounted."))
+
+(deftest table-lazy-item-hydrates-only-its-uuid-through-use-block-test
+  (let [row-uuid (random-uuid)
+        block {:block/uuid row-uuid
+               :db/id 11
+               :block/tx-id 9
+               :block/title "Loaded table row"
+               :block/tags []}
+        calls (atom [])
+        row-renders (atom 0)]
+    (with-redefs [db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! calls conj requested-uuid)
+                    block)
+                  views/table-row
+                  (fn [table row props option]
+                    (swap! row-renders inc)
+                    (is (= {:data [row-uuid]} table))
+                    (is (= block row))
+                    (is (= {} props))
+                    (is (true? (:table-view? option)))
+                    (.createElement react "span" nil (:block/title row)))]
+      (is (= "<span>Loaded table row</span>"
+             (render-static
+              (views/table-lazy-item
+               [row-uuid]
+               0
+               {:data [row-uuid]}
+               {:table-view? true}))))
+      (is (= [row-uuid] @calls)
+          "A mounted table row supplies one UUID and owns no loader closure.")
+      (is (= 1 @row-renders)))))
+
+(deftest table-body-keeps-value-comparable-row-props-on-range-change-test
+  (let [row-uuid (random-uuid)
+        virtual-opts (atom nil)
+        lazy-item-calls (atom [])
+        table {:data [row-uuid]
+               :rows [{:db/id 1 :block/uuid row-uuid}]}
+        option {:config {}}]
+    (with-redefs [db-hooks/use-block-prefetch (constantly true)
+                  util/app-scroll-container-node (constantly #js {:clientHeight 800})
+                  views/table-lazy-item
+                  (fn [data idx table' option']
+                    (swap! lazy-item-calls conj [data idx table' option'])
+                    [:div])
+                  ui/virtualized-list
+                  (fn [opts]
+                    (reset! virtual-opts opts)
+                    [:div])]
+      (render-static
+       (views/table-body table option (:rows table) (atom nil) (fn [_])))
+      (is (fn? (:item-content @virtual-opts)))
+      (is (nil? (:is-scrolling @virtual-opts))
+          "Table scroll must not flip a shared scrolling React state.")
+      (is (nil? (:context @virtual-opts)))
+      (is (= {:top 96 :bottom 96} (:increase-viewport-by @virtual-opts)))
+      ((:item-content @virtual-opts) 0)
+      ((:item-content @virtual-opts) 0)
+      (is (= 2 (count @lazy-item-calls)))
+      (is (= (first @lazy-item-calls) (second @lazy-item-calls))
+          "The same index keeps equal table-lazy-item props across item-content calls.")
+      (let [[data idx table' option'] (first @lazy-item-calls)]
+        (is (= [row-uuid] data))
+        (is (zero? idx))
+        (is (identical? table table'))
+        (is (true? (:table-view? option')))
+        (is (not (some fn? [data idx table' option'])))))))
+
+(deftest virtualized-table-rows-skip-per-cell-intersection-observers-test
+  (let [in-view-calls (atom 0)
+        row {:db/id 1
+             :block/uuid (random-uuid)
+             :block/title "Row"
+             :block/tags []}
+        columns [{:id :block/title
+                  :cell (fn [_table _row _column _style] [:span "Name"])}
+                 {:id :user.property/status
+                  :cell (fn [_table _row _column _style] [:span "Open"])}]
+        table {:state {:pinned-columns []
+                       :unpinned-columns columns
+                       :sized-columns {}}
+               :data []}
+        option {:view-feature-type :class-objects}]
+    (with-redefs [ui/useInView (fn [_]
+                                 (swap! in-view-calls inc)
+                                 #js {:inView true :ref nil})
+                  hooks/use-ref (fn [value] #js {:current value})
+                  hooks/use-effect! (fn [& _args])]
+      (is (string/includes?
+           (render-static (views/table-row table row {} option))
+           "Name"))
+      (is (zero? @in-view-calls)
+          "Virtualized table cells render eagerly without IntersectionObserver.")
+      (is (string/includes?
+           (render-static
+            (views/table-row table row {} (assoc option :disable-virtualized? true)))
+           "Open"))
+      (is (= (count columns) @in-view-calls)
+          "Grouped non-virtualized tables still lazy-mount offscreen cells."))))
 
 (deftest view-row-hydrates-only-its-uuid-through-use-block-test
   (let [row-uuid (random-uuid)
