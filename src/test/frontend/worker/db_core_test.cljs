@@ -623,27 +623,45 @@
                :tx-report migration-tx-report}]
              @handled-reports)))))
 
+(def ^:private built-in-sync-repair-idents
+  [:logseq.property.repeat/repeat-type
+   :logseq.property.comments/blocks
+   :logseq.class/Comments
+   :logseq.class/Comment])
+
+(def ^:private built-in-sync-repair-graph-created-at 1786957365920)
+
+(defn- built-in-sync-repair-block-items
+  [tx-data]
+  (filter (fn [item]
+            (and (map? item) (:block/uuid item)))
+          tx-data))
+
 (deftest built-in-sync-repair-tx-data-covers-65-26-through-65-28-test
-  (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
-        tx-data-again (#'db-core/built-in-sync-repair-tx-data)
-        idents (set (keep :db/ident tx-data))]
+  (let [tx-data (#'db-core/built-in-sync-repair-tx-data built-in-sync-repair-graph-created-at)
+        tx-data-again (#'db-core/built-in-sync-repair-tx-data built-in-sync-repair-graph-created-at)
+        idents (set (keep :db/ident tx-data))
+        block-items (built-in-sync-repair-block-items tx-data)]
     (is (= tx-data tx-data-again)
         "The repair is stable when multiple clients send it")
-    (is (every? idents
-                [:logseq.property.repeat/repeat-type
-                 :logseq.property.comments/blocks
-                 :logseq.class/Comments
-                 :logseq.class/Comment]))
+    (is (every? idents built-in-sync-repair-idents))
+    (is (seq block-items))
     (is (every?
          (fn [item]
-           (or (not (and (map? item) (:block/uuid item)))
-               (and (number? (:block/created-at item))
-                    (number? (:block/updated-at item))
-                    (or (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
-                        (and (string? (:block/order item))
-                             (db-order/validate-order-key? (:block/order item)))))))
-         tx-data)
-        "Block-shaped repair items keep valid timestamps and order when order is allowed")
+           (and (= built-in-sync-repair-graph-created-at
+                   (:block/created-at item)
+                   (:block/updated-at item))
+                (pos-int? (:block/created-at item))
+                (pos-int? (:block/updated-at item))))
+         block-items)
+        "Repair timestamps come from graph-created-at and must not be zero")
+    (is (every?
+         (fn [item]
+           (or (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
+               (and (string? (:block/order item))
+                    (db-order/validate-order-key? (:block/order item)))))
+         block-items)
+        "Block-shaped repair items keep valid order when order is allowed")
     (is (not-any?
          (fn [item]
            (and (map? item)
@@ -658,11 +676,57 @@
                (and (vector? item)
                     (= :logseq.property.comments/blocks (nth item 2 nil)))))
          tx-data)
-        "65.29 comment target data is intentionally not included")))
+        "65.29 comment target data is intentionally not included")
+    (doseq [invalid-timestamp [0 nil -1 1.5]]
+      (is (thrown? js/Error (#'db-core/built-in-sync-repair-tx-data invalid-timestamp))
+          (str "Repair timestamp " invalid-timestamp " is rejected")))))
+
+(deftest built-in-sync-repair-timestamp-rejects-zero-graph-created-at-test
+  (let [conn (d/create-conn db-schema/schema)]
+    (is (thrown? js/Error (#'db-core/built-in-sync-repair-timestamp @conn))
+        "Missing graph-created-at is rejected")
+    (d/transact! conn [{:db/ident :logseq.kv/graph-created-at
+                        :kv/value 0}])
+    (is (thrown? js/Error (#'db-core/built-in-sync-repair-timestamp @conn))
+        "graph-created-at 0 is rejected")
+    (d/transact! conn [{:db/ident :logseq.kv/graph-created-at
+                        :kv/value built-in-sync-repair-graph-created-at}])
+    (is (= built-in-sync-repair-graph-created-at
+           (#'db-core/built-in-sync-repair-timestamp @conn)))))
+
+(deftest built-in-sync-repair-keeps-existing-built-in-timestamps-nonzero-test
+  (let [conn (d/create-conn db-schema/schema)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+        graph-created-at (:kv/value (d/entity @conn :logseq.kv/graph-created-at))
+        task-before (select-keys (d/entity @conn :logseq.class/Task)
+                                 [:block/created-at :block/updated-at])
+        before (into {}
+                     (map (fn [ident]
+                            [ident (select-keys (d/entity @conn ident)
+                                                [:block/created-at :block/updated-at])]))
+                     built-in-sync-repair-idents)]
+    (is (pos-int? graph-created-at))
+    (is (every? (fn [{:keys [block/created-at block/updated-at]}]
+                  (and (pos-int? created-at) (pos-int? updated-at)))
+                (vals before))
+        "Fresh graphs stamp Comment/Comments and related built-ins with non-zero times")
+    (is (every? pos-int? (vals task-before)))
+    (d/transact! conn (#'db-core/built-in-sync-repair-tx-data graph-created-at))
+    (doseq [ident built-in-sync-repair-idents]
+      (let [entity (d/entity @conn ident)]
+        (is (= graph-created-at (:block/created-at entity) (:block/updated-at entity))
+            (str ident " repair must not reset Created At / Updated At to 0"))))
+    (is (= task-before
+           (select-keys (d/entity @conn :logseq.class/Task)
+                        [:block/created-at :block/updated-at]))
+        "#Task stays outside the repair path")))
 
 (deftest enqueue-built-in-sync-repair-queues-pending-fix-once-test
-  (let [upserts (atom [])
+  (let [conn (d/create-conn db-schema/schema)
+        upserts (atom [])
         count-adjustments (atom [])]
+    (d/transact! conn [{:db/ident :logseq.kv/graph-created-at
+                        :kv/value built-in-sync-repair-graph-created-at}])
     (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
                   client-op/upsert-local-tx-entry! (fn [repo entry]
                                                      (swap! upserts conj {:repo repo
@@ -670,7 +734,7 @@
                                                      {:should-inc-pending? true})
                   client-op/adjust-pending-local-tx-count! (fn [repo delta]
                                                              (swap! count-adjustments conj [repo delta]))]
-      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (#'db-core/enqueue-built-in-sync-repair! test-repo @conn)
       (let [{:keys [repo entry]} (first @upserts)]
         (is (= test-repo repo))
         (is (uuid? (:tx-id entry)))
@@ -678,7 +742,16 @@
         (is (true? (:pending? entry)))
         (is (false? (:failed? entry)))
         (is (= :fix (:outliner-op entry)))
-        (is (seq (:normalized-tx-data entry)))))
+        (is (seq (:normalized-tx-data entry)))
+        (is (every?
+             (fn [item]
+               (and (pos-int? (:block/created-at item))
+                    (pos-int? (:block/updated-at item))
+                    (= built-in-sync-repair-graph-created-at
+                       (:block/created-at item)
+                       (:block/updated-at item))))
+             (built-in-sync-repair-block-items (:normalized-tx-data entry)))
+            "Queued repair txs keep graph-created-at, not timestamp 0")))
       (is (= [[test-repo 1]] @count-adjustments))
 
     (reset! upserts [])
@@ -688,37 +761,58 @@
                                                      (swap! upserts conj :unexpected))
                   client-op/adjust-pending-local-tx-count! (fn [_repo _delta]
                                                              (swap! count-adjustments conj :unexpected))]
-      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (#'db-core/enqueue-built-in-sync-repair! test-repo @conn)
       (is (empty? @upserts))
       (is (empty? @count-adjustments)))))
 
 (deftest maybe-enqueue-built-in-sync-repair-only-for-migrated-remote-graphs-test
   (let [remote-conn (d/create-conn db-schema/schema)
         local-conn (d/create-conn db-schema/schema)
+        populated-remote-conn (d/create-conn db-schema/schema)
         upserts (atom [])]
     (d/transact! remote-conn [{:db/ident :logseq.kv/graph-remote?
-                               :kv/value true}])
+                               :kv/value true}
+                              {:db/ident :logseq.kv/graph-created-at
+                               :kv/value built-in-sync-repair-graph-created-at}])
     (d/transact! local-conn [{:db/ident :logseq.kv/graph-remote?
-                              :kv/value false}])
+                              :kv/value false}
+                             {:db/ident :logseq.kv/graph-created-at
+                              :kv/value built-in-sync-repair-graph-created-at}])
+    (d/transact! populated-remote-conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! populated-remote-conn [{:db/ident :logseq.kv/graph-remote?
+                                         :kv/value true}])
     (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
                   client-op/upsert-local-tx-entry! (fn [repo entry]
                                                      (swap! upserts conj {:repo repo
                                                                           :entry entry})
                                                      {:should-inc-pending? false})
                   client-op/adjust-pending-local-tx-count! (fn [_repo _delta] nil)]
-      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil true)
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo @remote-conn nil true)
       (is (= 1 (count @upserts)))
 
       (reset! upserts [])
-      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn {:upgrade-result-coll []} true)
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo @populated-remote-conn nil true)
+      (is (= 1 (count @upserts))
+          "Local built-ins still enqueue so the server can receive the 65.26-65.28 backfill")
+      (is (every?
+           (fn [item]
+             (and (pos-int? (:block/created-at item))
+                  (pos-int? (:block/updated-at item))
+                  (not (zero? (:block/created-at item)))
+                  (not (zero? (:block/updated-at item)))))
+           (built-in-sync-repair-block-items (:normalized-tx-data (:entry (first @upserts)))))
+          "Backfill repair must not zero Comment/Comments or related built-in timestamps")
+
+      (reset! upserts [])
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo @remote-conn {:upgrade-result-coll []} true)
       (is (empty? @upserts)
           "Real migration tx reports are uploaded instead of repair txs")
 
-      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo local-conn nil true)
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo @local-conn nil true)
       (is (empty? @upserts)
           "Local-only graphs do not need server repair")
 
-      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil false)
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo @remote-conn nil false)
       (is (empty? @upserts)
           "New graphs rely on initial upload data"))))
 
