@@ -1496,10 +1496,15 @@
                  (assoc :block.temp/refs-count (:block.temp/refs-count row)))]
     (table-row-inner table row' props option)))
 
+(defn- search-input-visible?
+  "Keep the search field open after a remount whenever a query is already present."
+  [show-input? input]
+  (or (boolean show-input?) (not (string/blank? input))))
+
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
   (let [[show-input? set-show-input!] (hooks/use-state false)]
-    (if show-input?
+    (if (search-input-visible? show-input? input)
       [:div.flex.flex-row.items-center
        (shui/input
         {:placeholder (t :view.filter/type-to-search)
@@ -3088,6 +3093,12 @@
     (= :query-result view-feature-type)
     (assoc :query-row-uuids query-row-uuids)))
 
+(defn- displayed-view-data
+  "Keep the last successful view payload while a refetch is in flight.
+   Only the initial load (no previous data) should show skeletons."
+  [view-data last-view-data]
+  (or view-data last-view-data))
+
 (hsx/defc loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
@@ -3116,8 +3127,10 @@
                                                 initial-row-count)
         view-data (db-hooks/use-resource
                    [:view-data (:block/uuid view-entity) resource-context])
+        *last-view-data (hooks/use-ref nil)
+        resolved-view-data (displayed-view-data view-data (hooks/deref *last-view-data))
         query? (= view-feature-type :query-result)
-        properties (:properties view-data)
+        properties (:properties resolved-view-data)
         option (cond-> (assoc option
                               :view-parent (:logseq.property/view-for view-entity))
                  query?
@@ -3130,16 +3143,18 @@
                          (fn [collapsed?]
                            (when collapsed?
                              (deactivate-deferred-view!)))}))]
-    (if (nil? view-data)
+    (when (some? view-data)
+      (hooks/set-ref! *last-view-data view-data))
+    (if (nil? resolved-view-data)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
-      (let [data (view-data->rows view-data)
+      (let [data (view-data->rows resolved-view-data)
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
-                                            :view-data view-data
-                                            :partition (:partition view-data)
+                                            :view-data resolved-view-data
+                                            :partition (:partition resolved-view-data)
                                             :data data
                                             :full-data data
                                             :filters (or filters {})
@@ -3149,11 +3164,11 @@
                                             :set-data! ignore!
                                             :set-input! set-input!
                                             :input input
-                                            :items-count (:count view-data)
+                                            :items-count (:count resolved-view-data)
                                             :group-by-property-ident group-by-property-ident
-                                            :ref-pages-count (:ref-pages-count view-data)
+                                            :ref-pages-count (:ref-pages-count resolved-view-data)
                                             :ref-matched-children-ids
-                                            (:matched-child-uuids view-data)
+                                            (:matched-child-uuids resolved-view-data)
                                             :display-type display-type))]))))
 
 (hsx/defc deferred-view-placeholder
