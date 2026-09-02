@@ -1219,10 +1219,36 @@
            :path (path/path-join zotero-data-dir "storage" id label)
            :base label})))))
 
-(defn- file-link-map->url
+(defn- http-url-protocol?
+  [protocol]
+  (contains? #{"http" "https"} protocol))
+
+(defn- link-map->url
+  "Reconstruct a URL from an mldoc Complex link map.
+   file, http, and https PDF targets can become Assets during import."
   [m]
-  (when (and (map? m) (= "file" (:protocol m)) (string? (:link m)))
-    (str "file://" (:link m))))
+  (when (and (map? m) (string? (:protocol m)) (string? (:link m)))
+    (cond
+      (= "file" (:protocol m))
+      (str "file://" (:link m))
+      (http-url-protocol? (:protocol m))
+      (str (:protocol m) "://" (:link m)))))
+
+(defn- external-pdf-url?
+  [s]
+  (and (string? s)
+       (or (string/starts-with? s "file://")
+           (boolean (re-find #"^https?://" s)))))
+
+(defn- windows-drive-path?
+  [s]
+  (boolean (and (string? s) (re-find #"^[a-zA-Z]:[/\\]" s))))
+
+(defn- pdf-link-url?
+  [url]
+  (and (string? url)
+       (string? (path/filename url))
+       (= "pdf" (path/file-ext url))))
 
 (defn- file-url->path
   [file-url]
@@ -1253,10 +1279,8 @@
                       (string/ends-with? path-or-map ".pdf"))
                   (and (map? path-or-map) (= "zotero" (:protocol path-or-map)) (string? (:link path-or-map)))
                   (:link (get-zotero-local-pdf-path config (second x)))
-                  (file-link-map->url path-or-map)
-                  (= "pdf" (path/file-ext (file-link-map->url path-or-map)))
                   :else
-                  nil)))
+                  (pdf-link-url? (link-map->url path-or-map)))))
          (swap! results update :asset-links conj x)
          (and (vector? x)
               (= "Macro" (first x))
@@ -1417,7 +1441,9 @@
 
 (defn- pdf-file?
   [path]
-  (= "pdf" (some-> path path/file-ext string/lower-case)))
+  (and (string? path)
+       (string? (path/filename path))
+       (= "pdf" (some-> path path/file-ext string/lower-case))))
 
 (defn asset-path->name
   "Given an asset's relative or full path, create a unique name for identifying an asset.
@@ -1603,7 +1629,14 @@
   [asset-link user-config linked-files linked-base-dir zotero-imported-files]
   (let [link-map (second asset-link)
         path* (-> link-map :url second)
-        file-url (file-link-map->url path*)
+        link-url (or (link-map->url path*)
+                     (when (and (string? path*)
+                                (or (external-pdf-url? path*)
+                                    (windows-drive-path? path*)))
+                       path*))
+        remote-url? (and (string? link-url) (boolean (re-find #"^https?://" link-url)))
+        file-url (when (and (string? link-url) (string/starts-with? link-url "file://"))
+                   link-url)
         zotero-path-data (when (map? path*)
                            (get-zotero-local-pdf-path user-config link-map))
         zotero-asset? (some? zotero-path-data)
@@ -1622,9 +1655,15 @@
                                                 :link (:link zotero-path-data)
                                                 :base linked-base}
                                    zotero-asset? zotero-path-data
+                                   remote-url? {:path link-url
+                                                :link link-url
+                                                :base (path/filename link-url)}
                                    file-url {:path (file-url->path file-url)
                                              :link file-url
                                              :base (path/filename file-url)}
+                                   (windows-drive-path? path*) {:path path*
+                                                                :link (str "file://" path*)
+                                                                :base (path/filename path*)}
                                    :else {:path path*})
         asset-name (cond
                      linked-path base
@@ -1645,24 +1684,51 @@
      :path path
      :zotero-asset? zotero-asset?}))
 
+(defn- remote-http-url?
+  [s]
+  (boolean (and (string? s) (re-find #"^https?://" s))))
+
+(defn- external-linked-pdf?
+  [asset-link-or-name path]
+  (or (external-pdf-url? asset-link-or-name)
+      (external-pdf-url? path)
+      (windows-drive-path? path)))
+
+(defn- put-linked-pdf-asset!
+  [assets asset-link-or-name path asset-path stat]
+  (swap! assets assoc asset-link-or-name
+         {:asset-id (d/squuid)
+          :type "pdf"
+          ;; avoid using the real checksum since it could be the same with in-graph asset
+          :checksum "0000000000000000000000000000000000000000000000000000000000000000"
+          ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
+          :size (or (:size stat) (some-> stat .-size) 0)
+          :external-url (or asset-link-or-name path)
+          :external-file-name asset-path}))
+
 (defn- ensure-asset-data!
   [assets asset-link-or-name path asset-path <get-file-stat]
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
-             (pdf-file? path)
-             (fn? <get-file-stat))
-    (-> (p/let [stat (<get-file-stat path)]
-          (swap! assets assoc asset-link-or-name
-                 {:asset-id (d/squuid)
-                  :type "pdf"
-                  ;; avoid using the real checksum since it could be the same with in-graph asset
-                  :checksum "0000000000000000000000000000000000000000000000000000000000000000"
-                  ;; gracefully create stat-less assets so that references to them are still valid
-                  ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
-                  :size (or (:size stat) (some-> stat .-size) 0)
-                  :external-url (or asset-link-or-name path)
-                  :external-file-name asset-path}))
-        (p/catch (constantly nil)))))
+             (pdf-file? path))
+    (let [external? (external-linked-pdf? asset-link-or-name path)
+          remote? (or (remote-http-url? asset-link-or-name)
+                      (remote-http-url? path))]
+      (cond
+        remote?
+        (do (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)
+            (p/resolved nil))
+
+        (fn? <get-file-stat)
+        (-> (p/let [stat (<get-file-stat path)]
+              (put-linked-pdf-asset! assets asset-link-or-name path asset-path stat))
+            (p/catch (fn [_]
+                       (when external?
+                         (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)))))
+
+        external?
+        (do (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)
+            (p/resolved nil))))))
 
 (defn- build-asset-tx
   [asset-data asset-name asset-link-or-name asset-link pdf-annotation-pages opts assets zotero-asset?]
@@ -1672,7 +1738,9 @@
                          (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                            {:logseq.property.asset/resize-metadata metadata}))
         external-file-asset? (and (string? asset-name)
-                                  (not= asset-name asset-link-or-name))
+                                  (or (not= asset-name asset-link-or-name)
+                                      (external-pdf-url? asset-link-or-name)
+                                      (windows-drive-path? asset-name)))
         pdf-annotations-paths (if (and (or zotero-asset? external-file-asset?)
                                        (string? asset-name))
                                 [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
@@ -1729,6 +1797,81 @@
           (seq asset-blocks)
           (assoc :asset-blocks-tx asset-blocks)))
       (p/resolved {:block block}))))
+
+(defn- hls-annotation-md-file?
+  [file]
+  (string/starts-with? (str (path/basename file)) "hls__"))
+
+(defn- pdf-url-from-text
+  [s]
+  (when (string? s)
+    (let [trimmed (string/trim s)
+          url (or (second (re-find #"\[[^\]]*\]\(([^)\s]+)\)" trimmed))
+                  trimmed)]
+      (when (and (pdf-file? url)
+                 (or (external-pdf-url? url)
+                     (windows-drive-path? url)))
+        url))))
+
+(defn- url->complex-link-map
+  [url]
+  (cond
+    (string/starts-with? url "https://")
+    {:protocol "https" :link (subs url 8)}
+    (string/starts-with? url "http://")
+    {:protocol "http" :link (subs url 7)}
+    (string/starts-with? url "file://")
+    {:protocol "file" :link (subs url 7)}
+    (windows-drive-path? url)
+    {:protocol "file" :link url}))
+
+(defn- synthetic-pdf-asset-link
+  [url]
+  (when-let [link-map (url->complex-link-map url)]
+    (let [label (or (path/filename url) "pdf")]
+      ["Link" {:url ["Complex" link-map]
+               :label [["Plain" label]]
+               :full_text (str "![" label "](" url ")")
+               :metadata ""}])))
+
+(defn- hls-extracted-pdf-urls
+  [extracted]
+  (->> (concat (:pages extracted) (:blocks extracted))
+       (mapcat (fn [node]
+                 (concat (vals (:block/properties node))
+                         (vals (:block/properties-text-values node)))))
+       (mapcat (fn [v]
+                 (cond
+                   (string? v) [v]
+                   (and (coll? v) (not (map? v))) (filter string? v)
+                   :else [])))
+       (keep pdf-url-from-text)
+       distinct))
+
+(defn- <import-hls-linked-pdf-assets!
+  "Create Assets from hls__ page file:: / file-path:: PDF targets when no image link exists."
+  [file {:keys [import-state user-config] :as options}]
+  (when (hls-annotation-md-file? file)
+    (let [extracted (get @(:pdf-annotation-pages import-state) (node-path/basename file))
+          walked (walk-ast-blocks user-config
+                                  (mapcat :block.temp/ast-blocks
+                                          (concat (:pages extracted) (:blocks extracted))))
+          property-urls (hls-extracted-pdf-urls extracted)
+          walked-urls (set (keep (fn [link]
+                                   (link-map->url (second (:url (second link)))))
+                                 (:asset-links walked)))
+          extra-links (into []
+                            (comp (remove walked-urls)
+                                  (keep synthetic-pdf-asset-link))
+                            property-urls)
+          asset-links (into (vec (:asset-links walked)) extra-links)]
+      (when (seq asset-links)
+        (p/let [result (<handle-assets-in-block
+                        {:block/title ""}
+                        (assoc walked :asset-links asset-links)
+                        import-state
+                        (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))]
+          (:asset-blocks-tx result))))))
 
 (defn- quote-node->markdown
   "Converts a Quote AST node to markdown, preserving nested quote structure.
@@ -2598,6 +2741,16 @@
   [ref]
   {:block/uuid (second ref)})
 
+(defn- <extract-pages-and-import-hls-assets!
+  [conn file content options]
+  (p/let [{:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          hls-asset-blocks-tx (<import-hls-linked-pdf-assets! file options)
+          _ (when (seq hls-asset-blocks-tx)
+              (ldb/transact! conn hls-asset-blocks-tx
+                             {::imported-data? true ::path file ::new-graph? true})
+              (save-from-tx hls-asset-blocks-tx options))]
+    {:pages pages :blocks blocks}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2614,7 +2767,7 @@
                            log-fn prn}
                       :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
-          {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          {:keys [pages blocks]} (<extract-pages-and-import-hls-assets! conn file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
