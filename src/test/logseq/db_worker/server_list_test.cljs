@@ -95,7 +95,7 @@
         file-path (server-list/path root-dir)
         lock-file (server-list/lock-path file-path)]
     (fs/writeFileSync lock-file "{\"pid\":1}" "utf8")
-    (fs/chmodSync lock-file 0o000)
+    (fs/chmodSync lock-file 8r000)
     (try
       (server-list/append-entry! file-path {:pid 123 :port 456})
       (is (= [{:pid 123 :port 456}]
@@ -103,7 +103,7 @@
       (is (not (fs/existsSync lock-file)))
       (finally
         (when (fs/existsSync lock-file)
-          (fs/chmodSync lock-file 0o644))))))
+          (fs/chmodSync lock-file 8r644))))))
 
 (deftest append-entry-times-out-on-live-server-list-lock
   (let [root-dir (node-helper/create-tmp-dir "server-list-live-lock")
