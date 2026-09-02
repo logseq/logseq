@@ -3164,7 +3164,7 @@
                    {:db/id class-id
                     :logseq.property.class/properties (vec prop-ids)})
                  class-to-prop-uuids)]
-    (ldb/transact! repo-or-conn tx {::imported-data? true})))
+    (ldb/transact! repo-or-conn tx {::imported-data? true ::new-graph? true})))
 
 (defn- <safe-async-loop
   "Calls async-fn with each element in args-to-loop. Catches an unexpected error in loop and notifies user"
