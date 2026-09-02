@@ -275,15 +275,19 @@
       (log/error :exception e))))
 
 (defn extract
-  "Extracts pages, blocks and ast from given file"
-  [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
+  "Extracts pages, blocks and ast from given file.
+
+  `:parse-outline-only?` is for file-to-db import of outline-shaped markdown
+  (headings, properties, refs, tags). Render, editor, and import conversions
+  that walk Src/Macro/Quote/Drawer AST must leave it unset so mldoc full-parses."
+  [file-path content {:keys [user-config verbose parse-outline-only?] :or {verbose true} :as options}]
   (if (string/blank? content)
     {}
     (let [format (common-util/get-format file-path)
           _ (when verbose (println "Parsing start: " file-path))
-          ast (gp-mldoc/->edn content (gp-mldoc/default-config format
-                                        ;; {:parse_outline_only? true}
-                                                               ))]
+          ast (gp-mldoc/->edn content
+                              (gp-mldoc/default-config format
+                                                       {:parse_outline_only? (boolean parse-outline-only?)}))]
       (when verbose (println "Parsing finished: " file-path))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)

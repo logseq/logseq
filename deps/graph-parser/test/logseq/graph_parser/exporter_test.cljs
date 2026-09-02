@@ -225,7 +225,7 @@
                                              (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
-                        (select-keys options [:verbose]))]
+                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
@@ -753,7 +753,7 @@ abc
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
 
-(deftest export-doc-files-aborts-on-export-file-failure
+(deftest export-doc-files-continues-after-export-file-failure
   (cljs.test/async
    done
    (let [attempted-paths (atom [])
@@ -763,34 +763,38 @@ abc
          first-file (node-path/join graph-dir "pages/A.md")
          second-file (node-path/join graph-dir "pages/B.md")
          conn (db-test/create-conn)
+         notifications (atom [])
          doc-options (gp-exporter/build-doc-options
                       {:macros {} :file/name-format :triple-lowbar}
                       (merge default-export-options
-                             {:notify-user (constantly nil)
+                             {:notify-user #(swap! notifications conj %)
                               :user-options {:convert-all-tags? false}
-                              :<export-file (fn [_conn {:file/keys [path]} _opts]
+                              :<export-file (fn [conn' {:file/keys [path content]} opts]
                                               (swap! attempted-paths conj path)
-                                              (p/rejected failed-error))}))
-         assert-failure (fn [result]
-                          (is (= :worker-transact-failed
-                                 (or (:code (ex-data result))
-                                     (:code (ex-data (.-cause result)))))
-                              "Export file failure is propagated to the caller")
-                          (is (= [first-file] @attempted-paths)
-                              "Import stops after the first export file failure")
-                          (done))]
-     (try
-       (-> (gp-exporter/export-doc-files
-            conn
-            [{:path first-file} {:path second-file}]
-            <read-file
-            doc-options)
-           (.then (fn [_]
-                    (is false "Export file failure should reject")
-                    (done)))
-           (.catch assert-failure))
-       (catch :default e
-         (assert-failure e))))))
+                                              (if (= path first-file)
+                                                (p/rejected failed-error)
+                                                (gp-exporter/<add-file-to-db-graph conn' path content opts)))}))]
+     (-> (gp-exporter/export-doc-files
+          conn
+          [{:path first-file} {:path second-file}]
+          <read-file
+          doc-options)
+         (p/then (fn [_]
+                   (is (= [first-file second-file] @attempted-paths)
+                       "Import continues with later files after one export failure")
+                   (is (= [first-file]
+                          (map :path @(:ignored-files (:import-state doc-options))))
+                       "Failed files are recorded in import state")
+                   (is (some #(= :error (:level %)) @notifications)
+                       "The failed file is reported to the user")
+                   (is (some? (db-test/find-block-by-content @conn "second"))
+                       "Later files are still imported")
+                   (is (nil? (db-test/find-block-by-content @conn "first"))
+                       "The failed file is not imported")
+                   (done)))
+         (p/catch (fn [error]
+                    (is false (str "Single file failure should not abort import: " error))
+                    (done)))))))
 
 (deftest-async export-doc-files-preserves-filesystem-timestamps
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
@@ -943,7 +947,9 @@ abc
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true
+                                                       :import-timeout-ms (if js/process.env.CI 60000 30000)
+                                                       :import-heartbeat-ms 5000})
           end-time (cljs.core/system-time)]
 
     ;; Add multiplicative factor for CI as it runs about twice as slow
@@ -1796,6 +1802,21 @@ abc
                   set))
             "Block has correct task tag and property :block/refs")))))
 
+(deftest-async import-file-graph-rebuilds-refs-without-per-file-listener
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db file-graph-dir conn {})
+          block (db-test/find-block-by-content @conn "old todo block")]
+    (is (some? (:block/tx-id block))
+        "Finalize stamps :block/tx-id")
+    (is (set/subset?
+         #{:logseq.property/status :logseq.class/Task}
+         (->> block
+              :block/refs
+              (map #(:db/ident (d/entity @conn (:db/id %))))
+              set))
+        "One-shot rebuild writes property and class :block/refs without a per-file listener")))
+
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
@@ -1981,6 +2002,38 @@ abc
     (is (= #{(:block/uuid missing-page)}
            (set (map :block/uuid (:block/refs source-block))))
         "Missing ordinary page ref points at the created page")))
+
+(deftest-async import-page-drawer-properties-write-refs-on-the-page
+  (p/let [file (write-temp-graph-file
+                "pages/Zorba the Greek (1964).md"
+                (str "tags:: movies\n"
+                     "title:: Zorba the Greek (1964)\n"
+                     "genre:: [[Comedy]], [[Drama]]\n"
+                     "actors:: [[Anthony Quinn]], [[Alan Bates]]\n"))
+          conn (db-test/create-conn)
+          _ (import-files-to-db [file] conn {:convert-all-tags? true})
+          page (db-test/find-page-by-title @conn "Zorba the Greek (1964)")
+          comedy (db-test/find-page-by-title @conn "Comedy")
+          drama (db-test/find-page-by-title @conn "Drama")
+          quinn (db-test/find-page-by-title @conn "Anthony Quinn")
+          bates (db-test/find-page-by-title @conn "Alan Bates")
+          props (db-test/readable-properties page)
+          ref-titles (set (map :block/title (:block/refs page)))]
+    (is (some? page) "Movie page is imported")
+    (is (= #{"Comedy" "Drama"} (:user.property/genre props))
+        "Genre page refs are stored on the movie page")
+    (is (= #{"Anthony Quinn" "Alan Bates"} (:user.property/actors props))
+        "Actor page refs are stored on the movie page")
+    (is (set/subset? #{"Comedy" "Drama" "Anthony Quinn" "Alan Bates"} ref-titles)
+        "Page drawer refs are written onto the page :block/refs")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id comedy))))
+        "Comedy linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id drama))))
+        "Drama linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id quinn))))
+        "Actor linked references include the movie page")
+    (is (= 1 (count (d/datoms @conn :avet :block/refs (:db/id bates))))
+        "Actor linked references include the movie page")))
 
 (deftest-async import-favorites-from-og-config-edn
   (p/let [dir (write-temp-file-graph

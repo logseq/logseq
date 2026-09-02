@@ -8,7 +8,6 @@
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
@@ -218,11 +217,19 @@
         ^{:key (str (or class "group") "-body")}
         [sidebar-content-group-body child])]]))
 
+(defn <load-nav-class-uuids
+  [repo db-worker-ready?]
+  (when (and repo db-worker-ready?)
+    (p/all (map (fn [class-ident]
+                  (state/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
+                [:logseq.class/Asset :logseq.class/Task]))))
+
 (hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
         repo (state/get-current-repo)
+        db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)
         [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
@@ -234,13 +241,19 @@
 	     [checked-navs])
     (hooks/use-effect!
      (fn []
-       (p/let [classes (p/all (map (fn [class-ident]
-                                     (db-async/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
-                                   [:logseq.class/Asset :logseq.class/Task]))]
-         (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
-                                         (map :block/uuid classes))))
-       nil)
-     [repo])
+       (if-let [classes-request (<load-nav-class-uuids repo db-worker-ready?)]
+         (let [cancelled? (atom false)]
+           (-> classes-request
+               (p/then (fn [classes]
+                         (when-not @cancelled?
+                           (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
+                                                           (map :block/uuid classes))))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         (do
+           (set-class-ident->uuid! {})
+           nil)))
+     [repo db-worker-ready?])
 
     (sidebar-content-group
       [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]

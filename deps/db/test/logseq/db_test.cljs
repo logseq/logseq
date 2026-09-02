@@ -238,6 +238,29 @@
       (finally
         (reset! ldb/*transact-pipeline-fn original-pipeline)))))
 
+(deftest transact-new-graph-refs-skips-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page 1"}
+                                   :blocks [{:block/title "before"}]}]})
+        block (db-test/find-block-by-content @conn "before")
+        block-id (:db/id block)
+        pipeline-calls (atom 0)
+        original-pipeline @ldb/*transact-pipeline-fn]
+    (try
+      (ldb/register-transact-pipeline-fn!
+       (fn [tx-report]
+         (swap! pipeline-calls inc)
+         tx-report))
+      (ldb/transact! conn
+                     [{:db/id block-id
+                       :block/title "after"}]
+                     {:transact-new-graph-refs? true})
+      (is (zero? @pipeline-calls)
+          "Import finalize already wrote :block/refs; do not rebuild them in the pipeline.")
+      (is (= "after" (:block/title (d/entity @conn block-id))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn original-pipeline)))))
+
 (deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
   (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"
         schema  {:block/uuid {:db/unique :db.unique/identity}}

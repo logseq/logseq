@@ -66,8 +66,9 @@
         (maybe-run-recycle-gc! conn)
         nil)
       (catch :default error
-        (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
-        (log/error ::worker-transact-failed error)
+        (log/error ::worker-transact-failed {:tx-meta tx-meta
+                                             :tx-count (count tx-data)
+                                             :error error})
         (throw error)))))
 
 (defn- perf-time-ms []
