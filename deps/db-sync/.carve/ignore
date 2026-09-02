@@ -4,10 +4,6 @@ logseq.db-sync.node.entry/main
 logseq.db-sync.node.show-checksum/main
 ;; API
 logseq.db-sync.order/fix-duplicate-orders!
-;; TODO: is this ns needed?
-logseq.db-sync.platform.cloudflare/response
-logseq.db-sync.platform.cloudflare/request
-logseq.db-sync.platform.cloudflare/request-url
 ;; testing
 logseq.db-sync.protocol/tx->transit
 ;; debugging
