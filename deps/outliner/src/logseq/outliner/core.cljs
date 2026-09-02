@@ -1008,7 +1008,7 @@
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
-  [db blocks _opts]
+  [db blocks {:keys [reclaim-property-value?]}]
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
@@ -1036,7 +1036,7 @@
                                                (:db/id (:logseq.property/default-value from-property)))
                                          (not (:block/closed-value-property start-block)))]
         (cond
-          (and delete-one-block? default-value-property?)
+          (and delete-one-block? default-value-property? (not reclaim-property-value?))
           (let [datoms (d/datoms db :avet (:db/ident from-property) (:db/id start-block))
                 tx-data (map (fn [d] {:db/id (:e d)
                                       (:db/ident from-property) :logseq.property/empty-placeholder}) datoms)]
