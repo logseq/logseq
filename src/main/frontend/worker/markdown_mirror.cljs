@@ -531,10 +531,16 @@
    (block-content db (:block/uuid page) {:include-page-properties? true} options)
    options))
 
+(defn- contents-page?
+  "The Contents page is created as built-in but holds ordinary user blocks."
+  [page]
+  (= "contents" (:block/name page)))
+
 (defn- mirrorable-page?
   [page]
   (and (ldb/page? page)
-       (not (ldb/built-in? page))
+       (or (not (ldb/built-in? page))
+           (contents-page? page))
        (not (ldb/property? page))
        (not (ldb/hidden? page))
        (not (:logseq.property.user/email page))))
