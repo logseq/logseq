@@ -2696,8 +2696,11 @@
   (some-> node (.closest ".bottom-properties-row")))
 
 (defn- bottom-properties-row-in-block
+  "Find the bottom-properties row owned by this block, not a descendant child."
   [block-node]
-  (some-> block-node (.querySelector ".bottom-properties-row")))
+  (when-let [block-id (node-attr block-node "blockid")]
+    (some-> block-node
+            (.querySelector (str "[data-bottom-properties-row=\"" block-id "\"]")))))
 
 (defn- focus-bottom-properties-row!
   [row]
