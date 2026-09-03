@@ -1166,4 +1166,4 @@
                     (is (not (some #{contents-path} @deletes)))
                     (is (= contents-content (get @files contents-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
-          (p/finally done))))))
+          (p/finally done)))))
