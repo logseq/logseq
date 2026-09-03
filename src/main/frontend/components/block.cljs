@@ -3055,12 +3055,38 @@
                             trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
+(defn- hidden-block-below-property?
+  "Icon is rendered on the block itself, never as a bottom pill."
+  [property]
+  (or (= :logseq.property/icon property)
+      (= :logseq.property/icon (:db/ident property))))
+
+(defn- property-item-uuid
+  [property]
+  (cond
+    (uuid? property) property
+    (map? property) (:block/uuid property)))
+
+(defn- visible-block-below-property-uuids
+  [property-uuids]
+  (into [] (remove hidden-block-below-property?) property-uuids))
+
+(defn- show-block-below-properties-row?
+  [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
+                                  show-hidden-properties-control?
+                                  show-add-property-button?]}]
+  (boolean
+   (or (seq visible-property-uuids)
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?)))
+
 (hsx/defc positioned-property-row
   [block property-uuid opts]
   (let [property (db-hooks/use-block property-uuid)]
     (when (and property
                (not (and (= :block-below (:property-position opts))
-                         (= :logseq.property/icon (:db/ident property)))))
+                         (hidden-block-below-property? property))))
       (if (= :block-below (:property-position opts))
         (bottom-property-pill-cp block property opts)
         (pv/property-value block property (assoc opts :show-tooltip? true))))))
@@ -3127,7 +3153,7 @@
                   "flex-wrap overflow-x-hidden"
                   "flex-nowrap overflow-x-hidden")])
        :data-expanded (str expanded?)
-       :data-bottom-properties-row (:block/uuid block)
+       :data-bottom-properties-row (str (:block/uuid block))
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
       [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.min-w-0.flex-1.basis-0
@@ -3153,6 +3179,43 @@
                                                      :icon-only? true
                                                      :tab-index 0)))]]))
 
+(hsx/defc block-below-positioned-properties-gate
+  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [property-item-uuids (into [] (keep property-item-uuid) property-uuids)
+        resolved-properties (db-hooks/use-blocks property-item-uuids)
+        all-identifiable? (and (seq property-uuids)
+                               (every? (fn [property]
+                                         (or (keyword? property)
+                                             (some? (:db/ident property))))
+                                       property-uuids))
+        visible-property-uuids
+        (cond
+          all-identifiable?
+          (into [] (keep property-item-uuid) (visible-block-below-property-uuids property-uuids))
+
+          (nil? resolved-properties)
+          nil
+
+          :else
+          (into []
+                (keep (fn [property]
+                        (when (and property
+                                   (not (hidden-block-below-property? property)))
+                          (:block/uuid property))))
+                resolved-properties))]
+    (when (and (some? visible-property-uuids)
+               (show-block-below-properties-row?
+                visible-property-uuids
+                {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+                 :show-hidden-properties-control? show-hidden-properties-control?
+                 :show-add-property-button? show-add-property-button?}))
+      [block-below-positioned-properties-cp block
+       visible-property-uuids
+       opts
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?])))
+
 (hsx/defc positioned-properties-content
   [config block position property-uuids]
   (let [opts (merge config
@@ -3177,7 +3240,8 @@
         show-add-property-button? show-page-add-property?]
     (case position
         :block-below
-        [block-below-positioned-properties-cp block
+        [block-below-positioned-properties-gate
+         block
          property-uuids
          opts
          show-hidden-properties-pill-toggle?

@@ -2695,10 +2695,6 @@
   [node]
   (some-> node (.closest ".bottom-properties-row")))
 
-(defn- bottom-properties-row-in-block
-  [block-node]
-  (some-> block-node (.querySelector ".bottom-properties-row")))
-
 (defn- focus-bottom-properties-row!
   [row]
   (when row
@@ -2711,6 +2707,13 @@
   (or (some-> node (gobj/get attr))
       (when (and node (gobj/get node "getAttribute"))
         (dom/attr node attr))))
+
+(defn- bottom-properties-row-in-block
+  "Find the bottom-properties row owned by this block, not a descendant child."
+  [block-node]
+  (when-let [block-id (node-attr block-node "blockid")]
+    (some-> block-node
+            (.querySelector (str "[data-bottom-properties-row=\"" block-id "\"]")))))
 
 (defn- comment-item-node?
   [node]

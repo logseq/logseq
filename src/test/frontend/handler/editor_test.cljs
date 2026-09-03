@@ -2575,3 +2575,30 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(deftest bottom-properties-row-in-block-matches-owned-row-only-test
+  (let [parent-id (str #uuid "11111111-1111-1111-1111-111111111111")
+        child-id (str #uuid "22222222-2222-2222-2222-222222222222")
+        child-row (js-obj "id" "child-row"
+                          "data-bottom-properties-row" child-id)
+        parent-row (js-obj "id" "parent-row"
+                           "data-bottom-properties-row" parent-id)
+        descendant-selector (str "[data-bottom-properties-row=\"" parent-id "\"]")
+        parent-without-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) nil
+                                    :else nil)))
+        parent-with-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) parent-row
+                                    :else nil)))]
+    (is (nil? (#'editor/bottom-properties-row-in-block parent-without-own-row))
+        "A parent must not treat a child icon/bottom row as its own navigation stop")
+    (is (identical? parent-row (#'editor/bottom-properties-row-in-block parent-with-own-row))
+        "A parent still resolves the bottom-properties row it owns")))
