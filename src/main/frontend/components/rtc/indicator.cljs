@@ -95,11 +95,29 @@
       (conj {:count download
              :label-key :sync/assets-downloading}))))
 
+(defn checksums-diverged?
+  "True when both checksums are present and differ.
+  Missing checksums are treated as unknown, not as a match or a mismatch."
+  [local-checksum remote-checksum]
+  (boolean
+   (and (some? local-checksum)
+        (some? remote-checksum)
+        (not= local-checksum remote-checksum))))
+
+(defn checksum-mismatch-detail
+  [{:keys [local-checksum remote-checksum]}]
+  (when (checksums-diverged? local-checksum remote-checksum)
+    {:local-checksum local-checksum
+     :remote-checksum remote-checksum}))
+
 (defn indicator-button-class
-  [{:keys [online? rtc-state pending-local-ops pending-asset-ops pending-server-ops]}]
+  [{:keys [online? rtc-state pending-local-ops pending-asset-ops pending-server-ops
+           local-checksum remote-checksum]}]
   (let [open? (and online? (= :open rtc-state))
+        diverged? (checksums-diverged? local-checksum remote-checksum)
         syncing? (and open? (pos? (or pending-server-ops 0)))
         idle? (and open?
+                   (not diverged?)
                    (zero? (or pending-local-ops 0))
                    (zero? (or pending-asset-ops 0))
                    (zero? (or pending-server-ops 0)))
@@ -109,7 +127,8 @@
                        open? (conj "on")
                        syncing? (conj "syncing")
                        idle? (conj "idle")
-                       queuing? (conj "queuing")))))
+                       queuing? (conj "queuing")
+                       diverged? (conj "diverged")))))
 
 (defn- asset-status-label
   [label-key]
@@ -200,11 +219,20 @@
                 download-logs upload-logs misc-logs pending-local-ops pending-asset-ops
                 missing-asset-upload-files pending-server-ops]}
         detail-info
+        checksum-mismatch (checksum-mismatch-detail detail-info)
+        show-debug-checksums? (or show-checksums? (some? checksum-mismatch))
         asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
                                        :missing-asset-upload-files missing-asset-upload-files
                                        :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
+     (when-let [{:keys [local-checksum remote-checksum]} checksum-mismatch]
+       [:div.flex.flex-col.gap-1.text-sm
+        [:div.flex.flex-row.gap-1.items-center.warning
+         (ui/icon "alert-triangle" {:size 14})
+         (t :sync/checksum-mismatch-warning)]
+        [:div.select-text (t :sync/local-checksum-label local-checksum)]
+        [:div.select-text (t :sync/remote-checksum-label remote-checksum)]])
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
      (for [{:keys [count label-key]} asset-rows]
        [:div {:key (name label-key)}
@@ -230,8 +258,8 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
-               (and show-checksums? local-checksum) (assoc :local-checksum local-checksum)
-               (and show-checksums? remote-checksum) (assoc :remote-checksum remote-checksum)
+               (and show-debug-checksums? local-checksum) (assoc :local-checksum local-checksum)
+               (and show-debug-checksums? remote-checksum) (assoc :remote-checksum remote-checksum)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])
@@ -253,7 +281,7 @@
         unpushed-block-update-count (:pending-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)
         pending-server-ops          (:pending-server-ops detail-info)
-        {:keys [local-tx remote-tx]} detail-info]
+        {:keys [local-tx remote-tx local-checksum remote-checksum]} detail-info]
     [:div.cp__rtc-sync
      [:div.hidden {"data-testid" "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
@@ -267,7 +295,9 @@
                                         :rtc-state rtc-state
                                         :pending-local-ops unpushed-block-update-count
                                         :pending-asset-ops pending-asset-ops
-                                        :pending-server-ops pending-server-ops})})]]))
+                                        :pending-server-ops pending-server-ops
+                                        :local-checksum local-checksum
+                                        :remote-checksum remote-checksum})})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
 (when-not config/publishing?

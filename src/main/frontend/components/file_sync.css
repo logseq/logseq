@@ -35,6 +35,12 @@
                       background-color: var(--ls-color-file-sync-idle);
                   }
               }
+
+              &.diverged {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-error);
+                  }
+              }
           }
       }
 

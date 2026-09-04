@@ -37,14 +37,93 @@
   (is (= :close
          (:rtc-state (indicator/rtc-state->detail-info {})))))
 
-(deftest indicator-button-class-is-space-separated
-  (let [class-name (indicator/indicator-button-class
-                    {:online? true
-                     :rtc-state :open
-                     :pending-local-ops 0
-                     :pending-asset-ops 0
-                     :pending-server-ops 0})]
+(defn- class-set
+  [opts]
+  (let [class-name (indicator/indicator-button-class opts)]
     (is (string? class-name))
     (is (not (re-find #"," class-name)))
-    (is (= #{"cloud" "on" "idle"}
-           (set (.split class-name " "))))))
+    (set (.split class-name " "))))
+
+(def ^:private idle-open-opts
+  {:online? true
+   :rtc-state :open
+   :pending-local-ops 0
+   :pending-asset-ops 0
+   :pending-server-ops 0})
+
+(deftest checksums-diverged-requires-both-present-and-different
+  (is (false? (indicator/checksums-diverged? nil nil)))
+  (is (false? (indicator/checksums-diverged? "abc" nil)))
+  (is (false? (indicator/checksums-diverged? nil "abc")))
+  (is (false? (indicator/checksums-diverged? "abc" "abc")))
+  (is (true? (indicator/checksums-diverged? "abc" "def"))))
+
+(deftest checksum-mismatch-detail-only-when-both-checksums-differ
+  (is (nil? (indicator/checksum-mismatch-detail
+             {:local-checksum "abc"
+              :remote-checksum "abc"})))
+  (is (nil? (indicator/checksum-mismatch-detail
+             {:local-checksum "abc"
+              :remote-checksum nil})))
+  (is (= {:local-checksum "abc"
+          :remote-checksum "def"}
+         (indicator/checksum-mismatch-detail
+          {:local-checksum "abc"
+           :remote-checksum "def"}))))
+
+(deftest detail-info-forwards-local-and-remote-checksums
+  (is (= {:local-checksum "abc"
+          :remote-checksum "def"}
+         (select-keys (indicator/rtc-state->detail-info
+                       {:local-checksum "abc"
+                        :remote-checksum "def"})
+                      [:local-checksum :remote-checksum]))))
+
+(deftest indicator-button-class-is-space-separated
+  (is (= #{"cloud" "on" "idle"}
+         (class-set idle-open-opts))))
+
+(deftest indicator-button-class-idle-when-checksums-match
+  (is (= #{"cloud" "on" "idle"}
+         (class-set (assoc idle-open-opts
+                           :local-checksum "abc"
+                           :remote-checksum "abc")))))
+
+(deftest indicator-button-class-idle-when-checksums-unknown
+  (is (= #{"cloud" "on" "idle"}
+         (class-set (assoc idle-open-opts
+                           :local-checksum "abc"
+                           :remote-checksum nil))))
+  (is (= #{"cloud" "on" "idle"}
+         (class-set (assoc idle-open-opts
+                           :local-checksum nil
+                           :remote-checksum "abc")))))
+
+(deftest indicator-button-class-not-idle-when-checksums-diverge
+  (let [classes (class-set (assoc idle-open-opts
+                                  :local-checksum "abc"
+                                  :remote-checksum "def"))]
+    (is (= #{"cloud" "on" "diverged"} classes))
+    (is (not (contains? classes "idle")))))
+
+(deftest indicator-button-class-keeps-pending-counts-ahead-of-checksum-match
+  (is (= #{"cloud" "on" "queuing"}
+         (class-set (assoc idle-open-opts
+                           :pending-local-ops 2
+                           :local-checksum "abc"
+                           :remote-checksum "abc"))))
+  (is (= #{"cloud" "on" "syncing"}
+         (class-set (assoc idle-open-opts
+                           :pending-server-ops 3
+                           :local-checksum "abc"
+                           :remote-checksum "abc"))))
+  (is (= #{"cloud" "on" "queuing" "diverged"}
+         (class-set (assoc idle-open-opts
+                           :pending-asset-ops 1
+                           :local-checksum "abc"
+                           :remote-checksum "def"))))
+  (is (= #{"cloud" "on" "syncing" "diverged"}
+         (class-set (assoc idle-open-opts
+                           :pending-server-ops 1
+                           :local-checksum "abc"
+                           :remote-checksum "def")))))
