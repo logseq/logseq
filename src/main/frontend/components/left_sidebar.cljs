@@ -14,6 +14,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
@@ -22,6 +23,7 @@
             [frontend.util :as util]
             [frontend.util.entity :as entity]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -110,22 +112,35 @@
                                  (ctx-icon "layout-sidebar-right")
                                  (t :sidebar.right/open)
                                  (ui/dropdown-shortcut "shift+click"))]))]
+
+    ;; TODO: move to standalone component
         [:a.link-item.group
          (if (util/mobile?)
            {:on-pointer-down util/stop-propagation
             :on-pointer-up (fn [_e]
                              (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
-           {:on-click
-            (fn [e]
-              (if (gobj/get e "shiftKey")
-                (open-in-sidebar)
-                (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-            :on-context-menu (fn [^js e]
-                               (shui/popup-show! e (x-menu-content)
-                                                 {:as-dropdown? true
-                                                  :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                                  :class "w-60"}})
-                               (util/stop e))})
+           (cond->
+            {:on-click
+             (fn [e]
+               (let [cmd-key? (or (.-metaKey e) (.-ctrlKey e))
+                     shift? (gobj/get e "shiftKey")]
+                 (cond
+                   (and cmd-key? (not shift?))
+                   (tabs-handler/open-tab-by-page! (:block/uuid page) {:new-tab? true})
+
+                   shift?
+                   (open-in-sidebar)
+
+                   :else
+                   (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))))
+             :on-context-menu (fn [^js e]
+                                (shui/popup-show! e (x-menu-content)
+                                                  {:as-dropdown? true
+                                                   :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                   :class "w-60"}})
+                                (util/stop e))}
+             (ldb/object? page)
+             (assoc :title (block-handler/block-unique-title page))))
          [:span.page-icon {:key "page-icon"} icon]
          (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at)
          (shui/button
@@ -171,7 +186,8 @@
     :all-pages :nav.all-pages/label
     :graph-view :nav/graph-view
     :tag/tasks :nav/tasks
-    :tag/assets :nav/assets))
+    :tag/assets :nav/assets
+    :nav/unknown))
 
 (hsx/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]
@@ -270,16 +286,24 @@
             :shortcut :go/home})
 
           (sidebar-item
-           {:class "journals-nav"
-            :active (and (not srs-open?)
-                         (or (= route-name :all-journals) (= route-name :home)))
-            :title (t :nav/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon "calendar"
-            :shortcut :go/journals})))
+             {:class "journals-nav"
+              :active (and (not srs-open?)
+                           (or (= route-name :all-journals) (= route-name :home)))
+              :title (t :nav/journals)
+              :on-click-handler (fn [e]
+                                  (let [cmd-key? (or (.-metaKey e) (.-ctrlKey e))
+                                        shift? (gobj/get e "shiftKey")]
+                                    (cond
+                                      (and cmd-key? (not shift?))
+                                      (tabs-handler/open-all-journals-in-tab!)
+
+                                      shift?
+                                      (route-handler/sidebar-journals!)
+
+                                      :else
+                                      (route-handler/go-to-journals!))))
+              :icon "calendar"
+              :shortcut :go/journals})))
 
       (for [nav checked-navs]
         (cond

@@ -146,6 +146,9 @@
       :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
       :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      :ui/auto-hide-tabs-typing?             (storage/get :ui/auto-hide-tabs-typing)
+      :tabs/tabs-list                        []
+      :tabs/active-tab-id                    nil
       :ui/radix-color                        (storage/get :ui/radix-color)
       :ui/editor-font                        (storage/get :ui/editor-font)
 
@@ -728,6 +731,10 @@ should be done through this fn in order to get global config and config defaults
 (defn auto-expand-block-refs?
   []
   (:ui/auto-expand-block-refs? (get-config)))
+
+(defn auto-hide-tabs-typing?
+  []
+  (get-state :ui/auto-hide-tabs-typing?))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -1520,6 +1527,10 @@ should be done through this fn in order to get global config and config defaults
 (defn toggle-wide-mode!
   []
   (update-state! :ui/wide-mode? not))
+
+(defn toggle-auto-hide-tabs-typing!
+  []
+  (update-state! :ui/auto-hide-tabs-typing? not))
 
 (defn set-online!
   [value]

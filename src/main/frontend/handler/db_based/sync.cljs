@@ -158,7 +158,7 @@
 
 (defn- <ensure-user-rsa-keys-on-server!
   [{:keys [server-rsa-keys-exists?]}]
-  (if (not= false server-rsa-keys-exists?)
+  (if (or config/db-sync-local? (not= false server-rsa-keys-exists?))
     (p/resolved nil)
     (if @state/*db-worker
       (-> (p/let [_ (<sync-auth-state-to-db-worker!)]
@@ -455,7 +455,8 @@
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? true)]
+  (p/let [_ (<sync-auth-state-to-db-worker!)
+          graph-id (<rtc-create-graph! repo graph-e2ee? true)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))
     (p/do!
