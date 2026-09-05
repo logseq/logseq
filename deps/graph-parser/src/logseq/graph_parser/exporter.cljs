@@ -810,17 +810,64 @@
     (catch :default e
       (js/console.error "Translating linked reference filters failed with: " e))))
 
+(def ^:private rgi-emoji-re
+  "Matches a single RGI emoji, including ZWJ sequences, flags, and keycaps."
+  (js/RegExp. "^\\p{RGI_Emoji}$" "v"))
+
+(defn- emoji-icon-id?
+  [s]
+  (boolean (and (string? s)
+                (not (string/blank? s))
+                (.test rgi-emoji-re s))))
+
+(defn- db-icon-map
+  "Returns a DB :logseq.property/icon map when m already has a supported shape."
+  [m]
+  (let [icon-type (keyword (:type m))
+        icon-id (:id m)
+        color (:color m)]
+    (when (and (contains? #{:emoji :tabler-icon} icon-type)
+               (string? icon-id)
+               (not (string/blank? icon-id)))
+      (cond-> {:type icon-type :id icon-id}
+        (and (string? color) (not (string/blank? color)))
+        (assoc :color color)))))
+
+(defn- file-icon-value->db-icon
+  "Converts a file-graph :icon value to a DB :logseq.property/icon map when the
+   value can be mapped safely. Returns nil for values that cannot be imported."
+  [prop-value]
+  (cond
+    (map? prop-value)
+    (db-icon-map prop-value)
+
+    (string? prop-value)
+    (let [icon-id (string/trim prop-value)]
+      (when (emoji-icon-id? icon-id)
+        {:type :emoji :id icon-id}))))
+
+(defn- ignored-built-in-property-value
+  [prop prop-value {:block/keys [title name]}]
+  {:property prop :value prop-value :location (if name {:page name} {:block title})})
+
 (defn- update-built-in-property-values
-  [props page-names-to-uuids {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
+  [props page-names-to-uuids {:keys [ignored-properties all-idents]} block options]
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:icon :file :file-path :hl-stamp} prop)
+                       (if (#{:file :file-path :hl-stamp} prop)
                          (do (swap! ignored-properties
                                     conj
-                                    {:property prop :value prop-value :location (if name {:page name} {:block title})})
+                                    (ignored-built-in-property-value prop prop-value block))
                              nil)
                          (case prop
+                           :icon
+                           (if-let [icon (file-icon-value->db-icon prop-value)]
+                             [[:logseq.property/icon icon]]
+                             (do (swap! ignored-properties
+                                        conj
+                                        (ignored-built-in-property-value prop prop-value block))
+                                 nil))
                            :query-properties
                            (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
                              [[:logseq.property.table/ordered-columns cols]])
