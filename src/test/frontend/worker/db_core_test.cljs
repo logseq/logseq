@@ -567,6 +567,31 @@
         (reset! worker-state/*state state-prev)
         (reset! worker-state/*db-sync-config config-prev)))))
 
+(deftest set-db-sync-config-without-node-process-test
+  (let [set-config! (get @thread-api/*thread-apis :thread-api/set-db-sync-config)
+        process-descriptor (js/Object.getOwnPropertyDescriptor js/globalThis "process")
+        config-prev @worker-state/*db-sync-config
+        state-prev @worker-state/*state
+        config {:http-base "http://localhost:8787"
+                :ws-url "ws://localhost:8787/sync/%s"}]
+    (try
+      (reset! worker-state/*state (assoc state-prev :auth/static-sync-token "browser-token"))
+      ;; Browser and Capacitor workers have no Node process global.
+      (let [result (try
+                     (js-delete js/globalThis "process")
+                     (set-config! config)
+                     (set-config! config)
+                     {:config @worker-state/*db-sync-config
+                      :token (:auth/static-sync-token @worker-state/*state)}
+                     (finally
+                       (when process-descriptor
+                         (js/Object.defineProperty js/globalThis "process" process-descriptor))))]
+        (is (= config (:config result)))
+        (is (= "browser-token" (:token result))))
+      (finally
+        (reset! worker-state/*db-sync-config config-prev)
+        (reset! worker-state/*state state-prev)))))
+
 (deftest get-db-sync-config-strips-auth-fields-test
   (let [get-config (get @thread-api/*thread-apis :thread-api/get-db-sync-config)
         config-prev @worker-state/*db-sync-config]
