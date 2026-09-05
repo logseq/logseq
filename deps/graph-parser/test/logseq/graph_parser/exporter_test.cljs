@@ -2135,14 +2135,72 @@ abc
         (is (ldb/inline-tag? raw-title tag)
             "first-line namespaced tag is stored as an inline tag")))))
 
-(deftest-async export-files-with-ignored-properties
+(deftest file-icon-value->db-icon
+  (are [input expected] (= expected (#'gp-exporter/file-icon-value->db-icon input))
+    "👻" {:type :emoji :id "👻"}
+    "  😆  " {:type :emoji :id "😆"}
+    "❤️" {:type :emoji :id "❤️"}
+    "👨‍💻" {:type :emoji :id "👨‍💻"}
+    "🇺🇸" {:type :emoji :id "🇺🇸"}
+    "👍🏻" {:type :emoji :id "👍🏻"}
+    {:type :emoji :id "👻"} {:type :emoji :id "👻"}
+    {:type :tabler-icon :id "ghost"} {:type :tabler-icon :id "ghost"}
+    {:type :tabler-icon :id "ghost" :color "#ff0000"} {:type :tabler-icon :id "ghost" :color "#ff0000"}
+    {:type "emoji" :id "ghost"} {:type :emoji :id "ghost"}
+    "not-an-emoji" nil
+    "./assets/foo.png" nil
+    "👻🎃" nil
+    "ghost" nil
+    ":ghost:" nil
+    "" nil
+    "   " nil
+    nil nil
+    {:type :emoji :id ""} nil
+    {:type :unknown :id "👻"} nil))
+
+(deftest-async export-files-with-icon-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(path/path-join file-graph-dir %) ["ignored/icon-page.md"])
           conn (db-test/create-conn)
-          {:keys [import-state]} (import-files-to-db files conn {})]
+          {:keys [import-state]} (import-files-to-db files conn {})
+          page (db-test/find-page-by-title @conn "icon-page")
+          block (db-test/find-block-by-content @conn "has some content")
+          expected-icon {:type :emoji :id "😆"}]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (some? page)
+        "imported icon page")
+    (is (some? block)
+        "imported icon block")
+    (is (= expected-icon (:logseq.property/icon (db-test/readable-properties page)))
+        "page emoji icon is imported")
+    (is (= expected-icon (:logseq.property/icon (db-test/readable-properties block)))
+        "block emoji icon is imported")
+    (is (= 0
+           (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
+        "importable emoji icons are not ignored")))
+
+(deftest-async export-files-with-unmappable-icon-properties
+  (p/let [file (write-temp-graph-file
+                "pages/bad-icon.md"
+                "icon:: not-an-emoji\n\n- block with file icon\n  icon:: ./assets/ghost.png\n")
+          conn (db-test/create-conn)
+          {:keys [import-state]} (import-files-to-db [file] conn {})
+          page (db-test/find-page-by-title @conn "bad-icon")
+          block (db-test/find-block-by-content @conn "block with file icon")]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (some? page)
+        "imported page with unmappable icon")
+    (is (some? block)
+        "imported block with unmappable icon")
+    (is (nil? (:logseq.property/icon (db-test/readable-properties page)))
+        "unmappable page icon is not imported")
+    (is (nil? (:logseq.property/icon (db-test/readable-properties block)))
+        "unmappable block icon is not imported")
     (is (= 2
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
-        "icon properties are visibly ignored in order to not fail import")))
+        "unmappable icon properties are still ignored")))
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
