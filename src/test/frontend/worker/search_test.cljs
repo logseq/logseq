@@ -930,13 +930,20 @@
           property (d/entity @conn :user.property/foo)
           page (db-test/find-page-by-title @conn "Test Page")
           holder-block (db-test/find-block-by-content @conn "Holder block")
+          ;; Worker pipeline records property usage on :block/refs. Seed the
+          ;; same links so this test exercises the FTS referrer path.
+          _ (d/transact! conn [[:db/add (:db/id page) :block/refs (:db/id property)]
+                               [:db/add (:db/id holder-block) :block/refs (:db/id property)]])
           property-uuid (str (:block/uuid property))
           page-uuid (str (:block/uuid page))
           holder-uuid (str (:block/uuid holder-block))
+          referrer-ids (set (map :db/id (:block/_refs (d/entity @conn (:db/id property)))))
           tx-report (d/transact! conn (outliner-page/build-page-retract-tx @conn property))
           {:keys [blocks-to-add blocks-to-remove-set]} (search/sync-search-indice tx-report)
           add-ids (set (map :id blocks-to-add))
           add-titles (set (map :title blocks-to-add))]
+      (is (= #{(:db/id page) (:db/id holder-block)} referrer-ids)
+          "holders reference the property before delete")
       (is (some? (d/entity @conn (:db/id page)))
           "holder page remains in Datascript")
       (is (some? (d/entity @conn (:db/id holder-block)))
@@ -951,6 +958,10 @@
       (is (contains? add-titles "Holder block"))
       (is (contains? blocks-to-remove-set property-uuid)
           "deleted property leaves the FTS index")
+      (is (contains? blocks-to-remove-set page-uuid)
+          "holder page is removed then re-upserted")
+      (is (contains? blocks-to-remove-set holder-uuid)
+          "holder block is removed then re-upserted")
       (is (not (contains? add-ids property-uuid))
           "deleted property is not re-added to the FTS index"))))
 
