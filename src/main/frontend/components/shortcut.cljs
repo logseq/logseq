@@ -442,6 +442,38 @@
                       (into #{} (map shortcut-utils/canonicalize-binding) (editable-binding-vec bs)))]
       (= (canon-set binding) (canon-set binding-vec)))))
 
+(defn- default-binding-key-set
+  "Canonical key set from an action's configured default binding."
+  [action-id]
+  (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
+    (into #{} (map shortcut-utils/canonicalize-binding)
+          (editable-binding-vec binding))))
+
+(defn- reset-conflict-update
+  "Build a persist update that strips reset keys from a conflicting action.
+
+   Keys that are also on the peer's default binding are kept so shared
+   defaults (e.g. Backspace on :editor/backspace and :editor/delete-selection)
+   survive reset. User-customized collisions are still stripped.
+
+   Returns nil when the peer should keep its current binding."
+  [conflicting-id their-binding keys-to-strip]
+  (let [peer-default-keys (or (default-binding-key-set conflicting-id) #{})
+        canonical-keys (->> keys-to-strip
+                            (map shortcut-utils/canonicalize-binding)
+                            (remove peer-default-keys)
+                            set)]
+    (when (seq canonical-keys)
+      (let [filtered (vec (remove (fn [b]
+                                    (contains? canonical-keys
+                                               (shortcut-utils/canonicalize-binding b)))
+                                  their-binding))]
+        {:action-id conflicting-id
+         :new-binding (cond
+                        (empty? filtered) []
+                        (matches-default-binding? conflicting-id filtered) nil
+                        :else filtered)}))))
+
 (defn persisted-binding-value
   "Returns the value that should be stored for a shortcut customization."
   [action-id binding-vec]
@@ -577,10 +609,10 @@
 (defn- compute-reset-plan
   "Compute conflict-stripping data needed when resetting a shortcut to default.
    For each key in the default binding, checks if another action currently owns
-   that key and plans to strip it.
+   that key and plans to strip user-customized collisions.
 
-   Returns nil if no conflicts, otherwise a map with:
-   :undo-entries, :conflict-updates"
+   Shared default keys are left on peer commands. Returns nil when nothing
+   should be stripped, otherwise a map with :undo-entries and :conflict-updates."
   [action-id handler-id default-binding current-binding]
   (let [all-conflicts
         (for [b default-binding
@@ -599,24 +631,19 @@
         conflicts-by-id
         (reduce (fn [acc {:keys [conflicting-id accepted-key]}]
                   (update acc conflicting-id (fnil conj #{}) accepted-key))
-                {} all-conflicts)]
-    (when (seq conflicts-by-id)
-      (let [conflict-updates
-            (for [[conflicting-id keys-to-strip] conflicts-by-id]
-              (let [their-binding (dh/shortcut-binding conflicting-id)
-                    canonical-keys (set (map shortcut-utils/canonicalize-binding keys-to-strip))
-                    filtered (vec (remove (fn [b]
-                                            (contains? canonical-keys
-                                                       (shortcut-utils/canonicalize-binding b)))
-                                          their-binding))]
-                {:action-id conflicting-id
-                 :new-binding (cond
-                                (empty? filtered) []
-                                (matches-default-binding? conflicting-id filtered) nil
-                                :else filtered)}))
+                {} all-conflicts)
+        conflict-updates
+        (keep (fn [[conflicting-id keys-to-strip]]
+                (reset-conflict-update conflicting-id
+                                       (dh/shortcut-binding conflicting-id)
+                                       keys-to-strip))
+              conflicts-by-id)]
+    (when (seq conflict-updates)
+      (let [updated-ids (into #{} (map :action-id) conflict-updates)
             undo-entries
             (into [{:action-id action-id :previous-binding current-binding}]
-                  (for [[conflicting-id _] conflicts-by-id]
+                  (for [conflicting-id (keys conflicts-by-id)
+                        :when (contains? updated-ids conflicting-id)]
                     {:action-id conflicting-id
                      :previous-binding (dh/shortcut-binding conflicting-id)}))]
         {:undo-entries undo-entries
