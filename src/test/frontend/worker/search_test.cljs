@@ -5,7 +5,8 @@
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]))
 
 (defn- process-cpu-time-ms
   []
@@ -916,6 +917,42 @@
         titles (set (map :title blocks-to-add))]
     (is (contains? titles "Moved parent"))
     (is (contains? titles "Moved child"))))
+
+(deftest sync-search-indice-reindexes-holders-when-property-is-deleted
+  (testing "pages and blocks that held a deleted property stay in the FTS add set"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:foo {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Test Page"
+                          :build/properties {:foo "page value"}}
+                   :blocks [{:block/title "Holder block"
+                             :build/properties {:foo "block value"}}]}]})
+          property (d/entity @conn :user.property/foo)
+          page (db-test/find-page-by-title @conn "Test Page")
+          holder-block (db-test/find-block-by-content @conn "Holder block")
+          property-uuid (str (:block/uuid property))
+          page-uuid (str (:block/uuid page))
+          holder-uuid (str (:block/uuid holder-block))
+          tx-report (d/transact! conn (outliner-page/build-page-retract-tx @conn property))
+          {:keys [blocks-to-add blocks-to-remove-set]} (search/sync-search-indice tx-report)
+          add-ids (set (map :id blocks-to-add))
+          add-titles (set (map :title blocks-to-add))]
+      (is (some? (d/entity @conn (:db/id page)))
+          "holder page remains in Datascript")
+      (is (some? (d/entity @conn (:db/id holder-block)))
+          "holder block remains in Datascript")
+      (is (nil? (d/entity @conn :user.property/foo))
+          "deleted property is gone from Datascript")
+      (is (contains? add-ids page-uuid)
+          "holder page is reindexed after property delete")
+      (is (contains? add-ids holder-uuid)
+          "holder block is reindexed after property delete")
+      (is (contains? add-titles "Test Page"))
+      (is (contains? add-titles "Holder block"))
+      (is (contains? blocks-to-remove-set property-uuid)
+          "deleted property leaves the FTS index")
+      (is (not (contains? add-ids property-uuid))
+          "deleted property is not re-added to the FTS index"))))
 
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
