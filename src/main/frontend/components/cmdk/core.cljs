@@ -1084,7 +1084,10 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
-        composing? (util/goog-event-is-composing? e)
+        ;; Native addEventListener keydown, not goog.events. Include keyCode 229 /
+        ;; key "Process" so macOS IME Enter commits composition instead of running
+        ;; the highlighted action (logseq/db-test#1154).
+        composing? (util/native-event-is-composing? e)
         shift? (.-shiftKey e)
         highlighted-group (some-> (state->highlighted-item state) :group)
         show-less (fn []
