@@ -807,6 +807,7 @@
   (if-let [asset-id (existing-asset-ref db block)]
     (cond-> {:block/link asset-id
              :block/title (or (:block/title block) "")}
+      (:block/uuid block) (assoc :block/uuid (:block/uuid block))
       (:block/parent block) (assoc :block/parent (:block/parent block))
       (:block/level block) (assoc :block/level (:block/level block))
       (:block/order block) (assoc :block/order (:block/order block)))

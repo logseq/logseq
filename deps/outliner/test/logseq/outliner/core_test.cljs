@@ -373,7 +373,45 @@
       (is (= (:db/id source-asset) (:db/id (:block/link pasted)))
           "Pasted copy should embed the original asset")
       (is (nil? (:logseq.property.asset/type pasted))
-          "Copy must not create a second file-backed asset identity"))))
+          "Copy must not create a second file-backed asset identity")
+      (is (not= (:block/uuid asset) (:block/uuid pasted))
+          "Copied embed must get its own block identity"))))
+
+(deftest paste-existing-asset-blocks-embeds-each-original
+  (testing "copy+paste of multiple assets embeds each original without colliding uuids"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "report"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "pdf"
+                                               :logseq.property.asset/checksum "abc"
+                                               :logseq.property.asset/size 42}}
+                           {:block/title "photo"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "png"
+                                               :logseq.property.asset/checksum "img"
+                                               :logseq.property.asset/size 10}}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          report (db-test/find-block-by-content @conn "report")
+          photo (db-test/find-block-by-content @conn "photo")
+          target (db-test/find-block-by-content @conn "target")
+          _ (outliner-core/insert-blocks!
+             conn
+             [(clipboard-asset-block report)
+              (clipboard-asset-block photo)]
+             target
+             {:sibling? true
+              :outliner-op :paste
+              :keep-uuid? false})
+          dest-children (->> (:block/_parent (ldb/get-page @conn "dest"))
+                             ldb/sort-by-order)
+          pasted (remove #(= "target" (:block/title %)) dest-children)]
+      (is (= 2 (count pasted)))
+      (is (= 2 (count (set (map :block/uuid pasted)))))
+      (is (= #{(:db/id report) (:db/id photo)}
+             (set (map (comp :db/id :block/link) pasted))))
+      (is (every? nil? (map :logseq.property.asset/type pasted))))))
 
 (deftest paste-cut-asset-block-reinserts-same-identity
   (testing "cut+paste of an existing asset reinserts the same uuid-backed asset"
@@ -457,4 +495,4 @@
         :outliner-op :insert-blocks})
       (let [uploaded (d/entity @conn [:block/uuid asset-uuid])]
         (is (= "png" (:logseq.property.asset/type uploaded)))
-        (is (= ["target" "uploaded"] (page-child-titles @conn "dest"))))))))
+        (is (= ["target" "uploaded"] (page-child-titles @conn "dest")))))))
