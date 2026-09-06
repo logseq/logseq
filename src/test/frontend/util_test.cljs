@@ -1,6 +1,7 @@
 (ns frontend.util-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [goog.object :as gobj]))
 
 (deftest test-split-graphemes
   (testing "split-graphemes returns individual grapheme clusters"
@@ -71,3 +72,32 @@
       (is (= @actual-ops 4))
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
+
+(deftest native-event-is-composing?-detects-ime-process-enter
+  (testing "plain native Enter is not composing"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 13)
+      (gobj/set event "isComposing" false)
+      (is (false? (boolean (util/native-event-is-composing? event))))))
+
+  (testing "macOS IME commit Enter uses keyCode 229"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 229)
+      (gobj/set event "isComposing" false)
+      (is (true? (util/native-event-is-composing? event)))))
+
+  (testing "IME Process key is composing"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Process")
+      (gobj/set event "keyCode" 229)
+      (gobj/set event "isComposing" false)
+      (is (true? (util/native-event-is-composing? event)))))
+
+  (testing "isComposing true is composing even with keyCode 13"
+    (let [event (js-obj)]
+      (gobj/set event "key" "Enter")
+      (gobj/set event "keyCode" 13)
+      (gobj/set event "isComposing" true)
+      (is (true? (util/native-event-is-composing? event))))))
