@@ -418,6 +418,29 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-does-not-encode-background-color-as-highlight-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Highlighted"}
+                   :blocks [{:block/title "Highlighted block"
+                             :build/properties {:logseq.property/background-color "red"}}]}]})
+          page (db-test/find-page-by-title @conn "Highlighted")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Highlighted.md"))]
+                      ;; The :encode-highlight-as-mark? behaviour added for the
+                      ;; "Export page" feature must not leak into the
+                      ;; markdown-mirror, which shares the same underlying
+                      ;; logseq.common.export.file code.
+                      (is (not (re-find #"\^\^" content)))
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- Highlighted block")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-preserves-markdown-semantic-block-formatting-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
