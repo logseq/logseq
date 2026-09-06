@@ -790,6 +790,28 @@
                          (:block/parent target-block)
                          target-block)))
 
+(defn- existing-asset-ref
+  "Resolve a still-present asset entity to a :block/link target."
+  [db block]
+  (let [eid (or (:db/id block)
+                (when-let [id (:block/uuid block)]
+                  [:block/uuid id]))]
+    (when-let [e (and eid (d/entity db eid))]
+      (when (ldb/asset? e)
+        (:db/id e)))))
+
+(defn- asset-block->paste-link
+  "Copying a file-backed asset cannot reuse its uuid-named file.
+  Link to the original asset so the destination stays renderable."
+  [db block]
+  (if-let [asset-id (existing-asset-ref db block)]
+    (cond-> {:block/link asset-id
+             :block/title (or (:block/title block) "")}
+      (:block/parent block) (assoc :block/parent (:block/parent block))
+      (:block/level block) (assoc :block/level (:block/level block))
+      (:block/order block) (assoc :block/order (:block/order block)))
+    block))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -837,9 +859,17 @@
                              (apply dissoc b' dissoc-keys))
                            b))
                        blocks)
-                  (or (= outliner-op :paste)
-                      insert-template?)
-                  (remove ldb/asset?))
+                  ;; Templates cannot clone uuid-named asset files.
+                  insert-template?
+                  (remove ldb/asset?)
+                  ;; Copying an existing asset would create a new uuid whose
+                  ;; file does not exist. Embed the original instead. Cut
+                  ;; (keep-uuid?) reinserts the same asset identity.
+                  (and (= outliner-op :paste) (not keep-uuid?))
+                  (map (fn [block]
+                         (if (ldb/asset? block)
+                           (asset-block->paste-link db block)
+                           block))))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
          replace-empty-target? (if (and (some? replace-empty-target?)

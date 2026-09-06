@@ -325,3 +325,136 @@
       (outliner-core/move-blocks! conn [ordinary] tagged-comment {:sibling? false})
       (is (= (:db/id page)
              (:db/id (:block/parent (d/entity @conn (:db/id ordinary)))))))))
+
+(defn- clipboard-asset-block
+  [asset]
+  {:db/id (:db/id asset)
+   :block/uuid (:block/uuid asset)
+   :block/title (:block/title asset)
+   :block/tags #{:logseq.class/Asset}
+   :logseq.property.asset/type (:logseq.property.asset/type asset)
+   :logseq.property.asset/checksum (:logseq.property.asset/checksum asset)
+   :logseq.property.asset/size (:logseq.property.asset/size asset)})
+
+(defn- page-child-titles
+  [db page-title]
+  (->> (:block/_parent (ldb/get-page db page-title))
+       ldb/sort-by-order
+       (mapv :block/title)))
+
+(deftest paste-existing-asset-block-embeds-on-copy
+  (testing "copy+paste of an existing asset inserts a link instead of dropping the block"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "report"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "pdf"
+                                               :logseq.property.asset/checksum "abc"
+                                               :logseq.property.asset/size 42}}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          asset (db-test/find-block-by-content @conn "report")
+          target (db-test/find-block-by-content @conn "target")
+          _ (outliner-core/insert-blocks!
+             conn
+             [(clipboard-asset-block asset)]
+             target
+             {:sibling? true
+              :outliner-op :paste
+              :keep-uuid? false})
+          dest-children (->> (:block/_parent (ldb/get-page @conn "dest"))
+                             ldb/sort-by-order)
+          pasted (last dest-children)
+          source-asset (d/entity @conn [:block/uuid (:block/uuid asset)])]
+      (is (= "pdf" (:logseq.property.asset/type source-asset))
+          "Source asset remains on the original page")
+      (is (= ["report"] (page-child-titles @conn "source")))
+      (is (= ["target" "report"] (mapv :block/title dest-children)))
+      (is (= (:db/id source-asset) (:db/id (:block/link pasted)))
+          "Pasted copy should embed the original asset")
+      (is (nil? (:logseq.property.asset/type pasted))
+          "Copy must not create a second file-backed asset identity"))))
+
+(deftest paste-cut-asset-block-reinserts-same-identity
+  (testing "cut+paste of an existing asset reinserts the same uuid-backed asset"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "report"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "pdf"
+                                               :logseq.property.asset/checksum "abc"
+                                               :logseq.property.asset/size 42}}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          asset (db-test/find-block-by-content @conn "report")
+          asset-uuid (:block/uuid asset)
+          clipboard (clipboard-asset-block asset)
+          target (db-test/find-block-by-content @conn "target")]
+      (outliner-core/delete-blocks! conn [asset] {})
+      (is (nil? (d/entity @conn [:block/uuid asset-uuid]))
+          "Cut retracts the source asset before paste")
+      (outliner-core/insert-blocks!
+       conn
+       [clipboard]
+       target
+       {:sibling? true
+        :outliner-op :paste
+        :keep-uuid? true})
+      (let [moved (d/entity @conn [:block/uuid asset-uuid])
+            dest-page (ldb/get-page @conn "dest")]
+        (is (some? moved))
+        (is (= "pdf" (:logseq.property.asset/type moved)))
+        (is (= "abc" (:logseq.property.asset/checksum moved)))
+        (is (= (:db/id dest-page) (:db/id (:block/parent moved)))
+            "Cut+paste should move the asset without creating a blank node")
+        (is (empty? (page-child-titles @conn "source")))))))
+
+(deftest insert-template-still-skips-asset-blocks
+  (testing "template insertion continues to drop assets that cannot clone their files"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "template"}
+                  :blocks [{:block/title "report"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "pdf"
+                                               :logseq.property.asset/checksum "abc"
+                                               :logseq.property.asset/size 42}}
+                           {:block/title "note"}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          asset (db-test/find-block-by-content @conn "report")
+          note (db-test/find-block-by-content @conn "note")
+          target (db-test/find-block-by-content @conn "target")]
+      (outliner-core/insert-blocks!
+       conn
+       [(clipboard-asset-block asset)
+        {:block/uuid (:block/uuid note)
+         :block/title (:block/title note)}]
+       target
+       {:sibling? true
+        :outliner-op :insert-template-blocks
+        :insert-template? true
+        :keep-uuid? false})
+      (is (= ["target" "note"] (page-child-titles @conn "dest"))))))
+
+(deftest insert-blocks-still-creates-new-assets
+  (testing "non-paste insert-blocks still creates file-backed asset blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          target (db-test/find-block-by-content @conn "target")
+          asset-uuid (random-uuid)]
+      (outliner-core/insert-blocks!
+       conn
+       [{:block/uuid asset-uuid
+         :block/title "uploaded"
+         :block/tags #{:logseq.class/Asset}
+         :logseq.property.asset/type "png"
+         :logseq.property.asset/checksum "new"
+         :logseq.property.asset/size 10}]
+       target
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :insert-blocks})
+      (let [uploaded (d/entity @conn [:block/uuid asset-uuid])]
+        (is (= "png" (:logseq.property.asset/type uploaded)))
+        (is (= ["target" "uploaded"] (page-child-titles @conn "dest"))))))))
