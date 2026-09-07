@@ -227,17 +227,17 @@
       (finally
         (state/replace-state! original-state)))))
 
-(deftest recycling-current-page-on-mobile-does-not-navigate-test
+(deftest recycling-current-page-on-mobile-goes-to-previous-route-test
   (let [original-state (state/get-state)
         page-uuid (random-uuid)]
     (try
       (state/replace-state! {:client-id "client"})
       (with-redefs [util/mobile? (constantly true)]
-        (is (= []
+        (is (= [:previous]
                (invoke-delete-hooks
                 {:current-page (str page-uuid)
                  :delta (recycled-page-delta page-uuid)}))
-            "Mobile keeps its own stack; pipeline must not also go back."))
+            "The shared page-menu deletion flow relies on pipeline navigation on mobile too."))
       (finally
         (state/replace-state! original-state)))))
 
