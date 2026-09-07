@@ -117,13 +117,21 @@
                            :pending-server-ops 3
                            :local-checksum "abc"
                            :remote-checksum "abc"))))
-  (is (= #{"cloud" "on" "queuing" "diverged"}
+  (is (= #{"cloud" "on" "queuing"}
          (class-set (assoc idle-open-opts
                            :pending-asset-ops 1
                            :local-checksum "abc"
                            :remote-checksum "def"))))
-  (is (= #{"cloud" "on" "syncing" "diverged"}
+  (is (= #{"cloud" "on" "syncing"}
          (class-set (assoc idle-open-opts
                            :pending-server-ops 1
                            :local-checksum "abc"
                            :remote-checksum "def")))))
+
+(deftest checksum-warning-waits-for-settled-revisions
+  (let [state (assoc idle-open-opts :local-tx 4 :remote-tx 4
+                     :local-checksum "abc" :remote-checksum "def")]
+    (doseq [pending-key [:pending-local-ops :pending-asset-ops :pending-server-ops]]
+      (is (nil? (indicator/checksum-mismatch-detail (assoc state pending-key 1)))))
+    (is (nil? (indicator/checksum-mismatch-detail (assoc state :remote-tx 5))))
+    (is (some? (indicator/checksum-mismatch-detail state)))))

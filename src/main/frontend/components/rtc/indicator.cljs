@@ -105,19 +105,22 @@
         (not= local-checksum remote-checksum))))
 
 (defn checksum-mismatch-detail
-  [{:keys [local-checksum remote-checksum]}]
-  (when (checksums-diverged? local-checksum remote-checksum)
+  [{:keys [local-checksum remote-checksum local-tx remote-tx
+           pending-local-ops pending-asset-ops pending-server-ops]}]
+  (when (and (= local-tx remote-tx)
+             (every? #(zero? (or % 0)) [pending-local-ops pending-asset-ops pending-server-ops])
+             (checksums-diverged? local-checksum remote-checksum))
     {:local-checksum local-checksum
      :remote-checksum remote-checksum}))
 
 (defn indicator-button-class
   [{:keys [online? rtc-state pending-local-ops pending-asset-ops pending-server-ops
-           local-checksum remote-checksum]}]
+           local-checksum remote-checksum] :as detail-info}]
   (let [open? (and online? (= :open rtc-state))
-        diverged? (checksums-diverged? local-checksum remote-checksum)
+        diverged? (some? (checksum-mismatch-detail detail-info))
         syncing? (and open? (pos? (or pending-server-ops 0)))
         idle? (and open?
-                   (not diverged?)
+                   (not (checksums-diverged? local-checksum remote-checksum))
                    (zero? (or pending-local-ops 0))
                    (zero? (or pending-asset-ops 0))
                    (zero? (or pending-server-ops 0)))
@@ -226,7 +229,7 @@
                                        :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
-     (when-let [{:keys [local-checksum remote-checksum]} checksum-mismatch]
+     (when checksum-mismatch
        [:div.flex.flex-col.gap-1.text-sm
         [:div.flex.flex-row.gap-1.items-center.warning
          (ui/icon "alert-triangle" {:size 14})
@@ -297,7 +300,9 @@
                                         :pending-asset-ops pending-asset-ops
                                         :pending-server-ops pending-server-ops
                                         :local-checksum local-checksum
-                                        :remote-checksum remote-checksum})})]]))
+                                        :remote-checksum remote-checksum
+                                        :local-tx local-tx
+                                        :remote-tx remote-tx})})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
 (when-not config/publishing?
