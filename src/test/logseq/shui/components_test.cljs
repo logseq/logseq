@@ -4,7 +4,7 @@
             [logseq.shui.components :as components]))
 
 (deftest popup-scroll-style-keeps-long-menus-in-viewport
-  (let [style (#'components/popup-scroll-style)
+  (let [style @#'components/popup-scroll-style
         max-height (.-maxHeight style)]
     (is (= "auto" (.-overflowY style)))
     (is (= "hidden" (.-overflowX style)))
