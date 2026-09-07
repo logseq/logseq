@@ -25,6 +25,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.download :as sync-download]
+            [frontend.worker.ui-request :as ui-request]
             [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
@@ -2876,6 +2877,64 @@
                         "Desktop import progress is posted over the node event channel.")
                     (is (= :import/validating-graph last-label)
                         "Desktop import progress reaches graph validation."))
+                  (p/finally (fn []
+                               (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
+(deftest import-file-graph-streams-files-via-ui-request
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                   conn (d/create-conn db-schema/schema)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   in-flight (atom 0)
+                   max-in-flight (atom 0)
+                   requested (atom [])
+                   contents {"logseq/config.edn" "{}"
+                             "pages/Home.md" "- imported home"
+                             "pages/Projects.md" "- imported projects"}
+                   config-file {:path "logseq/config.edn"}
+                   files [{:path "logseq/config.edn"}
+                          {:path "pages/Home.md"}
+                          {:path "pages/Projects.md"}]]
+               (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)
+                  ui-request/<request
+                  (fn [action payload _opts]
+                    (is (= :read-import-file action))
+                    (swap! requested conj (:path payload))
+                    (swap! in-flight inc)
+                    (swap! max-in-flight max @in-flight)
+                    (p/let [_ (p/delay 0)]
+                      (swap! in-flight dec)
+                      {:path (:path payload)
+                       :file/content (get contents (:path payload))}))]
+                 (->
+                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
+                          home (ldb/get-page @conn "home")
+                          projects (ldb/get-page @conn "projects")
+                          home-block (db-test/find-block-by-content @conn "imported home")
+                          project-block (db-test/find-block-by-content @conn "imported projects")]
+                    (assert-terminal-import-result result)
+                    (is (= "Home" (:block/title home)))
+                    (is (= "Projects" (:block/title projects)))
+                    (is (= "imported home" (:block/title home-block)))
+                    (is (= "imported projects" (:block/title project-block)))
+                    (is (= 1 @max-in-flight)
+                        "Import must read one file at a time instead of preloading the graph.")
+                    (is (= #{"logseq/config.edn" "pages/Home.md" "pages/Projects.md"}
+                           (set @requested))))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch

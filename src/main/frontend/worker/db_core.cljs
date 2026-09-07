@@ -39,6 +39,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.download :as sync-download]
    [frontend.worker.thread-atom]
+   [frontend.worker.ui-request :as ui-request]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
@@ -275,6 +276,8 @@
            :issue-count issue-count)))
 
 
+(def ^:private import-file-read-timeout-ms (* 5 60 1000))
+
 (defn- file-content
   [file]
   (:file/content file))
@@ -291,20 +294,33 @@
     (catch :default _
       nil)))
 
+(defn- <request-import-file
+  [file]
+  (ui-request/<request :read-import-file
+                       {:path (:path file)}
+                       {:timeout-ms import-file-read-timeout-ms
+                        :hint "import-file-graph"}))
+
 (defn- <read-import-file-content
   [file]
   (cond
-    (file-needs-lazy-read? file)
-    (if-let [^js fsp (node-fs-promises)]
+    (and (file-needs-lazy-read? file) (node-fs-promises))
+    (let [^js fsp (node-fs-promises)]
       (-> (.readFile fsp (:fs-path file) "utf8")
           (p/catch (fn [e]
                      (log/error :read-import-file {:fs-path (:fs-path file) :error e})
-                     (throw e))))
-      (p/rejected (ex-info "Filesystem is unavailable for lazy import"
-                           {:fs-path (:fs-path file)})))
+                     (throw e)))))
 
     (string? (file-content file))
     (p/resolved (file-content file))
+
+    (string? (:path file))
+    (p/let [resolved (<request-import-file file)
+            content (file-content resolved)]
+      (if (string? content)
+        content
+        (throw (ex-info "Import file is missing content"
+                        {:path (:path file)}))))
 
     :else
     (p/rejected (ex-info "Import file is missing content and fs-path"
@@ -340,13 +356,17 @@
   [file]
   (if-let [payload (some-> file :asset/payload import-file-payload)]
     (p/resolved payload)
-    (when-let [fs-path (:fs-path file)]
-      (if-let [^js fsp (node-fs-promises)]
+    (if (and (string? (:fs-path file)) (node-fs-promises))
+      (let [^js fsp (node-fs-promises)
+            fs-path (:fs-path file)]
         (-> (.readFile fsp fs-path)
             (p/then #(js/Uint8Array. %))
             (p/catch (fn [e]
                        (log/error :read-import-asset {:fs-path fs-path :error e})
-                       nil)))
+                       nil))))
+      (if (string? (:path file))
+        (p/let [resolved (<request-import-file file)]
+          (some-> resolved :asset/payload import-file-payload))
         (p/resolved nil)))))
 
 (defn- <read-and-copy-import-asset

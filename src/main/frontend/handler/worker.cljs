@@ -6,6 +6,7 @@
             [frontend.common.crypt :as crypt]
             [frontend.context.i18n :as i18n]
             [frontend.handler.e2ee :as e2ee-handler]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
@@ -156,6 +157,15 @@
           (p/resolved {:supported? false})
           (p/let [_ (e2ee-handler/<native-delete-secret! key)]
             {:supported? true}))))
+
+    :read-import-file
+    (let [path (:path payload)]
+      (if-not (string? path)
+        (p/rejected (ex-info "invalid read-import-file payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (file-graph-import/<read-file-graph-import-file path)))
 
     (p/rejected (ex-info "unsupported db-worker ui action"
                          {:code :unsupported-ui-action

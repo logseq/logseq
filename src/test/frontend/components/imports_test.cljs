@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.components.imports]
             [frontend.config :as config]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -51,6 +52,25 @@
     (is (= :importing (:step initial-ui-state)))
     (is (= :import/loading (:label initial-ui-state))
         "Progress starts as Importing before the worker sends file names.")))
+
+(deftest file-graph-import-file-descriptors-omit-file-contents-test
+  (let [file-descriptor (some-> (resolve 'frontend.components.imports/import-file-descriptor)
+                                deref)]
+    (is (fn? file-descriptor))
+    (when (fn? file-descriptor)
+      (let [meta (file-descriptor {:path "pages/Home.md"
+                                   :last-modified-at 1
+                                   :fs-path "/tmp/graph/pages/Home.md"
+                                   :file/content "- should not cross the worker boundary"
+                                   :asset/payload (js/Uint8Array. 4)
+                                   :file-object :renderer-only})]
+        (is (= {:path "pages/Home.md"
+                :last-modified-at 1
+                :fs-path "/tmp/graph/pages/Home.md"}
+               meta))
+        (is (not (contains? meta :file/content)))
+        (is (not (contains? meta :asset/payload)))
+        (is (not (contains? meta :file-object)))))))
 
 (defn- file-graph-import-fn
   []
@@ -102,10 +122,10 @@
     (p/rejected (js/Error. "Failed to fetch"))))
 
 (defn- run-file-graph-import!
-  [{:keys [ui calls files options config-file invoke-import]}]
+  [{:keys [ui calls files options config-file invoke-import electron?]}]
   (let [import-file-graph (file-graph-import-fn)]
     (is (fn? import-file-graph))
-    (p/with-redefs [util/electron? (constantly true)
+    (p/with-redefs [util/electron? (constantly (not (false? electron?)))
                     state/set-state! (fn [path value]
                                        (swap! calls conj [:set-state path])
                                        (if (vector? path)
@@ -156,12 +176,12 @@
         "The new graph is created before worker import.")
     (is (< (call-idx calls :thread-api/import-file-graph) (call-idx calls :restore))
         "Renderer restore happens after worker import.")
-    (is (every? #(and (string? (:path %))
-                      (string? (:fs-path %))
-                      (nil? (:file/content %))
-                      (nil? (:asset/payload %)))
-                import-files)
-        "Electron lazy import sends filesystem paths without file contents.")
+        (is (every? #(and (string? (:path %))
+                          (string? (:fs-path %))
+                          (nil? (:file/content %))
+                          (nil? (:asset/payload %)))
+                    import-files)
+            "File-graph import sends filesystem paths without file contents.")
     (is (notify-status? calls :error)
         "Worker error notifications from the terminal result are shown.")
     (is (notify-status? calls :info)
@@ -273,3 +293,45 @@
                (p/catch (fn [error]
                           (is false (str error))))
                (p/finally done)))))
+
+(deftest file-graph-import-does-not-preload-web-file-contents-before-worker-invoke
+  (async done
+         (let [graph-name "Imported"
+               text-calls (atom 0)
+               fake-file #js {:text (fn []
+                                      (swap! text-calls inc)
+                                      (p/resolved "- should not preload"))}
+               ui (atom {:git/current-repo "logseq_db_old"})
+               calls (atom [])]
+           (-> (run-file-graph-import!
+                {:ui ui
+                 :calls calls
+                 :electron? false
+                 :files [{:path "logseq/config.edn"
+                          :file-object fake-file}
+                         {:path "pages/Home.md"
+                          :file-object fake-file}]
+                 :options {:graph-name graph-name}
+                 :invoke-import (fn [] (p/resolved (completed-file-graph-result)))})
+               (p/then (fn [_]
+                         (let [import-call (first (filter #(= :thread-api/import-file-graph (first %))
+                                                          @calls))
+                               import-files (nth import-call 3)]
+                           (is (zero? @text-calls)
+                               "Web import must not call File.text before the worker asks for a file.")
+                           (is (every? #(and (string? (:path %))
+                                             (nil? (:file/content %))
+                                             (nil? (:asset/payload %))
+                                             (nil? (:file-object %)))
+                                       import-files)
+                               "Web import sends file metadata only across the worker boundary."))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally (fn []
+                            (-> (file-graph-import/<read-file-graph-import-file "pages/Home.md")
+                                (p/then (fn [_]
+                                          (is false "import session should be cleared after import")))
+                                (p/catch (fn [error]
+                                           (is (= :missing-import-session
+                                                  (:code (ex-data error))))))
+                                (p/finally done)))))))))
