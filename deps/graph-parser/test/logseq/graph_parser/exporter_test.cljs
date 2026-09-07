@@ -250,7 +250,7 @@
         file-path (node-path/join dir relative-path)]
     (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
     (fs/writeFileSync file-path content)
-    file-path))
+    (path/path-normalize file-path)))
 
 (defn- write-temp-file-graph
   [files]
@@ -1121,111 +1121,49 @@ abc
       (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
       (fs/writeFileSync file-path content))))
 
-(deftest-async import-windows-linked-pdf-uri-format
-  (let [annotation-id #uuid "11111111-1111-1111-1111-111111111111"
-        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
-        graph-dir (node-path/join dir "graph")
-        windows-file-uri "file://D:\\assets\\LocalDoc.pdf"]
-    (write-linked-pdf-annotation-graph
-     graph-dir
-     {:pdf-uri windows-file-uri
-      :pdf-label "LocalDoc"
-      :source-line (str "- ![LocalDoc.pdf](" windows-file-uri ")")
-      :annotation-id annotation-id
-      :highlight-text "Windows highlight"
-      :hl-page 1})
-    (p/let [conn (db-test/create-conn)
-            assets (atom [])
-            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
-            asset (db-test/find-block-by-content @conn "LocalDoc")
-            annotation (d/entity @conn [:block/uuid annotation-id])]
-      (is (some? asset)
-          "Asset entity must be created for Windows path")
-      (is (= {:block/tags [:logseq.class/Asset]
-              :logseq.property.asset/type "pdf"}
-             (select-keys (db-test/readable-properties asset)
-                          [:block/tags :logseq.property.asset/type]))
-          "Windows linked PDF imports as an Asset")
-      (let [external-url (:logseq.property.asset/external-url (db-test/readable-properties asset))]
-        (is (and (string? external-url)
-                 (string/starts-with? external-url "file://")
-                 (string/includes? (string/lower-case external-url) "localdoc.pdf"))
-            "Windows drive URIs keep a file:// external URL, matching POSIX linked PDFs"))
-      (is (= {:block/tags [:logseq.class/Pdf-annotation]
-              :logseq.property/asset "LocalDoc"
-              :logseq.property.pdf/hl-page 1}
-             (select-keys (db-test/readable-properties annotation)
-                          [:block/tags
-                           :logseq.property/asset
-                           :logseq.property.pdf/hl-page]))
-          "Windows linked PDF annotations bind to the imported Asset")
-      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
-
-(deftest-async import-remote-https-pdf-annotations
-  (let [annotation-id #uuid "22222222-2222-2222-2222-222222222222"
-        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
-        graph-dir (node-path/join dir "graph")
-        remote-url "https://example.com/RemoteDoc.pdf"]
-    (write-linked-pdf-annotation-graph
-     graph-dir
-     {:pdf-uri remote-url
-      :pdf-label "RemoteDoc"
-      :source-line (str "- ![RemoteDoc.pdf](" remote-url ")")
-      :annotation-id annotation-id
-      :highlight-text "Remote web highlight"
-      :hl-page 2})
-    (p/let [conn (db-test/create-conn)
-            assets (atom [])
-            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
-            asset (db-test/find-block-by-content @conn "RemoteDoc")
-            annotation (d/entity @conn [:block/uuid annotation-id])]
-      (is (some? asset)
-          "Asset entity must be created for a remote HTTPS PDF")
-      (is (= {:block/tags [:logseq.class/Asset]
-              :logseq.property.asset/type "pdf"
-              :logseq.property.asset/external-url remote-url}
-             (select-keys (db-test/readable-properties asset)
-                          [:block/tags
-                           :logseq.property.asset/type
-                           :logseq.property.asset/external-url]))
-          "Remote HTTPS PDF keeps the URL as the asset source")
-      (is (= {:block/tags [:logseq.class/Pdf-annotation]
-              :logseq.property/asset "RemoteDoc"
-              :logseq.property.pdf/hl-page 2}
-             (select-keys (db-test/readable-properties annotation)
-                          [:block/tags
-                           :logseq.property/asset
-                           :logseq.property.pdf/hl-page]))
-          "Remote annotation must resolve to its parent Asset")
-      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
-
-(deftest-async import-remote-https-pdf-annotations-from-hls-file-prop
-  (let [annotation-id #uuid "33333333-3333-3333-3333-333333333333"
-        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
-        graph-dir (node-path/join dir "graph")
-        remote-url "https://example.com/HlsOnlyDoc.pdf"]
-    (write-linked-pdf-annotation-graph
-     graph-dir
-     {:pdf-uri remote-url
-      :pdf-label "HlsOnlyDoc"
-      :source-line (str "- ((" annotation-id "))")
-      :annotation-id annotation-id
-      :highlight-text "HLS file-prop highlight"
-      :hl-page 5})
-    (p/let [conn (db-test/create-conn)
-            assets (atom [])
-            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
-            asset (db-test/find-block-by-content @conn "HlsOnlyDoc")
-            annotation (d/entity @conn [:block/uuid annotation-id])]
-      (is (some? asset)
-          "HLS file:: HTTPS PDF creates a bindable Asset without an image target")
-      (is (= remote-url
-             (:logseq.property.asset/external-url (db-test/readable-properties asset)))
-          "HLS file:: remote PDF keeps the HTTPS URL as the asset source")
-      (is (= "HlsOnlyDoc"
-             (:logseq.property/asset (db-test/readable-properties annotation)))
-          "HLS file:: remote annotation binds to the imported Asset")
-      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
+(deftest-async import-external-pdf-annotations
+  (p/loop [remaining-cases
+            [["file://D:\\assets\\LocalDoc.pdf" true]
+             ["https://example.com/LocalDoc.pdf" true]
+             ["https://example.com/LocalDoc.pdf?token=sample#page=2" true]
+             ["https://example.com/LocalDoc.pdf?token=sample#page=2" false]]]
+    (when-let [[pdf-uri image-link?] (first remaining-cases)]
+      (let [annotation-id #uuid "11111111-1111-1111-1111-111111111111"
+            dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+            graph-dir (node-path/join dir "graph")]
+        (write-linked-pdf-annotation-graph
+         graph-dir
+         {:pdf-uri pdf-uri
+          :pdf-label "LocalDoc"
+          :source-line (str "- Source " (if image-link?
+                                          (str "![LocalDoc.pdf](" pdf-uri ")")
+                                          (str "((" annotation-id "))")))
+          :annotation-id annotation-id
+          :highlight-text "Sample highlight"
+          :hl-page 2})
+        (p/let [conn (db-test/create-conn)
+                {:keys [import-state]} (import-file-graph-to-db graph-dir conn {})
+                asset (db-test/find-block-by-content @conn "LocalDoc")
+                annotation (d/entity @conn [:block/uuid annotation-id])]
+          (is (= {:block/tags [:logseq.class/Asset]
+                  :logseq.property.asset/type "pdf"
+                  :logseq.property.asset/external-url pdf-uri}
+                 (select-keys (db-test/readable-properties asset)
+                              [:block/tags :logseq.property.asset/type
+                               :logseq.property.asset/external-url]))
+              (str "External PDF preserves its complete URI: " pdf-uri))
+          (is (= {:block/tags [:logseq.class/Pdf-annotation]
+                  :logseq.property/asset "LocalDoc"
+                  :logseq.property.pdf/hl-page 2}
+                 (select-keys (db-test/readable-properties annotation)
+                              [:block/tags :logseq.property/asset :logseq.property.pdf/hl-page]))
+              "Annotation binds to the external Asset, including without an image link")
+          (when image-link?
+            (is (= (str "Source " (page-ref/->page-ref (:block/uuid asset)))
+                   (:block/title (db-test/find-block-by-content @conn #"^Source ")))
+                "Source image link becomes an Asset reference"))
+          (is (empty? @(:ignored-assets import-state)) "No ignored assets")
+          (p/recur (rest remaining-cases)))))))
 
 (deftest-async ^:integration import-large-flat-file-without-stack-overflow
   (p/let [file (write-temp-graph-file
