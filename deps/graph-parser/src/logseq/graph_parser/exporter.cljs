@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -810,40 +811,20 @@
     (catch :default e
       (js/console.error "Translating linked reference filters failed with: " e))))
 
-(def ^:private rgi-emoji-re
-  "Matches a single RGI emoji, including ZWJ sequences, flags, and keycaps."
-  (js/RegExp. "^\\p{RGI_Emoji}$" "v"))
-
-(defn- emoji-icon-id?
-  [s]
-  (boolean (and (string? s)
-                (not (string/blank? s))
-                (.test rgi-emoji-re s))))
-
-(defn- db-icon-map
-  "Returns a DB :logseq.property/icon map when m already has a supported shape."
-  [m]
-  (let [icon-type (keyword (:type m))
-        icon-id (:id m)
-        color (:color m)]
-    (when (and (contains? #{:emoji :tabler-icon} icon-type)
-               (string? icon-id)
-               (not (string/blank? icon-id)))
-      (cond-> {:type icon-type :id icon-id}
-        (and (string? color) (not (string/blank? color)))
-        (assoc :color color)))))
+(def ^:private emoji-icon-ids
+  (delay
+    (into #{}
+          (mapcat (fn [emoji]
+                    (map #(gobj/get % "native")
+                         (array-seq (gobj/get emoji "skins")))))
+          (gobj/getValues (gobj/get (js/require "@emoji-mart/data") "emojis")))))
 
 (defn- file-icon-value->db-icon
-  "Converts a file-graph :icon value to a DB :logseq.property/icon map when the
-   value can be mapped safely. Returns nil for values that cannot be imported."
+  "Converts a file-graph `:icon` string to a DB icon when the emoji data supports it."
   [prop-value]
-  (cond
-    (map? prop-value)
-    (db-icon-map prop-value)
-
-    (string? prop-value)
+  (when (string? prop-value)
     (let [icon-id (string/trim prop-value)]
-      (when (emoji-icon-id? icon-id)
+      (when (contains? @emoji-icon-ids icon-id)
         {:type :emoji :id icon-id}))))
 
 (defn- ignored-built-in-property-value
