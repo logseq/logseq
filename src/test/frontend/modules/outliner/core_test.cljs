@@ -755,8 +755,8 @@
   (outliner-tx/transact! (transact-opts)
                          (outliner-core/insert-blocks! (conn/get-db test-db false)
                                                        blocks
-                                                       target
-                                                       {:sibling? (gen/generate gen/boolean)
+                                                       (if target target (get-block 1))
+                                                       {:sibling? (if target (gen/generate gen/boolean) false)
                                                         :keep-uuid? (gen/generate gen/boolean)
                                                         :replace-empty-target? (gen/generate gen/boolean)})))
 
@@ -794,15 +794,12 @@
                     (remove (fn [datom]
                               (empty? (d/datoms (conn/get-db test-db) :eavt (:e datom) :block/parent))))
                     vec)]
-    (if (seq datoms)
+    (when (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
             block (db-utils/entity (conn/get-db test-db) id)]
         (assert (:block/parent block)
                 (str "No parent for block: " block))
-        block)
-      (do
-        (transact-random-tree!)
-        (get-random-block)))))
+        block))))
 
 (comment
   (defn get-random-successive-blocks
@@ -821,7 +818,7 @@
 (defn get-random-blocks
   []
   (let [limit (inc (rand-int 5))]
-    (repeatedly limit get-random-block)))
+    (keep identity (repeatedly limit get-random-block))))
 
 (def ^:private random-ops-iterations 40)
 
@@ -954,6 +951,30 @@
                                           (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
     (dotimes [_i 100]
       ((rand-nth ops)))))
+
+(deftest random-selection-on-empty-page
+  (transact-tree! [[22]])
+  (outliner-tx/transact! (transact-opts)
+                       (outliner-core/delete-blocks! (conn/get-db test-db false)
+                                                     [(get-block 22)] {}))
+  (let [db-before (conn/get-db test-db)]
+    (is (nil? (get-random-block)))
+    (is (empty? (get-random-blocks)))
+    (is (= db-before (conn/get-db test-db))
+        "selecting blocks must not insert an untracked tree")))
+
+(deftest random-mixed-ops-after-deleting-all-blocks
+  (transact-tree! [[22]])
+  (let [*random-blocks (atom (get-blocks-ids))
+        *operation-count (atom 0)]
+    (with-redefs [rand-nth (fn [ops]
+                            (if (= 1 (swap! *operation-count inc))
+                              (second ops)
+                              (first ops)))
+                  gen-blocks (fn [] (build-blocks [[(swap! init-id inc)]]))]
+      (run-random-mixed-ops! *random-blocks))
+    (is (= (count @*random-blocks) (get-blocks-count))
+        "inserting after delete-all adds only the tracked blocks")))
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
