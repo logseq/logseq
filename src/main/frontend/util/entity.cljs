@@ -38,6 +38,12 @@
       (class? entity)
       (property? entity)))
 
+(defn url-property-value?
+  "URL-type property values are not containers. They must not have child blocks
+  or expose sub-block UX when zoomed."
+  [entity]
+  (= :url (:logseq.property/type (:logseq.property/created-from-property entity))))
+
 (defn get-entity-types
   [entity]
   (cond-> #{}

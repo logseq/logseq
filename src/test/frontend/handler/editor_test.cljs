@@ -1525,6 +1525,109 @@
     (is (#'editor/block-map-has-children? parent))
     (is (not (#'editor/block-map-has-children? leaf)))))
 
+(deftest insert-new-block-as-sibling-for-url-property-value-test
+  (let [url-value {:block/title "https://example.com/path"
+                   :logseq.property/created-from-property {:logseq.property/type :url}}
+        text-value {:block/title "text value"
+                    :logseq.property/created-from-property {:logseq.property/type :default}}
+        ordinary {:block/title "ordinary"}]
+    (is (true? (#'editor/insert-new-block-as-sibling? url-value true))
+        "Zoomed or property-root URL values still insert as siblings")
+    (is (true? (#'editor/insert-new-block-as-sibling? url-value false)))
+    (is (false? (#'editor/insert-new-block-as-sibling? text-value true))
+        "Default/text property values can still receive children when they are the insert root")
+    (is (nil? (#'editor/insert-new-block-as-sibling? ordinary false)))
+    (is (false? (#'editor/insert-new-block-as-sibling? ordinary true)))
+    (is (true? (#'editor/insert-new-block-as-sibling?
+                (assoc ordinary :block/link {:block/collapsed? true}) false)))))
+
+(deftest insert-new-block-aux-splits-url-property-value-as-sibling-test
+  (async done
+    (let [url-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          url "https://example.com/path"
+          url-block {:db/id 1
+                     :block/uuid url-uuid
+                     :block/title url
+                     :block/parent {:db/id 10}
+                     :block/page {:db/id 10}
+                     :logseq.property/created-from-property {:logseq.property/type :url}}
+          insertion (atom nil)
+          input #js {:value url}]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-edit-input-id (constantly "edit-block-url")
+                          gdom/getElement (constantly input)
+                          util/get-selection-start (constantly 19)
+                          util/get-selection-end (constantly 19)
+                          db-async/<get-block-with-children
+                          (fn [& _] (p/resolved {:block url-block :children []}))
+                          editor/wrap-parse-block identity
+                          editor/get-state (constantly nil)
+                          editor/outliner-insert-block!
+                          (fn [config current-block next-block opts]
+                            (reset! insertion {:config config
+                                               :current-block current-block
+                                               :next-block next-block
+                                               :opts opts}))]
+            (editor/insert-new-block-aux!
+             {:id (str url-uuid)}
+             url-block
+             url))
+          (p/then
+           (fn [_]
+             (is (true? (get-in @insertion [:opts :sibling?]))
+                 "Enter on a zoomed/property-root URL value must not request a child insert")
+             (is (= "https://example.com"
+                    (get-in @insertion [:current-block :block/title]))
+                 "Text before the cursor stays on the URL value")
+             (is (= "/path"
+                    (get-in @insertion [:next-block :block/title]))
+                 "Text after the cursor becomes the next sibling instead of being discarded")
+             (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
+(deftest insert-new-block-aux-creates-sibling-at-end-of-url-property-value-test
+  (async done
+    (let [url-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          url "https://logseq.com"
+          url-block {:db/id 2
+                     :block/uuid url-uuid
+                     :block/title url
+                     :block/parent {:db/id 10}
+                     :block/page {:db/id 10}
+                     :logseq.property/created-from-property {:logseq.property/type :url}}
+          insertion (atom nil)
+          input #js {:value url}]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-edit-input-id (constantly "edit-block-url-end")
+                          gdom/getElement (constantly input)
+                          util/get-selection-start (constantly (count url))
+                          util/get-selection-end (constantly (count url))
+                          db-async/<get-block-with-children
+                          (fn [& _] (p/resolved {:block url-block :children []}))
+                          editor/wrap-parse-block identity
+                          editor/get-state (constantly nil)
+                          editor/outliner-insert-block!
+                          (fn [_config current-block next-block opts]
+                            (reset! insertion {:current-block current-block
+                                               :next-block next-block
+                                               :opts opts}))]
+            (editor/insert-new-block-aux!
+             {:id (str url-uuid)}
+             url-block
+             url))
+          (p/then
+           (fn [_]
+             (is (true? (get-in @insertion [:opts :sibling?]))
+                 "Enter at the end of a zoomed URL value creates a sibling instead of no-op")
+             (is (= url (get-in @insertion [:current-block :block/title])))
+             (is (= "" (get-in @insertion [:next-block :block/title])))
+             (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"

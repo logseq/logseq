@@ -429,6 +429,16 @@
                      (some-> current-page parse-uuid))]
     (= uuid block-id)))
 
+(defn- insert-new-block-as-sibling?
+  "URL property values cannot own children, so Enter must insert a sibling even
+  when the value is treated as the zoomed/page root."
+  [block block-self?]
+  (cond
+    (entity/url-property-value? block) true
+    (get-in block [:block/link :block/collapsed?]) true
+    block-self? false
+    :else nil))
+
 (defn- start-pending-new-block!
   []
   (state/set-state! :editor/pending-new-block {:typed-text ""}))
@@ -564,7 +574,7 @@
             next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                                   new-m)
                            (wrap-parse-block))
-            sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
+            sibling? (insert-new-block-as-sibling? block block-self?)
             container-id (or (get-new-container-id :insert {:sibling? sibling?})
                              (:container-id config))
             config (assoc config :editor/edit-block-fn
