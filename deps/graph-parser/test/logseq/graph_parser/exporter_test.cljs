@@ -792,13 +792,13 @@ abc
        (catch :default e
          (assert-failure e))))))
 
-(defn- export-in-memory-doc-files
+(defn- <export-in-memory-doc-files
   "Import in-memory file maps. `path->stat` is a path-> {:birthtime :mtime} map.
    Pass `:file-created-at` / `:file-updated-at` on a file map to simulate the UI
    worker path, where `<get-file-stat` is unavailable.
    Pass an existing `conn` to import more files into the same graph."
   ([files path->stat]
-   (export-in-memory-doc-files files path->stat nil))
+   (<export-in-memory-doc-files files path->stat nil))
   ([files path->stat conn]
    (p/let [existing-conn? (some? conn)
            conn (or conn (db-test/create-conn))
@@ -822,7 +822,7 @@ abc
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         source-file {:path "pages/A.md" :content "- [[Timestamps]]\n"}
         file {:path "pages/timestamps.md" :content "- timestamped\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [source-file file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
             page (ldb/get-page @conn "timestamps")
@@ -838,7 +838,7 @@ abc
               :content "alias:: sportlich\n"
               :file-created-at created-at
               :file-updated-at modified-at}]
-    (p/let [conn (export-in-memory-doc-files [file] {})
+    (p/let [conn (<export-in-memory-doc-files [file] {})
             page (ldb/get-page @conn "sport")]
       (is (= created-at (:block/created-at page)))
       (is (= modified-at (:block/updated-at page)))
@@ -849,7 +849,7 @@ abc
         modified-at (js/Date. "2024-03-08T21:19:12.000Z")
         mention {:path "journals/2024_01_01.md" :content "- [[Sport]]\n"}
         file {:path "pages/Sport.md" :content "alias:: sportlich\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [mention file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
             page (ldb/get-page @conn "sport")]
@@ -863,7 +863,7 @@ abc
         mention {:path "journals/2024_01_01.md" :content "- [[schlafe]]\n"}
         file {:path "pages/Schlaf.md"
               :content "alias:: schlafe, schlafen, geschlafen, Schlafrhythmus, wach\n\n- ## Problems\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [mention file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
             page (ldb/get-page @conn "schlaf")
@@ -880,7 +880,7 @@ abc
         expected (date-time-util/journal-day->ms journal-day)
         journal {:path "journals/2024_03_08.md" :content "- first mention [[Referenced Only]]\n"}
         later {:path "journals/2024_06_01.md" :content "- later mention [[Referenced Only]]\n"}]
-    (p/let [conn (export-in-memory-doc-files [journal later] {})
+    (p/let [conn (<export-in-memory-doc-files [journal later] {})
             page (ldb/get-page @conn "referenced only")]
       (is (= expected (:block/created-at page)))
       (is (= expected (:block/updated-at page)))
@@ -891,7 +891,7 @@ abc
         file-created-at (js/Date. "2025-08-01T00:00:00.000Z")
         file-updated-at (js/Date. "2025-08-02T00:00:00.000Z")
         journal {:path "journals/2024_03_08.md" :content "- first mention [[Referenced Only]]\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [journal]
                   {(:path journal) {:birthtime file-created-at :mtime file-updated-at}})
             page (ldb/get-page @conn "referenced only")]
@@ -902,7 +902,7 @@ abc
   (let [expected (date-time-util/journal-day->ms 20240308)
         modified-at (js/Date. "2025-08-02T00:00:00.000Z")
         journal {:path "journals/2024_03_08.md" :content "- journal block\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [journal]
                   {(:path journal) {:mtime modified-at}})
             page (db-test/find-page-by-title @conn "Mar 8th, 2024")
@@ -916,7 +916,7 @@ abc
   (let [expected (date-time-util/journal-day->ms 20240308)
         journal {:path "journals/2024_03_08.md"
                  :content "- first mention [[Referenced Only]] [[Mar 9th, 2024]]\n"}]
-    (p/let [conn (export-in-memory-doc-files [journal] {})
+    (p/let [conn (<export-in-memory-doc-files [journal] {})
             page (ldb/get-page @conn "referenced only")]
       (is (= expected (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
@@ -925,7 +925,7 @@ abc
   (let [created-at (js/Date. "2020-01-02T03:04:05.000Z")
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         file {:path "pages/foo.md" :content "- [[Mar 8th, 2024]]\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
             page (ldb/get-page @conn "foo")]
@@ -937,7 +937,7 @@ abc
   (let [expected (date-time-util/journal-day->ms 20240308)
         mention {:path "journals/2024_03_08.md" :content "- [[Later File]]\n"}
         file {:path "pages/Later File.md" :content "- later file\n"}]
-    (p/let [conn (export-in-memory-doc-files [mention file] {})
+    (p/let [conn (<export-in-memory-doc-files [mention file] {})
             page (ldb/get-page @conn "later file")]
       (is (= expected (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
@@ -945,7 +945,7 @@ abc
 (deftest-async export-doc-file-ignores-epoch-zero-birthtime
   (let [modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         file {:path "pages/epoch.md" :content "- epoch birth\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [file]
                   {(:path file) {:birthtime (js/Date. 0) :mtime modified-at}})
             page (ldb/get-page @conn "epoch")]
@@ -955,7 +955,7 @@ abc
 (deftest-async export-doc-file-uses-mtime-when-birthtime-missing
   (let [modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         file {:path "pages/mtime-only.md" :content "- mtime only\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [file]
                   {(:path file) {:mtime modified-at}})
             page (ldb/get-page @conn "mtime-only")]
@@ -967,7 +967,7 @@ abc
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         mention {:path "journals/2024_03_08.md" :content "- [[Mtime Page]]\n"}
         file {:path "pages/Mtime Page.md" :content "- see [[Mtime Page]]\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [mention file]
                   {(:path file) {:mtime modified-at}})
             page (ldb/get-page @conn "mtime page")]
@@ -980,10 +980,10 @@ abc
         modified-at (js/Date. "2021-06-07T08:09:10.000Z")
         file {:path "pages/Existing File.md" :content "- existing file\n"}
         mention {:path "journals/2024_03_08.md" :content "- [[Existing File]]\n"}]
-    (p/let [conn (export-in-memory-doc-files
+    (p/let [conn (<export-in-memory-doc-files
                   [file]
                   {(:path file) {:birthtime created-at :mtime modified-at}})
-            _ (export-in-memory-doc-files [mention] {} conn)
+            _ (<export-in-memory-doc-files [mention] {} conn)
             page (ldb/get-page @conn "existing file")]
       (is (= (.getTime created-at) (:block/created-at page)))
       (is (= (.getTime modified-at) (:block/updated-at page)))
@@ -994,7 +994,7 @@ abc
         file {:path "pages/numeric.md"
               :content "- numeric mtime\n"
               :last-modified-at modified-at}]
-    (p/let [conn (export-in-memory-doc-files [file] {})
+    (p/let [conn (<export-in-memory-doc-files [file] {})
             page (ldb/get-page @conn "numeric")]
       (is (= modified-at (:block/created-at page) (:block/updated-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
