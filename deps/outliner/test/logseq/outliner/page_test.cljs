@@ -136,6 +136,36 @@
                      (:db/id d1)))
       (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
 
+(deftest delete-page-succeeds-when-recycle-missing
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "D-missing"}}])
+        page (ldb/get-page @conn "D-missing")
+        recycle (ldb/get-built-in-page @conn common-config/recycle-page-name)]
+    (d/transact! conn [[:db/retractEntity (:db/id recycle)]])
+    (is (nil? (ldb/get-built-in-page @conn common-config/recycle-page-name)))
+    (is (true? (outliner-page/delete! conn (:block/uuid page))))
+    (let [page' (d/entity @conn (:db/id page))
+          recycle' (ldb/get-built-in-page @conn common-config/recycle-page-name)]
+      (is (true? (ldb/page? recycle')))
+      (is (contains? (set (map :db/ident (:block/tags recycle'))) :logseq.class/Page))
+      (is (true? (ldb/recycled? page')))
+      (is (= (:db/id recycle') (:db/id (:block/parent page')))))))
+
+(deftest delete-page-succeeds-when-recycle-untagged
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "D-untagged"}}])
+        page (ldb/get-page @conn "D-untagged")
+        recycle (ldb/get-built-in-page @conn common-config/recycle-page-name)]
+    (d/transact! conn [[:db/retract (:db/id recycle) :block/tags :logseq.class/Page]])
+    (is (not (ldb/page? (d/entity @conn (:db/id recycle)))))
+    (is (true? (outliner-page/delete! conn (:block/uuid page))))
+    (let [page' (d/entity @conn (:db/id page))
+          recycle' (d/entity @conn (:db/id recycle))]
+      (is (true? (ldb/page? recycle')))
+      (is (contains? (set (map :db/ident (:block/tags recycle'))) :logseq.class/Page))
+      (is (true? (ldb/recycled? page')))
+      (is (= (:db/id recycle') (:db/id (:block/parent page')))))))
+
 (deftest delete-class-page-hard-retracts-page-tree
   (let [conn (db-test/create-conn-with-blocks {:classes {:Movie {}}})
         class-page (ldb/get-page @conn "Movie")
