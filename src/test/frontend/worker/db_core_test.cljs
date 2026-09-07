@@ -1604,6 +1604,7 @@
                  :block/uuid block-uuid
                  :block/title "Tagged page"
                  :block/raw-title "Tagged page"
+                 :block.temp/property-keys [:block/tags]
                  :block/tags [{:db/id class-id
                                :db/ident :logseq.class/Page
                                :block/title "Page"
@@ -1996,7 +1997,23 @@
        (is (= ["current worker page"]
               (resolve-inputs! test-repo [":current-page"]
                                {:current-page page-uuid
-                                :today-title "Today"})))))))
+                                :today-title "Today"})))
+       (let [broken-refs-matcher "\\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\)"]
+         (is (= [broken-refs-matcher]
+                (resolve-inputs! test-repo [broken-refs-matcher] {}))
+             "Regex query inputs that start with an escaped paren stay strings.")
+         (doseq [input ["target-page" "two words" "foo.*"]]
+           (is (= [input] (resolve-inputs! test-repo [input] {}))
+               "Raw string query inputs retain their complete text."))
+         (is (= [tag-uuid]
+                (resolve-inputs! test-repo [(str "#uuid \"" tag-uuid "\"")] {}))
+             "Plugin EDN UUID inputs stay UUIDs.")
+         (is (= ["target-page"]
+                (resolve-inputs! test-repo ["\"target-page\""] {}))
+             "Quoted EDN string inputs are unquoted.")
+         (is (= [["a" "b" "c"]]
+                (resolve-inputs! test-repo ["[\"a\" \"b\" \"c\"]"] {}))
+             "EDN collection inputs stay collections."))))))
 
 (deftest query-dsl-worker-apis-run-against-worker-db
   (restoring-worker-state
