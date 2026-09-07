@@ -433,21 +433,17 @@
                (.preventDefault e)
                false)))}}))))
 
+(defn- canonical-binding-set
+  [binding]
+  (into #{} (map shortcut-utils/canonicalize-binding)
+        (editable-binding-vec binding)))
+
 (defn- matches-default-binding?
   "Check if a binding vector matches the default binding for an action.
    Uses canonical comparison to handle platform-dependent modifier aliases."
   [action-id binding-vec]
   (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
-    (let [canon-set (fn [bs]
-                      (into #{} (map shortcut-utils/canonicalize-binding) (editable-binding-vec bs)))]
-      (= (canon-set binding) (canon-set binding-vec)))))
-
-(defn- default-binding-key-set
-  "Canonical key set from an action's configured default binding."
-  [action-id]
-  (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
-    (into #{} (map shortcut-utils/canonicalize-binding)
-          (editable-binding-vec binding))))
+    (= (canonical-binding-set binding) (canonical-binding-set binding-vec))))
 
 (defn- reset-conflict-update
   "Build a persist update that strips reset keys from a conflicting action.
@@ -458,7 +454,7 @@
 
    Returns nil when the peer should keep its current binding."
   [conflicting-id their-binding keys-to-strip]
-  (let [peer-default-keys (or (default-binding-key-set conflicting-id) #{})
+  (let [peer-default-keys (canonical-binding-set (:binding (dh/shortcut-item conflicting-id)))
         canonical-keys (->> keys-to-strip
                             (map shortcut-utils/canonicalize-binding)
                             (remove peer-default-keys)
