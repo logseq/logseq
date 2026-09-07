@@ -138,7 +138,8 @@
 
 (deftest resolved-property-value-for-render-uses-default-for-loaded-block-test
   (is (= (:logseq.property/default-value default-status-property)
-         (#'property-value/resolved-property-value-for-render loaded-block-without-status default-status-property false)))
+         (#'property-value/resolved-property-value-for-render
+          loaded-block-without-status default-status-property false))
       "Non-table surfaces still show the property default for a loaded block."))
 
 (deftest resolved-property-value-for-render-skips-default-for-table-view-unset-property-test
