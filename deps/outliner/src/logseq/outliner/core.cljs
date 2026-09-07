@@ -790,28 +790,17 @@
                          (:block/parent target-block)
                          target-block)))
 
-(defn- existing-asset-ref
-  "Resolve a still-present asset entity to a :block/link target."
-  [db block]
-  (let [eid (or (:db/id block)
-                (when-let [id (:block/uuid block)]
-                  [:block/uuid id]))]
-    (when-let [e (and eid (d/entity db eid))]
-      (when (ldb/asset? e)
-        (:db/id e)))))
-
 (defn- asset-block->paste-link
-  "Copying a file-backed asset cannot reuse its uuid-named file.
-  Link to the original asset so the destination stays renderable."
-  [db block]
-  (if-let [asset-id (existing-asset-ref db block)]
-    (cond-> {:block/link asset-id
-             :block/title (or (:block/title block) "")}
-      (:block/uuid block) (assoc :block/uuid (:block/uuid block))
-      (:block/parent block) (assoc :block/parent (:block/parent block))
-      (:block/level block) (assoc :block/level (:block/level block))
-      (:block/order block) (assoc :block/order (:block/order block)))
-    block))
+  "Embed a copied asset while retaining source IDs for insertion planning."
+  [db block parent-ids]
+  (let [asset (d/entity db [:block/uuid (:block/uuid block)])]
+    (when-not (ldb/asset? asset)
+      (throw (ex-info "Cannot paste a missing asset" {:block/uuid (:block/uuid block)})))
+    (when (contains? parent-ids (:db/id asset))
+      (throw (ex-info "Cannot embed an asset inside itself" {:block/uuid (:block/uuid block)})))
+    (assoc (select-keys block [:db/id :block/uuid :block/title
+                              :block/parent :block/level :block/order])
+           :block/link (:db/id asset))))
 
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -862,17 +851,19 @@
                        blocks)
                   ;; Templates cannot clone uuid-named asset files.
                   insert-template?
-                  (remove ldb/asset?)
-                  ;; Copying an existing asset would create a new uuid whose
-                  ;; file does not exist. Embed the original instead. Cut
-                  ;; (keep-uuid?) reinserts the same asset identity.
-                  (and (= outliner-op :paste) (not keep-uuid?))
-                  (map (fn [block]
-                         (if (ldb/asset? block)
-                           (asset-block->paste-link db block)
-                           block))))
+                  (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
+         blocks (if (and (= outliner-op :paste) (not keep-uuid?) (some ldb/asset? blocks))
+                  (let [parent-ids (cond-> (into #{(:db/id target-block)}
+                                               (map :db/id)
+                                               (ldb/get-block-parents db (:block/uuid target-block) {}))
+                                     sibling? (disj (:db/id target-block)))]
+                    (mapv #(if (ldb/asset? %)
+                             (asset-block->paste-link db % parent-ids)
+                             %)
+                          blocks))
+                  blocks)
          replace-empty-target? (if (and (some? replace-empty-target?)
                                         (:block/title target-block)
                                         (string/blank? (:block/title target-block)))

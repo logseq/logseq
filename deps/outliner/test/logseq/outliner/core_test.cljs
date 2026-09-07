@@ -496,3 +496,48 @@
       (let [uploaded (d/entity @conn [:block/uuid asset-uuid])]
         (is (= "png" (:logseq.property.asset/type uploaded)))
         (is (= ["target" "uploaded"] (page-child-titles @conn "dest")))))))
+
+(defn- asset-paste-fixture
+  []
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "source"}
+                :blocks [{:block/title "report"
+                          :build/tags #{:logseq.class/Asset}
+                          :build/properties {:logseq.property.asset/type "pdf"
+                                             :logseq.property.asset/checksum "abc"
+                                             :logseq.property.asset/size 42}
+                          :build/children [{:block/title "annotation"}]}]}
+               {:page {:block/title "dest"}
+                :blocks [{:block/title "target"}]}])]
+    {:conn conn
+     :asset (db-test/find-block-by-content @conn "report")
+     :child (db-test/find-block-by-content @conn "annotation")
+     :target (db-test/find-block-by-content @conn "target")}))
+
+(deftest paste-asset-preserves-map-parent-hierarchy
+  (let [{:keys [conn asset child target]} (asset-paste-fixture)
+        child-map (assoc (into {} child) :db/id (:db/id child)
+                         :block/parent {:db/id (:db/id asset)})]
+    (outliner-core/insert-blocks! conn [(clipboard-asset-block asset) child-map]
+                                  target {:sibling? true :outliner-op :paste})
+    (let [pasted (last (ldb/sort-by-order (:block/_parent (ldb/get-page @conn "dest"))))]
+      (is (= (:db/id asset) (:db/id (:block/link pasted))))
+      (is (= ["annotation"] (mapv :block/title (:block/_parent pasted)))))))
+
+(deftest paste-asset-rejects-missing-source
+  (let [{:keys [conn asset target]} (asset-paste-fixture)
+        clipboard (clipboard-asset-block asset)]
+    (outliner-core/delete-blocks! conn [asset] {})
+    (let [before @conn]
+      (is (thrown-with-msg? js/Error #"Cannot paste a missing asset"
+                           (outliner-core/insert-blocks! conn [clipboard] target
+                                                         {:sibling? true :outliner-op :paste})))
+      (is (identical? before @conn)))))
+
+(deftest paste-asset-rejects-embedding-an-ancestor
+  (let [{:keys [conn asset child]} (asset-paste-fixture)
+        before @conn]
+    (is (thrown-with-msg? js/Error #"Cannot embed an asset inside itself"
+                         (outliner-core/insert-blocks! conn [(clipboard-asset-block asset)] child
+                                                       {:sibling? true :outliner-op :paste})))
+    (is (identical? before @conn))))
