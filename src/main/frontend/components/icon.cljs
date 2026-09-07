@@ -383,6 +383,11 @@
         {:id :icons-color-picker}
         (content-fn)))))
 
+(defn- icon-search-keydown
+  [^js e]
+  (when (contains? #{"ArrowLeft" "ArrowRight"} (.-key e))
+    (util/stop-propagation e)))
+
 (hsx/defc ^:large-vars/cleanup-todo icon-search
   [{:keys [on-chosen del-btn? color-auto-chosen? icon-value] :as opts}]
   (let [[q set-q!] (hooks/use-state "")
@@ -422,7 +427,8 @@
          (set-tab! tab)))
      [tab default-tab])
     [:div.cp__emoji-icon-picker
-     {:data-keep-selection true}
+     {:data-keep-selection true
+      :on-key-down icon-search-keydown}
      ;; header
      [:div.hd.bg-popover
       (tab-observer tab {:reset-q! reset-q!})
