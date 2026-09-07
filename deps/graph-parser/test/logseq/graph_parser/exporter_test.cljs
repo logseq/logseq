@@ -1165,6 +1165,33 @@ abc
           (is (empty? @(:ignored-assets import-state)) "No ignored assets")
           (p/recur (rest remaining-cases)))))))
 
+(deftest-async import-hls-pdfs-uses-annotation-file-identities
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-hls-identities-"))
+        graph-dir (node-path/join dir "graph")
+        first-id #uuid "11111111-1111-1111-1111-111111111111"
+        second-id #uuid "22222222-2222-2222-2222-222222222222"
+        first-url "https://example.com/Alpha.pdf"
+        first-key (str "Alpha__" (hash first-url))]
+    (doseq [[label url annotation-id] [["Alpha" first-url first-id]
+                                      ["Beta" "https://example.com/Beta.pdf" second-id]]]
+      (write-linked-pdf-annotation-graph
+       graph-dir {:pdf-uri url :pdf-label label
+                  :source-line (str "- ((" annotation-id "))")
+                  :annotation-id annotation-id :highlight-text "Original highlight" :hl-page 2}))
+    (fs/appendFileSync (node-path/join graph-dir "pages/hls__Alpha.md")
+                       "- ![Beta](https://example.com/Beta.pdf)\n")
+    (fs/appendFileSync (node-path/join graph-dir "pages/hls__Beta.md") "  - Child note\n")
+    (doseq [[before after] [["pages/hls__Alpha.md" (str "pages/hls__" first-key ".md")]
+                            ["assets/Alpha.edn" (str "assets/" first-key ".edn")]]]
+      (fs/renameSync (node-path/join graph-dir before) (node-path/join graph-dir after)))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            annotation (d/entity @conn [:block/uuid first-id])
+            second-annotation (d/entity @conn [:block/uuid second-id])]
+      (is (= "Original highlight" (:block/title annotation)))
+      (is (= "Alpha" (:block/title (:logseq.property/asset annotation))))
+      (is (= ["Child note"] (mapv :block/title (ordered-children second-annotation)))))))
+
 (deftest-async ^:integration import-large-flat-file-without-stack-overflow
   (p/let [file (write-temp-graph-file
                 "pages/large.md"
