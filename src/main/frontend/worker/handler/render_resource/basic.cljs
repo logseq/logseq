@@ -219,6 +219,30 @@
           (mapv #(common/require-uuid! :comment-thread-uuid
                                 (:block/uuid %))))]))
 
+(defn- history-resource-item
+  [item]
+  (let [status? (= :logseq.property/status
+                   (:logseq.property.history/property-ident item))
+        ref-value-uuid (:logseq.property.history/ref-value-uuid item)]
+    (cond-> {:created-at (:block/created-at item)}
+      status?
+      (assoc :status-uuid
+             (common/require-uuid!
+              :status-uuid
+              ref-value-uuid))
+      (not status?)
+      (assoc :property-ident (:logseq.property.history/property-ident item)
+             :property-uuid
+             (common/require-uuid!
+              :property-uuid
+              (:logseq.property.history/property-uuid item)))
+      (and (not status?) (uuid? ref-value-uuid))
+      (assoc :value-uuid
+             (common/require-uuid! :history-value-uuid ref-value-uuid))
+      (and (not status?)
+           (contains? item :logseq.property.history/scalar-value))
+      (assoc :scalar-value (:logseq.property.history/scalar-value item)))))
+
 (defn- block-task-time
   [db resource-key _runtime]
   (let [block-uuid (second resource-key)
@@ -228,14 +252,7 @@
                                            (common-util/time-ms))
             [[] 0])]
     [#{[:task-time block-uuid]}
-     {:history
-      (mapv (fn [item]
-              {:created-at (:block/created-at item)
-               :status-uuid
-               (common/require-uuid!
-                :status-uuid
-                (:logseq.property.history/ref-value-uuid item))})
-            history)
+     {:history (mapv history-resource-item history)
       :seconds seconds}]))
 
 (defn- route-block

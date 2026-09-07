@@ -1447,6 +1447,60 @@
                                 {:history [] :seconds 0}
                                 response))))
 
+(deftest block-task-time-resource-includes-non-status-property-history-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn journal-child-b]} (render-resource-fixture)
+          tracked-property-uuid (random-uuid)
+          history-uuid (random-uuid)
+          priority-history-uuid (random-uuid)
+          priority-uuid (:block/uuid (d/entity @conn :logseq.property/priority))
+          high-uuid (:block/uuid (d/entity @conn :logseq.property/priority.high))]
+      (d/transact! conn
+                   [{:db/id -200
+                     :db/ident :user.property/tracked
+                     :block/uuid tracked-property-uuid
+                     :block/tx-id 21
+                     :block/title "Tracked"
+                     :block/tags :logseq.class/Property
+                     :logseq.property/type :default
+                     :logseq.property/enable-history? true}
+                    {:db/id [:block/uuid journal-child-b]
+                     :block/tx-id 21
+                     :user.property/tracked "alpha"
+                     :logseq.property/priority :logseq.property/priority.high}
+                    {:block/uuid history-uuid
+                     :block/tx-id 21
+                     :block/created-at 5000
+                     :logseq.property.history/block [:block/uuid journal-child-b]
+                     :logseq.property.history/property :user.property/tracked
+                     :logseq.property.history/scalar-value "alpha"}
+                    {:block/uuid priority-history-uuid
+                     :block/tx-id 21
+                     :block/created-at 8000
+                     :logseq.property.history/block [:block/uuid journal-child-b]
+                     :logseq.property.history/property :logseq.property/priority
+                     :logseq.property.history/ref-value :logseq.property/priority.high}])
+      (let [resource-key [:block-task-time journal-child-b]
+            response (call-resource api conn resource-key)]
+        (assert-resource-envelope
+         @conn
+         resource-key
+         #{[:task-time journal-child-b]}
+         {:history [{:created-at 5000
+                     :property-ident :user.property/tracked
+                     :property-uuid tracked-property-uuid
+                     :scalar-value "alpha"}
+                    {:created-at 8000
+                     :property-ident :logseq.property/priority
+                     :property-uuid priority-uuid
+                     :value-uuid high-uuid}]
+          :seconds 0}
+         response)
+        (is (not-any? :status-uuid (get-in response [:value :history]))
+            "Non-status history is displayed without the Status-only payload")
+        (is (= 8000 (:created-at (last (get-in response [:value :history]))))
+            "The node timestamp uses the latest enable-history change")))))
+
 (deftest route-block-resource-watches-the-page-lookup-and-resolved-entities-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn page route-heading]} (render-resource-fixture)
