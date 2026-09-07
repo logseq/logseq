@@ -2662,6 +2662,7 @@
                (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
                (reset! worker-state/*datascript-conns {test-repo conn})
                (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (platform/set-platform! (build-test-platform {:runtime :node}))
                (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
                (p/with-redefs
                  [db-core/node-fs-promises (fn [] fake-fsp)
@@ -2703,6 +2704,7 @@
                (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
                (reset! worker-state/*datascript-conns {test-repo conn})
                (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (platform/set-platform! (build-test-platform {:runtime :node}))
                (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
                (p/with-redefs
                  [db-core/node-fs-promises (fn [] fake-fsp)
@@ -2898,10 +2900,14 @@
                    contents {"logseq/config.edn" "{}"
                              "pages/Home.md" "- imported home"
                              "pages/Projects.md" "- imported projects"}
-                   config-file {:path "logseq/config.edn"}
-                   files [{:path "logseq/config.edn"}
-                          {:path "pages/Home.md"}
-                          {:path "pages/Projects.md"}]]
+                   config-file {:path "logseq/config.edn"
+                                :fs-path "/tmp/graph/logseq/config.edn"}
+                   files [{:path "logseq/config.edn"
+                           :fs-path "/tmp/graph/logseq/config.edn"}
+                          {:path "pages/Home.md"
+                           :fs-path "/tmp/graph/pages/Home.md"}
+                          {:path "pages/Projects.md"
+                           :fs-path "/tmp/graph/pages/Projects.md"}]]
                (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
                (reset! worker-state/*datascript-conns {test-repo conn})
                (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
@@ -2932,7 +2938,7 @@
                     (is (= "imported home" (:block/title home-block)))
                     (is (= "imported projects" (:block/title project-block)))
                     (is (= 1 @max-in-flight)
-                        "Import must read one file at a time instead of preloading the graph.")
+                        "Browser db-worker streams one file at a time via UI request and must not read Node fs.")
                     (is (= #{"logseq/config.edn" "pages/Home.md" "pages/Projects.md"}
                            (set @requested))))
                   (p/finally (fn []
