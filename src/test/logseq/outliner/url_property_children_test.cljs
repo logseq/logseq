@@ -87,7 +87,7 @@
         (is (= original-left (:db/id (ldb/get-left-sibling page-child')))))))
 
   (testing "sibling insert next to a URL property value is rejected"
-    (let [conn (db-test/create-conn-with-blocks)
+    (let [conn (db-test/create-conn-with-blocks
                 {:properties {:url {:logseq.property/type :url}}
                  :pages-and-blocks
                  [{:page {:block/title "page1"
