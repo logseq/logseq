@@ -30,6 +30,11 @@
         property-value (:logseq.property/value ref)
         property-icon (:logseq.property/icon ref)
         hide-from-node (:logseq.property.class/hide-from-node ref)
+        asset-type (:logseq.property.asset/type ref)
+        asset-width (:logseq.property.asset/width ref)
+        asset-height (:logseq.property.asset/height ref)
+        asset-resize-metadata (:logseq.property.asset/resize-metadata ref)
+        asset-external-url (:logseq.property.asset/external-url ref)
         property-value-title (when (or (:block/closed-value-property ref)
                                        (:logseq.property/created-from-property ref))
                                (:block/title ref))]
@@ -52,6 +57,13 @@
       (some? property-value) (assoc :logseq.property/value property-value)
       (some? property-icon) (assoc :logseq.property/icon property-icon)
       (some? hide-from-node) (assoc :logseq.property.class/hide-from-node hide-from-node)
+      (some? asset-type) (assoc :logseq.property.asset/type asset-type)
+      (some? asset-width) (assoc :logseq.property.asset/width asset-width)
+      (some? asset-height) (assoc :logseq.property.asset/height asset-height)
+      (some? asset-resize-metadata)
+      (assoc :logseq.property.asset/resize-metadata asset-resize-metadata)
+      (some? asset-external-url)
+      (assoc :logseq.property.asset/external-url asset-external-url)
       (some? property-value-title) (assoc :block/title property-value-title))))
 
 (defn- breadcrumb-entity

@@ -101,6 +101,7 @@
 (def ^:export create_journal_page api-editor/create_journal_page)
 (def ^:export create_page api-editor/create_page)
 (def ^:export delete_page api-editor/delete_page)
+(def ^:export delete_recycled_page_permanently api-editor/delete_recycled_page_permanently)
 (def ^:export download_graph_db api-editor/download_graph_db)
 (def ^:export download_graph_pages api-editor/download_graph_pages)
 (def ^:export edit_block api-editor/edit_block)

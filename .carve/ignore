@@ -22,12 +22,8 @@ frontend.handler.user/<ensure-id&access-token
 frontend.image/get-orientation
 ;; For debugging
 frontend.mixins/perf-measure-mixin
-;; Previously useful fn
-frontend.mobile.util/get-idevice-statusbar-height
 ;; placeholder fn
 frontend.publishing/stop
-;; Future use
-frontend.storage/get-transit
 ;; repl fn
 frontend.state/remove-watch-state
 ;; Future use?

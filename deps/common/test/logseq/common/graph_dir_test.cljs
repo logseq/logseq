@@ -1,6 +1,6 @@
-(ns frontend.worker.graph-dir-test
+(ns logseq.common.graph-dir-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.worker.graph-dir :as graph-dir]))
+            [logseq.common.graph-dir :as graph-dir]))
 
 (deftest repo->graph-dir-key-strips-db-prefix
   (testing "db-prefixed repo is mapped to prefix-free graph dir key"
