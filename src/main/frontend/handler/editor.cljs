@@ -682,41 +682,41 @@
          (escape-editing)
          (do
            (start-pending-new-block!)
-           (let [{:keys [block value config]} state)
-             value (if (string? block-value) block-value value)
-             block-id (:block/uuid block)
-             block-self? (block-self-alone-when-insert? config block-id)
-             input (:node state)
-             selection-start (util/get-selection-start input)
-             selection-end (util/get-selection-end input)
-             [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-             insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
-             block' block
-             original-block (:original-block config)
-             block'' (or
-                      (when original-block
-                        (let [e block']
-                          (if (and (worker-has-children? e)
-                                   (not (:block/collapsed? e)))
+           (let [{:keys [block value config]} state
+                 value (if (string? block-value) block-value value)
+                 block-id (:block/uuid block)
+                 block-self? (block-self-alone-when-insert? config block-id)
+                 input (:node state)
+                 selection-start (util/get-selection-start input)
+                 selection-end (util/get-selection-end input)
+                 [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                 insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+                 block' block
+                 original-block (:original-block config)
+                 block'' (or
+                          (when original-block
+                            (let [e block']
+                              (if (and (worker-has-children? e)
+                                       (not (:block/collapsed? e)))
                           ;; object has children and not collapsed
-                            block'
-                            original-block)))
-                      block')
-             insert-fn (cond
-                         block-self?
-                         insert-new-block-aux!
+                                block'
+                                original-block)))
+                          block')
+                 insert-fn (cond
+                             block-self?
+                             insert-new-block-aux!
 
-                         insert-above?
-                         insert-new-block-before-block-aux!
+                             insert-above?
+                             insert-new-block-before-block-aux!
 
-                         :else
-                         insert-new-block-aux!)]
+                             :else
+                             insert-new-block-aux!)]
              (-> (p/let [insert-result (insert-fn config block'' value)
-                     _ (first insert-result)]
-               (clear-when-saved!))
-             (p/catch (fn [error]
-                        (clear-pending-new-block!)
-                        (throw error)))))))))))
+                         _ (first insert-result)]
+                   (clear-when-saved!))
+                 (p/catch (fn [error]
+                            (clear-pending-new-block!)
+                            (throw error)))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
