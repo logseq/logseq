@@ -139,3 +139,43 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest node-adapter-semantic-capture-is-routed-test
+  (async done
+         (let [server* (atom nil)
+               claims #js {"sub" "node-semantic-user"
+                           "scope" "logseq/read logseq/write"}]
+           (-> (p/with-redefs
+                [auth/auth-claims (fn [_request _env] (p/resolved claims))
+                 auth/semantic-auth-claims (fn [_request _env] (p/resolved claims))]
+                 (p/let [server (start-test-server)
+                         _ (reset! server* server)
+                         base-url (:base-url server)
+                         create-resp (post-json
+                                      (str base-url "/graphs")
+                                      {:graph-name "Semantic Capture"
+                                       :graph-e2ee? false
+                                       :graph-ready-for-use? false})
+                         create-body (parse-json create-resp)
+                         graph-id (aget create-body "graph-id")
+                         missing-resp (post-json
+                                       (str base-url "/api/v1/graphs/missing-graph/capture")
+                                       {:blocks [{:title "should 404"}]})
+                         capture-resp (post-json
+                                       (str base-url "/api/v1/graphs/" graph-id "/capture")
+                                       {:blocks [{:title "Captured from Chat"}]})]
+                   (testing "unknown graphs stay not found"
+                     (is (= 404 (.-status missing-resp))))
+                   (testing "Chat semantic capture is routed instead of 404"
+                     (is (not= 404 (.-status capture-resp)))
+                     (is (not= 405 (.-status capture-resp))))))
+               (p/finally
+                 (fn []
+                   (if-let [server @server*]
+                     (p/let [_ ((:stop! server))]
+                       (.rmSync fs (:data-dir server) #js {:recursive true :force true}))
+                     (p/resolved nil))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
