@@ -136,8 +136,9 @@
                  :pages-and-blocks
                  [{:page {:block/title "page1"
                           :build/properties {:default-many #{"text a" "text b"}}}}]})
-          page (ldb/get-page @conn "page1")
-          [text-a text-b] (->> (:user.property/default-many page)
+          [text-a text-b] (->> [(db-test/find-block-by-content @conn "text a")
+                                (db-test/find-block-by-content @conn "text b")]
+                               (remove nil?)
                                ldb/sort-by-order)
           left (ldb/get-left-sibling text-b)]
       (is (= 2 (count [text-a text-b])))
