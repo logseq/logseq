@@ -1736,11 +1736,14 @@
                                   (or (not= asset-name asset-link-or-name)
                                       (external-pdf-url? asset-link-or-name)
                                       (windows-drive-path? asset-name)))
-        pdf-annotations-paths (if (and (or zotero-asset? external-file-asset?)
-                                       (string? asset-name))
-                                [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
-                                 (path/path-join common-config/local-assets-dir asset-name)]
-                                [(or asset-name asset-link-or-name)])
+        pdf-annotations-paths (if-let [annotation-file (:pdf-annotation-file opts)]
+                                [(path/path-join common-config/local-assets-dir
+                                                 (-> (subs (node-path/basename annotation-file) 5)
+                                                     (string/replace #"(?i)\.md$" ".pdf")))]
+                                (if (and (or zotero-asset? external-file-asset?) (string? asset-name))
+                                  [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
+                                   (path/path-join common-config/local-assets-dir asset-name)]
+                                  [(or asset-name asset-link-or-name)]))
         pdf-annotations-tx (when (some pdf-file? pdf-annotations-paths)
                              (build-pdf-annotations-tx pdf-annotations-paths assets new-asset pdf-annotation-pages opts))
         asset-tx (concat [new-asset] pdf-annotations-tx)]
@@ -1837,29 +1840,17 @@
        distinct))
 
 (defn- <import-hls-linked-pdf-assets!
-  "Create Assets from hls__ page file:: / file-path:: PDF targets when no image link exists."
-  [file {:keys [import-state user-config] :as options}]
-  (when (hls-annotation-md-file? file)
-    (let [extracted (get @(:pdf-annotation-pages import-state) (node-path/basename file))
-          walked (walk-ast-blocks user-config
-                                  (mapcat :block.temp/ast-blocks
-                                          (concat (:pages extracted) (:blocks extracted))))
-          property-urls (hls-extracted-pdf-urls extracted)
-          walked-urls (set (keep (fn [link]
-                                   (link-map->url (second (:url (second link)))))
-                                 (:asset-links walked)))
-          extra-links (into []
-                            (comp (remove walked-urls)
-                                  (keep synthetic-pdf-asset-link))
-                            property-urls)
-          asset-links (into (vec (:asset-links walked)) extra-links)]
-      (when (seq asset-links)
-        (p/let [result (<handle-assets-in-block
-                        {:block/title ""}
-                        (assoc walked :asset-links asset-links)
-                        import-state
-                        (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))]
-          (:asset-blocks-tx result))))))
+  "Create PDF assets from an annotation page's file properties."
+  [file {:keys [import-state] :as options}]
+  (let [extracted (get @(:pdf-annotation-pages import-state) (node-path/basename file))
+        asset-links (into [] (keep synthetic-pdf-asset-link) (hls-extracted-pdf-urls extracted))]
+    (when (seq asset-links)
+      (p/let [result (<handle-assets-in-block
+                      {:block/title ""}
+                      {:asset-links asset-links}
+                      import-state
+                      (assoc options :pdf-annotation-file file))]
+        (:asset-blocks-tx result)))))
 
 (defn- quote-node->markdown
   "Converts a Quote AST node to markdown, preserving nested quote structure.
@@ -2729,16 +2720,6 @@
   [ref]
   {:block/uuid (second ref)})
 
-(defn- <extract-pages-and-import-hls-assets!
-  [conn file content options]
-  (p/let [{:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
-          hls-asset-blocks-tx (<import-hls-linked-pdf-assets! file options)
-          _ (when (seq hls-asset-blocks-tx)
-              (ldb/transact! conn hls-asset-blocks-tx
-                             {::imported-data? true ::path file ::new-graph? true})
-              (save-from-tx hls-asset-blocks-tx options))]
-    {:pages pages :blocks blocks}))
-
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2755,7 +2736,7 @@
                            log-fn prn}
                       :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
-          {:keys [pages blocks]} (<extract-pages-and-import-hls-assets! conn file content options)
+          {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
@@ -2989,11 +2970,18 @@
                                  *doc-files)
                         (range 0 (count *doc-files)))]
     (index-journal-page-name-uuids! doc-files (:import-state options))
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
-                 i 0]
-          (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
-                     (inc i))))
+    (let [[annotation-files other-files] (split-with #(hls-annotation-md-file? (:path %)) doc-files)]
+      (-> (p/do!
+           (p/doseq [file annotation-files]
+             (export-doc-file file conn <read-file options))
+           (p/doseq [{file :path} annotation-files]
+             (p/let [tx (<import-hls-linked-pdf-assets! file options)]
+               (when (seq tx)
+                 (let [report (ldb/transact! conn tx {::imported-data? true ::path file ::new-graph? true})]
+                   (save-from-tx tx options)
+                   (on-tx-report report)))))
+           (p/doseq [file other-files]
+             (export-doc-file file conn <read-file options)))
         (p/then (fn [_]
                   (p/let [normalize-tx-report (normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
@@ -3004,7 +2992,7 @@
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
                                  :ex-data {:error e}})
-                   (throw e))))))
+                   (throw e)))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
