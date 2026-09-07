@@ -4,7 +4,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
@@ -28,14 +27,6 @@
                (and (= current-page (str block-uuid))
                     (ldb/recycled? block)))
              blocks)))
-
-(defn- leave-removed-current-page!
-  "Desktop: go to the previous page/block after the current route is deleted
-   or recycled. Mobile keeps its own stack; the header delete handler already
-   calls history.back."
-  []
-  (when-not (util/mobile?)
-    (route-handler/redirect-to-previous!)))
 
 (defn- publish-plugin-hook!
   [tx-meta {:keys [blocks deleted]}]
@@ -71,7 +62,7 @@
       (when (or (current-page-deleted? current-page deleted)
                 (and (not initial-pages?)
                      (current-page-recycled? current-page blocks)))
-        (leave-removed-current-page!))
+        (route-handler/redirect-to-previous!))
 
       (cond
         initial-pages?
