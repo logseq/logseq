@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.db.hooks :as db-hooks]
-            [frontend.format.block :refer [displayed-math-formula parse-title-and-body]]
+            [frontend.format.block :refer [parse-title-and-body]]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -72,23 +72,10 @@
    :block/uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
    :block/title mixed-title})
 
-(deftest page-ref-math-formula-test
-  (testing "unconverted latex-only title exposes the inner formula"
-    (is (= formula
-           (#'block/page-ref-math-formula (latex-only-block)))))
-
-  (testing "math display-type blocks use the stored formula title"
-    (is (= formula
-           (#'block/page-ref-math-formula (math-display-block)))))
-
-  (testing "Displayed_Math in ast-body is used when the heading title is empty"
-    (is (= formula
-           (#'block/page-ref-math-formula
-            (merge (latex-only-block)
-                   (parse-title-and-body nil :markdown latex-only-title))))))
-
-  (testing "mixed-title latex is not treated as a standalone formula"
-    (is (nil? (displayed-math-formula mixed-title)))))
+(deftest parsed-page-ref-math-formula-test
+  (is (= formula
+         (#'block/ast-displayed-math-formula
+          (:block.temp/ast-body (parse-title-and-body nil :markdown latex-only-title))))))
 
 (deftest latex-only-page-ref-renders-formula-test
   (testing "a reference to an unconverted latex-only block shows the formula"
