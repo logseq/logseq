@@ -307,7 +307,7 @@
 (defn- plain-render-block?
   [db block]
   (empty? (remove #{:block/tags}
-                  (property-handler/direct-block-property-ids db (:db/id block)))))
+                  (property-handler/block-property-keys db block))))
 
 (defn- block-positioned-properties-map
   [db block]

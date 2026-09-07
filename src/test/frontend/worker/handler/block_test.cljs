@@ -605,6 +605,53 @@
                  (canonical-block @conn (d/entity @conn (:db/id with-class)))))
           "Canonical renderer maps persist class-provided property keys."))))
 
+(deftest canonical-block-positions-default-task-status-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Page"}
+                  :blocks [{:block/title "task only"
+                            :build/tags [:logseq.class/Task]}
+                           {:block/title "task doing"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.doing}}]}])
+          task-only (db-test/find-block-by-content @conn "task only")
+          task-doing (db-test/find-block-by-content @conn "task doing")
+          status-uuid (:block/uuid (d/entity @conn :logseq.property/status))]
+      (d/transact! conn [{:db/id (:db/id task-only) :block/tx-id 1}
+                         {:db/id (:db/id task-doing) :block/tx-id 1}])
+      (let [only-block (canonical-block @conn (d/entity @conn (:db/id task-only)))
+            doing-block (canonical-block @conn (d/entity @conn (:db/id task-doing)))
+            only-left (set (get-in only-block [:block.temp/positioned-properties :block-left]))
+            doing-left (set (get-in doing-block [:block.temp/positioned-properties :block-left]))]
+        (is (contains? only-left status-uuid)
+            "Tag-only #Task still exposes the default status icon.")
+        (is (not (contains? only-block :logseq.property/status))
+            "Canonical row maps omit unset status so table/query cells stay empty.")
+        (is (contains? doing-left status-uuid)
+            "Explicit status still positions.")
+        (is (some? (:logseq.property/status doing-block)))))))
+
+(deftest get-block-and-children-positions-default-task-status-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Page"}
+                :blocks [{:block/title "task only"
+                          :build/tags [:logseq.class/Task]}
+                         {:block/title "plain"}]}])
+        task-only (db-test/find-block-by-content @conn "task only")
+        plain (db-test/find-block-by-content @conn "plain")
+        task-result (:block (block-handler/get-block-and-children
+                             @conn (:db/id task-only)
+                             {:children? false :render-data? true}))
+        plain-result (:block (block-handler/get-block-and-children
+                              @conn (:db/id plain)
+                              {:children? false :render-data? true}))
+        task-left (set (map :db/ident
+                            (get-in task-result [:block.temp/positioned-properties :block-left])))]
+    (is (contains? task-left :logseq.property/status)
+        "Tag-only #Task is not treated as a plain block for positioned status.")
+    (is (empty? (get-in plain-result [:block.temp/positioned-properties :block-left]))
+        "Untagged blocks still skip positioned status.")))
+
 (defn- cover-row-fixture
   []
   (let [conn (db-test/create-conn)
