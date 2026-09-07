@@ -334,4 +334,4 @@
                                 (p/catch (fn [error]
                                            (is (= :missing-import-session
                                                   (:code (ex-data error))))))
-                                (p/finally done)))))))))
+                                (p/finally done))))))))
