@@ -3058,18 +3058,7 @@
 (defn- hidden-block-below-property?
   "Icon is rendered on the block itself, never as a bottom pill."
   [property]
-  (or (= :logseq.property/icon property)
-      (= :logseq.property/icon (:db/ident property))))
-
-(defn- property-item-uuid
-  [property]
-  (cond
-    (uuid? property) property
-    (map? property) (:block/uuid property)))
-
-(defn- visible-block-below-property-uuids
-  [property-uuids]
-  (into [] (remove hidden-block-below-property?) property-uuids))
+  (= :logseq.property/icon (:db/ident property)))
 
 (defn- show-block-below-properties-row?
   [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
@@ -3181,40 +3170,22 @@
 
 (hsx/defc block-below-positioned-properties-gate
   [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
-  (let [property-item-uuids (into [] (keep property-item-uuid) property-uuids)
-        resolved-properties (db-hooks/use-blocks property-item-uuids)
-        all-identifiable? (and (seq property-uuids)
-                               (every? (fn [property]
-                                         (or (keyword? property)
-                                             (some? (:db/ident property))))
-                                       property-uuids))
-        visible-property-uuids
-        (cond
-          all-identifiable?
-          (into [] (keep property-item-uuid) (visible-block-below-property-uuids property-uuids))
-
-          (nil? resolved-properties)
-          nil
-
-          :else
-          (into []
-                (keep (fn [property]
-                        (when (and property
-                                   (not (hidden-block-below-property? property)))
-                          (:block/uuid property))))
-                resolved-properties))]
-    (when (and (some? visible-property-uuids)
-               (show-block-below-properties-row?
-                visible-property-uuids
-                {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
-                 :show-hidden-properties-control? show-hidden-properties-control?
-                 :show-add-property-button? show-add-property-button?}))
-      [block-below-positioned-properties-cp block
-       visible-property-uuids
-       opts
-       show-hidden-properties-pill-toggle?
-       show-hidden-properties-control?
-       show-add-property-button?])))
+  (when-let [properties (db-hooks/use-blocks property-uuids)]
+    (let [visible-property-uuids (into []
+                                       (comp (remove hidden-block-below-property?)
+                                             (keep :block/uuid))
+                                       properties)]
+      (when (show-block-below-properties-row?
+             visible-property-uuids
+             {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+              :show-hidden-properties-control? show-hidden-properties-control?
+              :show-add-property-button? show-add-property-button?})
+        [block-below-positioned-properties-cp block
+         visible-property-uuids
+         opts
+         show-hidden-properties-pill-toggle?
+         show-hidden-properties-control?
+         show-add-property-button?]))))
 
 (hsx/defc positioned-properties-content
   [config block position property-uuids]

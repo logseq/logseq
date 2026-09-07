@@ -94,3 +94,25 @@
                 "- after")
            content))
     (is (not (string/includes? content "should not appear")))))
+
+(deftest highlighted-export-preserves-code-and-math-content
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Highlight export"}
+                 :blocks [{:block/title "plain text"
+                           :build/properties {:logseq.property/background-color "red"}}
+                          {:block/title "const x = 1;"
+                           :build/properties {:logseq.property/background-color "red"
+                                              :logseq.property.node/display-type :code
+                                              :logseq.property.code/lang "javascript"}}
+                          {:block/title "x^2"
+                           :build/properties {:logseq.property/background-color "red"
+                                              :logseq.property.node/display-type :math}}]}]})
+        page (db-test/find-page-by-title @conn "Highlight export")
+        content (common-file/block->content
+                 @conn (:block/uuid page) {:include-properties? false}
+                 (assoc block-export-context :encode-highlight-as-mark? true))]
+    (is (= (str "- ^^plain text^^\n"
+                "- ```javascript\n  const x = 1;\n  ```\n"
+                "- $$\n  x^2\n  $$")
+           content))))

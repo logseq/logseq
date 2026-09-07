@@ -1604,6 +1604,7 @@
                  :block/uuid block-uuid
                  :block/title "Tagged page"
                  :block/raw-title "Tagged page"
+                 :block.temp/property-keys [:block/tags]
                  :block/tags [{:db/id class-id
                                :db/ident :logseq.class/Page
                                :block/title "Page"
@@ -2001,6 +2002,9 @@
          (is (= [broken-refs-matcher]
                 (resolve-inputs! test-repo [broken-refs-matcher] {}))
              "Regex query inputs that start with an escaped paren stay strings.")
+         (doseq [input ["target-page" "two words" "foo.*"]]
+           (is (= [input] (resolve-inputs! test-repo [input] {}))
+               "Raw string query inputs retain their complete text."))
          (is (= [tag-uuid]
                 (resolve-inputs! test-repo [(str "#uuid \"" tag-uuid "\"")] {}))
              "Plugin EDN UUID inputs stay UUIDs.")
