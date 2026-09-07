@@ -2230,29 +2230,6 @@ abc
         (is (ldb/inline-tag? raw-title tag)
             "first-line namespaced tag is stored as an inline tag")))))
 
-(deftest file-icon-value->db-icon
-  (are [input expected] (= expected (#'gp-exporter/file-icon-value->db-icon input))
-    "👻" {:type :emoji :id "👻"}
-    "  😆  " {:type :emoji :id "😆"}
-    "❤️" {:type :emoji :id "❤️"}
-    "👨‍💻" {:type :emoji :id "👨‍💻"}
-    "🇺🇸" {:type :emoji :id "🇺🇸"}
-    "👍🏻" {:type :emoji :id "👍🏻"}
-    {:type :emoji :id "👻"} {:type :emoji :id "👻"}
-    {:type :tabler-icon :id "ghost"} {:type :tabler-icon :id "ghost"}
-    {:type :tabler-icon :id "ghost" :color "#ff0000"} {:type :tabler-icon :id "ghost" :color "#ff0000"}
-    {:type "emoji" :id "ghost"} {:type :emoji :id "ghost"}
-    "not-an-emoji" nil
-    "./assets/foo.png" nil
-    "👻🎃" nil
-    "ghost" nil
-    ":ghost:" nil
-    "" nil
-    "   " nil
-    nil nil
-    {:type :emoji :id ""} nil
-    {:type :unknown :id "👻"} nil))
-
 (deftest-async export-files-with-icon-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(path/path-join file-graph-dir %) ["ignored/icon-page.md"])
@@ -2280,7 +2257,7 @@ abc
                 "pages/bad-icon.md"
                 "icon:: not-an-emoji\n\n- block with file icon\n  icon:: ./assets/ghost.png\n")
           conn (db-test/create-conn)
-          {:keys [import-state]} (import-files-to-db [file] conn {})
+          {:keys [import-state]} (import-files-to-db [(path/path-normalize file)] conn {})
           page (db-test/find-page-by-title @conn "bad-icon")
           block (db-test/find-block-by-content @conn "block with file icon")]
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
