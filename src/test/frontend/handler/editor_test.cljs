@@ -2575,3 +2575,34 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(deftest db-collapsable-uses-property-keys-and-class-properties-test
+  (testing "own property-keys make a childless node collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "class-provided property-keys are collapsable even without a value"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block/tags [{:db/ident :user.class/c1}]
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "property idents on the worker map are used when property-keys is absent"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :user.property/p1 "filled"})))
+
+  (testing "query blocks stay collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "query"
+          :logseq.property/query {:block/title "q"}})))
+
+  (testing "tags or titles alone do not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :user.class/c1}]
+               :block.temp/property-keys [:block/tags]})))
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :logseq.class/Page}]})))))

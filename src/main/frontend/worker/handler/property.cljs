@@ -734,6 +734,18 @@
                    property-id))))
        distinct))
 
+(defn block-property-keys
+  "Own property idents plus class-provided property idents."
+  [db block]
+  (let [block-id (cond
+                   (number? block) block
+                   (map? block) (:db/id block)
+                   :else (:db/id (d/entity db block)))
+        own-keys (direct-block-property-ids db block-id)
+        class-keys (map :db/ident
+                        (:classes-properties (block-class-properties db (d/entity db block-id))))]
+    (vec (distinct (concat own-keys class-keys)))))
+
 (defn- property-has-closed-values?
   [db property]
   (boolean (seq (d/datoms db :avet :block/closed-value-property (:db/id property)))))
