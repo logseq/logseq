@@ -289,10 +289,11 @@
 
 (defn- node-fs-promises
   []
-  (try
-    (js/require "fs/promises")
-    (catch :default _
-      nil)))
+  (when (node-runtime?)
+    (try
+      (js/require "fs/promises")
+      (catch :default _
+        nil))))
 
 (defn- <request-import-file
   [file]
