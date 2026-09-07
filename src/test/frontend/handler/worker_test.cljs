@@ -138,4 +138,4 @@
                      (is nil (str "unexpected error: " error))))
           (p/finally (fn []
                        (file-graph-import/clear-file-graph-import-session!)
-                       (done))))))))
+                       (done)))))))
