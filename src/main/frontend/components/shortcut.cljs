@@ -639,11 +639,9 @@
                                        keys-to-strip))
               conflicts-by-id)]
     (when (seq conflict-updates)
-      (let [updated-ids (into #{} (map :action-id) conflict-updates)
-            undo-entries
+      (let [undo-entries
             (into [{:action-id action-id :previous-binding current-binding}]
-                  (for [conflicting-id (keys conflicts-by-id)
-                        :when (contains? updated-ids conflicting-id)]
+                  (for [{conflicting-id :action-id} conflict-updates]
                     {:action-id conflicting-id
                      :previous-binding (dh/shortcut-binding conflicting-id)}))]
         {:undo-entries undo-entries
