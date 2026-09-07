@@ -36,6 +36,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.emoji-data :as emoji-data]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
@@ -811,21 +812,24 @@
     (catch :default e
       (js/console.error "Translating linked reference filters failed with: " e))))
 
-(def ^:private emoji-icon-ids
+(def ^:private emoji-icons
   (delay
-    (into #{}
+    (into {}
           (mapcat (fn [emoji]
-                    (map #(gobj/get % "native")
-                         (array-seq (gobj/get emoji "skins")))))
-          (gobj/getValues (gobj/get (js/require "@emoji-mart/data") "emojis")))))
+                    (map-indexed
+                     (fn [skin-index skin]
+                       (let [native (gobj/get skin "native")]
+                         [native (cond-> {:type :emoji :id native}
+                                   (pos? skin-index) (assoc :skin (inc skin-index)))]))
+                     (array-seq (gobj/get emoji "skins")))))
+          (gobj/getValues (gobj/get emoji-data/data
+                                "emojis")))))
 
 (defn- file-icon-value->db-icon
   "Converts a file-graph `:icon` string to a DB icon when the emoji data supports it."
   [prop-value]
   (when (string? prop-value)
-    (let [icon-id (string/trim prop-value)]
-      (when (contains? @emoji-icon-ids icon-id)
-        {:type :emoji :id icon-id}))))
+    (get @emoji-icons (string/trim prop-value))))
 
 (defn- ignored-built-in-property-value
   [prop prop-value {:block/keys [title name]}]

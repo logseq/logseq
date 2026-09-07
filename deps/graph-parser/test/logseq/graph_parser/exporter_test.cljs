@@ -2252,6 +2252,14 @@ abc
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
         "importable emoji icons are not ignored")))
 
+(deftest-async export-files-preserves-icon-skin-tone
+  (p/let [file (write-temp-graph-file "pages/skin-tone.md" "icon:: 👍🏽\n\n- note\n")
+          conn (db-test/create-conn)
+          _ (import-files-to-db [(path/path-normalize file)] conn {})
+          page (db-test/find-page-by-title @conn "skin-tone")]
+    (is (= {:type :emoji :id "👍🏽" :skin 4}
+           (:logseq.property/icon (db-test/readable-properties page))))))
+
 (deftest-async export-files-with-unmappable-icon-properties
   (p/let [file (write-temp-graph-file
                 "pages/bad-icon.md"
