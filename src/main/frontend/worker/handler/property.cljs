@@ -779,6 +779,14 @@
   [db block-id property-id]
   (entity-direct-value db block-id property-id))
 
+(defn- positioned-property-empty?
+  "True when the block has no written value and the property has no default.
+  Class defaults such as Task status are not empty."
+  [db block-id property]
+  (and (nil? (block-direct-property-value db block-id (:db/ident property)))
+       (nil? (:logseq.property/default-value property))
+       (nil? (:logseq.property/scalar-default-value property))))
+
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
   (when-let [property (d/entity db property-id)]
@@ -788,7 +796,7 @@
        (not (false? (:logseq.property/public? property)))
        (= property-position position)
        (not (and (:logseq.property/hide-empty-value property)
-                 (nil? property-value)))
+                 (positioned-property-empty? db block-id property)))
        (not (:logseq.property/hide? property))
        (not (and
              (= property-position :block-below)
