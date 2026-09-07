@@ -64,9 +64,9 @@
            (server-list/read-entries file-path)))
     (is (not (fs/existsSync lock-file)))))
 
-(deftest lock-stale-treats-malformed-and-unreadable-locks-as-stale
+(deftest lock-stale-requires-an-observed-ownerless-lock
   (is (true? (#'server-list/lock-stale? {:parse-error (js/Error. "bad")})))
-  (is (true? (#'server-list/lock-stale? {:read-error (js/Error. "EPERM")})))
+  (is (false? (#'server-list/lock-stale? nil)))
   (is (true? (#'server-list/lock-stale? {:raw "" :metadata nil})))
   (is (true? (#'server-list/lock-stale? {:metadata {}})))
   (is (true? (#'server-list/lock-stale? {:metadata {:pid "12"}})))
@@ -90,20 +90,23 @@
       (is (not (fs/existsSync lock-file))
           label))))
 
-(deftest append-entry-repairs-unreadable-server-list-lock
+(deftest append-entry-preserves-unreadable-server-list-lock
   (let [root-dir (node-helper/create-tmp-dir "server-list-unreadable-lock")
         file-path (server-list/path root-dir)
-        lock-file (server-list/lock-path file-path)]
-    (fs/writeFileSync lock-file "{\"pid\":1}" "utf8")
-    (fs/chmodSync lock-file 8r000)
-    (try
-      (server-list/append-entry! file-path {:pid 123 :port 456})
-      (is (= [{:pid 123 :port 456}]
-             (server-list/read-entries file-path)))
-      (is (not (fs/existsSync lock-file)))
-      (finally
-        (when (fs/existsSync lock-file)
-          (fs/chmodSync lock-file 8r644))))))
+        lock-file (server-list/lock-path file-path)
+        read-file fs/readFileSync
+        read-error (doto (js/Error. "Permission denied") (aset "code" "EACCES"))]
+    (fs/writeFileSync lock-file "{}" "utf8")
+    (with-redefs [fs/readFileSync (fn [file & args]
+                                  (if (= file lock-file)
+                                    (throw read-error)
+                                    (apply read-file file args)))]
+      (is (identical? read-error
+                      (try
+                        (server-list/append-entry! file-path {:pid 123 :port 456})
+                        (catch :default e e)))))
+    (is (fs/existsSync lock-file))
+    (is (not (fs/existsSync file-path)))))
 
 (deftest append-entry-times-out-on-live-server-list-lock
   (let [root-dir (node-helper/create-tmp-dir "server-list-live-lock")
@@ -121,3 +124,36 @@
         (is (= lock-file (:lock-path (ex-data e))))
         (is (= lock-payload
                (.toString (fs/readFileSync lock-file) "utf8")))))))
+
+(deftest acquisition-publishes-complete-metadata
+  (let [root-dir (node-helper/create-tmp-dir "server-list-atomic-lock")
+        file-path (server-list/path root-dir)
+        lock-file (server-list/lock-path file-path)
+        write-metadata @#'server-list/write-lock-metadata!]
+    (with-redefs [server-list/write-lock-metadata!
+                  (fn [fd metadata]
+                    (is (not (fs/existsSync lock-file))
+                        "An acquiring writer must not publish an empty lock")
+                    (write-metadata fd metadata))]
+      (server-list/append-entry! file-path {:pid 123 :port 456}))
+    (is (= [{:pid 123 :port 456}] (server-list/read-entries file-path)))))
+
+(deftest missing-lock-read-preserves-a-new-holder
+  (let [root-dir (node-helper/create-tmp-dir "server-list-replaced-lock")
+        file-path (server-list/path root-dir)
+        lock-file (server-list/lock-path file-path)
+        owner (js/JSON.stringify #js {:pid (.-pid js/process) :lock-id "replacement"})
+        read-metadata @#'server-list/read-lock-metadata
+        first-read? (atom true)]
+    (fs/writeFileSync lock-file "{}")
+    (with-redefs [server-list/write-lock-timeout-ms 50
+                  server-list/read-lock-metadata
+                  (fn [file]
+                    (if (compare-and-set! first-read? true false)
+                      (do (fs/writeFileSync file owner) nil)
+                      (read-metadata file)))]
+      (is (= :server-list-lock-timeout
+             (try
+               (server-list/append-entry! file-path {:pid 123 :port 456})
+               (catch :default e (:code (ex-data e)))))))
+    (is (= owner (.toString (fs/readFileSync lock-file))))))

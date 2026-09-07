@@ -113,21 +113,16 @@
     (catch :default e
       (if (= "ENOENT" (.-code e))
         nil
-        {:read-error e}))))
-
-(defn- lock-pid
-  [lock-info]
-  (let [pid (get-in lock-info [:metadata :pid])]
-    (when (pos-int? pid)
-      pid)))
+        (throw e)))))
 
 (defn- lock-stale?
-  "True when the lock file cannot identify a still-running holder.
-  Malformed, empty, or unreadable locks are stale; a valid live pid is not."
+  "True for an observed malformed lock or a lock whose holder has exited."
   [lock-info]
-  (if-let [pid (lock-pid lock-info)]
-    (= :not-found (process-status pid))
-    true))
+  (let [pid (get-in lock-info [:metadata :pid])]
+    (and (some? lock-info)
+         (if (pos-int? pid)
+           (= :not-found (process-status pid))
+           true))))
 
 (defn- unlink-if-exists!
   [file-path]
@@ -147,8 +142,18 @@
              (:raw lock-info) (assoc :lock-raw (:raw lock-info)))))
 
 (defn- write-lock-metadata!
-  [fd metadata]
-  (fs/writeFileSync fd (js/JSON.stringify (clj->js metadata)) "utf8"))
+  [file-path metadata]
+  (fs/writeFileSync file-path (js/JSON.stringify (clj->js metadata))
+                    #js {:encoding "utf8" :flag "wx"}))
+
+(defn- publish-write-lock!
+  [lock-file metadata]
+  (let [tmp-file (str lock-file "." (:lock-id metadata) ".tmp")]
+    (try
+      (write-lock-metadata! tmp-file metadata)
+      (fs/linkSync tmp-file lock-file)
+      (finally
+        (unlink-if-exists! tmp-file)))))
 
 (defn- acquire-write-lock!
   [file-path]
@@ -161,19 +166,10 @@
                       :lock-id lock-id
                       :created-at (.toISOString (js/Date.))}
             result (try
-                     (let [fd (fs/openSync lock-file "wx")
-                           write-error (try
-                                         (write-lock-metadata! fd metadata)
-                                         nil
-                                         (catch :default e
-                                           e))]
-                       (fs/closeSync fd)
-                       (when write-error
-                         (unlink-if-exists! lock-file)
-                         (throw write-error))
-                       {:file-path file-path
-                        :lock-path lock-file
-                        :metadata metadata})
+                     (publish-write-lock! lock-file metadata)
+                     {:file-path file-path
+                      :lock-path lock-file
+                      :metadata metadata}
                      (catch :default e
                        (if (= "EEXIST" (.-code e))
                          (let [lock-info (read-lock-metadata lock-file)]
