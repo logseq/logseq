@@ -10,6 +10,7 @@
             [frontend.context.i18n :refer [t t-en]]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -291,14 +292,17 @@
     (notification/show! msg :error)
     (notification/show! msg :warning false)))
 
-(defn- electron-lazy-import?
-  [files]
-  (and (util/electron?)
-       (boolean (some :fs-path files))))
-
 (defn- import-file-descriptor
   [file]
   (select-keys file [:path :fs-path :last-modified-at]))
+
+(defn- import-files-by-path
+  [files]
+  (into {}
+        (keep (fn [file]
+                (when-let [path (:path file)]
+                  [path file])))
+        files))
 
 (defn- <serialize-import-file
   [file]
@@ -317,11 +321,16 @@
         (p/resolved (assoc (select-keys file [:path :fs-path])
                            :file/content content))))))
 
-(defn- <serialize-import-files
+(defn- start-file-graph-import-session!
   [files]
-  (if (electron-lazy-import? files)
-    (p/resolved (mapv import-file-descriptor files))
-    (p/all (mapv <serialize-import-file files))))
+  (let [files-by-path (import-files-by-path files)]
+    (file-graph-import/set-file-graph-import-session!
+     {:<read-file (fn [path]
+                    (if-let [file (get files-by-path path)]
+                      (<serialize-import-file file)
+                      (p/rejected (ex-info "import file not found"
+                                           {:code :import-file-not-found
+                                            :path path}))))})))
 
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
@@ -416,6 +425,7 @@
         expected-repo (str config/db-version-prefix graph-name)]
     (state/set-state! :graph/importing :file-graph)
     (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
+    (start-file-graph-import-session! *files)
     (open-import-indicator!)
     (-> (p/let [start-time (t/now)
                 created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
@@ -425,10 +435,10 @@
                             {:code :file-graph-import/graph-not-created
                              :expected expected-repo
                              :repo repo})))
-          (p/let [serialized-files (<serialize-import-files *files)
-                  serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+          (p/let [file-metas (mapv import-file-descriptor *files)
+                  serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
                   options (build-file-graph-worker-options user-options config/config-default-content)
-                  import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+                  import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
                   ;; Import txs do not broadcast renderer deltas. Restore after
                   ;; import so this client sees pages and refs. Keep importing
                   ;; set so :graph/restored does not start a second search build.
@@ -436,7 +446,9 @@
             (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
             (finish-file-graph-import! repo import-result)))
         (p/catch (fn [error]
-                   (abort-file-graph-import! error previous-repo))))))
+                   (abort-file-graph-import! error previous-repo)))
+        (p/finally (fn []
+                     (file-graph-import/clear-file-graph-import-session!))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
