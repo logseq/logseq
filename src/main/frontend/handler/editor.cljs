@@ -375,7 +375,7 @@
        (or (= (block-parent-id source-block) (block-parent-id target-block))
            (not (worker-has-children? source-block)))))
 
-(declare save-block-aux! save-current-block! <left-sibling-or-parent)
+(declare save-block-aux! save-current-block! <left-sibling-or-parent escape-editing)
 
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
@@ -429,15 +429,13 @@
                      (some-> current-page parse-uuid))]
     (= uuid block-id)))
 
-(defn- insert-new-block-as-sibling?
-  "URL property values cannot own children, so Enter must insert a sibling even
-  when the value is treated as the zoomed/page root."
-  [block block-self?]
-  (cond
-    (entity/url-property-value? block) true
-    (get-in block [:block/link :block/collapsed?]) true
-    block-self? false
-    :else nil))
+(defn- skip-insert-for-url-property-value!
+  "URL property values are leaves. Save the full title and exit instead of
+  creating a child or sibling."
+  [block]
+  (when (entity/url-property-value? block)
+    (escape-editing)
+    (p/resolved [nil nil nil])))
 
 (defn- start-pending-new-block!
   []
@@ -520,29 +518,30 @@
 
 (defn insert-new-block-before-block-aux!
   [config block value]
-  (let [edit-input-id (state/get-edit-input-id)
-        input (gdom/getElement edit-input-id)
-        input-text-selected? (util/input-text-selected? input)
-        new-m {:block/uuid (ldb/new-block-id)
-               :block/title ""}
-        prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                              new-m)
-                       (wrap-parse-block))
-        repo (state/get-current-repo)]
-    (when input-text-selected?
-      (let [selection-start (util/get-selection-start input)
-            selection-end (util/get-selection-end input)
-            [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
-        (state/set-edit-content! edit-input-id new-content)))
-    (p/let [left-or-parent (<left-sibling-or-parent repo block)]
-      (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
-            container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                             (:container-id config))
-            config (assoc config :editor/edit-block-fn
-                          (inserted-block-edit-fn block prev-block container-id))
-            result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                             :keep-uuid? true})]
-        [result sibling? prev-block]))))
+  (or (skip-insert-for-url-property-value! block)
+      (let [edit-input-id (state/get-edit-input-id)
+            input (gdom/getElement edit-input-id)
+            input-text-selected? (util/input-text-selected? input)
+            new-m {:block/uuid (ldb/new-block-id)
+                   :block/title ""}
+            prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                  new-m)
+                           (wrap-parse-block))
+            repo (state/get-current-repo)]
+        (when input-text-selected?
+          (let [selection-start (util/get-selection-start input)
+                selection-end (util/get-selection-end input)
+                [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
+            (state/set-edit-content! edit-input-id new-content)))
+        (p/let [left-or-parent (<left-sibling-or-parent repo block)]
+          (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
+                container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                 (:container-id config))
+                config (assoc config :editor/edit-block-fn
+                              (inserted-block-edit-fn block prev-block container-id))
+                result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                                 :keep-uuid? true})]
+            [result sibling? prev-block])))))
 
 ;; This used to be a list of file attributes. Unclear if remaining ones should be removed
 (def retract-attributes
@@ -557,31 +556,32 @@
    {:block/keys [uuid]
     :as block}
    value]
-  (let [repo (state/get-current-repo)
-        block-self? (block-self-alone-when-insert? config uuid)
-        input (gdom/getElement (state/get-edit-input-id))
-        selection-start (util/get-selection-start input)
-        selection-end (util/get-selection-end input)]
-    (p/let [worker-result (when-let [block-id (:db/id block)]
-                            (db-async/<get-block-with-children
-                             repo block-id {:children? true}))]
-      (let [block (block-with-worker-children block worker-result)
-            [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-            current-block (current-block-with-title block fst-block-text)
-            current-block (apply dissoc current-block retract-attributes)
-            new-m {:block/uuid (ldb/new-block-id)
-                   :block/title snd-block-text}
-            next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                                  new-m)
-                           (wrap-parse-block))
-            sibling? (insert-new-block-as-sibling? block block-self?)
-            container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                             (:container-id config))
-            config (assoc config :editor/edit-block-fn
-                          (inserted-block-edit-fn current-block next-block container-id))
-            result (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                                            :keep-uuid? true})]
-        [result sibling? next-block]))))
+  (or (skip-insert-for-url-property-value! block)
+      (let [repo (state/get-current-repo)
+            block-self? (block-self-alone-when-insert? config uuid)
+            input (gdom/getElement (state/get-edit-input-id))
+            selection-start (util/get-selection-start input)
+            selection-end (util/get-selection-end input)]
+        (p/let [worker-result (when-let [block-id (:db/id block)]
+                                (db-async/<get-block-with-children
+                                 repo block-id {:children? true}))]
+          (let [block (block-with-worker-children block worker-result)
+                [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                current-block (current-block-with-title block fst-block-text)
+                current-block (apply dissoc current-block retract-attributes)
+                new-m {:block/uuid (ldb/new-block-id)
+                       :block/title snd-block-text}
+                next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                      new-m)
+                               (wrap-parse-block))
+                sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
+                container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                 (:container-id config))
+                config (assoc config :editor/edit-block-fn
+                              (inserted-block-edit-fn current-block next-block container-id))
+                result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                                :keep-uuid? true})]
+            [result sibling? next-block])))))
 
 (defn clear-when-saved!
   []
@@ -678,8 +678,11 @@
   ([state block-value _right-sibling]
    (when (not config/publishing?)
      (when state
-       (start-pending-new-block!)
-       (let [{:keys [block value config]} state
+       (if (entity/url-property-value? (:block state))
+         (escape-editing)
+         (do
+           (start-pending-new-block!)
+           (let [{:keys [block value config]} state)
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
              block-self? (block-self-alone-when-insert? config block-id)
@@ -708,12 +711,12 @@
 
                          :else
                          insert-new-block-aux!)]
-         (-> (p/let [insert-result (insert-fn config block'' value)
+             (-> (p/let [insert-result (insert-fn config block'' value)
                      _ (first insert-result)]
                (clear-when-saved!))
              (p/catch (fn [error]
                         (clear-pending-new-block!)
-                        (throw error)))))))))
+                        (throw error)))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -2621,7 +2624,8 @@
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
-            (get-in state [:config :page-title?])
+            (or (get-in state [:config :page-title?])
+                (entity/url-property-value? (:block state)))
             (do
               (when e (.preventDefault e))
               (escape-editing))
