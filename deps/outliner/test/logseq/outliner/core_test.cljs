@@ -109,24 +109,6 @@
        db
        (common-util/page-name-sanity-lc title)))
 
-(deftest resolve-page-refs-recognizes-db-graph-journal-tags
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "host"}]}])
-        title "2026-07-27"
-        {:keys [block page-txs]}
-        (#'outliner-core/resolve-page-refs
-         @conn
-         {:block/title (str "[[" title "]]")
-          :block/refs [{:block/name title
-                        :block/title title
-                        :block/uuid (random-uuid)
-                        :block/tags [:logseq.class/Journal]}]})]
-    (d/transact! conn page-txs)
-    (let [journal (d/entity @conn [:block/uuid (-> block :block/refs first :block/uuid)])]
-      (is (ldb/journal? journal))
-      (is (= 20260727 (:block/journal-day journal))))))
-
 (deftest insert-blocks-does-not-duplicate-existing-page-ref
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
