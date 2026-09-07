@@ -605,6 +605,38 @@
                  (canonical-block @conn (d/entity @conn (:db/id with-class)))))
           "Canonical renderer maps persist class-provided property keys."))))
 
+(deftest canonical-block-omits-unset-property-default-value-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default
+                                     :build/properties
+                                     {:logseq.property/default-value "fallback"}
+                                     :build/properties-ref-types {:entity :number}}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "unset"}
+                            {:block/title "set"
+                             :build/properties {:note "written"}}]}]})
+          db @conn
+          unset (db-test/find-block-by-content db "unset")
+          set-block (db-test/find-block-by-content db "set")
+          _ (d/transact! conn [{:db/id (:db/id unset) :block/tx-id 1}
+                               {:db/id (:db/id set-block) :block/tx-id 1}])
+          db @conn
+          unset (d/entity db (:db/id unset))
+          set-block (d/entity db (:db/id set-block))
+          property (d/entity db :user.property/note)
+          unset-map (canonical-block db unset)
+          set-map (canonical-block db set-block)]
+      (is (some? (:logseq.property/default-value property))
+          "The property has a default value configured.")
+      (is (empty? (d/datoms db :eavt (:db/id unset) :user.property/note))
+          "The unset block has no own property datom.")
+      (is (not (contains? unset-map :user.property/note))
+          "Canonical row maps used by table cells omit unset properties even when the property has a default (db-test#1160).")
+      (is (some? (get set-map :user.property/note))
+          "A row that has the property still carries its written value."))))
+
 (defn- cover-row-fixture
   []
   (let [conn (db-test/create-conn)

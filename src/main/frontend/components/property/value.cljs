@@ -2261,21 +2261,29 @@
        (multiple-values-inner block property value' opts)))
 
 (defn- resolved-property-value-for-render
-  [block property multiple-values?]
-  (let [v (get block (:db/ident property))
-        block-loaded? (some? (:block/uuid block))]
-    (or
-     (cond
-       (and multiple-values? (or (set? v) (coll? v) (nil? v)))
-       v
-       multiple-values?
-       #{v}
-       (set? v)
-       (first v)
-       :else
-       v)
-     (when block-loaded?
-       (:logseq.property/default-value property)))))
+  "Resolve the value to render for a property cell.
+
+  Table/query cells receive canonical row maps that only include properties
+  actually set on the entity. Do not fall back to the property default there —
+  an unset column must stay empty (db-test#1160). Non-table surfaces still
+  show the default for loaded blocks (class property rows, block-below pills)."
+  ([block property multiple-values?]
+   (resolved-property-value-for-render block property multiple-values? {}))
+  ([block property multiple-values? {:keys [table-view?]}]
+   (let [v (get block (:db/ident property))
+         block-loaded? (some? (:block/uuid block))]
+     (or
+      (cond
+        (and multiple-values? (or (set? v) (coll? v) (nil? v)))
+        v
+        multiple-values?
+        #{v}
+        (set? v)
+        (first v)
+        :else
+        v)
+      (when (and block-loaded? (not table-view?))
+        (:logseq.property/default-value property))))))
 
 (hsx/defc ^:large-vars/cleanup-todo property-value
   [block property {:keys [show-tooltip? p-block p-property editing?]
@@ -2293,7 +2301,7 @@
             editor-id (str dom-id "-editor")
             type (:logseq.property/type property)
             multiple-values? (db-property/many? property)
-            v (resolved-property-value-for-render block property multiple-values?)
+            v (resolved-property-value-for-render block property multiple-values? opts)
             self-value-or-embedded? (fn [v]
                                       (or (= (:db/id v) (:db/id block))
                                           ;; property value self embedded

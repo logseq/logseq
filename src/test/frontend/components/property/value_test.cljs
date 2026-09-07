@@ -122,23 +122,45 @@
                           (is false (str error))
                           (done)))))))
 
+(def ^:private default-status-property
+  {:db/ident :logseq.property/status
+   :logseq.property/default-value {:db/id 3
+                                   :db/ident :logseq.property/status.todo
+                                   :block/title "Todo"}})
+
+(def ^:private loaded-block-without-status
+  {:db/id 1
+   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"})
+
 (deftest resolved-property-value-for-render-skips-default-for-placeholder-row-test
-  (let [property {:db/ident :logseq.property/status
-                  :logseq.property/default-value {:db/id 3
-                                                  :db/ident :logseq.property/status.todo
-                                                  :block/title "Todo"}}
-        placeholder-block {:db/id 1}]
-    (is (nil? (#'property-value/resolved-property-value-for-render placeholder-block property false)))))
+  (let [placeholder-block {:db/id 1}]
+    (is (nil? (#'property-value/resolved-property-value-for-render placeholder-block default-status-property false)))))
 
 (deftest resolved-property-value-for-render-uses-default-for-loaded-block-test
-  (let [property {:db/ident :logseq.property/status
-                  :logseq.property/default-value {:db/id 3
-                                                  :db/ident :logseq.property/status.todo
-                                                  :block/title "Todo"}}
-        loaded-block {:db/id 1
-                      :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
-    (is (= (:logseq.property/default-value property)
-           (#'property-value/resolved-property-value-for-render loaded-block property false)))))
+  (is (= (:logseq.property/default-value default-status-property)
+         (#'property-value/resolved-property-value-for-render loaded-block-without-status default-status-property false)))
+      "Non-table surfaces still show the property default for a loaded block."))
+
+(deftest resolved-property-value-for-render-skips-default-for-table-view-unset-property-test
+  (is (nil? (#'property-value/resolved-property-value-for-render
+             loaded-block-without-status default-status-property false {:table-view? true}))
+      "Table/query cells must stay empty when the row does not have the property (db-test#1160)."))
+
+(deftest resolved-property-value-for-render-keeps-set-value-in-table-view-test
+  (let [doing {:db/id 4
+               :db/ident :logseq.property/status.doing
+               :block/title "Doing"}
+        loaded-block (assoc loaded-block-without-status :logseq.property/status doing)]
+    (is (= doing
+           (#'property-value/resolved-property-value-for-render
+            loaded-block default-status-property false {:table-view? true}))
+        "Table/query cells still render the value that is actually set on the row.")))
+
+(deftest resolved-property-value-for-render-skips-default-for-table-view-many-cardinality-test
+  (let [many-property (assoc default-status-property :db/cardinality :db.cardinality/many)]
+    (is (nil? (#'property-value/resolved-property-value-for-render
+               loaded-block-without-status many-property true {:table-view? true}))
+        "Many-cardinality table cells also stay empty when the property is unset.")))
 
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]
