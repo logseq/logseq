@@ -105,7 +105,7 @@ html.is-mobile .ls-block-content-indent {
   }
 
   .katex svg {
-    width: auto;
+    width: 100%;
     height: inherit;
   }
 }

@@ -2407,16 +2407,8 @@
   (some (fn [form]
           (when (and (vector? form)
                      (= "Displayed_Math" (first form)))
-            (not-empty (string/trim (str (second form))))))
+            (not-empty (string/trim (second form)))))
         (tree-seq coll? seq ast)))
-
-(defn- page-ref-math-formula
-  "Inner formula for a latex-only block shown as a DB page-ref chip."
-  [block]
-  (or (when (= :math (:logseq.property.node/display-type block))
-        (not-empty (string/trim (str (:block/title block)))))
-      (ast-displayed-math-formula (:block.temp/ast-body block))
-      (block/displayed-math-formula (:block/title block))))
 
 (defn- page-ref-math-cp
   [formula]
@@ -2495,7 +2487,7 @@
              (video-inline-segments-cp config' block-ast-title)
 
              (and (:page-ref? config) (empty? block-ast-title))
-             (if-let [formula (page-ref-math-formula block)]
+             (if-let [formula (ast-displayed-math-formula (:block.temp/ast-body block))]
                [(page-ref-math-cp formula)]
                (map-inline config' block-ast-title))
 

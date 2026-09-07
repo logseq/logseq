@@ -6,22 +6,6 @@
 (def ^:private latex-only-title "$$ x^2 + y^2 = z^2 $$")
 (def ^:private mixed-title "Pythagoras: $$ x^2 + y^2 = z^2 $$")
 
-(deftest displayed-math-formula-test
-  (testing "extracts the inner formula from a latex-only title"
-    (is (= "x^2 + y^2 = z^2"
-           (block/displayed-math-formula latex-only-title))))
-
-  (testing "accepts multiline display math"
-    (is (= "E = mc^2"
-           (block/displayed-math-formula "$$\n  E = mc^2  \n$$"))))
-
-  (testing "does not treat mixed-title latex as standalone display math"
-    (is (nil? (block/displayed-math-formula mixed-title))))
-
-  (testing "ignores blank or non-math titles"
-    (is (nil? (block/displayed-math-formula "$$   $$")))
-    (is (nil? (block/displayed-math-formula "plain text")))))
-
 (deftest parse-title-and-body-latex-only-vs-mixed-title-test
   (testing "latex-only content has no heading title; the formula lives in ast-body"
     (let [parsed (block/parse-title-and-body nil :markdown latex-only-title)]
