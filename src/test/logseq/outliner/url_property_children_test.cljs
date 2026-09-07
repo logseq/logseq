@@ -86,8 +86,8 @@
         (is (= original-parent-id (:db/id (:block/parent page-child'))))
         (is (= original-left (:db/id (ldb/get-left-sibling page-child')))))))
 
-  (testing "sibling insert next to a URL property value is rejected")
-    (let [conn (db-test/create-conn-with-blocks
+  (testing "sibling insert next to a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks)
                 {:properties {:url {:logseq.property/type :url}}
                  :pages-and-blocks
                  [{:page {:block/title "page1"
@@ -108,7 +108,7 @@
         (is (empty? (child-titles url-value')))
         (is (= (:db/id (:block/parent url-value'))
                (:db/id (:block/parent page-child')))
-            "Existing page children stay in place"))))))
+            "Existing page children stay in place")))))
 
 (deftest default-property-value-allows-children
   (testing "insert as child of a default/text property value is allowed"
