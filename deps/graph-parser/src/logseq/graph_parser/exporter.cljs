@@ -1219,36 +1219,41 @@
            :path (path/path-join zotero-data-dir "storage" id label)
            :base label})))))
 
-(defn- http-url-protocol?
-  [protocol]
-  (contains? #{"http" "https"} protocol))
+(defn- remote-http-url?
+  [s]
+  (boolean (and (string? s) (re-find #"^https?://" s))))
 
 (defn- link-map->url
-  "Reconstruct a URL from an mldoc Complex link map.
-   file, http, and https PDF targets can become Assets during import."
+  "Reconstruct a file, HTTP, or HTTPS URL from an mldoc Complex link map."
   [m]
-  (when (and (map? m) (string? (:protocol m)) (string? (:link m)))
-    (cond
-      (= "file" (:protocol m))
-      (str "file://" (:link m))
-      (http-url-protocol? (:protocol m))
-      (str (:protocol m) "://" (:link m)))))
+  (when (and (map? m) (contains? #{"file" "http" "https"} (:protocol m))
+             (string? (:link m)))
+    (str (:protocol m) "://" (:link m))))
 
 (defn- external-pdf-url?
   [s]
   (and (string? s)
        (or (string/starts-with? s "file://")
-           (boolean (re-find #"^https?://" s)))))
+           (remote-http-url? s))))
 
 (defn- windows-drive-path?
   [s]
   (boolean (and (string? s) (re-find #"^[a-zA-Z]:[/\\]" s))))
 
-(defn- pdf-link-url?
-  [url]
-  (and (string? url)
-       (string? (path/filename url))
-       (= "pdf" (path/file-ext url))))
+(defn- pdf-target-path
+  [target]
+  (if (remote-http-url? target)
+    (try
+      (.-pathname (js/URL. target))
+      (catch :default _ nil))
+    target))
+
+(defn- pdf-file?
+  [target]
+  (let [path (pdf-target-path target)]
+    (and (string? path)
+         (string? (path/filename path))
+         (= "pdf" (path/file-ext path)))))
 
 (defn- file-url->path
   [file-url]
@@ -1280,7 +1285,7 @@
                   (and (map? path-or-map) (= "zotero" (:protocol path-or-map)) (string? (:link path-or-map)))
                   (:link (get-zotero-local-pdf-path config (second x)))
                   :else
-                  (pdf-link-url? (link-map->url path-or-map)))))
+                  (pdf-file? (link-map->url path-or-map)))))
          (swap! results update :asset-links conj x)
          (and (vector? x)
               (= "Macro" (first x))
@@ -1438,12 +1443,6 @@
     (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])
     (:block/name (:block/parent block))
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
-
-(defn- pdf-file?
-  [path]
-  (and (string? path)
-       (string? (path/filename path))
-       (= "pdf" (some-> path path/file-ext string/lower-case))))
 
 (defn asset-path->name
   "Given an asset's relative or full path, create a unique name for identifying an asset.
@@ -1634,7 +1633,7 @@
                                 (or (external-pdf-url? path*)
                                     (windows-drive-path? path*)))
                        path*))
-        remote-url? (and (string? link-url) (boolean (re-find #"^https?://" link-url)))
+        remote-url? (remote-http-url? link-url)
         file-url (when (and (string? link-url) (string/starts-with? link-url "file://"))
                    link-url)
         zotero-path-data (when (map? path*)
@@ -1657,7 +1656,7 @@
                                    zotero-asset? zotero-path-data
                                    remote-url? {:path link-url
                                                 :link link-url
-                                                :base (path/filename link-url)}
+                                                :base (path/filename (pdf-target-path link-url))}
                                    file-url {:path (file-url->path file-url)
                                              :link file-url
                                              :base (path/filename file-url)}
@@ -1668,7 +1667,7 @@
         asset-name (cond
                      linked-path base
                      zotero-asset? (or (get zotero-imported-files (last (string/split link #"/"))) base)
-                     :else (some-> path asset-path->name))
+                     :else (some-> path pdf-target-path asset-path->name))
         path (cond
                linked-path path
                (and zotero-asset? asset-name) (string/replace path #"[^/]+$" asset-name)
@@ -1683,10 +1682,6 @@
      :asset-path asset-path
      :path path
      :zotero-asset? zotero-asset?}))
-
-(defn- remote-http-url?
-  [s]
-  (boolean (and (string? s) (re-find #"^https?://" s))))
 
 (defn- external-linked-pdf?
   [asset-link-or-name path]
@@ -1706,7 +1701,7 @@
           :external-url (or asset-link-or-name path)
           :external-file-name asset-path}))
 
-(defn- ensure-asset-data!
+(defn- <ensure-asset-data!
   [assets asset-link-or-name path asset-path <get-file-stat]
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
@@ -1767,7 +1762,7 @@
                                   (fn [asset-link]
                                     (p/let [{:keys [asset-link-or-name asset-name asset-path path zotero-asset?]}
                                             (resolve-asset-data asset-link user-config linked-files linked-base-dir zotero-imported-files)
-                                            _ (ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
+                                            _ (<ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
                                             asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
                                       (if asset-data
                                         (cond
@@ -1837,14 +1832,7 @@
 (defn- hls-extracted-pdf-urls
   [extracted]
   (->> (concat (:pages extracted) (:blocks extracted))
-       (mapcat (fn [node]
-                 (concat (vals (:block/properties node))
-                         (vals (:block/properties-text-values node)))))
-       (mapcat (fn [v]
-                 (cond
-                   (string? v) [v]
-                   (and (coll? v) (not (map? v))) (filter string? v)
-                   :else [])))
+       (mapcat #(vals (select-keys (:block/properties-text-values %) [:file :file-path])))
        (keep pdf-url-from-text)
        distinct))
 
@@ -2665,7 +2653,7 @@
                 (swap! (:ignored-files import-state) conj
                        {:path file :reason :unsupported-file-format})))]
     ;; Annotation markdown pages are saved for later as they are dependant on the asset being annotated
-    (if (string/starts-with? (str (path/basename file)) "hls__")
+    (if (hls-annotation-md-file? file)
       (do
         (swap! (:pdf-annotation-pages import-state) assoc (node-path/basename file) extracted)
         nil)
