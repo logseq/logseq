@@ -3853,6 +3853,7 @@
                           (filter db-property/property? (keys block)))
         properties (->> property-keys
                         (remove db-property/db-attribute-properties)
+                        (remove #{:logseq.property/created-by-ref})
                         (remove nil?))]
     (or (seq properties)
         (:logseq.property/query block))))
