@@ -925,6 +925,7 @@
  :import/file-finished "导入完成！"
  :import/file-to-db-desc "将基于文件的 Logseq 知识库文件夹导入到新的 DB 知识库"
  :import/file-to-db-title "文件到 DB 知识库"
+ :import/finalizing "正在准备导入的块"
  :import/graph-name-conflict "已存在同名图谱，请指定其他名称！"
  :import/graph-name-placeholder "图谱名称"
  :import/ignored-assets "导入跳过了 {1} 个资源。详情请查看 JavaScript 控制台。"
@@ -957,6 +958,7 @@
  :import/tags-case-insensitive "标签不区分大小写"
  :import/title "导入"
  :import/unexpected-error "意外错误：{1}"
+ :import/validating "正在验证导入的图谱"
  :import/zip-import-error "压缩包导入失败：{1}"
  :import/zip-missing-db-sqlite "压缩包缺少 db.sqlite。请检查归档结构。"
 

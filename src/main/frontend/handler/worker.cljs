@@ -35,6 +35,9 @@
                              content)]
     (notification/show! translated-content status clear? uid timeout close-cb)))
 
+(defmethod handle :set-ui-state [_ _worker [path value]]
+  (state/set-state! path value))
+
 (defmethod handle :log [_ _worker [name level data]]
   (log/log name level data))
 

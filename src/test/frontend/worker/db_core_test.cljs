@@ -2581,58 +2581,76 @@
 
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
-         (restoring-worker-state
-          (fn []
-            (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
-                  conn (d/create-conn db-schema/schema)
-                  pipeline-before @ldb/*transact-pipeline-fn
-                  renderer-payloads (atom [])
-                  config-file {:path "logseq/config.edn"
-                               :file/content "{}"}
-                  files [config-file
-                         {:path "pages/Home.md"
-                          :file/content "- imported block"}]]
-              (is (fn? import-file-graph!))
-              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-              (p/with-redefs
-                [db-sync/update-local-sync-checksum! (fn [& _] nil)
-                 db-sync/handle-local-tx! (fn [& _] nil)
-                 shared-service/broadcast-to-clients!
-                 (fn [event payload]
-                   (when (= :sync-db-changes event)
-                     (swap! renderer-payloads conj payload)))]
-                (db-listener/listen-db-changes! test-repo conn
-                                                :handler-keys [:sync-db-to-main-thread])
-                (->
-                 (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})
-                         page (some->> (d/q '[:find [?e ...]
-                                               :where [?e :block/name "home"]]
-                                             @conn)
-                                             first
-                                        (d/entity @conn))
-                         block (db-test/find-block-by-content @conn "imported block")
-                         published-block-uuids
-                         (into #{}
-                               (mapcat #(keys (get-in % [:delta :blocks])))
-                               @renderer-payloads)]
-                   (is (= #{"pages/Home.md" "logseq/config.edn"}
-                          (set (map :path (:files result)))))
-                   (is (= "Home" (:block/title page)))
-                   (is (= "imported block" (:block/title block)))
-                   (doseq [entity [page block]]
-                     (is (nat-int? (:block/tx-id entity)))
-                     (is (= (:block/uuid entity)
-                            (:block/uuid (block-handler/canonical-block @conn entity))))
-                     (is (contains? published-block-uuids (:block/uuid entity))
-                         "Live file imports must publish complete canonical replacements.")))
-                 (p/catch
-                  (fn [error]
-                    (is false (str error))))
-                 (p/finally (fn []
-                              (reset! ldb/*transact-pipeline-fn pipeline-before)
-                              (done))))))))))
+         (-> (restoring-worker-state
+              (fn []
+                (let [import-file-graph! (get @thread-api/*thread-apis :thread-api/import-file-graph)
+                      conn (d/create-conn db-schema/schema)
+                      pipeline-before @ldb/*transact-pipeline-fn
+                      renderer-payloads (atom [])
+                      finalization-progress (atom [])
+                      yielded? (atom false)
+                      config-file {:path "logseq/config.edn"
+                                   :file/content "{}"}
+                      files [config-file
+                             {:path "pages/Home.md"
+                              :file/content (str "- imported block\n"
+                                                 (string/join "\n" (map #(str "- block " %) (range 260))))}]]
+                  (is (fn? import-file-graph!))
+                  (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+                  (reset! worker-state/*datascript-conns {test-repo conn})
+                  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+                  (p/with-redefs
+                    [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                     db-sync/handle-local-tx! (fn [& _] nil)
+                     shared-service/broadcast-to-clients!
+                     (fn [event payload]
+                       (when (= :sync-db-changes event)
+                         (swap! renderer-payloads conj payload)))]
+                    (db-listener/listen-db-changes! test-repo conn
+                                                    :handler-keys [:sync-db-to-main-thread])
+                    (->
+                     (p/let [result (import-file-graph!
+                                     test-repo config-file files
+                                     {:user-options {}
+                                      :set-ui-state
+                                      (fn [path value]
+                                        (when (= path [:graph/importing-state])
+                                          (swap! finalization-progress conj [value @yielded?])
+                                          (reset! yielded? false)
+                                          (js/setTimeout #(reset! yielded? true) 0)))})
+                             page (some->> (d/q '[:find [?e ...]
+                                                   :where [?e :block/name "home"]]
+                                                 @conn)
+                                                 first
+                                            (d/entity @conn))
+                             block (db-test/find-block-by-content @conn "imported block")
+                             published-block-uuids
+                             (into #{}
+                                   (mapcat #(keys (get-in % [:delta :blocks])))
+                                   @renderer-payloads)]
+                       (is (= #{"pages/Home.md" "logseq/config.edn"}
+                              (set (map :path (:files result)))))
+                       (is (= "Home" (:block/title page)))
+                       (is (= "imported block" (:block/title block)))
+                       (is (< 2 (count @renderer-payloads))
+                           "Large imports must publish bounded batches instead of one graph-wide replacement.")
+                       (is (every? second (rest @finalization-progress))
+                           "Worker timers must run between finalization batches.")
+                       (let [progress (map first @finalization-progress)]
+                         (is (= 0 (:current-idx (first progress))))
+                         (is (= (:total (last progress)) (:current-idx (last progress)))))
+                       (doseq [entity [page block]]
+                         (is (nat-int? (:block/tx-id entity)))
+                         (is (= (:block/uuid entity)
+                                (:block/uuid (block-handler/canonical-block @conn entity))))
+                         (is (contains? published-block-uuids (:block/uuid entity))
+                             "Live file imports must publish complete canonical replacements.")))
+                     (p/catch
+                      (fn [error]
+                        (is false (str error))))
+                     (p/finally (fn []
+                                  (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+             (p/finally (fn [] (done))))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state

@@ -265,8 +265,10 @@
                                      :asset-type asset-type
                                      :payload payload}))))))
 
-(defn- finalize-import-render-revisions!
-  [conn]
+(def ^:private import-render-batch-size 128)
+
+(defn- <finalize-import-render-revisions!
+  [conn set-ui-state]
   (let [db @conn
         entity-ids (d/q '[:find [?e ...]
                           :where
@@ -274,31 +276,47 @@
                           [?e :block/title]
                           [(missing? $ ?e :block/tx-id)]]
                         db)]
-    (when (seq entity-ids)
-      (let [tx-id (inc (:max-tx db))]
-        (ldb/transact! conn
-                       (mapv (fn [entity-id]
-                               {:db/id entity-id
-                                :block/tx-id tx-id})
-                             entity-ids)
-                       {::gp-exporter/imported-data? true})))))
+    ;; Each transaction builds canonical renderer replacements synchronously.
+    ;; Yield between batches so large imports cannot starve worker requests.
+    (p/loop [batches (partition-all import-render-batch-size entity-ids)
+             completed 0]
+      (set-ui-state [:graph/importing-state]
+                    {:label :import/finalizing
+                     :current-idx completed
+                     :total (count entity-ids)})
+      (when-let [batch (first batches)]
+        (p/let [_ (p/delay 0)
+                tx-id (inc (:max-tx @conn))
+                _ (ldb/transact! conn
+                                 (mapv (fn [entity-id]
+                                         {:db/id entity-id
+                                          :block/tx-id tx-id})
+                                       batch)
+                                 {::gp-exporter/imported-data? true})
+                completed' (+ completed (count batch))]
+          (p/recur (next batches) completed'))))))
 
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [notifications (atom [])
           staged-assets (atom [])
+          set-ui-state (or (:set-ui-state opts)
+                           (fn [path value]
+                             (shared-service/broadcast-to-clients! :set-ui-state [path value])))
           options (-> opts
-                      (assoc :notify-user #(swap! notifications conj %)
+                      (assoc :set-ui-state set-ui-state
+                             :notify-user #(swap! notifications conj %)
                              :log-fn (fn [& args]
                                        (log/info :import-file-graph {:args args}))
                              :<read-file (fn [file] (p/resolved (file-content file)))
                              :<get-file-stat (constantly nil)
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
-                      (dissoc :set-ui-state))]
+                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets))))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-              _ (finalize-import-render-revisions! conn)
+              _ (<finalize-import-render-revisions! conn set-ui-state)
+              _ (set-ui-state [:graph/importing-state :label] :import/validating)
+              _ (p/delay 0)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
          :import-state (import-state-summary (:import-state result))

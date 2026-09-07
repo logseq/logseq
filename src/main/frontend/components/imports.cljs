@@ -367,22 +367,28 @@
    config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (-> (p/let [start-time (t/now)
+              _ (repo-handler/new-db! graph-name {:file-graph-import? true})
+              repo (state/get-current-repo)
+              serialized-files (<serialize-import-files *files)
+              serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+              options (build-file-graph-worker-options user-options config/config-default-content)
+              import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+              _ (doseq [notification (:notifications import-result)]
+                  (show-notification notification))
+              _ (write-staged-assets! repo (:staged-assets import-result))]
+        (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+        (state/set-state! :graph/importing nil)
+        (state/set-state! :graph/importing-state nil)
+        (validate-imported-data import-result)
+        (state/pub-event! [:graph/ready (state/get-current-repo)])
+        (finished-cb))
+      (p/catch (fn [e]
+                 (log/error :import-file-graph {:error e})
+                 (notification/show! (t :import/unexpected-error (or (ex-message e) (str e))) :error)
+                 (state/set-state! :graph/importing nil)
+                 (state/set-state! :graph/importing-state nil)
+                 (shui/dialog-close! :import-indicator)))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
@@ -422,11 +428,20 @@
 (hsx/defc indicator-progress
   []
   (let [{:keys [total current-idx current-page label]} (rfx/use-sub [:graph/importing-state])
-        label (or label (t :import/loading))
-        left-label (if (and current-idx total (= current-idx total))
+        phase-label (case label
+                      :import/finalizing (t :import/finalizing)
+                      :import/validating (t :import/validating)
+                      nil)
+        left-label (cond
+                     phase-label
+                     [:div.flex.flex-row.font-bold phase-label]
+
+                     (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]
+
+                     :else
                      [:div.flex.flex-row.font-bold
-                      label
+                      (or label (t :import/loading))
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
