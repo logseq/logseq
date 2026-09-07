@@ -106,7 +106,12 @@
   (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
                 :block/tags :logseq.property/value :logseq.property/icon
                 :logseq.property.class/hide-from-node
-                :logseq.property/choice-exclusions}
+                :logseq.property/choice-exclusions
+                :logseq.property.asset/type
+                :logseq.property.asset/width
+                :logseq.property.asset/height
+                :logseq.property.asset/resize-metadata
+                :logseq.property.asset/external-url}
               (keys reference))))
 
 (deftest canonical-property-reference-values-keep-type-tags-test
@@ -560,3 +565,62 @@
         (doseq [value [blocks membership tree]]
           (is (= value
                  (-> value ldb/write-transit-str ldb/read-transit-str))))))))
+
+(defn- cover-row-fixture
+  []
+  (let [conn (db-test/create-conn)
+        page-uuid #uuid "20000000-0000-0000-0000-000000000001"
+        row-uuid #uuid "20000000-0000-0000-0000-000000000002"
+        cover-uuid #uuid "20000000-0000-0000-0000-000000000003"]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid page-uuid
+                   :block/tx-id 10
+                   :block/title "Movies"
+                   :block/name "movies"
+                   :block/tags :logseq.class/Page}
+                  {:db/id -2
+                   :db/ident :user.property/cover
+                   :db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/one
+                   :block/uuid #uuid "20000000-0000-0000-0000-000000000004"
+                   :block/tx-id 10
+                   :block/title "Cover"
+                   :logseq.property/type :asset
+                   :block/tags :logseq.class/Property}
+                  {:db/id -3
+                   :block/uuid cover-uuid
+                   :block/tx-id 10
+                   :block/title "poster"
+                   :block/tags :logseq.class/Asset
+                   :logseq.property.asset/type "webp"
+                   :logseq.property.asset/width 800
+                   :logseq.property.asset/height 1200
+                   :logseq.property.asset/external-url "https://example.com/poster.webp"}
+                  {:db/id -4
+                   :block/uuid row-uuid
+                   :block/tx-id 10
+                   :block/title "Inception"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"
+                   :user.property/cover -3}])
+    {:conn conn
+     :row-uuid row-uuid
+     :cover-uuid cover-uuid}))
+
+(deftest canonical-cover-property-is-not-a-db-id-stub-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [{:keys [conn row-uuid cover-uuid]} (cover-row-fixture)
+          block (canonical-block @conn (d/entity @conn [:block/uuid row-uuid]))
+          cover (:user.property/cover block)]
+      (is (map? cover))
+      (is (not= {:db/id (:db/id cover)} cover)
+          "Gallery/Table Cover values must keep more than a bare db/id stub.")
+      (is (= cover-uuid (:block/uuid cover)))
+      (is (= "webp" (:logseq.property.asset/type cover)))
+      (is (= 800 (:logseq.property.asset/width cover)))
+      (is (= 1200 (:logseq.property.asset/height cover)))
+      (is (= "https://example.com/poster.webp"
+             (:logseq.property.asset/external-url cover)))
+      (assert-shallow-identity-ref cover))))

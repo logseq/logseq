@@ -33,6 +33,18 @@
         (assoc :logseq.property/choice-checkbox-state (:logseq.property/choice-checkbox-state entity))
         property-value-datom
         (assoc :logseq.property/value (:v property-value-datom))
+        (:logseq.property.asset/type entity)
+        (assoc :logseq.property.asset/type (:logseq.property.asset/type entity))
+        (:logseq.property.asset/width entity)
+        (assoc :logseq.property.asset/width (:logseq.property.asset/width entity))
+        (:logseq.property.asset/height entity)
+        (assoc :logseq.property.asset/height (:logseq.property.asset/height entity))
+        (:logseq.property.asset/resize-metadata entity)
+        (assoc :logseq.property.asset/resize-metadata
+               (:logseq.property.asset/resize-metadata entity))
+        (:logseq.property.asset/external-url entity)
+        (assoc :logseq.property.asset/external-url
+               (:logseq.property.asset/external-url entity))
         (:db/ident entity)
         (assoc :db/ident (:db/ident entity))))
     {:db/id value}))

@@ -1946,6 +1946,44 @@
                                 {:rows [journal-grandchild]}
                                 response))))
 
+(deftest query-resource-keeps-escaped-paren-regex-inputs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          matcher "\\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\)"
+          resource-key
+          [:query {:kind :datalog
+                   :query '[:find ?regex
+                            :in $ ?matcher
+                            :where [(re-pattern ?matcher) ?regex]]
+                   :inputs [matcher]}]
+          response (call-resource api conn resource-key)]
+      (is (regexp? (first (:rows (:value response))))
+          "Broken-reference regex inputs must not be read as a character literal."))))
+
+(deftest render-snapshots-isolates-failing-query-resources-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        journals-key [:journals]
+        failing-query
+        [:query {:kind :datalog
+                 :query '[:find ?regex
+                          :in $ ?matcher
+                          :where [(re-pattern ?matcher) ?regex]]
+                 :inputs ["("]}]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A failing query must not fail sibling resources in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (re-find #"Invalid regular expression"
+                 (get-in response [:slots [:resource failing-query] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str)))))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}

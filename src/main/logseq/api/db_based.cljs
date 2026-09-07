@@ -17,6 +17,7 @@
             [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
@@ -239,9 +240,11 @@
              (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
            (p/let [opts (bean/->clj opts)
                    class-ident-namespace (api-block/resolve-class-prefix-for-db this)
-                   opts' (assoc opts
-                                :redirect? false
-                                :class-ident-namespace class-ident-namespace)
+                   opts' (cond-> (assoc opts
+                                        :redirect? false
+                                        :class-ident-namespace class-ident-namespace)
+                           (common-util/uuid-string? (:uuid opts))
+                           (update :uuid uuid))
                    tag-properties (:tagProperties opts)
                    tag (db-page-handler/<create-class! title opts')
                    properties (when (seq tag-properties)

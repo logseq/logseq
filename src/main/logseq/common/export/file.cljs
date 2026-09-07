@@ -283,6 +283,12 @@
         (str (apply str (repeat heading-level "#")) " " (strip-heading-prefix content))
         content))))
 
+(defn- highlighted-block?
+  "Whether a block has a background color set (the block-level highlight
+  feature, distinct from inline ^^text^^ highlighting)."
+  [db b]
+  (some? (:logseq.property/background-color (d/entity db (:db/id b)))))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -290,6 +296,16 @@
         ;; replace [[uuid]] with block's content
         title (block-title-content db b context)
         content (or title "")
+        ;; Encode the block's background-color highlight as inline ^^text^^
+        ;; markup so it round-trips through mldoc and renders as <mark> in
+        ;; HTML export (and stays as ^^text^^ in Text/OPML export). Only done
+        ;; for the explicit "Export page" feature (see :encode-highlight-as-mark?
+        ;; in get-content-config), not for markdown-mirror generation.
+        content (if (and (:encode-highlight-as-mark? context)
+                         (not (string/blank? content))
+                         (highlighted-block? db b))
+                  (str "^^" content "^^")
+                  content)
         level (if (and heading-to-list? heading)
                 (if (> heading 1)
                   (dec heading)

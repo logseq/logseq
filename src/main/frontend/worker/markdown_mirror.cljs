@@ -3,10 +3,10 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
             [logseq.common.export.file :as common-file]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -531,10 +531,16 @@
    (block-content db (:block/uuid page) {:include-page-properties? true} options)
    options))
 
+(defn- contents-page?
+  "The Contents page is created as built-in but holds ordinary user blocks."
+  [page]
+  (= "contents" (:block/name page)))
+
 (defn- mirrorable-page?
   [page]
   (and (ldb/page? page)
-       (not (ldb/built-in? page))
+       (or (not (ldb/built-in? page))
+           (contents-page? page))
        (not (ldb/property? page))
        (not (ldb/hidden? page))
        (not (:logseq.property.user/email page))))
