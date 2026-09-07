@@ -107,14 +107,14 @@
 
 (defn- query-input-value
   "Parse stringified EDN query inputs from plugin/JSON callers (e.g. \":today\").
-  Keep the original string when cljs.reader reads a character literal, so regex
+  Keep the original string when cljs.reader reads a symbol or character literal, so regex
   patterns such as \"\\\\(uuid\\\\)\" are not reduced to \"(\"."
   [input]
   (if (and (string? input)
            (not (page-ref/page-ref? input)))
     (try
       (let [value (cljs.reader/read-string input)]
-        (if (reader-character-literal? input value)
+        (if (or (symbol? value) (reader-character-literal? input value))
           input
           value))
       (catch :default _
