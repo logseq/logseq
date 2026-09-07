@@ -1,9 +1,9 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.string :as string]
             [frontend.db.subs :as db-subs]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
@@ -59,9 +59,10 @@
           (state/sidebar-remove-deleted-block! deleted-ids))
         (when-let [removed-page-ids (not-empty (concat deleted-ids recycled-ids))]
           (state/remove-pages-from-recent! removed-page-ids)))
-      (when (and (current-page-deleted? current-page deleted)
-                 (not (util/mobile?)))
-        (.back js/window.history))
+      (when (or (current-page-deleted? current-page deleted)
+                (and (not initial-pages?)
+                     (current-page-recycled? current-page blocks)))
+        (route-handler/redirect-to-previous!))
 
       (cond
         initial-pages?
@@ -71,9 +72,6 @@
 
         :else
         (do
-          (when (current-page-recycled? current-page blocks)
-            (.back js/window.history))
-
           (when (or (not= (:client-id tx-meta) (:client-id (state/get-state)))
                     (= :apply-template (:outliner-op tx-meta)))
             (update-editing-block-title-if-changed! blocks))
