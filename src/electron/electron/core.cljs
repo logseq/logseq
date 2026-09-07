@@ -209,6 +209,18 @@
          (.removeHandler ipcMain call-app-channel)
          (.removeHandler ipcMain call-win-channel))))
 
+(defn- window-menu-os-items
+  "OS window roles. Minimize is always present so macOS Command+M is
+   handled by Electron's minimize role instead of being omitted."
+  [macos?]
+  (concat
+   [{:role "minimize"}]
+   (when-not macos?
+     [{:role "zoom"}
+      ;; Disable Control+W shortcut
+      {:role "close"
+       :accelerator false}])))
+
 (defn- set-app-menu! []
   (let [about-fn (fn []
                    (.showMessageBox dialog (clj->js {:title "Logseq"
@@ -244,12 +256,7 @@
                        {:role "windowMenu"
                         :submenu
                         (concat
-                          (when-not mac?
-                            [{:role "minimize"}
-                             {:role "zoom"}
-                             ;; Disable Control+W shortcut
-                             {:role "close"
-                              :accelerator false}])
+                          (window-menu-os-items mac?)
                           [{:label "Always on Top"
                             :type "checkbox"
                             :click (fn [^js menuItem ^js browserWindow]
