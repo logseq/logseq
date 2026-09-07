@@ -243,11 +243,11 @@
                                                                {:include-property-block? true})
                                    rest)]
       (when (seq template-blocks)
-        (cons (assoc (into {} (first template-blocks))
-                     :db/id (:db/id (first template-blocks))
-                     :logseq.property/used-template (:db/id template))
+        (cons (-> (into {} (first template-blocks))
+                  (dissoc :db/id)
+                  (assoc :logseq.property/used-template (:db/id template)))
               (map (fn [block]
-                     (assoc (into {} block) :db/id (:db/id block)))
+                     (dissoc (into {} block) :db/id))
                    (rest template-blocks)))))))
 
 (defn- journal-title

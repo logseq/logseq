@@ -6,6 +6,70 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.common.config :as common-config]))
 
+(deftest insert-blocks-keep-uuid-paste-does-not-reparent-live-source
+  (testing "keep-uuid paste of a live block clones it instead of moving the source"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source page"}
+                  :blocks [{:block/title "live child"}]}
+                 {:page {:block/title "target page"}
+                  :blocks [{:block/title "target"}]}])
+          live (db-test/find-block-by-content @conn "live child")
+          target (db-test/find-block-by-content @conn "target")
+          source-parent (:db/id (:block/parent live))
+          source-uuid (:block/uuid live)]
+      (outliner-core/insert-blocks!
+       conn
+       [(assoc (into {} live)
+               :db/id (:db/id live)
+               :block/uuid source-uuid)]
+       target
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :paste})
+      (let [db @conn
+            live-after (d/entity db (:db/id live))
+            target-parent (d/entity db (:db/id (:block/parent target)))
+            pasted (->> (:block/_parent target-parent)
+                        ldb/sort-by-order
+                        (remove #(= (:db/id live) (:db/id %)))
+                        (some #(when (= "live child" (:block/title %)) %)))]
+        (is (= source-parent (:db/id (:block/parent live-after))))
+        (is (= source-uuid (:block/uuid live-after)))
+        (is (some? pasted))
+        (is (not= source-uuid (:block/uuid pasted)))))))
+
+(deftest insert-template-blocks-keep-uuid-does-not-reparent-other-page-source
+  (testing "tag-template insert clones live children that still belong to another page"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "template page"}
+                  :blocks [{:block/title "template child"}]}
+                 {:page {:block/title "journal page"}
+                  :blocks [{:block/title "journal target"}]}])
+          live (db-test/find-block-by-content @conn "template child")
+          target (db-test/find-block-by-content @conn "journal target")
+          source-parent (:db/id (:block/parent live))
+          source-uuid (:block/uuid live)]
+      (outliner-core/insert-blocks!
+       conn
+       [(assoc (into {} live)
+               :db/id (:db/id live)
+               :block/uuid source-uuid)]
+       target
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :insert-template-blocks})
+      (let [db @conn
+            live-after (d/entity db (:db/id live))
+            target-parent (d/entity db (:db/id (:block/parent target)))
+            inserted (->> (:block/_parent target-parent)
+                          ldb/sort-by-order
+                          (remove #(= (:db/id live) (:db/id %)))
+                          (some #(when (= "template child" (:block/title %)) %)))]
+        (is (= source-parent (:db/id (:block/parent live-after))))
+        (is (= source-uuid (:block/uuid live-after)))
+        (is (some? inserted))
+        (is (not= source-uuid (:block/uuid inserted)))))))
+
 (deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

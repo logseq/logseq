@@ -665,13 +665,45 @@
           (recur db (inc idx) (rest blocks) (conj entries nil)))
         entries))))
 
+(defn- entity-page-id
+  [block]
+  (or (:db/id (:block/page block))
+      (when (ldb/page? block)
+        (:db/id block))))
+
+(defn- reuse-uuid-on-insert?
+  "keep-uuid? preserves identity for new or recycled entities.
+  Paste must not reparent a live entity. Tag-template apply may reuse a UUID
+  already on the target page (idempotent journal re-apply)."
+  [db uuid keep-uuid? target-block outliner-op]
+  (boolean
+   (and keep-uuid?
+        uuid
+        (let [existing (d/entity db [:block/uuid uuid])]
+          (or (nil? existing)
+              (ldb/recycled? existing)
+              (case outliner-op
+                :paste false
+                :insert-template-blocks
+                (let [existing-page (entity-page-id existing)
+                      target-page (entity-page-id target-block)]
+                  (and existing-page
+                       target-page
+                       (= existing-page target-page)))
+                true))))))
+
 (defn- insert-blocks-aux
-  [db blocks target-block {:keys [replace-empty-target? keep-uuid?]
+  [db blocks target-block {:keys [replace-empty-target? keep-uuid? outliner-op]
                            :as opts}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (if keep-uuid?
-                        block-uuids
+                        (map (fn [uuid]
+                               (if (reuse-uuid-on-insert? db uuid keep-uuid? target-block outliner-op)
+                                 uuid
+                                 (when uuid
+                                   (common-uuid/gen-uuid))))
+                             block-uuids)
                         (repeatedly common-uuid/gen-uuid)))
         uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
@@ -800,9 +832,10 @@
       `sibling?`: as siblings (true) or children (false).
       `bottom?`: inserts block to the bottom.
       `top?`: inserts block to the top.
-      `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
-                    For example, if `blocks` are from internal copy, the uuids
-                    need to be changed, but there's no need for internal cut or drag & drop.
+      `keep-uuid?`: whether to keep `:block/uuid` from the parameter `blocks`.
+                    New and recycled identities are kept. Paste of a live entity
+                    always clones. Tag-template apply may keep a UUID already on
+                    the target page.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
