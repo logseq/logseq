@@ -84,7 +84,7 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 - Source issue: [db-test#1140](https://github.com/logseq/db-test/issues/1140). Follow-up to #923.
 - Case: an OG graph links a PDF with a Windows drive URI (`file://D:\\...pdf`) or a remote `https://...pdf` URL, including when the only reference is `file::` / `file-path::` on an `hls__` annotation page.
 - Expected import behavior: create an external Asset for the linked PDF (stat the local file when available, otherwise a stub), keep the original `file://` or `https://` URL as asset metadata, import annotations, and bind them to the Asset. Missing in-graph relative PDFs stay ignored.
-- Regression tests: `logseq.graph-parser.exporter-test/import-windows-linked-pdf-uri-format`, `import-remote-https-pdf-annotations`, and `import-remote-https-pdf-annotations-from-hls-file-prop`.
+- Regression test: `logseq.graph-parser.exporter-test/import-external-pdf-annotations` covers Windows, HTTPS, query/fragment URLs, and hls-only references.
 
 ### Missing local PDF asset links
 
