@@ -83,3 +83,40 @@
       (let [after (worker-property/display-property-map @conn :user.property/color)]
         (is (= "Red" (get-in before [:logseq.property/default-value :block/title])))
         (is (= "Crimson" (get-in after [:logseq.property/default-value :block/title])))))))
+
+(defn- positioned-idents
+  [db block-id position]
+  (set (map :db/ident (worker-property/block-positioned-properties db block-id position))))
+
+(deftest task-tag-only-positions-default-status
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page"}
+                :blocks [{:block/title "task only"
+                          :build/tags [:logseq.class/Task]}
+                         {:block/title "task doing"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                         {:block/title "plain"}]}])
+        db @conn
+        task-only (db-test/find-block-by-content db "task only")
+        task-doing (db-test/find-block-by-content db "task doing")
+        plain (db-test/find-block-by-content db "plain")]
+    (testing "tagging only #Task still positions the class default status"
+      (is (contains? (positioned-idents db (:db/id task-only) :block-left)
+                     :logseq.property/status))
+      (is (nil? (worker-property/entity-direct-value db task-only :logseq.property/status))
+          "Status is resolved from the property default, not a written datom"))
+    (testing "explicit status still positions"
+      (is (contains? (positioned-idents db (:db/id task-doing) :block-left)
+                     :logseq.property/status))
+      (is (some? (worker-property/entity-direct-value db task-doing :logseq.property/status))))
+    (testing "unset priority stays hidden because it has no default"
+      (is (not (contains? (positioned-idents db (:db/id task-only) :block-left)
+                          :logseq.property/priority))))
+    (testing "untagged blocks do not get a status icon"
+      (is (not (contains? (positioned-idents db (:db/id plain) :block-left)
+                          :logseq.property/status))))
+    (testing "removing the default hides empty status again"
+      (d/transact! conn [[:db/retract :logseq.property/status :logseq.property/default-value]])
+      (is (not (contains? (positioned-idents @conn (:db/id task-only) :block-left)
+                          :logseq.property/status))))))
