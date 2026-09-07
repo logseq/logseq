@@ -50,8 +50,12 @@
   [config query]
   (let [resource (db-hooks/use-resource [:query (query-spec config query)])
         result (:rows resource)
-        query-result (:query-result config)]
+        query-result (:query-result config)
+        error (:error resource)]
     (hooks/use-effect! #(when query-result
                           (reset! query-result result))
                        [query-result result])
+    (when error
+      (throw (ex-info (or (:message error) "Query failed")
+                      (or (:data error) {}))))
     result))
