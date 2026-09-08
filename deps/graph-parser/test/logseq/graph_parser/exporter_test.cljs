@@ -15,6 +15,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -2370,6 +2371,72 @@ abc
            (set (map :block/uuid (:block/refs source-block))))
         "Missing ordinary page ref points at the created page")))
 
+(deftest-async import-namespace-pages-have-child-order
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{}"
+                "pages/example.md" "- [[example/items]]\n- #Topic\n- [[Topic/child]]\n"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          page (db-test/find-page-by-title @conn "example")
+          child (db-test/find-page-by-title @conn "items")
+          tag (db-test/find-page-by-title @conn "Topic")]
+    (is (= (:db/id page) (:db/id (:block/parent child))))
+    (is (db-order/validate-order-key? (:block/order child))
+        "Namespace child pages need an order just like other children rendered in a page.")
+    (is (ldb/class? tag))
+    (is (nil? (:block/parent tag))
+        "Namespace roots converted to tags must not be reparented into the library.")
+    (is (nil? (:block/order tag)))
+    (is (empty? (:errors (db-validate/validate-local-db! @conn))))))
+
+(deftest-async import-property-text-keeps-namespace-references
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{}"
+                "pages/example.md" "related-items:: [[example/items]]\n- notes\n"
+                "pages/other.md" "related-items:: See [[example/items]]\n- notes\n"
+                "pages/third.md" "related-items:: [[example/items]]\n- notes\n"})
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {})
+          child (db-test/find-page-by-title @conn "items")
+          child-ref (page-ref/->page-ref (:block/uuid child))
+          property (d/entity @conn :user.property/related-items)]
+    (is (= :default (:logseq.property/type property)))
+    (doseq [[title expected] [["example" child-ref]
+                            ["other" (str "See " child-ref)]
+                            ["third" child-ref]]]
+      (let [page (db-test/find-page-by-title @conn title)
+            value (first (:user.property/related-items page))]
+        (is (= expected (:block/raw-title value))
+            "Text properties must use DB references, including values converted from node properties.")))))
+
+(deftest-async import-tags-do-not-overwrite-properties
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{}"
+                "pages/a.md" "- TODO task #scheduled\n  SCHEDULED: <2026-01-01 Thu>\n- tagged item #custom-label\n"
+                "pages/b.md" "custom-label:: [[Example value]]\n- notes\n"})
+          conn (db-test/create-conn)
+          scheduled-uuid (:block/uuid (d/entity @conn :logseq.property/scheduled))
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          scheduled (d/entity @conn :logseq.property/scheduled)
+          tagged-block (db-test/find-block-by-content @conn "tagged item")
+          custom-tag (first (:block/tags tagged-block))
+          custom-property (some->> (d/q '[:find [?e ...]
+                                           :where [?e :block/title "custom-label"]
+                                           [?e :block/tags :logseq.class/Property]] @conn)
+                                   first
+                                   (d/entity @conn))]
+    (is (= scheduled-uuid (:block/uuid scheduled))
+        "A #scheduled tag must not replace the built-in Scheduled property.")
+    (is (ldb/property? scheduled))
+    (is (ldb/class? custom-tag))
+    (is (ldb/property? custom-property))
+    (is (not= (:db/id custom-tag) (:db/id custom-property))
+        "A later property declaration must preserve the class referenced by earlier tags.")
+    (is (empty? (:errors (db-validate/validate-local-db! @conn))))))
+
 (deftest-async import-page-drawer-properties-write-refs-on-the-page
   (p/let [file (write-temp-graph-file
                 "pages/Zorba the Greek (1964).md"
@@ -2606,6 +2673,18 @@ abc
     (is (= 2
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
         "unmappable icon properties are still ignored")))
+
+(deftest-async export-files-with-leftover-template-property-does-not-abort
+  (p/let [file (write-temp-graph-file
+                "pages/Book.md"
+                "template:: [[Book]]\n- leftover template property should not abort import\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"leftover template property"))
+        "Page with leftover template:: page-ref still imports")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

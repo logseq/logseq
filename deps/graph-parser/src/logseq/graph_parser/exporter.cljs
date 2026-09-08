@@ -212,7 +212,9 @@
         (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
                                            (get-in block [:block/namespace :block/name])
-                                           {:block block :block/namespace (:block/namespace block)})}))
+                                           {:block block :block/namespace (:block/namespace block)})})
+        (cond-> (= :block/parent parent-k)
+          (assoc :block/order (db-order/gen-key))))
     block))
 
 (defn- build-class-ident-name
@@ -298,7 +300,11 @@
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
       (let [existing-tag-uuid (find-existing-class db tag-block)
-            internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
+            internal-tag-conflict? (or (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))
+                                       (some->> (:block/uuid tag-block)
+                                                (vector :block/uuid)
+                                                (d/entity db)
+                                                ldb/property?))]
         (cond
           ;; Don't overwrite internal tags
           (and existing-tag-uuid (not internal-tag-conflict?))
@@ -697,8 +703,9 @@
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
 
 (defn- get-property-schema [property-schemas kw]
-  (or (get property-schemas kw)
-      (throw (ex-info (str "No property schema found for " (pr-str kw)) {}))))
+  (when (some? kw)
+    (or (get property-schemas kw)
+        (throw (ex-info (str "No property schema found for " (pr-str kw)) {})))))
 
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
@@ -859,7 +866,7 @@
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:file :file-path :hl-stamp} prop)
+                       (if (#{:file :file-path :hl-stamp :template :template-including-parent} prop)
                          (do (swap! ignored-properties
                                     conj
                                     (ignored-built-in-property-value prop prop-value block))
@@ -897,7 +904,12 @@
                                       (into {}))]
                              [[:logseq.property.pdf/hl-color (get color-text-idents prop-value)]])
                            ;; else
-                           [[(built-in-property-file-to-db-idents prop) prop-value]]))))
+                           (if-let [db-ident (built-in-property-file-to-db-idents prop)]
+                             [[db-ident prop-value]]
+                             (do (swap! ignored-properties
+                                        conj
+                                        (ignored-built-in-property-value prop prop-value block))
+                                 nil))))))
              (into {}))]
     (cond-> m
       (and (contains? props :query-sort-desc) (:query-sort-by props))
@@ -990,6 +1002,7 @@
   [new-block properties get-schema-fn all-idents]
   (->> properties
        (keep (fn [[k v]]
+               (when (some? k)
                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                  (when (and (db-property-type/value-ref-property-types built-in-type)
                             ;; closed values are referenced by their :db/ident so no need to create values
@@ -1002,7 +1015,7 @@
                                        {:db/ident (get-ident all-idents k)
                                         :original-property-id k}
                                        (get-schema-fn k))]
-                     [property-map v])))))
+                     [property-map v]))))))
        (db-property-build/build-property-values-tx-m new-block)))
 
 (defn- build-properties-and-values
@@ -1013,7 +1026,9 @@
    {:keys [import-state user-options] :as options}]
   (let [{:keys [all-idents property-schemas]} import-state
         get-ident' #(get-ident @all-idents %)
-        user-properties (apply dissoc props file-built-in-property-names)]
+        user-properties (->> (apply dissoc props file-built-in-property-names)
+                             (remove (fn [[prop]] (nil? prop)))
+                             (into {}))]
     (when (seq user-properties)
       (swap! (:block-properties-text-values import-state)
              assoc
@@ -1029,6 +1044,7 @@
                       (select-keys block [:block/name :block/title])
                       (select-keys user-options [:property-classes]))
                      (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
+          props' (dissoc props' nil)
           pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
           block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                (update-keys get-ident'))]
@@ -1072,6 +1088,21 @@
                    [prop val])))
          (into {}))))
 
+(defn- property-text-with-id-refs
+  [content refs page-names-to-uuids]
+  (let [page-refs (->> refs
+                       (filter :block/name)
+                       ;; refs also includes property pages intentionally removed
+                       ;; by property-to-tag conversion; only imported pages have IDs.
+                       (keep (fn [ref]
+                               (let [page-name ((some-fn ::original-name :block/name) ref)]
+                                 (when-let [page-uuid (get @page-names-to-uuids page-name)]
+                                   (assoc ref :block/uuid page-uuid
+                                              :block/title ((some-fn ::original-title :block/title) ref)))))))]
+    (-> (db-content/title-ref->id-ref content page-refs {:replace-tag? false})
+        (string/replace block-ref/block-ref-re
+                        (fn [[_ id]] (page-ref/->page-ref id))))))
+
 (defn- handle-page-and-block-properties
   "Returns a map of :block with updated block and :properties-tx with any properties tx.
    Handles modifying block properties, updating classes from property-classes
@@ -1102,9 +1133,14 @@
                    (into {}))
               ;; _ (when (seq property-changes) (prn :prop-changes property-changes))
               options' (assoc options :property-changes property-changes)
+              normalize-text #(property-text-with-id-refs % refs page-names-to-uuids)
+              ;; Keep canonical refs in the saved text too: a later file can change
+              ;; this property's type from node/date to text.
+              property-block (update block :block/properties-text-values
+                                     #(update-vals % normalize-text))
               {:keys [block-properties pvalues-tx]}
               (build-properties-and-values properties' db page-names-to-uuids
-                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid ::original-name])
+                                           (select-keys property-block [:block/properties-text-values :block/name :block/title :block/uuid ::original-name])
                                            options')]
           {:block
            (cond-> block
@@ -1116,7 +1152,11 @@
                      (fn [tags]
                        (let [tags' (if (sequential? tags) tags (set tags))]
                          (into tags' (map #(hash-map :block.temp/new-class %) classes-from-properties))))))
-           :properties-tx pvalues-tx})
+           :properties-tx (map (fn [value]
+                                 (cond-> value
+                                   (:block/title value)
+                                   (update :block/title normalize-text)))
+                               pvalues-tx)})
         {:block block :properties-tx []})
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
@@ -2353,7 +2393,7 @@
                    :block/updated-at (or file-updated-at file-created-at)))
         ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
-                               :block/created-at :block/updated-at]
+                               :block/created-at :block/updated-at :block/order]
         allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                         (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                               m))
@@ -2681,6 +2721,7 @@
    (mapcat (fn [b]
              (let [eid [:block/uuid (:block/uuid b)]]
                [[:db/retract eid :block/parent]
+                [:db/retract eid :block/order]
                 [:db/retract eid :block/tags :logseq.class/Page]]))
            col)))
 
@@ -2891,7 +2932,7 @@
                      (contains? existing-properties (:block/uuid page)))
                (-> page
                    (update :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
-                   (dissoc :block/parent))
+                   (dissoc :block/parent :block/order))
                page))
            pages-tx')
      :retract-page-tags-tx
@@ -3554,7 +3595,9 @@
                               (keep (fn [d]
                                       (let [child (d/entity db (:e d))
                                             parent (d/entity db (:v d))]
-                                        (when (and (nil? (:block/parent parent)) (page-entity? child) (page-entity? parent))
+                                        (when (and (nil? (:block/parent parent))
+                                                   (page-entity? child)
+                                                   (entity-util/internal-page? parent))
                                           parent))))
                               (common-util/distinct-by :block/uuid))
         tx-data (map
