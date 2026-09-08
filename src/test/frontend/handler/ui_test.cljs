@@ -97,3 +97,13 @@
              (fn []
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest get-file-content-skips-when-db-worker-not-ready-test
+  (let [previous @state/*db-worker]
+    (try
+      (reset! state/*db-worker nil)
+      (is (nil? (ui-handler/<get-file-content "repo" "logseq/custom.css")))
+      (reset! state/*db-worker (fn [& _] :content))
+      (is (some? (ui-handler/<get-file-content "repo" "logseq/custom.css")))
+      (finally
+        (reset! state/*db-worker previous)))))

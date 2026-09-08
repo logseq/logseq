@@ -99,7 +99,7 @@
 
 (defn <get-file-content
   [repo path]
-  (state/<invoke-db-worker :thread-api/get-file-content repo path))
+  (state/<invoke-db-worker-when-ready :thread-api/get-file-content repo path))
 
 (defn- <pull-anchor-block
   [repo anchor-id]
