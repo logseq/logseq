@@ -188,7 +188,7 @@
                        :client-id (:client-id (state/get-state))
                        :ui/perf-id perf-id
                        :local-tx? true))
-            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
+            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn :await-ui-publish?)
                           (:editor/edit-block-fn opts')
                           (assoc :editor-row-uuids (operation-row-uuids ops)))
             request #(p/do!
@@ -209,24 +209,43 @@
                 publish? (or delta
                              (and current-context?
                                   (:editor/edit-block-fn opts')))
-                ui-refresh-perf (when publish?
-                                  (publish-worker-response!
-                                   opts' delta editor-rows editor-row-uuids current-context?))
-                ui-updated-at (now-ms)]
-          (when publish?
-            (on-next-frame!
-             (fn []
-               (log-outliner-op-perf!
-                {:stage :ui-updated
-                 :perf-id perf-id
-                 :op-names (mapv first ops)
-                 :op-count (count ops)
-                 :worker-apply-ms (:apply-ms perf)
-                 :worker-perf (dissoc perf :listener)
-                 :worker-listener (:listener perf)
-                 :worker-roundtrip-ms (- mutation-returned-at started-at)
-                 :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
-                 :ui-refresh ui-refresh-perf
-                 :state-update-ms (- ui-updated-at worker-returned-at)
-                 :total-to-next-frame-ms (- (now-ms) started-at)}))))
-          result)))))
+                ;; HTTP/plugin writes persist in the worker. Do not gate their
+                ;; return on renderer flushSync / get-block hydration.
+                await-ui? (not (false? (:await-ui-publish? opts')))
+                log-ui-perf! (fn [ui-refresh-perf]
+                               (on-next-frame!
+                                (fn []
+                                  (log-outliner-op-perf!
+                                   {:stage :ui-updated
+                                    :perf-id perf-id
+                                    :op-names (mapv first ops)
+                                    :op-count (count ops)
+                                    :worker-apply-ms (:apply-ms perf)
+                                    :worker-perf (dissoc perf :listener)
+                                    :worker-listener (:listener perf)
+                                    :worker-roundtrip-ms (- mutation-returned-at started-at)
+                                    :worker-to-ui-ms (- worker-returned-at mutation-returned-at)
+                                    :ui-refresh ui-refresh-perf
+                                    :state-update-ms (- (now-ms) worker-returned-at)
+                                    :total-to-next-frame-ms (- (now-ms) started-at)}))))]
+          (cond
+            (and publish? await-ui?)
+            (p/let [ui-refresh-perf (publish-worker-response!
+                                     opts' delta editor-rows editor-row-uuids current-context?)]
+              (log-ui-perf! ui-refresh-perf)
+              result)
+
+            publish?
+            (do
+              (js/setTimeout
+               (fn []
+                 (-> (publish-worker-response!
+                      opts' delta editor-rows editor-row-uuids current-context?)
+                     (p/then log-ui-perf!)
+                     (p/catch (fn [error]
+                                (log/error :db/ui-publish-failed {:error error})))))
+               0)
+              result)
+
+            :else
+            result))))))

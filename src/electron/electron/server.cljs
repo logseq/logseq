@@ -10,6 +10,7 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [electron.mcp-server :as desktop-mcp-server]
+            [electron.server-invoke :as server-invoke]
             [electron.utils :as utils]
             [electron.window :as window]
             [promesa.core :as p]))
@@ -105,12 +106,24 @@
 (defonce ^:private *cid (volatile! 0))
 (defn- invoke-logseq-api!
   [method args]
-  (p/create
-   (fn [resolve _reject]
-     (let [sid        (vswap! *cid inc)
-           ret-handle (fn [^js _w ret] (resolve ret))]
-       (utils/send-to-renderer @*win :invokeLogseqAPI {:syncId sid :method method :args args})
-       (.handleOnce ipcMain (str ::sync! sid) ret-handle)))))
+  (let [sid (vswap! *cid inc)
+        channel (str ::sync! sid)]
+    (utils/send-to-renderer @*win :invokeLogseqAPI {:syncId sid :method method :args args})
+    (server-invoke/await-ipc-reply!
+     {:channel channel
+      :timeout-ms server-invoke/invoke-timeout-ms
+      :handle-once! (fn [ch handler]
+                      (.handleOnce ipcMain ch handler))
+      :remove-handler! (fn [ch]
+                         (.removeHandler ipcMain ch))})))
+
+(defn- send-api-error!
+  [^js rep error]
+  (if (server-invoke/api-invoke-timeout? error)
+    (-> rep
+        (.code 504)
+        (.send #js {:error (ex-message error)}))
+    (.send rep error)))
 
 (defn- api-handler!
   [^js req ^js rep]
@@ -123,7 +136,7 @@
                        (.code rep 500)
                        (js/console.error "Unexpected API error:" msg))
                      (.send rep %)))
-          (p/catch #(.send rep %)))
+          (p/catch #(send-api-error! rep %)))
       (-> rep
           (.code 400)
           (.send (js/Error. ":method of body is missing!"))))

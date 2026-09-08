@@ -534,12 +534,15 @@
                                                  :edit-block? false
                                                  :end? true}))
         (p/then
-         (fn [_]
+         (fn [inserted]
            (is (= [[page-id {:children? false}]]
-                  (take 1 @block-reads)))
+                  @block-reads)
+               "API insert must not hydrate the new block via renderer <get-block>.")
            (is (= [[10 :last-child]] @sibling-reads))
            (is (= last-child (:target @insertion)))
-           (is (true? (get-in @insertion [:opts :sibling?]))))))))
+           (is (true? (get-in @insertion [:opts :sibling?])))
+           (is (= "new" (:block/title inserted)))
+           (is (uuid? (:block/uuid inserted))))))))
 
 (deftest-async insert-above-awaits-async-insert
   (let [current-block {:db/id 1
