@@ -2258,10 +2258,11 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :block block
-                                                        :ignore-children? page-title?
-                                                        :page-title? collapsable-page-title?})
+        collapsable? (and (not (entity/url-property-value? block))
+                          (editor-handler/collapsable? uuid {:semantic? true
+                                                            :block block
+                                                            :ignore-children? page-title?
+                                                            :page-title? collapsable-page-title?}))
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2370,10 +2371,18 @@
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
+(defn- url-property-validation-effect-deps
+  "Re-validate URL property values when the title changes so the error icon updates."
+  [block]
+  [(:db/id block)
+   (some-> (:logseq.property/created-from-property block) :db/id)
+   (:block/title block)])
+
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (boolean (seq child-uuids))
+        has-children? (and (not (entity/url-property-value? block))
+                           (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
 
@@ -2508,8 +2517,7 @@
            (set-property-validation-message! nil))
          (set-property-validation-message! nil))
        nil)
-     [(:db/id block)
-      (some-> (:logseq.property/created-from-property block) :db/id)])
+     (url-property-validation-effect-deps block))
     [:div
      (merge
       {:class (if query?
@@ -3786,7 +3794,8 @@
   [config block opts effective-variant]
   (let [block-id (or (:block/uuid block) (:db/id block))
         loaded-block (db-hooks/use-block block-id)
-        block' (or loaded-block block)
+        block' (breadcrumb-model/with-breadcrumb-ref-titles
+                (or loaded-block block) (:ref-titles opts))
         segment (breadcrumb-model/block->breadcrumb-segment block')]
     (when segment
       (let [label (breadcrumb-segment-label segment block')]
@@ -3829,7 +3838,7 @@
        {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
        (for [block-uuid hidden-uuids]
          ^{:key (str block-uuid)}
-         (breadcrumb-dropdown-row config block-uuid ref-titles opts))))))
+         [:<> (breadcrumb-dropdown-row config block-uuid ref-titles opts)])))))
 
 (hsx/defc breadcrumb-overflow-dropdown
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
@@ -3912,10 +3921,12 @@
 
 (hsx/defc subscribed-breadcrumb
   [config block-id opts]
-  (let [block (db-hooks/use-block block-id)
-        breadcrumb-ancestors (:block.temp/breadcrumb block)]
-    (when (seq breadcrumb-ancestors)
-      (breadcrumb-aux config block-id opts breadcrumb-ancestors))))
+  (when-let [breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
+    (when (seq (:ancestor-uuids breadcrumb-data))
+      (breadcrumb-aux config block-id
+                      (assoc opts :ref-titles (:ref-titles breadcrumb-data))
+                      (mapv (fn [ancestor-uuid] {:block/uuid ancestor-uuid})
+                            (:ancestor-uuids breadcrumb-data))))))
 
 (defn breadcrumb
   [config _repo block-id {:keys [block] :as opts}]
@@ -4603,6 +4614,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
+                   (entity/url-property-value? block)
                    table?
                    property?
                    comments-area?

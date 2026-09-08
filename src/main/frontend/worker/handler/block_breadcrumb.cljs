@@ -27,6 +27,8 @@
         (mapv (fn [choice]
                 (select-keys choice [:db/id :block/uuid :db/ident]))
               (:logseq.property/choice-exclusions ref))
+        property-type (:logseq.property/type ref)
+        cardinality (:db/cardinality ref)
         property-value (:logseq.property/value ref)
         property-icon (:logseq.property/icon ref)
         hide-from-node (:logseq.property.class/hide-from-node ref)
@@ -54,6 +56,8 @@
       (seq ref-tags) (assoc :block/tags ref-tags)
       (seq choice-exclusions)
       (assoc :logseq.property/choice-exclusions choice-exclusions)
+      (some? property-type) (assoc :logseq.property/type property-type)
+      (some? cardinality) (assoc :db/cardinality cardinality)
       (some? property-value) (assoc :logseq.property/value property-value)
       (some? property-icon) (assoc :logseq.property/icon property-icon)
       (some? hide-from-node) (assoc :logseq.property.class/hide-from-node hide-from-node)

@@ -779,16 +779,18 @@
                  (rest blocks)))))))
 
 (defn- url-property-value?
-  "URL-type property values are not containers; they must not have child blocks."
+  "URL-type property values are leaves; they must not have child blocks."
   [block]
   (= :url (:logseq.property/type (:logseq.property/created-from-property block))))
 
-(defn- url-property-value-child-target?
-  "True when insert/move would make a URL-type property value the parent."
+(defn- url-property-value-forbidden-target?
+  "True when insertion or movement would create a URL child or a single-value sibling."
   [target-block sibling?]
-  (url-property-value? (if sibling?
-                         (:block/parent target-block)
-                         target-block)))
+  (or (and (url-property-value? target-block)
+           (or (not sibling?)
+               (not= :db.cardinality/many
+                     (:db/cardinality (:logseq.property/created-from-property target-block)))))
+      (and sibling? (url-property-value? (:block/parent target-block)))))
 
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -851,7 +853,7 @@
                                       (string/blank? (:block/title target-block))
                                       (> (count blocks) 1)))]
      (when (and (seq blocks)
-                (not (url-property-value-child-target? target-block sibling?)))
+                (not (url-property-value-forbidden-target? target-block sibling?)))
        (let [blocks' (let [blocks' (blocks-with-level blocks)]
                        (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                          update-timestamps?
@@ -1099,7 +1101,7 @@
             property-tx (let [retract-property-tx (when block-from-property
                                                     [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
                                                      [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when (and sibling? target-from-property (not block-from-property))
+                              add-property-tx (when (and sibling? target-from-property)
                                                 [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
                                                  [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
                           (concat retract-property-tx add-property-tx))]
@@ -1160,7 +1162,7 @@
               original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
           (when (and (every? #(move-source-allowed-for-comments? % sibling?) blocks)
                      (move-target-allowed-for-comments? target-block sibling?)
-                     (not (url-property-value-child-target? target-block sibling?))
+                     (not (url-property-value-forbidden-target? target-block sibling?))
                      (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                      (not original-position?))
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})

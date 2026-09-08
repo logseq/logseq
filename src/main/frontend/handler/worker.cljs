@@ -6,6 +6,7 @@
             [frontend.common.crypt :as crypt]
             [frontend.context.i18n :as i18n]
             [frontend.handler.e2ee :as e2ee-handler]
+            [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
@@ -35,9 +36,6 @@
                              content)]
     (notification/show! translated-content status clear? uid timeout close-cb)))
 
-(defmethod handle :set-ui-state [_ _worker [path value]]
-  (state/set-state! path value))
-
 (defmethod handle :log [_ _worker [name level data]]
   (log/log name level data))
 
@@ -59,6 +57,10 @@
     (state/update-state!
      :assets/asset-file-write-finish
      (fn [m] (assoc-in m [repo asset-id] (or ts (.now js/Date)))))))
+
+(defmethod handle :thread-api/set-ui-state [_ _worker args]
+  (when-let [f (get @thread-api/*thread-apis :thread-api/set-ui-state)]
+    (apply f args)))
 
 (defmethod handle :thread-api/search-index-build-progress [_ _worker args]
   (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
@@ -155,6 +157,15 @@
           (p/resolved {:supported? false})
           (p/let [_ (e2ee-handler/<native-delete-secret! key)]
             {:supported? true}))))
+
+    :read-import-file
+    (let [path (:path payload)]
+      (if-not (string? path)
+        (p/rejected (ex-info "invalid read-import-file payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (file-graph-import/<read-file-graph-import-file path)))
 
     (p/rejected (ex-info "unsupported db-worker ui action"
                          {:code :unsupported-ui-action

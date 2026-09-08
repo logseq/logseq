@@ -139,8 +139,6 @@
                      (property-handler/block-property-keys db entity)
                      :block.temp/positioned-properties
                      (canonical-positioned-properties-map db entity)
-                     :block.temp/breadcrumb
-                     (block-breadcrumb/block-breadcrumb db entity)
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
         (string? raw-title)
@@ -307,7 +305,7 @@
 (defn- plain-render-block?
   [db block]
   (empty? (remove #{:block/tags}
-                  (property-handler/direct-block-property-ids db (:db/id block)))))
+                  (property-handler/block-property-keys db block))))
 
 (defn- block-positioned-properties-map
   [db block]
@@ -451,8 +449,6 @@
         block-uuid (:block/uuid block)]
     (cond-> (assoc block
                    :block.temp/refs-count (block-refs-count db block-id)
-                   :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb db block)
                    :block.temp/comment-thread-present?
                    (contains? commented-block-uuids (str block-uuid))
                    :block.temp/sync-conflicts

@@ -519,7 +519,6 @@
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
   (is (every? #{:block.temp/positioned-properties
-                :block.temp/breadcrumb
                 :block.temp/refs-count
                 :block.temp/order-list-index
                 :block.temp/property-keys}
@@ -1062,8 +1061,8 @@
                             #"Unknown renderer resource key"
                             (call-resource-raw api conn resource-key))))))
 
-(deftest canonical-visible-blocks-include-ready-properties-and-breadcrumbs-test
-  (let [{:keys [conn page resource-block positioned-property]}
+(deftest canonical-visible-blocks-keep-properties-without-preloading-breadcrumbs-test
+  (let [{:keys [conn resource-block positioned-property]}
         (render-resource-fixture)
         positioned-property-id (:db/id (d/entity @conn
                                                   [:block/uuid positioned-property]))
@@ -1072,9 +1071,8 @@
         target (get-in response [:blocks resource-block])]
     (is (contains? (:blocks response) positioned-property)
         "A positioned property row is ready in the same visible block load.")
-    (is (= [page]
-           (mapv :block/uuid (:block.temp/breadcrumb target)))
-        "The primary breadcrumb is ready with its owning block.")
+    (is (not (contains? target :block.temp/breadcrumb))
+        "Ancestor data loads only when a breadcrumb is displayed.")
     (is (= response
            (-> response ldb/write-transit-str ldb/read-transit-str)))))
 

@@ -8,6 +8,8 @@
 #?(:cljs
    (def *thread-apis (volatile! {})))
 
+#?(:cljs (def *profile (volatile! {})))
+
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defmacro defkeyword [& _args])
 
@@ -21,9 +23,8 @@
            ~qualified-keyword-name
            (fn ~(symbol (str "thread-api--" (name qualified-keyword-name))) ~params ~@body)))
 
-#?(:cljs (def *profile (volatile! {})))
-
 #?(:cljs (defonce ^:private *worker-thread-api-call-id (atom 0)))
+
 
 #?(:cljs
    (defn- log-worker-thread-api-call!
@@ -42,7 +43,7 @@
 
 #?(:cljs
    (defn remote-function
-     "Return a promise whose value is transit-str."
+     "Return a promise whose value is a transit string."
      [qualified-kw-str args-transit-str]
      (let [qkw (keyword qualified-kw-str)
            call-id (swap! *worker-thread-api-call-id inc)
