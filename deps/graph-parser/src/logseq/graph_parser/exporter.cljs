@@ -12,6 +12,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.storage :as storage]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -36,6 +37,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.emoji-data :as emoji-data]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.import-profile :as import-profile]
             [logseq.graph-parser.text :as text]
@@ -44,18 +46,38 @@
             [promesa.core :as p]))
 
 (defn- add-missing-timestamps
-  "Add updated-at or created-at timestamps if they doesn't exist"
+  "Add updated-at or created-at timestamps if they doesn't exist.
+   File-backed pages always use the file's birthtime/mtime when those exist,
+   including when the page was first mentioned from a journal.
+   Journal pages and their blocks keep the journal day, not filesystem times.
+   Reference-only pages created from a journal keep the journal date, even when
+   extract already stamped them with import time."
   ([block]
    (add-missing-timestamps block nil))
-  ([block {:keys [file-created-at file-updated-at]}]
-   (let [updated-at (or file-updated-at (common-util/time-ms))
-         created-at (or file-created-at updated-at)
-         block (cond-> block
-                 (nil? (:block/updated-at block))
-                 (assoc :block/updated-at updated-at)
-                 (nil? (:block/created-at block))
-                 (assoc :block/created-at created-at))]
-     block)))
+  ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
+   (let [file-page? (::file-page? block)
+         file-times? (and file-page?
+                          (not (:block/journal-day block))
+                          (or file-created-at file-updated-at))
+         journal-ref-page? (and current-journal-created-at
+                                (:block/name block)
+                                (not (:block/journal-day block))
+                                (not file-page?))
+         updated-at (cond
+                      file-times? (or file-updated-at file-created-at)
+                      journal-ref-page? current-journal-created-at
+                      file-updated-at file-updated-at
+                      :else (common-util/time-ms))
+         created-at (cond
+                      file-times? (or file-created-at file-updated-at)
+                      journal-ref-page? current-journal-created-at
+                      file-created-at file-created-at
+                      :else updated-at)]
+     (cond-> block
+       (or file-times? journal-ref-page? (nil? (:block/updated-at block)))
+       (assoc :block/updated-at updated-at)
+       (or file-times? journal-ref-page? (nil? (:block/created-at block)))
+       (assoc :block/created-at created-at)))))
 
 (defn- build-new-namespace-page [block]
   (let [new-title (ns-util/get-last-part (:block/title block))]
@@ -809,17 +831,47 @@
     (catch :default e
       (js/console.error "Translating linked reference filters failed with: " e))))
 
+(def ^:private emoji-icons
+  (delay
+    (into {}
+          (mapcat (fn [emoji]
+                    (map-indexed
+                     (fn [skin-index skin]
+                       (let [native (gobj/get skin "native")]
+                         [native (cond-> {:type :emoji :id native}
+                                   (pos? skin-index) (assoc :skin (inc skin-index)))]))
+                     (array-seq (gobj/get emoji "skins")))))
+          (gobj/getValues (gobj/get emoji-data/data
+                                "emojis")))))
+
+(defn- file-icon-value->db-icon
+  "Converts a file-graph `:icon` string to a DB icon when the emoji data supports it."
+  [prop-value]
+  (when (string? prop-value)
+    (get @emoji-icons (string/trim prop-value))))
+
+(defn- ignored-built-in-property-value
+  [prop prop-value {:block/keys [title name]}]
+  {:property prop :value prop-value :location (if name {:page name} {:block title})})
+
 (defn- update-built-in-property-values
-  [props page-names-to-uuids {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
+  [props page-names-to-uuids {:keys [ignored-properties all-idents]} block options]
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:icon :file :file-path :hl-stamp} prop)
+                       (if (#{:file :file-path :hl-stamp} prop)
                          (do (swap! ignored-properties
                                     conj
-                                    {:property prop :value prop-value :location (if name {:page name} {:block title})})
+                                    (ignored-built-in-property-value prop prop-value block))
                              nil)
                          (case prop
+                           :icon
+                           (if-let [icon (file-icon-value->db-icon prop-value)]
+                             [[:logseq.property/icon icon]]
+                             (do (swap! ignored-properties
+                                        conj
+                                        (ignored-built-in-property-value prop prop-value block))
+                                 nil))
                            :query-properties
                            (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
                              [[:logseq.property.table/ordered-columns cols]])
@@ -2170,7 +2222,8 @@
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       (add-missing-timestamps options)
-      (update-page-tags db user-options per-file-state all-idents)))
+      (update-page-tags db user-options per-file-state all-idents)
+      (dissoc ::file-page?)))
 
 (defn- get-page-parents
   "Like ldb/get-page-parents but using all-existing-page-uuids"
@@ -2245,11 +2298,28 @@
   [ref]
   {:block/uuid (second ref)})
 
+(defn- lookup-imported-page-uuid
+  "Uuid for a page already in this import or already imported into the db.
+   Ignore built-in pages so names like alias do not collide with the schema."
+  [db all-existing-page-uuids page-name]
+  (or (get all-existing-page-uuids page-name)
+      (when page-name
+        (when-let [page (ldb/get-page db page-name)]
+          (when-not (ldb/built-in? page)
+            (:block/uuid page))))))
+
 (defn- journal-file-title
   [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
     (second (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
                      normalized-path))))
+
+(defn- journal-file-created-at
+  "Created-at for pages first mentioned in this journal file, from the filename day."
+  [file]
+  (when-let [journal-title (journal-file-title file)]
+    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
+      (date-time-util/journal-day->ms journal-day))))
 
 (defn- journal-page-name-uuid-entries
   [{:keys [path]}]
@@ -2269,13 +2339,24 @@
          (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
-  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
-  (let [;; These attributes are not allowed to be transacted because they must not change across files
+  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
+  (let [file-page? (::file-page? m)
+        file-times? (and file-page?
+                         (not (:block/journal-day m))
+                         (or file-created-at file-updated-at))
+        m (cond-> (dissoc m ::file-page?)
+            file-times?
+            (assoc :block/created-at (or file-created-at file-updated-at)
+                   :block/updated-at (or file-updated-at file-created-at)))
+        ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                       m))
+        allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
+                                        (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                              m))
+                             ;; File stats replace first-mention / journal dates.
+                             file-times?
+                             (into [:block/created-at :block/updated-at]))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
       (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
@@ -2400,9 +2481,11 @@
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [import-state user-options]
+  [conn pages blocks {:keys [import-state user-options file-created-at file-updated-at]
                       :as options}]
   (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
+        file-page-created-at (or file-created-at file-updated-at)
+        file-page-updated-at (or file-updated-at file-created-at)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
                                           (contains? journal-page-name-uuids (:block/name %))))
@@ -2410,28 +2493,42 @@
                             (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
-                            ;; remove file path relative
-                            (map #(dissoc % :block/file)))
+                            ;; remove file path relative. Re-apply file stats after
+                            ;; with-ref-pages, which merges refs over the file page.
+                            (map #(let [file-page? (boolean (:block/file %))
+                                        apply-file-times? (and file-page? (not (:block/journal-day %)))]
+                                    (cond-> (dissoc % :block/file)
+                                      file-page?
+                                      (assoc ::file-page? true)
+                                      (and apply-file-times? file-page-created-at)
+                                      (assoc :block/created-at file-page-created-at)
+                                      (and apply-file-times? file-page-updated-at)
+                                      (assoc :block/updated-at file-page-updated-at)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-page-names-to-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
+        existing-uuid #(lookup-imported-page-uuid @conn all-existing-page-uuids
+                                                  (or (::original-name %) (:block/name %)))
+        db-existing-page-uuids (->> all-pages
+                                    (keep (fn [page]
+                                            (when-let [page-uuid (existing-uuid page)]
+                                              [(or (::original-name page) (:block/name page)) page-uuid])))
+                                    (into {}))
         all-new-page-uuids (->> all-pages
-                                (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
+                                (remove existing-uuid)
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids db-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (into [] (keep (fn [{m :block _properties-tx :properties-tx}]
-                         (let [page (if-let [page-uuid (if (::original-name m)
-                                                         (all-existing-page-uuids (::original-name m))
-                                                         (all-existing-page-uuids (:block/name m)))]
+                         (let [page (if-let [page-uuid (existing-uuid m)]
                                       (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
                                       (when (or (ldb/class? m)
                                                 ;; Don't build a new page if it overwrites an existing class
@@ -2716,7 +2813,8 @@
         journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
-                                 file-created-at (assoc :block/created-at file-created-at)
+                                 (or file-created-at file-updated-at)
+                                 (assoc :block/created-at (or file-created-at file-updated-at))
                                  file-updated-at (assoc :block/updated-at file-updated-at)))
         extract-options' (merge {:block-pattern (get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
@@ -2733,9 +2831,12 @@
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
                   (update :pages (fn [pages]
-                                   (map #(-> %
-                                             (dissoc :block.temp/original-page-name)
-                                             with-file-timestamps)
+                                   (map (fn [page]
+                                          (let [page (dissoc page :block.temp/original-page-name)]
+                                            (if (and (:block/file page)
+                                                     (not (:block/journal-day page)))
+                                              (with-file-timestamps page)
+                                              page)))
                                         pages)))
                   (update :blocks (fn [blocks]
                                     (fix-extracted-block-tags-and-refs
@@ -2860,6 +2961,13 @@
           [pages-index page-properties-tx property-page-properties-tx pages-tx''
            classes-tx' custom-status-tx blocks-index blocks-tx])))
 
+(defn- file-graph-tx-options
+  [options pages file preserve-empty-properties-uuids]
+  (merge (build-tx-options options)
+         {:journal-created-ats (build-journal-created-ats pages)
+          :current-journal-created-at (journal-file-created-at file)
+          :preserve-empty-property-block-uuids preserve-empty-properties-uuids}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph.
 
@@ -2881,9 +2989,7 @@
                                                       (get-in options [:extract-options :user-config])
                                                       {})
                                                 blocks)
-          tx-options (merge (build-tx-options options)
-                            {:journal-created-ats (build-journal-created-ats pages)
-                             :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
+          tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           _ (log-phase-ms! log-fn :prep prep-start {:file file})
           _ (import-progress! options {:phase :pages-tx :file file})
@@ -2956,12 +3062,17 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
-              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
+              ;; Prefer birthtime when it is a real time. Fall back to mtime when
+              ;; birthtime is missing or invalid (e.g. epoch-0 on ext4).
+              modified-at (or (common-util/timestamp-ms (:file-updated-at file))
+                              (common-util/timestamp-ms (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))))
+              created-at (or (common-util/timestamp-ms (:file-created-at file))
+                             (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime)))
+                             modified-at)
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
-                               created-at (assoc :file-created-at (.getTime created-at))
-                               modified-at (assoc :file-updated-at (.getTime modified-at)))
+                               created-at (assoc :file-created-at created-at)
+                               modified-at (assoc :file-updated-at modified-at))
               _ (<export-file conn m export-options)]
         ;; returning val results in smoother ui updates
         m)

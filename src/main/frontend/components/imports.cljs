@@ -3,6 +3,7 @@
   (:require ["path" :as node-path]
             [cljs-time.core :as t]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -22,6 +23,7 @@
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
             [logseq.shui.hooks :as hooks]
@@ -287,9 +289,12 @@
                         :warning false)
     (log/info :import-valid {:msg "Valid import!"})))
 
-(defn- show-notification [{:keys [msg level]}]
+(defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
-    (notification/show! msg :error)
+    (do
+      (notification/show! msg :error)
+      (when ex-data
+        (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
 (defn- import-file-descriptor
@@ -304,6 +309,23 @@
                   [path file])))
         files))
 
+(defn- <file-timestamps
+  "Prefer birthtime when present. Fall back to mtime / File.lastModified."
+  [{:keys [fs-path last-modified-at]}]
+  (p/let [stat (when (and fs-path (util/electron?) (path/absolute? fs-path))
+                  (p/catch (ipc/ipc :stat fs-path)
+                           (fn [error]
+                             (log/warn :import-file-stat-failed {:path fs-path :error error})
+                             nil)))
+          updated-at (common-util/timestamp-ms (or (:mtime stat) last-modified-at))
+          created-at (or (common-util/timestamp-ms (:birthtime stat))
+                         updated-at)]
+    (cond-> {}
+      created-at
+      (assoc :file-created-at created-at)
+      updated-at
+      (assoc :file-updated-at updated-at))))
+
 (defn- <serialize-import-file
   [file]
   (let [^js file-object (:file-object file)]
@@ -317,9 +339,11 @@
           (p/resolved (assoc (select-keys file [:path :fs-path])
                              :asset/payload (js/Uint8Array. buffer)
                              :asset/size (.-size file-object)))))
-      (p/let [content (.text file-object)]
-        (p/resolved (assoc (select-keys file [:path :fs-path])
-                           :file/content content))))))
+      (p/let [content (.text file-object)
+              timestamps (<file-timestamps file)]
+        (p/resolved (merge (select-keys file [:path :fs-path])
+                           timestamps
+                           {:file/content content}))))))
 
 (defn- start-file-graph-import-session!
   [files]
