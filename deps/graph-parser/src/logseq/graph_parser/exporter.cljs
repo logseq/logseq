@@ -3484,7 +3484,9 @@
      (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
      (set-finishing-import-ui! set-ui-state)
      (import-progress! doc-options {:step :favorites})
-     (export-favorites-from-config-edn conn repo-or-conn config {:log-fn log-fn})
+     (export-favorites-from-config-edn conn repo-or-conn config
+                                      (cond-> {}
+                                        log-fn (assoc :log-fn log-fn)))
      (import-progress! doc-options {:step :class-properties})
      (export-class-properties conn repo-or-conn)
      (import-progress! doc-options {:step :move-to-library})
@@ -3513,7 +3515,8 @@
                     {:timeout-ms import-timeout-ms
                      :heartbeat-ms import-heartbeat-ms
                      :log-fn log-fn}))
-        options (cond-> (assoc options :log-fn log-fn)
+        options (cond-> options
+                  log-fn (assoc :log-fn log-fn)
                   watchdog (assoc :import-watchdog watchdog))]
     (reset! gp-block/*export-to-db-graph? true)
     (swap! conn assoc :skip-store? true)
