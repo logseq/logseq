@@ -124,6 +124,81 @@
       (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
               (common-util/safe-decode-uri-component)))))
 
+(def ^:private iframe-src-attr-re
+  #"(?i)(<iframe\b[^>]*?\bsrc(?!doc)\s*=\s*)(\"[^\"]*\"|'[^']*'|[^\s>]+)")
+
+(defn- unwrap-quoted-attr
+  [quoted]
+  (let [n (count quoted)]
+    (if (and (>= n 2)
+             (or (and (string/starts-with? quoted "\"")
+                      (string/ends-with? quoted "\""))
+                 (and (string/starts-with? quoted "'")
+                      (string/ends-with? quoted "'"))))
+      (subs quoted 1 (dec n))
+      quoted)))
+
+(defn- wrap-quoted-attr
+  [original value]
+  (cond
+    (string/starts-with? original "\"") (str "\"" value "\"")
+    (string/starts-with? original "'") (str "'" value "'")
+    :else value))
+
+(defn- iframe-src-protocol
+  [src]
+  (when-let [idx (string/index-of src ":")]
+    (when (and (pos? idx)
+               (not (string/includes? (subs src 0 idx) "/")))
+      (string/lower-case (subs src 0 (inc idx))))))
+
+(defn local-file-iframe-src->assets-url
+  "Convert a local-file iframe src to assets:// on Electron.
+
+  Chromium blocks file:// subframe loads when webSecurity is on (prod
+  Desktop). The privileged assets:// protocol is the existing safe
+  substitute used for images. Only file:// and graph-relative asset
+  paths are rewritten; http(s) and other protocols stay unchanged."
+  [src]
+  (when (and (util/electron?) (string? src) (not (string/blank? src)))
+    (let [protocol (iframe-src-protocol src)]
+      (cond
+        (= "file:" protocol)
+        (when-let [fs-path (not-empty (path/file-url-or-path->path src))]
+          (normalize-asset-resource-url fs-path))
+
+        (some? protocol)
+        nil
+
+        (common-config/local-relative-asset? src)
+        (when-let [repo (state/get-current-repo)]
+          (when (config/get-repo-dir repo)
+            (resolve-asset-real-path-url repo src)))
+
+        :else
+        nil))))
+
+(defn rewrite-local-file-iframe-srcs
+  "Rewrite file:// and graph-asset iframe srcs to assets:// on Electron.
+
+  Only iframe src attributes are rewritten so http(s) embeds and other
+  tags keep their original URLs. No-op outside Electron."
+  [html]
+  (if-not (and (util/electron?) (string? html) (seq html))
+    html
+    (reduce (fn [acc [_ prefix quoted-src]]
+              (let [src (unwrap-quoted-attr quoted-src)
+                    rewritten (or (local-file-iframe-src->assets-url src) src)
+                    from (str prefix quoted-src)
+                    to (str prefix (wrap-quoted-attr quoted-src rewritten))
+                    idx (when (not= from to)
+                          (string/index-of acc from))]
+                (if idx
+                  (str (subs acc 0 idx) to (subs acc (+ idx (count from))))
+                  acc)))
+            html
+            (re-seq iframe-src-attr-re html))))
+
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
