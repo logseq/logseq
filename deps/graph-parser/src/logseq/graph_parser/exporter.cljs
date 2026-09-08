@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -35,24 +36,45 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.emoji-data :as emoji-data]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
 
 (defn- add-missing-timestamps
-  "Add updated-at or created-at timestamps if they doesn't exist"
+  "Add updated-at or created-at timestamps if they doesn't exist.
+   File-backed pages always use the file's birthtime/mtime when those exist,
+   including when the page was first mentioned from a journal.
+   Journal pages and their blocks keep the journal day, not filesystem times.
+   Reference-only pages created from a journal keep the journal date, even when
+   extract already stamped them with import time."
   ([block]
    (add-missing-timestamps block nil))
-  ([block {:keys [file-created-at file-updated-at]}]
-   (let [updated-at (or file-updated-at (common-util/time-ms))
-         created-at (or file-created-at updated-at)
-         block (cond-> block
-                 (nil? (:block/updated-at block))
-                 (assoc :block/updated-at updated-at)
-                 (nil? (:block/created-at block))
-                 (assoc :block/created-at created-at))]
-     block)))
+  ([block {:keys [file-created-at file-updated-at current-journal-created-at]}]
+   (let [file-page? (::file-page? block)
+         file-times? (and file-page?
+                          (not (:block/journal-day block))
+                          (or file-created-at file-updated-at))
+         journal-ref-page? (and current-journal-created-at
+                                (:block/name block)
+                                (not (:block/journal-day block))
+                                (not file-page?))
+         updated-at (cond
+                      file-times? (or file-updated-at file-created-at)
+                      journal-ref-page? current-journal-created-at
+                      file-updated-at file-updated-at
+                      :else (common-util/time-ms))
+         created-at (cond
+                      file-times? (or file-created-at file-updated-at)
+                      journal-ref-page? current-journal-created-at
+                      file-created-at file-created-at
+                      :else updated-at)]
+     (cond-> block
+       (or file-times? journal-ref-page? (nil? (:block/updated-at block)))
+       (assoc :block/updated-at updated-at)
+       (or file-times? journal-ref-page? (nil? (:block/created-at block)))
+       (assoc :block/created-at created-at)))))
 
 (defn- build-new-namespace-page [block]
   (let [new-title (ns-util/get-last-part (:block/title block))]
@@ -810,17 +832,47 @@
     (catch :default e
       (js/console.error "Translating linked reference filters failed with: " e))))
 
+(def ^:private emoji-icons
+  (delay
+    (into {}
+          (mapcat (fn [emoji]
+                    (map-indexed
+                     (fn [skin-index skin]
+                       (let [native (gobj/get skin "native")]
+                         [native (cond-> {:type :emoji :id native}
+                                   (pos? skin-index) (assoc :skin (inc skin-index)))]))
+                     (array-seq (gobj/get emoji "skins")))))
+          (gobj/getValues (gobj/get emoji-data/data
+                                "emojis")))))
+
+(defn- file-icon-value->db-icon
+  "Converts a file-graph `:icon` string to a DB icon when the emoji data supports it."
+  [prop-value]
+  (when (string? prop-value)
+    (get @emoji-icons (string/trim prop-value))))
+
+(defn- ignored-built-in-property-value
+  [prop prop-value {:block/keys [title name]}]
+  {:property prop :value prop-value :location (if name {:page name} {:block title})})
+
 (defn- update-built-in-property-values
-  [props page-names-to-uuids {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
+  [props page-names-to-uuids {:keys [ignored-properties all-idents]} block options]
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:icon :file :file-path :hl-stamp} prop)
+                       (if (#{:file :file-path :hl-stamp} prop)
                          (do (swap! ignored-properties
                                     conj
-                                    {:property prop :value prop-value :location (if name {:page name} {:block title})})
+                                    (ignored-built-in-property-value prop prop-value block))
                              nil)
                          (case prop
+                           :icon
+                           (if-let [icon (file-icon-value->db-icon prop-value)]
+                             [[:logseq.property/icon icon]]
+                             (do (swap! ignored-properties
+                                        conj
+                                        (ignored-built-in-property-value prop prop-value block))
+                                 nil))
                            :query-properties
                            (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
                              [[:logseq.property.table/ordered-columns cols]])
@@ -1219,10 +1271,41 @@
            :path (path/path-join zotero-data-dir "storage" id label)
            :base label})))))
 
-(defn- file-link-map->url
+(defn- remote-http-url?
+  [s]
+  (boolean (and (string? s) (re-find #"^https?://" s))))
+
+(defn- link-map->url
+  "Reconstruct a file, HTTP, or HTTPS URL from an mldoc Complex link map."
   [m]
-  (when (and (map? m) (= "file" (:protocol m)) (string? (:link m)))
-    (str "file://" (:link m))))
+  (when (and (map? m) (contains? #{"file" "http" "https"} (:protocol m))
+             (string? (:link m)))
+    (str (:protocol m) "://" (:link m))))
+
+(defn- external-pdf-url?
+  [s]
+  (and (string? s)
+       (or (string/starts-with? s "file://")
+           (remote-http-url? s))))
+
+(defn- windows-drive-path?
+  [s]
+  (boolean (and (string? s) (re-find #"^[a-zA-Z]:[/\\]" s))))
+
+(defn- pdf-target-path
+  [target]
+  (if (remote-http-url? target)
+    (try
+      (.-pathname (js/URL. target))
+      (catch :default _ nil))
+    target))
+
+(defn- pdf-file?
+  [target]
+  (let [path (pdf-target-path target)]
+    (and (string? path)
+         (string? (path/filename path))
+         (= "pdf" (path/file-ext path)))))
 
 (defn- file-url->path
   [file-url]
@@ -1253,10 +1336,8 @@
                       (string/ends-with? path-or-map ".pdf"))
                   (and (map? path-or-map) (= "zotero" (:protocol path-or-map)) (string? (:link path-or-map)))
                   (:link (get-zotero-local-pdf-path config (second x)))
-                  (file-link-map->url path-or-map)
-                  (= "pdf" (path/file-ext (file-link-map->url path-or-map)))
                   :else
-                  nil)))
+                  (pdf-file? (link-map->url path-or-map)))))
          (swap! results update :asset-links conj x)
          (and (vector? x)
               (= "Macro" (first x))
@@ -1414,10 +1495,6 @@
     (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])
     (:block/name (:block/parent block))
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
-
-(defn- pdf-file?
-  [path]
-  (= "pdf" (some-> path path/file-ext string/lower-case)))
 
 (defn asset-path->name
   "Given an asset's relative or full path, create a unique name for identifying an asset.
@@ -1603,7 +1680,14 @@
   [asset-link user-config linked-files linked-base-dir zotero-imported-files]
   (let [link-map (second asset-link)
         path* (-> link-map :url second)
-        file-url (file-link-map->url path*)
+        link-url (or (link-map->url path*)
+                     (when (and (string? path*)
+                                (or (external-pdf-url? path*)
+                                    (windows-drive-path? path*)))
+                       path*))
+        remote-url? (remote-http-url? link-url)
+        file-url (when (and (string? link-url) (string/starts-with? link-url "file://"))
+                   link-url)
         zotero-path-data (when (map? path*)
                            (get-zotero-local-pdf-path user-config link-map))
         zotero-asset? (some? zotero-path-data)
@@ -1622,14 +1706,20 @@
                                                 :link (:link zotero-path-data)
                                                 :base linked-base}
                                    zotero-asset? zotero-path-data
+                                   remote-url? {:path link-url
+                                                :link link-url
+                                                :base (path/filename (pdf-target-path link-url))}
                                    file-url {:path (file-url->path file-url)
                                              :link file-url
                                              :base (path/filename file-url)}
+                                   (windows-drive-path? path*) {:path path*
+                                                                :link (str "file://" path*)
+                                                                :base (path/filename path*)}
                                    :else {:path path*})
         asset-name (cond
                      linked-path base
                      zotero-asset? (or (get zotero-imported-files (last (string/split link #"/"))) base)
-                     :else (some-> path asset-path->name))
+                     :else (some-> path pdf-target-path asset-path->name))
         path (cond
                linked-path path
                (and zotero-asset? asset-name) (string/replace path #"[^/]+$" asset-name)
@@ -1645,24 +1735,47 @@
      :path path
      :zotero-asset? zotero-asset?}))
 
-(defn- ensure-asset-data!
+(defn- external-linked-pdf?
+  [asset-link-or-name path]
+  (or (external-pdf-url? asset-link-or-name)
+      (external-pdf-url? path)
+      (windows-drive-path? path)))
+
+(defn- put-linked-pdf-asset!
+  [assets asset-link-or-name path asset-path stat]
+  (swap! assets assoc asset-link-or-name
+         {:asset-id (d/squuid)
+          :type "pdf"
+          ;; avoid using the real checksum since it could be the same with in-graph asset
+          :checksum "0000000000000000000000000000000000000000000000000000000000000000"
+          ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
+          :size (or (:size stat) (some-> stat .-size) 0)
+          :external-url (or asset-link-or-name path)
+          :external-file-name asset-path}))
+
+(defn- <ensure-asset-data!
   [assets asset-link-or-name path asset-path <get-file-stat]
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
-             (pdf-file? path)
-             (fn? <get-file-stat))
-    (-> (p/let [stat (<get-file-stat path)]
-          (swap! assets assoc asset-link-or-name
-                 {:asset-id (d/squuid)
-                  :type "pdf"
-                  ;; avoid using the real checksum since it could be the same with in-graph asset
-                  :checksum "0000000000000000000000000000000000000000000000000000000000000000"
-                  ;; gracefully create stat-less assets so that references to them are still valid
-                  ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
-                  :size (or (:size stat) (some-> stat .-size) 0)
-                  :external-url (or asset-link-or-name path)
-                  :external-file-name asset-path}))
-        (p/catch (constantly nil)))))
+             (pdf-file? path))
+    (let [external? (external-linked-pdf? asset-link-or-name path)
+          remote? (or (remote-http-url? asset-link-or-name)
+                      (remote-http-url? path))]
+      (cond
+        remote?
+        (do (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)
+            (p/resolved nil))
+
+        (fn? <get-file-stat)
+        (-> (p/let [stat (<get-file-stat path)]
+              (put-linked-pdf-asset! assets asset-link-or-name path asset-path stat))
+            (p/catch (fn [_]
+                       (when external?
+                         (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)))))
+
+        external?
+        (do (put-linked-pdf-asset! assets asset-link-or-name path asset-path nil)
+            (p/resolved nil))))))
 
 (defn- build-asset-tx
   [asset-data asset-name asset-link-or-name asset-link pdf-annotation-pages opts assets zotero-asset?]
@@ -1672,12 +1785,17 @@
                          (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                            {:logseq.property.asset/resize-metadata metadata}))
         external-file-asset? (and (string? asset-name)
-                                  (not= asset-name asset-link-or-name))
-        pdf-annotations-paths (if (and (or zotero-asset? external-file-asset?)
-                                       (string? asset-name))
-                                [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
-                                 (path/path-join common-config/local-assets-dir asset-name)]
-                                [(or asset-name asset-link-or-name)])
+                                  (or (not= asset-name asset-link-or-name)
+                                      (external-pdf-url? asset-link-or-name)
+                                      (windows-drive-path? asset-name)))
+        pdf-annotations-paths (if-let [annotation-file (:pdf-annotation-file opts)]
+                                [(path/path-join common-config/local-assets-dir
+                                                 (-> (subs (node-path/basename annotation-file) 5)
+                                                     (string/replace #"(?i)\.md$" ".pdf")))]
+                                (if (and (or zotero-asset? external-file-asset?) (string? asset-name))
+                                  [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
+                                   (path/path-join common-config/local-assets-dir asset-name)]
+                                  [(or asset-name asset-link-or-name)]))
         pdf-annotations-tx (when (some pdf-file? pdf-annotations-paths)
                              (build-pdf-annotations-tx pdf-annotations-paths assets new-asset pdf-annotation-pages opts))
         asset-tx (concat [new-asset] pdf-annotations-tx)]
@@ -1699,7 +1817,7 @@
                                   (fn [asset-link]
                                     (p/let [{:keys [asset-link-or-name asset-name asset-path path zotero-asset?]}
                                             (resolve-asset-data asset-link user-config linked-files linked-base-dir zotero-imported-files)
-                                            _ (ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
+                                            _ (<ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
                                             asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
                                       (if asset-data
                                         (cond
@@ -1729,6 +1847,62 @@
           (seq asset-blocks)
           (assoc :asset-blocks-tx asset-blocks)))
       (p/resolved {:block block}))))
+
+(defn- hls-annotation-md-file?
+  [file]
+  (string/starts-with? (str (path/basename file)) "hls__"))
+
+(defn- pdf-url-from-text
+  [s]
+  (when (string? s)
+    (let [trimmed (string/trim s)
+          url (or (second (re-find #"\[[^\]]*\]\(([^)\s]+)\)" trimmed))
+                  trimmed)]
+      (when (and (pdf-file? url)
+                 (or (external-pdf-url? url)
+                     (windows-drive-path? url)))
+        url))))
+
+(defn- url->complex-link-map
+  [url]
+  (cond
+    (string/starts-with? url "https://")
+    {:protocol "https" :link (subs url 8)}
+    (string/starts-with? url "http://")
+    {:protocol "http" :link (subs url 7)}
+    (string/starts-with? url "file://")
+    {:protocol "file" :link (subs url 7)}
+    (windows-drive-path? url)
+    {:protocol "file" :link url}))
+
+(defn- synthetic-pdf-asset-link
+  [url]
+  (when-let [link-map (url->complex-link-map url)]
+    (let [label (or (path/filename url) "pdf")]
+      ["Link" {:url ["Complex" link-map]
+               :label [["Plain" label]]
+               :full_text (str "![" label "](" url ")")
+               :metadata ""}])))
+
+(defn- hls-extracted-pdf-urls
+  [extracted]
+  (->> (concat (:pages extracted) (:blocks extracted))
+       (mapcat #(vals (select-keys (:block/properties-text-values %) [:file :file-path])))
+       (keep pdf-url-from-text)
+       distinct))
+
+(defn- <import-hls-linked-pdf-assets!
+  "Create PDF assets from an annotation page's file properties."
+  [file {:keys [import-state] :as options}]
+  (let [extracted (get @(:pdf-annotation-pages import-state) (node-path/basename file))
+        asset-links (into [] (keep synthetic-pdf-asset-link) (hls-extracted-pdf-urls extracted))]
+    (when (seq asset-links)
+      (p/let [result (<handle-assets-in-block
+                      {:block/title ""}
+                      {:asset-links asset-links}
+                      import-state
+                      (assoc options :pdf-annotation-file file))]
+        (:asset-blocks-tx result)))))
 
 (defn- quote-node->markdown
   "Converts a Quote AST node to markdown, preserving nested quote structure.
@@ -2021,7 +2195,8 @@
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       (add-missing-timestamps options)
-      (update-page-tags db user-options per-file-state all-idents)))
+      (update-page-tags db user-options per-file-state all-idents)
+      (dissoc ::file-page?)))
 
 (defn- get-page-parents
   "Like ldb/get-page-parents but using all-existing-page-uuids"
@@ -2061,11 +2236,28 @@
                                    (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
+(defn- lookup-imported-page-uuid
+  "Uuid for a page already in this import or already imported into the db.
+   Ignore built-in pages so names like alias do not collide with the schema."
+  [db all-existing-page-uuids page-name]
+  (or (get all-existing-page-uuids page-name)
+      (when page-name
+        (when-let [page (ldb/get-page db page-name)]
+          (when-not (ldb/built-in? page)
+            (:block/uuid page))))))
+
 (defn- journal-file-title
   [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
     (second (re-find #"(?:^|/)journals/(\d{4}_\d{2}_\d{2})\.(?:md|markdown|org)$"
                      normalized-path))))
+
+(defn- journal-file-created-at
+  "Created-at for pages first mentioned in this journal file, from the filename day."
+  [file]
+  (when-let [journal-title (journal-file-title file)]
+    (when-let [journal-day (date-time-util/journal-title->int journal-title ["yyyy_MM_dd"])]
+      (date-time-util/journal-day->ms journal-day))))
 
 (defn- journal-page-name-uuid-entries
   [{:keys [path]}]
@@ -2085,13 +2277,24 @@
          (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
 (defn- build-existing-page
-  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
-  (let [;; These attributes are not allowed to be transacted because they must not change across files
+  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
+  (let [file-page? (::file-page? m)
+        file-times? (and file-page?
+                         (not (:block/journal-day m))
+                         (or file-created-at file-updated-at))
+        m (cond-> (dissoc m ::file-page?)
+            file-times?
+            (assoc :block/created-at (or file-created-at file-updated-at)
+                   :block/updated-at (or file-updated-at file-created-at)))
+        ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
-                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                       m))
+        allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
+                                        (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                              m))
+                             ;; File stats replace first-mention / journal dates.
+                             file-times?
+                             (into [:block/created-at :block/updated-at]))
         block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
       (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
@@ -2216,9 +2419,11 @@
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [import-state user-options]
+  [conn pages blocks {:keys [import-state user-options file-created-at file-updated-at]
                       :as options}]
   (let [journal-page-name-uuids @(:journal-page-name-uuids import-state)
+        file-page-created-at (or file-created-at file-updated-at)
+        file-page-updated-at (or file-updated-at file-created-at)
         all-pages* (-> (->> (extract/with-ref-pages pages blocks)
                             (remove #(and (not (:block/file %))
                                           (contains? journal-page-name-uuids (:block/name %))))
@@ -2226,8 +2431,17 @@
                             (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
                                                      (keyword (:block/name %)))
                                           (not (:block/file %))))
-                            ;; remove file path relative
-                            (map #(dissoc % :block/file)))
+                            ;; remove file path relative. Re-apply file stats after
+                            ;; with-ref-pages, which merges refs over the file page.
+                            (map #(let [file-page? (boolean (:block/file %))
+                                        apply-file-times? (and file-page? (not (:block/journal-day %)))]
+                                    (cond-> (dissoc % :block/file)
+                                      file-page?
+                                      (assoc ::file-page? true)
+                                      (and apply-file-times? file-page-created-at)
+                                      (assoc :block/created-at file-page-created-at)
+                                      (and apply-file-times? file-page-updated-at)
+                                      (assoc :block/updated-at file-page-updated-at)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state)))
@@ -2235,20 +2449,25 @@
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
+        existing-uuid #(lookup-imported-page-uuid @conn all-existing-page-uuids
+                                                  (or (::original-name %) (:block/name %)))
+        db-existing-page-uuids (->> all-pages
+                                    (keep (fn [page]
+                                            (when-let [page-uuid (existing-uuid page)]
+                                              [(or (::original-name page) (:block/name page)) page-uuid])))
+                                    (into {}))
         all-new-page-uuids (->> all-pages
-                                (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
+                                (remove existing-uuid)
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids db-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
-                         (let [page (if-let [page-uuid (if (::original-name m)
-                                                         (all-existing-page-uuids (::original-name m))
-                                                         (all-existing-page-uuids (:block/name m)))]
+                         (let [page (if-let [page-uuid (existing-uuid m)]
                                       (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
                                       (when (or (ldb/class? m)
                                                 ;; Don't build a new page if it overwrites an existing class
@@ -2493,7 +2712,8 @@
         journal-file? (some? (journal-file-title file))
         with-file-timestamps (fn [node]
                                (cond-> node
-                                 file-created-at (assoc :block/created-at file-created-at)
+                                 (or file-created-at file-updated-at)
+                                 (assoc :block/created-at (or file-created-at file-updated-at))
                                  file-updated-at (assoc :block/updated-at file-updated-at)))
         extract-options' (merge {:block-pattern (get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
@@ -2509,9 +2729,12 @@
         (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
                   (update :pages (fn [pages]
-                                   (map #(-> %
-                                             (dissoc :block.temp/original-page-name)
-                                             with-file-timestamps)
+                                   (map (fn [page]
+                                          (let [page (dissoc page :block.temp/original-page-name)]
+                                            (if (and (:block/file page)
+                                                     (not (:block/journal-day page)))
+                                              (with-file-timestamps page)
+                                              page)))
                                         pages)))
                   (update :blocks (fn [blocks]
                                     (fix-extracted-block-tags-and-refs
@@ -2522,7 +2745,7 @@
                 (swap! (:ignored-files import-state) conj
                        {:path file :reason :unsupported-file-format})))]
     ;; Annotation markdown pages are saved for later as they are dependant on the asset being annotated
-    (if (string/starts-with? (str (path/basename file)) "hls__")
+    (if (hls-annotation-md-file? file)
       (do
         (swap! (:pdf-annotation-pages import-state) assoc (node-path/basename file) extracted)
         nil)
@@ -2598,6 +2821,13 @@
   [ref]
   {:block/uuid (second ref)})
 
+(defn- file-graph-tx-options
+  [options pages file preserve-empty-properties-uuids]
+  (merge (build-tx-options options)
+         {:journal-created-ats (build-journal-created-ats pages)
+          :current-journal-created-at (journal-file-created-at file)
+          :preserve-empty-property-block-uuids preserve-empty-properties-uuids}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -2616,9 +2846,7 @@
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
-          tx-options (merge (build-tx-options options)
-                            {:journal-created-ats (build-journal-created-ats pages)
-                             :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
+          tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
@@ -2690,12 +2918,17 @@
               content (<read-file file)
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
-              created-at (or (:birthtime stat) (some-> ^js stat .-birthtime))
-              modified-at (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))
+              ;; Prefer birthtime when it is a real time. Fall back to mtime when
+              ;; birthtime is missing or invalid (e.g. epoch-0 on ext4).
+              modified-at (or (common-util/timestamp-ms (:file-updated-at file))
+                              (common-util/timestamp-ms (or (:mtime stat) (some-> ^js stat .-mtime) (:last-modified-at file))))
+              created-at (or (common-util/timestamp-ms (:file-created-at file))
+                             (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime)))
+                             modified-at)
               m {:file/path path :file/content content}
               export-options (cond-> (dissoc options :set-ui-state :<export-file)
-                               created-at (assoc :file-created-at (.getTime created-at))
-                               modified-at (assoc :file-updated-at (.getTime modified-at)))
+                               created-at (assoc :file-created-at created-at)
+                               modified-at (assoc :file-updated-at modified-at))
               _ (<export-file conn m export-options)]
         ;; returning val results in smoother ui updates
         m)
@@ -2848,11 +3081,18 @@
                                  *doc-files)
                         (range 0 (count *doc-files)))]
     (index-journal-page-name-uuids! doc-files (:import-state options))
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
-                 i 0]
-          (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
-                     (inc i))))
+    (let [[annotation-files other-files] (split-with #(hls-annotation-md-file? (:path %)) doc-files)]
+      (-> (p/do!
+           (p/doseq [file annotation-files]
+             (export-doc-file file conn <read-file options))
+           (p/doseq [{file :path} annotation-files]
+             (p/let [tx (<import-hls-linked-pdf-assets! file options)]
+               (when (seq tx)
+                 (let [report (ldb/transact! conn tx {::imported-data? true ::path file ::new-graph? true})]
+                   (save-from-tx tx options)
+                   (on-tx-report report)))))
+           (p/doseq [file other-files]
+             (export-doc-file file conn <read-file options)))
         (p/then (fn [_]
                   (p/let [normalize-tx-report (normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
@@ -2863,7 +3103,7 @@
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
                                  :ex-data {:error e}})
-                   (throw e))))))
+                   (throw e)))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path

@@ -1525,6 +1525,109 @@
     (is (#'editor/block-map-has-children? parent))
     (is (not (#'editor/block-map-has-children? leaf)))))
 
+(deftest enter-on-url-property-value-saves-and-exits-instead-of-inserting-test
+  (let [url-block {:db/id 1
+                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                   :block/title "https://example.com/path"
+                   :logseq.property/created-from-property {:logseq.property/type :url}}
+        target #js {:value "https://example.com/path"
+                    :selectionStart 19}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block url-block
+                                                :config {:id (str (:block/uuid url-block))}
+                                                :node target
+                                                :value "https://example.com/path"
+                                                :pos 19})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))
+                  editor/insert-new-block! (fn [& _args]
+                                             (swap! calls conj :insert-new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a URL property value must save and exit without creating a child or sibling."))))
+
+(deftest enter-on-multiple-url-property-value-allows-siblings-only-test
+  (doseq [zoomed? [false true]]
+    (let [block-uuid (random-uuid)
+          url-block {:block/uuid block-uuid
+                     :logseq.property/created-from-property
+                     {:logseq.property/type :url
+                      :db/cardinality :db.cardinality/many}}
+          target #js {:value "https://example.com" :selectionStart 19}
+          calls (atom [])]
+      (with-redefs [editor/get-state
+                    (constantly {:block url-block
+                                 :config {:id (str (if zoomed? block-uuid (random-uuid)))}
+                                 :node target})
+                    editor/inside-of-editor-block (constantly true)
+                    editor/pending-new-block? (constantly false)
+                    state/doc-mode-enter-for-new-line? (constantly false)
+                    editor/inside-of-single-block (constantly false)
+                    editor/escape-editing #(swap! calls conj :escape)
+                    editor/keydown-new-block (fn [_] (swap! calls conj :insert))]
+        (editor/keydown-new-block-handler
+         #js {:target target :preventDefault (fn [])})
+        (is (= [(if zoomed? :escape :insert)] @calls))))))
+
+(deftest insert-new-block-aux-does-not-split-url-property-value-test
+  (async done
+    (let [url "https://example.com/path"
+          url-block {:db/id 1
+                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                     :block/title url
+                     :logseq.property/created-from-property {:logseq.property/type :url}}
+          calls (atom [])]
+      (-> (p/with-redefs [editor/escape-editing (fn [& _args]
+                                                  (swap! calls conj :escape-editing))
+                          editor/outliner-insert-block!
+                          (fn [& _args]
+                            (swap! calls conj :insert)
+                            (p/resolved nil))
+                          db-async/<get-block-with-children
+                          (fn [& _]
+                            (swap! calls conj :load-children)
+                            (p/resolved {:block url-block :children []}))]
+            (editor/insert-new-block-aux! {:id (str (:block/uuid url-block))} url-block url))
+          (p/then
+           (fn [result]
+             (is (= [:escape-editing] @calls)
+                 "Enter must not save a truncated title or insert around a URL value")
+             (is (= [nil nil nil] result))
+             (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
+(deftest insert-new-block-skips-url-property-value-test
+  (let [url-block {:db/id 1
+                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                   :block/title "https://logseq.com"
+                   :logseq.property/created-from-property {:logseq.property/type :url}}
+        calls (atom [])]
+    (with-redefs [editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/start-pending-new-block! (fn [& _args]
+                                                    (swap! calls conj :pending))
+                  editor/insert-new-block-aux! (fn [& _args]
+                                                 (swap! calls conj :insert-aux)
+                                                 (p/resolved [nil nil nil]))]
+      (editor/insert-new-block! {:block url-block
+                                 :value "https://logseq.com"
+                                 :config {:id (str (:block/uuid url-block))}}
+                                "https://logseq.com"
+                                nil)
+      (is (= [:escape-editing] @calls)
+          "insert-new-block! must not create a next block from a URL value."))))
+
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -2575,3 +2678,61 @@
       (#'editor/enter-comments-area-node! comments-node)
       (is (= [comments-node] @selected)
           "Collapsed comments should be selected for keyboard shortcuts"))))
+
+(deftest bottom-properties-row-in-block-matches-owned-row-only-test
+  (let [parent-id (str #uuid "11111111-1111-1111-1111-111111111111")
+        child-id (str #uuid "22222222-2222-2222-2222-222222222222")
+        child-row (js-obj "id" "child-row"
+                          "data-bottom-properties-row" child-id)
+        parent-row (js-obj "id" "parent-row"
+                           "data-bottom-properties-row" parent-id)
+        descendant-selector (str "[data-bottom-properties-row=\"" parent-id "\"]")
+        parent-without-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) nil
+                                    :else nil)))
+        parent-with-own-row
+        (js-obj "blockid" parent-id
+                "querySelector" (fn [selector]
+                                  (cond
+                                    (= selector ".bottom-properties-row") child-row
+                                    (= selector descendant-selector) parent-row
+                                    :else nil)))]
+    (is (nil? (#'editor/bottom-properties-row-in-block parent-without-own-row))
+        "A parent must not treat a child icon/bottom row as its own navigation stop")
+    (is (identical? parent-row (#'editor/bottom-properties-row-in-block parent-with-own-row))
+        "A parent still resolves the bottom-properties row it owns")))
+
+(deftest db-collapsable-uses-property-keys-and-class-properties-test
+  (testing "own property-keys make a childless node collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "class-provided property-keys are collapsable even without a value"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block/tags [{:db/ident :user.class/c1}]
+          :block.temp/property-keys [:user.property/p1]})))
+
+  (testing "property idents on the worker map are used when property-keys is absent"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :user.property/p1 "filled"})))
+
+  (testing "query blocks stay collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "query"
+          :logseq.property/query {:block/title "q"}})))
+
+  (testing "tags or titles alone do not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :user.class/c1}]
+               :block.temp/property-keys [:block/tags]})))
+    (is (not (editor/db-collapsable?
+              {:block/title "plain"
+               :block/tags [{:db/ident :logseq.class/Page}]})))))

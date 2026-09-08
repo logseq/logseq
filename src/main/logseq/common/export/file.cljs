@@ -302,6 +302,7 @@
         ;; for the explicit "Export page" feature (see :encode-highlight-as-mark?
         ;; in get-content-config), not for markdown-mirror generation.
         content (if (and (:encode-highlight-as-mark? context)
+                         (not (contains? #{:code :math} (:logseq.property.node/display-type b)))
                          (not (string/blank? content))
                          (highlighted-block? db b))
                   (str "^^" content "^^")
