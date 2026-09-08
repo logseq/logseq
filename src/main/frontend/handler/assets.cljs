@@ -98,6 +98,32 @@
                     (path/prepend-protocol protocol (path/path-join graph-root rpath))))]
         ret))))
 
+(defn normalize-asset-resource-url
+  "try to convert resource file to url asset link"
+  [path]
+  (let [windows-drive-path? (windows-drive-absolute-path? path)
+        protocol-link? (and (not windows-drive-path?)
+                            (common-config/protocol-path? path))]
+    (cond
+      protocol-link?
+      path
+
+      ;; BUG: avoid double encoding from PDF assets
+      (or (path/absolute? path)
+          windows-drive-path?)
+      (let [protocol (if (util/electron?) "assets://" "file://")
+            path (if (util/electron?)
+                   (protect-windows-drive-in-assets-path path)
+                   path)]
+        (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
+          ;; Incoming path might be already URL encoded. from PDF assets
+          (path/path-join protocol (common-util/safe-decode-uri-component path))
+          (path/path-join protocol path)))
+
+      :else ;; relative path or alias path
+      (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
+              (common-util/safe-decode-uri-component)))))
+
 (def ^:private iframe-src-attr-re
   #"(?i)(<iframe\b[^>]*?\bsrc(?!doc)\s*=\s*)(\"[^\"]*\"|'[^']*'|[^\s>]+)")
 
@@ -172,32 +198,6 @@
                   acc)))
             html
             (re-seq iframe-src-attr-re html))))
-
-(defn normalize-asset-resource-url
-  "try to convert resource file to url asset link"
-  [path]
-  (let [windows-drive-path? (windows-drive-absolute-path? path)
-        protocol-link? (and (not windows-drive-path?)
-                            (common-config/protocol-path? path))]
-    (cond
-      protocol-link?
-      path
-
-      ;; BUG: avoid double encoding from PDF assets
-      (or (path/absolute? path)
-          windows-drive-path?)
-      (let [protocol (if (util/electron?) "assets://" "file://")
-            path (if (util/electron?)
-                   (protect-windows-drive-in-assets-path path)
-                   path)]
-        (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
-          ;; Incoming path might be already URL encoded. from PDF assets
-          (path/path-join protocol (common-util/safe-decode-uri-component path))
-          (path/path-join protocol path)))
-
-      :else ;; relative path or alias path
-      (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
-              (common-util/safe-decode-uri-component)))))
 
 (defn <make-data-url
   [path]
