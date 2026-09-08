@@ -162,6 +162,10 @@
   [path lock]
   (daemon/cleanup-stale-lock! path lock))
 
+(defn- force-cleanup-lock!
+  [path lock]
+  (daemon/force-cleanup-lock! path lock))
+
 (defn- wait-for
   [pred-fn opts]
   (daemon/wait-for pred-fn opts))
@@ -273,6 +277,66 @@
                    :interval-ms 50})
         (p/then (fn [_] @server*)))))
 
+(defn- published-pid?
+  [config pid]
+  (and (number? pid)
+       (some #(= pid (:pid %))
+             (server-list/read-entries (server-list-path config)))))
+
+(defn- spawn-daemon-and-wait-lock!
+  [config repo path requester-owner profile-session]
+  (let [root-dir (resolve-root-dir config)]
+    (profile/time! profile-session
+                   "server.spawn-daemon"
+                   (fn []
+                     (spawn-server! {:repo repo
+                                     :root-dir root-dir
+                                     :owner-source requester-owner
+                                     :create-empty-db? (:create-empty-db? config)
+                                     :embedding-endpoint (:embedding-endpoint config)
+                                     :embedding-model-id (:embedding-model-id config)})))
+    (-> (profile/time! profile-session
+                       "server.wait-lock"
+                       (fn []
+                         (wait-for-lock path)))
+        (p/catch (fn [e]
+                   (if (= :timeout (:code (ex-data e)))
+                     (throw (ex-info "db-worker-node failed to create lock"
+                                     {:code :server-start-timeout-orphan
+                                      :repo repo}))
+                     (throw e)))))))
+
+(defn- replace-unhealthy-lock!
+  [repo path lock]
+  (log/info :cli-server-replace-unhealthy-lock
+            {:repo repo
+             :pid (:pid lock)
+             :reason :live-pid-http-unhealthy})
+  (force-cleanup-lock! path lock))
+
+(defn- wait-for-published-server!
+  [config repo path requester-owner profile-session]
+  (-> (profile/time! profile-session
+                     "server.wait-publish"
+                     (fn []
+                       (wait-for-discovered-server config repo)))
+      (p/catch (fn [e]
+                 (if (= :timeout (:code (ex-data e)))
+                   (p/let [lock (read-lock path)]
+                     (if (and lock
+                              (owner-manageable? requester-owner
+                                                 (lock-owner-source lock)))
+                       (p/let [_ (replace-unhealthy-lock! repo path lock)
+                               _ (when-not (fs/existsSync path)
+                                   (spawn-daemon-and-wait-lock! config repo path
+                                                                requester-owner profile-session))]
+                         (profile/time! profile-session
+                                        "server.wait-publish"
+                                        (fn []
+                                          (wait-for-discovered-server config repo))))
+                       (throw e)))
+                   (throw e))))))
+
 (defn- ensure-server-started-once!
   [config repo]
   (let [root-dir (resolve-root-dir config)
@@ -286,38 +350,28 @@
                              _ (cleanup-stale-lock! path existing)
                              discovered (discover-servers config)
                              discovered-repo-server (repo-server config discovered repo)
-                             _ (when (and (not discovered-repo-server) (not (fs/existsSync path)))
-                                 (profile/time! profile-session
-                                                "server.spawn-daemon"
-                                                (fn []
-                                                  (spawn-server! {:repo repo
-                                                                  :root-dir root-dir
-                                                                  :owner-source requester-owner
-                                                                  :create-empty-db? (:create-empty-db? config)
-                                                                  :embedding-endpoint (:embedding-endpoint config)
-                                                                  :embedding-model-id (:embedding-model-id config)})))
-                                 (-> (profile/time! profile-session
-                                                    "server.wait-lock"
-                                                    (fn []
-                                                      (wait-for-lock path)))
-                                     (p/catch (fn [e]
-                                                (if (= :timeout (:code (ex-data e)))
-                                                  (throw (ex-info "db-worker-node failed to create lock"
-                                                                  {:code :server-start-timeout-orphan
-                                                                   :repo repo}))
-                                                  (throw e))))))
+                             existing (read-lock path)
+                             _ (when (and (not discovered-repo-server)
+                                          existing
+                                          (published-pid? config (:pid existing))
+                                          (owner-manageable? requester-owner
+                                                             (lock-owner-source existing)))
+                                 (replace-unhealthy-lock! repo path existing))
+                             _ (when (and (not discovered-repo-server)
+                                          (not (fs/existsSync path)))
+                                 (spawn-daemon-and-wait-lock! config repo path
+                                                              requester-owner profile-session))
                              lock (read-lock path)
                              lock (if (and lock
                                            (= :cli requester-owner)
                                            (= :unknown (lock-owner-source lock)))
                                     (rewrite-lock-owner-source! path lock :cli)
                                     lock)
-                             repo-server' (if discovered-repo-server
+                             repo-server' (if (and discovered-repo-server
+                                                   (fs/existsSync path))
                                             discovered-repo-server
-                                            (-> (profile/time! profile-session
-                                                               "server.wait-publish"
-                                                               (fn []
-                                                                 (wait-for-discovered-server config repo)))
+                                            (-> (wait-for-published-server!
+                                                 config repo path requester-owner profile-session)
                                                 (p/catch (fn [e]
                                                            (if (= :timeout (:code (ex-data e)))
                                                              (throw (ex-info "db-worker-node failed to publish health"
@@ -411,11 +465,22 @@
           (p/let [server (if target-server
                            target-server
                            (p/let [servers (discover-servers config)]
-                             (repo-server config servers repo)))]
+                             (repo-server config servers repo)))
+                  stop-lock (cond-> lock
+                              server (assoc :pid (:pid server)))]
             (if-not server
-              {:ok? false
-               :error {:code :server-not-found
-                       :message "server is not running"}}
+              (p/let [_ (force-cleanup-lock! path stop-lock)]
+                (if (and (fs/existsSync path)
+                         (contains? #{:alive :no-permission} (pid-status (:pid stop-lock)))
+                         (not= (:pid stop-lock) (.-pid js/process)))
+                  {:ok? false
+                   :error {:code :server-stop-timeout
+                           :message "timed out stopping server"}}
+                  (do
+                    (when (fs/existsSync path)
+                      (remove-lock! path))
+                    {:ok? true
+                     :data {:repo repo}})))
               (-> (p/let [_ (shutdown! server)]
                     (wait-for (fn []
                                 (p/resolved (not (fs/existsSync path))))
@@ -425,20 +490,13 @@
                      :data {:repo repo}})
                   (p/catch
                    (fn [_]
-                     (when (and (= :alive (pid-status (:pid server)))
-                                (not= (:pid server) (.-pid js/process)))
-                       (try
-                         (.kill js/process (:pid server) "SIGTERM")
-                         (catch :default e
-                           (log/warn :cli-server-stop-sigterm-failed e))))
-                     (when (= :not-found (pid-status (:pid server)))
-                       (remove-lock! path))
-                     (if (fs/existsSync path)
-                       {:ok? false
-                        :error {:code :server-stop-timeout
-                                :message "timed out stopping server"}}
-                       {:ok? true
-                        :data {:repo repo}})))))))))))
+                     (p/let [_ (force-cleanup-lock! path stop-lock)]
+                       (if (fs/existsSync path)
+                         {:ok? false
+                          :error {:code :server-stop-timeout
+                                  :message "timed out stopping server"}}
+                         {:ok? true
+                          :data {:repo repo}}))))))))))))
 
 (defn stop-server!
   [config repo]

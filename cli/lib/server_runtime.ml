@@ -367,13 +367,22 @@ let wait_for_ready config repo =
           | Some ({ status = Ready; _ } as server) -> Some server | _ -> None)
         (find_repo_server config repo))
 
-let read_lock_pid path =
+let read_lock path =
   if not (Cli_unix.file_exists path) then None
   else
     try
-      Cli_unix.read_text_file path |> Json_util.value_of_json_string
-      |> fun raw -> Edn_util.get_int raw "pid"
+      let raw =
+        Cli_unix.read_text_file path |> Json_util.value_of_json_string
+      in
+      Some
+        ( Edn_util.get_int raw "pid",
+          Edn_util.get_string raw "owner-source"
+          |> Option.map owner_source_of_string
+          |> Option.value ~default:Cli_primitive.Unknown )
     with _ -> None
+
+let read_lock_pid path =
+  match read_lock path with Some (Some pid, _) -> Some pid | _ -> None
 
 let live_lock path =
   match read_lock_pid path with Some pid -> process_alive pid | None -> false
@@ -381,6 +390,56 @@ let live_lock path =
 let owner_manageable = function
   | Cli_primitive.Cli | Cli_primitive.Unknown -> true
   | _ -> false
+
+let pid_published_in_server_list config pid =
+  read_server_list (server_list_path config)
+  |> Vec.exists (fun (entry_pid, _) -> entry_pid = pid)
+
+let remove_lock path =
+  if Cli_unix.file_exists path then
+    try Cli_unix.remove_tree path with _ -> ()
+
+let lock_process_stopped pid_opt =
+  match pid_opt with
+  | None -> true
+  | Some pid -> pid = Cli_unix.getpid () || not (process_alive pid)
+
+let force_cleanup_lock path (pid_opt, _owner) =
+  let open Cli_effect in
+  let self = Cli_unix.getpid () in
+  (match pid_opt with
+  | Some pid when pid <> self && process_alive pid -> (
+      try Cli_unix.kill pid Sys.sigterm with _ -> ())
+  | _ -> ());
+  bind
+    (wait_until_effect ~timeout_span:(Time.span_of_ms 1_000L)
+       ~interval_span:(Time.span_of_ms 100L) (fun () ->
+         pure (if lock_process_stopped pid_opt then Some () else None)))
+    (function
+      | Some () ->
+          if lock_process_stopped pid_opt then remove_lock path;
+          pure ()
+      | None ->
+          (match pid_opt with
+          | Some pid when pid <> self && process_alive pid -> (
+              try Cli_unix.kill pid Sys.sigkill with _ -> ())
+          | _ -> ());
+          bind
+            (wait_until_effect ~timeout_span:(Time.span_of_ms 1_000L)
+               ~interval_span:(Time.span_of_ms 100L) (fun () ->
+                 pure
+                   (if lock_process_stopped pid_opt then Some () else None)))
+            (fun _ ->
+              if lock_process_stopped pid_opt then remove_lock path;
+              pure ()))
+
+let maybe_replace_unhealthy_lock config path =
+  match read_lock path with
+  | Some ((Some pid, owner) as lock_info)
+    when owner_manageable owner && process_alive pid
+         && pid_published_in_server_list config pid ->
+      force_cleanup_lock path lock_info
+  | _ -> Cli_effect.pure ()
 
 let start_result_of_server repo (server : server) =
   { repo; owner_source = server.owner_source; owned = server.owned }
@@ -409,6 +468,37 @@ let wait_for_published_ready time config repo =
                        (Error.make Error.Server_start_failed
                           "db-worker-node failed to start"))))
 
+let spawn_new_server time config repo ~create_empty_db lock =
+  let open Cli_effect in
+  match resolve_script_path config with
+  | Stdlib.Error err -> pure (Stdlib.Error err)
+  | Stdlib.Ok script -> (
+      try
+        bind
+          (time "server.spawn-daemon" (fun () ->
+               spawn_server_process ~script
+                 ~root_dir:(resolve_root_dir config) ~repo ~owner_source:"cli"
+                 ~create_empty_db;
+               pure ()))
+          (fun () ->
+            bind
+              (time "server.wait-lock" (fun () -> wait_for_lock lock))
+              (function
+                | None ->
+                    pure
+                      (Stdlib.Error
+                         (Error.make Error.Server_start_timeout_orphan
+                            ("db-worker-node failed to start. Command: "
+                            ^ db_worker_command_line ~script
+                                ~root_dir:(resolve_root_dir config) ~repo
+                                ~owner_source:"cli" ~create_empty_db)))
+                | Some () -> wait_for_published_ready time config repo))
+      with exn ->
+        pure
+          (Stdlib.Error
+             (Error.make Error.Server_start_failed
+                ("failed to spawn db-worker-node: " ^ Printexc.to_string exn))))
+
 let start_server_unprofiled config repo ~create_empty_db =
   let open Cli_effect in
   let time stage f =
@@ -424,44 +514,26 @@ let start_server_unprofiled config repo ~create_empty_db =
     | None -> (
         match ensure_repo_dir config repo with
         | Stdlib.Error err -> pure (Stdlib.Error err)
-        | Stdlib.Ok _ -> (
+        | Stdlib.Ok _ ->
             let lock = lock_path ~root_dir:(resolve_root_dir config) repo in
-            if live_lock lock then wait_for_published_ready time config repo
-            else
-              match resolve_script_path config with
-              | Stdlib.Error err -> pure (Stdlib.Error err)
-              | Stdlib.Ok script -> (
-                  try
-                    bind
-                      (time "server.spawn-daemon" (fun () ->
-                           spawn_server_process ~script
-                             ~root_dir:(resolve_root_dir config) ~repo
-                             ~owner_source:"cli" ~create_empty_db;
-                           pure ()))
-                      (fun () ->
+            bind (maybe_replace_unhealthy_lock config lock) (fun () ->
+                if live_lock lock then
+                  bind (wait_for_published_ready time config repo) (function
+                    | Stdlib.Ok result -> pure (Stdlib.Ok result)
+                    | Stdlib.Error err ->
                         bind
-                          (time "server.wait-lock" (fun () ->
-                               wait_for_lock lock))
-                          (function
-                            | None ->
-                                pure
-                                  (Stdlib.Error
-                                     (Error.make
-                                        Error.Server_start_timeout_orphan
-                                        ("db-worker-node failed to start. \
-                                          Command: "
-                                        ^ db_worker_command_line ~script
-                                            ~root_dir:(resolve_root_dir config)
-                                            ~repo ~owner_source:"cli"
-                                            ~create_empty_db)))
-                            | Some () ->
-                                wait_for_published_ready time config repo))
-                  with exn ->
-                    pure
-                      (Stdlib.Error
-                         (Error.make Error.Server_start_failed
-                            ("failed to spawn db-worker-node: "
-                           ^ Printexc.to_string exn)))))))
+                          (match read_lock lock with
+                          | Some ((_, owner) as lock_info)
+                            when owner_manageable owner ->
+                              force_cleanup_lock lock lock_info
+                          | _ -> pure ())
+                          (fun () ->
+                            if live_lock lock then pure (Stdlib.Error err)
+                            else
+                              spawn_new_server time config repo ~create_empty_db
+                                lock))
+                else
+                  spawn_new_server time config repo ~create_empty_db lock)))
 
 let start_server config repo ~create_empty_db =
   Profile_types.time config.Cli_config.profile_session "server.ensure-started"
@@ -516,13 +588,31 @@ let shutdown_server server =
 
 let stop_server config repo =
   let open Cli_effect in
+  let lock_path = lock_path ~root_dir:(resolve_root_dir config) repo in
   bind (find_repo_server config repo) (function
     | None when Option.is_some config.Cli_config.base_url ->
         pure (Stdlib.Ok { repo })
-    | None ->
-        pure
-          (Stdlib.Error
-             (Error.make Error.Server_not_found "server is not running"))
+    | None -> (
+        match read_lock lock_path with
+        | None ->
+            pure
+              (Stdlib.Error
+                 (Error.make Error.Server_not_found "server is not running"))
+        | Some (_, owner) when not (owner_manageable owner) ->
+            pure
+              (Stdlib.Error
+                 (Error.make Error.Server_owned_by_other
+                    "server is owned by another process"))
+        | Some lock_info ->
+            bind (force_cleanup_lock lock_path lock_info) (fun () ->
+                if live_lock lock_path then
+                  pure
+                    (Stdlib.Error
+                       (Error.make Error.Server_stop_timeout
+                          "timed out stopping server"))
+                else (
+                  remove_lock lock_path;
+                  pure (Stdlib.Ok { repo }))))
     | Some server ->
         if not (owner_manageable server.owner_source) then
           pure
@@ -532,8 +622,6 @@ let stop_server config repo =
         else
           let shutdown_timeout_span = Time.span_of_ms 5_000L in
           let shutdown_interval_span = Time.span_of_ms 200L in
-          let kill_timeout_span = Time.span_of_ms 1_000L in
-          let kill_interval_span = Time.span_of_ms 100L in
           bind (shutdown_server server) (fun _ ->
               bind
                 (wait_until_effect ~timeout_span:shutdown_timeout_span
@@ -544,23 +632,28 @@ let stop_server config repo =
                 (function
                   | Some () -> pure (Stdlib.Ok { repo })
                   | None ->
-                      (try
-                         if process_alive server.pid then
-                           Cli_unix.kill server.pid Sys.sigterm
-                       with _ -> ());
-                      bind
-                        (wait_until_effect ~timeout_span:kill_timeout_span
-                           ~interval_span:kill_interval_span (fun () ->
-                             map
-                               (function None -> Some () | Some _ -> None)
-                               (find_repo_server config repo)))
-                        (function
-                          | Some () -> pure (Stdlib.Ok { repo })
-                          | None ->
-                              pure
-                                (Stdlib.Error
-                                   (Error.make Error.Server_stop_timeout
-                                      "timed out stopping server"))))))
+                      let lock_info =
+                        match read_lock lock_path with
+                        | Some (pid_opt, owner) ->
+                            ( (match pid_opt with
+                              | Some _ -> pid_opt
+                              | None -> Some server.pid),
+                              owner )
+                        | None -> (Some server.pid, server.owner_source)
+                      in
+                      bind (force_cleanup_lock lock_path lock_info) (fun () ->
+                          if
+                            Cli_unix.file_exists lock_path
+                            && process_alive server.pid
+                            && server.pid <> Cli_unix.getpid ()
+                          then
+                            pure
+                              (Stdlib.Error
+                                 (Error.make Error.Server_stop_timeout
+                                    "timed out stopping server"))
+                          else (
+                            remove_lock lock_path;
+                            pure (Stdlib.Ok { repo }))))))
 
 let restart_server config repo =
   stop_server config repo >>= function

@@ -125,6 +125,59 @@
                      (is false (str "unexpected error: " e))
                      (done)))))))
 
+(deftest cleanup-stale-lock-keeps-live-valid-lock
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-live-lock")
+          repo (str "logseq_db_helper_live_" (subs (str (random-uuid)) 0 8))
+          path (node-path/join root-dir "db-worker.lock")
+          child (.spawn child-process "node" #js ["-e" "setInterval(() => {}, 1000)"]
+                        #js {:stdio "ignore"})
+          pid (.-pid child)
+          lock {:repo repo
+                :pid pid
+                :lock-id "live-valid-lock"
+                :owner-source :cli}]
+      (.on child "exit" (fn [_code _signal] nil))
+      (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+      (-> (p/let [_ (daemon/cleanup-stale-lock! path lock)]
+            (is (fs/existsSync path) "live valid lock must be kept")
+            (is (= :alive (daemon/pid-status pid))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (try
+                         (.kill child "SIGKILL")
+                         (catch :default _))
+                       (done)))))))
+
+(deftest force-cleanup-lock-kills-frozen-process-and-removes-lock
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-frozen-lock")
+          repo (str "logseq_db_helper_frozen_" (subs (str (random-uuid)) 0 8))
+          path (node-path/join root-dir "db-worker.lock")
+          child (.spawn child-process "node" #js ["-e" "setInterval(() => {}, 1000)"]
+                        #js {:stdio "ignore"})
+          pid (.-pid child)
+          lock {:repo repo
+                :pid pid
+                :lock-id "frozen-lock"
+                :owner-source :cli}]
+      (.on child "exit" (fn [_code _signal] nil))
+      (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+      (when (not= "win32" (.-platform js/process))
+        (.kill js/process pid "SIGSTOP"))
+      (-> (p/let [_ (daemon/force-cleanup-lock! path lock)]
+            (is (not (fs/existsSync path)) "unhealthy lock must be removed")
+            (is (not= :alive (daemon/pid-status pid))
+                "frozen pid must be killed so a new worker can start"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (try
+                         (.kill child "SIGKILL")
+                         (catch :default _))
+                       (done)))))))
+
 (deftest terminate-process-uses-platform-appropriate-stop-command
   (async done
     (let [terminate-process! (fn [pid force?]

@@ -446,25 +446,95 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest ensure-server-repairs-stale-lock
+(deftest stop-server-kills-undiscovered-live-lock
   (async done
-         (let [root-dir (node-helper/create-tmp-dir "cli-server")
-               repo (str "logseq_db_stale_" (subs (str (random-uuid)) 0 8))
-               path (cli-server/lock-path root-dir repo)
-               cleanup-stale-lock! #'cli-server/cleanup-stale-lock!
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-stop-unhealthy")
+               repo (str "logseq_db_stop_unhealthy_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               pid 424242
                lock {:repo repo
-                     :pid (.-pid js/process)
-                     :host "127.0.0.1"
-                     :port 0
-                     :startedAt (.toISOString (js/Date.))}]
-           (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
-           (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
-           (-> (p/let [_ (cleanup-stale-lock! path lock)]
-                 (is (not (fs/existsSync path)))
-                 (done))
+                     :pid pid
+                     :lock-id "unhealthy-stop-lock"
+                     :owner-source :cli}
+               cleanup-calls (atom [])]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_] (p/resolved []))
+                               daemon/force-cleanup-lock! (fn [path lock']
+                                                            (swap! cleanup-calls conj lock')
+                                                            (when (fs/existsSync path)
+                                                              (fs/unlinkSync path))
+                                                            (p/resolved nil))]
+                 (cli-server/stop-server! {:root-dir root-dir
+                                           :owner-source :cli}
+                                          repo))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= 1 (count @cleanup-calls)))
+                         (is (= pid (:pid (first @cleanup-calls))))
+                         (is (not (fs/existsSync lock-file)))))
                (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))
-                          (done)))))))
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest start-server-replaces-unhealthy-published-lock
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-start-unhealthy")
+               repo (str "logseq_db_start_unhealthy_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path root-dir repo)
+               server-list-file (cli-config/server-list-path root-dir)
+               pid 424242
+               port 65534
+               lock {:repo repo
+                     :pid pid
+                     :lock-id "unhealthy-start-lock"
+                     :owner-source :cli}
+               replacement-lock {:repo repo
+                                 :pid (.-pid js/process)
+                                 :lock-id "replacement-lock"
+                                 :owner-source :cli}
+               spawn-calls (atom 0)
+               cleanup-calls (atom [])]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (fs/writeFileSync server-list-file (str pid " " port "\n"))
+           (-> (p/with-redefs [                               daemon/pid-status (fn [_] :alive)
+                               daemon/force-cleanup-lock! (fn [path lock']
+                                                            (swap! cleanup-calls conj lock')
+                                                            (when (fs/existsSync path)
+                                                              (fs/unlinkSync path))
+                                                            (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (fs/writeFileSync lock-file
+                                                                        (js/JSON.stringify (clj->js replacement-lock)))
+                                                      nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved
+                                                             (if (pos? @spawn-calls)
+                                                               [{:repo repo
+                                                                 :host "127.0.0.1"
+                                                                 :port 9330
+                                                                 :pid (.-pid js/process)
+                                                                 :owner-source :cli
+                                                                 :revision (version/revision)
+                                                                 :status :ready
+                                                                 :root-dir root-dir}]
+                                                               [])))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/start-server! {:root-dir root-dir
+                                            :owner-source :cli
+                                            :expected-revision (version/revision)}
+                                           repo))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= 1 (count @cleanup-calls)))
+                         (is (= pid (:pid (first @cleanup-calls))))
+                         (is (= 1 @spawn-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest ensure-server-reuses-existing-running-daemon-lock
   (async done
