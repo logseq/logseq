@@ -1790,7 +1790,7 @@
                        :block-name (:block/name block)
                        :note "page-title save uses prepare-page-title-tags"}))
                ;; #endregion
-               (save-block-aux! block value opts')))
+               (save-block-aux! block value opts'))))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
