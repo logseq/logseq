@@ -2293,6 +2293,8 @@
              plain-results (remove #(= "Block 2" (:block/title %)) children)
              unrelated-result (some #(when (= "Block 3" (:block/title %)) %) children)]
          (is (= 165 (count children)))
+         (is (every? #(not (contains? % :block.temp/breadcrumb)) (cons block children))
+             "Ordinary tree metadata does not preload breadcrumbs.")
          (is (contains? block :block.temp/display-properties)
              "The journal root should carry full render data in its initial tree response.")
          (is (contains? block :block.temp/positioned-properties))
