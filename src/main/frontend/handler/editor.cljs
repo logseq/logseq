@@ -257,10 +257,7 @@
   [block opts]
   (or (:page-title? opts)
       (some? (:block/name block))
-      (entity/page? block)
-      (boolean (try
-                 (get-in (get-state) [:config :page-title?])
-                 (catch :default _ false)))))
+      (entity/page? block)))
 
 (defn- save-block-inner!
   [block value opts]
