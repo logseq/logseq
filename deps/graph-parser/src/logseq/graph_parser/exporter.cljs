@@ -2298,6 +2298,19 @@
   [ref]
   {:block/uuid (second ref)})
 
+(defn- lookup-imported-page-uuid
+  "Uuid for a page already in this import or already imported into the db.
+   Ignore built-in pages so names like alias do not collide with the schema.
+   Ignore properties so a later #tag cannot reuse a property uuid when
+   convert-all-tags? is on (property and class may share a title)."
+  [db all-existing-page-uuids page-name]
+  (or (get all-existing-page-uuids page-name)
+      (when page-name
+        (when-let [page (ldb/get-page db page-name)]
+          (when (and (not (ldb/built-in? page))
+                     (not (ldb/property? page)))
+            (:block/uuid page))))))
+
 (defn- journal-file-title
   [path]
   (let [normalized-path (some-> path str (string/replace "\\" "/") string/lower-case)]
@@ -2501,13 +2514,19 @@
         all-existing-page-uuids (get-page-names-to-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         existing-page-uuid (fn [m]
-                             (all-existing-page-uuids (or (::original-name m) (:block/name m))))
+                             (lookup-imported-page-uuid @conn all-existing-page-uuids
+                                                        (or (::original-name m) (:block/name m))))
+        db-existing-page-uuids (->> all-pages
+                                    (keep (fn [page]
+                                            (when-let [page-uuid (existing-page-uuid page)]
+                                              [(or (::original-name page) (:block/name page)) page-uuid])))
+                                    (into {}))
         all-new-page-uuids (->> all-pages
                                 (remove existing-page-uuid)
                                 (map (juxt (some-fn ::original-name :block/name) :block/uuid))
                                 (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
+        page-names-to-uuids (atom (merge all-existing-page-uuids db-existing-page-uuids all-new-page-uuids journal-page-name-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
