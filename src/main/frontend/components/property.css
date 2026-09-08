@@ -76,14 +76,15 @@
 
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
-    grid-template-columns: fit-content(260px) minmax(0, 1fr);
+    /* Fixed key column so every row shares one value-column axis.
+       Per-row fit-content(260px) sized keys independently (150–260px). */
+    grid-template-columns: 160px minmax(0, 1fr);
     margin-left: 0;
   }
 
   .property-key-panel {
-    @apply flex items-center min-w-0;
+    @apply flex items-center min-w-0 w-full;
     min-height: 28px;
-    min-width: 150px;
     font-size: inherit;
     color: var(--ls-primary-text-color);
   }
@@ -141,13 +142,23 @@
   }
 
   .property-panel-bullet {
-    @apply inline-flex items-center opacity-60;
-    margin-left: 2px;
+    @apply inline-flex items-center justify-center opacity-60 shrink-0;
+    width: 16px;
+    min-width: 16px;
     min-height: 24px;
   }
 
   .property-panel-bullet .bullet-container {
     @apply relative left-0 top-0;
+    width: 15px;
+    height: 15px;
+    min-width: 15px;
+  }
+
+  .property-value-panel.ls-block.property-value-container:not(:has(> .property-panel-bullet)) {
+    /* Reserve the in-flow bullet slot (16px) plus gap-1 so filled default/url
+       values start on the same axis as rows that render a bullet. */
+    padding-left: calc(16px + 0.25rem);
   }
 
   .property-panel-edit-btn {
@@ -514,10 +525,20 @@ a.control-link {
   @apply flex flex-row items-center gap-1 relative;
 
   .property-icon {
-    @apply flex items-center;
+    @apply flex items-center justify-center shrink-0;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+
     svg {
         width: 15px;
         height: 15px;
+    }
+
+    .bullet-container {
+        width: 15px;
+        height: 15px;
+        min-width: 15px;
     }
   }
 
