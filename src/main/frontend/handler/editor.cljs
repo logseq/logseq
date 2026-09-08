@@ -429,11 +429,17 @@
                      (some-> current-page parse-uuid))]
     (= uuid block-id)))
 
+(defn- url-property-value-insert-blocked?
+  [config block]
+  (and (entity/url-property-value? block)
+       (or (not= :db.cardinality/many
+                 (:db/cardinality (:logseq.property/created-from-property block)))
+           (block-self-alone-when-insert? config (:block/uuid block)))))
+
 (defn- skip-insert-for-url-property-value!
-  "URL property values are leaves. Save the full title and exit instead of
-  creating a child or sibling."
-  [block]
-  (when (entity/url-property-value? block)
+  "Save and exit when insertion would create a URL child or a single-value sibling."
+  [config block]
+  (when (url-property-value-insert-blocked? config block)
     (escape-editing)
     (p/resolved [nil nil nil])))
 
@@ -518,7 +524,7 @@
 
 (defn insert-new-block-before-block-aux!
   [config block value]
-  (or (skip-insert-for-url-property-value! block)
+  (or (skip-insert-for-url-property-value! config block)
       (let [edit-input-id (state/get-edit-input-id)
             input (gdom/getElement edit-input-id)
             input-text-selected? (util/input-text-selected? input)
@@ -556,7 +562,7 @@
    {:block/keys [uuid]
     :as block}
    value]
-  (or (skip-insert-for-url-property-value! block)
+  (or (skip-insert-for-url-property-value! config block)
       (let [repo (state/get-current-repo)
             block-self? (block-self-alone-when-insert? config uuid)
             input (gdom/getElement (state/get-edit-input-id))
@@ -678,7 +684,7 @@
   ([state block-value _right-sibling]
    (when (not config/publishing?)
      (when state
-       (if (entity/url-property-value? (:block state))
+       (if (url-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
          (do
            (start-pending-new-block!)
@@ -2623,7 +2629,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
-                (entity/url-property-value? (:block state)))
+                (url-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
               (escape-editing))

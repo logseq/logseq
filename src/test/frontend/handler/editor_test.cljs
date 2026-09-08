@@ -1555,6 +1555,29 @@
       (is (= [:prevent-default :escape-editing] @calls)
           "Enter on a URL property value must save and exit without creating a child or sibling."))))
 
+(deftest enter-on-multiple-url-property-value-allows-siblings-only-test
+  (doseq [zoomed? [false true]]
+    (let [block-uuid (random-uuid)
+          url-block {:block/uuid block-uuid
+                     :logseq.property/created-from-property
+                     {:logseq.property/type :url
+                      :db/cardinality :db.cardinality/many}}
+          target #js {:value "https://example.com" :selectionStart 19}
+          calls (atom [])]
+      (with-redefs [editor/get-state
+                    (constantly {:block url-block
+                                 :config {:id (str (if zoomed? block-uuid (random-uuid)))}
+                                 :node target})
+                    editor/inside-of-editor-block (constantly true)
+                    editor/pending-new-block? (constantly false)
+                    state/doc-mode-enter-for-new-line? (constantly false)
+                    editor/inside-of-single-block (constantly false)
+                    editor/escape-editing #(swap! calls conj :escape)
+                    editor/keydown-new-block (fn [_] (swap! calls conj :insert))]
+        (editor/keydown-new-block-handler
+         #js {:target target :preventDefault (fn [])})
+        (is (= [(if zoomed? :escape :insert)] @calls))))))
+
 (deftest insert-new-block-aux-does-not-split-url-property-value-test
   (async done
     (let [url "https://example.com/path"

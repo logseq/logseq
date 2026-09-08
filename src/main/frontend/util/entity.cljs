@@ -39,8 +39,8 @@
       (property? entity)))
 
 (defn url-property-value?
-  "URL-type property values are leaves. They must not have child or sibling
-  blocks, or expose sub-block UX when zoomed."
+  "URL-type property values are leaves. They must not have child blocks
+  or expose sub-block UX when zoomed."
   [entity]
   (= :url (:logseq.property/type (:logseq.property/created-from-property entity))))
 

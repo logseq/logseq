@@ -11,7 +11,7 @@
        ldb/sort-by-order
        (mapv :block/title)))
 
-(deftest url-property-value-rejects-children-and-siblings
+(deftest url-property-value-rejects-children-and-single-value-siblings
   (testing "insert as child of a URL property value is rejected"
     (let [conn (db-test/create-conn-with-blocks
                 {:properties {:url {:logseq.property/type :url}}
@@ -149,3 +149,30 @@
             text-b' (d/entity @conn (:db/id text-b))]
         (is (= [(:block/title text-b)] (child-titles text-a')))
         (is (= (:db/id text-a') (:db/id (:block/parent text-b'))))))))
+
+(deftest multiple-url-property-values-allow-sibling-insert-and-move
+  (doseq [operation [:insert :move]]
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url-many {:logseq.property/type :url
+                                         :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url-many #{"https://a.example"
+                                                         "https://b.example"
+                                                         "https://c.example"}}}}]})
+          page (ldb/get-page @conn "page1")
+          [first-value _ last-value] (ldb/sort-by-order (:user.property/url-many page))
+          sibling-uuid (if (= :insert operation) (random-uuid) (:block/uuid last-value))]
+      (case operation
+        :insert (outliner-core/insert-blocks!
+                 conn [{:block/uuid sibling-uuid :block/title "https://new.example"}]
+                 first-value {:sibling? true :keep-uuid? true})
+        :move (outliner-core/move-blocks! conn [last-value] first-value {:sibling? true}))
+      (let [sibling (d/entity @conn [:block/uuid sibling-uuid])
+            values (:user.property/url-many (d/entity @conn (:db/id page)))]
+        (is (= (if (= :insert operation) 4 3) (count values)))
+        (is (= (:db/id first-value) (:db/id (ldb/get-left-sibling sibling))))
+        (is (= (:db/id page) (:db/id (:block/parent sibling))))
+        (is (= :user.property/url-many
+               (:db/ident (:logseq.property/created-from-property sibling))))
+        (is (every? #(empty? (child-titles %)) values))))))
