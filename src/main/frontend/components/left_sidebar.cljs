@@ -224,7 +224,7 @@
                   (state/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
                 [:logseq.class/Asset :logseq.class/Task]))))
 
-(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
+(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations-loaded
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
@@ -337,6 +337,12 @@
                 :href (rfe/href :page {:name tag-uuid})
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
+
+(hsx/defc sidebar-navigations
+  [opts]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-navigations-loaded opts))))
 
 (hsx/defc sidebar-favorites-loaded
   []
