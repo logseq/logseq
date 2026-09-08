@@ -66,16 +66,29 @@
               graph))
           (state/get-repos))))
 
+(defn <load-rtc-graph-uuid
+  [repo db-worker-ready?]
+  (when (and repo db-worker-ready?)
+    (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)))
+
 (defn- use-db-rtc-uuid
   [repo]
-  (let [[db-rtc-uuid set-db-rtc-uuid!] (hooks/use-state nil)]
+  (let [[db-rtc-uuid set-db-rtc-uuid!] (hooks/use-state nil)
+        db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)]
     (hooks/use-effect!
      (fn []
-       (when repo
-         (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
-           (set-db-rtc-uuid! graph-uuid)))
-       nil)
-     [repo])
+       (if-let [rtc-graph-uuid-request (<load-rtc-graph-uuid repo db-worker-ready?)]
+         (let [cancelled? (atom false)]
+           (-> rtc-graph-uuid-request
+               (p/then (fn [graph-uuid]
+                         (when-not @cancelled?
+                           (set-db-rtc-uuid! graph-uuid))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         (do
+           (set-db-rtc-uuid! nil)
+           nil)))
+     [repo db-worker-ready?])
     db-rtc-uuid))
 
 (defn- current-remote-rtc-graph

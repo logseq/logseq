@@ -185,6 +185,7 @@
                  :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing (state/get-state))
+                 :web-platform? util/web-platform?
                  :date-formatter (state/get-date-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)}]
@@ -279,7 +280,7 @@
 (defevent! :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
   (state/pub-event! [:graph/sync-context])
-  (when graph
+  (when (and graph (not (:graph/importing (state/get-state))))
     (schedule-search-index-build! graph))
   (export/auto-db-backup! graph)
   (rtc-flows/trigger-rtc-start graph)
