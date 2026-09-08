@@ -2666,6 +2666,7 @@
             (do
               (when e (.preventDefault e))
               (keydown-new-block state))))))))
+
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
     (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
