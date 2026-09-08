@@ -3059,27 +3059,26 @@
                           [?e :block/uuid]
                           [?e :block/title]
                           [(missing? $ ?e :block/tx-id)]]
-                        db)]
+                     db)]
     (when (seq entity-ids)
       (let [tx-id (inc (:max-tx db))
-            tx-id-tx (mapv (fn [entity-id]
-                             {:db/id entity-id
-                              :block/tx-id tx-id})
-                           entity-ids)
-            refs-tx (into []
-                          (mapcat (fn [id]
-                                    (let [block (d/entity db id)]
-                                      (when (and block
-                                                 (not (:logseq.property.reaction/target block)))
-                                        (let [refs (outliner-pipeline/db-rebuild-block-refs db block)]
-                                          (when (seq refs)
-                                            [[:db/retract id :block/refs]
-                                             {:db/id id
-                                              :block/refs refs}]))))))
-                          entity-ids)]
-        (ldb/transact! conn
-                       (into tx-id-tx refs-tx)
-                       {::imported-data? true ::new-graph? true :transact-new-graph-refs? true})))))
+            rebuild-refs (outliner-pipeline/db-rebuild-block-refs-fn db)
+            tx (into []
+                     (mapcat
+                      (fn [id]
+                        (let [block (d/entity db id)
+                              refs (when-not (:logseq.property.reaction/target block)
+                                     (set (rebuild-refs block)))
+                              old-refs (when (seq refs)
+                                         (into #{} (map :v) (d/datoms db :eavt id :block/refs)))]
+                          (concat [[:db/add id :block/tx-id tx-id]]
+                                  (map (fn [ref] [:db/retract id :block/refs ref])
+                                    (set/difference old-refs refs))
+                                  (map (fn [ref] [:db/add id :block/refs ref])
+                                    (set/difference refs old-refs))))))
+                     entity-ids)]
+        (ldb/transact! conn tx
+          {::imported-data? true ::new-graph? true :transact-new-graph-refs? true})))))
 
 (defn- cleanup-missing-block-refs!
   ([conn] (cleanup-missing-block-refs! conn nil))

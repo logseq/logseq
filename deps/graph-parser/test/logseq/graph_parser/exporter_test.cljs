@@ -27,6 +27,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [promesa.core :as p]))
 
 ;; Helpers
@@ -1897,6 +1898,38 @@ abc
                   set))
             "Block has correct task tag and property :block/refs")))))
 
+(deftest finalize-imported-graph-avoids-unchanged-ref-writes
+  (let [conn (db-test/create-conn)
+        target-uuid (random-uuid)
+        block-uuid (random-uuid)
+        skipped-uuid (random-uuid)
+        reaction-uuid (random-uuid)
+        _ (d/transact! conn [{:db/id -1 :block/uuid target-uuid :block/title "target"}
+                             {:db/id -2 :block/uuid block-uuid
+                              :block/title (page-ref/->page-ref target-uuid)
+                              :block/refs [-1]}
+                             {:db/id -3 :block/uuid skipped-uuid :block/title "already stamped"
+                              :block/tx-id 42 :block/refs [-1]}
+                             {:db/id -4 :block/uuid reaction-uuid
+                              :block/title (page-ref/->page-ref target-uuid)
+                              :logseq.property.reaction/target -2}])
+        block-id (:db/id (d/entity @conn [:block/uuid block-uuid]))
+        tx-id (inc (:max-tx @conn))
+        reports (atom [])]
+    (d/listen! conn ::finalize-test #(swap! reports conj %))
+    (gp-exporter/finalize-imported-graph! conn)
+    (is (= tx-id (:block/tx-id (d/entity @conn block-id))))
+    (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
+           (set (map :db/id (:block/refs (d/entity @conn block-id))))))
+    (is (empty? (filter #(and (= block-id (:e %)) (= :block/refs (:a %)))
+                       (mapcat :tx-data @reports)))
+        "Finalization must not retract and re-add refs that already match")
+    (is (= 42 (:block/tx-id (d/entity @conn [:block/uuid skipped-uuid]))))
+    (is (empty? (:block/refs (d/entity @conn [:block/uuid reaction-uuid]))))
+    (is (= 1 (count @reports)))
+    (gp-exporter/finalize-imported-graph! conn)
+    (is (= 1 (count @reports)) "Repeated finalization is a no-op")))
+
 (deftest-async import-file-graph-rebuilds-refs-without-per-file-listener
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
@@ -1911,6 +1944,17 @@ abc
               (map #(:db/ident (d/entity @conn (:db/id %))))
               set))
         "One-shot rebuild writes property and class :block/refs without a per-file listener")))
+
+(deftest-async bulk-import-refs-match-single-block-refs
+  (p/let [conn (db-test/create-conn)
+          _ (import-file-graph-to-db "test/resources/exporter-test-graph" conn {})
+          db @conn
+          rebuild-refs (outliner-pipeline/db-rebuild-block-refs-fn db)]
+    (doseq [datom (d/datoms db :avet :block/uuid)]
+      (let [block (d/entity db (:e datom))]
+        (is (= (set (outliner-pipeline/db-rebuild-block-refs db block))
+               (set (rebuild-refs block)))
+            (str "Bulk refs match for " (:block/uuid block)))))))
 
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
