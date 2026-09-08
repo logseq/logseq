@@ -31,6 +31,7 @@
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
@@ -456,7 +457,8 @@
                           page)]
      (if journal-page
        journal-page
-       (create-page-f journal {:redirect? false})))))
+       (create-page-f journal {:redirect? false
+                              :journal? true})))))
 
 (def ^:private selected-day-selector
   "[role='gridcell'][aria-selected='true'] button, [role='gridcell'] button[tabindex='0']")
@@ -576,32 +578,67 @@
     other-position?
     (assoc :on-click util/stop-propagation)))
 
+(defn- datetime-value-page
+  "Page entity passed to page-cp for a datetime property pill.
+   Must be the journal entity (uuid route), not a computed title string."
+  [utc-ms journal-page]
+  (when (and (number? utc-ms)
+             (uuid? (:block/uuid journal-page))
+             (= (date-time-util/ms->journal-day utc-ms)
+                (:block/journal-day journal-page)))
+    journal-page))
+
+(defn- <resolve-datetime-journal-page
+  ([utc-ms]
+   (<resolve-datetime-journal-page utc-ms
+                                   state/get-current-repo
+                                   db-async/<get-journal-page-by-day
+                                   <resolve-journal-page-for-date))
+  ([utc-ms get-current-repo-f get-journal-page-by-day-f resolve-journal-page-for-date-f]
+   (let [journal-day (date-time-util/ms->journal-day utc-ms)]
+     (p/let [page (when journal-day
+                    (get-journal-page-by-day-f (get-current-repo-f) journal-day))]
+       (or (datetime-value-page utc-ms page)
+           (resolve-journal-page-for-date-f (js/Date. utc-ms)))))))
+
 (hsx/defc datetime-value
   [value property-id repeated-task? {:keys [datetime? other-position? suppress-inline-edit-icon?]}]
-  (when-let [date (t/to-default-time-zone (tc/from-long value))]
-    (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
-                   (when-let [page-cp (state/get-component :block/page-cp)]
-                     (let [page-title (date/journal-name date)]
-                       ^{:key page-title}
-                       [:span.inline-flex (date-page-link-props other-position?)
+  (let [date (when (number? value)
+               (t/to-default-time-zone (tc/from-long value)))
+        [journal-page set-journal-page!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-journal-page! nil)
+       (when (number? value)
+         (p/let [page (<resolve-datetime-journal-page value)]
+           (set-journal-page! page))))
+     [value])
+    (when date
+      (let [page (datetime-value-page value journal-page)
+            page-cp (state/get-component :block/page-cp)
+            content [:div.ls-datetime.flex.flex-row.gap-1.items-center
+                     ^{:key (or (:block/uuid page) (date/journal-name date))}
+                     [:span.inline-flex (date-page-link-props other-position?)
+                      (if (and page page-cp)
                         (page-cp {:disable-preview? true
-                                  :show-non-exists-page? true
                                   :label (human-date-label value)}
-                                 {:block/name page-title})]))
-                   (when datetime?
-                     (let [date (js/Date. value)
-                           hours (.getHours date)
-                           minutes (.getMinutes date)]
-                       [:span.select-none
-                        (if (= 0 hours minutes)
-                          (when-not (or other-position? suppress-inline-edit-icon?)
-                            (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"}))
-                          (str (util/zero-pad hours)
-                               ":"
-                               (util/zero-pad minutes)))]))]]
-      (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
-        (overdue date content)
-        content))))
+                                 page)
+                        (or (human-date-label value)
+                            (date/journal-name date)))]
+                     (when datetime?
+                       (let [date (js/Date. value)
+                             hours (.getHours date)
+                             minutes (.getMinutes date)]
+                         [:span.select-none
+                          (if (= 0 hours minutes)
+                            (when-not (or other-position? suppress-inline-edit-icon?)
+                              (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"}))
+                            (str (util/zero-pad hours)
+                                 ":"
+                                 (util/zero-pad minutes)))]))]]
+        (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
+          (overdue date content)
+          content)))))
 
 (defn- delete-block-property!
   [block property opts]
