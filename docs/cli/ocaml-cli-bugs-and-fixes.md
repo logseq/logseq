@@ -12,6 +12,26 @@ For detailed sync stress logs and per-run evidence, see `docs/sync/failed-cases.
 
 ## OCaml CLI Product Bugs
 
+### `upsert block` applied `--update-tags`/`--update-properties` to referenced pages
+
+- Status: fixed.
+- Symptom: creating a block whose content contains a page reference also wrote the block's tags and
+  properties onto every referenced page. `upsert block --target-page Home --content 'Mentions
+  [[Target]]' --update-tags '["MyTag"]' --update-properties '{:my-prop "v"}'` left page `Target`
+  carrying `MyTag` and `my-prop`. Both entities were tagged in a single transaction, and shared
+  property names on the referenced page were overwritten.
+- Reproduced by: any scripted graph build that links pages from block content, e.g. writing
+  `[[Food]]` links from component blocks.
+- Root cause: `execute_create_block` applied the resolved update plan to the ids returned by
+  `Add.execute_add_block`. Those ids come from `resolve_created_ids`, which reads the insert
+  transaction's `tx-data` and therefore includes referenced pages that the transaction created or
+  touched — not just the blocks the caller asked to create.
+- Fix: `execute_create_block` now targets the action's own block uuids
+  (`block_uuids_of_add_action`), falling back to id resolution only when the action carries no
+  uuids. This matches the pattern already used by `execute_task_create`.
+- Regression coverage: `block-upsert-update-tags-not-applied-to-referenced-page-json` in
+  `cli-e2e/spec/non_sync_cases.edn` asserts that only the created block carries the tag.
+
 ### Tag-name resolution failed for block tag updates
 
 - Status: fixed.

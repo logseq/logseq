@@ -429,6 +429,33 @@
      :show ["--page" "--linked-references" "--level"]}},
    :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-update-tags-not-applied-to-referenced-page-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name RefOnlyTag >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name ref-only-prop >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RefOnlyTarget >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Mentions [[RefOnlyTarget]]' --update-tags '[\"RefOnlyTag\"]' --update-properties '{:ref-only-prop \"block-only\"}' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json list node --graph {{graph-arg}} --tags RefOnlyTag --fields id,title,type --limit 20"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :items 0 :block/title] "Mentions [[RefOnlyTarget]]",
+     [:data :items 0 :node/type] "block",
+     [:data :items 1] nil}},
+   :covers
+   {:commands
+    ["upsert tag" "upsert property" "upsert page" "upsert block" "list node"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert
+     ["--name" "--page" "--target-page" "--content" "--update-tags"
+      "--update-properties"],
+     :list ["--tags" "--fields" "--limit"]}},
+   :tags [:upsert :list],
+   :extends :non-sync/graph-json-env}
   {:id "show-page-default-content-json",
    :setup
    ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"
