@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
@@ -154,29 +155,44 @@
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
-  (->
-   (p/let [config config/config-default-content
-           _ (persist-db/<new full-graph-name
-                              (cond-> {:config config
-                                       :graph-git-sha (build-version/revision)
-                                       :creating-remote-graph? creating-remote-graph?}
-                                file-graph-import? (assoc :import-type :file-graph)))
-           _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
-           _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
-           _ (when-not file-graph-import? (route-handler/redirect-to-home!))
-           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
-          ;; TODO: handle global graph
-           _ (state/pub-event! [:init/commands])
-           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
-     (state/pub-event! [:shortcut/refresh])
-     (route-handler/redirect-to-home!)
-     (ui-handler/re-render-root!)
-     (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
-     (prn "New db created: " full-graph-name)
-     full-graph-name)
-   (p/catch (fn [error]
-              (notification/show! (t :graph/create-error) :error)
-              (js/console.error error)))))
+  (let [graph-created? (atom false)]
+    (->
+     (p/let [config config/config-default-content
+             _ (persist-db/<new full-graph-name
+                                (cond-> {:config config
+                                         :graph-git-sha (build-version/revision)
+                                         :creating-remote-graph? creating-remote-graph?}
+                                  file-graph-import? (assoc :import-type :file-graph)))
+             _ (reset! graph-created? true)
+             _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
+             _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
+             _ (when-not file-graph-import? (route-handler/redirect-to-home!))
+             _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+            ;; TODO: handle global graph
+             _ (state/pub-event! [:init/commands])
+             _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
+       (state/pub-event! [:shortcut/refresh])
+       (route-handler/redirect-to-home!)
+       (ui-handler/re-render-root!)
+       (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
+       (prn "New db created: " full-graph-name)
+       full-graph-name)
+     (p/catch (fn [error]
+                (when-not file-graph-import?
+                  (notification/show! (t :graph/create-error) :error))
+                (log/error :graph-create-failed
+                           {:repo full-graph-name
+                            :error error})
+                (let [data (assoc (or (ex-data error) {})
+                                  :repo full-graph-name
+                                  :graph-created? @graph-created?)
+                      code (or (:code data)
+                               (when (persist-db/db-worker-unavailable-error? error)
+                                 :db-worker-unavailable)
+                               :graph-create-failed)]
+                  (throw (ex-info "Create graph failed"
+                                  (assoc data :code code)
+                                  error))))))))
 
 (defn new-db!
   "Handler for creating a new database graph"

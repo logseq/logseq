@@ -654,16 +654,17 @@
                        (invalid-graph-name-warning)
                        (do
                          (set-creating-db? true)
-                         (p/let [repo (repo-handler/new-db! graph-name
-                                                            {:creating-remote-graph? cloud?})]
-                           (when cloud?
-                             (->
-                              (p/do
-                                (rtc-handler/<rtc-create-graph-and-start-sync! repo graph-e2ee?))
-                              (p/catch handle-cloud-graph-error!)
-                              (p/finally (fn []
-                                           (set-creating-db? false)))))
-                           (shui/dialog-close!))))))
+                         (-> (p/let [repo (repo-handler/new-db! graph-name
+                                                               {:creating-remote-graph? cloud?})
+                                    _ (when cloud?
+                                        (-> (rtc-handler/<rtc-create-graph-and-start-sync! repo graph-e2ee?)
+                                            (p/catch handle-cloud-graph-error!)))]
+                               repo)
+                             (p/finally (fn []
+                                          (set-creating-db? false)))
+                             (p/then (fn [_]
+                                       (shui/dialog-close!)))
+                             (p/catch (fn [_] nil)))))))
         submit! (fn submit!
                   [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))

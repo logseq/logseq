@@ -1,5 +1,6 @@
 (ns frontend.worker.platform
-  "Platform adapter contract for db-worker runtimes.")
+  "Platform adapter contract for db-worker runtimes."
+  (:require [promesa.core :as p]))
 
 (defn- normalize-missing-value
   [value]
@@ -75,6 +76,18 @@
   (if-let [f (get-in platform [:storage :read-text!])]
     (f path)
     (throw (ex-info "platform storage/read-text! missing" {:path path}))))
+
+(defn <read-file-bytes!
+  [platform path]
+  (if-let [f (get-in platform [:storage :read-file-bytes!])]
+    (f path)
+    (throw (ex-info "platform storage/read-file-bytes! missing" {:path path}))))
+
+(defn <file-stat
+  [platform path]
+  (if-let [f (get-in platform [:storage :file-stat])]
+    (f path)
+    (p/resolved nil)))
 
 (defn write-text!
   [platform path text]

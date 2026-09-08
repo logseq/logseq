@@ -9,20 +9,19 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t t-en]]
-            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
@@ -321,34 +320,30 @@
 
 (defn- <serialize-import-file
   [file]
-  (let [^js file-object (:file-object file)]
+  (let [^js file-object (:file-object file)
+        fs-path (some-> (:fs-path file) not-empty)
+        file-reference (cond-> (select-keys file [:path :last-modified-at])
+                         fs-path (assoc :fs-path fs-path))]
     (if (string/starts-with? (:path file) "assets/")
       (if (assets-handler/exceed-limit-size? file-object)
         (let [path (pr-str (:path file))]
           (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
           (notification/show! (t :import/asset-too-large-warning path) :info false)
           (select-keys file [:path]))
-        (p/let [buffer (.arrayBuffer file-object)]
-          (assoc (select-keys file [:path])
-                 :asset/payload (js/Uint8Array. buffer)
-                 :asset/size (.-size file-object))))
-      (p/let [content (.text file-object)]
-        (assoc (select-keys file [:path])
-               :file/content content)))))
+        (if fs-path
+          (assoc file-reference :asset/size (.-size file-object))
+          (p/let [buffer (.arrayBuffer file-object)]
+            (assoc file-reference
+                   :asset/payload (js/Uint8Array. buffer)
+                   :asset/size (.-size file-object)))))
+      (if fs-path
+        file-reference
+        (p/let [content (.text file-object)]
+          (assoc file-reference :file/content content))))))
 
 (defn- <serialize-import-files
   [files]
   (p/all (mapv <serialize-import-file files)))
-
-(defn- write-staged-assets!
-  [repo staged-assets]
-  (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
-    (when (seq staged-assets)
-      (p/let [_ (fs/mkdir-if-not-exists assets-dir)]
-        (p/all
-         (mapv (fn [{:keys [asset-id asset-type payload]}]
-                 (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true}))
-               staged-assets))))))
 
 (defn build-file-graph-worker-options
   [{:keys [tag-classes property-classes property-parent-classes] :as user-options}
@@ -361,28 +356,120 @@
      :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
    :default-config default-config})
 
+(defn- restore-repo-after-import-failure!
+  [previous-repo]
+  (state/set-current-repo! previous-repo)
+  (when previous-repo
+    (state/pub-event! [:graph/switch previous-repo {:persist? false}])))
+
+(defn- file-graph-import-retry-delay-ms
+  [attempt]
+  (min 30000 (* 1000 (js/Math.pow 2 (min (dec attempt) 5)))))
+
+(def ^:private file-graph-import-max-attempts 3)
+
+(defn- <remove-failed-file-graph!
+  [repo]
+  (if repo
+    (-> (persist-db/<wait-for-db-worker-ready! repo)
+        (p/catch (fn [_] nil))
+        (p/then (fn [_]
+                  (repo-handler/remove-repo! {:url repo} :switch-graph? false))))
+    (p/resolved nil)))
+
+(defn- <cleanup-failed-file-graph!
+  [repo previous-repo]
+  (-> (<remove-failed-file-graph! repo)
+      (p/then (constantly true))
+      (p/catch (fn [error]
+                 (log/error :import-file-graph-cleanup-failed
+                            {:repo repo
+                             :error error})
+                 false))
+      (p/finally (fn []
+                   (restore-repo-after-import-failure! previous-repo)))))
+
+(defn- <invoke-file-graph-import-with-recovery!
+  [created-repo graph-name serialized-config-file serialized-files options attempt]
+  (reset! created-repo nil)
+  (-> (p/let [repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+              _ (when-not (string? repo)
+                  (throw (ex-info "Failed to create graph for file import"
+                                  {:code :file-import-graph-create-failed
+                                   :graph-name graph-name})))
+              _ (reset! created-repo repo)
+              result (state/<invoke-db-worker :thread-api/import-file-graph
+                                              repo
+                                              serialized-config-file
+                                              serialized-files
+                                              options)]
+        result)
+      (p/catch
+       (fn [error]
+         (let [{:keys [graph-created? repo]} (ex-data error)
+               unavailable? (persist-db/db-worker-unavailable-error? error)
+               repo (or @created-repo
+                        (when (or graph-created? unavailable?) repo))]
+           (when repo
+             (reset! created-repo repo))
+           (if (and repo
+                    (< attempt file-graph-import-max-attempts)
+                    unavailable?)
+             (do
+               (log/warn :import-file-graph-retrying
+                         {:repo repo
+                          :attempt attempt
+                          :error error})
+               (p/let [_ (<remove-failed-file-graph! repo)
+                       _ (p/delay (file-graph-import-retry-delay-ms attempt))]
+                 (<invoke-file-graph-import-with-recovery!
+                  created-repo
+                  graph-name
+                  serialized-config-file
+                  serialized-files
+                  options
+                  (inc attempt))))
+             (throw error)))))))
+
 (defn- import-file-graph
   [*files
    {:keys [graph-name] :as user-options}
    config-file]
-  (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (p/let [start-time (t/now)
-          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
-          repo (state/get-current-repo)
-          serialized-files (<serialize-import-files *files)
-          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
-          options (build-file-graph-worker-options user-options config/config-default-content)
-          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
-          _ (doseq [notification (:notifications import-result)]
-              (show-notification notification))
-          _ (write-staged-assets! repo (:staged-assets import-result))]
-    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-    (state/set-state! :graph/importing nil)
-    (state/set-state! :graph/importing-state nil)
-    (validate-imported-data import-result)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])
-    (finished-cb)))
+  (let [previous-repo (state/get-current-repo)
+        created-repo (atom nil)]
+    (state/set-state! :graph/importing :file-graph)
+    (state/set-state! [:graph/importing-state :current-page] "Config files")
+    (-> (p/let [start-time (t/now)
+                serialized-files (<serialize-import-files *files)
+                serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
+                options (build-file-graph-worker-options user-options config/config-default-content)
+                import-result (<invoke-file-graph-import-with-recovery!
+                               created-repo
+                               graph-name
+                               serialized-config-file
+                               serialized-files
+                               options
+                               1)
+                _ (doseq [notification (:notifications import-result)]
+                    (show-notification notification))]
+          (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+          (validate-imported-data import-result)
+          (state/pub-event! [:graph/ready (state/get-current-repo)])
+          (finished-cb))
+        (p/catch (fn [error]
+                   (log/error :import-file-graph-failed
+                              {:repo @created-repo
+                               :error error})
+                   (p/let [cleanup-succeeded? (<cleanup-failed-file-graph! @created-repo previous-repo)]
+                     (notification/show! (t (if cleanup-succeeded?
+                                              :import/file-failed
+                                              :import/file-failed-cleanup))
+                                         :error)
+                     (throw error))))
+        (p/finally (fn []
+                     (state/set-state! :graph/importing nil)
+                     (state/set-state! :graph/importing-state nil)
+                     (shui/dialog-close! :import-indicator))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
@@ -397,7 +484,8 @@
                                               (map #(hash-map :file-object %
                                                                :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
                                                                :fs-path (when (util/electron?)
-                                                                          (js/window.apis.getFilePath %))
+                                                                          (some-> (js/window.apis.getFilePath %)
+                                                                                  not-empty))
                                                                :last-modified-at (some-> (.-lastModified %) js/Date.)))
                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats

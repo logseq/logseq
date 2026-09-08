@@ -221,11 +221,20 @@
                [k (if (satisfies? IDeref v) @v v)]))
         import-state))
 
-(defn- file-content
-  [file]
-  (or (:file/content file)
-      (:content file)
-      ""))
+(defn- <file-content
+  [current-platform file]
+  (cond
+    (string? (:file/content file))
+    (p/resolved (:file/content file))
+
+    (not-empty (:fs-path file))
+    (platform/read-text! current-platform (:fs-path file))
+
+    :else
+    (p/rejected
+     (ex-info "Import file has no readable content"
+              {:code :import-file-content-missing
+               :path (:path file)}))))
 
 (defn- import-file-payload
   [payload]
@@ -242,28 +251,53 @@
     :else
     nil))
 
-(defn- <read-and-stage-import-asset
-  [file assets buffer-handler staged-assets]
-  (when-let [payload (some-> file :asset/payload import-file-payload)]
-    (let [buffer (.-buffer payload)
-          asset-type (db-asset/asset-path->type (:path file))
-          asset-id (d/squuid)
-          asset-name (some-> (:path file) gp-exporter/asset-path->name)
-          size (or (:asset/size file) (.-byteLength payload))]
-      (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
-              {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
-              asset-data (with-edn-content
-                           {:size size
-                            :type asset-type
-                            :path (:path file)
-                            :checksum checksum
-                            :asset-id asset-id})]
-        (swap! assets assoc asset-name asset-data)
-        (when-not pdf-annotation?
-          (swap! staged-assets conj {:path (:path file)
-                                     :asset-id asset-id
-                                     :asset-type asset-type
-                                     :payload payload}))))))
+(defn- payload-array-buffer
+  [payload]
+  (let [buffer (.-buffer payload)
+        byte-offset (.-byteOffset payload)
+        byte-length (.-byteLength payload)]
+    (if (and (zero? byte-offset)
+             (= byte-length (.-byteLength buffer)))
+      buffer
+      (.slice buffer byte-offset (+ byte-offset byte-length)))))
+
+(defn- <import-file-payload
+  [current-platform file]
+  (if-let [payload (some-> file :asset/payload import-file-payload)]
+    (p/resolved payload)
+    (if-let [fs-path (:fs-path file)]
+      (p/then (platform/<read-file-bytes! current-platform fs-path)
+              import-file-payload)
+      (p/resolved nil))))
+
+(defn- <read-and-store-import-asset
+  [current-platform repo file assets buffer-handler asset-write-error]
+  (p/let [payload (<import-file-payload current-platform file)]
+    (when payload
+      (let [buffer (payload-array-buffer payload)
+            asset-type (db-asset/asset-path->type (:path file))
+            asset-id (d/squuid)
+            asset-name (some-> (:path file) gp-exporter/asset-path->name)
+            size (or (:asset/size file) (.-byteLength payload))]
+        (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+                {:keys [with-edn-content pdf-annotation?]} (buffer-handler payload)
+                asset-data (with-edn-content
+                            {:size size
+                             :type asset-type
+                             :path (:path file)
+                             :checksum checksum
+                             :asset-id asset-id})
+                _ (when-not pdf-annotation?
+                    (-> (p/let [_ (platform/asset-write-bytes! current-platform repo
+                                                               (str asset-id "." asset-type)
+                                                               payload)]
+                          nil)
+                        (p/catch (fn [error]
+                                   (compare-and-set! asset-write-error nil
+                                                     {:path (:path file)
+                                                      :error error})
+                                   (throw error)))))]
+          (swap! assets assoc asset-name asset-data))))))
 
 (defn- finalize-import-render-revisions!
   [conn]
@@ -286,24 +320,31 @@
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [notifications (atom [])
-          staged-assets (atom [])
+    (let [current-platform (platform/current)
+          notifications (atom [])
+          asset-write-error (atom nil)
           options (-> opts
                       (assoc :notify-user #(swap! notifications conj %)
                              :log-fn (fn [& args]
                                        (log/info :import-file-graph {:args args}))
-                             :<read-file (fn [file] (p/resolved (file-content file)))
-                             :<get-file-stat (constantly nil)
+                             :<read-file (fn [file] (<file-content current-platform file))
+                             :<get-file-stat (fn [path]
+                                               (platform/<file-stat current-platform path))
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-stage-import-asset file assets buffer-handler staged-assets)))
+                                                     (<read-and-store-import-asset current-platform repo file assets buffer-handler
+                                                                                  asset-write-error)))
                       (dissoc :set-ui-state))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+              _ (when-let [{:keys [path error]} @asset-write-error]
+                  (throw (ex-info "Failed to write imported asset"
+                                  {:code :import-asset-write-failed
+                                   :path path}
+                                  error)))
               _ (finalize-import-render-revisions! conn)
               validation (worker-db-validate/validate-db conn :fix false)]
         {:files (:files result)
          :import-state (import-state-summary (:import-state result))
          :notifications @notifications
-         :staged-assets @staged-assets
          :validation {:errors (:errors validation)
                       :invalid-entity-ids (:invalid-entity-ids validation)}}))))
 

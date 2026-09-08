@@ -69,7 +69,7 @@
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
-      (throw (ex-info "db-worker has not been initialized" {})))
+      (throw (ex-info "db-worker has not been initialized" {:code :db-worker-not-ready})))
     (p/let [result (apply worker qkw args)]
       (if (or (instance? ExceptionInfo result)
               (instance? js/Error result))
