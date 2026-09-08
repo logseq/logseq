@@ -524,7 +524,7 @@
                (p/then (fn [_]
                          (is false "expected verify failure")))
                (p/catch (fn [e]
-                          (is (= "decrypt-private-key" (ex-message e)))
+                          (is (= :db-sync/invalid-e2ee-password (:code (ex-data e))))
                           (is (zero? @save-calls))))
                (p/finally done)))))
 
@@ -850,13 +850,72 @@
                (p/then (fn [_]
                          (is false "expected decrypt-private-key failure")))
                (p/catch (fn [e]
-                          (is (= "decrypt-private-key" (ex-message e)))
+                          (is (= :db-sync/invalid-e2ee-password (:code (ex-data e))))
                           (is (= [{:action :native-get-e2ee-password
                                    :payload {:key "logseq-encrypted-password"}}
                                   {:action :request-e2ee-password
                                    :payload {:reason :decrypt-user-rsa-private-key}}]
                                  @ui-calls))
                           (is (empty? @save-calls))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
+(deftest preflight-upload-operation-error-is-not-silent-cache-miss-test
+  (async done
+         (let [old-state @worker-state/*state
+               get-pair-calls (atom 0)
+               clear-cache-calls (atom 0)
+               load-graph-ids (atom [])
+               ui-calls (atom [])
+               orig-load @#'sync-crypt/<load-user-rsa-key-material]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "current-refresh-token"))
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://api.logseq.io")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<get-user-rsa-key-pair-raw
+                               (fn [_base]
+                                 (swap! get-pair-calls inc)
+                                 (p/resolved {:public-key "public-key"
+                                              :encrypted-private-key "encrypted-private-key"}))
+                               sync-crypt/<clear-user-rsa-key-pair-cache!
+                               (fn [_base _user-id]
+                                 (swap! clear-cache-calls inc)
+                                 (p/resolved nil))
+                               sync-crypt/<import-public-key (fn [_public-key]
+                                                               (p/resolved :public-key))
+                               sync-crypt/<load-user-rsa-key-material
+                               (fn [base user-id graph-id]
+                                 (swap! load-graph-ids conj graph-id)
+                                 (orig-load base user-id graph-id))
+                               platform/current (fn [] {:env {:runtime :node
+                                                              :owner-source :electron}})
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/resolved "stored-password"))
+                               ldb/read-transit-str identity
+                               crypt/<decrypt-text-by-text-password
+                               (fn [_refresh-token _data]
+                                 (p/rejected (ex-info "decrypt-text-by-text-password" {})))
+                               crypt/<decrypt-private-key
+                               (fn [_password _encrypted-private-key]
+                                 (p/rejected (ex-info "decrypt-private-key"
+                                                      {}
+                                                      (js/DOMException. "OperationError" "OperationError"))))
+                               ui-request/<request
+                               (fn [action payload & _opts]
+                                 (swap! ui-calls conj {:action action :payload payload})
+                                 (p/resolved {:password "typed-password"}))]
+                 (sync-crypt/<preflight-upload-e2ee! "logseq_db_demo" true))
+               (p/then (fn [_]
+                         (is false "expected preflight decrypt failure")))
+               (p/catch (fn [error]
+                          (is (= :db-sync/invalid-e2ee-password (:code (ex-data error))))
+                          (is (= [nil] @load-graph-ids))
+                          (is (= 2 @get-pair-calls))
+                          (is (= 1 @clear-cache-calls))
+                          (is (= [{:action :request-e2ee-password
+                                   :payload {:reason :decrypt-user-rsa-private-key}}]
+                                 @ui-calls))))
                (p/finally (fn []
                             (reset! worker-state/*state old-state)
                             (done)))))))

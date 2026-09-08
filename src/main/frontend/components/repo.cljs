@@ -53,8 +53,12 @@
 (defn- handle-cloud-graph-error!
   [error]
   (log/error :db-sync/cloud-graph-failed error)
-  (when (rtc-error/e2ee-decrypt-failed? error)
-    (notification/show! (t :encryption/wrong-password) :error false)))
+  (notification/show!
+   (if (rtc-error/e2ee-decrypt-failed? error)
+     (t :encryption/wrong-password)
+     (t :sync/something-wrong))
+   :error
+   false))
 
 (defn- graph-e2ee-enabled?
   [{:keys [url graph-e2ee?] :as graph}]
