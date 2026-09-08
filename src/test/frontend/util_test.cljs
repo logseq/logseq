@@ -95,7 +95,8 @@
       (gobj/set event "key" "Enter")
       (gobj/set event "keyCode" 229)
       (gobj/set event "isComposing" false)
-      (is (true? (util/native-event-is-composing? event)))))
+      (is (true? (util/native-event-is-composing? event)))
+      (is (false? (boolean (util/native-event-is-composing? event false))))))
 
   (testing "IME Process key is composing"
     (let [event (js-obj)]
@@ -109,4 +110,5 @@
       (gobj/set event "key" "Enter")
       (gobj/set event "keyCode" 13)
       (gobj/set event "isComposing" true)
-      (is (true? (util/native-event-is-composing? event))))))
+      (is (true? (util/native-event-is-composing? event)))
+      (is (true? (util/native-event-is-composing? event false))))))
