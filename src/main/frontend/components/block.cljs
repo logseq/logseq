@@ -2258,10 +2258,11 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :block block
-                                                        :ignore-children? page-title?
-                                                        :page-title? collapsable-page-title?})
+        collapsable? (and (not (entity/url-property-value? block))
+                          (editor-handler/collapsable? uuid {:semantic? true
+                                                            :block block
+                                                            :ignore-children? page-title?
+                                                            :page-title? collapsable-page-title?}))
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2370,10 +2371,18 @@
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
+(defn- url-property-validation-effect-deps
+  "Re-validate URL property values when the title changes so the error icon updates."
+  [block]
+  [(:db/id block)
+   (some-> (:logseq.property/created-from-property block) :db/id)
+   (:block/title block)])
+
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (boolean (seq child-uuids))
+        has-children? (and (not (entity/url-property-value? block))
+                           (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
 
@@ -2508,8 +2517,7 @@
            (set-property-validation-message! nil))
          (set-property-validation-message! nil))
        nil)
-     [(:db/id block)
-      (some-> (:logseq.property/created-from-property block) :db/id)])
+     (url-property-validation-effect-deps block))
     [:div
      (merge
       {:class (if query?
@@ -4603,6 +4611,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
+                   (entity/url-property-value? block)
                    table?
                    property?
                    comments-area?
