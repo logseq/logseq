@@ -189,6 +189,90 @@
   (assert/assert-is-visible
    (loc/filter ".ls-table-header-cell" :has-text "Status")))
 
+(defn- seed-scroll-table-view!
+  [tag-name row-count]
+  (let [container-page (page/get-page-name)]
+    (ls-api-call! :editor.createTag
+                  tag-name
+                  {:tagProperties [{:name "Status"}
+                                   {:name "Priority"
+                                    :schema {:type "number"}}
+                                   {:name "Owner"}
+                                   {:name "Team"}
+                                   {:name "Estimate"
+                                    :schema {:type "number"}}
+                                   {:name "Label"}
+                                   {:name "Sprint"}
+                                   {:name "Notes"}
+                                   {:name "Risk"}
+                                   {:name "Area"}]})
+    (dotimes [i row-count]
+      (ls-api-call! :editor.insertBlock
+                    container-page
+                    (str "Scroll row " i " #" tag-name)
+                    {:properties {"Status" (if (even? i) "Open" "Closed")
+                                  "Priority" i
+                                  "Owner" "Ada"
+                                  "Team" "Core"
+                                  "Estimate" 3
+                                  "Label" "perf"
+                                  "Sprint" "S1"
+                                  "Notes" "n"
+                                  "Risk" "low"
+                                  "Area" "views"}}))
+    (page/goto-page tag-name)
+    (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "Scroll row 0"))))
+
+(defn- table-row-remounts-after-scroll
+  []
+  (w/eval-js
+   "() => {
+      const rows = () => Array.from(document.querySelectorAll('.ls-view-body .ls-table-row'));
+      window.__tableRowNodes = new Map(rows().map((el) => [el.getAttribute('data-id'), el]));
+      const scroller = document.getElementById('main-content-container');
+      if (!scroller) {
+        return {error: 'missing-scroller', overlap: 0, remounted: 0};
+      }
+      scroller.scrollBy(0, 120);
+      return {
+        before: window.__tableRowNodes.size
+      };
+    }")
+  (util/wait-timeout 400)
+  (w/eval-js
+   "() => {
+      const next = new Map(
+        Array.from(document.querySelectorAll('.ls-view-body .ls-table-row'))
+          .map((el) => [el.getAttribute('data-id'), el])
+      );
+      let overlap = 0;
+      let remounted = 0;
+      (window.__tableRowNodes || new Map()).forEach((node, id) => {
+        const current = next.get(id);
+        if (current) {
+          overlap += 1;
+          if (current !== node) {
+            remounted += 1;
+          }
+        }
+      });
+      return {overlap, remounted, after: next.size};
+    }"))
+
+(deftest table-view-scroll-does-not-remount-visible-rows-test
+  (seed-scroll-table-view! "table-scroll-perf" 36)
+  (let [result (table-row-remounts-after-scroll)
+        overlap (or (get result "overlap") (:overlap result))
+        remounted (or (get result "remounted") (:remounted result))]
+    (is (pos? (or overlap 0))
+        (str "Expected overlapping table rows after a small scroll: " (pr-str result)))
+    (is (number? remounted)
+        (str "Scroll remount probe did not return a count: " (pr-str result)))
+    (is (zero? remounted)
+        (str "Visible table rows remounted during scroll: " (pr-str result)))))
+
 (deftest table-view-group-and-export-actions-test
   (seed-table-view! "table-group-export-actions")
 
