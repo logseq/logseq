@@ -2608,8 +2608,6 @@
   [el]
   (some? (dom/closest el ".block-editor")))
 
-(declare escape-editing)
-
 (defn keydown-new-block-handler [^js e]
   (let [target (when e (.-target e))
         state (cond-> (get-state)
