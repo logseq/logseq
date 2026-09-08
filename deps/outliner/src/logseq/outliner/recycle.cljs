@@ -36,7 +36,7 @@
 
 (defn- recycle-page-tag-tx
   [page]
-  (when-not (ldb/page? page)
+  (when-not (ldb/internal-page? page)
     [[:db/add (:db/id page) :block/tags :logseq.class/Page]]))
 
 (defn- ensure-recycle-page
