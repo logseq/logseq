@@ -1,5 +1,6 @@
 (ns frontend.security-test
   (:require [cljs.test :refer [deftest is testing]]
+            [frontend.handler.assets :as assets]
             [frontend.security :as security]))
 
 (deftest sanitize-html-uses-logseq-sanitization-policy
@@ -33,6 +34,16 @@
       (is (= "Unsupported DOMPurify module shape" (.-message bad-module-error)))
       (is (= "DOMPurify factory did not return a sanitizer instance"
              (.-message bad-factory-error))))))
+
+(deftest sanitize-html-rewrites-local-file-iframe-srcs-after-purify
+  (testing "surviving iframe srcs are rewritten after DOMPurify returns"
+    (let [html "<iframe src=\"file:///Users/charlie/graph/assets/foo.html\"></iframe>"
+          fake-purify #js {:sanitize (fn [input _opts] input)}]
+      (with-redefs [security/get-dompurify (fn [] fake-purify)
+                    assets/rewrite-local-file-iframe-srcs (fn [sanitized]
+                                                            (is (= html sanitized))
+                                                            "rewritten")]
+        (is (= "rewritten" (security/sanitize-html html)))))))
 
 (deftest get-dompurify-caches-the-resolved-instance
   (testing "the DOMPurify instance is resolved once and then reused"
