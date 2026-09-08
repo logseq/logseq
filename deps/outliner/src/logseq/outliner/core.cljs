@@ -792,6 +792,18 @@
                      (:db/cardinality (:logseq.property/created-from-property target-block)))))
       (and sibling? (url-property-value? (:block/parent target-block)))))
 
+(defn- asset-block->paste-link
+  "Embed a copied asset while retaining source IDs for insertion planning."
+  [db block parent-ids]
+  (let [asset (d/entity db [:block/uuid (:block/uuid block)])]
+    (when-not (ldb/asset? asset)
+      (throw (ex-info "Cannot paste a missing asset" {:block/uuid (:block/uuid block)})))
+    (when (contains? parent-ids (:db/id asset))
+      (throw (ex-info "Cannot embed an asset inside itself" {:block/uuid (:block/uuid block)})))
+    (assoc (select-keys block [:db/id :block/uuid :block/title
+                              :block/parent :block/level :block/order])
+           :block/link (:db/id asset))))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -839,11 +851,21 @@
                              (apply dissoc b' dissoc-keys))
                            b))
                        blocks)
-                  (or (= outliner-op :paste)
-                      insert-template?)
+                  ;; Templates cannot clone uuid-named asset files.
+                  insert-template?
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
+         blocks (if (and (= outliner-op :paste) (not keep-uuid?) (some ldb/asset? blocks))
+                  (let [parent-ids (cond-> (into #{(:db/id target-block)}
+                                               (map :db/id)
+                                               (ldb/get-block-parents db (:block/uuid target-block) {}))
+                                     sibling? (disj (:db/id target-block)))]
+                    (mapv #(if (ldb/asset? %)
+                             (asset-block->paste-link db % parent-ids)
+                             %)
+                          blocks))
+                  blocks)
          replace-empty-target? (if (and (some? replace-empty-target?)
                                         (:block/title target-block)
                                         (string/blank? (:block/title target-block)))
