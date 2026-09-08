@@ -2621,8 +2621,9 @@
                 (assoc :node target
                        :value (gobj/get target "value")
                        :pos (util/get-selection-start target)))]
-    (when (or (nil? target)
-              (inside-of-editor-block target))
+    (when (and (not (auto-complete?))
+               (or (nil? target)
+                   (inside-of-editor-block target)))
       (if (pending-new-block?)
         (when e (.preventDefault e))
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
