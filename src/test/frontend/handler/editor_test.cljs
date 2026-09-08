@@ -24,6 +24,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
+            [goog.object :as gobj]
             [logseq.db :as ldb]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.graph-parser.block :as gp-block]
@@ -1291,6 +1292,51 @@
           :cursor-pos 9}
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
+
+(defn- keydown-bracket-autopair-result
+  "Drive keydown-not-matched-handler for `[` with a native KeyboardEvent-shaped
+  object (window addEventListener path). Returns whether autopair ran."
+  [{:keys [key key-code composing? value cursor-pos]
+    :or {key "[" key-code 219 composing? false value "" cursor-pos 0}}]
+  (let [content (atom nil)
+        stopped? (atom false)
+        input #js {:id "edit-block-test"
+                   :value value}
+        event (js-obj)]
+    (gobj/set event "key" key)
+    (gobj/set event "keyCode" key-code)
+    (gobj/set event "isComposing" (boolean composing?))
+    (gobj/set event "ctrlKey" false)
+    (gobj/set event "metaKey" false)
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/get-state (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' _pos']
+                                                          (reset! content value'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly "")
+                  util/stop (fn [_] (reset! stopped? true))
+                  cursor/pos (constantly cursor-pos)
+                  cursor/move-cursor-to (constantly nil)
+                  cursor/get-caret-pos (constantly {:pos cursor-pos})]
+      ((editor/keydown-not-matched-handler :markdown) event key-code)
+      {:content @content
+       :stopped? @stopped?})))
+
+(deftest keydown-not-matched-handler-skips-bracket-autopair-during-ime
+  ;; #12966: native window keydown events are invisible to goog-event-is-composing?,
+  ;; so Japanese IME `[` → 「 was swallowed by [] autopair.
+  (testing "IME process keyCode 229 must not autopair"
+    (is (= {:content nil :stopped? false}
+           (keydown-bracket-autopair-result {:key "[" :key-code 229 :composing? false}))))
+  (testing "isComposing true must not autopair"
+    (is (= {:content nil :stopped? false}
+           (keydown-bracket-autopair-result {:key "[" :key-code 219 :composing? true}))))
+  (testing "plain `[` without IME still autopairs"
+    (is (= {:content "[]" :stopped? true}
+           (keydown-bracket-autopair-result {:key "[" :key-code 219 :composing? false})))))
 
 (defn- delete-block-at-zero-pos-result
   [block & {:keys [left-sibling]}]
