@@ -127,10 +127,9 @@
                k')))
 
 (defn- extract-refs-by-commas
+  "Split comma-separated plain text. Inline parse keeps commas inside [[page, name]]."
   [v format]
-  (let [plains (->> (map first (gp-mldoc/->edn v (gp-mldoc/default-config format)))
-                    first
-                    second
+  (let [plains (->> (gp-mldoc/inline->edn v (gp-mldoc/default-config format))
                     (filter #(and (vector? %) (= "Plain" (first %))))
                     (map second))]
     (set (mapcat sep-by-comma plains))))
