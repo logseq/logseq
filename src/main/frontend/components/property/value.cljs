@@ -1380,14 +1380,24 @@
       :else
       (property-normal-block-value block property v-block opts))))
 
+(defn- keep-local-scalar-input?
+  "True when a nil hydrated scalar must not replace the current input.
+   After set-block-property!, property-cp may re-render with a value-entity
+   UUID that use-blocks has not hydrated yet. Syncing that gap to \"\"
+   makes the just-typed number/string vanish until reload."
+  [hydrated-scalar current-str]
+  (and (nil? hydrated-scalar)
+       (not (string/blank? current-str))))
+
 (hsx/defc single-string-input
   [block property value table-view?]
   (let [[editing? set-editing!] (hooks/use-state false)
         *ref (hooks/use-ref nil)
-        string-value (cond
-                       (string? value) value
-                       (some? value) (str (db-property/property-value-content value))
-                       :else "")
+        hydrated-scalar (cond
+                          (string? value) value
+                          (some? value) (db-property/property-value-content value)
+                          :else nil)
+        string-value (if (some? hydrated-scalar) (str hydrated-scalar) "")
         [value set-value!] (hooks/use-state string-value)
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
@@ -1406,7 +1416,8 @@
                                    (set-editing! false)))))]
     (hooks/use-effect!
      (fn []
-       (set-value! string-value)
+       (when-not (keep-local-scalar-input? hydrated-scalar value)
+         (set-value! string-value))
        #())
      [string-value])
 
@@ -1690,7 +1701,8 @@
 
     (hooks/use-effect!
      (fn []
-       (set-value! number-value-str)
+       (when-not (keep-local-scalar-input? number-value value)
+         (set-value! number-value-str))
        #())
      [number-value-str])
 
