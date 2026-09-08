@@ -16,10 +16,6 @@
   "Validates a page title doesn't include hashtag character"
   [page-title meta-m]
   (when (string/includes? page-title "#")
-    ;; #region agent log
-    (prn :dbg.H4/validate-page-title-no-hashtag
-         {:page-title page-title :will-throw? true :meta-keys (vec (keys meta-m))})
-    ;; #endregion
     (throw (ex-info "Page name can't include \"#\"."
                     (merge meta-m
                            {:type :notification

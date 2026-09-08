@@ -17,7 +17,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -97,50 +96,27 @@
                   edit? true}
            :as options}]
    (when (string? title)
-     (let [{title' :title :keys [has-tags? tags error parsed]}
+     (let [{title' :title :keys [has-tags? tags error]}
            (db-editor-handler/prepare-page-title-tags title)]
-       ;; #region agent log
-       (prn :dbg.H1+H2/create!-parsed
-            {:input-title title
-             :parsed-title (:block/title parsed)
-             :has-tags? has-tags?
-             :parsed-tags (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags])
-                                tags)
-             :stripped-title title'
-             :error error
-             :has-hash-brackets? (boolean (some-> (:block/title parsed)
-                                                  (string/includes? (str "#" page-ref/left-brackets))))})
-       ;; #endregion
        (cond
          (= :name-no-hash error)
-         (do
-           ;; #region agent log
-           (prn :dbg.H2/create!-strip-failed {:parsed-title (:block/title parsed)})
-           ;; #endregion
-           (notification/show! (t :page.validation/name-no-hash) :error))
+         (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
               (seq (set/intersection ldb/private-tags (set (map :db/ident tags)))))
-         (do
-           ;; #region agent log
-           (prn :dbg.H1/create!-private-tags-blocked {:tags (mapv :db/ident tags)})
-           ;; #endregion
-           (notification/show! (i18n/interpolate-rich-text-node
+         (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
                                 (keep #(when (ldb/private-tags (:db/ident %))
                                          (pr-str (:block/title %)))
                                       tags))])
-                             :error))
+                             :error)
 
          :else
          (when-not (string/blank? title')
            (p/let [existing-page (when-not class? (<page-for-create title'))]
              (if (and existing-page (not (ldb/recycled? existing-page)))
                (do
-                 ;; #region agent log
-                 (prn :dbg.H1/create!-existing-page {:title' title' :has-tags? has-tags?})
-                 ;; #endregion
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))
                  (when (and edit? (not today-journal?))
@@ -149,22 +125,10 @@
                (p/let [options' (cond-> (update options :tags concat tags)
                                   (nil? (:split-namespace? options))
                                   (assoc :split-namespace? true))
-                       ;; #region agent log
-                       _ (prn :dbg.H1/create!-calling-create-page!
-                              {:title' title'
-                               :tags-passed (mapv #(or (:db/ident %) (:block/title %) %) (:tags options'))
-                               :tag-count (count (:tags options'))})
-                       ;; #endregion
                        [_page-name page-uuid] (ui-outliner-tx/transact!
                                                {:outliner-op :create-page}
                                                (outliner-op/create-page! title' options'))
                        page (<page-for-create (or page-uuid title'))]
-                 ;; #region agent log
-                 (prn :dbg.H1/create!-done
-                      {:page-uuid page-uuid
-                       :page-title (:block/title page)
-                       :page-tags (mapv #(select-keys % [:db/ident :block/title]) (:block/tags page))})
-                 ;; #endregion
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)
                    (when (and edit? (not today-journal?))

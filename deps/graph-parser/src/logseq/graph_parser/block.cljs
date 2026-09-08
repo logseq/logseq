@@ -546,14 +546,6 @@
                              (:block.temp/original-page-name ref)
                              (assoc :block.temp/original-page-name (:block.temp/original-page-name ref))))))
           tags (ref->map db *structured-tags (assoc ref->map-options :tag? true))]
-      ;; #region agent log
-      (when (seq @*structured-tags)
-        (prn :dbg.H1/gp-with-page-refs-and-tags
-             {:db-nil? (nil? db)
-              :db-based? (boolean db-based?)
-              :structured-tags (vec @*structured-tags)
-              :tags-out (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags]) tags)}))
-      ;; #endregion
       (assoc block
              :refs refs
              :tags tags))))

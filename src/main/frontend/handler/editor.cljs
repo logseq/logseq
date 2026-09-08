@@ -264,16 +264,6 @@
   (let [page-title? (saving-page-title? block opts)
         prepared (when (and page-title? (string? value) (string/includes? value "#"))
                    (db-editor-handler/prepare-page-title-tags value))]
-    ;; #region agent log
-    (when prepared
-      (prn :dbg.H4/save-block-inner-page-title
-           {:page-title? page-title?
-            :input-value value
-            :stripped-title (:title prepared)
-            :has-tags? (:has-tags? prepared)
-            :error (:error prepared)
-            :tag-titles (mapv #(or (:block/title %) (:db/ident %)) (:tags prepared))}))
-    ;; #endregion
     (cond
       (= :name-no-hash (:error prepared))
       (notification/show! (t :page.validation/name-no-hash) :error)
@@ -292,14 +282,6 @@
                                             :block/title value})
                          (assoc :block/uuid (:block/uuid block))))
             opts' (assoc opts :outliner-op :save-block)]
-        ;; #region agent log
-        (when (or page-title? (string/includes? (str value) "#"))
-          (prn :dbg.H4/save-block-inner-saving
-               {:page-title? page-title?
-                :save-title (:block/title block')
-                :save-tag-count (count (:block/tags block'))
-                :save-tag-titles (mapv #(or (:block/title %) (:db/ident %)) (:block/tags block'))}))
-        ;; #endregion
         (ui-outliner-tx/transact!
          opts'
          (outliner-save-block! block'))))))
@@ -1776,17 +1758,6 @@
                    opts' (cond-> opts
                            page-title?
                            (assoc :page-title? true))]
-               ;; #region agent log
-               (when (or (string/includes? (str value) "#") page-title?)
-                 (prn :dbg.H4/save-current-block
-                      {:value value
-                       :has-hash? (boolean (string/includes? (str value) "#"))
-                       :page-title? page-title?
-                       :block-uuid (:block/uuid block)
-                       :block-page? (entity/page? block)
-                       :block-name (:block/name block)
-                       :note "page-title save uses prepare-page-title-tags"}))
-               ;; #endregion
                (save-block-aux! block value opts'))))
          (catch :default error
            (js/console.error error)
@@ -2054,22 +2025,8 @@
                                    (conj (:block/alias class) class)))
                          (common-util/distinct-by :db/id)
                          (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title :block/tags]))))]
-        ;; #region agent log
-        (when (seq q)
-          (let [sample (take 3 classes)
-                sample-raw (take 3 all-classes)]
-            (prn :dbg.H3/get-matched-classes
-                 {:q q
-                  :matched-keys-after-select (vec (keys (or (first classes) {})))
-                  :raw-had-block-tags? (boolean (some #(contains? % :block/tags) sample-raw))
-                  :stripped-still-class?
-                  (boolean (some #(entity/class? %) sample))
-                  :raw-class?-sample (mapv #(hash-map :title (:block/title %)
-                                                      :class? (entity/class? %)
-                                                      :tags (:block/tags %))
-                                           sample-raw)})))
-        ;; #endregion
         (search/fuzzy-search classes q {:extract-fn :block/title})))))
+
 (defn <get-matched-blocks
   "Return matched blocks, optionally including public built-ins"
   [q & [{:keys [nlp-pages? page-only? built-in?]}]]
@@ -2699,15 +2656,6 @@
             (or (get-in state [:config :page-title?])
                 (url-property-value-insert-blocked? (:config state) (:block state)))
             (do
-              ;; #region agent log
-              (prn :dbg.H4/page-title-enter
-                   {:page-title? (boolean (get-in state [:config :page-title?]))
-                    :value (:value state)
-                    :has-hash? (boolean (some-> (:value state) (string/includes? "#")))
-                    :block-uuid (:block/uuid (:block state))
-                    :block-title (:block/title (:block state))
-                    :path "escape-editing (no tag strip/apply)"})
-              ;; #endregion
               (when e (.preventDefault e))
               (escape-editing))
 
