@@ -447,18 +447,24 @@ let status_last_error status =
   | Some value when not (Edn_util.is_null value) -> Some value
   | _ -> None
 
-let invoke_global_config ?(create_empty_db = false) config =
-  match (config.Cli_config.base_url, config.repo) with
-  | Some base_url, _ ->
-      Cli_effect.pure
-        (Ok
-           {
-             Transport.base_url;
-             timeout_span = config.timeout_span;
-             profile_session = config.profile_session;
-           })
-  | None, Some repo -> Server_runtime.ensure_server config repo ~create_empty_db
-  | None, None -> Cli_effect.pure (Error (Error.missing_graph ()))
+let account_runtime_repo = Cli_primitive.create_repo ".cli-sync-runtime"
+
+let invoke_config_of_base_url config base_url =
+  {
+    Transport.base_url;
+    timeout_span = config.Cli_config.timeout_span;
+    profile_session = config.profile_session;
+  }
+
+let invoke_global_config ?(create_empty_db = false) ?fallback_repo config =
+  match (config.Cli_config.base_url, config.repo, fallback_repo) with
+  | Some base_url, _, _ ->
+      Cli_effect.pure (Ok (invoke_config_of_base_url config base_url))
+  | None, Some repo, _ ->
+      Server_runtime.ensure_server config repo ~create_empty_db
+  | None, None, Some repo ->
+      Server_runtime.ensure_server config repo ~create_empty_db
+  | None, None, None -> Cli_effect.pure (Error (Error.missing_graph ()))
 
 let graphs_value graphs =
   if Edn_util.is_null graphs then Edn_util.vector_vec Vec.empty
@@ -977,7 +983,9 @@ let execute_remote_graphs mode config =
         (Cli_result.error ~command:Command_id.Sync_remote_graphs mode err)
   | Ok auth -> (
       let config = config_with_auth config auth in
-      invoke_global_config config >>= function
+      invoke_global_config config ~create_empty_db:true
+        ~fallback_repo:account_runtime_repo
+      >>= function
       | Error err ->
           Cli_effect.pure
             (Cli_result.error ~command:Command_id.Sync_remote_graphs mode err)
