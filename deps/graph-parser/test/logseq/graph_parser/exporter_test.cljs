@@ -1104,6 +1104,50 @@ abc
           "Linked file PDF annotations import and keep highlight positions from the EDN file")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
 
+(deftest-async import-linked-pdf-annotations-with-missing-attributes-without-log-fn
+  (let [annotation-id #uuid "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+        external-pdf-path (node-path/join dir "external/Sparse Paper.pdf")
+        graph-dir (node-path/join dir "graph")
+        encoded-pdf-uri (str "file://" (string/replace external-pdf-path " " "%20"))]
+    (fs/mkdirSync (node-path/dirname external-pdf-path) #js {:recursive true})
+    (fs/writeFileSync external-pdf-path "pdf")
+    (doseq [[relative-path content]
+            {"logseq/config.edn" "{}"
+             "pages/source.md" (str "- ![Sparse Paper.pdf](" encoded-pdf-uri ")\n")
+             "pages/hls__Sparse Paper.md" (str "file:: [Sparse Paper.pdf](" encoded-pdf-uri ")\n"
+                                               "file-path:: " encoded-pdf-uri "\n\n"
+                                               "- Sparse highlight\n"
+                                               "  ls-type:: annotation\n"
+                                               "  id:: " annotation-id "\n")
+             "assets/Sparse Paper.edn" (str "{:highlights [{:id #uuid \"" annotation-id "\","
+                                            " :position {:bounding {:x1 1 :y1 2 :x2 3 :y2 4 :width 10 :height 20},"
+                                            "            :rects ()},"
+                                            " :content {},"
+                                            " :properties {}}]}")}]
+      (let [file-path (node-path/join graph-dir relative-path)]
+        (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+        (fs/writeFileSync file-path content)))
+    (p/let [conn (db-test/create-conn)
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {})
+            asset (db-test/find-block-by-content @conn "Sparse Paper")
+            annotation (d/entity @conn [:block/uuid annotation-id])]
+      (is (some? asset)
+          "Linked file PDF imports as an external Asset")
+      (is (some? annotation)
+          "Highlights missing color, page, and text still import")
+      (is (= "Sparse highlight" (:block/title annotation))
+          "Annotation title comes from the markdown highlight when EDN text is missing")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Sparse Paper"
+              :logseq.property.pdf/hl-page 1}
+             (select-keys (db-test/readable-properties annotation)
+                          [:block/tags
+                           :logseq.property/asset
+                           :logseq.property.pdf/hl-page]))
+          "Missing annotation attributes fall back to import defaults")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
+
 (defn- write-linked-pdf-annotation-graph
   "Write a hermetic file-graph fixture for linked-PDF import tests."
   [graph-dir {:keys [pdf-uri pdf-label source-line annotation-id highlight-text hl-page]}]
