@@ -232,7 +232,6 @@ let raw_config_string config keys =
 
 let default_oauth_domain = "logseq-prod.auth.us-east-1.amazoncognito.com"
 let default_oauth_client_id = "69cs1lgme7p8kbgld8n5kseii6"
-let default_api_http_base = "https://api.logseq.io"
 
 let normalize_base_url value =
   let value = String.trim value in
@@ -247,29 +246,13 @@ let oauth_domain_base config =
   | Some domain when String.trim domain <> "" -> "https://" ^ String.trim domain
   | _ -> "https://" ^ default_oauth_domain
 
-let raw_http_base config = raw_config_string config (Vec.singleton "http-base")
-
-let configured_http_base config =
-  match raw_http_base config with
-  | Some base when String.trim base <> "" -> Some base
-  | _ -> (
-      match config.Cli_config.http_base with
-      | Some base
-        when String.trim base <> ""
-             && normalize_base_url base <> default_api_http_base ->
-          Some base
-      | _ -> None)
-
-let oauth_endpoint_base config =
-  Option.value (configured_http_base config) ~default:(oauth_domain_base config)
-
 let token_endpoint config =
   match
     raw_config_string config
       (Vec.of_array [| "oauth-token-endpoint"; "token-endpoint" |])
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
-  | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/oauth2/token")
+  | _ -> Some (normalize_base_url (oauth_domain_base config) ^ "/oauth2/token")
 
 let logout_endpoint config =
   match
@@ -277,7 +260,7 @@ let logout_endpoint config =
       (Vec.of_array [| "oauth-logout-endpoint"; "logout-endpoint" |])
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
-  | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/logout")
+  | _ -> Some (normalize_base_url (oauth_domain_base config) ^ "/logout")
 
 let oauth_client_id config =
   match
@@ -293,8 +276,7 @@ let authorize_endpoint config =
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ ->
-      Some
-        (normalize_base_url (oauth_endpoint_base config) ^ "/oauth2/authorize")
+      Some (normalize_base_url (oauth_domain_base config) ^ "/oauth2/authorize")
 
 let oauth_scope config =
   Option.value
