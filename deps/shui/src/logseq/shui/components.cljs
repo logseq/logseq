@@ -345,8 +345,12 @@
     (when (input-target? (event-target event))
       (prevent-base-ui-handler! event))))
 
+;; Cap height when Base UI's --available-height is missing or larger than the window.
+(def ^:private popup-max-height
+  "min(var(--available-height, 100vh), calc(100vh - 16px))")
+
 (def ^:private popup-scroll-style
-  #js {:maxHeight "var(--available-height)"
+  #js {:maxHeight popup-max-height
        :overflowY "auto"
        :overflowX "hidden"})
 
@@ -432,7 +436,7 @@
         (react/createElement component props'))))))
 
 (defn- composed-popup
-  [portal positioner popup base-class & {:keys [extra-class-fn]}]
+  [portal positioner popup base-class & {:keys [extra-class-fn sticky?]}]
   (react/forwardRef
    (fn [^js props ref]
      (let [portal-props (merge-object-props! (copy-named-props props portal-prop-names)
@@ -445,7 +449,11 @@
            on-key-down (prop popup-props "onKeyDown")
            children (prop props "children")]
        (set-prop! positioner-props "style"
-                  (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
+                  (merge-object-props! #js {:zIndex 99999
+                                            :maxHeight popup-max-height}
+                                       (prop positioner-props "style")))
+       (when (and sticky? (nil? (prop positioner-props "sticky")))
+         (set-prop! positioner-props "sticky" true))
        (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (merge-object-props! (popup-normal-style) (prop popup-props "style")))
@@ -736,10 +744,11 @@
 (def DropdownMenuRadioGroup MenuRadioGroupPart)
 (def DropdownMenuContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
-                  "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"))
+                  "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md overflow-y-auto"))
 (def DropdownMenuSubContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
-                  "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"))
+                  "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg overflow-y-auto"
+                  :sticky? true))
 (def DropdownMenuItem
   (react/forwardRef
    (fn [^js props ref]
@@ -796,10 +805,11 @@
 (def ContextMenuRadioGroup ContextMenuRadioGroupPart)
 (def ContextMenuContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
-                  "ui__context-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none focus:outline-none focus-visible:outline-none"))
+                  "ui__context-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none focus:outline-none focus-visible:outline-none overflow-y-auto"))
 (def ContextMenuSubContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
-                  "ui__context-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg outline-none focus:outline-none focus-visible:outline-none"))
+                  "ui__context-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg outline-none focus:outline-none focus-visible:outline-none overflow-y-auto"
+                  :sticky? true))
 (def ContextMenuItem (forward-part ContextMenuItemPart "ui__context-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
 (def ContextMenuCheckboxItem (forward-part ContextMenuCheckboxItemPart "ui__context-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
 (def ContextMenuRadioItem (forward-part ContextMenuRadioItemPart "ui__context-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))

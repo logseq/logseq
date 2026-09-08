@@ -463,17 +463,17 @@ kbd.shui-shortcut-key-pressed,
   background-color: var(--lx-accent-08-alpha, var(--color-level-4));
 }
 
-.ui__dropdown-menu-content, div[data-radix-menu-content],
+.ui__dropdown-menu-content,
+.ui__dropdown-menu-sub-content,
+.ui__context-menu-content,
+.ui__context-menu-sub-content,
+div[data-radix-menu-content],
 .ui__select-content {
-  @apply overflow-y-auto;
+  @apply overflow-x-hidden overflow-y-auto;
 
-  &[data-side=top] {
-    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 20px);
-  }
-
-  &[data-side=bottom] {
-    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 10px);
-  }
+  /* Base UI sets --available-height on the positioner; inherit it for all sides,
+     including left/right and inline-* submenus that the old top/bottom rules missed. */
+  max-height: min(var(--available-height, 100vh), calc(100vh - 16px));
 
   &.text-popover-foreground {
     color: inherit;
