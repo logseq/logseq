@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]
@@ -43,6 +44,23 @@
         (fn [error]
           (is false (str error))))
        (p/finally done)))))
+
+(deftest get-all-classes-exposes-tag-idents-for-class?
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/Topic
+                        :block/title "Topic"
+                        :block/name "topic"
+                        :block/uuid (random-uuid)
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/extends :logseq.class/Root}])
+    (let [classes (worker-property/get-all-classes @conn {:except-root-class? true})
+          topic (some #(when (= :user.class/Topic (:db/ident %)) %) classes)]
+      (is (some? topic))
+      (is (= [:logseq.class/Tag] (:block/tags topic))
+          "block/tags must be idents so frontend entity/class? works")
+      (is (entity-util/class? topic)))))
 
 (deftest display-properties-hides-hide-by-default-properties-on-nodes
   (let [conn (db-test/create-conn-with-blocks

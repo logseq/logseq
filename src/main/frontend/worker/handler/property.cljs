@@ -58,7 +58,13 @@
       (remove #(= :logseq.class/Root (:db/ident %)))
 
       true
-      (map entity-util/entity->map))))
+      ;; Keep :block/tags as idents so renderer entity/class? works after transit.
+      (map (fn [class]
+             (-> (entity-util/entity->map class)
+                 (assoc :block/tags
+                        (->> (:block/tags class)
+                             (keep :db/ident)
+                             vec))))))))
 
 (defn class-extends-children-tree
   ([db class-id]

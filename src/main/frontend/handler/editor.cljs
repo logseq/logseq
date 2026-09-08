@@ -252,18 +252,60 @@
   [block]
   (db-editor-handler/wrap-parse-block block))
 
+(defn- saving-page-title?
+  "True when the save targets a page title (not a normal block)."
+  [block opts]
+  (or (:page-title? opts)
+      (some? (:block/name block))
+      (entity/page? block)
+      (boolean (try
+                 (get-in (get-state) [:config :page-title?])
+                 (catch :default _ false)))))
+
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:block/uuid (:block/uuid block)
-               :block/title value}
-        block' (-> (wrap-parse-block block)
-                   ;; :block/uuid might be changed when backspace/delete
-                   ;; a block that has been refed
-                   (assoc :block/uuid (:block/uuid block)))
-        opts' (assoc opts :outliner-op :save-block)]
-    (ui-outliner-tx/transact!
-     opts'
-     (outliner-save-block! block'))))
+  (let [page-title? (saving-page-title? block opts)
+        prepared (when (and page-title? (string? value) (string/includes? value "#"))
+                   (db-editor-handler/prepare-page-title-tags value))]
+    ;; #region agent log
+    (when prepared
+      (prn :dbg.H4/save-block-inner-page-title
+           {:page-title? page-title?
+            :input-value value
+            :stripped-title (:title prepared)
+            :has-tags? (:has-tags? prepared)
+            :error (:error prepared)
+            :tag-titles (mapv #(or (:block/title %) (:db/ident %)) (:tags prepared))}))
+    ;; #endregion
+    (cond
+      (= :name-no-hash (:error prepared))
+      (notification/show! (t :page.validation/name-no-hash) :error)
+
+      (and (:has-tags? prepared)
+           (seq (set/intersection ldb/private-tags (set (map :db/ident (:tags prepared))))))
+      (notification/show! (t :page.validation/cant-set-built-in-tags) :error)
+
+      :else
+      (let [block' (if (:has-tags? prepared)
+                     (-> (:parsed prepared)
+                         (assoc :block/uuid (:block/uuid block)
+                                :block/title (:title prepared)
+                                :block/tags (:tags prepared)))
+                     (-> (wrap-parse-block {:block/uuid (:block/uuid block)
+                                            :block/title value})
+                         (assoc :block/uuid (:block/uuid block))))
+            opts' (assoc opts :outliner-op :save-block)]
+        ;; #region agent log
+        (when (or page-title? (string/includes? (str value) "#"))
+          (prn :dbg.H4/save-block-inner-saving
+               {:page-title? page-title?
+                :save-title (:block/title block')
+                :save-tag-count (count (:block/tags block'))
+                :save-tag-titles (mapv #(or (:block/title %) (:db/ident %)) (:block/tags block'))}))
+        ;; #endregion
+        (ui-outliner-tx/transact!
+         opts'
+         (outliner-save-block! block'))))))
 
 (defn- latest-renderer-block
   [block]
@@ -1733,18 +1775,22 @@
                block (state/get-edit-block)
                value (current-editor-value input-id current-block block)]
            (when value
-             ;; #region agent log
-             (when (or (string/includes? (str value) "#")
-                       (get-in (get-state) [:config :page-title?]))
-               (prn :dbg.H4/save-current-block
-                    {:value value
-                     :has-hash? (boolean (string/includes? (str value) "#"))
-                     :page-title? (boolean (get-in (get-state) [:config :page-title?]))
-                     :block-uuid (:block/uuid block)
-                     :block-page? (entity/page? block)
-                     :note "save path does not strip/apply title tags"}))
-             ;; #endregion
-             (save-block-aux! block value opts)))
+             (let [page-title? (boolean (get-in (get-state) [:config :page-title?]))
+                   opts' (cond-> opts
+                           page-title?
+                           (assoc :page-title? true))]
+               ;; #region agent log
+               (when (or (string/includes? (str value) "#") page-title?)
+                 (prn :dbg.H4/save-current-block
+                      {:value value
+                       :has-hash? (boolean (string/includes? (str value) "#"))
+                       :page-title? page-title?
+                       :block-uuid (:block/uuid block)
+                       :block-page? (entity/page? block)
+                       :block-name (:block/name block)
+                       :note "page-title save uses prepare-page-title-tags"}))
+               ;; #endregion
+               (save-block-aux! block value opts')))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
@@ -2010,7 +2056,7 @@
                          (mapcat (fn [class]
                                    (conj (:block/alias class) class)))
                          (common-util/distinct-by :db/id)
-                         (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title]))))]
+                         (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title :block/tags]))))]
         ;; #region agent log
         (when (seq q)
           (let [sample (take 3 classes)

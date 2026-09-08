@@ -1,5 +1,6 @@
 (ns frontend.handler.db-based.editor-test
   (:require [cljs.test :refer [are async deftest is testing]]
+            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.db-based.editor :as db-editor-handler]
@@ -34,6 +35,22 @@
          (select-keys
           (db-editor-handler/wrap-parse-block {:block/title " \n$$\n  E = mc^2  \n$$\n "})
           [:block/title :logseq.property.node/display-type]))))
+
+(deftest prepare-page-title-tags-strips-inline-tags-test
+  (testing "page title with #tag strips title and keeps parsed tags"
+    (let [result (db-editor-handler/prepare-page-title-tags "Project A #project")]
+      (is (true? (:has-tags? result)))
+      (is (nil? (:error result)))
+      (is (= "Project A" (:title result)))
+      (is (seq (:tags result)))
+      (is (some #(= "project" (some-> % :block/title string/lower-case))
+                (:tags result)))))
+
+  (testing "page title without tags is unchanged"
+    (let [result (db-editor-handler/prepare-page-title-tags "Plain Title")]
+      (is (false? (:has-tags? result)))
+      (is (= "Plain Title" (:title result)))
+      (is (empty? (:tags result))))))
 
 (deftest wrap-parse-block-markdown-heading-test
   (testing "normal blocks save markdown heading syntax as heading property"

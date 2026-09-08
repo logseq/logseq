@@ -14,10 +14,25 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.op]
             [promesa.core :as p]))
+
+(defn- wrap-tags
+  "Tags might have multiple words"
+  [title]
+  (let [parts (string/split title #" #")]
+    (->>
+     (cons (first parts)
+           (map (fn [s]
+                  (if (and (string/includes? s " ") (not (page-ref/page-ref? s)))
+                    (page-ref/->page-ref s)
+                    s))
+                (rest parts)))
+     (string/join " #"))))
 
 (defn- remove-empty-refs
   [refs]
@@ -149,6 +164,51 @@
                    (merge (if level {:block/level level} {}))
                    (assoc :block/title title'))]
     result))
+
+(defn prepare-page-title-tags
+  "Parse a page title for inline tags (`#tag` / `#[[...]]`).
+
+  Returns a map with:
+  - `:title` — title with inline tags stripped (nil when strip fails)
+  - `:tags` — parsed tag entities to apply via `:block/tags`
+  - `:has-tags?` — whether any tags were parsed
+  - `:parsed` — full wrap-parse-block result
+  - `:error` — `:name-no-hash` when tags were found but title could not be stripped"
+  [title]
+  {:pre [(string? title)]}
+  (let [wrapped (if (string/includes? title " #")
+                  (wrap-tags title)
+                  title)
+        parsed (wrap-parse-block {:block/title wrapped})
+        tags (:block/tags parsed)
+        has-tags? (seq tags)
+        stripped (when has-tags?
+                   (some-> (first
+                            (common-util/split-first (str "#" page-ref/left-brackets)
+                                                     (:block/title parsed)))
+                           string/trim))]
+    ;; #region agent log
+    (prn :dbg.H4/prepare-page-title-tags
+         {:input-title title
+          :wrapped-title wrapped
+          :parsed-title (:block/title parsed)
+          :has-tags? (boolean has-tags?)
+          :stripped-title stripped
+          :tag-titles (mapv #(or (:block/title %) (:db/ident %)) tags)})
+    ;; #endregion
+    (cond
+      (and has-tags? (nil? stripped))
+      {:title nil
+       :tags tags
+       :has-tags? true
+       :parsed parsed
+       :error :name-no-hash}
+
+      :else
+      {:title (if has-tags? stripped title)
+       :tags tags
+       :has-tags? (boolean has-tags?)
+       :parsed parsed})))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"

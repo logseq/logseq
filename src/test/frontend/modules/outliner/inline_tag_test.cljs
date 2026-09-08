@@ -1,6 +1,7 @@
 (ns frontend.modules.outliner.inline-tag-test
   (:require [cljs.test :refer [use-fixtures deftest is testing] :as test]
             [datascript.core :as d]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.test.helper :as test-helper]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -24,6 +25,31 @@
     (is (some? (:db/ident audio-tag)) "#audio doesn't have db/ident")
     (is (= [:logseq.class/Tag] (map :db/ident (:block/tags audio-tag)))
         "#audio has wrong tags")))
+
+(deftest save-page-title-with-inline-tag
+  (testing "Saving a page title like \"Name #tag\" strips the tag from the title and applies it"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Base"}}])
+          page (db-test/find-page-by-title @conn "Base")
+          prepared (db-editor-handler/prepare-page-title-tags "Name #project")
+          _ (is (= "Name" (:title prepared)))
+          _ (is (seq (:tags prepared)))
+          _ (outliner-core/save-block! conn
+                                       (-> (:parsed prepared)
+                                           (assoc :block/uuid (:block/uuid page)
+                                                  :db/id (:db/id page)
+                                                  :block/title (:title prepared)
+                                                  :block/tags (:tags prepared))))
+          page' (d/entity @conn (:db/id page))
+          tag-idents (set (map :db/ident (:block/tags page')))
+          project-tag (some #(when (= "project" (:block/name %)) %)
+                            (:block/tags page'))]
+      (is (= "Name" (:block/title page')))
+      (is (contains? tag-idents :logseq.class/Page))
+      (is (some? project-tag)
+          "project tag should be applied on the page")
+      (is (contains? (set (map :db/ident (:block/tags project-tag))) :logseq.class/Tag)
+          "applied tag should be a Tag class"))))
 
 (deftest disallowed-inline-tags-when-save-block
   (testing "Disallowed inline tags shouldn't be recognized when save block"

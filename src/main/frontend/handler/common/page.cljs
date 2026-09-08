@@ -21,19 +21,6 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(defn- wrap-tags
-  "Tags might have multiple words"
-  [title]
-  (let [parts (string/split title #" #")]
-    (->>
-     (cons (first parts)
-           (map (fn [s]
-                  (if (and (string/includes? s " ") (not (page-ref/page-ref? s)))
-                    (page-ref/->page-ref s)
-                    s))
-                (rest parts)))
-     (string/join " #"))))
-
 (defn- find-page-add-button
   [page-id]
   (when page-id
@@ -110,52 +97,40 @@
                   edit? true}
            :as options}]
    (when (string? title)
-     (p/let [raw-title title
-             title (if (string/includes? title " #") ; tagged page
-                     (wrap-tags title)
-                     title)
-             ;; #region agent log
-             _ (prn :dbg.H1/create!-after-wrap-tags {:raw-title raw-title :wrapped-title title :wrapped? (not= raw-title title)})
-             ;; #endregion
-             parsed-result (db-editor-handler/wrap-parse-block {:block/title title})
-             has-tags? (seq (:block/tags parsed-result))
-             title' (if has-tags?
-                      (some-> (first
-                               (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
-                              string/trim)
-                      title)
-             ;; #region agent log
-             _ (prn :dbg.H1+H2/create!-parsed
-                    {:wrapped-title title
-                     :parsed-title (:block/title parsed-result)
-                     :has-tags? (boolean has-tags?)
-                     :parsed-tags (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags])
-                                        (:block/tags parsed-result))
-                     :stripped-title title'
-                     :has-hash-brackets? (boolean (some-> (:block/title parsed-result)
-                                                          (string/includes? (str "#" page-ref/left-brackets))))})
-             ;; #endregion
-             ]
+     (let [{title' :title :keys [has-tags? tags error parsed]}
+           (db-editor-handler/prepare-page-title-tags title)]
+       ;; #region agent log
+       (prn :dbg.H1+H2/create!-parsed
+            {:input-title title
+             :parsed-title (:block/title parsed)
+             :has-tags? has-tags?
+             :parsed-tags (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags])
+                                tags)
+             :stripped-title title'
+             :error error
+             :has-hash-brackets? (boolean (some-> (:block/title parsed)
+                                                  (string/includes? (str "#" page-ref/left-brackets))))})
+       ;; #endregion
        (cond
-         (and has-tags? (nil? title'))
+         (= :name-no-hash error)
          (do
            ;; #region agent log
-           (prn :dbg.H2/create!-strip-failed {:parsed-title (:block/title parsed-result)})
+           (prn :dbg.H2/create!-strip-failed {:parsed-title (:block/title parsed)})
            ;; #endregion
            (notification/show! (t :page.validation/name-no-hash) :error))
 
          (and has-tags?
-              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+              (seq (set/intersection ldb/private-tags (set (map :db/ident tags)))))
          (do
            ;; #region agent log
-           (prn :dbg.H1/create!-private-tags-blocked {:tags (mapv :db/ident (:block/tags parsed-result))})
+           (prn :dbg.H1/create!-private-tags-blocked {:tags (mapv :db/ident tags)})
            ;; #endregion
            (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
                                 (keep #(when (ldb/private-tags (:db/ident %))
                                          (pr-str (:block/title %)))
-                                      (:block/tags parsed-result)))])
+                                      tags))])
                              :error))
 
          :else
@@ -164,14 +139,14 @@
              (if (and existing-page (not (ldb/recycled? existing-page)))
                (do
                  ;; #region agent log
-                 (prn :dbg.H1/create!-existing-page {:title' title' :has-tags? (boolean has-tags?)})
+                 (prn :dbg.H1/create!-existing-page {:title' title' :has-tags? has-tags?})
                  ;; #endregion
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))
                  (when (and edit? (not today-journal?))
                      (js/setTimeout #(edit-page! existing-page) 100)))
                  existing-page)
-               (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
+               (p/let [options' (cond-> (update options :tags concat tags)
                                   (nil? (:split-namespace? options))
                                   (assoc :split-namespace? true))
                        ;; #region agent log
