@@ -1604,10 +1604,6 @@
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
-(defn editor-commands-popup-exists?
-  []
-  (popup-exists? "editor.commands"))
-
 (defn dialog-exists?
   [id]
   (shui-dialog/get-dialog id))
@@ -2174,18 +2170,6 @@
   (when-let [saved-cursor (state/get-editor-last-pos)]
     (when-let [input (gdom/getElement id)]
       (cursor/move-cursor-to input saved-cursor true))))
-
-(defn dismiss-editor-popup-on-escape!
-  "Dismiss an editor popup without exiting or saving the editor."
-  [^js e input-id]
-  (if (state/editor-in-composition?)
-    false
-    (do
-      (util/stop e)
-      (if (= :input (state/get-editor-action))
-        (handle-command-input-close input-id)
-        (state/clear-editor-action!))
-      true)))
 
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
@@ -3796,6 +3780,10 @@
           ;; simulate text selection
           (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
+
+(defn editor-commands-popup-exists?
+  []
+  (popup-exists? "editor.commands"))
 
 (defn open-selected-blocks-in-sidebar!
   []

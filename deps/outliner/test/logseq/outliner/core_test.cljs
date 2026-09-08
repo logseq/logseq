@@ -6,7 +6,9 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.graph-parser.block :as gp-block]))
 
 (deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
@@ -109,26 +111,29 @@
        db
        (common-util/page-name-sanity-lc title)))
 
-(deftest insert-blocks-does-not-duplicate-existing-page-ref
+(deftest insert-blocks-reuses-page-created-after-reference-parsing
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "host"}]}])
+        parsed-ref (gp-block/page-name->map "Esc Dup" nil true
+                                           date-time-util/default-journal-title-formatter)
+        parsed-uuid (:block/uuid parsed-ref)
         [_ existing-uuid] (outliner-page/create! conn "Esc Dup" {})
         host (db-test/find-block-by-content @conn "host")
-        parsed-uuid (random-uuid)
         result (outliner-core/insert-blocks
                 @conn
                 [{:block/uuid (random-uuid)
-                  :block/title "[[Esc Dup]]"
-                  :block/refs [{:block/name "esc dup"
-                                :block/title "Esc Dup"
-                                :block/uuid parsed-uuid
-                                :block/tags [:logseq.class/Page]}]}]
+                  :block/title (str "[[" parsed-uuid "]]")
+                  :block/raw-title (str "[[" parsed-uuid "]]")
+                  :block/refs [parsed-ref]}]
                 host
                 {:sibling? true
                  :keep-uuid? true})]
     (d/transact! conn (:tx-data result))
     (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
+    (is (= (str "[[" existing-uuid "]]")
+           (:block/title (first (:blocks result)))
+           (:block/raw-title (first (:blocks result)))))
     (is (= existing-uuid
            (:block/uuid (first (:block/refs (first (:blocks result)))))))))
 
