@@ -1,5 +1,5 @@
 (ns logseq.common.util-test
-  (:require [clojure.test :refer [deftest are testing]]
+  (:require [clojure.test :refer [deftest are testing is]]
             [logseq.common.util :as common-util]))
 
 (deftest valid-edn-keyword?
@@ -66,3 +66,17 @@
       [nil 0 5] ""
       [nil 0]   ""
       [42 0 1]  "")))
+
+(deftest timestamp-ms
+  (testing "keeps positive epoch-ms numbers"
+    (is (= 1577934245000 (common-util/timestamp-ms 1577934245000))))
+  (testing "reads Date.getTime"
+    (is (= 1577934245000 (common-util/timestamp-ms (js/Date. "2020-01-02T03:04:05.000Z")))))
+  (testing "treats missing and non-positive values as absent"
+    (are [x] (nil? (common-util/timestamp-ms x))
+      nil
+      0
+      -1
+      (js/Date. 0)
+      "2020-01-02T03:04:05.000Z"
+      js/NaN)))
