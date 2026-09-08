@@ -31,12 +31,9 @@
         second-page-uuid (random-uuid)
         now (common-util/time-ms)
         page-ref-map (fn [page-uuid]
-                       {:block/uuid page-uuid
-                        :block/title "foo"
-                        :block/name "foo"
-                        :block/created-at now
-                        :block/updated-at now
-                        :block/type "page"})]
+                       (gp-block/page-name->map "foo" nil true
+                                                date-time-util/default-journal-title-formatter
+                                                {:page-uuid page-uuid}))]
     (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
     (try
       (outliner-core/save-block!
@@ -56,6 +53,7 @@
         (let [second-block (d/entity @conn (:db/id second-block))]
           (is (= (:block/uuid page)
                  (:block/uuid (first (:block/refs second-block)))))
+          (is (= 1 (count (d/datoms @conn :avet :block/name "foo"))))
           (is (= "[[foo]]" (:block/title second-block)))))
 
       (let [tag-ref-uuid (random-uuid)
