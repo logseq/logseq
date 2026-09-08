@@ -255,6 +255,17 @@
   []
   (tc/to-long (t/now)))
 
+(defn timestamp-ms
+  "Coerce a Date or epoch-ms number to a positive ms timestamp.
+   Treats missing values and non-positive times (e.g. Linux epoch-0 birthtime) as absent."
+  [value]
+  (let [ms (cond
+             (number? value) value
+             (instance? js/Date value) (.getTime value)
+             :else nil)]
+    (when (and (number? ms) (pos? ms) (js/isFinite ms))
+      ms)))
+
 (defn get-page-title
   [page]
   (or (:block/title page)
