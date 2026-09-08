@@ -250,7 +250,7 @@
         file-path (node-path/join dir relative-path)]
     (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
     (fs/writeFileSync file-path content)
-    file-path))
+    (path/path-normalize file-path)))
 
 (defn- write-temp-file-graph
   [files]
@@ -1102,6 +1102,101 @@ abc
                            :logseq.property.pdf/hl-page]))
           "Linked file PDF annotations import and keep highlight positions from the EDN file")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
+
+(defn- write-linked-pdf-annotation-graph
+  "Write a hermetic file-graph fixture for linked-PDF import tests."
+  [graph-dir {:keys [pdf-uri pdf-label source-line annotation-id highlight-text hl-page]}]
+  (doseq [[relative-path content]
+          {"logseq/config.edn" "{}"
+           "pages/source.md" (str source-line "\n")
+           (str "pages/hls__" pdf-label ".md") (str "file:: [" pdf-label ".pdf](" pdf-uri ")\n"
+                                                    "file-path:: " pdf-uri "\n\n"
+                                                    "- " highlight-text "\n"
+                                                    "  ls-type:: annotation\n"
+                                                    "  hl-page:: " hl-page "\n"
+                                                    "  hl-color:: yellow\n"
+                                                    "  id:: " annotation-id "\n")
+           (str "assets/" pdf-label ".edn") (str "{:highlights [{:id #uuid \"" annotation-id "\","
+                                                 " :page " hl-page ","
+                                                 " :position {:bounding {:x1 1 :y1 2 :x2 3 :y2 4 :width 10 :height 20},"
+                                                 "            :rects (),"
+                                                 "            :page " hl-page "},"
+                                                 " :content {:text \"" highlight-text "\"},"
+                                                 " :properties {:color \"yellow\"}}]}")}]
+    (let [file-path (node-path/join graph-dir relative-path)]
+      (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+      (fs/writeFileSync file-path content))))
+
+(deftest-async import-external-pdf-annotations
+  (p/loop [remaining-cases
+            [["file://D:\\assets\\LocalDoc.pdf" true]
+             ["https://example.com/LocalDoc.pdf" true]
+             ["https://example.com/LocalDoc.pdf?token=sample#page=2" true]
+             ["https://example.com/LocalDoc.pdf?token=sample#page=2" false]]]
+    (when-let [[pdf-uri image-link?] (first remaining-cases)]
+      (let [annotation-id #uuid "11111111-1111-1111-1111-111111111111"
+            dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+            graph-dir (node-path/join dir "graph")]
+        (write-linked-pdf-annotation-graph
+         graph-dir
+         {:pdf-uri pdf-uri
+          :pdf-label "LocalDoc"
+          :source-line (str "- Source " (if image-link?
+                                          (str "![LocalDoc.pdf](" pdf-uri ")")
+                                          (str "((" annotation-id "))")))
+          :annotation-id annotation-id
+          :highlight-text "Sample highlight"
+          :hl-page 2})
+        (p/let [conn (db-test/create-conn)
+                {:keys [import-state]} (import-file-graph-to-db graph-dir conn {})
+                asset (db-test/find-block-by-content @conn "LocalDoc")
+                annotation (d/entity @conn [:block/uuid annotation-id])]
+          (is (= {:block/tags [:logseq.class/Asset]
+                  :logseq.property.asset/type "pdf"
+                  :logseq.property.asset/external-url pdf-uri}
+                 (select-keys (db-test/readable-properties asset)
+                              [:block/tags :logseq.property.asset/type
+                               :logseq.property.asset/external-url]))
+              (str "External PDF preserves its complete URI: " pdf-uri))
+          (is (= {:block/tags [:logseq.class/Pdf-annotation]
+                  :logseq.property/asset "LocalDoc"
+                  :logseq.property.pdf/hl-page 2}
+                 (select-keys (db-test/readable-properties annotation)
+                              [:block/tags :logseq.property/asset :logseq.property.pdf/hl-page]))
+              "Annotation binds to the external Asset, including without an image link")
+          (when image-link?
+            (is (= (str "Source " (page-ref/->page-ref (:block/uuid asset)))
+                   (:block/title (db-test/find-block-by-content @conn #"^Source ")))
+                "Source image link becomes an Asset reference"))
+          (is (empty? @(:ignored-assets import-state)) "No ignored assets")
+          (p/recur (rest remaining-cases)))))))
+
+(deftest-async import-hls-pdfs-uses-annotation-file-identities
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-hls-identities-"))
+        graph-dir (node-path/join dir "graph")
+        first-id #uuid "11111111-1111-1111-1111-111111111111"
+        second-id #uuid "22222222-2222-2222-2222-222222222222"
+        first-url "https://example.com/Alpha.pdf"
+        first-key (str "Alpha__" (hash first-url))]
+    (doseq [[label url annotation-id] [["Alpha" first-url first-id]
+                                      ["Beta" "https://example.com/Beta.pdf" second-id]]]
+      (write-linked-pdf-annotation-graph
+       graph-dir {:pdf-uri url :pdf-label label
+                  :source-line (str "- ((" annotation-id "))")
+                  :annotation-id annotation-id :highlight-text "Original highlight" :hl-page 2}))
+    (fs/appendFileSync (node-path/join graph-dir "pages/hls__Alpha.md")
+                       "- ![Beta](https://example.com/Beta.pdf)\n")
+    (fs/appendFileSync (node-path/join graph-dir "pages/hls__Beta.md") "  - Child note\n")
+    (doseq [[before after] [["pages/hls__Alpha.md" (str "pages/hls__" first-key ".md")]
+                            ["assets/Alpha.edn" (str "assets/" first-key ".edn")]]]
+      (fs/renameSync (node-path/join graph-dir before) (node-path/join graph-dir after)))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            annotation (d/entity @conn [:block/uuid first-id])
+            second-annotation (d/entity @conn [:block/uuid second-id])]
+      (is (= "Original highlight" (:block/title annotation)))
+      (is (= "Alpha" (:block/title (:logseq.property/asset annotation))))
+      (is (= ["Child note"] (mapv :block/title (ordered-children second-annotation)))))))
 
 (deftest-async ^:integration import-large-flat-file-without-stack-overflow
   (p/let [file (write-temp-graph-file

@@ -734,6 +734,18 @@
                    property-id))))
        distinct))
 
+(defn block-property-keys
+  "Own property idents plus class-provided property idents."
+  [db block]
+  (let [block-id (cond
+                   (number? block) block
+                   (map? block) (:db/id block)
+                   :else (:db/id (d/entity db block)))
+        own-keys (direct-block-property-ids db block-id)
+        class-keys (map :db/ident
+                        (:classes-properties (block-class-properties db (d/entity db block-id))))]
+    (vec (distinct (concat own-keys class-keys)))))
+
 (defn- property-has-closed-values?
   [db property]
   (boolean (seq (d/datoms db :avet :block/closed-value-property (:db/id property)))))
@@ -767,6 +779,14 @@
   [db block-id property-id]
   (entity-direct-value db block-id property-id))
 
+(defn- positioned-property-empty?
+  "True when the block has no written value and the property has no default.
+  Class defaults such as Task status are not empty."
+  [db block-id property]
+  (and (nil? (block-direct-property-value db block-id (:db/ident property)))
+       (nil? (:logseq.property/default-value property))
+       (nil? (:logseq.property/scalar-default-value property))))
+
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
   (when-let [property (d/entity db property-id)]
@@ -776,7 +796,7 @@
        (not (false? (:logseq.property/public? property)))
        (= property-position position)
        (not (and (:logseq.property/hide-empty-value property)
-                 (nil? property-value)))
+                 (positioned-property-empty? db block-id property)))
        (not (:logseq.property/hide? property))
        (not (and
              (= property-position :block-below)

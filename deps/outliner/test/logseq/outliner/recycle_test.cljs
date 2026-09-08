@@ -1,11 +1,59 @@
 (ns logseq.outliner.recycle-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as recycle]))
+
+(defn- recycle-page
+  [db]
+  (ldb/get-built-in-page db common-config/recycle-page-name))
+
+(defn- retract-recycle-page!
+  [conn]
+  (when-let [page (recycle-page @conn)]
+    (d/transact! conn [[:db/retractEntity (:db/id page)]])))
+
+(defn- untag-recycle-page!
+  [conn]
+  (when-let [page (recycle-page @conn)]
+    (d/transact! conn [[:db/retract (:db/id page) :block/tags :logseq.class/Page]])))
+
+(defn- assert-page-recycled-under-tagged-recycle
+  [db page-id]
+  (let [page (d/entity db page-id)
+        recycle (recycle-page db)]
+    (is (some? recycle))
+    (is (true? (ldb/page? recycle)))
+    (is (contains? (set (map :db/ident (:block/tags recycle))) :logseq.class/Page))
+    (is (true? (ldb/recycled? page)))
+    (is (= (:db/id recycle) (:db/id (:block/parent page))))))
+
+(deftest recycle-page-creates-page-tagged-recycle-when-missing
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}])
+        page (ldb/get-page @conn "page1")
+        page-id (:db/id page)]
+    (retract-recycle-page! conn)
+    (is (nil? (recycle-page @conn)))
+    (ldb/transact! conn (recycle/recycle-page-tx-data @conn page {}) {:outliner-op :delete-page})
+    (assert-page-recycled-under-tagged-recycle @conn page-id)))
+
+(deftest recycle-page-repairs-untagged-recycle
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}])
+        page (ldb/get-page @conn "page1")
+        page-id (:db/id page)
+        recycle (recycle-page @conn)]
+    (untag-recycle-page! conn)
+    (is (some? recycle))
+    (is (not (ldb/page? (d/entity @conn (:db/id recycle)))))
+    (ldb/transact! conn (recycle/recycle-page-tx-data @conn page {}) {:outliner-op :delete-page})
+    (assert-page-recycled-under-tagged-recycle @conn page-id)
+    (is (= (:db/id recycle) (:db/id (recycle-page @conn))))))
 
 (deftest restore-recycled-page-removes-recycle-parent
   (let [conn (db-test/create-conn-with-blocks
