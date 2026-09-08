@@ -24,6 +24,7 @@
      :block/uuid (common-uuid/gen-uuid :builtin-block-uuid recycle-page-title)
      :block/name (common-util/page-name-sanity-lc recycle-page-title)
      :block/title recycle-page-title
+     :block/tags [:logseq.class/Page]
      :block/created-at now
      :block/updated-at now
      :logseq.property/hide? true
@@ -33,12 +34,17 @@
   [db]
   (ldb/get-built-in-page db recycle-page-title))
 
+(defn- recycle-page-tag-tx
+  [page]
+  (when-not (ldb/internal-page? page)
+    [[:db/add (:db/id page) :block/tags :logseq.class/Page]]))
+
 (defn- ensure-recycle-page
   [db]
   (if-let [page (recycle-page db)]
     {:page page
      :page-id (:db/id page)
-     :tx-data []}
+     :tx-data (vec (recycle-page-tag-tx page))}
     {:page nil
      :page-id "recycle-page"
      :tx-data [(build-recycle-page-tx "recycle-page")]}))

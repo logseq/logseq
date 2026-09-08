@@ -135,10 +135,10 @@
                          (property-handler/display-property-map db entity-id))
                   block)]
       (cond-> (assoc block
+                     :block.temp/property-keys
+                     (property-handler/block-property-keys db entity)
                      :block.temp/positioned-properties
                      (canonical-positioned-properties-map db entity)
-                     :block.temp/breadcrumb
-                     (block-breadcrumb/block-breadcrumb db entity)
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
         (string? raw-title)
@@ -305,7 +305,7 @@
 (defn- plain-render-block?
   [db block]
   (empty? (remove #{:block/tags}
-                  (property-handler/direct-block-property-ids db (:db/id block)))))
+                  (property-handler/block-property-keys db block))))
 
 (defn- block-positioned-properties-map
   [db block]
@@ -391,15 +391,19 @@
                                                :else
                                                child-map-base)]
                                (-> child-map
-                                   (assoc :block.temp/has-children?
+                                   (assoc :block.temp/property-keys
+                                          (property-handler/block-property-keys db child)
+                                          :block.temp/has-children?
                                           (block-has-children? db (:db/id child))))))
                            children))
-          block-map-base (cond-> (merge
-                                  (property-handler/entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
-                                  (worker-plain/entity-forward-map db block {:properties properties}))
-                           (or render-data? (empty? properties))
-                           (assoc :block/properties
-                                  (property-handler/display-properties-for-block db block)))
+          block-map-base (-> (cond-> (merge
+                                      (property-handler/entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
+                                      (worker-plain/entity-forward-map db block {:properties properties}))
+                               (or render-data? (empty? properties))
+                               (assoc :block/properties
+                                      (property-handler/display-properties-for-block db block)))
+                             (assoc :block.temp/property-keys
+                                    (property-handler/block-property-keys db block)))
           block-map (cond
                       root-render-data?
                       (assoc-root-render-data db block block-map-base)
@@ -445,8 +449,6 @@
         block-uuid (:block/uuid block)]
     (cond-> (assoc block
                    :block.temp/refs-count (block-refs-count db block-id)
-                   :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb db block)
                    :block.temp/comment-thread-present?
                    (contains? commented-block-uuids (str block-uuid))
                    :block.temp/sync-conflicts
