@@ -217,6 +217,19 @@
             chosen (:block/title chosen-result)
             class? (or (string/includes? chosen (str (t :editor/new-tag) " "))
                        (entity/class? chosen-result))
+            ;; #region agent log
+            _ (prn :dbg.H3/tag-on-chosen
+                   {:q q
+                    :chosen chosen
+                    :class? class?
+                    :entity-class? (entity/class? chosen-result)
+                    :entity-page? (entity/page? chosen-result)
+                    :chosen-keys (vec (keys chosen-result))
+                    :chosen-tags (:block/tags chosen-result)
+                    :edit-content-preview (subs (str edit-content) 0 (min 120 (count (str edit-content))))
+                    :edit-block-uuid (:block/uuid (state/get-edit-block))
+                    :page-title? (boolean (get-in (editor-handler/get-state) [:config :page-title?]))})
+            ;; #endregion
             inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
                              (not= chosen "Page"))
             chosen (-> chosen
@@ -245,9 +258,12 @@
                                         :end-pattern (when wrapped? page-ref/right-brackets)
                                         :command :page-ref})
        (when-not tag-in-page-auto-complete?
+         ;; #region agent log
+         (prn :dbg.H3/tag-on-chosen-call-db-handler
+              {:class? class? :will-call-add-tag-path? class? :chosen chosen :tag-in-page-auto-complete? false})
+         ;; #endregion
          (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
        (when input (.focus input))))))
-
 (defn- page-on-chosen-handler
   [id format q]
   (fn [chosen-result e]

@@ -48,23 +48,45 @@
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [page-name]}]
+  [blocks content format {:keys [page-name] :as opts}]
   (try
-    (let [blocks (gp-block/extract-blocks blocks content format
-                                          {:user-config (state/get-config)
-                                           :block-pattern common-config/block-pattern
-                                           :date-formatter (state/get-date-formatter)
-                                           :page-name page-name
-                                           :db-graph-mode? true})]
-      (map (fn [block]
-             (let [block (standalone-display-block block)]
-               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
-                 (:block/properties block)
-                 (merge (update-keys (:block/properties block)
-                                     (fn [k]
-                                       (or ({:heading :logseq.property/heading} k)
-                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
-           blocks))
+    (let [extract-opts {:user-config (state/get-config)
+                        :block-pattern common-config/block-pattern
+                        :date-formatter (state/get-date-formatter)
+                        :page-name page-name
+                        :db-graph-mode? true}
+          ;; #region agent log
+          _ (when (or (string/includes? (str content) "#")
+                      (contains? opts :db))
+              (prn :dbg.H1/extract-blocks-opts
+                   {:content-preview (subs (str content) 0 (min 120 (count (str content))))
+                    :opts-has-db? (contains? opts :db)
+                    :db-nil? (nil? (:db opts))
+                    :db-graph-mode? true
+                    :page-name page-name}))
+          ;; #endregion
+          blocks (gp-block/extract-blocks blocks content format extract-opts)]
+      (let [result (map (fn [block]
+                          (let [block (standalone-display-block block)]
+                            (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
+                              (:block/properties block)
+                              (merge (update-keys (:block/properties block)
+                                                  (fn [k]
+                                                    (or ({:heading :logseq.property/heading} k)
+                                                        (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))))
+                        blocks)]
+        ;; #region agent log
+        (when (or (string/includes? (str content) "#")
+                  (some #(seq (:block/tags %)) result))
+          (prn :dbg.H1/extract-blocks-result
+               {:block-count (count result)
+                :tags (mapv (fn [b]
+                              {:title (:block/title b)
+                               :tags (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags])
+                                           (:block/tags b))})
+                            result)}))
+        ;; #endregion
+        result))
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e

@@ -26,11 +26,22 @@
         false))))
 
 (defn add-tag [repo block-id tag-entity]
+  ;; #region agent log
+  (prn :dbg.H3/add-tag-entry
+       {:block-id block-id
+        :tag-title (:block/title tag-entity)
+        :tag-ident (:db/ident tag-entity)
+        :tag-tags (:block/tags tag-entity)
+        :tag-class? (boolean (some #(= :logseq.class/Tag (or (:db/ident %) %)) (:block/tags tag-entity)))})
+  ;; #endregion
   ;; Check after save-current-block to get most up to date block content.
   (-> (editor-handler/save-current-block!)
       (p/then (fn [_]
                 (<valid-tag? repo block-id (:db/id tag-entity))))
       (p/then (fn [valid?]
+                ;; #region agent log
+                (prn :dbg.H3/add-tag-valid? {:valid? valid? :block-id block-id :tag-id (:db/id tag-entity)})
+                ;; #endregion
                 (when valid?
                   (db-property-handler/set-block-property! block-id :block/tags (:db/id tag-entity)))))))
 
@@ -89,6 +100,13 @@
         edit-block (state/get-edit-block)
         create-opts {:redirect? false}
         existing-result? (:db/id chosen-result)]
+    ;; #region agent log
+    (prn :dbg.H3/db-tag-on-chosen
+         {:tag tag :class? class? :existing-result? (boolean existing-result?)
+          :edit-block-uuid (:block/uuid edit-block)
+          :edit-content-preview (subs (str edit-content) 0 (min 120 (count (str edit-content))))
+          :last-pattern last-pattern})
+    ;; #endregion
     (when (:block/uuid edit-block)
       (p/let [result (when-not existing-result? ; page not exists yet
                        (if class?
@@ -99,6 +117,13 @@
                 hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
                 add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
                 nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
+            ;; #region agent log
+            (prn :dbg.H3/db-tag-on-chosen-add
+                 {:will-add-tag? true
+                  :add-tag-to-nearest-node? add-tag-to-nearest-node?
+                  :tag-entity-title (:block/title tag-entity)
+                  :tag-entity-id (:db/id tag-entity)})
+            ;; #endregion
             (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
               (p/let [node-ent (db-async/<get-case-page (state/get-current-repo) nearest-node)
                       ;; Save because nearest node doesn't exist yet
@@ -107,4 +132,10 @@
                       _ (add-tag (state/get-current-repo) (:block/uuid node-ent') tag-entity)]
                 ;; Notify as action has been applied to a node off screen
                 (notification/show! (t :page/added-tag-to-node (:block/title tag-entity) (:block/title node-ent'))))
-              (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
+              (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))
+        ;; #region agent log
+        (when-not class?
+          (prn :dbg.H3/db-tag-on-chosen-skipped-add-tag
+               {:reason "class?=false so add-tag path skipped" :tag tag}))
+        ;; #endregion
+        ))))

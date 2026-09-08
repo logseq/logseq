@@ -1733,6 +1733,17 @@
                block (state/get-edit-block)
                value (current-editor-value input-id current-block block)]
            (when value
+             ;; #region agent log
+             (when (or (string/includes? (str value) "#")
+                       (get-in (get-state) [:config :page-title?]))
+               (prn :dbg.H4/save-current-block
+                    {:value value
+                     :has-hash? (boolean (string/includes? (str value) "#"))
+                     :page-title? (boolean (get-in (get-state) [:config :page-title?]))
+                     :block-uuid (:block/uuid block)
+                     :block-page? (entity/page? block)
+                     :note "save path does not strip/apply title tags"}))
+             ;; #endregion
              (save-block-aux! block value opts)))
          (catch :default error
            (js/console.error error)
@@ -2000,8 +2011,22 @@
                                    (conj (:block/alias class) class)))
                          (common-util/distinct-by :db/id)
                          (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title]))))]
+        ;; #region agent log
+        (when (seq q)
+          (let [sample (take 3 classes)
+                sample-raw (take 3 all-classes)]
+            (prn :dbg.H3/get-matched-classes
+                 {:q q
+                  :matched-keys-after-select (vec (keys (or (first classes) {})))
+                  :raw-had-block-tags? (boolean (some #(contains? % :block/tags) sample-raw))
+                  :stripped-still-class?
+                  (boolean (some #(entity/class? %) sample))
+                  :raw-class?-sample (mapv #(hash-map :title (:block/title %)
+                                                      :class? (entity/class? %)
+                                                      :tags (:block/tags %))
+                                           sample-raw)})))
+        ;; #endregion
         (search/fuzzy-search classes q {:extract-fn :block/title})))))
-
 (defn <get-matched-blocks
   "Return matched blocks, optionally including public built-ins"
   [q & [{:keys [nlp-pages? page-only? built-in?]}]]
@@ -2631,6 +2656,15 @@
             (or (get-in state [:config :page-title?])
                 (url-property-value-insert-blocked? (:config state) (:block state)))
             (do
+              ;; #region agent log
+              (prn :dbg.H4/page-title-enter
+                   {:page-title? (boolean (get-in state [:config :page-title?]))
+                    :value (:value state)
+                    :has-hash? (boolean (some-> (:value state) (string/includes? "#")))
+                    :block-uuid (:block/uuid (:block state))
+                    :block-title (:block/title (:block state))
+                    :path "escape-editing (no tag strip/apply)"})
+              ;; #endregion
               (when e (.preventDefault e))
               (escape-editing))
 
@@ -2641,7 +2675,6 @@
             (do
               (when e (.preventDefault e))
               (keydown-new-block state))))))))
-
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
     (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))

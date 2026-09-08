@@ -114,6 +114,17 @@
                       cached-refs (collect-known-refs block)
                       hashtag-link-refs (existing-markdown-hashtag-link-refs ast cached-refs)
                       parsed-block (block/parse-block (assoc block :block/title content'))
+                      ;; #region agent log
+                      _ (when (or (string/includes? (str title) "#")
+                                  (seq (:block/tags parsed-block)))
+                          (prn :dbg.H1/wrap-parse-block
+                               {:input-title title
+                                :parsed-title (:block/title parsed-block)
+                                :parsed-tags (mapv #(select-keys % [:db/id :db/ident :block/uuid :block/title :block/tags])
+                                                   (:block/tags parsed-block))
+                                :parsed-refs-sample (take 5 (map #(or (:block/title %) (:db/ident %) %)
+                                                                 (:block/refs parsed-block)))}))
+                      ;; #endregion
                       new-display-block? (and (nil? (:logseq.property.node/display-type block))
                                               (contains? #{:code :math}
                                                          (:logseq.property.node/display-type parsed-block)))
