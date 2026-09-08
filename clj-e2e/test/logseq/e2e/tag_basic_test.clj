@@ -1,5 +1,5 @@
 (ns logseq.e2e.tag-basic-test
-  (:require [clojure.test :refer [deftest use-fixtures]]
+  (:require [clojure.test :refer [deftest is use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -24,6 +24,25 @@
 
 (deftest new-tag-test
   (add-new-tags "tag-test-"))
+
+(deftest page-title-tag-autocomplete-test
+  (let [tag-name "page-title-autocomplete-tag"]
+    (doseq [page-name ["new-tag-page-title" "existing-tag-page-title"]]
+      (page/new-page page-name)
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (util/move-cursor-to-end)
+      (util/press-seq (str " #" tag-name))
+      (assert/assert-is-visible
+       (loc/filter ".ui__popover-content a.menu-link.chosen" :has-text tag-name))
+      (k/enter)
+      (assert/assert-is-visible
+       (loc/filter "div[data-testid='page title'] .block-tag" :has-text tag-name))
+      (util/exit-edit)
+      (is (= page-name (page/get-page-name)))
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (k/enter)
+      (assert/assert-is-hidden util/editor-q)
+      (is (= page-name (page/get-page-name))))))
 
 (deftest page-tag-conversion-persists-and-removes-tag-from-objects-test
   (let [tag-name "page-tag-conversion"
