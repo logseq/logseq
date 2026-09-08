@@ -519,9 +519,9 @@
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
   (is (every? #{:block.temp/positioned-properties
-                :block.temp/breadcrumb
                 :block.temp/refs-count
-                :block.temp/order-list-index}
+                :block.temp/order-list-index
+                :block.temp/property-keys}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
@@ -1061,8 +1061,8 @@
                             #"Unknown renderer resource key"
                             (call-resource-raw api conn resource-key))))))
 
-(deftest canonical-visible-blocks-include-ready-properties-and-breadcrumbs-test
-  (let [{:keys [conn page resource-block positioned-property]}
+(deftest canonical-visible-blocks-keep-properties-without-preloading-breadcrumbs-test
+  (let [{:keys [conn resource-block positioned-property]}
         (render-resource-fixture)
         positioned-property-id (:db/id (d/entity @conn
                                                   [:block/uuid positioned-property]))
@@ -1071,9 +1071,8 @@
         target (get-in response [:blocks resource-block])]
     (is (contains? (:blocks response) positioned-property)
         "A positioned property row is ready in the same visible block load.")
-    (is (= [page]
-           (mapv :block/uuid (:block.temp/breadcrumb target)))
-        "The primary breadcrumb is ready with its owning block.")
+    (is (not (contains? target :block.temp/breadcrumb))
+        "Ancestor data loads only when a breadcrumb is displayed.")
     (is (= response
            (-> response ldb/write-transit-str ldb/read-transit-str)))))
 
@@ -1945,6 +1944,44 @@
                                 (datalog-query-watch-keys resource-key)
                                 {:rows [journal-grandchild]}
                                 response))))
+
+(deftest query-resource-keeps-escaped-paren-regex-inputs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          matcher "\\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\)"
+          resource-key
+          [:query {:kind :datalog
+                   :query '[:find ?regex
+                            :in $ ?matcher
+                            :where [(re-pattern ?matcher) ?regex]]
+                   :inputs [matcher]}]
+          response (call-resource api conn resource-key)]
+      (is (regexp? (first (:rows (:value response))))
+          "Broken-reference regex inputs must not be read as a character literal."))))
+
+(deftest render-snapshots-isolates-failing-query-resources-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        journals-key [:journals]
+        failing-query
+        [:query {:kind :datalog
+                 :query '[:find ?regex
+                          :in $ ?matcher
+                          :where [(re-pattern ?matcher) ?regex]]
+                 :inputs ["("]}]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A failing query must not fail sibling resources in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (re-find #"Invalid regular expression"
+                 (get-in response [:slots [:resource failing-query] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str)))))
 
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]

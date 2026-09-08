@@ -16,3 +16,14 @@
     (is (not (entity/page? {:block/tags [:logseq.class/Task]})))
     (is (not (entity/page? 1)))
     (is (not (entity/page? nil)))))
+
+(deftest url-property-value-predicate-test
+  (testing "URL-type property values are identified from created-from-property"
+    (is (entity/url-property-value?
+         {:block/title "https://logseq.com"
+          :logseq.property/created-from-property {:logseq.property/type :url}}))
+    (is (not (entity/url-property-value?
+              {:block/title "text value"
+               :logseq.property/created-from-property {:logseq.property/type :default}})))
+    (is (not (entity/url-property-value? {:block/title "ordinary block"})))
+    (is (not (entity/url-property-value? nil)))))
