@@ -1400,16 +1400,20 @@
           uuid (get parent "uuid")
           child-in-parent (loc/filter (format ".ls-page-blocks #ls-block-%s" uuid)
                                       :has-text "zoom collapse child")]
+      (is (string? uuid))
       (ls-api-call! :editor.insertBlock uuid "zoom collapse child" {:sibling false})
       (w/click (format ".ls-page-blocks #control-%s" uuid))
       (assert/assert-is-hidden child-in-parent)
       (w/click (format ".ls-page-blocks #dot-%s" uuid))
       (assert/assert-is-visible
        (loc/filter "#main-content-container" :has-text "zoom collapse child"))
+      (is (string/includes? (or (w/eval-js "window.location.hash") "") uuid))
       (.goBack (w/get-page))
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks" :has-text "zoom collapse parent"))
-      (assert/assert-is-hidden child-in-parent))))
+      (assert/assert-is-hidden child-in-parent)
+      (is (false? (w/visible? child-in-parent))
+          "Parent view must keep the zoomed subtree collapsed after back"))))
 
 (deftest selection-direction-and-hierarchical-select-all-test
   (testing "range and select-all remain inside the current visible container"
