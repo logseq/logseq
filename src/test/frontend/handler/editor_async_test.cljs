@@ -1000,3 +1000,48 @@
         (p/then
          (fn []
            (is (= (:block/uuid comment-block) @resolved-block-ref)))))))
+
+(deftest-async expand-block-skip-db-keeps-parent-container-collapse
+  (testing "Display-only expand must not mark the parent editor container as open"
+    (let [block-id (random-uuid)
+          parent-container 1
+          zoom-container 2
+          repo test-helper/test-db
+          previous-repo (state/get-current-repo)
+          previous-args (state/get-editor-args)
+          previous-editor-container (state/get-current-editor-container-id)
+          previous-collapsed (state/get-state :ui/collapsed-blocks)]
+      (state/set-current-repo! repo)
+      (state/set-state! :editor/args [nil nil {:container-id parent-container}])
+      (state/set-state! :editor/container-id parent-container)
+      (state/set-state! :ui/collapsed-blocks {})
+      (-> (p/with-redefs [db-async/<get-block
+                          (fn [_repo id opts]
+                            (is (= block-id id))
+                            (is (true? (:include-collapsed-children? opts)))
+                            (p/resolved {:block/uuid id}))]
+            (p/do!
+             ;; Zoom/root load path used to omit :container-id, which wrote false
+             ;; onto the current editor/parent container via resolve-container-id.
+             (editor/expand-block! block-id {:skip-db-collpsing? true})
+             (is (nil? (state/get-block-collapsed block-id parent-container))
+                 "skip-db expand without a container must not write the editor container")
+             (editor/expand-block! block-id {:skip-db-collpsing? true
+                                             :container-id zoom-container})
+             (state/set-collapsed-block! block-id false zoom-container)
+             (is (false? (state/get-block-collapsed block-id zoom-container)))
+             (is (nil? (state/get-block-collapsed block-id parent-container))
+                 "Zoom expand must stay on the zoom container")
+             ;; Navigate-back cleanup only clears the zoom container.
+             (state/set-collapsed-block! block-id nil zoom-container)))
+          (p/then
+           (fn [_]
+             (is (nil? (state/get-block-collapsed block-id parent-container))
+                 "Parent view can fall back to DB :block/collapsed? after back")
+             (is (nil? (state/get-block-collapsed block-id zoom-container)))))
+          (p/finally
+           (fn []
+             (state/set-state! :editor/args previous-args)
+             (state/set-state! :editor/container-id previous-editor-container)
+             (state/set-state! :ui/collapsed-blocks previous-collapsed)
+             (state/set-current-repo! previous-repo)))))))
