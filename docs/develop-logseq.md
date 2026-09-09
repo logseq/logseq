@@ -132,7 +132,7 @@ about db sync, see [its readme](/deps/db-sync/README.md).
 
 ### DB sync Cloudflare Worker adapter
 
-Build and run a Cloudlare worker locally
+Build and run a Cloudflare worker locally
 
 ```bash
 cd deps/db-sync
