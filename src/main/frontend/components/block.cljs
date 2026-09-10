@@ -79,6 +79,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -1850,6 +1851,9 @@
   (let [macro-content (or
                        (get (state/get-macros) name)
                        (get (state/get-macros) (keyword name)))
+        macro-content (if (and (seq arguments) macro-content)
+                        (macro-util/macro-subs macro-content arguments)
+                        macro-content)
         format (get-in config [:block :block/format] :markdown)]
     (render-macro config name arguments macro-content format)))
 
@@ -2254,10 +2258,11 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :block block
-                                                        :ignore-children? page-title?
-                                                        :page-title? collapsable-page-title?})
+        collapsable? (and (not (entity/url-property-value? block))
+                          (editor-handler/collapsable? uuid {:semantic? true
+                                                            :block block
+                                                            :ignore-children? page-title?
+                                                            :page-title? collapsable-page-title?}))
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2366,10 +2371,18 @@
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
+(defn- url-property-validation-effect-deps
+  "Re-validate URL property values when the title changes so the error icon updates."
+  [block]
+  [(:db/id block)
+   (some-> (:logseq.property/created-from-property block) :db/id)
+   (:block/title block)])
+
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (boolean (seq child-uuids))
+        has-children? (and (not (entity/url-property-value? block))
+                           (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
 
@@ -2504,8 +2517,7 @@
            (set-property-validation-message! nil))
          (set-property-validation-message! nil))
        nil)
-     [(:db/id block)
-      (some-> (:logseq.property/created-from-property block) :db/id)])
+     (url-property-validation-effect-deps block))
     [:div
      (merge
       {:class (if query?
@@ -3051,12 +3063,27 @@
                             trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
+(defn- hidden-block-below-property?
+  "Icon is rendered on the block itself, never as a bottom pill."
+  [property]
+  (= :logseq.property/icon (:db/ident property)))
+
+(defn- show-block-below-properties-row?
+  [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
+                                  show-hidden-properties-control?
+                                  show-add-property-button?]}]
+  (boolean
+   (or (seq visible-property-uuids)
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?)))
+
 (hsx/defc positioned-property-row
   [block property-uuid opts]
   (let [property (db-hooks/use-block property-uuid)]
     (when (and property
                (not (and (= :block-below (:property-position opts))
-                         (= :logseq.property/icon (:db/ident property)))))
+                         (hidden-block-below-property? property))))
       (if (= :block-below (:property-position opts))
         (bottom-property-pill-cp block property opts)
         (pv/property-value block property (assoc opts :show-tooltip? true))))))
@@ -3123,7 +3150,7 @@
                   "flex-wrap overflow-x-hidden"
                   "flex-nowrap overflow-x-hidden")])
        :data-expanded (str expanded?)
-       :data-bottom-properties-row (:block/uuid block)
+       :data-bottom-properties-row (str (:block/uuid block))
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
       [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.min-w-0.flex-1.basis-0
@@ -3149,6 +3176,25 @@
                                                      :icon-only? true
                                                      :tab-index 0)))]]))
 
+(hsx/defc block-below-positioned-properties-gate
+  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (when-let [properties (db-hooks/use-blocks property-uuids)]
+    (let [visible-property-uuids (into []
+                                       (comp (remove hidden-block-below-property?)
+                                             (keep :block/uuid))
+                                       properties)]
+      (when (show-block-below-properties-row?
+             visible-property-uuids
+             {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+              :show-hidden-properties-control? show-hidden-properties-control?
+              :show-add-property-button? show-add-property-button?})
+        [block-below-positioned-properties-cp block
+         visible-property-uuids
+         opts
+         show-hidden-properties-pill-toggle?
+         show-hidden-properties-control?
+         show-add-property-button?]))))
+
 (hsx/defc positioned-properties-content
   [config block position property-uuids]
   (let [opts (merge config
@@ -3173,7 +3219,8 @@
         show-add-property-button? show-page-add-property?]
     (case position
         :block-below
-        [block-below-positioned-properties-cp block
+        [block-below-positioned-properties-gate
+         block
          property-uuids
          opts
          show-hidden-properties-pill-toggle?
@@ -3747,7 +3794,8 @@
   [config block opts effective-variant]
   (let [block-id (or (:block/uuid block) (:db/id block))
         loaded-block (db-hooks/use-block block-id)
-        block' (or loaded-block block)
+        block' (breadcrumb-model/with-breadcrumb-ref-titles
+                (or loaded-block block) (:ref-titles opts))
         segment (breadcrumb-model/block->breadcrumb-segment block')]
     (when segment
       (let [label (breadcrumb-segment-label segment block')]
@@ -3790,7 +3838,7 @@
        {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
        (for [block-uuid hidden-uuids]
          ^{:key (str block-uuid)}
-         (breadcrumb-dropdown-row config block-uuid ref-titles opts))))))
+         [:<> (breadcrumb-dropdown-row config block-uuid ref-titles opts)])))))
 
 (hsx/defc breadcrumb-overflow-dropdown
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
@@ -3873,10 +3921,12 @@
 
 (hsx/defc subscribed-breadcrumb
   [config block-id opts]
-  (let [block (db-hooks/use-block block-id)
-        breadcrumb-ancestors (:block.temp/breadcrumb block)]
-    (when (seq breadcrumb-ancestors)
-      (breadcrumb-aux config block-id opts breadcrumb-ancestors))))
+  (when-let [breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
+    (when (seq (:ancestor-uuids breadcrumb-data))
+      (breadcrumb-aux config block-id
+                      (assoc opts :ref-titles (:ref-titles breadcrumb-data))
+                      (mapv (fn [ancestor-uuid] {:block/uuid ancestor-uuid})
+                            (:ancestor-uuids breadcrumb-data))))))
 
 (defn breadcrumb
   [config _repo block-id {:keys [block] :as opts}]
@@ -4564,6 +4614,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
+                   (entity/url-property-value? block)
                    table?
                    property?
                    comments-area?

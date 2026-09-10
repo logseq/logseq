@@ -1,0 +1,178 @@
+(ns logseq.outliner.url-property-children-test
+  (:require [cljs.test :refer [deftest is testing]]
+            [datascript.core :as d]
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]))
+
+(defn- child-titles
+  [block]
+  (->> (:block/_parent block)
+       ldb/sort-by-order
+       (mapv :block/title)))
+
+(deftest url-property-value-rejects-children-and-single-value-siblings
+  (testing "insert as child of a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url {:logseq.property/type :url}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url "https://logseq.com"}}
+                   :blocks [{:block/title "sibling"}]}]})
+          url-value (db-test/find-block-by-content @conn "https://logseq.com")]
+      (is (= :url (:logseq.property/type (:logseq.property/created-from-property url-value))))
+      (outliner-core/insert-blocks!
+       conn
+       [{:block/uuid (random-uuid)
+         :block/title "url child"}]
+       url-value
+       {:sibling? false
+        :keep-uuid? true})
+      (let [url-value' (d/entity @conn (:db/id url-value))]
+        (is (empty? (child-titles url-value')))
+        (is (nil? (db-test/find-block-by-content @conn "url child"))))))
+
+  (testing "indent under a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url-many {:logseq.property/type :url
+                                         :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url-many #{"https://a.example"
+                                                         "https://b.example"}}}}]})
+          page (ldb/get-page @conn "page1")
+          [url-a url-b] (->> (:user.property/url-many page)
+                             ldb/sort-by-order)
+          left (ldb/get-left-sibling url-b)
+          original-parent-id (:db/id (:block/parent url-b))]
+      (is (= 2 (count [url-a url-b])))
+      (is (= (:db/id url-a) (:db/id left))
+          "The later URL value is a property-value sibling of the earlier one")
+      (outliner-core/indent-outdent-blocks! conn [url-b] true)
+      (let [url-a' (d/entity @conn (:db/id url-a))
+            url-b' (d/entity @conn (:db/id url-b))]
+        (is (empty? (child-titles url-a')))
+        (is (= original-parent-id (:db/id (:block/parent url-b')))))))
+
+  (testing "move as child of a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url {:logseq.property/type :url}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url "https://logseq.com"}}
+                   :blocks [{:block/title "sibling"}]}]})
+          url-value (db-test/find-block-by-content @conn "https://logseq.com")
+          sibling (db-test/find-block-by-content @conn "sibling")
+          original-parent-id (:db/id (:block/parent sibling))]
+      (outliner-core/move-blocks! conn [sibling] url-value {:sibling? false})
+      (let [url-value' (d/entity @conn (:db/id url-value))
+            sibling' (d/entity @conn (:db/id sibling))]
+        (is (empty? (child-titles url-value')))
+        (is (= original-parent-id (:db/id (:block/parent sibling')))))))
+
+  (testing "move as sibling of a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url {:logseq.property/type :url}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url "https://logseq.com"}}
+                   :blocks [{:block/title "page child"}]}]})
+          url-value (db-test/find-block-by-content @conn "https://logseq.com")
+          page-child (db-test/find-block-by-content @conn "page child")
+          original-left (:db/id (ldb/get-left-sibling page-child))
+          original-parent-id (:db/id (:block/parent page-child))]
+      (outliner-core/move-blocks! conn [page-child] url-value {:sibling? true})
+      (let [page-child' (d/entity @conn (:db/id page-child))]
+        (is (= original-parent-id (:db/id (:block/parent page-child'))))
+        (is (= original-left (:db/id (ldb/get-left-sibling page-child')))))))
+
+  (testing "sibling insert next to a URL property value is rejected"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url {:logseq.property/type :url}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url "https://logseq.com"}}
+                   :blocks [{:block/title "page child"}]}]})
+          url-value (db-test/find-block-by-content @conn "https://logseq.com")
+          page-child (db-test/find-block-by-content @conn "page child")]
+      (outliner-core/insert-blocks!
+       conn
+       [{:block/uuid (random-uuid)
+         :block/title "after url"}]
+       url-value
+       {:sibling? true
+        :keep-uuid? true})
+      (let [url-value' (d/entity @conn (:db/id url-value))
+            page-child' (d/entity @conn (:db/id page-child))]
+        (is (nil? (db-test/find-block-by-content @conn "after url")))
+        (is (empty? (child-titles url-value')))
+        (is (= (:db/id (:block/parent url-value'))
+               (:db/id (:block/parent page-child')))
+            "Existing page children stay in place")))))
+
+(deftest default-property-value-allows-children
+  (testing "insert as child of a default/text property value is allowed"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:default {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:default "text value"}}}]})
+          text-value (db-test/find-block-by-content @conn "text value")]
+      (is (= :default (:logseq.property/type (:logseq.property/created-from-property text-value))))
+      (outliner-core/insert-blocks!
+       conn
+       [{:block/uuid (random-uuid)
+         :block/title "text child"}]
+       text-value
+       {:sibling? false
+        :keep-uuid? true})
+      (let [text-value' (d/entity @conn (:db/id text-value))]
+        (is (= ["text child"] (child-titles text-value'))))))
+
+  (testing "indent under a default/text property value is allowed"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:default-many {:logseq.property/type :default
+                                             :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:default-many #{"text a" "text b"}}}}]})
+          [text-a text-b] (->> [(db-test/find-block-by-content @conn "text a")
+                                (db-test/find-block-by-content @conn "text b")]
+                               (remove nil?)
+                               ldb/sort-by-order)
+          left (ldb/get-left-sibling text-b)]
+      (is (= 2 (count [text-a text-b])))
+      (is (= (:db/id text-a) (:db/id left))
+          "The later text value is a property-value sibling of the earlier one")
+      (outliner-core/indent-outdent-blocks! conn [text-b] true)
+      (let [text-a' (d/entity @conn (:db/id text-a))
+            text-b' (d/entity @conn (:db/id text-b))]
+        (is (= [(:block/title text-b)] (child-titles text-a')))
+        (is (= (:db/id text-a') (:db/id (:block/parent text-b'))))))))
+
+(deftest multiple-url-property-values-allow-sibling-insert-and-move
+  (doseq [operation [:insert :move]]
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:url-many {:logseq.property/type :url
+                                         :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"
+                          :build/properties {:url-many #{"https://a.example"
+                                                         "https://b.example"
+                                                         "https://c.example"}}}}]})
+          page (ldb/get-page @conn "page1")
+          [first-value _ last-value] (ldb/sort-by-order (:user.property/url-many page))
+          sibling-uuid (if (= :insert operation) (random-uuid) (:block/uuid last-value))]
+      (case operation
+        :insert (outliner-core/insert-blocks!
+                 conn [{:block/uuid sibling-uuid :block/title "https://new.example"}]
+                 first-value {:sibling? true :keep-uuid? true})
+        :move (outliner-core/move-blocks! conn [last-value] first-value {:sibling? true}))
+      (let [sibling (d/entity @conn [:block/uuid sibling-uuid])
+            values (:user.property/url-many (d/entity @conn (:db/id page)))]
+        (is (= (if (= :insert operation) 4 3) (count values)))
+        (is (= (:db/id first-value) (:db/id (ldb/get-left-sibling sibling))))
+        (is (= (:db/id page) (:db/id (:block/parent sibling))))
+        (is (= :user.property/url-many
+               (:db/ident (:logseq.property/created-from-property sibling))))
+        (is (every? #(empty? (child-titles %)) values))))))

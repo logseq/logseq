@@ -13,6 +13,10 @@ const config: CapacitorConfig = {
     androidScheme: 'http',
   },
   plugins: {
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
+
     App: {
       // Logseq routes back presses through MainActivity -> JS (window.LogseqNative.onNativePop).
       // Disable @capacitor/app's built-in OnBackPressedCallback so it doesn't intercept the

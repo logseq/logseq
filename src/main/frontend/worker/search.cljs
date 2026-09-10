@@ -1170,14 +1170,20 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (filter #(= :logseq.property/deleted-at (:a %)))
                               (map :e)
                               set)
+            ;; Include db-before referrers on the add side so surviving holders
+            ;; (e.g. pages/blocks that used a now-deleted property) are reindexed.
+            ;; entities-for drops eids that no longer exist in db-after.
+            referrers-before (referrer-eids db-before ref-eids)
+            referrers-after (referrer-eids db-after ref-eids)
             remove-eids (set/union ref-eids
-                                   (referrer-eids db-before ref-eids)
+                                   referrers-before
                                    direct-visibility-eids
                                    (entity-tree-eids db-before hidden-status-changed-eids)
                                    (page-descendant-eids-for db-before page-hierarchy-before-eids)
                                    (entity-tree-eids db-before deleted-eids))
             add-eids (set/union ref-eids
-                                (referrer-eids db-after ref-eids)
+                                referrers-before
+                                referrers-after
                                 direct-visibility-eids
                                 (entity-tree-eids db-after hidden-status-changed-eids)
                                 (page-descendant-eids-for db-after page-hierarchy-after-eids)

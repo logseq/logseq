@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@emoji-mart/data':
+        specifier: ^1.2.1
+        version: 1.2.1
       mldoc:
         specifier: ^1.5.9
         version: 1.5.9
@@ -23,6 +26,9 @@ importers:
         version: 12.8.0
 
 packages:
+
+  '@emoji-mart/data@1.2.1':
+    resolution: {integrity: sha512-no2pQMWiBy6gpBEiqGeU77/bFejDqUTRY7KX+0+iur13op3bqUsXdnwoZs6Xb1zbv0gAj5VvS1PWoUUckSr5Dw==}
 
   '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
     resolution: {tarball: https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb}
@@ -370,6 +376,8 @@ packages:
     resolution: {integrity: sha512-Lhz8TLaYnxq/2ObqHDql8dX8CJi97oHxrjUcYtzKbbykPtVW9WB+poxI+NM2UIzsMgNCZTIf0AQwsjK5yMAqZw==}
 
 snapshots:
+
+  '@emoji-mart/data@1.2.1': {}
 
   '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
     dependencies:

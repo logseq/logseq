@@ -169,3 +169,21 @@
             content)
        (map first)
        first))
+
+(defn- first-heading-link
+  [content]
+  (->> (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))
+       ffirst
+       second
+       :title
+       first))
+
+(deftest get-page-reference-file-link-formatted-labels
+  (testing "File-link labels yield a plain page-ref string"
+    (are [content page-ref]
+         (= page-ref
+            (gp-block/get-page-reference (first-heading-link content) :markdown))
+      "- [k](a.md)" "k"
+      "- [~~k~~](a.md)" "k"
+      "- [**k**](a.md)" "k"
+      "- [*k*](a.md)" "k")))

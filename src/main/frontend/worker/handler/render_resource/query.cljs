@@ -6,6 +6,7 @@
             [frontend.worker.handler.render-resource.common :as common]
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.query-dsl :as query-dsl]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.outliner.tree :as otree]
@@ -218,12 +219,30 @@
      (query-handler/custom-query-watch-dependencies query-spec)
      (query-dsl/query-watch-dependencies (:query query-spec) db query-spec))))
 
+(defn- query-error-value
+  [error]
+  (cond-> {:rows []
+           :error {:message (or (ex-message error) (str error))}}
+    (ex-data error) (assoc-in [:error :data] (ex-data error))))
+
+(defn- syntax-error?
+  [error]
+  (or (instance? js/SyntaxError error)
+      (= "SyntaxError" (.-name error))))
+
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))]
-    [(query-watch-keys db query-spec)
-     {:rows (query-result-rows (execute-query-spec db query-spec runtime)
-                               query-spec)}]))
+  (let [query-spec (require-query-spec! (second resource-key))
+        watch (query-watch-keys db query-spec)]
+    (try
+      [watch {:rows (query-result-rows (execute-query-spec db query-spec runtime)
+                                       query-spec)}]
+      (catch :default error
+        (if (syntax-error? error)
+          (do
+            (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
+            [watch (query-error-value error)])
+          (throw error))))))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})

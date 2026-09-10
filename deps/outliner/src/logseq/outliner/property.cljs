@@ -106,10 +106,13 @@
        boolean))
 
 (defn- should-add-task-tag-for-property?
+  "Add #Task when setting status/scheduled/deadline unless a class already
+  provides that property. Pages are not special-cased: #Page does not provide
+  task properties, so a plain page still gets #Task, while a page tagged with a
+  Task child class does not."
   [conn block property-id]
   (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
        (or (empty? (:block/tags block))
-           (ldb/internal-page? block)
            (not (block-classes-provide-property? @conn block property-id)))))
 
 (defn- class-lookup-ref?

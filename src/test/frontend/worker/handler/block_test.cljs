@@ -2,7 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.util.entity :as entity]
-            [frontend.worker.handler.block]
+            [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.property :as property-handler]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -105,8 +106,14 @@
           (keyword? (:db/ident reference))))
   (is (every? #{:db/id :block/uuid :db/ident :block/title :block/name
                 :block/tags :logseq.property/value :logseq.property/icon
+                :logseq.property/type :db/cardinality
                 :logseq.property.class/hide-from-node
-                :logseq.property/choice-exclusions}
+                :logseq.property/choice-exclusions
+                :logseq.property.asset/type
+                :logseq.property.asset/width
+                :logseq.property.asset/height
+                :logseq.property.asset/resize-metadata
+                :logseq.property.asset/external-url}
               (keys reference))))
 
 (deftest canonical-property-reference-values-keep-type-tags-test
@@ -160,6 +167,34 @@
             (is (predicate value)
                 "Reference-valued properties retain their renderer type identity")))))))
 
+(deftest canonical-property-values-retain-source-property-type-test
+  (let [{:keys [conn target-uuid page-uuid]} (canonical-block-fixture)
+        property-uuid (random-uuid)]
+    (d/transact! conn [{:db/id -1
+                       :block/uuid property-uuid
+                       :block/title "URL"
+                       :db/ident :user.property/URL
+                       :db/valueType :db.type/ref
+                       :db/cardinality :db.cardinality/many
+                       :block/tags :logseq.class/Property
+                       :logseq.property/type :url}
+                      {:block/uuid target-uuid
+                       :logseq.property/created-from-property -1}])
+    (doseq [property-type [:url :default]]
+      (d/transact! conn [{:block/uuid property-uuid
+                         :logseq.property/type property-type}])
+      (let [block (block-handler/canonical-block
+                   @conn (d/entity @conn [:block/uuid target-uuid]))]
+        (is (= property-type
+               (get-in block [:logseq.property/created-from-property
+                              :logseq.property/type])))
+        (is (= :db.cardinality/many
+               (get-in block [:logseq.property/created-from-property :db/cardinality])))
+        (is (= (= :url property-type) (entity/url-property-value? block)))))
+    (is (not (entity/url-property-value?
+              (block-handler/canonical-block
+               @conn (d/entity @conn [:block/uuid page-uuid])))))))
+
 (deftest canonical-block-keeps-own-attributes-and-only-shallow-references-test
   (when-let [canonical-block (canonical-block-api)]
     (let [{:keys [conn target-uuid]} (canonical-block-fixture)
@@ -200,15 +235,17 @@
       (is (= 1 (:block.temp/order-list-index block))
           "Canonical blocks retain worker-derived ordered-list indexes.")
       (is (map? (:block.temp/positioned-properties block)))
-      (is (vector? (:block.temp/breadcrumb block)))
+      (is (not (contains? block :block.temp/breadcrumb)))
       (is (integer? (:block.temp/refs-count block)))
+      (is (some #{:user.property/priority} (:block.temp/property-keys block))
+          "Own property idents are persisted for collapse.")
       (is (not (contains? block :block/children)))
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
                     (remove #{:block.temp/order-list-index
-                              :block.temp/breadcrumb
                               :block.temp/positioned-properties
+                              :block.temp/property-keys
                               :block.temp/refs-count}
                             (keys block)))))))
 
@@ -560,3 +597,144 @@
         (doseq [value [blocks membership tree]]
           (is (= value
                  (-> value ldb/write-transit-str ldb/read-transit-str))))))))
+
+(deftest block-property-keys-include-own-and-class-properties-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:c1 {:build/class-properties [:p1]}}
+               :properties {:own {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "with-own"
+                           :build/properties {:own "v"}}
+                          {:block/title "with-class"
+                           :build/tags [:c1]}
+                          {:block/title "plain"}]}]})
+        db @conn
+        with-own (db-test/find-block-by-content db "with-own")
+        with-class (db-test/find-block-by-content db "with-class")
+        plain (db-test/find-block-by-content db "plain")
+        own-map (:block (block-handler/get-block-and-children db (:db/id with-own) {:children? false}))
+        class-map (:block (block-handler/get-block-and-children db (:db/id with-class) {:children? false}))
+        plain-map (:block (block-handler/get-block-and-children db (:db/id plain) {:children? false}))]
+    (is (some #{:user.property/own} (property-handler/block-property-keys db with-own)))
+    (is (some #{:user.property/p1} (property-handler/block-property-keys db with-class))
+        "Class-provided properties are included even when the node has no own value.")
+    (is (not-any? #{:user.property/own :user.property/p1}
+                  (property-handler/block-property-keys db plain)))
+    (is (some #{:user.property/own} (:block.temp/property-keys own-map)))
+    (is (some #{:user.property/p1} (:block.temp/property-keys class-map)))
+    (is (not-any? #{:user.property/own :user.property/p1}
+                  (:block.temp/property-keys plain-map)))
+    (when-let [canonical-block (canonical-block-api)]
+      (d/transact! conn [{:db/id (:db/id with-class)
+                          :block/tx-id 1}])
+      (is (some #{:user.property/p1}
+                (:block.temp/property-keys
+                 (canonical-block @conn (d/entity @conn (:db/id with-class)))))
+          "Canonical renderer maps persist class-provided property keys."))))
+
+(deftest canonical-block-positions-default-task-status-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Page"}
+                  :blocks [{:block/title "task only"
+                            :build/tags [:logseq.class/Task]}
+                           {:block/title "task doing"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.doing}}]}])
+          task-only (db-test/find-block-by-content @conn "task only")
+          task-doing (db-test/find-block-by-content @conn "task doing")
+          status-uuid (:block/uuid (d/entity @conn :logseq.property/status))]
+      (d/transact! conn [{:db/id (:db/id task-only) :block/tx-id 1}
+                         {:db/id (:db/id task-doing) :block/tx-id 1}])
+      (let [only-block (canonical-block @conn (d/entity @conn (:db/id task-only)))
+            doing-block (canonical-block @conn (d/entity @conn (:db/id task-doing)))
+            only-left (set (get-in only-block [:block.temp/positioned-properties :block-left]))
+            doing-left (set (get-in doing-block [:block.temp/positioned-properties :block-left]))]
+        (is (contains? only-left status-uuid)
+            "Tag-only #Task still exposes the default status icon.")
+        (is (not (contains? only-block :logseq.property/status))
+            "Canonical row maps omit unset status so table/query cells stay empty.")
+        (is (contains? doing-left status-uuid)
+            "Explicit status still positions.")
+        (is (some? (:logseq.property/status doing-block)))))))
+
+(deftest get-block-and-children-positions-default-task-status-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Page"}
+                :blocks [{:block/title "task only"
+                          :build/tags [:logseq.class/Task]}
+                         {:block/title "plain"}]}])
+        task-only (db-test/find-block-by-content @conn "task only")
+        plain (db-test/find-block-by-content @conn "plain")
+        task-result (:block (block-handler/get-block-and-children
+                             @conn (:db/id task-only)
+                             {:children? false :render-data? true}))
+        plain-result (:block (block-handler/get-block-and-children
+                              @conn (:db/id plain)
+                              {:children? false :render-data? true}))
+        task-left (set (map :db/ident
+                            (get-in task-result [:block.temp/positioned-properties :block-left])))]
+    (is (contains? task-left :logseq.property/status)
+        "Tag-only #Task is not treated as a plain block for positioned status.")
+    (is (empty? (get-in plain-result [:block.temp/positioned-properties :block-left]))
+        "Untagged blocks still skip positioned status.")))
+
+(defn- cover-row-fixture
+  []
+  (let [conn (db-test/create-conn)
+        page-uuid #uuid "20000000-0000-0000-0000-000000000001"
+        row-uuid #uuid "20000000-0000-0000-0000-000000000002"
+        cover-uuid #uuid "20000000-0000-0000-0000-000000000003"]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid page-uuid
+                   :block/tx-id 10
+                   :block/title "Movies"
+                   :block/name "movies"
+                   :block/tags :logseq.class/Page}
+                  {:db/id -2
+                   :db/ident :user.property/cover
+                   :db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/one
+                   :block/uuid #uuid "20000000-0000-0000-0000-000000000004"
+                   :block/tx-id 10
+                   :block/title "Cover"
+                   :logseq.property/type :asset
+                   :block/tags :logseq.class/Property}
+                  {:db/id -3
+                   :block/uuid cover-uuid
+                   :block/tx-id 10
+                   :block/title "poster"
+                   :block/tags :logseq.class/Asset
+                   :logseq.property.asset/type "webp"
+                   :logseq.property.asset/width 800
+                   :logseq.property.asset/height 1200
+                   :logseq.property.asset/external-url "https://example.com/poster.webp"}
+                  {:db/id -4
+                   :block/uuid row-uuid
+                   :block/tx-id 10
+                   :block/title "Inception"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"
+                   :user.property/cover -3}])
+    {:conn conn
+     :row-uuid row-uuid
+     :cover-uuid cover-uuid}))
+
+(deftest canonical-cover-property-is-not-a-db-id-stub-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [{:keys [conn row-uuid cover-uuid]} (cover-row-fixture)
+          block (canonical-block @conn (d/entity @conn [:block/uuid row-uuid]))
+          cover (:user.property/cover block)]
+      (is (map? cover))
+      (is (not= {:db/id (:db/id cover)} cover)
+          "Gallery/Table Cover values must keep more than a bare db/id stub.")
+      (is (= cover-uuid (:block/uuid cover)))
+      (is (= "webp" (:logseq.property.asset/type cover)))
+      (is (= 800 (:logseq.property.asset/width cover)))
+      (is (= 1200 (:logseq.property.asset/height cover)))
+      (is (= "https://example.com/poster.webp"
+             (:logseq.property.asset/external-url cover)))
+      (assert-shallow-identity-ref cover))))

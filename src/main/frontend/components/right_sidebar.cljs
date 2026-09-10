@@ -8,6 +8,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
+            [frontend.components.right-sidebar-util :as right-sidebar-util]
             [frontend.components.shortcut-help :as shortcut-help]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
@@ -206,12 +207,10 @@
         page? (or (contains? #{:page :contents} type) (entity/page? block))]
     (hooks/use-effect!
      (fn []
-       (if (integer? db-id)
-         (p/let [block (db-async/<get-block (state/get-current-repo) db-id {:children? false})]
-           (set-block! block))
-         (set-block! nil))
+       (p/let [block (right-sidebar-util/<sidebar-action-block (state/get-current-repo) db-id type)]
+         (set-block! block))
        nil)
-     [db-id])
+     [db-id type])
     [:<>
      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :sidebar.right/close))
      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :sidebar.right/close-others)))
@@ -227,7 +226,10 @@
      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :sidebar.right/expand-all)))
      (when page? [:hr.menu-separator])
      (when page?
-       (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+       (menu-item {:on-click (fn []
+                               (p/let [target (right-sidebar-util/<sidebar-action-block
+                                               (state/get-current-repo) db-id type)]
+                                 (route-handler/redirect-to-page! (:block/uuid target))))}
                   (t :sidebar.right/open-as-page)))]))
 
 (hsx/defc drop-indicator
@@ -290,7 +292,7 @@
                               (when drag-to (state/sidebar-move-block! idx drag-to))
                               (reset! *drag-to nil)
                               (reset! *drag-from nil))
-             :on-pointer-up   (fn [event]
+             :on-pointer-up   (fn [^js event]
                                 (when (= (.-which (.-nativeEvent event)) 2)
                                   (state/sidebar-remove-block! idx)))}
 
@@ -310,6 +312,7 @@
               (shui/button
                {:class "px-2 py-2 h-8 w-8 text-muted-foreground"
                 :variant :ghost
+                :data-testid "sidebar-item-more"
                 :on-click #(shui/popup-show!
                             (.-target %)
                             (actions-menu-content db-id idx block-type collapsed? block-count)

@@ -45,3 +45,32 @@
                       (str "self " (page-ref/->page-ref (:block/uuid block))))]
     (is (empty? (outliner-pipeline/db-rebuild-block-refs @conn block'))
         "A block should not rebuild a recursive ref to itself")))
+
+(deftest bulk-block-refs-preserve-datetime-and-content-rules
+  (let [timestamp (.getTime (js/Date. 2026 8 8 12))
+        conn (db-test/create-conn-with-import-map
+              {:properties {:user.property/datetime {:logseq.property/type :datetime}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/properties {:user.property/datetime timestamp}}]}]})
+        block (db-test/find-block-by-content @conn "b1")
+        page (db-test/find-page-by-title @conn "page1")
+        alias-uuid (random-uuid)
+        journal-uuid (random-uuid)
+        _ (d/transact! conn [{:db/id -1 :block/uuid journal-uuid
+                              :block/title "Sep 8th, 2026" :block/journal-day 20260908
+                              :block/tags [:logseq.class/Journal]}
+                             {:db/id -2 :block/uuid alias-uuid :block/title "alias"}
+                             {:db/id (:db/id block) :block/alias [-2]
+                              :block/link (:db/id page)
+                              :block/title (str (page-ref/->page-ref (:block/uuid block)) " "
+                                                (page-ref/->page-ref alias-uuid) " "
+                                                (page-ref/->page-ref (random-uuid)))}])
+        db @conn
+        updated-block (d/entity db (:db/id block))
+        expected #{(:db/id page)
+                   (:db/id (d/entity db :block/alias))
+                   (:db/id (d/entity db [:block/uuid journal-uuid]))
+                   (:db/id (d/entity db :user.property/datetime))}]
+    (is (= expected (set (outliner-pipeline/db-rebuild-block-refs db updated-block))))
+    (is (= expected (set ((outliner-pipeline/db-rebuild-block-refs-fn db) updated-block))))))

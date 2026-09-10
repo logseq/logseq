@@ -11,7 +11,7 @@ doc: "https://url/to/documentation"
 bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "dune" {>= "3.23"}
-  "ocaml"
+  "ocaml" {>= "5.1.1"}
   "melange"
   "melange-fetch"
   "melange-transit-melange"

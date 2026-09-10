@@ -294,13 +294,22 @@ export type SimpleCommandKeybinding = {
 
 export type SettingSchemaDesc = {
   key: string
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'heading'
+  type:
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'enum'
+    | 'object'
+    | 'heading'
+    | 'button'
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
   inputAs?: 'color' | 'date' | 'datetime-local' | 'range' | 'textarea'
   enumChoices?: Array<string>
   enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
+  buttonText?: string // Button label. Required when type is `button`.
+  buttonAction?: string // `provideModel` method name. Required when type is `button`.
 }
 
 export type ExternalCommandType =
@@ -827,6 +836,10 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<PageEntity | null>
 
   deletePage: (pageName: BlockPageName) => Promise<void>
+
+  deleteRecycledPagePermanently: (
+    page: PageIdentity | EntityID
+  ) => Promise<boolean | null>
 
   restorePage: (page: PageIdentity | EntityID) => Promise<boolean | null>
 

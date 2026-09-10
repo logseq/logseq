@@ -1,5 +1,6 @@
 (ns frontend.handler.route-test
   (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [electron.ipc :as ipc]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.date :as date]
@@ -17,6 +18,39 @@
 (defn- test-db
   []
   (conn/get-db test-helper/test-db))
+
+(defn- with-history
+  [history f]
+  (let [original-history (.-history js/window)]
+    (set! (.-history js/window) history)
+    (try
+      (f)
+      (finally
+        (set! (.-history js/window) original-history)))))
+
+(deftest redirect-to-previous-uses-history-when-available-test
+  (let [calls (atom [])]
+    (with-history
+      #js {:length 3
+           :back (fn [] (swap! calls conj :back))}
+      (fn []
+        (with-redefs [route-handler/redirect! (fn [route]
+                                                (swap! calls conj [:redirect route]))]
+          (route-handler/redirect-to-previous!)
+          (is (= [:back] @calls)
+              "A previous history entry is restored instead of sending the user home."))))))
+
+(deftest redirect-to-previous-falls-back-to-home-without-history-test
+  (let [calls (atom [])]
+    (with-history
+      #js {:length 1
+           :back (fn [] (swap! calls conj :back))}
+      (fn []
+        (with-redefs [route-handler/redirect! (fn [route]
+                                                (swap! calls conj [:redirect route]))]
+          (route-handler/redirect-to-previous!)
+          (is (= [[:redirect {:to :home :push false}]] @calls)
+              "With no previous history entry, replace the deleted page with home."))))))
 
 (deftest default-page-route
   (let [journal-uuid (random-uuid)]
@@ -185,6 +219,87 @@
              (is (= "Page" (.-page (.-dataset (.-body document)))))
              (is (= (str (subs block-title 0 48) "...")
                     (.-title document)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
+(defn- page-route
+  [page-name]
+  {:data {:name :page}
+   :path-params {:name page-name}})
+
+(deftest stale-route-title-resolve-does-not-overwrite-current-page-test
+  (async done
+    (let [left-route (page-route "Left")
+          current-route (page-route "Current")
+          left-title (p/deferred)
+          document #js {:title "stale"
+                        :body #js {:dataset #js {:page ""}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker
+          window-titles (atom [])]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [_api _repo route-name]
+                (case route-name
+                  "Left" left-title
+                  "Current" (p/resolved {:page-title "Current"})
+                  (p/resolved nil))))
+      (-> (p/with-redefs [ipc/ipc (fn [channel title]
+                                    (when (= :set-window-title channel)
+                                      (swap! window-titles conj title)))]
+            (p/do!
+             (do (route-handler/update-page-title! left-route) nil)
+             (route-handler/update-page-title! current-route)
+             (is (= "Current" (.-title document)))
+             (p/resolve! left-title {:page-title "Left"})
+             (p/delay 10)
+             (is (= "Current" (.-title document))
+                 "A stale Back/forward title resolve must not overwrite the current page.")
+             (is (= ["Current"] (vec (distinct @window-titles))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
+(deftest set-route-match-updates-title-after-back-navigation-test
+  (async done
+    (let [left-route (page-route "Left")
+          previous-route (page-route "Previous")
+          document #js {:title ""
+                        :body #js {:dataset #js {:page ""}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [_api _repo route-name]
+                (p/resolved {:page-title route-name})))
+      (-> (p/do!
+           (route-handler/set-route-match! left-route)
+           (p/delay 0)
+           (is (= "Left" (.-title document)))
+           ;; popstate / history.back uses the same on-navigate -> set-route-match! path
+           (route-handler/set-route-match! previous-route)
+           (p/delay 0)
+           (is (= "Previous" (.-title document)))
+           (route-handler/set-route-match! left-route)
+           (p/delay 0)
+           (is (= "Left" (.-title document))))
           (p/catch
            (fn [error]
              (is false (str error))))

@@ -429,32 +429,6 @@ Investigation sequence:
 Snapshot upload may initialize a missing checksum only before transaction history
 has advanced. It must not overwrite an existing different checksum.
 
-#### Cycle repair utility
-
-`logseq.db-sync.cycle` implements and tests reference-cycle repair for:
-
-- :block/parent, cardinality one;
-- :logseq.property.class/extends, cardinality many.
-
-Its algorithm:
-
-1. Collect entities touched by remote and local transaction reports.
-2. Detect a reachable cycle with DFS across the configured attribute.
-3. Prefer an edge whose current value differs from the corresponding value in
-   the remote transaction report.
-4. Retract one edge on the cycle.
-5. For block parent, add a safe remote parent or page root when possible.
-6. For class extension, prefer the remote reference set or Root fallback.
-7. Repeat until stable, with a 16-iteration safety cap.
-
-Repair transactions use `:outliner-op :fix-cycle`, disable undo generation, and
-set `:persist-op? false`.
-
-Current integration boundary: the client remote-apply path in
-`frontend.worker.sync.apply-txs` repairs duplicate outliner orders but does not
-call `logseq.db-sync.cycle/fix-cycle!`. The utility and its unit tests therefore
-must not be described as active client-side cycle repair.
-
 #### Schema and failure policy
 
 D1 schema changes require SQL migrations in deps/db-sync/worker/migrations.

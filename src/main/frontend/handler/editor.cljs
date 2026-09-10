@@ -52,6 +52,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.utf8 :as utf8]
@@ -374,7 +375,7 @@
        (or (= (block-parent-id source-block) (block-parent-id target-block))
            (not (worker-has-children? source-block)))))
 
-(declare save-block-aux! save-current-block! <left-sibling-or-parent)
+(declare save-block-aux! save-current-block! <left-sibling-or-parent escape-editing)
 
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
@@ -427,6 +428,20 @@
         block-id (or (some-> (:id config) parse-uuid)
                      (some-> current-page parse-uuid))]
     (= uuid block-id)))
+
+(defn- url-property-value-insert-blocked?
+  [config block]
+  (and (entity/url-property-value? block)
+       (or (not= :db.cardinality/many
+                 (:db/cardinality (:logseq.property/created-from-property block)))
+           (block-self-alone-when-insert? config (:block/uuid block)))))
+
+(defn- skip-insert-for-url-property-value!
+  "Save and exit when insertion would create a URL child or a single-value sibling."
+  [config block]
+  (when (url-property-value-insert-blocked? config block)
+    (escape-editing)
+    (p/resolved [nil nil nil])))
 
 (defn- start-pending-new-block!
   []
@@ -509,29 +524,30 @@
 
 (defn insert-new-block-before-block-aux!
   [config block value]
-  (let [edit-input-id (state/get-edit-input-id)
-        input (gdom/getElement edit-input-id)
-        input-text-selected? (util/input-text-selected? input)
-        new-m {:block/uuid (ldb/new-block-id)
-               :block/title ""}
-        prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                              new-m)
-                       (wrap-parse-block))
-        repo (state/get-current-repo)]
-    (when input-text-selected?
-      (let [selection-start (util/get-selection-start input)
-            selection-end (util/get-selection-end input)
-            [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
-        (state/set-edit-content! edit-input-id new-content)))
-    (p/let [left-or-parent (<left-sibling-or-parent repo block)]
-      (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
-            container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                             (:container-id config))
-            config (assoc config :editor/edit-block-fn
-                          (inserted-block-edit-fn block prev-block container-id))
-            result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                             :keep-uuid? true})]
-        [result sibling? prev-block]))))
+  (or (skip-insert-for-url-property-value! config block)
+      (let [edit-input-id (state/get-edit-input-id)
+            input (gdom/getElement edit-input-id)
+            input-text-selected? (util/input-text-selected? input)
+            new-m {:block/uuid (ldb/new-block-id)
+                   :block/title ""}
+            prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                  new-m)
+                           (wrap-parse-block))
+            repo (state/get-current-repo)]
+        (when input-text-selected?
+          (let [selection-start (util/get-selection-start input)
+                selection-end (util/get-selection-end input)
+                [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
+            (state/set-edit-content! edit-input-id new-content)))
+        (p/let [left-or-parent (<left-sibling-or-parent repo block)]
+          (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
+                container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                 (:container-id config))
+                config (assoc config :editor/edit-block-fn
+                              (inserted-block-edit-fn block prev-block container-id))
+                result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                                 :keep-uuid? true})]
+            [result sibling? prev-block])))))
 
 ;; This used to be a list of file attributes. Unclear if remaining ones should be removed
 (def retract-attributes
@@ -546,31 +562,32 @@
    {:block/keys [uuid]
     :as block}
    value]
-  (let [repo (state/get-current-repo)
-        block-self? (block-self-alone-when-insert? config uuid)
-        input (gdom/getElement (state/get-edit-input-id))
-        selection-start (util/get-selection-start input)
-        selection-end (util/get-selection-end input)]
-    (p/let [worker-result (when-let [block-id (:db/id block)]
-                            (db-async/<get-block-with-children
-                             repo block-id {:children? true}))]
-      (let [block (block-with-worker-children block worker-result)
-            [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-            current-block (current-block-with-title block fst-block-text)
-            current-block (apply dissoc current-block retract-attributes)
-            new-m {:block/uuid (ldb/new-block-id)
-                   :block/title snd-block-text}
-            next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                                  new-m)
-                           (wrap-parse-block))
-            sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
-            container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                             (:container-id config))
-            config (assoc config :editor/edit-block-fn
-                          (inserted-block-edit-fn current-block next-block container-id))
-            result (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                                            :keep-uuid? true})]
-        [result sibling? next-block]))))
+  (or (skip-insert-for-url-property-value! config block)
+      (let [repo (state/get-current-repo)
+            block-self? (block-self-alone-when-insert? config uuid)
+            input (gdom/getElement (state/get-edit-input-id))
+            selection-start (util/get-selection-start input)
+            selection-end (util/get-selection-end input)]
+        (p/let [worker-result (when-let [block-id (:db/id block)]
+                                (db-async/<get-block-with-children
+                                 repo block-id {:children? true}))]
+          (let [block (block-with-worker-children block worker-result)
+                [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                current-block (current-block-with-title block fst-block-text)
+                current-block (apply dissoc current-block retract-attributes)
+                new-m {:block/uuid (ldb/new-block-id)
+                       :block/title snd-block-text}
+                next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                      new-m)
+                               (wrap-parse-block))
+                sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
+                container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                 (:container-id config))
+                config (assoc config :editor/edit-block-fn
+                              (inserted-block-edit-fn current-block next-block container-id))
+                result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                                :keep-uuid? true})]
+            [result sibling? next-block])))))
 
 (defn clear-when-saved!
   []
@@ -667,42 +684,45 @@
   ([state block-value _right-sibling]
    (when (not config/publishing?)
      (when state
-       (start-pending-new-block!)
-       (let [{:keys [block value config]} state
-             value (if (string? block-value) block-value value)
-             block-id (:block/uuid block)
-             block-self? (block-self-alone-when-insert? config block-id)
-             input (:node state)
-             selection-start (util/get-selection-start input)
-             selection-end (util/get-selection-end input)
-             [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-             insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
-             block' block
-             original-block (:original-block config)
-             block'' (or
-                      (when original-block
-                        (let [e block']
-                          (if (and (worker-has-children? e)
-                                   (not (:block/collapsed? e)))
+       (if (url-property-value-insert-blocked? (:config state) (:block state))
+         (escape-editing)
+         (do
+           (start-pending-new-block!)
+           (let [{:keys [block value config]} state
+                 value (if (string? block-value) block-value value)
+                 block-id (:block/uuid block)
+                 block-self? (block-self-alone-when-insert? config block-id)
+                 input (:node state)
+                 selection-start (util/get-selection-start input)
+                 selection-end (util/get-selection-end input)
+                 [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                 insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+                 block' block
+                 original-block (:original-block config)
+                 block'' (or
+                          (when original-block
+                            (let [e block']
+                              (if (and (worker-has-children? e)
+                                       (not (:block/collapsed? e)))
                           ;; object has children and not collapsed
-                            block'
-                            original-block)))
-                      block')
-             insert-fn (cond
-                         block-self?
-                         insert-new-block-aux!
+                                block'
+                                original-block)))
+                          block')
+                 insert-fn (cond
+                             block-self?
+                             insert-new-block-aux!
 
-                         insert-above?
-                         insert-new-block-before-block-aux!
+                             insert-above?
+                             insert-new-block-before-block-aux!
 
-                         :else
-                         insert-new-block-aux!)]
-         (-> (p/let [insert-result (insert-fn config block'' value)
-                     _ (first insert-result)]
-               (clear-when-saved!))
-             (p/catch (fn [error]
-                        (clear-pending-new-block!)
-                        (throw error)))))))))
+                             :else
+                             insert-new-block-aux!)]
+             (-> (p/let [insert-result (insert-fn config block'' value)
+                         _ (first insert-result)]
+                   (clear-when-saved!))
+                 (p/catch (fn [error]
+                            (clear-pending-new-block!)
+                            (throw error)))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -2594,8 +2614,6 @@
   [el]
   (some? (dom/closest el ".block-editor")))
 
-(declare escape-editing)
-
 (defn keydown-new-block-handler [^js e]
   (let [target (when e (.-target e))
         state (cond-> (get-state)
@@ -2603,14 +2621,16 @@
                 (assoc :node target
                        :value (gobj/get target "value")
                        :pos (util/get-selection-start target)))]
-    (when (or (nil? target)
-              (inside-of-editor-block target))
+    (when (and (not (auto-complete?))
+               (or (nil? target)
+                   (inside-of-editor-block target)))
       (if (pending-new-block?)
         (when e (.preventDefault e))
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
-            (get-in state [:config :page-title?])
+            (or (get-in state [:config :page-title?])
+                (url-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
               (escape-editing))
@@ -2695,10 +2715,6 @@
   [node]
   (some-> node (.closest ".bottom-properties-row")))
 
-(defn- bottom-properties-row-in-block
-  [block-node]
-  (some-> block-node (.querySelector ".bottom-properties-row")))
-
 (defn- focus-bottom-properties-row!
   [row]
   (when row
@@ -2711,6 +2727,13 @@
   (or (some-> node (gobj/get attr))
       (when (and node (gobj/get node "getAttribute"))
         (dom/attr node attr))))
+
+(defn- bottom-properties-row-in-block
+  "Find the bottom-properties row owned by this block, not a descendant child."
+  [block-node]
+  (when-let [block-id (node-attr block-node "blockid")]
+    (some-> block-node
+            (.querySelector (str "[data-bottom-properties-row=\"" block-id "\"]")))))
 
 (defn- comment-item-node?
   [node]
@@ -3599,8 +3622,8 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (when-not (:active? (state/get-state :ui/find-in-page))
-    (cut-selection-blocks copy?)
-    (clear-selection!)))
+    (p/do! (cut-selection-blocks copy?)
+           (clear-selection!))))
 
 (defn shortcut-copy-selection
   [e]
@@ -3848,8 +3871,11 @@
 
 (defn db-collapsable?
   [block & _opts]
-  (let [properties (->> (:block.temp/property-keys block)
-                        (remove #{:block/alias})
+  (let [property-keys (or (seq (:block.temp/property-keys block))
+                          (filter db-property/property? (keys block)))
+        properties (->> property-keys
+                        (remove db-property/db-attribute-properties)
+                        (remove #{:logseq.property/created-by-ref})
                         (remove nil?))]
     (or (seq properties)
         (:logseq.property/query block))))

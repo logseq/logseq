@@ -84,7 +84,7 @@ Legacy notes:
 ### Custom Queries
 
 Custom queries are defined in `:custom-queries` of a config file. This config is a map with the key as a query name and the value as a map with the following keys:
-* `:query` - Required datalog query as a vector. Queries can use built-in rules from `logseq.db.frontend.rules` by appending `%` to the `:in` part of a query. See `logseq.cli.command.query` for example queries.
+* `:query` - Required datalog query as a vector. Queries can use built-in rules from `logseq.db.frontend.rules` by appending `%` to the `:in` part of a query. See `cli/lib/query.ml` for example queries.
 * `:doc` - Optional doc string describing the query.
 * `:inputs` - Optional vector of inputs where each input is a map. Valid keys for the map are `:name` and `:default`. This defines positional arguments to a query e.g. the arguments a user passes map to these inputs and the `:in` bindings in a `:query`.
 
