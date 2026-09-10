@@ -1,12 +1,19 @@
 name: logseq/db-sync CI
 
 on:
+  workflow_dispatch:
   # Path filters ensure jobs only kick off if a change is made to db-sync or
   # its local dependencies
   push:
     branches: [master]
     paths:
       - 'deps/db-sync/**'
+      - 'deps/graph-parser/**'
+      - 'deps/outliner/**'
+      - 'resources/**'
+      - '.dockerignore'
+      - '.github/workflows/db-sync-native-runtime.yml'
+      - '.github/workflows/db-sync-native-release.yml'
       - '.github/workflows/deps-db-sync.yml'
       - '!deps/db-sync/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow
@@ -16,6 +23,12 @@ on:
     branches: [master]
     paths:
       - 'deps/db-sync/**'
+      - 'deps/graph-parser/**'
+      - 'deps/outliner/**'
+      - 'resources/**'
+      - '.dockerignore'
+      - '.github/workflows/db-sync-native-runtime.yml'
+      - '.github/workflows/db-sync-native-release.yml'
       - '.github/workflows/deps-db-sync.yml'
       - '!deps/db-sync/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow
@@ -34,6 +47,10 @@ env:
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
+  native-runtime:
+    name: Build native runtime packages
+    uses: ./.github/workflows/db-sync-native-runtime.yml
+
   test:
     runs-on: ubuntu-latest
 
@@ -99,3 +116,40 @@ jobs:
 
       - name: Lint for vars that are too large
         run: bb lint:large-vars
+
+  deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n deploy/logseq-sync
+          bash -n deploy/logseq-sync-native
+          bash -n deploy/package-native-runtime.sh
+          bash -n deploy/test.sh
+          bash -n deploy/native-test.sh
+
+      - name: Run deployment manager tests
+        run: |
+          bash deploy/test.sh
+          bash deploy/native-test.sh
+
+      - name: Run deployment manager HTTP smoke test
+        run: |
+          install_dir="$RUNNER_TEMP/logseq-sync-install"
+          data_dir="$RUNNER_TEMP/logseq-sync-data"
+          printf '%s\n' \
+            "$install_dir" \
+            "$data_dir" \
+            http \
+            http://127.0.0.1:18080 \
+            I_ACCEPT_HTTP \
+            logseq-client \
+            y \
+            | bash deploy/logseq-sync setup
+          curl --fail --silent http://127.0.0.1:18080/health
+          docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" -f "$install_dir/compose.http.yaml" config -q
+          docker compose --profile https --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" config -q
