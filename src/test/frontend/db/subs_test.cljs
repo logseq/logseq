@@ -229,6 +229,65 @@
                   (when-let [unsubscribe! @unsubscribe]
                     (unsubscribe!)))))))))
 
+(deftest renaming-an-ancestor-refreshes-a-descendants-path-test
+  (async done
+         (let [conn (db-test/create-conn-with-blocks
+                     {:pages-and-blocks [{:page {:block/title "Superhuman"}}
+                                         {:page {:block/title "Docs"}}]})
+               parent (db-test/find-page-by-title @conn "Superhuman")
+               child (db-test/find-page-by-title @conn "Docs")
+               ;; canonical-block requires a revision
+               _ (d/transact! conn [{:db/id (:db/id parent) :block/tx-id 20}
+                                    {:db/id (:db/id child)
+                                     :block/tx-id 20
+                                     :block/parent (:db/id parent)}])
+               child-uuid (:block/uuid child)
+               worker (fn [api & args]
+                        (case api
+                          :thread-api/update-thread-atom
+                          (p/resolved nil)
+
+                          :thread-api/get-render-snapshots
+                          (let [[_graph-id request] args]
+                            (p/resolved
+                             (render-engine/render-snapshots @conn request
+                                                             {:repo test-graph-id})))
+
+                          (p/rejected
+                           (ex-info "Unexpected worker API" {:api api}))))
+               path #(:block.temp/hierarchy-title
+                      (:value (subs/block-snapshot child-uuid)))
+               unsubscribe (atom nil)]
+           (finish-async!
+            done
+            (->
+             (p/let [_ (reset! state/*db-worker worker)
+                     _ (reset! unsubscribe
+                               (subs/subscribe-block! child-uuid (fn [])))
+                     _ (p/delay 0)
+                     _ (is (= "Superhuman/Docs" (path)))
+                     ;; Renaming the parent leaves the child's own tx-id at 20
+                     report (d/transact! conn
+                                         [[:db/add (:db/id parent)
+                                           :block/title "Finance"]
+                                          [:db/add (:db/id parent)
+                                           :block/tx-id 21]])
+                     render-delta (-> (#'db-listener/build-render-delta
+                                       test-graph-id report
+                                       {:affected-keys #{}
+                                        :deleted-block-uuids #{}})
+                                      ldb/write-transit-str
+                                      ldb/read-transit-str)
+                     _ (subs/apply-delta! render-delta)]
+               (is (= 20 (:block/tx-id (:value (subs/block-snapshot child-uuid))))
+                   "The descendant was not touched, so its own revision is unchanged.")
+               (is (= "Finance/Docs" (path))
+                   "Its path must still follow the rename, with no reload."))
+             (p/finally
+               (fn []
+                 (when-let [unsubscribe! @unsubscribe]
+                   (unsubscribe!)))))))))
+
 (deftest block-changed-uses-only-tx-id-test
   (let [block-uuid (random-uuid)
         old-block (block block-uuid 10 "before" {:block/format :markdown

@@ -729,6 +729,32 @@
                             :value :block/uuid]))
           "The real loader partition must retain a later root's hydrated dependency."))))
 
+(deftest namespaced-page-snapshot-carries-its-hierarchy-title-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Superhuman"}}
+                                  {:page {:block/title "Docs"}}]})
+        parent (db-test/find-page-by-title @conn "Superhuman")
+        child (db-test/find-page-by-title @conn "Docs")
+        ;; canonical-block requires a revision, as the fixture data above does
+        _ (d/transact! conn [{:db/id (:db/id parent) :block/tx-id 20}
+                             {:db/id (:db/id child)
+                              :block/tx-id 20
+                              :block/parent (:db/id parent)}])
+        child-uuid (:block/uuid child)
+        parent-uuid (:block/uuid parent)
+        response (render-engine/render-snapshots
+                  @conn {:blocks [child-uuid parent-uuid] :children [] :resources []} {})]
+    (is (= "Superhuman/Docs"
+           (get-in response [:slots [:block child-uuid]
+                             :value :block.temp/hierarchy-title]))
+        "The renderer cannot walk ancestors, so the path must arrive in the snapshot.")
+    (is (= "Superhuman"
+           (get-in response [:slots [:block parent-uuid] :value :block/title]))
+        "The parent slot is present, so the next assertion is not vacuous.")
+    (is (nil? (get-in response [:slots [:block parent-uuid]
+                                :value :block.temp/hierarchy-title]))
+        "A top-level page has no path to add.")))
+
 (deftest render-snapshots-thread-api-fails-fast-without-a-database-test
   (when-let [api (get @thread-api/*thread-apis
                       :thread-api/get-render-snapshots)]

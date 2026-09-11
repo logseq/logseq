@@ -365,7 +365,11 @@
     (if (or (> (slot-revision current) (:rev store))
             (and (= :block (first slot-key))
                  (:tx-id current)
-                 (= (:tx-id current) (:tx-id next-slot))))
+                 (= (:tx-id current) (:tx-id next-slot))
+                 ;; A page's displayed path embeds its ancestors' titles, so its
+                 ;; snapshot can change while its own tx-id does not. Those fall
+                 ;; through to the value comparison below.
+                 (nil? (get-in next-slot [:snapshot :value :block.temp/hierarchy-title]))))
       [store false]
       [(if (mounted? slot-key)
          (assoc-in store [:slots slot-key] next-slot)

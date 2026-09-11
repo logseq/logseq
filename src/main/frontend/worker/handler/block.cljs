@@ -102,6 +102,16 @@
         block-tx-id (:block/tx-id entity)
         raw-title (:block/raw-title entity)
         display-title (:block/title entity)
+        ;; The renderer holds no db, and snapshot refs are flattened one level
+        ;; deep, so a page's full hierarchy path can only be computed here.
+        ;; Read by `:ui/show-hierarchy`.
+        ;;
+        ;; Renaming the referenced page itself refreshes labels, because its own
+        ;; slot is re-emitted. Renaming an ancestor does not: the delta only
+        ;; carries the renamed entity, not the blocks whose labels embed it, so
+        ;; those labels stay stale until reload.
+        hierarchy-title (when (and (ldb/internal-page? entity) (:block/parent entity))
+                          (ldb/get-title-with-parents entity))
         order-list-type (worker-plain/order-list-type entity)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"
@@ -146,6 +156,9 @@
 
         (string? display-title)
         (assoc :block/title display-title)
+
+        (and hierarchy-title (not= hierarchy-title display-title))
+        (assoc :block.temp/hierarchy-title hierarchy-title)
 
         order-list-type
         (assoc :block.temp/order-list-index

@@ -80,7 +80,7 @@
 
   `title` may be supplied when a caller has already prepared a display title,
   such as a search snippet with highlight markers."
-  [db block {:keys [with-tags? alias truncate? title]
+  [db block {:keys [with-tags? with-parents? alias truncate? title]
              :or {with-tags? true
                   truncate? true}}]
   (let [block-e (resolve-block db block)]
@@ -93,11 +93,24 @@
                                  (db-class/private-tags (:db/ident tag))))
                            (map #(resolve-tag db %) (or (:block/tags block)
                                                         (:block/tags block-e)))))
-            base-title (if class?
+            base-title (cond
+                         class?
                          (let [display-title (or title (:block/title block-e))]
                            (if (class-title-conflicts? db block-e)
                              (class-title-with-extends block-e display-title)
                              display-title))
+
+                         ;; `title` is a caller-prepared display string, such as a
+                         ;; search snippet with highlight markers, so it wins.
+                         ;; The path itself is computed in the worker, since the
+                         ;; renderer holds no db to walk ancestors with.
+                         (and with-parents?
+                              (nil? title)
+                              (:block.temp/hierarchy-title block)
+                              (entity-util/internal-page? block-e))
+                         (:block.temp/hierarchy-title block)
+
+                         :else
                          (or title (:block/title block-e)))
             trunc-title (if (and truncate? base-title (> (count base-title) 256))
                           (subs base-title 0 256)
