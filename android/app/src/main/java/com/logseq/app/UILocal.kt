@@ -128,6 +128,7 @@ class UILocal : Plugin() {
     val ctx = context
     if (ctx != null) {
       val intent = Intent(ACTION_ROUTE_CHANGED).apply {
+        setPackage(ctx.packageName)
         putExtra("navigationType", navigationType)
         putExtra("push", push)
         putExtra("stack", stack)
