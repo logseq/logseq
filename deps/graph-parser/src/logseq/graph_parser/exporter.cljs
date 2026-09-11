@@ -3265,6 +3265,38 @@
     (when (seq tx)
       (ldb/transact! conn tx {::imported-data? true}))))
 
+(defn- missing-internal-page-parent-order-tx
+  "Namespace import sets :block/parent without :block/order. Only repair
+  internal pages so class pages that share the same rewrite stay unordered."
+  [db]
+  (->> (d/datoms db :avet :block/parent)
+       (keep (fn [d]
+               (let [child (d/entity db (:e d))]
+                 (when (entity-util/internal-page? child)
+                   child))))
+       (group-by :block/parent)
+       (mapcat
+        (fn [[_parent siblings]]
+          (let [missing (vec (remove #(string? (:block/order %)) siblings))
+                max-order (->> siblings
+                               (keep :block/order)
+                               (filter string?)
+                               sort
+                               last)]
+            (map (fn [child order]
+                   {:db/id (:db/id child)
+                    :block/order order})
+                 missing
+                 (if (seq missing)
+                   (db-order/gen-n-keys (count missing) max-order nil)
+                   [])))))))
+
+(defn- ensure-imported-page-parent-orders!
+  [conn]
+  (let [tx-data (missing-internal-page-parent-order-tx @conn)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {::imported-data? true}))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
@@ -3304,6 +3336,7 @@
                           _ (import-progress! options {:phase :cleanup-missing-block-refs})
                           cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
                           _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))
+                          _ (ensure-imported-page-parent-orders! conn)
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
@@ -3563,7 +3596,8 @@
                     :block/parent [:block/uuid library-id]
                     :block/order (db-order/gen-key)})
                  top-parent-pages)]
-    (ldb/transact! repo-or-conn tx-data {::imported-data? true})))
+    (ldb/transact! repo-or-conn tx-data {::imported-data? true})
+    (ensure-imported-page-parent-orders! conn)))
 
 (defn- partition-graph-files
   [*files config rpath-key]
