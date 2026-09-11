@@ -283,7 +283,10 @@
        [:span.text-base (t :settings.sync-server/url)]
        [:span.text-sm.opacity-70
         (if-let [custom (config/get-custom-sync-server-url)]
-          custom
+          (str (t :settings.sync-server/self-hosted)
+               " · "
+               (try (.-host (js/URL. custom))
+                    (catch :default _ custom)))
           "Logseq Sync")]]
 
       (when login?

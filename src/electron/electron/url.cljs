@@ -113,6 +113,12 @@
                         {:key  (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
                          :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))})
 
+      ;; logseq://sync-setup?url=<server>&token=<token> — pair with a
+      ;; self-hosted sync server; the renderer asks for confirmation.
+      (= "sync-setup" url-host)
+      (let [[url token] (get-URL-decoded-params parsed-url ["url" "token"])]
+        (send-to-renderer :syncServerPair {:url url :token token}))
+
       :else
       (send-to-renderer :notification
                         {:type    "error"

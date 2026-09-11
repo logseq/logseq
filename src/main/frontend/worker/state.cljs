@@ -24,6 +24,9 @@
                        :auth/id-token nil
                        :auth/access-token nil
                        :auth/refresh-token nil
+                       ;; user-provided token for a self-hosted sync server;
+                       ;; when set, sync runs without a Logseq account
+                       :auth/static-sync-token nil
                        :auth/oauth-token-url nil
                        :auth/oauth-domain nil
                        :auth/oauth-client-id nil

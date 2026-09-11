@@ -80,6 +80,14 @@
           (and (= hostname "mobile") (= pathname "/go/quick-add"))
           (state/pub-event! [:mobile/set-tab "capture"])
 
+          ;; logseq://sync-setup?url=<server>&token=<token> — from the /pair
+          ;; page of a self-hosted sync server; confirmation happens in the
+          ;; event handler.
+          (= hostname "sync-setup")
+          (state/pub-event! [:sync-server/pair-request
+                             {:url (.get search-params "url")
+                              :token (.get search-params "token")}])
+
           (= hostname "graph")
           (let [graph-name (some-> pathname
                                    (string/replace "/" "")

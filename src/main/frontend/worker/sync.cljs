@@ -405,6 +405,14 @@
                       token (<resolve-ws-token)
                       connected (connect! repo connected url token)]
                 (reset! worker-state/*db-sync-client connected)
+                ;; local-mode fix: backfill missing remote assets on every sync start.
+                ;; Upstream only backfills after a fresh graph download and only on
+                ;; electron; web/android otherwise rely on a render-time one-shot
+                ;; request that races client startup and never retries.
+                (-> (sync-assets/download-missing-remote-assets! repo graph-id)
+                    (p/catch (fn [e]
+                               (log/info :db-sync/asset-backfill-failed
+                                         {:repo repo :error (str e)}))))
                 nil))
              (p/finally
                (fn []

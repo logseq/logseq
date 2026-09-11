@@ -150,8 +150,19 @@
 ;;     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
 
 (defn- snapshot-stream-url [request graph-id]
-  (let [url (js/URL. (.-url request))]
-    (str (.-origin url) "/sync/" graph-id "/snapshot/stream")))
+  ;; local-mode fix: clients fetch this URL like a pre-signed link (no auth
+  ;; header), so carry the caller's token as a query param -- auth.cljs
+  ;; token-from-request already accepts ?token=.
+  (let [url (js/URL. (.-url request))
+        auth-header (.get (.-headers request) "authorization")
+        btoken (when (and (string? auth-header)
+                          (string/starts-with? auth-header "Bearer "))
+                 (subs auth-header 7))
+        qtoken (.get (.-searchParams url) "token")
+        token (or btoken qtoken)]
+    (str (.-origin url) "/sync/" graph-id "/snapshot/stream"
+         (when (seq token)
+           (str "?token=" (js/encodeURIComponent token))))))
 
 (defn- maybe-decompress-stream [stream encoding]
   (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))

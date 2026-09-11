@@ -9,6 +9,9 @@
 
 (defn- env-object [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        local-token (or (:local-token cfg)
+                        (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN")))
+        local-user-id (some-> js/process .-env (aget "DB_SYNC_LOCAL_USER_ID"))
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
@@ -19,6 +22,10 @@
               (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
     (when (some? allow-unverified-jwt-claims)
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    (when (some? local-token)
+      (aset env "DB_SYNC_LOCAL_TOKEN" local-token))
+    (when (some? local-user-id)
+      (aset env "DB_SYNC_LOCAL_USER_ID" local-user-id))
     env))
 
 (defn graph-context

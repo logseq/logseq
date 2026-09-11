@@ -22,10 +22,17 @@
            (= :cli (:owner-source env))))
     (catch :default _ false)))
 
+(defn static-sync-token
+  "Token for a self-hosted sync server; when present it replaces the Cognito
+   id-token and is never refreshed."
+  []
+  (not-empty (:auth/static-sync-token @worker-state/*state)))
+
 (defn auth-token
   []
   (let [state @worker-state/*state]
-    (or (:auth/id-token state)
+    (or (static-sync-token)
+        (:auth/id-token state)
         (:auth/access-token state))))
 
 (defn get-graph-id

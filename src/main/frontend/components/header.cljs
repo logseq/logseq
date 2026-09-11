@@ -572,7 +572,8 @@
                :rtc-graphs rtc-graphs
                :db-rtc-uuid db-rtc-uuid
                :rtc-state rtc-state
-               :logged-in? (user-handler/logged-in?)
+               :logged-in? (or (user-handler/logged-in?)
+                               (user-handler/local-sync-mode?))
                :rtc-group? (user-handler/rtc-group?)})
          [:<>
           (recent-slider)
@@ -580,9 +581,11 @@
           [rtc-collaborators]
           (rtc-indicator/indicator)])
 
-       (when (user-handler/logged-in?)
+       (when (or (user-handler/logged-in?)
+                 (user-handler/local-sync-mode?))
          (rtc-indicator/downloading-detail))
-       (when (user-handler/logged-in?)
+       (when (or (user-handler/logged-in?)
+                 (user-handler/local-sync-mode?))
          (rtc-indicator/uploading-detail))
        (search-index-progress)
 
