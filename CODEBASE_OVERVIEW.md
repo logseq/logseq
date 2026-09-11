@@ -32,7 +32,7 @@ For other tasks like bundling static resources and building the desktop app, whi
 
 ## Important Directories and Files
 
-This is overview of this repository's most important directories and files.
+This is an overview of this repository's most important directories and files.
 
 - Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their ClojureScript counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
 
