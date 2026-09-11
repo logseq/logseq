@@ -405,3 +405,43 @@
     (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
+
+(deftest migrate-65-34-adds-missing-page-parent-order
+  (let [conn (d/create-conn db-schema/schema)
+        country-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        australia-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        canada-uuid #uuid "33333333-3333-3333-3333-333333333333"]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 33}}
+                       {:db/ident :logseq.class/Page
+                        :block/title "Page"}
+                       {:block/uuid country-uuid
+                        :block/title "Country"
+                        :block/name "country"
+                        :block/tags #{:logseq.class/Page}
+                        :block/order "a0"}
+                       {:block/uuid australia-uuid
+                        :block/title "Australia"
+                        :block/name "australia"
+                        :block/tags #{:logseq.class/Page}
+                        :block/parent [:block/uuid country-uuid]}
+                       {:block/uuid canada-uuid
+                        :block/title "Canada"
+                        :block/name "canada"
+                        :block/tags #{:logseq.class/Page}
+                        :block/parent [:block/uuid country-uuid]
+                        :block/order "a1"}])
+
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 34})
+          australia (d/entity @conn [:block/uuid australia-uuid])
+          canada (d/entity @conn [:block/uuid canada-uuid])]
+      (is (= {:major 65 :minor 34}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (is (string? (:block/order australia))
+          "Imported child page with nil order gets a string order")
+      (is (= "a1" (:block/order canada))
+          "Existing sibling order is left unchanged")
+      (is (not= (:block/order australia) (:block/order canada))
+          "Repaired order does not collide with an existing sibling")
+      (is (some #(contains? (:migrate-updates %) :fix)
+                (:upgrade-result-coll result))))))
