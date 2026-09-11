@@ -9,6 +9,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
@@ -120,6 +121,32 @@
              [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
       [:logseq.class/Comments :logseq.class/Comment]))))
 
+(defn- add-missing-page-parent-order
+  "Imported namespace pages historically received :block/parent without
+  :block/order. Opening Library or a non-leaf hierarchy page then crashes."
+  [db]
+  (->> (d/datoms db :avet :block/parent)
+       (keep (fn [d]
+               (let [child (d/entity db (:e d))]
+                 (when (ldb/internal-page? child)
+                   child))))
+       (group-by :block/parent)
+       (mapcat
+        (fn [[_parent siblings]]
+          (let [missing (vec (remove #(string? (:block/order %)) siblings))
+                max-order (->> siblings
+                               (keep :block/order)
+                               (filter string?)
+                               sort
+                               last)]
+            (map (fn [child order]
+                   {:db/id (:db/id child)
+                    :block/order order})
+                 missing
+                 (if (seq missing)
+                   (db-order/gen-n-keys (count missing) max-order nil)
+                   [])))))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -162,7 +189,8 @@
                           :logseq.property.view/gallery-display-properties
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
-                          :logseq.property.view/gallery-card-height]}]])
+                          :logseq.property.view/gallery-card-height]}]
+   ["65.34" {:fix add-missing-page-parent-order}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
