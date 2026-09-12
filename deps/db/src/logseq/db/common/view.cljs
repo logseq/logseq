@@ -311,15 +311,28 @@
                      (set? match)
                      (seq match)
                      (not (contains? match :empty)))
-            (let [match-ids (set (keep #(->filter-match-id db %) match))]
-              (when (seq match-ids)
+            (let [match-entities (keep #(d/entity db [:block/uuid %]) match)
+                  match-entity-ids (set (keep #(->filter-match-id db %) match))
+                  match-content-values (set (map db-property/property-value-content match-entities))]
+              (when (seq match-entities)
                 (fn [row]
                   (let [v (get row property-ident)
                         value-col (cond
                                     (set? v) v
                                     (nil? v) nil
                                     :else #{v})
-                        hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
+                        entity? (de/entity? (first value-col))
+                        match-as-entity? (and entity?
+                                              (match-property-value-as-entity? (first value-col) property))
+                        match-values (cond
+                                       match-as-entity? match-entity-ids
+                                       entity? match-content-values
+                                       :else match)
+                        row-values (cond
+                                     match-as-entity? (keep #(->filter-match-id db %) value-col)
+                                     entity? (map db-property/property-value-content value-col)
+                                     :else value-col)
+                        hit? (boolean (some match-values row-values))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
 (defn- get-exclude-page-ids

@@ -33,6 +33,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.entity :as entity]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -1552,6 +1553,12 @@
    {:value :custom-date
     :label (t :view.filter/custom-date)}])
 
+(defn- remove-filter-at
+  [filters idx]
+  (let [filters (vec filters)]
+    (into (subvec filters 0 idx)
+          (subvec filters (inc idx)))))
+
 (hsx/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
@@ -1646,9 +1653,18 @@
                                                                           (:block/uuid (first selected)))
                                                                    (set (map :block/uuid selected))
                                                                    selected)
+                                                  clauses (vec (:filters filters))
+                                                  new-filter [(:db/ident property) :is selected-value]
                                                   filters' (if (seq selected)
-                                                             (conj (:filters filters) [(:db/ident property) :is selected-value])
-                                                             (:filters filters))]
+                                                             (conj clauses new-filter)
+                                                             clauses)]
+                                              (log/debug :event :view-filter/picker-update
+                                                         :property-ident (:db/ident property)
+                                                         :picker-filter-idx (when (seq selected)
+                                                                              (count clauses))
+                                                         :selected-count (count selected)
+                                                         :filter-count-before (count clauses)
+                                                         :filter-count-after (count filters'))
                                               (set-filters! {:or? (:or? filters)
                                                              :filters filters'})))})))
                    :else
@@ -1942,7 +1958,9 @@
                 :variant "ghost"
                 :size :sm
                 :on-click (fn [_e]
-                            (let [new-filters (update filters :filters (fn [col] (vec (remove #{filter'} col))))]
+                            ;; Remove by position: two clauses can be equal, and removing by
+                            ;; value would drop every copy at once.
+                            (let [new-filters (update filters :filters remove-filter-at idx)]
                               (set-filters! new-filters)))}
                (ui/icon "x"))]))
          (:filters filters))]
