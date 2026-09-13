@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.components.views.row-dnd :as row-dnd]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [frontend.util :as util]
@@ -937,6 +938,53 @@
     (is (empty? (:selected-rows summary))
         "Select-all actions must not silently fall back to the first window while full rows are loading.")
     (is (false? (:selected-some? summary)))))
+
+(deftest windowed-table-dragging-waits-for-the-full-row-snapshot-test
+  (let [view-uuid (random-uuid)
+        first-row (random-uuid)
+        offscreen-row (random-uuid)
+        context {:feature-type :all-pages}
+        snapshots (atom [])]
+    (with-redefs [views/run-effects! (fn [& _args])
+                  row-dnd/root (fn [_view-uuid enabled? snapshot _children]
+                                 (swap! snapshots conj [enabled? snapshot])
+                                 nil)]
+      (doseq [[loading? full-data] [[true nil] [false [first-row offscreen-row]]]]
+        (render-static
+         (views/view-inner {:block/uuid view-uuid}
+                           {:data [first-row]
+                            :full-data full-data
+                            :full-data-loading? loading?
+                            :columns []
+                            :partition :flat
+                            :display-type :logseq.property.view/type.table
+                            :resource-context context
+                            :config {}}
+                           (atom nil)))))
+    (is (false? (ffirst @snapshots)))
+    (is (= [true {:context context
+                 :rows {nil [first-row offscreen-row]}
+                 :expected-order nil}]
+           (second @snapshots))
+        "Drop validation must include offscreen rows once the full resource is ready.")))
+
+(deftest windowed-table-sortable-rows-include-offscreen-drop-targets-test
+  (let [first-row (random-uuid)
+        offscreen-row (random-uuid)
+        sortable-rows (atom [])]
+    (with-redefs [views/table-header (fn [& _args])
+                  views/table-body (fn [& _args])
+                  row-dnd/rows (fn [_group rows _children]
+                                 (swap! sortable-rows conj rows)
+                                 nil)]
+      (doseq [view-partition [:flat :grouped]]
+        (render-static
+         (views/table-view {:rows [first-row]
+                            :full-data [first-row offscreen-row]}
+                           {:reorder-rows? true :partition view-partition}
+                           nil (atom nil)))))
+    (is (= [[first-row offscreen-row] [first-row]] @sortable-rows)
+        "Flat tables use all rows for dragging; grouped tables keep each group's rows separate.")))
 
 (deftest first-paint-skips-unpinned-property-columns-test
   (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]

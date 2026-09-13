@@ -12,6 +12,7 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.view :as outliner-view]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
             [logseq.outliner.op.construct :as op-construct]))
@@ -56,6 +57,10 @@
      [:args [:tuple ::blocks ::option]]]]
 
    ;; properties
+   [:reorder-view-rows
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block-id ::option]]]]
    [:upsert-property
     [:catn
      [:op :keyword]
@@ -300,6 +305,9 @@
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
+    :reorder-view-rows
+    (apply outliner-view/reorder-rows! conn args)
+
     ;; blocks
     :save-block
     (apply outliner-core/save-block! conn args)

@@ -13,6 +13,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
+            [frontend.components.views.row-dnd :as row-dnd]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.dicts :as dicts]
@@ -37,6 +38,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
+            [logseq.db.common.view-order :as view-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -340,7 +342,7 @@
         pinned? (when property
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
-        sub-content (fn [{:keys [id]}]
+        sub-content (fn [{:keys [id property]}]
                       (let [table-options [(when sortable?
                                              (shui/dropdown-menu-item
                                               {:key "asc"
@@ -388,7 +390,9 @@
                       (when (and (or (nil? @*last-header-action-target)
                                      (not= el @*last-header-action-target))
                                  (string/blank? (some-> el (.-style) (.-transform))))
-                        (shui/popup-show! el sub-content
+                        (p/let [resolved-property (db-async/<get-block (state/get-current-repo) (:db/ident property))]
+                          (shui/popup-show! el
+                                          #(sub-content (assoc % :property resolved-property))
                                           {:id popup-id
                                            :align "start"
                                            :as-dropdown? true
@@ -399,7 +403,7 @@
                                                                            (shui/popup-hide! popup-id))))}
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
-                                                             (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
+                                                             (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))))}
      (let [title (str (:name column))]
        [:span {:title title
                :class "max-w-full overflow-hidden text-ellipsis"}
@@ -1335,6 +1339,7 @@
      {:main-container (util/app-scroll-container-node)}
      (when (seq pinned-items)
        [:div.sticky-columns.flex.flex-row
+        (when (:reorder-rows? option) [:div.table-row-drag-gutter])
         (dnd/items pinned-items {:vertical? false
                                  :on-drag-end (fn [ordered-columns _m]
                                                 (set-ordered-columns! ordered-columns))})])
@@ -1486,8 +1491,9 @@
 
 (hsx/defc ^:large-vars/cleanup-todo table-row-inner
   [table row props {:keys [show-add-property? scrolling? disable-virtualized?
-                           mount-unpinned-cells?]}]
+                           mount-unpinned-cells? row-group]}]
   (let [*ref (hooks/use-ref nil)
+        drag (row-dnd/use-row row row-group)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (visible-unpinned-columns
@@ -1541,12 +1547,16 @@
       props
       {:key (str (:db/id row))
        :tabIndex 0
-       :ref *ref
+       :ref (fn [node]
+              (set! (.-current *ref) node)
+              (when-let [register (:ref drag)] (register node)))
+       :style (:style drag)
        :data-id (:db/id row)
        :blockid (str (:block/uuid row))
        :on-key-down (fn [e]
                       (let [container (hooks/deref *ref)]
-                        (when (dom/has-class? container "selected")
+                        (when (and (dom/has-class? container "selected")
+                                   (not (.closest (.-target e) "[data-table-row-drag]")))
                           (case (util/ekey e)
                             "Enter"
                             (do
@@ -1581,7 +1591,9 @@
                             nil))))})
      (when (seq pinned-columns)
        (into
-        [:div.sticky-columns.flex.flex-row]
+        [:div.sticky-columns.flex.flex-row
+         (when drag
+           [:div.table-row-drag-gutter (row-dnd/handle (:handle drag))])]
         (map #(row-cell-f % {}) pinned-columns)))
      (when (seq unpinned-columns)
        (into
@@ -2146,7 +2158,10 @@
   {:set-sorting!
    (fn [sorting]
      (p/do!
-      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sorting sorting)
+      (ui-outliner-tx/transact!
+       {:outliner-op :set-block-properties}
+       (outliner-op/remove-block-property! (:block/uuid entity) :logseq.property.table/sort-order)
+       (outliner-op/set-block-property! (:block/uuid entity) :logseq.property.table/sorting sorting))
       (set-sorting! sorting)))
    :set-filters!
    (fn [filters]
@@ -2776,7 +2791,11 @@
         [:div.relative
          (table-header table option)
 
-         (table-body table option rows *scroller-ref set-items-rendered!)
+         (row-dnd/rows (:row-group option)
+                       (if (and (:reorder-rows? option) (= :flat (:partition option)))
+                         (:full-data table)
+                         rows)
+                       (table-body table option rows *scroller-ref set-items-rendered!))
 
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
@@ -3182,6 +3201,8 @@
   [table sorting columns]
   (let [[sorting set-sorting!] (hooks/use-state sorting)]
     [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
+     (when (view-order/table-order (:view-entity table))
+       [:div.px-3.text-muted-foreground (t :property.built-in/table-sort-order)])
      (let [items (for [{:keys [id asc?]} sorting]
                    (when-let [name (some (fn [column] (when (= id (:id column))
                                                         (:name column))) columns)]
@@ -3425,7 +3446,7 @@
                  (action option)
                  action))])
 
-      (when (seq sorting)
+      (when (or (seq sorting) (view-order/table-order view-entity))
         (view-sorting table columns sorting))
 
       (filter-properties view-entity columns table option)
@@ -3483,13 +3504,17 @@
 
                  :else
                  (t :view.table/no-group-value (:block/title group-by-property)))]
+        title (if (:reorder-rows? option)
+                (row-dnd/group-target (view-order/group-value value) title)
+                title)
         body-fn (fn []
                   (let [render (view-cp view-entity
                                         (assoc group-table :rows group)
                                         (-> option
                                             (dissoc :all-row-ids :offset-rows :row-offset
                                                     :stale-offset-rows :stale-row-offset)
-                                            (assoc :disable-virtualized? true
+                                            (assoc :row-group (view-order/group-value value)
+                                                   :disable-virtualized? true
                                                    :hide-action-bar? gallery?))
                                         view-opts)]
                     (if (and list-view? (not (util/mobile?)))
@@ -3530,7 +3555,11 @@
   (let [view-partition (:partition option*)
         [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition data))
         journals? (:journals? config)
-        option (assoc option* :properties
+        reorder? (and (= display-type :logseq.property.view/type.table)
+                      (not config/publishing?) (not (:read-only? config))
+                      (not (:full-data-loading? option*))
+                      (some? (:resource-context option*)))
+        option (assoc option* :reorder-rows? reorder? :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec)
@@ -3633,8 +3662,14 @@
 
     (run-effects! option table-map *scroller-ref gallery?)
 
+    (row-dnd/root (:block/uuid view-entity) reorder?
+                  {:context (:resource-context option)
+                   :rows (if (= :grouped (:partition option)) (into {} full-data) {nil (vec full-data)})
+                   :expected-order (:logseq.property.table/sort-order view-entity)}
     [:div.flex.flex-col.gap-2.grid
-     {:ref *view-ref}
+     {:ref *view-ref
+      :data-table-view-uuid (str (:block/uuid view-entity))
+      :data-table-sort-order (hash (:logseq.property.table/sort-order view-entity))}
      (ui/foldable
       (if head-ready?
         (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
@@ -3676,7 +3711,7 @@
                              :group-by-property-ident group-by-property-ident
                              :disable-virtualized? disable-virtualized?)
                       view-opts)))])
-      (merge {:title-trigger? false} foldable-options))]))
+      (merge {:title-trigger? false} foldable-options))])))
 
 (defn- view-instance-key
   "Pending views have a UUID before db/id. Keying on db/id remounted
@@ -3733,6 +3768,9 @@
                                (= (:db/ident sorting)
                                   :logseq.property/empty-placeholder))]
     (cond
+      (view-order/table-order view-entity)
+      []
+
       (or (nil? sorting)
           empty-placeholder?
           (and (coll? sorting) (empty? sorting)))
@@ -3950,6 +3988,7 @@
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
+                                            :resource-context (:full-context plan)
                                             :on-viewport-filled! set-current-row-offset!
                                             :on-first-table-paint! notify-windowed-paint!
                                             :initial-row-count (:initial-row-count plan)
