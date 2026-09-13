@@ -127,6 +127,10 @@
   (let [*input (hooks/use-memo #(atom "") [])
         *toggle (hooks/use-memo #(atom nil) [])
         *selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
+        ;; Shared with `ui/auto-complete` below so `choose-first-on-enter?`
+        ;; can pick whatever item is currently keyboard-highlighted instead
+        ;; of always the first result. See #1174.
+        *current-idx (hooks/use-memo #(atom 0) [])
         [input] (hooks/use-atom *input)
         [selected-choices] (hooks/use-atom *selected-choices)
         _ (hooks/use-effect!
@@ -212,7 +216,12 @@
                                  (if (and (= "Enter" (util/ekey e)) (seq search-result))
                                    (do
                                      (util/stop e)
-                                     (choose-result! (first search-result) e))
+                                     ;; Respect keyboard navigation: pick whatever item is
+                                     ;; currently highlighted (defaults to the first one when
+                                     ;; the user hasn't pressed up/down yet), not always the
+                                     ;; first search result. See #1174.
+                                     (let [idx (min @*current-idx (dec (count search-result)))]
+                                       (choose-result! (nth search-result idx) e)))
                                    (when on-key-down
                                      (on-key-down e))))))
                       input-opts*)
@@ -237,6 +246,7 @@
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
                                     :class             "cp__select-results"
                                     :on-chosen         choose-result!
+                                    :current-idx-atom  *current-idx
                                     :empty-placeholder (empty-placeholder t)})]
 
                                  (when (and multiple-choices? (fn? on-apply))

@@ -444,9 +444,14 @@
            item-render
            class
            header
-           grouped?]
+           grouped?
+           current-idx-atom]
     :as opts}]
-  (let [*current-idx (hooks/use-memo #(atom 0) [])
+  (let [*local-idx (hooks/use-memo #(atom 0) [])
+        ;; Allow a parent (e.g. `select`) to own and read this atom itself,
+        ;; so it can know which item is keyboard-highlighted instead of
+        ;; always assuming the first one. See #1174.
+        *current-idx (or current-idx-atom *local-idx)
         [current-idx] (hooks/use-atom *current-idx)
         shortcut-state {:matched matched
                         :opts opts
