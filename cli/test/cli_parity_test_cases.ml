@@ -5789,8 +5789,72 @@ let () =
               mkdir_p (Filename.dirname path);
               write_file path "sqlite-copy";
               "[\"^ \",\"~:ok\",true]")
-            else if Js.String.includes ~search:"thread-api/export-edn" body then
-              "[\"^ \",\"~:exported\",true]"
+            else if Js.String.includes ~search:"thread-api/export-edn" body then (
+              let args =
+                expect_some "export args" (Edn_util.as_seq (invoke_args body))
+              in
+              let options = Vec.nth args 1 in
+              let export_type =
+                expect_some "export type"
+                  (Option.bind
+                     (Edn_util.get options "export-type")
+                     Edn_util.as_keyword)
+              in
+              (match export_type with
+              | "block" ->
+                  expect_int64 "top-level block id" 41L
+                    (expect_some "top-level block id"
+                       (Edn_util.get_int64 options "block-id"));
+                  expect_none "block graph options"
+                    (Edn_util.get options "graph-options")
+              | "page" ->
+                  expect_int64 "top-level page id" 40L
+                    (expect_some "top-level page id"
+                       (Edn_util.get_int64 options "page-id"));
+                  expect_none "page graph options"
+                    (Edn_util.get options "graph-options")
+              | "view-nodes" ->
+                  let rows =
+                    expect_some "top-level view rows"
+                      (Option.bind
+                         (Edn_util.get options "rows")
+                         Edn_util.as_seq)
+                  in
+                  expect_int64 "first view row" 42L
+                    (expect_some "first view row"
+                       (Edn_util.as_int64 (Vec.nth rows 0)));
+                  expect_bool "top-level group-by" false
+                    (expect_some "top-level group-by"
+                       (Edn_util.get_bool options "group-by?"));
+                  expect_none "view-nodes graph options"
+                    (Edn_util.get options "graph-options")
+              | "selected-nodes" ->
+                  let node_ids =
+                    expect_some "selected-nodes top-level node ids"
+                      (Option.bind
+                         (Edn_util.get options "node-ids")
+                         Edn_util.as_seq)
+                  in
+                  expect_int64 "selected-nodes first id" 42L
+                    (expect_some "selected-nodes first id"
+                       (Edn_util.as_int64 (Vec.nth node_ids 0)));
+                  expect_none "selected-nodes graph options"
+                    (Edn_util.get options "graph-options")
+              | "graph-human" ->
+                  let graph_options =
+                    expect_some "graph-human graph options"
+                      (Edn_util.get options "graph-options")
+                  in
+                  expect_bool "nested graph-human timestamps" true
+                    (expect_some "nested graph-human timestamps"
+                       (Edn_util.get_bool graph_options "include-timestamps?"));
+                  expect_none "graph-human top-level timestamps"
+                    (Edn_util.get options "include-timestamps?")
+              | "graph" ->
+                  expect_none "default graph options"
+                    (Edn_util.get options "graph-options")
+              | value -> fail_test ("unexpected export type: " ^ value));
+              "[\"^ \",\"~:exported\",true]")
             else if Js.String.includes ~search:"thread-api/import-edn" body then
               "[\"^ \",\"~:ok\",true]"
             else if
@@ -5807,19 +5871,20 @@ let () =
               Cli_config.base_url = Some base_url;
             }
           in
-          let edn_opts =
+          let make_edn_opts ?(pretty_print = false) edn_options =
             {
               Graph.export_type = Graph.Edn;
               file = Some edn_export;
-              edn_options =
-                Some
-                  (edn_of_string
-                     "{:export-type :graph :include-timestamps? true}");
-              pretty_print = true;
+              edn_options = Option.map edn_of_string edn_options;
+              pretty_print;
               include_timestamps = false;
               exclude_built_in_pages = false;
               exclude_namespaces = Vec.empty;
             }
+          in
+          let edn_opts =
+            make_edn_opts ~pretty_print:true
+              (Some "{:export-type :selected-nodes :node-ids [42]}")
           in
           let sqlite_opts =
             {
@@ -5843,6 +5908,38 @@ let () =
             ":exported true";
           expect_named_contains "pretty export writes multiline edn"
             (read_file edn_export) "\n";
+          let export_with options =
+            effect_to_promise
+              (execute_with_output Graph.execute
+                 (Graph.Graph_export
+                    { graph; repo; opts = make_edn_opts options })
+                 cfg Output.Mode.Edn)
+          in
+          let* block_result =
+            export_with (Some "{:export-type :block :block-id 41}")
+          in
+          expect_bool "block export ok" false (Cli_result.is_error block_result);
+          let* page_result =
+            export_with (Some "{:export-type :page :page-id 40}")
+          in
+          expect_bool "page export ok" false (Cli_result.is_error page_result);
+          let* view_result =
+            export_with
+              (Some "{:export-type :view-nodes :rows [42] :group-by? false}")
+          in
+          expect_bool "view-nodes export ok" false
+            (Cli_result.is_error view_result);
+          let* graph_human_result =
+            export_with
+              (Some
+                 "{:export-type :graph-human :graph-options \
+                  {:include-timestamps? true}}")
+          in
+          expect_bool "graph-human export ok" false
+            (Cli_result.is_error graph_human_result);
+          let* default_graph_result = export_with (Some "{}") in
+          expect_bool "default graph export ok" false
+            (Cli_result.is_error default_graph_result);
           let* sqlite_result =
             effect_to_promise
               (execute_with_output Graph.execute
