@@ -7,6 +7,7 @@
             [frontend.worker.handler.render-resource.common :as common]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
+            [logseq.db.common.view-order :as view-order]
             [logseq.db.frontend.class :as db-class]))
 
 (def ^:private view-eids-query
@@ -115,10 +116,12 @@
                            (= (property-ident persisted-sorting)
                               :logseq.property/empty-placeholder)
                            (empty? persisted-sorting))
-        sorting (if empty-sorting?
-                  (or (:sorting context)
-                      [{:id :block/updated-at :asc? false}])
-                  persisted-sorting)
+        sorting (if (view-order/table-order view)
+                  []
+                  (if empty-sorting?
+                    (or (:sorting context)
+                        [{:id :block/updated-at :asc? false}])
+                    persisted-sorting))
         filters (or (:logseq.property.table/filters view)
                     (:filters context))
         group-by-property-ident
@@ -178,7 +181,7 @@
 (defn- view-watch-keys
   [db view-uuid owner feature-type config view-partition]
   (if (= :unlinked-references feature-type)
-    #{}
+    #{[:entity view-uuid]}
     (let [owner-uuid (:block/uuid owner)
           value-watch-keys (if (= :linked-references feature-type)
                              #{}

@@ -98,6 +98,10 @@
   (op-transact!
    [:set-block-property [(->block-id block-eid) (->property-id property-id) value]]))
 
+(defn reorder-view-rows!
+  [view-uuid request]
+  (op-transact! [:reorder-view-rows [view-uuid request]]))
+
 (defn remove-block-property!
   [block-eid property-id]
   (op-transact!

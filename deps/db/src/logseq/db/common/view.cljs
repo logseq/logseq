@@ -9,6 +9,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.reference :as db-reference]
+            [logseq.db.common.view-order :as view-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -167,6 +168,14 @@
       (= :logseq.property/empty-placeholder v)
       (and (string? v) (string/blank? v))
       (and (coll? v) (empty? v))))
+
+(defn property-group-value
+  "Resolve a property value to the value displayed by a view group."
+  [property value]
+  (if (and (de/entity? value)
+           (not (match-property-value-as-entity? value property)))
+    (db-property/property-value-content value)
+    value))
 
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
@@ -562,6 +571,12 @@
       :data data}
      (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))))
 
+(defn- sort-view-entities
+  [db sorting manual-order group-property group-value entities]
+  (if manual-order
+    (view-order/order-entities entities (view-order/positions manual-order group-property group-value))
+    (sort-entities db sorting entities)))
+
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
                :as opts}]
@@ -574,12 +589,16 @@
         :data index})
      :else
      (let [view (d/entity db view-id)
-           group-by-property (:logseq.property.view/group-by-property view)
+           group-by-property (when-not (:ungrouped? opts)
+                               (:logseq.property.view/group-by-property view))
            list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
+           group-by-property-ident (when-not (:ungrouped? opts)
+                                     (or (:db/ident group-by-property) group-by-property-ident))
            group-by-closed-values? (some? (:property/closed-values group-by-property))
            ref-property? (= (:db/valueType group-by-property) :db.type/ref)
-           filters (or (:logseq.property.table/filters view) filters)
+           filters (when-not (:unfiltered? opts) (or (:logseq.property.table/filters view) filters))
+           input (when-not (:unfiltered? opts) input)
+           manual-order (view-order/table-order view)
            feat-type (or view-feature-type (:logseq.property.view/feature-type view))
            query? (= feat-type :query-result)
            query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
@@ -595,7 +614,11 @@
                                 (get-all-page-ids-fast db sorting))]
        (if fast-all-pages-ids
          {:count (count fast-all-pages-ids)
-          :data fast-all-pages-ids}
+          :data (if manual-order
+                  (mapv :db/id (view-order/order-entities
+                               (map #(entity-plus/unsafe->Entity db %) fast-all-pages-ids)
+                               (:flat manual-order)))
+                  fast-all-pages-ids)}
          (let [entities-result (if query?
                                  (keep (fn [id]
                                          (let [e (d/entity db id)]
@@ -632,11 +655,7 @@
                     (seq
                      (map
                        (fn [value]
-                         (if (de/entity? value)
-                           (if (match-property-value-as-entity? value group-by-property)
-                             value
-                             (db-property/property-value-content value))
-                           value))
+                         (property-group-value group-by-property value))
                        values))
                     [nil])))
                result (if linked-references-page-list-fast-path?
@@ -684,7 +703,7 @@
                                    (conj {:get-value (keyfn :block/title)
                                           :asc? (not desc?)})))
                                result))
-                        (sort-entities db sorting filtered-entities)))
+                        (sort-view-entities db sorting manual-order nil nil filtered-entities)))
                data' (if linked-references-page-list-fast-path?
                        nil
                        (if group-by-property-ident
@@ -705,7 +724,7 @@
                                                         :block/parent (:block/uuid (:block/parent b))})
                                                   (ldb/sort-by-order blocks))])
                                              parent-groups))
-                                         (->> (sort-entities db sorting entities)
+                                         (->> (sort-view-entities db sorting manual-order group-by-property-ident by-value entities)
                                               (map :db/id)))]
                              [by-value' group]))
                          result)

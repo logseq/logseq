@@ -405,3 +405,16 @@
     (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
+
+(deftest migrate-65-34-adds-hidden-table-sort-order
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 33}}])
+    (db-migrate/migrate conn :target-version {:major 65 :minor 34})
+    (let [property (d/entity @conn :logseq.property.table/sort-order)]
+      (is (= {:major 65 :minor 34}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (is (= "Sort Order" (:block/title property)))
+      (is (= :map (:logseq.property/type property)))
+      (is (true? (:logseq.property/hide? property)))
+      (is (false? (:logseq.property/public? property))))))

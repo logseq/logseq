@@ -516,6 +516,11 @@
                                       :public? false}
                                      :rtc property-ignore-rtc}
 
+     :logseq.property.table/sort-order {:title "Sort Order"
+                                       :schema {:type :map
+                                                :hide? true
+                                                :public? false}}
+
      :logseq.property.table/filters {:title "View filters"
                                      :schema
                                      {:type :map
