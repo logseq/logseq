@@ -123,7 +123,7 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
   - EDN export also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`
-  - `--edn-options` is an EDN map; `:export-type` (if present) overrides the default `:graph`, and every other key is forwarded to the worker as `:graph-options` (for example, `'{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}'`)
+  - `--edn-options` is an EDN map passed directly to the worker, with `:export-type` defaulting to `:graph`. Parameters for `:block`, `:page`, `:view-nodes`, and `:selected-nodes` stay at the top level (for example, `'{:export-type :selected-nodes :node-ids [42]}'`). `:graph-human` options belong under `:graph-options` (for example, `'{:export-type :graph-human :graph-options {:include-timestamps? true}}'`).
   - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
   - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected

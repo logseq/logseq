@@ -249,8 +249,7 @@ let options_for_command =
           option_of_array
             [| "-e"; "--edn-options" |]
             (Required_value "edn")
-            "EDN map of export options; :export-type overrides the default \
-             :graph";
+            "EDN map of worker export options; :export-type defaults to :graph";
           option_of_array
             [| "-p"; "--pretty-print" |]
             Flag "Pretty-print the exported EDN file";
