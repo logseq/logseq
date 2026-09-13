@@ -191,13 +191,28 @@
                           default-value)])))
              (into {}))))))
 
+(defn ^:api get-class-properties
+  [db class]
+  (mapv (fn [property]
+          (let [m (worker-plain/entity-forward-map db property {})
+                closed-values (mapv (fn [choice]
+                                      (select-keys (entity-util/entity->map choice)
+                                                   [:db/id :block/uuid :block/title :block/order
+                                                    :logseq.property/value
+                                                    :logseq.property/icon
+                                                    :logseq.property/choice-checkbox-state]))
+                                    (:property/closed-values property))]
+            (cond-> m
+              (seq closed-values)
+              (assoc :property/closed-values closed-values))))
+        (outliner-property/get-class-properties class)))
+
 (def-thread-api :thread-api/get-class-properties
   [repo class-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (when-let [class (d/entity db class-id)]
-        (mapv #(worker-plain/entity-forward-map db % {})
-              (outliner-property/get-class-properties class))))))
+        (get-class-properties db class)))))
 
 (def-thread-api :thread-api/get-alias-source-page
   [repo page-id]

@@ -120,3 +120,43 @@
       (d/transact! conn [[:db/retract :logseq.property/status :logseq.property/default-value]])
       (is (not (contains? (positioned-idents @conn (:db/id task-only) :block-left)
                           :logseq.property/status))))))
+
+(deftest get-class-properties-keeps-closed-values-for-icons
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties
+               {:my-status {:logseq.property/type :default
+                            :build/closed-values
+                            [{:value "Todo"  :uuid (random-uuid)
+                              :icon {:type :tabler-icon :id "circle"}}
+                             {:value "Doing" :uuid (random-uuid)
+                              :icon {:type :tabler-icon :id "circle-half"}}]}
+                :note {:logseq.property/type :default}}
+               :classes {:MyTask {:build/class-properties [:my-status :note]}}
+               :pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "task1"
+                           :build/tags [:MyTask]
+                           :build/properties {:my-status "Doing"}}]}]})
+        db @conn
+        class (d/entity db :user.class/MyTask)
+        properties (worker-property/get-class-properties db class)
+        by-ident (into {} (map (juxt :db/ident identity)) properties)
+        status (get by-ident :user.property/my-status)
+        note (get by-ident :user.property/note)]
+
+    (testing "closed values survive the worker boundary"
+      (is (some? status) "The tag's property is returned")
+      (is (= #{"Todo" "Doing"}
+             (set (map :block/title (:property/closed-values status))))
+          "Closed values are attached, which is what gates the icon render path in select-item"))
+
+    (testing "each closed value keeps its icon"
+      (is (= #{"circle" "circle-half"}
+             (set (map #(get-in % [:logseq.property/icon :id])
+                       (:property/closed-values status))))
+          "Without the icon the tag table falls back to plain text (issue #1173)"))
+
+    (testing "properties without closed values are unchanged"
+      (is (some? note))
+      (is (not (contains? note :property/closed-values))
+          "Plain properties keep their existing map shape"))))
