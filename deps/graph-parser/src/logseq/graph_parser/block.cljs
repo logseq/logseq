@@ -801,7 +801,7 @@
                                   ;; fix start_pos
                                   (assoc pos-meta :end_pos
                                          (if (seq headings)
-                                           (get-in (last headings) [:meta :start_pos])
+                                           (get-in (peek headings) [:meta :start_pos])
                                            nil)))
                       ;; Remove properties, deadline/scheduled and logbook text from title in db graphs
                       options' (assoc options
@@ -845,7 +845,14 @@
                    (map #(dissoc % :block/level-spaces) result)
                    (let [[block & others] blocks
                          level-spaces (:block/level-spaces block)
-                         {uuid' :block/uuid :block/keys [level parent] :as last-parent} (last parents)
+                         [parent-stack outdented-parent]
+                         (loop [parent-stack parents
+                                outdented-parent nil]
+                           (let [last-parent (peek parent-stack)]
+                             (if (< level-spaces (:block/level-spaces last-parent))
+                               (recur (pop parent-stack) last-parent)
+                               [parent-stack outdented-parent])))
+                         {uuid' :block/uuid :block/keys [level parent] :as last-parent} (peek parent-stack)
                          parent-spaces (:block/level-spaces last-parent)
                          [blocks parents result]
                          (cond
@@ -853,11 +860,11 @@
                            (let [block (assoc block
                                               :block/parent parent
                                               :block/level level)
-                                 parents' (conj (vec (butlast parents)) block)
+                                 parents' (conj (pop parent-stack) block)
                                  result' (conj result block)]
                              [others parents' result'])
 
-                           (> level-spaces parent-spaces)         ; child
+                           (nil? outdented-parent)                ; child
                            (let [parent (if uuid' [:block/uuid uuid'] (:page/id last-parent))
                                  block (cond->
                                         (assoc block
@@ -869,33 +876,21 @@
                                          ;; What if the input indentation is two spaces instead of 4 spaces
                                          (>= (- level-spaces parent-spaces) 1)
                                          (assoc :block/level (inc level)))
-                                 parents' (conj parents block)
+                                 parents' (conj parent-stack block)
                                  result' (conj result block)]
                              [others parents' result'])
 
-                           (< level-spaces parent-spaces)
-                           (cond
-                             (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
-                             (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                                   blocks (cons (assoc (first blocks)
-                                                       :block/level (dec level))
-                                                (rest blocks))]
-                               [blocks parents' result])
-
-                             :else
-                             (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
-                                   left (first r)
-                                   parent-id (if-let [block-id (:block/uuid (last f))]
-                                               [:block/uuid block-id]
-                                               page-id)
-                                   block (assoc block
-                                                :block/parent parent-id
-                                                :block/level (:block/level left)
-                                                :block/level-spaces (:block/level-spaces left))
-
-                                   parents' (->> (concat f [block]) vec)
-                                   result' (conj result block)]
-                               [others parents' result'])))]
+                           :else                                  ; irregular outdent
+                           (let [parent-id (if-let [block-id (:block/uuid last-parent)]
+                                             [:block/uuid block-id]
+                                             page-id)
+                                 block (assoc block
+                                              :block/parent parent-id
+                                              :block/level (:block/level outdented-parent)
+                                              :block/level-spaces (:block/level-spaces outdented-parent))
+                                 parents' (conj parent-stack block)
+                                 result' (conj result block)]
+                             [others parents' result']))]
                      (recur blocks parents result))))
         result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
     (concat result' other-blocks)))
