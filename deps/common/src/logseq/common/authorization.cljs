@@ -8,36 +8,49 @@
 
 (def ^:private jwks-ttl-ms (* 6 60 60 1000))
 (def ^:private token-ttl-ms (* 60 60 1000))
-(def ^:private token-capacity 200)
 
 (defonce ^:private *jwks-cache (atom {:url nil :keys nil :fetched-at 0}))
-(defonce ^:private *token-cache (atom {}))
+(defonce ^:private *token-cache-state
+  (atom {:tokens {}
+         :expiry-queue cljs.core/PersistentQueue.EMPTY}))
 
 (defn- get-now-ms []
   (.now js/Date))
 
 (defn- cached-token
   [token now-s now-ms]
-  (when-let [{:keys [payload exp cached-at]} (get @*token-cache token)]
+  (when-let [{:keys [payload exp cached-at]} (get-in @*token-cache-state [:tokens token])]
     (when (and (number? exp)
                (> exp now-s)
                (< (- now-ms cached-at) token-ttl-ms))
       payload)))
 
+(defn- remove-expired-tokens
+  [{:keys [tokens expiry-queue]} now-ms]
+  (loop [tokens tokens
+         expiry-queue expiry-queue]
+    (if-let [{:keys [token cached-at]} (peek expiry-queue)]
+      (if (>= (- now-ms cached-at) token-ttl-ms)
+        (recur (if (= cached-at (get-in tokens [token :cached-at]))
+                 (dissoc tokens token)
+                 tokens)
+               (pop expiry-queue))
+        {:tokens tokens :expiry-queue expiry-queue})
+      {:tokens tokens :expiry-queue expiry-queue})))
+
 (defn- cache-token!
-  [token payload now-ms]
+  [token payload]
   (let [exp (aget payload "exp")]
     (when (number? exp)
-      (swap! *token-cache assoc token {:payload payload :exp exp :cached-at now-ms}))
-    (when (> (count @*token-cache) token-capacity)
-      (swap! *token-cache
-             (fn [cache]
-               (into {}
-                     (remove (fn [[_ {:keys [exp cached-at]}]]
-                               (or (not (number? exp))
-                                   (<= exp (js/Math.floor (/ now-ms 1000)))
-                                   (>= (- now-ms cached-at) token-ttl-ms))))
-                     cache))))))
+      (let [cached-at (get-now-ms)]
+        (swap! *token-cache-state
+               (fn [cache]
+                 (-> (remove-expired-tokens cache cached-at)
+                     (assoc-in [:tokens token] {:payload payload
+                                                :exp exp
+                                                :cached-at cached-at})
+                     (update :expiry-queue conj {:token token
+                                                 :cached-at cached-at}))))))))
 
 (defn- get-jwks-keys
   [url & {:keys [force?]}]
@@ -133,5 +146,5 @@
                             signature
                             data)]
           (when ok
-            (cache-token! token payload now-ms)
+            (cache-token! token payload)
             payload))))))
