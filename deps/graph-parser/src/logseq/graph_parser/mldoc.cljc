@@ -147,10 +147,8 @@
     "Plain" content
     "Spaces" content
     "Link" (:full_text content)
-    ;; Nested_link is the AST node for [[page name]]; :content is the page name
-    ;; string. Without this case, collect-macro-source stops at this node
-    ;; whenever a page ref appears inside a fragmented macro.
-    "Nested_link" (str "[[" (:content content) "]]")
+    ;; Nested_link content already includes the outer page-reference brackets.
+    "Nested_link" (:content content)
     "Superscript" (str "^{" (apply str (map inline-ast->source content)) "}")
     "Subscript" (str "_{" (apply str (map inline-ast->source content)) "}")
     nil))
