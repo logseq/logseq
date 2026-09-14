@@ -148,7 +148,7 @@
     "Spaces" content
     "Link" (:full_text content)
     ;; Nested_link is the AST node for [[page name]]; :content is the page name
-    ;; string. Without this case, collect-macro-source aborts via when-let
+    ;; string. Without this case, collect-macro-source stops at this node
     ;; whenever a page ref appears inside a fragmented macro.
     "Nested_link" (str "[[" (:content content) "]]")
     "Superscript" (str "^{" (apply str (map inline-ast->source content)) "}")
@@ -238,25 +238,31 @@
                   :arguments (split-macro-arguments arguments)}]))))
 
 (defn- collect-macro-source
-  [items]
+  [items start]
   (loop [remaining items
-         source ""]
-    (when-let [[item & more] (seq remaining)]
+         offset start
+         fragments []
+         scanned 0]
+    (if-let [[item & more] (seq remaining)]
       (let [[typ content] item]
         (cond
           (= "Plain" typ)
-          (if-let [idx (string/index-of content "}}")]
-            (let [macro-source (str source (subs content 0 (+ idx 2)))]
-              (when-let [macro (macro-source->ast macro-source)]
-                (let [suffix (subs content (+ idx 2))]
-                  {:macro macro
-                   :suffix (when-not (string/blank? suffix) ["Plain" suffix])
-                   :remaining more})))
-            (recur more (str source content)))
+          (if-let [idx (string/index-of content "}}" offset)]
+            (let [end (+ idx 2)
+                  source (string/join "" (conj fragments (subs content offset end)))]
+              (if-let [macro (macro-source->ast source)]
+                {:macro macro :remaining remaining :offset end}
+                ;; Earlier items cannot contain another opener in an empty macro.
+                ;; Revisit the closing item in case it also starts a later macro.
+                {:skip (max 1 scanned)}))
+            (recur more 0 (conj fragments (subs content offset)) (inc scanned)))
 
           :else
-          (when-let [item-source (inline-ast->source item)]
-            (recur more (str source item-source))))))))
+          (if-let [item-source (inline-ast->source item)]
+            (recur more 0 (conj fragments item-source) (inc scanned))
+            ;; All openers before this barrier share the same failed scan.
+            {:skip scanned})))
+      {:skip scanned})))
 
 (defn- close-script-markup-in-macro
   ;; Appends a single "}" to the last argument to close the outermost
@@ -270,38 +276,40 @@
 (defn- recover-inline-macros
   [inline-list]
   (loop [remaining inline-list
+         offset 0
          result []]
     (if-let [[item & more] (seq remaining)]
       (let [[typ content] item]
         (cond
-          (and (= "Plain" typ)
-               (string/includes? content "{{"))
-          (let [idx (string/index-of content "{{")
-                prefix (subs content 0 idx)
-                start-item ["Plain" (subs content idx)]]
-            (if-let [{:keys [macro suffix remaining]} (collect-macro-source (cons start-item more))]
-              (recur (if suffix
-                       (cons suffix remaining)
-                       remaining)
+          (= "Plain" typ)
+          (if-let [idx (string/index-of content "{{" offset)]
+            (let [{:keys [macro skip] :as scan} (collect-macro-source remaining idx)]
+              (if macro
+                (let [prefix (subs content offset idx)]
+                  (recur (:remaining scan) (:offset scan)
+                         (cond-> result
+                           (not (string/blank? prefix)) (conj ["Plain" prefix])
+                           true (conj macro))))
+                (recur (drop skip remaining) 0
+                       (into (conj result (if (zero? offset)
+                                            item
+                                            ["Plain" (subs content offset)]))
+                             (take (dec skip) more)))))
+            (let [suffix (subs content offset)]
+              (recur more 0
                      (cond-> result
-                       (not (string/blank? prefix)) (conj ["Plain" prefix])
-                       true (conj macro)))
-              (recur more (conj result item))))
+                       (or (zero? offset) (not (string/blank? suffix)))
+                       (conj (if (zero? offset) item ["Plain" suffix]))))))
 
           (and (= "Macro" typ)
                (seq (:arguments content))
                (unclosed-script-markup? (last (:arguments content)))
                (= "Plain" (ffirst more))
                (string/starts-with? (second (first more)) "}"))
-          (let [[_ plain] (first more)
-                suffix (subs plain 1)]
-            (recur (if (string/blank? suffix)
-                     (rest more)
-                     (cons ["Plain" suffix] (rest more)))
-                   (conj result (close-script-markup-in-macro item))))
+          (recur more 1 (conj result (close-script-markup-in-macro item)))
 
           :else
-          (recur more (conj result item))))
+          (recur more 0 (conj result item))))
       result)))
 
 (defn- normalize-macro-asts
