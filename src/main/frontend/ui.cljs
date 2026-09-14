@@ -84,8 +84,29 @@
 
 (defonce textarea-autosize (gobj/get TextareaAutosize "default"))
 
-(hsx/defc textarea [opts & children]
-  (into [:> textarea-autosize opts] children))
+(defonce ^:private field-sizing-supported?
+  (boolean
+   (and (exists? js/CSS)
+        (.supports js/CSS "field-sizing" "content"))))
+
+(hsx/defc textarea
+  "A textarea whose height follows its content. Where the browser supports the
+   CSS `field-sizing: content` (Chromium 123, Safari 26.2, Firefox 152) this is
+   a plain textarea and no JavaScript measures it on any keystroke; `:minRows`
+   becomes a `min-height` in line-height units. Elsewhere it is the
+   react-textarea-autosize component as before, with its `:cacheMeasurements`
+   prop passed through."
+  [{:keys [minRows] :as opts} & children]
+  (if field-sizing-supported?
+    (let [opts (-> opts
+                   (dissoc :minRows :maxRows :cacheMeasurements :onHeightChange)
+                   ;; `rows` has no effect under field-sizing: content, so the
+                   ;; minimum is a min-height in line-height units.
+                   (update :style assoc
+                           :field-sizing "content"
+                           :min-height (str (or minRows 1) "lh")))]
+      (into [:textarea opts] children))
+    (into [:> textarea-autosize opts] children)))
 
 (hsx/defc virtualized-list [opts & children]
   (into [:> Virtuoso opts] children))
