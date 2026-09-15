@@ -596,29 +596,49 @@
           (is false (str error)))))))
 
 (deftest cycle-todo-uses-current-edit-block-test
-  (let [edit-block {:db/id 1
-                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                    :logseq.property/status {:db/ident :logseq.property/status.todo}}
-        tx-calls (atom [])
-        cycle-calls (atom [])]
-    (with-redefs [state/get-editor-action (constantly nil)
-                  editor/get-selected-blocks (constantly nil)
-                  state/get-edit-block (constantly edit-block)
-                  state/get-edit-input-id (constantly "edit-block-test")
-                  gdom/getElement (constantly #js {})
-                  state/get-edit-pos (constantly 0)
-                  conn/get-db (constantly :test-db)
-                  db-transact/apply-outliner-ops (fn [db ops opts]
-                                                   (reset! tx-calls [db ops opts])
-                                                   :tx)
-                  editor/db-based-cycle-todo! (fn [block]
-                                                (swap! cycle-calls conj block))]
-      (editor/cycle-todo!)
-      (is (= [edit-block] @cycle-calls))
-      (is (= [nil
-              []
-              {:outliner-op :cycle-todos}]
-             @tx-calls)))))
+  ;; cycle-todo! re-fetches the block before cycling (see db-test#1177), so
+  ;; this now exercises the same async pattern as the move-selected-blocks
+  ;; tests above instead of asserting synchronously right after the call.
+  (async done
+    (let [edit-block {:db/id 1
+                      :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                      :logseq.property/status {:db/ident :logseq.property/status.todo}}
+          tx-calls (atom [])
+          cycle-calls (atom [])
+          get-block-calls (atom [])]
+      (-> (p/with-redefs [state/get-editor-action (constantly nil)
+                          editor/get-selected-blocks (constantly nil)
+                          state/get-edit-block (constantly edit-block)
+                          state/get-edit-input-id (constantly "edit-block-test")
+                          state/get-current-repo (constantly "test")
+                          gdom/getElement (constantly #js {})
+                          state/get-edit-pos (constantly 0)
+                          conn/get-db (constantly :test-db)
+                          db-async/<get-block (fn [repo id-or-uuid opts]
+                                                (swap! get-block-calls conj [repo id-or-uuid opts])
+                                                (p/resolved edit-block))
+                          db-transact/apply-outliner-ops (fn [db ops opts]
+                                                            (reset! tx-calls [db ops opts])
+                                                            :tx)
+                          editor/db-based-cycle-todo! (fn [block]
+                                                        (swap! cycle-calls conj block))]
+            (-> (try
+                  (editor/cycle-todo!)
+                  (catch :default error
+                    (p/rejected error)))
+                (p/then
+                 (fn []
+                   (is (= [["test" (:block/uuid edit-block) {:children? false}]]
+                          @get-block-calls))
+                   (is (= [edit-block] @cycle-calls))
+                   (is (= [nil
+                           []
+                           {:outliner-op :cycle-todos}]
+                          @tx-calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
 
 (deftest delete-block-aux-uses-passed-block-test
   (let [block-id #uuid "11111111-1111-1111-1111-111111111111"

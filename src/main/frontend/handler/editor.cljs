@@ -851,9 +851,17 @@
     (if-let [blocks (seq (get-selected-blocks))]
       (cycle-todos!)
       (when-let [edit-block (state/get-edit-block)]
-        (ui-outliner-tx/transact!
-         {:outliner-op :cycle-todos}
-         (db-based-cycle-todo! edit-block))))))
+        ;; `edit-block` is a snapshot taken when edit mode started, so its
+        ;; :logseq.property/status can be stale after an earlier toggle in
+        ;; the same edit session (see db-test#1177). Re-fetch the block so
+        ;; the status cycles from its current value instead of repeating
+        ;; the same transition every time.
+        (p/let [block (db-async/<get-block (state/get-current-repo) (:block/uuid edit-block)
+                                           {:children? false})]
+          (when block
+            (ui-outliner-tx/transact!
+             {:outliner-op :cycle-todos}
+             (db-based-cycle-todo! block))))))))
 
 (defn delete-block-aux!
   ([block]
