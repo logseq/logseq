@@ -6,7 +6,8 @@
   without assuming that the URL itself contains a file extension."
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.asset :as db-asset]))
 
 (defn- asset-type->keyword
   "Coerces `asset-type` from an asset entity into a lowercase keyword.
@@ -28,11 +29,62 @@
       (some-> (util/get-file-ext href) keyword)
       (asset-type->keyword (:logseq.property.asset/type asset-block))))
 
+(def ^:private display-title-max-len 48)
+
+(defn url-like?
+  [s]
+  (and (string? s)
+       (or (string/starts-with? s "http://")
+           (string/starts-with? s "https://")
+           (string/starts-with? s "www."))))
+
+(defn- truncate-display-title
+  [s]
+  (if (and (string? s) (> (count s) display-title-max-len))
+    (str (subs s 0 (- display-title-max-len 3)) "...")
+    (str s)))
+
+(defn display-url-title
+  "Readable label for a remote URL. Uses the file stem so Amazon poster
+  hashes stay on one line instead of wrapping into fragments."
+  [url]
+  (let [stem (when (string? url) (db-asset/asset-name->title url))]
+    (truncate-display-title
+     (if (or (string/blank? stem) (= stem url))
+       url
+       stem))))
+
+(defn display-asset-title
+  "Visible asset title. Never returns a raw URL — those wrap with
+  `word-break: break-all` and look like garbled filename fragments."
+  [asset-block]
+  (let [title (:block/title asset-block)
+        external-url (:logseq.property.asset/external-url asset-block)]
+    (cond
+      (and (string? title)
+           (not (string/blank? title))
+           (not (url-like? title)))
+      (truncate-display-title title)
+
+      (string? external-url)
+      (display-url-title external-url)
+
+      (url-like? title)
+      (display-url-title title)
+
+      :else
+      (truncate-display-title (or title "")))))
+
 (defn link-file-name
   "Builds the display file name for `asset-block` using resolved extension `ext`."
   [asset-block ext]
-  (cond-> (str (:block/title asset-block))
-    ext (str "." (name ext))))
+  (let [title (display-asset-title asset-block)
+        ext-name (when ext (name ext))]
+    (cond-> title
+      (and ext-name
+           (not (string/ends-with? (string/lower-case title)
+                                   (str "." ext-name))))
+      (str "." ext-name))))
 
 (defn asset-file-name
   [asset-block]

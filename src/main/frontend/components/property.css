@@ -667,3 +667,27 @@ a.control-link {
     }
   }
 }
+
+.ls-properties-area .external-link,
+.ls-properties-area .asset-ref,
+.ls-properties-area .asset-title-slot,
+.ls-properties-area .asset-image-fallback {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.ls-properties-area .property-url-image .asset-container,
+.ls-properties-area .property-url-image .asset-container img {
+  max-width: 160px;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.property-select .item-results-wrap #ui__ac-inner {
+  max-height: 240px;
+}

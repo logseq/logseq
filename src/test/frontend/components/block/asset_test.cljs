@@ -1,6 +1,8 @@
 (ns frontend.components.block.asset-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.block.asset :as block-asset]))
+            [clojure.string :as string]
+            [frontend.components.block.asset :as block-asset]
+            [logseq.db.frontend.asset :as db-asset]))
 
 (deftest link-ext-test
   (testing "falls back to asset type when the URL has no extension"
@@ -15,7 +17,20 @@
     (is (= "test.pdf"
            (block-asset/link-file-name
             {:block/title "test"}
-            :pdf)))))
+            :pdf))))
+  (testing "does not append an extension that the title already has"
+    (is (= "test.pdf"
+           (block-asset/link-file-name
+            {:block/title "test.pdf"}
+            :pdf))))
+  (testing "does not display a raw poster URL as the file name"
+    (let [url "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg?V1_SX300"
+          name (block-asset/link-file-name
+                {:block/title url
+                 :logseq.property.asset/external-url url}
+                :jpg)]
+      (is (not (re-find #"https://" name)))
+      (is (string/includes? name "MV5BNT17G7zk")))))
 
 (deftest asset-relative-path-test
   (testing "builds the graph-relative asset file path from an asset block"
@@ -64,3 +79,28 @@
            :logseq.property.asset/type "png"}
           false
           true)))))
+
+(deftest asset-name->title-from-url-test
+  (testing "strips scheme, path, query, and extension from poster URLs"
+    (is (= "MV5BNT17G7zk"
+           (db-asset/asset-name->title
+            "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg?V1_SX300"))))
+  (testing "keeps the stem when the URL has no extension"
+    (is (= "MV5BNT17G7zk"
+           (db-asset/asset-name->title
+            "https://m.media-amazon.com/images/M/MV5BNT17G7zk"))))
+  (testing "still works for ordinary file basenames"
+    (is (= "poster"
+           (db-asset/asset-name->title "poster.png")))))
+
+(deftest display-asset-title-avoids-raw-urls-test
+  (testing "prefers a human title over a URL"
+    (is (= "Inception poster"
+           (block-asset/display-asset-title
+            {:block/title "Inception poster"
+             :logseq.property.asset/external-url "https://m.media-amazon.com/images/M/MV5B.jpg"}))))
+  (testing "falls back to the URL file stem instead of the full URL"
+    (is (= "MV5BNT17G7zk"
+           (block-asset/display-asset-title
+            {:block/title "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"
+             :logseq.property.asset/external-url "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"})))))

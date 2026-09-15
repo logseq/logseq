@@ -16,6 +16,43 @@
   [media-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
+(def ^:private image-url-hosts
+  "Hosts that serve images even when the URL has no file extension.
+  Movie-graph poster properties commonly use Amazon/IMDb/TMDB CDNs."
+  #{"m.media-amazon.com"
+    "images-na.ssl-images-amazon.com"
+    "images-amazon.com"
+    "ia.media-imdb.com"
+    "image.tmdb.org"
+    "www.themoviedb.org"
+    "i.imgur.com"
+    "imgur.com"})
+
+(def ^:private image-url-exts
+  #{"gif" "svg" "jpeg" "ico" "png" "jpg" "bmp" "webp" "avif" "cr2"})
+
+(defn- http-url?
+  [s]
+  (and (string? s)
+       (or (string/starts-with? s "http://")
+           (string/starts-with? s "https://"))))
+
+(defn- url-hostname
+  [s]
+  (when (http-url? s)
+    (try
+      (string/lower-case (.-hostname (js/URL. s)))
+      (catch :default _ nil))))
+
+(defn image-url?
+  "True when `s` should render as an image: an HTTP(S) URL with an image
+  extension, or a known image CDN host (Amazon/IMDb/TMDB posters)."
+  [s]
+  (boolean
+   (and (http-url? s)
+        (or (media-link? image-url-exts s)
+            (contains? image-url-hosts (url-hostname s))))))
+
 (defn get-current-line-by-pos
   [s pos]
   (let [lines (string/split-lines s)

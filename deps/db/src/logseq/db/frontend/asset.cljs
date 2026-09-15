@@ -18,12 +18,38 @@
         (.then (fn [dig] (js/Uint8Array. dig)))
         (.then decode-digest))))
 
+(defn- strip-url-suffix
+  "Drop query/hash so URL pathnames can be parsed like file names."
+  [s]
+  (when (string? s)
+    (first (string/split s #"[?#]" 2))))
+
+(defn- path-basename
+  "Last path segment of a file path or URL."
+  [s]
+  (when-let [s (strip-url-suffix s)]
+    (let [normalized (string/replace s #"\\+" "/")
+          idx (string/last-index-of normalized "/")]
+      (if idx
+        (subs normalized (inc idx))
+        normalized))))
+
 (defn asset-path->type
   "Create asset type given asset path"
   [path]
-  (string/lower-case (.substr (node-path/extname path) 1)))
+  (let [path (or (strip-url-suffix path) path)]
+    (string/lower-case (.substr (node-path/extname path) 1))))
 
 (defn asset-name->title
-  "Create asset title given asset path's basename"
+  "Create asset title given a basename, file path, or URL.
+
+  Remote poster URLs (Amazon/IMDb/TMDB) must not become the visible title —
+  callers display the file stem (`MV5B…`) instead of the full URL."
   [path-basename]
-  (.-name (node-path/parse path-basename)))
+  (let [base (or (path-basename path-basename) "")]
+    (if (string/blank? base)
+      ""
+      (let [parsed-name (.-name (node-path/parse base))]
+        (if (string/blank? parsed-name)
+          base
+          parsed-name)))))

@@ -229,7 +229,8 @@
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
         [load-failed? set-load-failed!] (hooks/use-state false)
-        *prev-src (hooks/use-ref src)]
+        *prev-src (hooks/use-ref src)
+        display-title (block-asset/display-asset-title asset-block)]
     (when (not= (hooks/deref *prev-src) src)
       (hooks/set-ref! *prev-src src)
       (set-load-failed! false))
@@ -254,6 +255,9 @@
                             (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
+          fallback-label (if (string/blank? display-title)
+                           (block-asset/display-url-title (or title src))
+                           display-title)
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
@@ -268,7 +272,7 @@
         :ref *el-ref}
        (block-image/image-or-fallback
         {:src src'
-         :title title
+         :title (or (not-empty fallback-label) title)
          :gallery-view? gallery-view?
          :metadata metadata
          :load-failed? load-failed?
@@ -596,7 +600,9 @@
           (contains? config/video-formats ext)
           (asset-video config src metadata)
 
-          (contains? (common-config/img-formats) ext)
+          (or (contains? (common-config/img-formats) ext)
+              (text-util/image-url? href)
+              (text-util/image-url? src))
           (resizable-image config title src metadata full_text true)
 
           (= ext :pdf)
@@ -1437,10 +1443,11 @@
      ;; markdown
      (string/starts-with? (string/triml full-text) "!")
 
-     ;; image http link
+     ;; image http link, including extension-less Amazon/IMDb/TMDB posters
      (and (or (string/starts-with? full-text "http://")
               (string/starts-with? full-text "https://"))
-          (text-util/media-link? media-formats s)))))
+          (or (text-util/media-link? media-formats s)
+              (text-util/image-url? s))))))
 
 (defn- relative-assets-path->absolute-path
   [path]
@@ -1533,10 +1540,12 @@
     (page-reference config s label)
 
     (path/protocol-url? s)
-    (->elem :a {:href s
-                :data-href s
-                :target "_blank"}
-            (map-inline config label))
+    (if (show-link? s (or full_text s))
+      (media-link config url s label metadata full_text)
+      (->elem :a {:href s
+                  :data-href s
+                  :target "_blank"}
+              (map-inline config label)))
 
     (show-link? s full_text)
     (media-link config url s label metadata full_text)
@@ -2429,11 +2438,16 @@
 
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
-  (let [format :markdown
-        block (if-not (:block.temp/ast-title block)
-                (merge block (block/parse-title-and-body uuid format (:block/title block)))
-                block)
-        block-ast-title (:block.temp/ast-title block)
+  (if (and (entity/url-property-value? block)
+           (text-util/image-url? (:block/title block)))
+    (let [url (:block/title block)]
+      [:span.block-title-wrap.property-url-image
+       (image-link config nil url nil nil url)])
+    (let [format :markdown
+          block (if-not (:block.temp/ast-title block)
+                  (merge block (block/parse-title-and-body uuid format (:block/title block)))
+                  block)
+          block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         block-ref? (:block-ref? config)
@@ -2497,7 +2511,7 @@
                          (assoc :parent-heading heading))]
            (if video-title?
              (video-inline-segments-cp config' block-ast-title)
-             (map-inline config' block-ast-title)))))))))
+             (map-inline config' block-ast-title))))))))))
 
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
