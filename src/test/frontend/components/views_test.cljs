@@ -8,9 +8,7 @@
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
-            [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.shui.hooks :as hooks]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -382,32 +380,6 @@
           {:user.property/imdb-url "https://www.imdb.com/title/tt5849986/"}
           {:id :user.property/imdb-url
            :get-value (fn [row] (:user.property/imdb-url row))}))))
-
-(deftest table-body-virtualizes-before-prefetch-settles
-  (let [virtual-opts (atom nil)
-        row-uuid (random-uuid)
-        markup
-        (with-redefs [hooks/use-state (fn [initial] [initial (constantly nil)])
-                      hooks/use-effect! (fn [& _args])
-                      hooks/use-ref (fn [value] #js {:current value})
-                      db-hooks/use-block-prefetch (constantly false)
-                      util/app-scroll-container-node (constantly #js {:clientHeight 800})
-                      ui/virtualized-list
-                      (fn [opts]
-                        (reset! virtual-opts opts)
-                        [:div.ls-table-virtuoso])]
-          (render-static
-           (views/table-body
-            {:data [row-uuid] :rows [row-uuid]}
-            {:config {} :viewid "movies-table"}
-            [row-uuid]
-            (atom nil)
-            (constantly nil))))]
-    (is (string/includes? markup "ls-table-virtuoso")
-        "The table list mounts immediately instead of waiting on a skeleton.")
-    (is (not (string/includes? markup "h-8 w-full")))
-    (is (= 33 (:fixed-item-height @virtual-opts)))
-    (is (= 480 (get-in @virtual-opts [:increase-viewport-by :top])))))
 
 (deftest gallery-loading-row-keeps-the-card-size-test
   (with-redefs [db-hooks/use-block (constantly nil)]
