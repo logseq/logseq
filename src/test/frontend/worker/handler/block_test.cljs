@@ -249,6 +249,65 @@
                               :block.temp/refs-count}
                             (keys block)))))))
 
+(deftest canonical-block-numbers-ref-typed-list-siblings-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          type-uuid (random-uuid)
+          a-uuid (random-uuid)
+          b-uuid (random-uuid)
+          c-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "List page"
+                     :block/name "list page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid parent-uuid
+                     :block/tx-id 1
+                     :block/title "parent"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -3
+                     :block/uuid type-uuid
+                     :block/tx-id 1
+                     :block/title "number"
+                     :logseq.property/created-from-property :logseq.property/order-list-type}
+                    {:db/id -4
+                     :block/uuid a-uuid
+                     :block/tx-id 1
+                     :block/title "a"
+                     :block/page -1
+                     :block/parent -2
+                     :block/order "a1"
+                     :logseq.property/order-list-type -3}
+                    {:db/id -5
+                     :block/uuid b-uuid
+                     :block/tx-id 1
+                     :block/title "b"
+                     :block/page -1
+                     :block/parent -2
+                     :block/order "a2"
+                     :logseq.property/order-list-type -3}
+                    {:db/id -6
+                     :block/uuid c-uuid
+                     :block/tx-id 1
+                     :block/title "c"
+                     :block/page -1
+                     :block/parent -2
+                     :block/order "a3"
+                     :logseq.property/order-list-type -3}])
+      (is (= [1 2 3]
+             (mapv (fn [block-uuid]
+                     (:block.temp/order-list-index
+                      (canonical-block @conn (d/entity @conn [:block/uuid block-uuid]))))
+                   [a-uuid b-uuid c-uuid]))
+          "Sibling number-list indexes stay 1. 2. 3. when the type is a closed-value ref."))))
+
 (deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)
