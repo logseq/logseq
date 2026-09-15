@@ -52,6 +52,17 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
+(deftest empty-placeholder-identity-maps-as-empty-test
+  (is (true? (#'property-value/empty-placeholder-value?
+              :logseq.property/empty-placeholder)))
+  (is (true? (#'property-value/empty-placeholder-value?
+              {:db/id 9
+               :db/ident :logseq.property/empty-placeholder}))
+      "Canonical rows inline empty-placeholder as a shallow identity, not the keyword.")
+  (is (false? (#'property-value/empty-placeholder-value?
+               {:db/id 10
+                :db/ident :logseq.property/priority.low}))))
+
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?
        {:property/closed-values

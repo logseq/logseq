@@ -308,6 +308,31 @@
                    [a-uuid b-uuid c-uuid]))
           "Sibling number-list indexes stay 1. 2. 3. when the type is a closed-value ref."))))
 
+(deftest canonical-block-keeps-empty-placeholder-priority-ident-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Priority page"
+                     :block/name "priority page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid block-uuid
+                     :block/tx-id 1
+                     :block/title "No priority test"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"
+                     :logseq.property/priority :logseq.property/empty-placeholder}])
+      (is (= :logseq.property/empty-placeholder
+             (:db/ident (:logseq.property/priority
+                         (canonical-block @conn (d/entity @conn [:block/uuid block-uuid])))))
+          "The dashed chip matches on :db/ident after shallow-ref-identity."))))
+
 (deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)

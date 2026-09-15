@@ -113,6 +113,11 @@
     (testing "unset priority stays hidden because it has no default"
       (is (not (contains? (positioned-idents db (:db/id task-only) :block-left)
                           :logseq.property/priority))))
+    (testing "No priority writes empty-placeholder and still positions the dashed chip"
+      (d/transact! conn [{:db/id (:db/id plain)
+                          :logseq.property/priority :logseq.property/empty-placeholder}])
+      (is (contains? (positioned-idents @conn (:db/id plain) :block-left)
+                     :logseq.property/priority)))))
     (testing "untagged blocks do not get a status icon"
       (is (not (contains? (positioned-idents db (:db/id plain) :block-left)
                           :logseq.property/status))))

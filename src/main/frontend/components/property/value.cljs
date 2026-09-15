@@ -91,6 +91,14 @@
   [m]
   (and (map? m) (:db/id m)))
 
+(defn- empty-placeholder-value?
+  "Canonical rows inline empty-placeholder as a shallow identity map.
+  select-item only painted the dashed icon for the bare keyword."
+  [value]
+  (or (= value :logseq.property/empty-placeholder)
+      (and (map? value)
+           (= (:db/ident value) :logseq.property/empty-placeholder))))
+
 (defn- value->db-id
   [value]
   (cond
@@ -1496,7 +1504,7 @@
     [:div.select-item.cursor-pointer
      {:class (multiple-value-item-class opts)}
      (cond
-       (= value :logseq.property/empty-placeholder)
+       (empty-placeholder-value? value)
        (property-empty-btn-value property opts)
 
        closed-values?
@@ -2091,9 +2099,8 @@
         select-type?' (or (select-type? block property)
                           (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
-        value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
-                nil
-                value*)]
+        empty-placeholder? (empty-placeholder-value? value*)
+        value (if empty-placeholder? nil value*)]
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
@@ -2132,7 +2139,13 @@
                                  select-opts
                                  (assoc opts
                                         :editing? editing?
-                                        :value-render (fn [] (select-item property type value opts))))))
+                                        :value-render (fn []
+                                                        (select-item
+                                                         property type
+                                                         (if empty-placeholder?
+                                                           :logseq.property/empty-placeholder
+                                                           value)
+                                                         opts)))))))
         (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
