@@ -3652,7 +3652,7 @@
      :partition (:partition view-data)
      :view-data view-data}))
 
-(hsx/defc loaded-view-aux
+(hsx/defc ^:large-vars/cleanup-todo loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
   (let [[input set-input!] (hooks/use-state "")

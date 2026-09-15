@@ -563,10 +563,9 @@
       (doseq [idx (range 66 93)]
         (is (some? (#'views/table-row-at first-window movies-offset 66 idx))
             (str "Offset 66 must cover visible Movies row " idx ".")))
-      (let [next-offset (mapv (fn [_] (random-uuid)) (range 27))]
-        (is (= (nth movies-offset 10)
-               (#'views/table-row-at first-window nil 90 movies-offset 66 76))
-            "The previous offset window stays addressable until the next one arrives.")))
+      (is (= (nth movies-offset 10)
+             (#'views/table-row-at first-window nil 90 movies-offset 66 76))
+          "The previous offset window stays addressable until the next one arrives."))
     (let [short-offset (mapv (fn [_] (random-uuid)) (range 11))]
       (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
           "A shorter Tags offset window must not throw on stale first-window bounds."))))
