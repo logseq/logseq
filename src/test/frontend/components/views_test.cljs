@@ -311,10 +311,14 @@
   (let [row-uuid (random-uuid)
         preview {:block/uuid row-uuid
                  :block/title "Æon Flux (2005)"
-                 :block.temp/first-window-preview? true}]
+                 :block.temp/first-window-preview? true}
+        calls (atom [])]
     (is (true? (#'views/first-window-title-preview? preview)))
     (is (= "Æon Flux (2005)" (#'views/first-window-title-text preview)))
-    (with-redefs [db-hooks/use-block (fn [_] nil)]
+    (with-redefs [db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! calls conj requested-uuid)
+                    nil)]
       (is (string/includes?
            (render-static
             (views/lazy-item
@@ -324,7 +328,9 @@
              (fn [item]
                (.createElement react "span" nil (#'views/first-window-title-text item)))))
            "Æon Flux (2005)")
-          "First-window titles paint when view-data arrives, before the block snapshot."))))
+          "First-window titles paint when view-data arrives, before the block snapshot.")
+      (is (empty? @calls)
+          "Preview paint must not subscribe use-block on the first frame."))))
 
 (deftest filter-value-renders-referenced-uuid-content-test
   (let [value-uuid (random-uuid)
@@ -636,6 +642,15 @@
   (is (true? (#'views/eager-table-cells? false {:id :user.property/actors} false)))
   (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
       "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
+
+(deftest first-paint-skips-unpinned-property-columns-test
+  (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]
+    (is (= [{:id :block/title} {:id :select}]
+           (#'views/visible-unpinned-columns columns false))
+        "React Doctor counted 290 table-cell-container mounts on first paint.")
+    (is (= columns
+           (#'views/visible-unpinned-columns columns true))
+        "Property columns mount after the name column has painted.")))
 
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))

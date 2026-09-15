@@ -1069,9 +1069,15 @@
   (let [page-uuid (if (uuid? page) page (:block/uuid page))
         page-name (:block/name page)]
     ^{:key (str (or page-uuid page-name))}
-    (if page-uuid
+    (if (and page-uuid
+             (not (and (:skip-async-load? config)
+                       (or (:block/title page)
+                           (true? (:block.temp/first-window-preview? page))))))
       [subscribed-page-cp config page-uuid]
-      [page-cp-inner config page])))
+      [page-cp-inner config (if (map? page)
+                              page
+                              {:block/uuid page-uuid
+                               :block/name page-name})])))
 
 (hsx/defc asset-reference
   [config title path]

@@ -553,7 +553,8 @@
             (render block*)))]
        [:div])
 
-     (when-not (util/mobile?)
+     (when (and (not (util/mobile?))
+                (not (first-window-title-preview? block)))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
           [:div.flex.flex-row.items-center
@@ -584,7 +585,8 @@
    :cell (fn [_table row _column]
            (when-let [page (:block/page row)]
              (when-let [page-cp (state/get-component :block/page-cp)]
-               (page-cp {:disable-preview? true} page))))})
+               (page-cp {:disable-preview? true
+                         :skip-async-load? true} page))))})
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column? add-page-column? advanced-query?]
@@ -1256,6 +1258,18 @@
                      (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
          (clear-selection!))))))
 
+(defn- always-eager-column?
+  [column]
+  (contains? #{:block/title :select :id} (:id column)))
+
+(defn- visible-unpinned-columns
+  "Movies first paint mounted 24 cells per row. Keep name/select/id
+  on the first frame and mount property columns after that paint."
+  [unpinned-columns mount-unpinned-cells?]
+  (if (false? mount-unpinned-cells?)
+    (filterv always-eager-column? unpinned-columns)
+    (vec unpinned-columns)))
+
 (defn- table-header
   [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option}]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
@@ -1269,7 +1283,11 @@
                       :content (table-header-cell table column)
                       :disabled? (= (:id column) :select)})
         pinned-items (mapv build-item pinned)
-        unpinned-items (if show-add-property?
+        unpinned (visible-unpinned-columns
+                  unpinned
+                  (:mount-unpinned-cells? option))
+        unpinned-items (if (and show-add-property?
+                                (not (false? (:mount-unpinned-cells? option))))
                          (conj (mapv build-item unpinned)
                                {:id "add property"
                                 :prop {:style {:width "-webkit-fill-available"
@@ -1309,10 +1327,6 @@
      (if in-view?
        (cell-render-f)
        cell-placeholder)]))
-
-(defn- always-eager-column?
-  [column]
-  (contains? #{:block/title :select :id} (:id column)))
 
 (defn- eager-table-cells?
   "Virtuoso windows rows. Unpinned property columns stay lazy. The name
@@ -1441,11 +1455,14 @@
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
-        unpinned-columns (if show-add-property?
-                           (conj (vec unpinned)
-                                 {:id :add-property
-                                  :cell (fn [_table _row _column])})
-                           unpinned)
+        unpinned-columns (visible-unpinned-columns
+                          (if (and show-add-property?
+                                   (not (false? mount-unpinned-cells?)))
+                            (conj (vec unpinned)
+                                  {:id :add-property
+                                   :cell (fn [_table _row _column])})
+                            unpinned)
+                          mount-unpinned-cells?)
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column cell-option]
                      (let [id (str (:id row) "-" (:id column))
@@ -2368,13 +2385,32 @@
     [:div.ls-card-item {:aria-hidden true}]
     [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))
 
+(hsx/defc lazy-item-subscribed
+  [row-uuid preview item-render table-view? gallery-view?]
+  (let [item (or (db-hooks/use-block row-uuid) preview)]
+    (if item
+      (item-render item)
+      (lazy-item-placeholder table-view? gallery-view?))))
+
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view? row-previews]} item-render]
   (let [row-uuid (util/nth-safe data idx)
         preview (get row-previews row-uuid)
-        item (or (db-hooks/use-block row-uuid) preview)]
-    (if item
-      (item-render item)
+        [subscribe? set-subscribe!] (hooks/use-state (nil? preview))]
+    (hooks/use-effect!
+     (fn []
+       (when-not subscribe?
+         (set-subscribe! true))
+       js/undefined)
+     [])
+    (cond
+      (and preview (not subscribe?))
+      (item-render preview)
+
+      row-uuid
+      [lazy-item-subscribed row-uuid preview item-render table-view? gallery-view?]
+
+      :else
       (lazy-item-placeholder table-view? gallery-view?))))
 
 (hsx/defc table-body
@@ -2399,9 +2435,10 @@
         row-previews (:row-previews option)
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
         (use-view-row-prefetch prefetch-source
-                               initial-prefetch-count
+                               (if (seq row-previews) 0 initial-prefetch-count)
                                prefetch-window-size)
-        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state false)
+        mount-unpinned-cells? (:mount-unpinned-cells? option)
+        set-mount-unpinned-cells! (:set-mount-unpinned-cells! option)
         on-viewport-filled! (:on-viewport-filled! option)
         total-count (table-total-count all-row-ids (:items-count option))
         option (assoc option
@@ -2468,7 +2505,9 @@
                                  props)))
                           (when (seq props)
                             (set-items-rendered! true)
-                            (set-mount-unpinned-cells! true)
+                            (when set-mount-unpinned-cells!
+                              (js/requestAnimationFrame
+                               #(set-mount-unpinned-cells! true)))
                             (when (and on-viewport-filled!
                                        (pos? (or (some-> scroll-parent .-scrollTop) 0)))
                               (on-viewport-filled!
@@ -2479,7 +2518,11 @@
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
-  (let [[items-rendered? set-items-rendered!] (hooks/use-state false)]
+  (let [[items-rendered? set-items-rendered!] (hooks/use-state false)
+        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state false)
+        option (assoc option
+                      :mount-unpinned-cells? mount-unpinned-cells?
+                      :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar

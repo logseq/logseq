@@ -11,9 +11,11 @@
   (->> [{:id :block/title
          :name (t :page/name)
          :cell (fn [_table row _column]
-                 (component-block/page-cp {:show-non-exists-page? true
-                                           :skip-async-load? true
-                                           :with-tags? false} row))
+                 (if (true? (:block.temp/first-window-preview? row))
+                   [:span.page-ref (some-> (:block/title row) str)]
+                   (component-block/page-cp {:show-non-exists-page? true
+                                             :skip-async-load? true
+                                             :with-tags? false} row)))
          :type :string}
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
