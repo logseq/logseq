@@ -276,7 +276,7 @@
         (is (empty? (filter #(= :notification (first %)) @calls))
             "A resolved user class titled Tag must not be treated as built-in #Tag")
         (is (seq (filter #(= :apply-outliner-ops (first %)) @calls))
-            "create-page should run for a resolved user tag"))))))
+            "create-page should run for a resolved user tag")))))
 
 (deftest-async create-page-allows-db-less-page-tag
   (let [calls (atom [])
@@ -301,4 +301,4 @@
         (is (empty? (filter #(= :notification (first %)) @calls))
             "db-less #Page must match the worker and not be rejected")
         (is (seq (filter #(= :apply-outliner-ops (first %)) @calls))
-            "create-page should run for #Page"))))))
+            "create-page should run for #Page")))))
