@@ -2149,12 +2149,18 @@
   [view-uuid window-context full-context]
   {:primary [:view-data view-uuid (or window-context full-context)]})
 
+(defn- offset-view-row-count
+  "One screen is already painted. Fetch the current screen plus the next
+  so rapid scroll does not run off the window mid-fetch."
+  [screen-rows]
+  (min view-prefetch-max-rows (* 2 (max 0 screen-rows))))
+
 (defn- offset-view-context
   [window-context row-offset]
   (when (and window-context (integer? row-offset) (pos? row-offset))
     (cond-> (assoc window-context :row-offset row-offset)
       (integer? (:initial-row-count window-context))
-      (update :initial-row-count inc))))
+      (update :initial-row-count offset-view-row-count))))
 
 (defn- offset-view-data-key
   "Remaining-id leftover collected 40938 pages in 84ms, sorted in 269ms,
@@ -2292,6 +2298,8 @@
                                          item-height))]
        [start (max start end)]))))
 
+(def ^:private offset-prefetch-lead-rows 8)
+
 (defn- offset-window-covers-visible?
   [row-offset window-size visible-start visible-end]
   (and (integer? row-offset)
@@ -2301,6 +2309,13 @@
        (integer? visible-end)
        (<= row-offset visible-start)
        (>= (+ row-offset (dec window-size)) visible-end)))
+
+(defn- offset-window-near-end?
+  [row-offset window-size visible-end]
+  (and (integer? row-offset)
+       (integer? window-size)
+       (integer? visible-end)
+       (>= visible-end (- (+ row-offset window-size) offset-prefetch-lead-rows))))
 
 (defn- next-scrolled-row-offset
   "Keep the current offset window until the visible range leaves it.
@@ -2320,7 +2335,9 @@
 
        (offset-window-covers-visible?
         current-offset window-size visible-start visible-end)
-       current-offset
+       (if (offset-window-near-end? current-offset window-size visible-end)
+         visible-start
+         current-offset)
 
        (and first-end (integer? visible-end) (<= visible-end first-end))
        current-offset
@@ -2612,7 +2629,7 @@
                                   window-size (max (if (seq offset-rows)
                                                      (count offset-rows)
                                                      0)
-                                                   (inc initial-prefetch-count))
+                                                   (offset-view-row-count initial-prefetch-count))
                                   [vis-start vis-end]
                                   (or (viewport-row-range
                                        scroll-top list-offset

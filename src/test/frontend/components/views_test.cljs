@@ -460,9 +460,9 @@
     (is (nil? (#'views/offset-view-data-key view-uuid window-context nil))
         "The offset window must not start before the user scrolls.")
     (is (nil? (#'views/offset-view-data-key view-uuid window-context 0)))
-    (is (= [:view-data view-uuid (assoc window-context :row-offset 72 :initial-row-count 31)]
+    (is (= [:view-data view-uuid (assoc window-context :row-offset 72 :initial-row-count 60)]
            (#'views/offset-view-data-key view-uuid window-context 72))
-        "Offset windows add one row so a clipped first visible row still fills the screen.")
+        "Offset windows fetch two screens so rapid scroll does not run off the current one.")
     (is (nil? (:full ready)))
     (is (= [:view-data view-uuid full-context] (:primary single)))
     (is (nil? (:full single)))))
@@ -578,8 +578,10 @@
       "The first window still covers the open screen. Do not fetch an offset.")
   (is (= 26 (#'views/next-scrolled-row-offset nil 27 4 30 26))
       "The first wheel past the first window fetches the next screen, not every row.")
-  (is (= 26 (#'views/next-scrolled-row-offset 26 27 30 52 26))
+  (is (= 26 (#'views/next-scrolled-row-offset 26 27 28 44 26))
       "Keep the same offset window while the visible rows stay inside it.")
+  (is (= 30 (#'views/next-scrolled-row-offset 26 27 30 52 26))
+      "Start the next offset before the visible range runs off the current window.")
   (is (= 40 (#'views/next-scrolled-row-offset 26 27 40 66 26))
       "Move the window only after the visible range leaves it.")
   (is (= 26 (#'views/next-scrolled-row-offset 26 27 40 66 26 false))
