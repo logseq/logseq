@@ -199,8 +199,9 @@
    (let [parents (vec (ldb/get-block-parents
                         db (:block/uuid block) {:depth depth}))
          page (:block/page block)
-         breadcrumb-ancestors (if (and page
-                                         (not= (:db/id page) (:db/id (first parents))))
+         page-id (resolve-ref-id db page)
+         breadcrumb-ancestors (if (and page-id
+                                         (not= page-id (:db/id (first parents))))
                                  (into [page] parents)
                                  parents)]
      (cond-> (mapv #(breadcrumb-entity db %) breadcrumb-ancestors)

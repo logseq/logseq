@@ -592,8 +592,21 @@
     (is (= (:db/id page)
            (:db/id (block-breadcrumb/shallow-ref-identity
                     @conn :logseq.class/Page))))
-    (is (seq (block-breadcrumb/block-breadcrumb @conn page))
+    (is (vector? (block-breadcrumb/block-breadcrumb @conn page))
         "Built-in Page is a CMDK hit for queries like page 1.")
+    (let [child-conn (db-test/create-conn-with-blocks
+                      {:pages-and-blocks
+                       [{:page {:block/title "page 1"}
+                         :blocks [{:block/title "child"}]}]})
+          child (db-test/find-block-by-content @child-conn "child")
+          page-uuid (:block/uuid (:block/page child))]
+      (is (uuid? page-uuid))
+      (is (= ["page 1"]
+             (mapv :block/title
+                   (block-breadcrumb/block-breadcrumb
+                    @child-conn
+                    (assoc child :block/page page-uuid))))
+          "search-result page fields are often a raw uuid."))
     (let [result (#'search/search-result->block-result
                   conn
                   "page"
@@ -620,7 +633,7 @@
                                       :ident (:db/ident block)
                                       :message (ex-message e)
                                       :data (ex-data e)})))))
-                       (d/datoms @conn :avet :block/name))]
+                       (d/datoms @conn :avet :block/uuid))]
     (is (empty? failures) (pr-str failures))))
 
 (deftest search-result-keeps-tag-identities-for-ui-entity-predicates
