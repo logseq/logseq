@@ -1918,7 +1918,6 @@
  :view/all "全部"
  :view/export-edn "导出 EDN"
  :view/linked-references "已链接的引用"
- :view/new "新建"
  :view/new-property "新建属性"
  :view/new-view "新建视图"
  :view/rename "重命名"
@@ -1962,6 +1961,7 @@
  :view.gallery/height "高度"
  :view.gallery/width "宽度"
 
+ :view.table/add-row "添加行"
  :view.table/ascending "升序"
  :view.table/columns-visibility "列可见性"
  :view.table/default-title "{1} 个节点"
@@ -1979,6 +1979,7 @@
  :view.table/page "页面"
  :view.table/pages "页面"
  :view.table/pin "固定"
+ :view.table/resize-column "调整列宽"
  :view.table/row-number "行号"
  :view.table/select-all "全选"
  :view.table/select-column "选择"

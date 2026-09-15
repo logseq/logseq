@@ -1749,7 +1749,6 @@
  :view/all "Všetky"
  :view/export-edn "Exportovať EDN"
  :view/linked-references "Prepojené referencie"
- :view/new "Nový"
  :view/new-property "Nová vlastnosť"
  :view/new-view "Nový pohľad"
  :view/rename "Premenovať"

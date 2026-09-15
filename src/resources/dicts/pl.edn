@@ -1749,7 +1749,6 @@
  :view/all "Wszystkie"
  :view/export-edn "Eksportuj EDN"
  :view/linked-references "Połączone referencje"
- :view/new "Nowy"
  :view/new-property "Nowa właściwość"
  :view/new-view "Nowy widok"
  :view/rename "Zmień nazwę"

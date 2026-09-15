@@ -1749,7 +1749,6 @@
  :view/all "Alle"
  :view/export-edn "Eksporter EDN"
  :view/linked-references "Lenkede referanser"
- :view/new "Ny"
  :view/new-property "Ny egenskap"
  :view/new-view "Ny visning"
  :view/rename "Gi nytt navn"

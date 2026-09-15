@@ -1762,7 +1762,6 @@
  :view/all "全部"
  :view/export-edn "匯出 EDN"
  :view/linked-references "已連結的引用"
- :view/new "新增"
  :view/new-property "新增屬性"
  :view/new-view "新增檢視"
  :view/rename "重新命名"
