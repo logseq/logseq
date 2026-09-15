@@ -1097,7 +1097,6 @@
                 (= :block/tags (:db/ident property))
                 (assoc :exact-match-exclude-items
                        (set (map name ldb/private-tags))
-                       :choose-first-on-enter? true
                        :transform-fn
                        (fn [results input]
                          (if (and page-class-id

@@ -851,9 +851,17 @@
     (if-let [blocks (seq (get-selected-blocks))]
       (cycle-todos!)
       (when-let [edit-block (state/get-edit-block)]
-        (ui-outliner-tx/transact!
-         {:outliner-op :cycle-todos}
-         (db-based-cycle-todo! edit-block))))))
+        ;; `edit-block` is a snapshot taken when edit mode started, so its
+        ;; :logseq.property/status can be stale after an earlier toggle in
+        ;; the same edit session (see db-test#1177). Re-fetch the block so
+        ;; the status cycles from its current value instead of repeating
+        ;; the same transition every time.
+        (p/let [block (db-async/<get-block (state/get-current-repo) (:block/uuid edit-block)
+                                           {:children? false})]
+          (when block
+            (ui-outliner-tx/transact!
+             {:outliner-op :cycle-todos}
+             (db-based-cycle-todo! block))))))))
 
 (defn delete-block-aux!
   ([block]
@@ -4041,7 +4049,16 @@
      (db-async/<get-block repo block-id {:include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
-     (state/set-collapsed-block! block-id false (or container-id (current-editor-container-id))))))
+     (cond
+       ;; Display-only expand (zoom/root load) must stay on the given container.
+       ;; Falling back to the current editor container writes `:ui/collapsed-blocks`
+       ;; onto the parent page, so the subtree stays open after navigate-back.
+       skip-db-collpsing?
+       (when container-id
+         (state/set-collapsed-block! block-id false container-id))
+
+       :else
+       (state/set-collapsed-block! block-id false (or container-id (current-editor-container-id)))))))
 
 (defn expand!
   ([e] (expand! e false))
