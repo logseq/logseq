@@ -156,6 +156,21 @@
      :graph ["--type" "--file" "--edn-options" "--pretty-print"]}},
    :tags [:graph],
    :extends :non-sync/graph-json-env}
+  {:id "graph-export-selected-nodes-edn-options",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Export Contract Page\"} :blocks [{:block/title \"selected node survives export\" :block/uuid #uuid \"13071000-0000-4000-8000-000000000001\" :build/keep-uuid? true}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}} --edn-options '{:export-type :selected-nodes :node-ids [[:block/uuid #uuid \"13071000-0000-4000-8000-000000000001\"]]}' >/dev/null"
+    "grep -q 'selected node survives export' {{export-path-arg}}"],
+   :expect {:exit 0},
+   :covers
+   {:commands ["graph export"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--file" "--edn-options"]}},
+   :tags [:graph],
+   :extends :non-sync/graph-json-env}
   {:tags [:graph],
    :extends :non-sync/source-graph-json-env,
    :expect
