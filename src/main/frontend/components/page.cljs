@@ -420,9 +420,10 @@
   "Tags/class objects are the first paint. Children trees and linked
   refs must not share that snapshot batch."
   [page {:keys [sidebar? tag-dialog?]}]
-  (and (entity/class? page)
-       (not sidebar?)
-       (not tag-dialog?)))
+  (boolean
+   (and (entity/class? page)
+        (not sidebar?)
+        (not tag-dialog?))))
 
 (hsx/defc after-first-paint
   [content]
