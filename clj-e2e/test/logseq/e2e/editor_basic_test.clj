@@ -1396,6 +1396,33 @@
       (assert/assert-is-visible
        (format ".ls-page-blocks #ls-block-%s" uuid)))))
 
+(defn- start-main-content-frame-capture!
+  []
+  (w/eval-js
+   "(() => {
+      const main = document.querySelector('#main-content-container');
+      if (!main) throw new Error('main-content-container not found');
+      window.__e2eMainFrames = [];
+      const startedAt = performance.now();
+      const sample = () => {
+        window.__e2eMainFrames.push({
+          text: (main.innerText || '').trim(),
+          hasBlocks: Boolean(main.querySelector('.ls-page-blocks'))
+        });
+        if (performance.now() - startedAt < 600) requestAnimationFrame(sample);
+      };
+      sample();
+      return true;
+    })()"))
+
+(defn- empty-main-content-frames
+  []
+  (util/wait-timeout 650)
+  (->> (js-json "JSON.stringify(window.__e2eMainFrames || [])")
+       (remove (fn [{:keys [text hasBlocks]}]
+                 (or hasBlocks (seq text))))
+       vec))
+
 (deftest collapsed-subtree-stays-collapsed-after-bullet-zoom-back-test
   (testing "bullet zoom-in then back keeps the parent subtree collapsed without an empty remount"
     (let [page-name (p/get-page-name)
@@ -1411,7 +1438,10 @@
       (assert/assert-is-visible
        (loc/filter "#main-content-container" :has-text "zoom collapse child"))
       (is (string/includes? (or (w/eval-js "window.location.hash") "") uuid))
+      (start-main-content-frame-capture!)
       (.goBack (w/get-page))
+      (is (empty? (empty-main-content-frames))
+          "Zoom-back must not remount through an empty main-content frame")
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks" :has-text "zoom collapse parent"))
       (assert/assert-is-hidden child-in-parent)
