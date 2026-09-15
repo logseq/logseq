@@ -594,7 +594,7 @@
       "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row.")
   (is (true? (#'views/eager-table-cells? false {:id :user.property/actors} false)))
   (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
-      "Grouped tables disable row virtualization and keep per-cell lazy mounts.")))
+      "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
 
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))
