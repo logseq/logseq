@@ -232,11 +232,16 @@
        pages))
 
 (defmethod load-results :initial [_ state]
-  (let [!results (::results state)]
+  (let [!input (::input state)
+        !results (::results state)]
     (p/let [recent-pages (db-recent-handler/get-recent-pages)]
-      (reset! !results (assoc-in default-results
-                                 [:recently-updated-pages :items]
-                                 (recent-page-items recent-pages))))))
+      ;; get-recent-pages is async. A typed search can finish first; resetting
+      ;; the whole results atom would wipe those nodes.
+      (when (and (string/blank? @!input)
+                 (not (:group @(::filter state))))
+        (reset! !results (assoc-in default-results
+                                   [:recently-updated-pages :items]
+                                   (recent-page-items recent-pages)))))))
 
 ;; The commands search uses the command-palette handler
 (defn- translate-locale

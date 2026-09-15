@@ -3,6 +3,7 @@
    [cljs.test :refer [async deftest is testing]]
    [frontend.components.cmdk.core :as cmdk]
    [frontend.db.async :as db-async]
+   [frontend.handler.db-based.recent :as db-recent-handler]
    [frontend.handler.editor :as editor-handler]
    [frontend.util :as util]
    [goog.object :as gobj]
@@ -66,6 +67,23 @@
         (cmdk/handle-input-change state event "ta" false)
         (is (zero? @search-calls)
             "The input event used while typing must not search.")))))
+
+(deftest cmdk-initial-results-do-not-clobber-typed-search-test
+  (async done
+    (let [kept [{:text "kept-node"}]
+          results (atom {:nodes {:status :success :items kept}})
+          state {::cmdk/input (atom "table-search-filter-actions")
+                 ::cmdk/filter (atom nil)
+                 ::cmdk/results results}]
+      (p/with-redefs [db-recent-handler/get-recent-pages
+                      (fn [] (p/delay 20 [{:block/title "Recent"}]))]
+        (cmdk/load-results :initial state)
+        (js/setTimeout
+         (fn []
+           (is (= kept (get-in @results [:nodes :items]))
+               "A late empty-state fetch must not reset nodes from a typed search.")
+           (done))
+         40)))))
 
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
