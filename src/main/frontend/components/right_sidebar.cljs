@@ -3,6 +3,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.icon :as icon]
             [frontend.components.onboarding :as onboarding]
@@ -67,14 +68,24 @@
   [:div.contents.flex-col.flex.ml-3
    (shortcut-help/shortcut-page {:show-title? false})])
 
+(hsx/defc sidebar-block-breadcrumb
+  [config repo block]
+  (let [block-id (:block/uuid block)
+        breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
+    (when breadcrumb-data
+      (block/breadcrumb config repo block-id
+                       {:indent? false
+                        :block (assoc block :block.temp/breadcrumb
+                                     (breadcrumb-model/resource-ancestors breadcrumb-data))}))))
+
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
-  (when-let [block-id (:block/uuid block)]
+  (when (:block/uuid block)
     [[:.flex.items-center {:class (when ref? "ml-2")}
-      (block/breadcrumb {:id     "block-parent"
-                         :block? true
-                         :sidebar-key sidebar-key} repo block-id {:indent? false
-                                                                 :block block})]
+      (sidebar-block-breadcrumb {:id "block-parent"
+                                 :block? true
+                                 :sidebar-key sidebar-key}
+                                repo block)]
      (block-cp repo idx block)]))
 
 (hsx/defc search-title

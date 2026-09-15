@@ -462,3 +462,18 @@
       (is (= 1 (count (:visible-prefix result))))
       (is (= 1 (count (:visible-suffix result))))
       (is (= 3 (count (:hidden result)))))))
+
+(deftest resource-ancestors-prefers-inline-payload-test
+  (testing "inline ancestors are used as-is, including an empty vector"
+    (let [breadcrumb-ancestors [{:block/uuid (random-uuid) :block/title "Parent"}]]
+      (is (= breadcrumb-ancestors
+             (model/resource-ancestors {:ancestors breadcrumb-ancestors
+                                         :ancestor-uuids [(random-uuid)]})))
+      (is (= []
+             (model/resource-ancestors {:ancestors []
+                                         :ancestor-uuids [(random-uuid)]})))))
+
+  (testing "legacy payloads fall back to UUID stubs"
+    (let [ancestor-uuid (random-uuid)]
+      (is (= [{:block/uuid ancestor-uuid}]
+             (model/resource-ancestors {:ancestor-uuids [ancestor-uuid]}))))))

@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.class :as class-component]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
@@ -557,10 +558,12 @@
 (hsx/defc loaded-page
   [option page-uuid]
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
+        breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
         refs-count (db-hooks/use-resource [:block-ref-count page-uuid])]
-    (when page
+    (when (and page breadcrumb-data)
       (page-inner (assoc option
-                         :page page
+                         :page (assoc page :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data))
                          :refs-count refs-count)))))
 
 (hsx/defc page-resource
