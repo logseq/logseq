@@ -232,7 +232,6 @@
        [:div.ls-property-key
         (select/select (merge
                         {:items items
-                         :grouped? false
                          :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false

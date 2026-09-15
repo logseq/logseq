@@ -436,10 +436,10 @@
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
 (def auto-complete-virtualize-threshold
-  "Window the picker list once it exceeds this many rows. Property
-  pickers on large graphs otherwise mount every matched row on each
-  keystroke."
-  24)
+  "Window ungrouped autocomplete lists once they exceed this many rows.
+  Keep this above typical built-in property/command counts so keyboard
+  highlight and click targets stay mounted."
+  200)
 
 (def auto-complete-virtualize-height 240)
 
