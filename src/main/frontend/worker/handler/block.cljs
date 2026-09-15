@@ -79,26 +79,54 @@
   (and (not (contains? canonical-block-excluded-attrs attr))
        (not= "block.temp" (namespace attr))))
 
-(defn- canonical-positioned-properties-map
-  [db block]
-  (if (seq (property-handler/direct-block-property-ids db (:db/id block)))
-    (->> property-handler/render-property-positions
-         (keep (fn [position]
-                 (let [property-uuids
-                       (mapv :block/uuid
-                             (property-handler/block-positioned-properties
-                              db (:db/id block) position))]
-                   (when (seq property-uuids)
-                     [position property-uuids]))))
-         (into {}))
-    {}))
-
-(declare block-refs-count)
-
 (defn- eavt-scalar
   [db eid attr]
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
+
+(defn- ident-eid
+  [db ident]
+  (when (keyword? ident)
+    (some-> (first (d/datoms db :avet :db/ident ident)) :e)))
+
+(defn- property-ident-uuid
+  [db property-ident]
+  (when-let [property-eid (ident-eid db property-ident)]
+    (eavt-scalar db property-eid :block/uuid)))
+
+(defn- tagged-with-ident?
+  [db eid tag-ident]
+  (some (fn [datom]
+          (= tag-ident (eavt-scalar db (:v datom) :db/ident)))
+        (d/datoms db :eavt eid :block/tags)))
+
+(defn- property-entity?
+  [db eid]
+  (tagged-with-ident? db eid :logseq.class/Property))
+
+(defn- block-order-list-type
+  [db eid]
+  (when-let [value (eavt-scalar db eid :logseq.property/order-list-type)]
+    (let [label (if (integer? value)
+                  (eavt-scalar db value :block/title)
+                  (str value))]
+      (some-> label string/lower-case))))
+
+(defn- canonical-positioned-properties-map
+  [db block]
+  (let [block-id (:db/id block)]
+    (->> property-handler/render-property-positions
+         (keep (fn [position]
+                 (let [property-uuids
+                       (into []
+                             (keep #(property-ident-uuid db %))
+                             (property-handler/block-positioned-property-idents
+                              db block-id position))]
+                   (when (seq property-uuids)
+                     [position property-uuids]))))
+         (into {}))))
+
+(declare block-refs-count)
 
 (defn canonical-block
   [db entity]
@@ -123,7 +151,7 @@
                         replace-id-refs? (:block/title entity)
                         (string? stored-title) stored-title
                         :else nil)
-        order-list-type (worker-plain/order-list-type entity)]
+        order-list-type (block-order-list-type db entity-id)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"
                          {:db-id entity-id}))
@@ -151,7 +179,7 @@
                result))
            {:db/id entity-id}
            (d/datoms db :eavt entity-id))
-          block (if (ldb/property? entity)
+          block (if (property-entity? db entity-id)
                   (merge block
                          (property-handler/display-property-map db entity-id))
                   block)]
@@ -178,14 +206,16 @@
     (when-not (uuid? block-uuid)
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
-  (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
+  (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
+            property-handler/*block-class-properties-cache* (volatile! {})]
+    (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
         dependencies
         (fn [block]
           (let [positioned-properties
                 (->> property-handler/render-property-positions
-                     (mapcat #(property-handler/block-positioned-properties
+                     (mapcat #(property-handler/block-positioned-property-idents
                                db (:db/id block) %))
-                     (keep #(d/entity db (:db/ident %))))]
+                     (keep #(d/entity db %)))]
             ;; Table/All Pages/class-object rows already inline shallow ref
             ;; identities. Expanding every :block/refs target into a full
             ;; canonical block makes a screen-sized scroll window take seconds.
@@ -207,7 +237,7 @@
            (map (fn [entity]
                   (let [block (canonical-block db entity)]
                     [(:block/uuid block) block])))
-           entities)}))
+           entities)})))
 
 (defn direct-children-membership
   [db parent-uuid]

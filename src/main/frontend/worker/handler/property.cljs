@@ -503,10 +503,19 @@
           (= tag-ident (:db/ident (d/entity db (:v datom)))))
         (d/datoms db :eavt (:db/id entity) :block/tags)))
 
+(def ^:dynamic *block-class-properties-cache* nil)
+
 (defn- block-class-properties
   [db block]
   (if-let [block-id (:db/id block)]
-    (outliner-property/get-block-classes-properties db block-id)
+    (let [tag-ids (mapv :v (d/datoms db :eavt block-id :block/tags))
+          cache *block-class-properties-cache*]
+      (if-let [hit (and cache (get @cache tag-ids))]
+        hit
+        (let [result (outliner-property/get-block-classes-properties db block-id)]
+          (when cache
+            (vswap! cache assoc tag-ids result))
+          result)))
     (let [classes (->> (:block/tags block)
                        (keep (fn [tag]
                                (d/entity db (if (map? tag)
@@ -819,7 +828,9 @@
              (not allow-empty-block-below?)
              (not (render-tag-class-page? db (d/entity db block-id)))))))))
 
-(defn- block-positioned-property-ids
+(defn block-positioned-property-idents
+  "Property idents visible at a render position. Table snapshots only need
+  these idents plus UUIDs; they must not build display-property maps."
   [db block-id position]
   (let [block (d/entity db block-id)
         class-page? (render-tag-class-page? db block)
@@ -844,7 +855,7 @@
 
 (defn block-positioned-properties
   [db block-id position]
-  (->> (block-positioned-property-ids db block-id position)
+  (->> (block-positioned-property-idents db block-id position)
        (keep #(display-property-map* db %))
        vec))
 

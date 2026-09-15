@@ -6,6 +6,8 @@
 
 (def ^:private load-depth 16)
 
+(def ^:dynamic *ref-identity-cache* nil)
+
 (defn- fail!
   [message data]
   (throw (ex-info message data)))
@@ -15,54 +17,59 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
-(defn shallow-ref-identity
+(defn- eavt-values
+  [db eid attr]
+  (mapv :v (d/datoms db :eavt eid attr)))
+
+(defn- resolve-ref-id
   [db ref-or-id]
-  (let [ref (if (or (de/entity? ref-or-id) (map? ref-or-id))
-              ref-or-id
-              (d/entity db ref-or-id))
-        ref-id (:db/id ref)
-        ref-uuid (:block/uuid ref)
-        ref-ident (:db/ident ref)
-        ;; Avoid Entity :block/title — it expands id-refs through every
-        ;; :block/refs target. Table cells only need the stored title.
-        ref-title (let [title (eavt-scalar db ref-id :block/title)]
+  (cond
+    (integer? ref-or-id) ref-or-id
+    (or (de/entity? ref-or-id) (map? ref-or-id)) (:db/id ref-or-id)
+    :else (:db/id (d/entity db ref-or-id))))
+
+(defn- tag-summary
+  [db tag-id]
+  (let [tag-uuid (eavt-scalar db tag-id :block/uuid)
+        tag-ident (eavt-scalar db tag-id :db/ident)]
+    (cond-> {:db/id tag-id}
+      (uuid? tag-uuid) (assoc :block/uuid tag-uuid)
+      (keyword? tag-ident) (assoc :db/ident tag-ident))))
+
+(defn- choice-summary
+  [db choice-id]
+  (let [choice-uuid (eavt-scalar db choice-id :block/uuid)
+        choice-ident (eavt-scalar db choice-id :db/ident)]
+    (cond-> {:db/id choice-id}
+      (uuid? choice-uuid) (assoc :block/uuid choice-uuid)
+      (keyword? choice-ident) (assoc :db/ident choice-ident))))
+
+(defn- ref-extras
+  "Read renderer identity extras from eavt. Page refs need tags; property,
+  class, and asset refs also need type/icon/closed-value fields. Entity
+  ILookup of those attrs walks inbound refs and is multi-second on Movies."
+  [db ref-id]
+  (let [ref-title (let [title (eavt-scalar db ref-id :block/title)]
                     (when (string? title) title))
-        ref-name (let [page-name (eavt-scalar db ref-id :block/name)]
-                   (when (string? page-name) page-name))
-        ref-tags (mapv (fn [tag]
-                         (select-keys tag [:db/id :block/uuid :db/ident]))
-                       (:block/tags ref))
+        ref-tags (mapv #(tag-summary db %) (eavt-values db ref-id :block/tags))
         choice-exclusions
-        (mapv (fn [choice]
-                (select-keys choice [:db/id :block/uuid :db/ident]))
-              (:logseq.property/choice-exclusions ref))
-        property-type (:logseq.property/type ref)
-        cardinality (:db/cardinality ref)
-        property-value (:logseq.property/value ref)
-        property-icon (:logseq.property/icon ref)
-        hide-from-node (:logseq.property.class/hide-from-node ref)
-        asset-type (:logseq.property.asset/type ref)
-        asset-width (:logseq.property.asset/width ref)
-        asset-height (:logseq.property.asset/height ref)
-        asset-resize-metadata (:logseq.property.asset/resize-metadata ref)
-        asset-external-url (:logseq.property.asset/external-url ref)
-        property-value-title (when (and ref-title
-                                         (or (:block/closed-value-property ref)
-                                             (:logseq.property/created-from-property ref)))
-                                 ref-title)]
-    (when-not ref
-      (fail! "Missing canonical block reference" {:ref-id ref-id}))
-    (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
-      (fail! "Invalid canonical block reference UUID"
-             {:ref-id ref-id :block-uuid ref-uuid}))
-    (when (and (some? ref-ident) (not (keyword? ref-ident)))
-      (fail! "Invalid canonical block reference ident"
-             {:ref-id ref-id :db-ident ref-ident}))
-    (cond-> {:db/id ref-id}
-      ref-uuid (assoc :block/uuid ref-uuid)
-      ref-ident (assoc :db/ident ref-ident)
-      (string? ref-title) (assoc :block/title ref-title)
-      (string? ref-name) (assoc :block/name ref-name)
+        (mapv #(choice-summary db %)
+              (eavt-values db ref-id :logseq.property/choice-exclusions))
+        property-type (eavt-scalar db ref-id :logseq.property/type)
+        cardinality (eavt-scalar db ref-id :db/cardinality)
+        property-value (eavt-scalar db ref-id :logseq.property/value)
+        property-icon (eavt-scalar db ref-id :logseq.property/icon)
+        hide-from-node (eavt-scalar db ref-id :logseq.property.class/hide-from-node)
+        asset-type (eavt-scalar db ref-id :logseq.property.asset/type)
+        asset-width (eavt-scalar db ref-id :logseq.property.asset/width)
+        asset-height (eavt-scalar db ref-id :logseq.property.asset/height)
+        asset-resize-metadata (eavt-scalar db ref-id :logseq.property.asset/resize-metadata)
+        asset-external-url (eavt-scalar db ref-id :logseq.property.asset/external-url)
+        closed-value? (some? (eavt-scalar db ref-id :block/closed-value-property))
+        created-from-property? (some? (eavt-scalar db ref-id :logseq.property/created-from-property))
+        property-value-title (when (and ref-title (or closed-value? created-from-property?))
+                               ref-title)]
+    (cond-> {}
       (seq ref-tags) (assoc :block/tags ref-tags)
       (seq choice-exclusions)
       (assoc :logseq.property/choice-exclusions choice-exclusions)
@@ -79,6 +86,39 @@
       (some? asset-external-url)
       (assoc :logseq.property.asset/external-url asset-external-url)
       (some? property-value-title) (assoc :block/title property-value-title))))
+
+(defn- compute-shallow-ref-identity
+  [db ref-id]
+  (when-not ref-id
+    (fail! "Missing canonical block reference" {:ref-id ref-id}))
+  (let [ref-uuid (eavt-scalar db ref-id :block/uuid)
+        ref-ident (eavt-scalar db ref-id :db/ident)
+        ref-title (let [title (eavt-scalar db ref-id :block/title)]
+                    (when (string? title) title))
+        ref-name (let [page-name (eavt-scalar db ref-id :block/name)]
+                   (when (string? page-name) page-name))]
+    (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
+      (fail! "Invalid canonical block reference UUID"
+             {:ref-id ref-id :block-uuid ref-uuid}))
+    (when (and (some? ref-ident) (not (keyword? ref-ident)))
+      (fail! "Invalid canonical block reference ident"
+             {:ref-id ref-id :db-ident ref-ident}))
+    (cond-> (merge {:db/id ref-id} (ref-extras db ref-id))
+      ref-uuid (assoc :block/uuid ref-uuid)
+      (keyword? ref-ident) (assoc :db/ident ref-ident)
+      (string? ref-title) (assoc :block/title ref-title)
+      (string? ref-name) (assoc :block/name ref-name))))
+
+(defn shallow-ref-identity
+  [db ref-or-id]
+  (let [ref-id (resolve-ref-id db ref-or-id)
+        cache *ref-identity-cache*]
+    (if-let [hit (and cache (get @cache ref-id))]
+      hit
+      (let [identity (compute-shallow-ref-identity db ref-id)]
+        (when cache
+          (vswap! cache assoc ref-id identity))
+        identity))))
 
 (defn- breadcrumb-entity
   [db entity]

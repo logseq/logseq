@@ -729,6 +729,65 @@
      :row-uuid row-uuid
      :cover-uuid cover-uuid}))
 
+(deftest canonical-page-property-values-keep-eavt-tags-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Actor"
+                     :block/name "actor"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :db/ident :user.property/Cast
+                     :db/valueType :db.type/ref
+                     :db/cardinality :db.cardinality/one
+                     :block/uuid (random-uuid)
+                     :block/tx-id 1
+                     :block/title "Cast"
+                     :block/tags :logseq.class/Property}
+                    {:block/uuid block-uuid
+                     :block/tx-id 1
+                     :block/title "Movie"
+                     :user.property/Cast -1}])
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid block-uuid]))
+            cast (:user.property/Cast block)]
+        (is (= :logseq.class/Page (get-in cast [:block/tags 0 :db/ident])))
+        (is (entity/page? cast)
+            "Page-valued table cells keep type tags without building Entities.")))))
+
+(deftest canonical-blocks-reuse-shared-ref-identities-test
+  (when-let [canonical-blocks (canonical-blocks-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          first-uuid (random-uuid)
+          second-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Shared"
+                     :block/name "shared"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid first-uuid
+                     :block/tx-id 1
+                     :block/title "One"
+                     :block/refs [-1]}
+                    {:block/uuid second-uuid
+                     :block/tx-id 1
+                     :block/title "Two"
+                     :block/refs [-1]}])
+      (let [response (canonical-blocks @conn [first-uuid second-uuid])
+            first-ref (get-in response [:blocks first-uuid :block/refs 0])
+            second-ref (get-in response [:blocks second-uuid :block/refs 0])]
+        (is (= first-ref second-ref))
+        (is (= page-uuid (:block/uuid first-ref)))
+        (is (= :logseq.class/Page (get-in first-ref [:block/tags 0 :db/ident])))))))
+
 (deftest canonical-cover-property-is-not-a-db-id-stub-test
   (when-let [canonical-block (canonical-block-api)]
     (let [{:keys [conn row-uuid cover-uuid]} (cover-row-fixture)
