@@ -307,6 +307,21 @@
       (is (= [row-uuid] @calls)
           "A mounted row supplies one UUID and owns no loader closure."))))
 
+(deftest lazy-item-paints-first-window-title-before-use-block-test
+  (let [row-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-block (fn [_] nil)]
+      (is (string/includes?
+           (render-static
+            (views/lazy-item
+             [row-uuid]
+             0
+             {:row-previews {row-uuid {:block/uuid row-uuid
+                                       :block/title "Æon Flux (2005)"}}}
+             (fn [item]
+               (.createElement react "span" nil (:block/title item)))))
+           "Æon Flux (2005)")
+          "First-window titles paint when view-data arrives, before the block snapshot."))))
+
 (deftest filter-value-renders-referenced-uuid-content-test
   (let [value-uuid (random-uuid)
         table {:data-fns {:set-filters! (fn [_])}
@@ -387,6 +402,12 @@
     (is (false? (#'views/viewport-filled? false #{row-uuid})))
     (is (true? (#'views/viewport-filled? true #{row-uuid}))
         "Opening a table mounts Virtuoso only after the viewport hydrate set exists.")
+    (is (true? (#'views/table-body-can-paint? false #{} {row-uuid {:block/title "Movie"}}))
+        "First-window titles skip the hydrate gate.")
+    (is (false? (#'views/table-body-can-paint? false #{} {}))
+        "Without titles, an empty table still waits for hydrate.")
+    (is (true? (#'views/row-has-first-window-title?
+                {row-uuid {:block/title "Movie"}} row-uuid)))
     (is (= 3883 (#'views/table-total-count (range 26) 3883))
         "The first window already has the full count. Do not wait for remaining ids.")
     (is (= 26 (#'views/table-total-count (range 26) nil)))))
@@ -591,7 +612,7 @@
       "The name column is on-screen even when unpinned.")
   (is (true? (#'views/eager-table-cells? false {:id :select} false)))
   (is (false? (#'views/eager-table-cells? false {:id :user.property/actors} true))
-      "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row.")
+      "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row."))
   (is (true? (#'views/eager-table-cells? false {:id :user.property/actors} false)))
   (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
       "Grouped tables disable row virtualization and keep per-cell lazy mounts."))

@@ -1429,7 +1429,8 @@
      body)))
 
 (hsx/defc table-row-inner
-  [table row props {:keys [show-add-property? scrolling? disable-virtualized?]}]
+  [table row props {:keys [show-add-property? scrolling? disable-virtualized?
+                           mount-unpinned-cells?]}]
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
@@ -1452,18 +1453,28 @@
                                               :style style}
                                        (not (string/blank? cell-title))
                                        (assoc :title cell-title))
+                           lazy-column? (:lazy? cell-option)
                            eager-cell? (eager-table-cells?
                                         disable-virtualized?
                                         column
-                                        (:lazy? cell-option))]
+                                        lazy-column?)]
                        (if (and scrolling? (not (:block/title row)))
                          (table-cell-container cell-opts nil)
                          (when-let [render (get column :cell)]
                            (let [cell-render (fn []
                                                (table-cell-container
                                                 cell-opts (render table row column style)))]
-                             (if eager-cell?
+                             (cond
+                               eager-cell?
                                [:div.h-full (cell-render)]
+
+                               ;; Movies first paint spent ~9ms/row on 23
+                               ;; IntersectionObservers. Mount them after
+                               ;; the name column has painted.
+                               (false? mount-unpinned-cells?)
+                               (table-cell-container cell-opts nil)
+
+                               :else
                                (lazy-table-cell cell-render
                                                 (table-cell-container cell-opts nil))))))))]
     (shui/table-row
@@ -2138,6 +2149,21 @@
   (and initial-rows-ready?
        (boolean (seq hydrate-row-uuids))))
 
+(defn- first-window-titles-ready?
+  [row-previews]
+  (boolean (seq row-previews)))
+
+(defn- table-body-can-paint?
+  "First-window view-data already carries titles. Do not hold an empty
+  table for the follow-up use-block snapshot."
+  [initial-rows-ready? hydrate-row-uuids row-previews]
+  (or (first-window-titles-ready? row-previews)
+      (viewport-filled? initial-rows-ready? hydrate-row-uuids)))
+
+(defn- row-has-first-window-title?
+  [row-previews row-uuid]
+  (contains? row-previews row-uuid))
+
 (defn- table-total-count
   "First-window view-data already has the full count. Use it for the
   scrollbar so remaining ids do not have to replace the painted rows."
@@ -2302,9 +2328,10 @@
     [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))
 
 (hsx/defc lazy-item
-  [data idx {:keys [gallery-view? table-view?]} item-render]
+  [data idx {:keys [gallery-view? table-view? row-previews]} item-render]
   (let [row-uuid (util/nth-safe data idx)
-        item (db-hooks/use-block row-uuid)]
+        preview (get row-previews row-uuid)
+        item (or (db-hooks/use-block row-uuid) preview)]
     (if item
       (item-render item)
       (lazy-item-placeholder table-view? gallery-view?))))
@@ -2325,19 +2352,25 @@
                               viewport-height
                               item-height)
         all-row-ids (or (:all-row-ids option) (:data table) rows)
+        row-previews (:row-previews option)
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
         (use-view-row-prefetch all-row-ids
                                initial-prefetch-count
                                prefetch-window-size)
+        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state false)
         on-viewport-filled! (:on-viewport-filled! option)
-        total-count (table-total-count all-row-ids (:items-count option))]
+        total-count (table-total-count all-row-ids (:items-count option))
+        option (assoc option
+                      :table-view? true
+                      :mount-unpinned-cells? mount-unpinned-cells?)]
     (cond
       (not (seq rows))
       nil
 
-      ;; Logs: Tags/Movies first paint was 21-22 empty placeholder rows.
-      ;; Mount Virtuoso only after the viewport hydrate set is ready.
-      (not (viewport-filled? initial-rows-ready? hydrate-row-uuids))
+      ;; Logs: view-data was ready at 44ms, then skeletons waited for the
+      ;; 24-block hydrate. First-window titles skip that gate.
+      (not (table-body-can-paint?
+            initial-rows-ready? hydrate-row-uuids row-previews))
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
@@ -2354,10 +2387,10 @@
         :default-item-height item-height
         :total-count total-count
         :item-content (fn [idx]
-                        (let [option (assoc option :table-view? true)
-                              row-uuid (util/nth-safe all-row-ids idx)]
-                          (if (viewport-hydrate-ready?
-                               initial-rows-ready? hydrate-row-uuids row-uuid)
+                        (let [row-uuid (util/nth-safe all-row-ids idx)]
+                          (if (or (viewport-hydrate-ready?
+                                   initial-rows-ready? hydrate-row-uuids row-uuid)
+                                  (row-has-first-window-title? row-previews row-uuid))
                             (lazy-item all-row-ids idx option
                                        (fn [row]
                                          (table-row table row {} option)))
@@ -2372,6 +2405,7 @@
                                props))
                           (when (seq props)
                             (set-items-rendered! true)
+                            (set-mount-unpinned-cells! true)
                             ;; Remaining-id normalize of 40938 UUIDs was 473ms
                             ;; and remounted the painted rows. Start it when
                             ;; the user actually scrolls past the first window.
@@ -3415,7 +3449,10 @@
                          :on-pointer-down
                          (fn [collapsed?]
                            (when collapsed?
-                             (deactivate-deferred-view!)))}))]
+                             (deactivate-deferred-view!)))})
+
+                 (seq (:row-previews view-data))
+                 (assoc :row-previews (:row-previews view-data)))]
     (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]

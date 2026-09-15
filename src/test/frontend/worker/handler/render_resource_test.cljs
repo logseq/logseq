@@ -1723,13 +1723,22 @@
                          :initial-row-count 2}]
           response (call-resource api conn resource-key)
           value (:value response)
-          initial-rows (take 2 (:rows value))]
+          initial-rows (take 2 (:rows value))
+          previews (:row-previews value)]
       (is (not (contains? value :initial-blocks)))
       (is (= 2 (count initial-rows)))
       (is (every? uuid? initial-rows))
       (is (not-any? #(contains? (:slots response) [:block %])
                     initial-rows)
-          "The first window is IDs only. Row snapshots load through use-block.")
+          "The first window stays an ID list. Full row snapshots still load through use-block.")
+      (is (= (count initial-rows) (count previews)))
+      (is (every? (fn [row]
+                    (let [preview (get previews row)]
+                      (and (= row (:block/uuid preview))
+                           (string? (:block/title preview))
+                           (integer? (:db/id preview)))))
+                  initial-rows)
+          "First-window titles travel with the IDs so the table can paint without use-block.")
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
@@ -1741,11 +1750,16 @@
                          :sorting [{:id :block/title :asc? true}]
                          :initial-row-count 1}]
           response (call-resource api conn resource-key)
-          value (:value response)]
+          value (:value response)
+          preview (get (:row-previews value) view-row)]
       (is (= 1 (count (:rows value))))
       (is (contains? (set (:rows value)) view-row))
       (is (not (contains? (:slots response) [:block view-row]))
           "Class-object first windows stay ID lists so open is not blocked on snapshots.")
+      (is (= view-row (:block/uuid preview)))
+      (is (= "Object row" (:block/title preview))
+          "The first window includes the name so Tags/Movies can paint before use-block.")
+      (is (integer? (:db/id preview)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 

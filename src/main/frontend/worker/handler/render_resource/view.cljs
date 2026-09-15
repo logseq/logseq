@@ -252,6 +252,25 @@
     :else
     (common/fail! "Unsupported view resource row" {:row row})))
 
+(defn- first-window-row-preview
+  [db block-uuid]
+  (when (uuid? block-uuid)
+    (when-let [entity (d/entity db [:block/uuid block-uuid])]
+      {:block/uuid block-uuid
+       :db/id (:db/id entity)
+       :block/title (:block/title entity)})))
+
+(defn- first-window-row-previews
+  "UUID rows still need a second use-block snapshot for titles.
+  26 title lookups stay in the first-window payload so the table can
+  paint the name column when view-data arrives."
+  [db rows]
+  (into {}
+        (keep (fn [block-uuid]
+                (when-let [preview (first-window-row-preview db block-uuid)]
+                  [block-uuid preview])))
+        rows))
+
 (defn- normalize-group-value
   [value]
   (cond
@@ -385,6 +404,10 @@
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))
+          value (cond-> value
+                  (and (:initial-row-count context)
+                       (= :flat (:partition value)))
+                  (assoc :row-previews (first-window-row-previews db (:rows value))))
           value-partition (:partition value)]
       [(view-watch-keys db view-uuid owner feature-type config value-partition)
        value])))
