@@ -95,6 +95,16 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
+(defn- tagged-with-ident?
+  [db eid tag-ident]
+  (some (fn [datom]
+          (= tag-ident (eavt-scalar db (:v datom) :db/ident)))
+        (d/datoms db :eavt eid :block/tags)))
+
+(defn- property-entity?
+  [db eid]
+  (tagged-with-ident? db eid :logseq.class/Property))
+
 (defn- block-order-list-type
   [db eid]
   (when-let [value (eavt-scalar db eid :logseq.property/order-list-type)]
@@ -366,10 +376,18 @@
 
 (defn- block-refs-count
   [db block-id]
-  (if (and (empty? (d/datoms db :avet :block/refs block-id))
-           (empty? (d/datoms db :eavt block-id :block/alias))
-           (empty? (d/datoms db :avet :block/alias block-id)))
+  (cond
+    ;; Property pages are referenced by every node that uses them.
+    ;; Walking that set for 18 Movie column headers was ~3.5s.
+    (property-entity? db block-id)
     0
+
+    (and (empty? (d/datoms db :avet :block/refs block-id))
+         (empty? (d/datoms db :eavt block-id :block/alias))
+         (empty? (d/datoms db :avet :block/alias block-id)))
+    0
+
+    :else
     (common-initial-data/get-block-refs-count db block-id)))
 
 (defn- assoc-render-property-data
