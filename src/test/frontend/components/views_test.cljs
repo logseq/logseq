@@ -327,22 +327,22 @@
   (let [rows (mapv (fn [_] (random-uuid)) (range 100))
         medium-rows (mapv (fn [_] (random-uuid)) (range 625))
         large-rows (mapv (fn [_] (random-uuid)) (range 2000))
-        window-size (#'views/view-prefetch-row-count 990 33 1650)
+        window-size (#'views/view-prefetch-row-count 990 33)
         subscribed (atom [])
         unsubscribed (atom [])]
-    (is (= 130 window-size)
-        "A 990px table prefetch window is viewport plus both overscan sides.")
-    (is (= rows
+    (is (= 30 window-size)
+        "A 990px table prefetch window is one screen, not both overscan sides.")
+    (is (= (subvec rows 40 70)
            (#'views/view-prefetch-window rows 40 40 window-size))
-        "A short view keeps every row subscribed.")
+        "A 100-row view still hydrates only one screen around the cursor.")
     (is (= (subvec rows 0 10)
            (#'views/view-prefetch-window (subvec rows 0 10) 90 99 window-size))
         "A filtered view can shrink before Virtuoso reports its new range.")
     (is (= (subvec medium-rows 0 window-size)
-           (#'views/view-prefetch-window medium-rows 0 30 window-size))
-        "A medium view only retains a screen-sized render-ahead window.")
+           (#'views/view-prefetch-window medium-rows 0 29 window-size))
+        "A medium view only retains a screen-sized hydrate window.")
     (is (= (#'views/view-prefetch-window large-rows 1000 1000 window-size)
-           (subvec large-rows 935 1065))
+           (subvec large-rows 1000 1030))
         "Large views retain one screen-sized window around the rendered rows.")
     (with-redefs [subs/subscribe-block!
                   (fn [block-uuid _listener]
@@ -365,8 +365,9 @@
       "A tall viewport hydrates enough rows to fill the screen, not a fixed 160.")
   (is (= 304 (#'views/initial-view-prefetch-count 10000 33)))
   (is (= 1 (#'views/initial-view-prefetch-count 0 33)))
-  (is (= 130 (#'views/view-prefetch-row-count 990 33 1650)))
-  (is (= 282 (#'views/view-prefetch-row-count 6000 33 1650))))
+  (is (= 30 (#'views/view-prefetch-row-count 990 33)))
+  (is (= 182 (#'views/view-prefetch-row-count 6000 33))
+      "Prefetch stays one screen. Virtuoso overscan is not hydrated."))
 
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
@@ -434,69 +435,54 @@
     (is (nil? (get-in plan [:pending-keys :full]))
         "The remaining-id query still waits until that first window paints.")))
 
-(defn- overscan-row-count
-  [item-height overscan-px]
-  (js/Math.ceil (/ overscan-px item-height)))
-
-(defn- prefetch-covers-virtualized-viewport?
-  [prefetch-limit viewport-height item-height overscan-px]
-  (>= prefetch-limit
-      (+ (#'views/initial-view-prefetch-count viewport-height item-height)
-         (* 2 (overscan-row-count item-height overscan-px)))))
-
-(defn- visible-overscan-row-range
-  [scroll-top viewport-height item-height overscan-px total-count]
-  (let [start (max 0 (js/Math.floor (/ (- scroll-top overscan-px) item-height)))
+(defn- visible-viewport-row-range
+  [scroll-top viewport-height item-height total-count]
+  (let [start (max 0 (js/Math.floor (/ scroll-top item-height)))
         end (min (dec total-count)
-                 (js/Math.floor (/ (+ scroll-top viewport-height overscan-px -1)
+                 (js/Math.floor (/ (+ scroll-top viewport-height -1)
                                    item-height)))]
     [start end]))
 
-(deftest table-prefetch-covers-viewport-and-both-overscan-sides-test
-  (let [{:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+(deftest table-prefetch-matches-one-screen-not-overscan-test
+  (let [{:keys [item-height]} (#'views/table-virtualization-metrics)
         viewport-height 990
-        window-size (#'views/view-prefetch-row-count
-                     viewport-height item-height overscan-px)]
-    (is (true? (prefetch-covers-virtualized-viewport?
-                window-size viewport-height item-height overscan-px))
-        "The subscribed window must be large enough that a fast scroll does not show empty rows.")))
+        window-size (#'views/view-prefetch-row-count viewport-height item-height)]
+    (is (= (#'views/initial-view-prefetch-count viewport-height item-height)
+           window-size)
+        "Prefetch hydrates the on-screen rows. Overscan placeholders stay empty.")))
 
-(deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-edge-test
+(deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
-        window-size 130
-        first-bounds (#'views/next-view-prefetch-bounds 2000 nil 0 30 window-size)
-        near-start (#'views/next-view-prefetch-bounds 2000 first-bounds 10 40 window-size)
-        still-inside (#'views/next-view-prefetch-bounds 2000 first-bounds 40 70 window-size)
-        near-edge (#'views/next-view-prefetch-bounds 2000 first-bounds 100 129 window-size)]
-    (is (= [0 129] first-bounds))
-    (is (= first-bounds near-start still-inside)
-        "Small and medium scrolls must not rebuild the subscribed row window.")
-    (is (not= first-bounds near-edge)
-        "The window moves only when the visible range approaches its edge.")
-    (is (= (#'views/next-view-prefetch-window rows first-bounds 10 40 window-size)
-           (#'views/next-view-prefetch-window rows first-bounds 40 70 window-size))
-        "The subscribed UUID window stays identical across consecutive scrolls.")
-    (let [jumped (#'views/next-view-prefetch-window rows first-bounds 800 830 window-size)]
-      (is (not= (subvec rows 0 130) jumped))
-      (is (every? (set jumped) (subvec rows 800 831))
-          "A jump still keeps the new visible rows subscribed."))))
+        window-size 30
+        first-bounds (#'views/next-view-prefetch-bounds 2000 nil 0 29 window-size)
+        still-inside (#'views/next-view-prefetch-bounds 2000 first-bounds 0 29 window-size)
+        moved (#'views/next-view-prefetch-bounds 2000 first-bounds 20 49 window-size)]
+    (is (= [0 29] first-bounds))
+    (is (= first-bounds still-inside)
+        "The same on-screen range keeps the same one-screen window.")
+    (is (not= first-bounds moved)
+        "The window moves when the visible screen leaves the current rows.")
+    (let [jumped (#'views/next-view-prefetch-window rows first-bounds 800 829 window-size)]
+      (is (not= (subvec rows 0 30) jumped))
+      (is (every? (set jumped) (subvec rows 800 830))
+          "A jump still keeps the new visible screen subscribed."))))
 
 (deftest consecutive-fast-scroll-keeps-every-visible-row-subscribed-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
-        {:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+        {:keys [item-height]} (#'views/table-virtualization-metrics)
         viewport-height 990
         ready-title "Scrolled row is ready"]
     (doseq [jump-index [0 30 90 400 800 1500]]
       (let [scroll-top (* jump-index item-height)
-            [start end] (visible-overscan-row-range
-                         scroll-top viewport-height item-height overscan-px (count rows))
+            [start end] (visible-viewport-row-range
+                         scroll-top viewport-height item-height (count rows))
             prefetched (#'views/view-prefetch-window
                         rows start end
                         (#'views/view-prefetch-row-count
-                         viewport-height item-height overscan-px))
+                         viewport-height item-height))
             needed (subvec rows start (inc end))]
         (is (every? (set prefetched) needed)
-            (str "Jumping to row " jump-index " must keep the visible and overscan rows subscribed."))
+            (str "Jumping to row " jump-index " must keep the visible screen subscribed."))
         (with-redefs [db-hooks/use-block
                       (fn [block-uuid]
                         (when (contains? (set prefetched) block-uuid)
@@ -510,23 +496,22 @@
                ready-title)
               (str "Row " jump-index " must render data immediately after the jump.")))))))
 
-(deftest fast-scroll-keeps-visible-and-overscan-rows-ready-to-render-test
+(deftest fast-scroll-keeps-visible-screen-ready-to-render-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
-        {:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+        {:keys [item-height]} (#'views/table-virtualization-metrics)
         viewport-height 990
         jump-index 800
         scroll-top (* jump-index item-height)
-        [start end] (visible-overscan-row-range
-                     scroll-top viewport-height item-height overscan-px (count rows))
+        [start end] (visible-viewport-row-range
+                     scroll-top viewport-height item-height (count rows))
         prefetched (#'views/view-prefetch-window
                     rows start end
-                    (#'views/view-prefetch-row-count
-                     viewport-height item-height overscan-px))
+                    (#'views/view-prefetch-row-count viewport-height item-height))
         needed (subvec rows start (inc end))
         ready-title "Scrolled row is ready"]
     (is (pos? (- end start)))
     (is (every? (set prefetched) needed)
-        "After a jump scroll, every on-screen and overscan row stays subscribed.")
+        "After a jump scroll, the on-screen rows stay subscribed.")
     (with-redefs [db-hooks/use-block
                   (fn [block-uuid]
                     (when (contains? (set prefetched) block-uuid)

@@ -2098,15 +2098,10 @@
   (min view-prefetch-max-rows (rows-for-height viewport-height item-height)))
 
 (defn- view-prefetch-row-count
-  "Subscribe to the on-screen rows plus both Virtuoso overscan sides."
-  [viewport-height item-height overscan-px]
-  (min view-prefetch-max-rows
-       (+ (rows-for-height viewport-height item-height)
-          (* 2 (rows-for-height overscan-px item-height)))))
-
-(defn- prefetch-edge-rows
-  [window-size]
-  (max 1 (quot window-size 4)))
+  "Hydrate one screen. Virtuoso overscan keeps placeholders and does not
+  belong in the snapshot batch."
+  [viewport-height item-height]
+  (initial-view-prefetch-count viewport-height item-height))
 
 (defn- view-prefetch-bounds
   [rows-count start-index end-index window-size]
@@ -2118,12 +2113,16 @@
     [0 (dec rows-count)]
 
     :else
-    (let [center-index (quot (+ start-index end-index) 2)
-          max-start (- rows-count window-size)
-          start (min max-start
-                     (max 0 (- center-index
-                               (quot window-size 2))))]
-      [start (+ start (dec window-size))])))
+    (let [max-start (- rows-count window-size)
+          visible-count (inc (- end-index start-index))]
+      (if (<= visible-count window-size)
+        (let [start (min max-start (max 0 start-index))]
+          [start (+ start (dec window-size))])
+        (let [center-index (quot (+ start-index end-index) 2)
+              start (min max-start
+                         (max 0 (- center-index
+                                   (quot window-size 2))))]
+          [start (+ start (dec window-size))])))))
 
 (defn- view-prefetch-window
   [rows start-index end-index window-size]
@@ -2133,11 +2132,13 @@
       [])))
 
 (defn- prefetch-bounds-cover-visible?
-  [[window-start window-end] visible-start visible-end rows-count window-size]
-  (let [edge-rows (prefetch-edge-rows window-size)]
-    (and (some? window-start)
-         (<= window-start (max 0 (- visible-start edge-rows)))
-         (>= window-end (min (dec rows-count) (+ visible-end edge-rows))))))
+  [current-bounds visible-start visible-end rows-count window-size]
+  (let [[need-start need-end] (view-prefetch-bounds
+                               rows-count visible-start visible-end window-size)]
+    (and (some? current-bounds)
+         (some? need-start)
+         (<= (first current-bounds) need-start)
+         (>= (second current-bounds) need-end))))
 
 (defn- next-view-prefetch-bounds
   "Keep the current screen-sized window until the visible range approaches an edge."
@@ -2168,8 +2169,7 @@
                            (lazy-item-placeholder-height false))
                           (view-prefetch-row-count
                            (or (.-innerHeight js/window) 0)
-                           (lazy-item-placeholder-height false)
-                           64)))
+                           (lazy-item-placeholder-height false))))
   ([rows initial-prefetch-count]
    (use-view-row-prefetch rows initial-prefetch-count initial-prefetch-count))
   ([rows initial-prefetch-count window-size]
@@ -2235,8 +2235,7 @@
                                 item-height)
         prefetch-window-size (view-prefetch-row-count
                               viewport-height
-                              item-height
-                              overscan-px)
+                              item-height)
         [_initial-rows-ready? prefetch-rows!]
         (use-view-row-prefetch (:data table)
                                initial-prefetch-count
