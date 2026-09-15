@@ -2100,7 +2100,10 @@
                           (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         empty-placeholder? (empty-placeholder-value? value*)
-        value (if empty-placeholder? nil value*)]
+        value (if empty-placeholder? nil value*)
+        select-value (if empty-placeholder?
+                       :logseq.property/empty-placeholder
+                       value)]
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
@@ -2139,14 +2142,8 @@
                                  select-opts
                                  (assoc opts
                                         :editing? editing?
-                                        :value-render (fn []
-                                                        (select-item
-                                                         property type
-                                                         (if empty-placeholder?
-                                                           :logseq.property/empty-placeholder
-                                                           value)
-                                                         opts)))))))
-        (case type)
+                                        :value-render (fn [] (select-item property type select-value opts))))))
+        (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
