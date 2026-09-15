@@ -8,6 +8,7 @@
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.email :as email-component]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
@@ -479,16 +480,21 @@
 
 (hsx/defc ready-block-breadcrumb
   [page-uuid]
-  (let [page (db-hooks/use-block page-uuid)]
-    (when page
-      (when (and (entity/page? page) (:block/parent page))
-        [:div.ls-block-breadcrumb
-         [:div.text-sm
-          (component-block/breadcrumb {}
-                                      (state/get-current-repo)
-                                      (:block/uuid page)
-                                      {:header? true
-                                       :block page})]]))))
+  (let [page (db-hooks/use-block page-uuid)
+        breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
+        page-with-breadcrumb (when (and page breadcrumb-data)
+                               (assoc page :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data)))]
+    (when (and page-with-breadcrumb
+               (entity/page? page-with-breadcrumb)
+               (:block/parent page-with-breadcrumb))
+      [:div.ls-block-breadcrumb
+       [:div.text-sm
+        (component-block/breadcrumb {}
+                                    (state/get-current-repo)
+                                    (:block/uuid page-with-breadcrumb)
+                                    {:header? true
+                                     :block page-with-breadcrumb})]])))
 
 (hsx/defc block-breadcrumb
   [page-name]

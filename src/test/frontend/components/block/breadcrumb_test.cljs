@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.block.breadcrumb-model :as model]
+            [frontend.components.header :as header]
             [frontend.db.hooks :as db-hooks]
             [goog.object :as gobj]
             [logseq.shui.ui :as shui]))
@@ -73,10 +74,20 @@
         (is (not (string/includes? markup (str referenced))))))))
 
 (deftest breadcrumb-does-not-load-ancestors-before-resource-is-ready-test
-  (doseq [resource [nil {:ancestor-uuids [] :ref-titles {}}]]
+  (doseq [resource [nil {:ancestor-uuids [] :ancestors [] :ref-titles {}}]]
     (with-redefs [db-hooks/use-resource (constantly resource)
                   db-hooks/use-block (fn [_] (is false "No block should be loaded"))]
       (is (= "" (render-static (block/breadcrumb {} nil (random-uuid) {})))))))
+
+(deftest breadcrumb-renders-inline-resource-ancestors-without-waiting-for-blocks-test
+  (let [ancestor {:block/uuid (random-uuid) :block/title "Ready ancestor"}]
+    (with-redefs [db-hooks/use-resource
+                  (constantly {:ancestor-uuids [(:block/uuid ancestor)]
+                                 :ancestors [ancestor]
+                                 :ref-titles {}})
+                  db-hooks/use-block (constantly nil)]
+      (let [markup (render-static (block/breadcrumb {} nil (random-uuid) {:disabled? true}))]
+        (is (string/includes? markup "Ready ancestor"))))))
 
 (deftest search-breadcrumb-keeps-inline-payload-test
   (with-redefs [db-hooks/use-resource (fn [_] (is false "Search already supplied breadcrumb-ancestors"))
@@ -107,3 +118,18 @@
         (is (= [[:block-breadcrumb target 1000]] @resources))
         (is (= (mapv :block/uuid (subvec breadcrumb-ancestors 1 5)) @loaded))
         (is (string/includes? markup "Ancestor 3"))))))
+
+(deftest header-breadcrumb-requests-resource-with-the-page-block-test
+  (let [page-uuid (random-uuid)
+        resources (atom [])]
+    (with-redefs [db-hooks/use-block (constantly {:block/uuid page-uuid
+                                                :block/title "Nested page"})
+                  db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resources conj resource-key)
+                    {:ancestor-uuids []
+                     :ancestors []
+                     :ref-titles {}})]
+      (render-static (header/ready-block-breadcrumb page-uuid))
+      (is (= [[:block-breadcrumb page-uuid 16]] @resources)
+          "Header breadcrumb is requested in the same render as the page block."))))

@@ -4,6 +4,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.db.subs-loader :as subs-loader]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -909,9 +910,12 @@
                      :logseq.property/created-from-property
                      [:block/uuid positioned-property]}])
       (let [resource-key [:block-breadcrumb target 16]
+            target-block (d/entity @conn [:block/uuid target])
+            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 16)
             response (call-resource api conn resource-key)
             expected {:target-uuid target
                       :ancestor-uuids [page parent-a parent-b positioned-property]
+                      :ancestors ancestors
                       :ref-titles {}}]
         (assert-resource-envelope @conn
                                   resource-key
@@ -922,7 +926,9 @@
                                     [:entity positioned-property]}
                                   expected
                                   response)
-        (is (every? uuid? (:ancestor-uuids (:value response))))))))
+        (is (every? uuid? (:ancestor-uuids (:value response))))
+        (is (= ["Page Identity" "Parent A" "Parent B" "Positioned"]
+               (mapv :block/title (:ancestors (:value response))))))))
 
 (deftest block-breadcrumb-resource-honors-the-requested-depth-test
   (when-let [api (render-resource-api)]
@@ -953,6 +959,8 @@
                      :block/parent -105
                      :block/order "y2"}])
       (let [resource-key [:block-breadcrumb target 1]
+            target-block (d/entity @conn [:block/uuid target])
+            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
             response (call-resource api conn resource-key)]
         (assert-resource-envelope @conn
                                   resource-key
@@ -961,6 +969,7 @@
                                     [:entity parent-b]}
                                   {:target-uuid target
                                    :ancestor-uuids [page parent-b]
+                                   :ancestors ancestors
                                    :ref-titles {}}
                                   response)))))
 
@@ -991,6 +1000,8 @@
                      :block/parent -108
                      :block/order "z1"}])
       (let [resource-key [:block-breadcrumb target-uuid 1]
+            target-block (d/entity @conn [:block/uuid target-uuid])
+            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
             response (call-resource api conn resource-key)]
         (assert-resource-envelope @conn
                                   resource-key
@@ -1000,6 +1011,7 @@
                                     [:entity ref-uuid]}
                                   {:target-uuid target-uuid
                                    :ancestor-uuids [page parent-uuid]
+                                   :ancestors ancestors
                                    :ref-titles {ref-uuid "Referenced title"}}
                                   response)
         (d/transact! conn
@@ -1009,6 +1021,21 @@
         (is (= {ref-uuid "Updated title"}
                (get-in (call-resource api conn resource-key)
                        [:value :ref-titles])))))))
+
+(deftest block-breadcrumb-resource-returns-empty-payload-for-missing-blocks-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          missing (random-uuid)
+          resource-key [:block-breadcrumb missing 16]
+          response (call-resource api conn resource-key)]
+      (assert-resource-envelope @conn
+                                  resource-key
+                                  #{[:entity missing]}
+                                  {:target-uuid missing
+                                   :ancestor-uuids []
+                                   :ancestors []
+                                   :ref-titles {}}
+                                  response))))
 
 (deftest journals-resource-returns-only-ordered-uuids-test
   (when-let [api (render-resource-api)]
