@@ -11,6 +11,8 @@
    :block/tags [{:db/ident :logseq.class/Page}]})
 
 (deftest class-pages-paint-the-objects-table-before-children-test
+  (is (>= (#'page/class-page-below-fold-delay-ms) 400)
+      "Linked refs must wait so they cannot steal the first table snapshot batch.")
   (is (true? (#'page/defer-class-page-below-fold? tag-page {}))
       "Tags and Movies must paint class-objects before children and linked refs.")
   (is (false? (#'page/defer-class-page-below-fold? tag-page {:sidebar? true})))

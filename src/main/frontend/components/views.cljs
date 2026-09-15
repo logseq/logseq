@@ -2089,6 +2089,13 @@
    :full (when (and window-context window-ready?)
            [:view-data view-uuid full-context])})
 
+(defn- full-view-data-key
+  "The remaining-id query is a resource and would jump the queue
+  ahead of the first screen of row snapshots."
+  [plan viewport-filled?]
+  (when viewport-filled?
+    (get-in plan [:ready-keys :full])))
+
 (defn- measured-viewport-height
   "0 is a real clientHeight before layout. `(or 0 window-height)` would
   keep it and hydrate one row."
@@ -2291,7 +2298,14 @@
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
         (use-view-row-prefetch (:data table)
                                initial-prefetch-count
-                               prefetch-window-size)]
+                               prefetch-window-size)
+        on-viewport-filled! (:on-viewport-filled! option)]
+    (hooks/use-effect!
+     (fn []
+       (when (and initial-rows-ready? on-viewport-filled!)
+         (on-viewport-filled!))
+       js/undefined)
+     [initial-rows-ready? on-viewport-filled!])
     (when (seq rows)
       (virtualized-list
        {:ref #(reset! *scroller-ref %)
@@ -3333,8 +3347,8 @@
                                         query-row-uuids
                                         viewport-height)
         window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
-        full-key (when (some? window-or-full-data)
-                   (get-in plan [:ready-keys :full]))
+        [viewport-filled? set-viewport-filled!] (hooks/use-state false)
+        full-key (full-view-data-key plan viewport-filled?)
         full-snapshot (db-hooks/use-resource-snapshot full-key)
         full-data (when full-key
                     (case (:status full-snapshot)
@@ -3365,6 +3379,7 @@
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
+                                            :on-viewport-filled! #(set-viewport-filled! true)
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data

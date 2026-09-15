@@ -401,6 +401,14 @@
     (is (= [:view-data view-uuid window-context] (:primary pending)))
     (is (nil? (:full pending))
         "The remaining-id query does not start until the first window paints.")
+    (is (nil? (#'views/full-view-data-key
+               {:ready-keys {:full [:view-data view-uuid full-context]}}
+               false))
+        "The remaining-id query must not start before the viewport is filled.")
+    (is (= [:view-data view-uuid full-context]
+           (#'views/full-view-data-key
+            {:ready-keys {:full [:view-data view-uuid full-context]}}
+            true)))
     (is (= [:view-data view-uuid full-context] (:full ready)))
     (is (= [:view-data view-uuid full-context] (:primary single)))
     (is (nil? (:full single)))))

@@ -425,13 +425,17 @@
         (not sidebar?)
         (not tag-dialog?))))
 
+(def ^:private class-page-below-fold-delay-ms 800)
+
 (hsx/defc after-first-paint
   [content]
   (let [[ready? set-ready!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
-       (set-ready! true)
-       js/undefined)
+       (let [timeout-id (js/setTimeout
+                         #(set-ready! true)
+                         class-page-below-fold-delay-ms)]
+         #(js/clearTimeout timeout-id)))
      [])
     (when ready?
       content)))
