@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]))
 
 (defn- create-view-id
@@ -92,6 +93,41 @@
         titles (map (fn [id] (:block/title (d/entity @conn id))) (:data result))]
     (is (= 3 (:count result)))
     (is (= ["A" "B"] titles))))
+
+(deftest get-view-data-class-objects-id-path-stays-bounded-with-many-rows-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Topic " idx)
+                              :block/updated-at idx
+                              :build/tags [:Topic]}})
+                    (range 400))
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks pages})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        entity-path-calls (atom 0)
+        window (with-redefs [db-class/get-class-objects
+                             (fn [& _args]
+                               (swap! entity-path-calls inc)
+                               (throw (js/Error. "class-objects must use the id-only path")))]
+                 (db-view/get-view-data @conn view-id (assoc option :row-limit 30)))
+        full (with-redefs [db-class/get-class-objects
+                           (fn [& _args]
+                             (swap! entity-path-calls inc)
+                             (throw (js/Error. "class-objects must use the id-only path")))]
+               (db-view/get-view-data @conn view-id option))]
+    (is (zero? @entity-path-calls)
+        "Unfiltered Tags/class-objects queries must not hydrate every object entity.")
+    (is (= 400 (:count window) (:count full)))
+    (is (= 30 (count (:data window)))
+        "The first window must not wait for the remaining ids.")
+    (is (= 400 (count (:data full))))
+    (is (= (take 30 (:data full)) (:data window)))
+    (is (every? integer? (:data window)))
+    (is (every? integer? (:data full)))))
 
 (deftest get-view-data-class-objects-sort-keeps-rows-with-missing-sort-value-test
   (let [conn (db-test/create-conn-with-blocks

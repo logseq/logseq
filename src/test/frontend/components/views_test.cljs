@@ -1,7 +1,7 @@
 (ns frontend.components.views-test
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [async deftest is use-fixtures]]
+            [cljs.test :refer [async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.components.property.value :as property-value]
@@ -329,8 +329,9 @@
         large-rows (mapv (fn [_] (random-uuid)) (range 2000))
         subscribed (atom [])
         unsubscribed (atom [])]
-    (is (= (subvec rows 15 65)
-           (#'views/view-prefetch-window rows 40 40)))
+    (is (= rows
+           (#'views/view-prefetch-window rows 40 40))
+        "A short view keeps every row subscribed.")
     (is (= (subvec rows 0 10)
            (#'views/view-prefetch-window (subvec rows 0 10) 90 99))
         "A filtered view can shrink before Virtuoso reports its new range.")
@@ -369,12 +370,123 @@
   (is (false? (#'views/windowed-view-feature? :linked-references nil)))
   (is (= :full (#'views/settled-view-data :full :window)))
   (is (= :window (#'views/settled-view-data nil :window)))
-  (is (nil? (#'views/settled-view-data nil nil))))
+  (is (nil? (#'views/settled-view-data nil nil)))
+  (let [view-uuid (random-uuid)
+        window-context {:feature-type :class-objects :initial-row-count 30}
+        full-context {:feature-type :class-objects}
+        pending (#'views/view-data-resource-keys view-uuid window-context full-context false)
+        ready (#'views/view-data-resource-keys view-uuid window-context full-context true)
+        single (#'views/view-data-resource-keys view-uuid nil full-context false)]
+    (is (= [:view-data view-uuid window-context] (:primary pending)))
+    (is (nil? (:full pending))
+        "The remaining-id query does not start until the first window paints.")
+    (is (= [:view-data view-uuid full-context] (:full ready)))
+    (is (= [:view-data view-uuid full-context] (:primary single)))
+    (is (nil? (:full single)))))
 
 (deftest table-virtualization-uses-fixed-row-height
   (is (= {:item-height 33 :overscan-px 1650}
          (#'views/table-virtualization-metrics))
       "Large table views keep a known row height so Virtuoso can skip layout measurement."))
+
+(deftest tags-and-all-pages-paint-as-soon-as-the-first-window-arrives-test
+  (doseq [feature-type [:class-objects :all-pages]]
+    (testing (str feature-type)
+      (let [view-uuid (random-uuid)
+            window-rows (mapv (fn [_] (random-uuid)) (range 30))
+            window-data {:partition :flat
+                         :count 4000
+                         :rows window-rows}
+            sorting [{:id :block/title :asc? true}]
+            plan (#'views/loaded-view-resource-plan
+                  view-uuid feature-type sorting nil "" nil nil 990)
+            paint (#'views/loaded-view-paint
+                   (#'views/settled-view-data nil window-data))]
+        (is (= 30 (:initial-row-count plan)))
+        (is (= 30 (get-in plan [:pending-keys :primary 2 :initial-row-count])))
+        (is (nil? (get-in plan [:pending-keys :full]))
+            "The remaining-id query does not start before the first window paints.")
+        (is (= [:view-data view-uuid (:full-context plan)]
+               (get-in plan [:ready-keys :full])))
+        (is (nil? (get-in plan [:ready-keys :full 2 :initial-row-count]))
+            "The follow-up query is the full id list.")
+        (is (true? (:ready? paint))
+            "Tags and All Pages must paint from the first window without the full id list.")
+        (is (= 4000 (:items-count paint)))
+        (is (= window-rows (:rows paint)))
+        (is (false? (:ready? (#'views/loaded-view-paint nil)))
+            "A cold view stays on the short skeleton until that first window exists.")))))
+
+(defn- overscan-row-count
+  [item-height overscan-px]
+  (js/Math.ceil (/ overscan-px item-height)))
+
+(defn- prefetch-covers-virtualized-viewport?
+  [prefetch-limit viewport-height item-height overscan-px]
+  (>= prefetch-limit
+      (+ (#'views/initial-view-prefetch-count viewport-height item-height)
+         (* 2 (overscan-row-count item-height overscan-px)))))
+
+(defn- visible-overscan-row-range
+  [scroll-top viewport-height item-height overscan-px total-count]
+  (let [start (max 0 (js/Math.floor (/ (- scroll-top overscan-px) item-height)))
+        end (min (dec total-count)
+                 (js/Math.floor (/ (+ scroll-top viewport-height overscan-px -1)
+                                   item-height)))]
+    [start end]))
+
+(deftest table-prefetch-covers-viewport-and-both-overscan-sides-test
+  (let [{:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+        viewport-height 990]
+    (is (true? (prefetch-covers-virtualized-viewport?
+                @#'views/view-prefetch-limit viewport-height item-height overscan-px))
+        "The subscribed window must be large enough that a fast scroll does not show empty rows.")))
+
+(deftest fast-scroll-keeps-visible-and-overscan-rows-ready-to-render-test
+  (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
+        {:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+        viewport-height 990
+        jump-index 800
+        scroll-top (* jump-index item-height)
+        [start end] (visible-overscan-row-range
+                     scroll-top viewport-height item-height overscan-px (count rows))
+        prefetched (#'views/view-prefetch-window rows start end)
+        needed (subvec rows start (inc end))
+        ready-title "Scrolled row is ready"]
+    (is (pos? (- end start)))
+    (is (every? (set prefetched) needed)
+        "After a jump scroll, every on-screen and overscan row stays subscribed.")
+    (with-redefs [db-hooks/use-block
+                  (fn [block-uuid]
+                    (when (contains? (set prefetched) block-uuid)
+                      {:block/uuid block-uuid
+                       :block/title ready-title}))]
+      (is (string/includes?
+           (render-static
+            (views/lazy-item rows jump-index {:table-view? true}
+                             (fn [item]
+                               (.createElement react "span" nil (:block/title item)))))
+           ready-title)
+          "A visible row renders its data as soon as the prefetch window has the block.")
+      (is (string/includes?
+           (render-static
+            (views/lazy-item rows start {:table-view? true}
+                             (fn [item]
+                               (.createElement react "span" nil (:block/title item)))))
+           ready-title))
+      (is (string/includes?
+           (render-static
+            (views/lazy-item rows end {:table-view? true}
+                             (fn [item]
+                               (.createElement react "span" nil (:block/title item)))))
+           ready-title))
+      (let [blank (render-static
+                   (views/lazy-item rows 0 {:table-view? true}
+                                    (fn [item]
+                                      (.createElement react "span" nil (:block/title item)))))]
+        (is (not (string/includes? blank ready-title)))
+        (is (string/includes? blank "min-height:33px")
+            "Rows outside the scrolled window stay placeholders instead of blocking paint.")))))
 
 (deftest table-cells-render-eagerly-once-rows-are-windowed
   (is (true? (#'views/eager-table-cells? false)))

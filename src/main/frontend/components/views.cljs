@@ -2082,6 +2082,12 @@
   [full-data window-data]
   (or full-data window-data))
 
+(defn- view-data-resource-keys
+  [view-uuid window-context full-context window-ready?]
+  {:primary [:view-data view-uuid (or window-context full-context)]
+   :full (when (and window-context window-ready?)
+           [:view-data view-uuid full-context])})
+
 (defn- initial-view-prefetch-count
   [viewport-height item-height]
   (-> (js/Math.ceil (/ viewport-height item-height))
@@ -3132,6 +3138,41 @@
     (= :query-result view-feature-type)
     (assoc :query-row-uuids query-row-uuids)))
 
+(defn- loaded-view-resource-plan
+  [view-uuid view-feature-type sorting filters input group-by-property-ident
+   query-row-uuids viewport-height]
+  (let [initial-row-count
+        (when (windowed-view-feature? view-feature-type group-by-property-ident)
+          (initial-view-prefetch-count
+           viewport-height
+           (lazy-item-placeholder-height true)))
+        window-context (when initial-row-count
+                         (view-resource-context view-feature-type sorting filters
+                                                input
+                                                group-by-property-ident
+                                                query-row-uuids
+                                                initial-row-count))
+        full-context (view-resource-context view-feature-type sorting filters
+                                            input
+                                            group-by-property-ident
+                                            query-row-uuids
+                                            nil)]
+    {:initial-row-count initial-row-count
+     :window-context window-context
+     :full-context full-context
+     :pending-keys (view-data-resource-keys view-uuid window-context full-context false)
+     :ready-keys (view-data-resource-keys view-uuid window-context full-context true)}))
+
+(defn- loaded-view-paint
+  [view-data]
+  (if (nil? view-data)
+    {:ready? false}
+    {:ready? true
+     :rows (view-data->rows view-data)
+     :items-count (:count view-data)
+     :partition (:partition view-data)
+     :view-data view-data}))
+
 (hsx/defc loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
@@ -3145,37 +3186,27 @@
         sorting (effective-view-sorting view-entity)
         filters (:logseq.property.table/filters view-entity)
         debounced-input (hooks/use-debounced-value input 300)
-        initial-row-count
-        (when (windowed-view-feature? view-feature-type group-by-property-ident)
-          (let [scroll-parent (get-scroll-parent config)
-                viewport-height (or (some-> scroll-parent .-clientHeight)
-                                    (.-innerHeight js/window))]
-            (initial-view-prefetch-count
-             viewport-height
-             (lazy-item-placeholder-height true))))
-        window-context (when initial-row-count
-                         (view-resource-context view-feature-type sorting filters
-                                                debounced-input
-                                                group-by-property-ident
-                                                query-row-uuids
-                                                initial-row-count))
-        full-context (view-resource-context view-feature-type sorting filters
-                                            debounced-input
-                                            group-by-property-ident
-                                            query-row-uuids
-                                            nil)
-        window-key (when window-context
-                     [:view-data (:block/uuid view-entity) window-context])
-        window-snapshot (db-hooks/use-resource-snapshot window-key)
-        window-data (when window-key
-                      (case (:status window-snapshot)
-                        :ready (:value window-snapshot)
-                        :error (throw (:error window-snapshot))
-                        nil))
-        view-data (settled-view-data
-                   (db-hooks/use-resource
-                    [:view-data (:block/uuid view-entity) full-context])
-                   window-data)
+        viewport-height (or (some-> (get-scroll-parent config) .-clientHeight)
+                            (.-innerHeight js/window))
+        plan (loaded-view-resource-plan (:block/uuid view-entity)
+                                        view-feature-type
+                                        sorting
+                                        filters
+                                        debounced-input
+                                        group-by-property-ident
+                                        query-row-uuids
+                                        viewport-height)
+        window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
+        full-key (when (some? window-or-full-data)
+                   (get-in plan [:ready-keys :full]))
+        full-snapshot (db-hooks/use-resource-snapshot full-key)
+        full-data (when full-key
+                    (case (:status full-snapshot)
+                      :ready (:value full-snapshot)
+                      :error (throw (:error full-snapshot))
+                      nil))
+        view-data (settled-view-data full-data window-or-full-data)
+        paint (loaded-view-paint view-data)
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         option (cond-> (assoc option
@@ -3190,16 +3221,16 @@
                          (fn [collapsed?]
                            (when collapsed?
                              (deactivate-deferred-view!)))}))]
-    (if (nil? view-data)
+    (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
-      (let [data (view-data->rows view-data)
+      (let [data (:rows paint)
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
-                                            :view-data view-data
-                                            :partition (:partition view-data)
+                                            :view-data (:view-data paint)
+                                            :partition (:partition paint)
                                             :data data
                                             :full-data data
                                             :filters (or filters {})
@@ -3209,7 +3240,7 @@
                                             :set-data! ignore!
                                             :set-input! set-input!
                                             :input input
-                                            :items-count (:count view-data)
+                                            :items-count (:items-count paint)
                                             :group-by-property-ident group-by-property-ident
                                             :ref-pages-count (:ref-pages-count view-data)
                                             :ref-matched-children-ids

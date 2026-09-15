@@ -404,8 +404,8 @@
 (defn- get-class-object-ids-fast
   "Fast path for class-objects where only sorted object ids are needed."
   [db class-id sorting]
-  (when (and class-id (fast-id-sorting sorting))
-    (let [{:keys [id asc?]} (fast-id-sorting sorting)]
+  (when class-id
+    (when-let [{:keys [id asc?]} (fast-id-sorting sorting)]
       (sort-eids-by-indexed-attr db (db-class/get-class-object-ids db class-id) id asc?))))
 
 (defn- maybe-limit-rows
