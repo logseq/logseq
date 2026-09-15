@@ -1465,7 +1465,7 @@
                                nil))))
      body)))
 
-(hsx/defc table-row-inner
+(hsx/defc ^:large-vars/cleanup-todo table-row-inner
   [table row props {:keys [show-add-property? scrolling? disable-virtualized?
                            mount-unpinned-cells?]}]
   (let [*ref (hooks/use-ref nil)
@@ -2439,7 +2439,7 @@
       :else
       (lazy-item-placeholder table-view? gallery-view?))))
 
-(hsx/defc table-body
+(hsx/defc ^:large-vars/cleanup-todo table-body
   [table option rows *scroller-ref set-items-rendered!]
   (let [scroll-parent (get-scroll-parent
                        (-> (:config option)
