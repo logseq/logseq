@@ -956,6 +956,11 @@
                     (shui/tooltip-content content-props tooltip-content))
                    (shui/tooltip-content content-props tooltip-content)))))
 
+(defn date-picker-form-target?
+  "True when Enter should stay in a date-picker form control instead of confirming the date."
+  [^js e]
+  (boolean (some-> (.-target e) (.closest "input, textarea, select, [contenteditable='true']"))))
+
 (hsx/defc DelDateButton
   [on-delete]
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
@@ -1005,7 +1010,7 @@
          :on-blur (fn [_]
                     (when-not (re-matches #"\d{4}" year-value)
                       (set-year-value! (str value))))
-         :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
+         :class "ls-date-year-input h-8 !w-[4.5rem] !px-2 !py-0"
          :value year-value
          :type "number"
          :min 1

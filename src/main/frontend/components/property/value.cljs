@@ -344,6 +344,132 @@
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
+(def ^:private datetime-only-recur-units
+  #{:logseq.property.repeat/recur-unit.minute
+    :logseq.property.repeat/recur-unit.hour})
+
+(defn- property-ref-id
+  [value]
+  (cond
+    (map? value) (:db/id value)
+    (number? value) value
+    :else nil))
+
+(defn- parse-positive-int
+  [raw]
+  (let [s (some-> raw str string/trim)]
+    (when (and (string? s) (re-matches #"\d+" s))
+      (let [n (js/parseInt s 10)]
+        (when (pos? n)
+          n)))))
+
+(defn- repeat-frequency-value
+  [block]
+  (let [v (get block :logseq.property.repeat/recur-frequency)]
+    (or (when (number? v) v)
+        (db-property/property-value-content v)
+        1)))
+
+(defn- repeat-unit-value-id
+  [block recur-unit-property]
+  (or (property-ref-id (get block :logseq.property.repeat/recur-unit))
+      (property-ref-id (:logseq.property/default-value recur-unit-property))
+      (some (fn [choice]
+              (when (= :logseq.property.repeat/recur-unit.day (:db/ident choice))
+                (:db/id choice)))
+            (:property/closed-values recur-unit-property))))
+
+(defn- repeat-unit-choices
+  [block property recur-unit-property]
+  (let [date? (= :date (:logseq.property/type property))]
+    (cond->> (db-property/scoped-closed-values
+              recur-unit-property block
+              {:values (:property/closed-values recur-unit-property)})
+      date?
+      (remove (fn [choice]
+                (contains? datetime-only-recur-units (:db/ident choice)))))))
+
+(defn- repeat-unit-label
+  [choice]
+  (or (db-property/built-in-display-title choice t)
+      (db-property/closed-value-content choice)))
+
+(hsx/defc repeat-every-controls
+  [block property recur-frequency-property recur-unit-property]
+  (let [frequency (repeat-frequency-value block)
+        [frequency-str set-frequency-str!] (hooks/use-state (str frequency))
+        unit-choices (repeat-unit-choices block property recur-unit-property)
+        unit-id (repeat-unit-value-id block recur-unit-property)
+        selected-choice (or (some (fn [choice]
+                                     (when (= unit-id (:db/id choice))
+                                       choice))
+                                  unit-choices)
+                            (some (fn [choice]
+                                    (when (= :logseq.property.repeat/recur-unit.day (:db/ident choice))
+                                      choice))
+                                  unit-choices)
+                            (first unit-choices))
+        selected-id (:db/id selected-choice)
+        save-frequency! (fn [raw]
+                           (if-let [n (parse-positive-int raw)]
+                             (do
+                               (set-frequency-str! (str n))
+                               (when (and (:db/id block) (not config/publishing?))
+                                 (db-property-handler/set-block-property!
+                                  (:db/id block)
+                                  (:db/ident recur-frequency-property)
+                                  n)))
+                             (set-frequency-str! (str frequency))))]
+    (hooks/use-effect!
+     (fn []
+       (set-frequency-str! (str frequency))
+       nil)
+     [frequency])
+    [:div.flex.flex-row.items-center.gap-2.ls-repeat-task-frequency.text-sm
+     [:div.flex-none.text-muted-foreground
+      (t :property.repeat/every)]
+     (shui/input
+      {:type "number"
+       :min 1
+       :step 1
+       :class "ls-repeat-frequency-input !h-8 !w-14 !px-2 !py-0"
+       :value frequency-str
+       :disabled config/publishing?
+       :on-mouse-down util/stop-propagation
+       :on-change (fn [e]
+                     (set-frequency-str! (util/evalue e)))
+       :on-blur (fn [e]
+                  (save-frequency! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (.blur (.-target e))
+                        (util/stop e)))})
+     [:div.flex-1.min-w-0
+      (shui/select
+       (cond-> {:items (mapv (fn [choice]
+                                {:label (repeat-unit-label choice)
+                                 :value (:db/id choice)})
+                             unit-choices)
+                :on-value-change (fn [v]
+                                   (when (and (:db/id block) (not config/publishing?))
+                                     (db-property-handler/set-block-property!
+                                      (:db/id block)
+                                      (:db/ident recur-unit-property)
+                                      v)))}
+         selected-id
+         (assoc :value selected-id)
+         config/publishing?
+         (assoc :disabled true))
+       (shui/select-trigger
+        {:class "h-8 w-full"}
+        [:span.truncate (or (some-> selected-choice repeat-unit-label) "")])
+       (shui/select-content
+        (map (fn [choice]
+               (shui/select-item {:key (str (:db/id choice))
+                                  :value (:db/id choice)}
+                                 (repeat-unit-label choice)))
+             unit-choices))]]))
+
 (hsx/defc repeat-setting
   [block property]
   (let [opts {:exit-edit? false}
@@ -390,13 +516,7 @@
            [:div (t (if (= :date (:logseq.property/type property))
                       :property.repeat/date
                       :property.repeat/datetime))])]]
-       [:div.flex.flex-row.gap-2.ls-repeat-task-frequency.text-sm
-        [:div.flex.text-muted-foreground
-         (t :property.repeat/every)]
-        [:div.w-10.mr-2
-         (property-value block recur-frequency-property opts)]
-        [:div.w-20
-         (property-value block recur-unit-property (assoc opts :property property))]]
+       (repeat-every-controls block property recur-frequency-property recur-unit-property)
        [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting.text-sm
         [:div.text-muted-foreground
          (t :property.repeat/next-date)]
@@ -508,8 +628,7 @@
     (hooks/use-window-keydown
      (fn [^js e]
        (when (and (= "Enter" (util/ekey e))
-                  (not (some-> (.-target e)
-                               (.closest ".ls-nlp-calendar input"))))
+                  (not (ui/date-picker-form-target? e)))
          (select-handler! initial-day)
          (util/stop e)))
      [initial-day select-handler!])

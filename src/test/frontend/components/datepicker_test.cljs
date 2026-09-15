@@ -2,6 +2,7 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.datepicker :as datepicker]
             [frontend.date :as date]
@@ -30,3 +31,20 @@
       (is (= [["edit-block" "[[May 20th, 2026]]" nil {:command :page-ref}]]
              @inserted*))
       (is (nil? @commands/*current-command)))))
+
+(deftest date-year-input-fits-caption-without-overlapping-nav-test
+  (let [html (.renderToStaticMarkup
+              react-dom-server
+              (ui/date-year-month-select {:name "years"
+                                          :value 2026
+                                          :onChange (fn [_])}))]
+    (is (string/includes? html "ls-date-year-input"))
+    (is (string/includes? html "4.5rem"))
+    (is (not (string/includes? html "ml-2")))
+    (is (not (string/includes? html "5.75rem")))))
+
+(deftest date-picker-form-target-ignores-enter-in-inputs-test
+  (is (true? (ui/date-picker-form-target?
+              #js {:target #js {:closest (fn [_] #js {})}})))
+  (is (false? (ui/date-picker-form-target?
+               #js {:target #js {:closest (fn [_] nil)}})))))

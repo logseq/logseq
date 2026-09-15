@@ -360,3 +360,53 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest parse-positive-int-test
+  (is (= 1 (#'property-value/parse-positive-int "1")))
+  (is (= 12 (#'property-value/parse-positive-int " 12 ")))
+  (is (nil? (#'property-value/parse-positive-int "0")))
+  (is (nil? (#'property-value/parse-positive-int "-2")))
+  (is (nil? (#'property-value/parse-positive-int "1.5")))
+  (is (nil? (#'property-value/parse-positive-int "")))
+  (is (nil? (#'property-value/parse-positive-int nil))))
+
+(deftest repeat-frequency-value-test
+  (is (= 1 (#'property-value/repeat-frequency-value {})))
+  (is (= 3 (#'property-value/repeat-frequency-value
+            {:logseq.property.repeat/recur-frequency 3})))
+  (is (= 4 (#'property-value/repeat-frequency-value
+            {:logseq.property.repeat/recur-frequency {:logseq.property/value 4}}))))
+
+(deftest repeat-unit-value-id-test
+  (let [day {:db/id 21 :db/ident :logseq.property.repeat/recur-unit.day}
+        week {:db/id 22 :db/ident :logseq.property.repeat/recur-unit.week}
+        property {:property/closed-values [day week]
+                  :logseq.property/default-value day}]
+    (is (= 22 (#'property-value/repeat-unit-value-id
+               {:logseq.property.repeat/recur-unit week}
+               property)))
+    (is (= 21 (#'property-value/repeat-unit-value-id {} property)))
+    (is (= 21 (#'property-value/repeat-unit-value-id
+               {}
+               (dissoc property :logseq.property/default-value))))))
+
+(deftest repeat-unit-choices-hide-time-units-for-date-properties-test
+  (let [minute {:db/id 1 :db/ident :logseq.property.repeat/recur-unit.minute}
+        hour {:db/id 2 :db/ident :logseq.property.repeat/recur-unit.hour}
+        day {:db/id 3 :db/ident :logseq.property.repeat/recur-unit.day}
+        week {:db/id 4 :db/ident :logseq.property.repeat/recur-unit.week}
+        property {:property/closed-values [minute hour day week]}
+        idents (fn [property-type]
+                 (map :db/ident
+                      (#'property-value/repeat-unit-choices
+                       {}
+                       {:logseq.property/type property-type}
+                       property)))]
+    (is (= [:logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents :date)))
+    (is (= [:logseq.property.repeat/recur-unit.minute
+            :logseq.property.repeat/recur-unit.hour
+            :logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents :datetime))))))
