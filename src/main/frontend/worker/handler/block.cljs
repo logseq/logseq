@@ -165,7 +165,10 @@
                      (mapcat #(property-handler/block-positioned-properties
                                db (:db/id block) %))
                      (keep #(d/entity db (:db/ident %))))]
-            (distinct (concat [block] (:block/refs block) positioned-properties))))
+            ;; Table/All Pages/class-object rows already inline shallow ref
+            ;; identities. Expanding every :block/refs target into a full
+            ;; canonical block makes a screen-sized scroll window take seconds.
+            (distinct (cons block positioned-properties))))
         dependencies-by-root
         (into {}
               (map (fn [block]

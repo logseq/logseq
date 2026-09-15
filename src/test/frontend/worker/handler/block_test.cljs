@@ -359,26 +359,32 @@
   (let [canonical-block (canonical-block-api)
         canonical-blocks (canonical-blocks-api)]
     (when (and canonical-block canonical-blocks)
-      (let [{:keys [conn page-uuid ref-uuid target-uuid]} (canonical-block-fixture)
+      (let [{:keys [conn page-uuid target-uuid ref-uuid]} (canonical-block-fixture)
             db @conn
             response (canonical-blocks db [target-uuid page-uuid])]
         (is (= (:max-tx db) (:basis-rev response)))
-        (is (= #{target-uuid page-uuid ref-uuid}
-               (set (keys (:blocks response)))))
+        (is (= #{target-uuid page-uuid}
+               (set (keys (:blocks response))))
+            "A row load must not hydrate every :block/refs target as its own canonical block.")
+        (is (not (contains? (set (keys (:blocks response))) ref-uuid))
+            "Unrequested :block/refs targets stay out of the snapshot.")
+        (is (some? (get-in response [:blocks target-uuid :block/refs]))
+            "The requested row still inlines shallow ref identities.")
         (doseq [[block-uuid block] (:blocks response)]
           (is (= block-uuid (:block/uuid block)))
           (is (= block
                  (canonical-block db
-                                  (d/entity db [:block/uuid block-uuid])))))))))
+                                  (d/entity db [:block/uuid block-uuid]))))))))))
 
 (deftest canonical-blocks-omits-absent-requested-uuids-at-the-same-basis-test
   (when-let [canonical-blocks (canonical-blocks-api)]
-    (let [{:keys [conn target-uuid ref-uuid]} (canonical-block-fixture)
+    (let [{:keys [conn target-uuid]} (canonical-block-fixture)
           missing-uuid (random-uuid)
           db @conn
           response (canonical-blocks db [target-uuid missing-uuid])]
       (is (= (:max-tx db) (:basis-rev response)))
-      (is (= #{target-uuid ref-uuid} (set (keys (:blocks response)))))
+      (is (= #{target-uuid} (set (keys (:blocks response))))
+          "Missing requested UUIDs stay omitted, and unrequested refs are not pulled in.")
       (is (= target-uuid
              (get-in response [:blocks target-uuid :block/uuid]))))))
 
