@@ -1318,7 +1318,7 @@
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
-                 :on-input (debounce on-input frontend.components.select/default-input-debounce-ms)
+                 :on-input (debounce on-input select/default-input-debounce-ms)
                  :on-chosen (fn [chosen selected?]
                               (p/let [add-tag-property? (and (= (:db/ident property) :logseq.property.class/properties) (not (integer? chosen)))
                                       id (if (integer? chosen)
