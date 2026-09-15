@@ -170,9 +170,12 @@
     (:label x)
 
     :else
-    (let [property-title (or (db-property/built-in-display-title x t)
-                             (:block/title x))
-          ident (:db/ident x)
+    (let [entity (or (:property x) x)
+          property-title (or (db-property/built-in-display-title entity t)
+                             (:block/title entity)
+                             (:block/title x)
+                             (:label x))
+          ident (:db/ident entity)
           ns' (some-> ident (namespace))
           plugin? (some-> ident (api-block/plugin-property-key?))
           plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
@@ -209,12 +212,14 @@
     (let [transform-fn (:transform-fn select-opts)
           items (->>
                  (map (fn [x]
-                        {:value (or (:block/uuid x) (:db/ident x))
-                         :property x
-                         :db/ident (:db/ident x)
-                         :block/title (or (db-property/built-in-display-title x t)
-                                          (:block/title x))
-                         :convert-page-to-property? (:convert-page-to-property? x)})
+                        (let [title (or (db-property/built-in-display-title x t)
+                                        (:block/title x))]
+                          {:value (or (:block/uuid x) (:db/ident x))
+                           :label title
+                           :property x
+                           :db/ident (:db/ident x)
+                           :block/title title
+                           :convert-page-to-property? (:convert-page-to-property? x)}))
                       properties)
                  (util/distinct-by-last-wins (fn [item] (or (:value item) (:db/ident item)))))
           property-transform-fn (fn [results input]
@@ -232,6 +237,7 @@
        [:div.ls-property-key
         (select/select (merge
                         {:items items
+                         :grouped? true
                          :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false
@@ -271,14 +277,33 @@
 	      [:span.bullet-container
 	       [:span.bullet]])))
 
+(defn- chosen-property-input-key
+  "Truthy key that leaves the property picker and opens the value setter.
+  Existing properties must not depend on a visual `:label` hiccup."
+  [property {:keys [value label convert-page-to-property?]} translate-fn]
+  (cond
+    (nil? property)
+    value
+    convert-page-to-property?
+    (:block/title property)
+    :else
+    (or (db-property/built-in-display-title property translate-fn)
+        (:block/title property)
+        label
+        value)))
+
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property? view-parent]}]
   (fn [{:keys [value label convert-page-to-property?]
         selected-property :property}]
     (p/let [property selected-property
-            _ (reset! *property-key (if property
-                                      (if convert-page-to-property? (:block/title property) label)
-                                      value))
+            _ (reset! *property-key
+                      (chosen-property-input-key
+                       property
+                       {:value value
+                        :label label
+                        :convert-page-to-property? convert-page-to-property?}
+                       t))
             batch? (pv/batch-operation?)]
       (if (and property remove-property?)
         (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
