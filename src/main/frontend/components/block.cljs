@@ -228,12 +228,11 @@
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
-        [load-failed? set-load-failed!] (hooks/use-state false)]
-    (hooks/use-effect!
-     (fn []
-       (set-load-failed! false)
-       js/undefined)
-     [src])
+        [load-failed? set-load-failed!] (hooks/use-state false)
+        *prev-src (hooks/use-ref src)]
+    (when (not= (hooks/deref *prev-src) src)
+      (hooks/set-ref! *prev-src src)
+      (set-load-failed! false))
     (hooks/use-effect!
      (fn []
        (when (and (seq src) (:block/uuid asset-block) (not load-failed?))
@@ -258,11 +257,14 @@
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
-        :on-pointer-down util/stop
+        :on-pointer-down (fn [e]
+                           (when-not (block-image/asset-fallback-link-event? e)
+                             (util/stop e)))
         :on-click (fn [e]
-                    (util/stop e)
-                    (when (= "IMG" (some-> (.-target e) (.-nodeName)))
-                      (open-lightbox! e)))
+                    (when-not (block-image/asset-fallback-link-event? e)
+                      (util/stop e)
+                      (when (= "IMG" (some-> (.-target e) (.-nodeName)))
+                        (open-lightbox! e))))
         :ref *el-ref}
        (block-image/image-or-fallback
         {:src src'
@@ -271,7 +273,8 @@
          :metadata metadata
          :load-failed? load-failed?
          :on-error (fn [_]
-                     (set-load-failed! true))})
+                     (when (block-image/remote-image-url? src')
+                       (set-load-failed! true)))})
        (when (and (not load-failed?)
                   (not breadcrumb?)
                   (not positioned?))
