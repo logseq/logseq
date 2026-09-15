@@ -569,154 +569,171 @@
      :timestamp (when (#{:before :after} operator)
                   (common-util/get-timestamp match))}))
 
+(defn- clause-row
+  [db eid {:keys [ident type ref?]} empty-id]
+  (let [raw (indexed-attr-values db eid ident)
+        first-raw (first raw)]
+    {:raw raw
+     :ref? ref?
+     :contents (mapv (fn [v]
+                       (if (and ref? (integer? v))
+                         (ref-value-content db v)
+                         v))
+                     raw)
+     :treat-as-entity? (and ref?
+                            (integer? first-raw)
+                            (or (indexed-attr-value db first-raw :db/ident)
+                                (not (contains? db-property-type/closed-value-property-types type))))
+     :empty-values? (empty-attr-values? raw empty-id)}))
+
+(defn- hits-values?
+  [vs match-set]
+  (boolean (some #(contains? match-set %) vs)))
+
+(defn- match-is-clause
+  [{:keys [raw ref? contents treat-as-entity? empty-values?]} match match-eids match-contents]
+  (let [scalar-match (if (set? match) match #{match})]
+    (cond
+      (boolean? match)
+      (= (boolean (first contents)) match)
+
+      (= :empty match)
+      empty-values?
+
+      (and (coll? match) (empty? match))
+      true
+
+      (and ref? (set? match))
+      (if treat-as-entity?
+        (hits-values? raw match-eids)
+        (boolean (seq (set/intersection (set contents) match-contents))))
+
+      :else
+      (hits-values? (if ref? contents raw) scalar-match))))
+
+(defn- match-is-not-clause
+  [{:keys [raw ref? contents treat-as-entity? empty-values?]} match match-eids match-contents]
+  (let [scalar-match (if (set? match) match #{match})]
+    (cond
+      (boolean? match)
+      (not= (boolean (first contents)) match)
+
+      (= :empty match)
+      (not empty-values?)
+
+      (and (coll? match) (empty? match) (seq raw))
+      true
+
+      (and (coll? match) (seq match) empty-values?)
+      true
+
+      (and ref? (set? match))
+      (if treat-as-entity?
+        (not (hits-values? raw match-eids))
+        (empty? (set/intersection (set contents) match-contents)))
+
+      :else
+      (not (hits-values? (if ref? contents raw) scalar-match)))))
+
+(defn- number-compare-match
+  [contents match pred]
+  (when (seq contents)
+    (if match
+      (some (fn [c] (and (number? c) (pred c match))) contents)
+      true)))
+
+(defn- journal-day-of
+  [db v]
+  (if (integer? v)
+    (indexed-attr-value db v :block/journal-day)
+    v))
+
+(defn- match-text-or-number-clause
+  [{:keys [contents]} operator match]
+  (case operator
+    :text-contains
+    (some (fn [c]
+            (and (some? c)
+                 (string/includes? (string/lower-case (str c))
+                                   (string/lower-case (str match)))))
+          contents)
+
+    :text-not-contains
+    (not-any? (fn [c]
+                (string/includes? (str c) (str match)))
+              contents)
+
+    :number-gt (number-compare-match contents match >)
+    :number-gte (number-compare-match contents match >=)
+    :number-lt (number-compare-match contents match <)
+    :number-lte (number-compare-match contents match <=)
+
+    :between
+    (if (seq match)
+      (let [[start end] match]
+        (some (fn [c]
+                (and (number? c)
+                     (if start (<= start c) true)
+                     (if end (<= c end) true)))
+              contents))
+      true)
+
+    ::unhandled))
+
+(defn- match-temporal-clause
+  [db {:keys [raw ref? contents]} operator match journal-day timestamp]
+  (case operator
+    :date-before
+    (when (seq raw)
+      (if match
+        (some (fn [v]
+                (let [day (journal-day-of db v)]
+                  (and day journal-day (< day journal-day))))
+              raw)
+        true))
+
+    :date-after
+    (when (seq raw)
+      (if match
+        (some (fn [v]
+                (let [day (journal-day-of db v)]
+                  (and day journal-day (> day journal-day))))
+              raw)
+        true))
+
+    :before
+    (when (seq raw)
+      (if timestamp
+        (some (fn [v] (and (number? v) (<= v timestamp)))
+              (if ref? contents raw))
+        true))
+
+    :after
+    (when (seq raw)
+      (if timestamp
+        (some (fn [v] (and (number? v) (>= v timestamp)))
+              (if ref? contents raw))
+        true))
+
+    true))
+
+(defn- match-compare-clause
+  [db row operator match journal-day timestamp]
+  (let [text-or-number (match-text-or-number-clause row operator match)]
+    (if (= ::unhandled text-or-number)
+      (match-temporal-clause db row operator match journal-day timestamp)
+      text-or-number)))
+
 (defn- eid-clause-match?
   [db eid {:keys [schema operator match match-eids match-contents journal-day timestamp]} empty-id]
   (if (nil? match)
     true
-    (let [{:keys [ident type ref?]} schema
-          raw (indexed-attr-values db eid ident)
-          contents (mapv (fn [v]
-                           (if (and ref? (integer? v))
-                             (ref-value-content db v)
-                             v))
-                         raw)
-          first-raw (first raw)
-          treat-as-entity? (and ref?
-                                (integer? first-raw)
-                                (or (indexed-attr-value db first-raw :db/ident)
-                                    (not (contains? db-property-type/closed-value-property-types type))))
-          empty-values? (empty-attr-values? raw empty-id)
-          scalar-match (if (set? match) match #{match})
-          hits-scalar? (fn [vs]
-                         (boolean (some #(contains? scalar-match %) vs)))
-          hits-eids? (fn [vs]
-                       (boolean (some #(contains? match-eids %) vs)))]
+    (let [row (clause-row db eid schema empty-id)]
       (boolean
        (case operator
-         :is
-         (cond
-           (boolean? match)
-           (= (boolean (first contents)) match)
-
-           (= :empty match)
-           empty-values?
-
-           (and (coll? match) (empty? match))
-           true
-
-           (and ref? (set? match))
-           (if treat-as-entity?
-             (hits-eids? raw)
-             (boolean (seq (set/intersection (set contents) match-contents))))
-
-           :else
-           (hits-scalar? (if ref? contents raw)))
-
-         :is-not
-         (cond
-           (boolean? match)
-           (not= (boolean (first contents)) match)
-
-           (= :empty match)
-           (not empty-values?)
-
-           (and (coll? match) (empty? match) (seq raw))
-           true
-
-           (and (coll? match) (seq match) empty-values?)
-           true
-
-           (and ref? (set? match))
-           (if treat-as-entity?
-             (not (hits-eids? raw))
-             (empty? (set/intersection (set contents) match-contents)))
-
-           :else
-           (not (hits-scalar? (if ref? contents raw))))
-
-         :text-contains
-         (some (fn [c]
-                 (and (some? c)
-                      (string/includes? (string/lower-case (str c))
-                                        (string/lower-case (str match)))))
-               contents)
-
-         :text-not-contains
-         (not-any? (fn [c]
-                     (string/includes? (str c) (str match)))
-                   contents)
-
-         :number-gt
-         (when (seq contents)
-           (if match
-             (some (fn [c] (and (number? c) (> c match))) contents)
-             true))
-
-         :number-gte
-         (when (seq contents)
-           (if match
-             (some (fn [c] (and (number? c) (>= c match))) contents)
-             true))
-
-         :number-lt
-         (when (seq contents)
-           (if match
-             (some (fn [c] (and (number? c) (< c match))) contents)
-             true))
-
-         :number-lte
-         (when (seq contents)
-           (if match
-             (some (fn [c] (and (number? c) (<= c match))) contents)
-             true))
-
-         :between
-         (if (seq match)
-           (let [[start end] match]
-             (some (fn [c]
-                     (and (number? c)
-                          (if start (<= start c) true)
-                          (if end (<= c end) true)))
-                   contents))
-           true)
-
-         :date-before
-         (when (seq raw)
-           (if match
-             (some (fn [v]
-                     (let [day (if (integer? v)
-                                 (indexed-attr-value db v :block/journal-day)
-                                 v)]
-                       (and day journal-day (< day journal-day))))
-                   raw)
-             true))
-
-         :date-after
-         (when (seq raw)
-           (if match
-             (some (fn [v]
-                     (let [day (if (integer? v)
-                                 (indexed-attr-value db v :block/journal-day)
-                                 v)]
-                       (and day journal-day (> day journal-day))))
-                   raw)
-             true))
-
-         :before
-         (when (seq raw)
-           (if timestamp
-             (some (fn [v] (and (number? v) (<= v timestamp)))
-                   (if ref? contents raw))
-             true))
-
-         :after
-         (when (seq raw)
-           (if timestamp
-             (some (fn [v] (and (number? v) (>= v timestamp)))
-                   (if ref? contents raw))
-             true))
-
-         true)))))
+         :is (match-is-clause row match match-eids match-contents)
+         :is-not (match-is-not-clause row match match-eids match-contents)
+         (match-compare-clause db row operator match journal-day timestamp))))))
 
 (defn- title-matches-input?
   [db eid input]
