@@ -45,8 +45,8 @@
 
   Remote poster URLs (Amazon/IMDb/TMDB) must not become the visible title —
   callers display the file stem (`MV5B…`) instead of the full URL."
-  [path-basename]
-  (let [base (or (path-basename path-basename) "")]
+  [name-or-url]
+  (let [base (or (path-basename name-or-url) "")]
     (if (string/blank? base)
       ""
       (let [parsed-name (.-name (node-path/parse base))]

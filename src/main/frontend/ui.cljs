@@ -500,7 +500,30 @@
                            [:div
                             [:div.ui__ac-group-name group-name]
                             item-cp])
-                         item-cp))))]
+                         item-cp))))
+        results (cond
+                  virtualize?
+                  (virtualized-list
+                   {:ref (fn [el] (hooks/set-ref! *virtuoso el))
+                    :style {:height auto-complete-virtualize-height}
+                    :total-count (count matched)
+                    :increase-viewport-by 80
+                    :item-content (fn [idx]
+                                    (auto-complete-item idx (nth matched idx) item-opts))})
+
+                  grouped?
+                  (let [*idx (atom -1)
+                        inc-idx #(swap! *idx inc)]
+                    (for [[group matched] (group-by :group matched)]
+                      (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
+                        (if group
+                          [:div
+                           [:div.ui__ac-group-name group]
+                           (render-f matched')]
+                          (render-f matched')))))
+
+                  :else
+                  (render-f (medley/indexed matched)))]
     (hooks/use-effect!
      (fn []
        (when-let [el (js/document.getElementById "ui__ac")]
@@ -512,31 +535,9 @@
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
-        (cond
-          virtualize?
-          (virtualized-list
-           {:ref (fn [el] (hooks/set-ref! *virtuoso el))
-            :style {:height auto-complete-virtualize-height}
-            :total-count (count matched)
-            :increase-viewport-by 80
-            :item-content (fn [idx]
-                            (auto-complete-item idx (nth matched idx) item-opts))})
-
-          grouped?
-          (let [*idx (atom -1)
-                inc-idx #(swap! *idx inc)]
-            (for [[group matched] (group-by :group matched)]
-              (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
-                (if group
-                  [:div
-                   [:div.ui__ac-group-name group]
-                   (render-f matched')]
-                  (render-f matched')))))
-
-          :else
-          (render-f (medley/indexed matched)))]
+        results]
        (when empty-placeholder
-         empty-placeholder))])))
+         empty-placeholder))]))
 
 (defn toggle
   ([on? on-click] (toggle on? on-click false))
