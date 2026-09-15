@@ -474,7 +474,14 @@
   [block]
   (true? (:block.temp/first-window-preview? block)))
 
-(hsx/defc ^:large-vars/cleanup-todo block-title
+(defn- first-window-block-title
+  "Tags/Movies first paint spent block-title hooks on every preview row."
+  [block]
+  [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer
+   [:div.flex.flex-row
+    [:div (first-window-title-text block)]]])
+
+(hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -574,6 +581,15 @@
                          (util/stop-propagation e)
                          (add-to-sidebar!))}
             (ui/icon "layout-sidebar-right"))]]))]))
+
+(defn- block-title
+  [block* opts]
+  (let [block (if (db-property/many? (:property opts))
+                (first block*)
+                block*)]
+    (if (first-window-title-preview? block)
+      (first-window-block-title block)
+      [block-title-interactive block* opts])))
 
 (defn- page-column
   []
@@ -2207,6 +2223,28 @@
   (or (first-window-titles-ready? row-previews)
       (viewport-filled? initial-rows-ready? hydrate-row-uuids)))
 
+(defn- first-paint-view-entity
+  "Pending views paint titles before use-block. Swapping in db/id
+  re-rendered All Pages / Tags / Movies before the first lazy-item."
+  [view-entity pending-view first-paint-done?]
+  (if first-paint-done?
+    (or view-entity pending-view)
+    pending-view))
+
+(defn- first-paint-class-properties
+  "Movies fetched 17 class properties before view-data. Keep the first
+  table frame on name/select/id."
+  [fetched first-paint-done?]
+  (if first-paint-done?
+    (or fetched [])
+    []))
+
+(defn- notify-first-table-paint!
+  [*notified? on-first-table-paint!]
+  (when (and on-first-table-paint! (not (.-current *notified?)))
+    (set! (.-current *notified?) true)
+    (on-first-table-paint!)))
+
 (defn- row-has-first-window-title?
   [row-previews row-uuid]
   (contains? row-previews row-uuid))
@@ -2445,7 +2483,8 @@
                       :table-view? true
                       :mount-unpinned-cells? mount-unpinned-cells?)
         can-paint? (table-body-can-paint?
-                    initial-rows-ready? hydrate-row-uuids row-previews)]
+                    initial-rows-ready? hydrate-row-uuids row-previews)
+        *first-paint-notified? (hooks/use-ref false)]
     ;; Offset-window rows replace the 40938-id list. Refresh hydrate
     ;; onto those UUIDs when the scrolled window arrives.
     (hooks/use-effect!
@@ -2505,6 +2544,9 @@
                                  props)))
                           (when (seq props)
                             (set-items-rendered! true)
+                            (notify-first-table-paint!
+                             *first-paint-notified?
+                             (:on-first-table-paint! option))
                             (when set-mount-unpinned-cells!
                               (js/requestAnimationFrame
                                #(set-mount-unpinned-cells! true)))
@@ -3237,13 +3279,19 @@
                     {:group-value group-value}))))
 
 (hsx/defc ^:large-vars/cleanup-todo view-inner
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config on-first-table-paint!] :as option*}
    *scroller-ref]
-  (let [journals? (:journals? config)
+  (let [[head-ready? set-head-ready!] (hooks/use-state false)
+        journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
-                          vec))
+                          vec)
+                      :on-first-table-paint!
+                      (fn []
+                        (set-head-ready! true)
+                        (when on-first-table-paint!
+                          (on-first-table-paint!))))
         visible-columns (-> (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
                               (zipmap hidden-columns (repeat false))
                               ;; This case can happen for imported tables
@@ -3331,7 +3379,9 @@
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
      (ui/foldable
-      (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
+      (if head-ready?
+        (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
+        [:div.ls-view-head])
       (fn []
         [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
          (filters-row view-entity table option)
@@ -3639,16 +3689,22 @@
 (hsx/defc selected-view
   [view-uuids option]
   (let [[requested-view-uuid set-requested-view-uuid!] (hooks/use-state nil)
+        [first-paint-done? set-first-paint-done!] (hooks/use-state false)
         selected-view-uuid (if (some #{requested-view-uuid} view-uuids)
                              requested-view-uuid
                              (first view-uuids))
         view-entity (db-hooks/use-block selected-view-uuid)
         pending-view {:block/uuid selected-view-uuid}]
     ^{:key (str "view-" selected-view-uuid)}
-    [sub-view (or view-entity pending-view)
+    [sub-view (first-paint-view-entity view-entity pending-view first-paint-done?)
      (assoc option
             :view-uuids view-uuids
-            :set-current-view-uuid! set-requested-view-uuid!)]))
+            :set-current-view-uuid! set-requested-view-uuid!
+            :on-first-table-paint!
+            (fn []
+              (set-first-paint-done! true)
+              (when-let [notify! (:on-first-table-paint! option)]
+                (notify!))))]))
 
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]

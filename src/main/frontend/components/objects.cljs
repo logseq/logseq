@@ -72,8 +72,14 @@
          (.click title-node)))
      100)))
 
+(defn- first-paint-class-properties
+  [fetched first-paint-done?]
+  (if first-paint-done?
+    (or fetched [])
+    []))
+
 (hsx/defc class-objects-inner
-  [config class properties]
+  [config class properties {:keys [on-first-table-paint!]}]
   (let [*ref (hooks/use-ref nil)
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
@@ -102,6 +108,7 @@
                   :add-new-object! add-new-object!
                   :show-add-property? true
                   :show-items-count? true
+                  :on-first-table-paint! on-first-table-paint!
                   :add-property! (fn [e]
                                    (state/pub-event! [:editor/new-property {:block class
                                                                             :class-schema? true
@@ -116,17 +123,20 @@
         ;; only refreshing on full remount (e.g. a page reload).
         live-class (db-hooks/use-block (:block/uuid class))
         class-properties (:logseq.property.class/properties live-class)
-        [properties set-properties!] (hooks/use-state [])
+        [fetched set-fetched!] (hooks/use-state nil)
+        [first-paint-done? set-first-paint-done!] (hooks/use-state false)
+        properties (first-paint-class-properties fetched first-paint-done?)
         _ (hooks/use-effect!
            (fn []
              (p/let [result (db-async/<get-class-properties
                               (state/get-current-repo)
                               (:db/id class))]
-               (set-properties! (or result [])))
+               (set-fetched! (or result [])))
              nil)
            [(:db/id class) class-properties])]
     [:div.ml-1
-     (class-objects-inner config class properties)]))
+     (class-objects-inner config class properties
+                          {:on-first-table-paint! #(set-first-paint-done! true)})]))
 
 (defn- <property-object-default-value
   [property]

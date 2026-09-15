@@ -649,6 +649,17 @@
            (#'views/view-instance-key {:block/uuid view-uuid :db/id 78981}))
         "All Pages remounted the painted table when db/id arrived.")))
 
+(deftest first-paint-keeps-pending-view-and-class-properties-test
+  (let [view-uuid (random-uuid)
+        pending {:block/uuid view-uuid}
+        entity {:block/uuid view-uuid :db/id 78981}]
+    (is (= pending (#'views/first-paint-view-entity entity pending false)))
+    (is (= entity (#'views/first-paint-view-entity entity pending true)))
+    (is (= [] (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] false))
+        "Movies applied 17 class properties before the first table frame.")
+    (is (= [{:db/ident :user.property/actors}]
+           (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] true)))))
+
 (deftest first-paint-skips-unpinned-property-columns-test
   (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]
     (is (= [{:id :block/title} {:id :select}]
