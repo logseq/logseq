@@ -2068,7 +2068,7 @@
   {:item-height (lazy-item-placeholder-height true)
    :overscan-px table-row-overscan-px})
 
-(def ^:private view-prefetch-limit 160)
+(def ^:private view-prefetch-max-rows 1000)
 
 (def ^:private windowed-view-feature-types
   #{:all-pages :class-objects})
@@ -2088,24 +2088,73 @@
    :full (when (and window-context window-ready?)
            [:view-data view-uuid full-context])})
 
+(defn- rows-for-height
+  [height-px item-height]
+  (max 1 (js/Math.ceil (/ (max 0 height-px) item-height))))
+
 (defn- initial-view-prefetch-count
+  "First paint hydrates only the rows that fit on screen."
   [viewport-height item-height]
-  (-> (js/Math.ceil (/ viewport-height item-height))
-      (max 1)
-      (min view-prefetch-limit)))
+  (min view-prefetch-max-rows (rows-for-height viewport-height item-height)))
+
+(defn- view-prefetch-row-count
+  "Subscribe to the on-screen rows plus both Virtuoso overscan sides."
+  [viewport-height item-height overscan-px]
+  (min view-prefetch-max-rows
+       (+ (rows-for-height viewport-height item-height)
+          (* 2 (rows-for-height overscan-px item-height)))))
+
+(defn- prefetch-edge-rows
+  [window-size]
+  (max 1 (quot window-size 4)))
+
+(defn- view-prefetch-bounds
+  [rows-count start-index end-index window-size]
+  (cond
+    (zero? rows-count)
+    nil
+
+    (<= rows-count window-size)
+    [0 (dec rows-count)]
+
+    :else
+    (let [center-index (quot (+ start-index end-index) 2)
+          max-start (- rows-count window-size)
+          start (min max-start
+                     (max 0 (- center-index
+                               (quot window-size 2))))]
+      [start (+ start (dec window-size))])))
 
 (defn- view-prefetch-window
-  [rows start-index end-index]
+  [rows start-index end-index window-size]
+  (let [rows (vec rows)]
+    (if-let [[start end] (view-prefetch-bounds (count rows) start-index end-index window-size)]
+      (subvec rows start (inc end))
+      [])))
+
+(defn- prefetch-bounds-cover-visible?
+  [[window-start window-end] visible-start visible-end rows-count window-size]
+  (let [edge-rows (prefetch-edge-rows window-size)]
+    (and (some? window-start)
+         (<= window-start (max 0 (- visible-start edge-rows)))
+         (>= window-end (min (dec rows-count) (+ visible-end edge-rows))))))
+
+(defn- next-view-prefetch-bounds
+  "Keep the current screen-sized window until the visible range approaches an edge."
+  [rows-count current-bounds visible-start visible-end window-size]
+  (if (prefetch-bounds-cover-visible?
+       current-bounds visible-start visible-end rows-count window-size)
+    current-bounds
+    (view-prefetch-bounds rows-count visible-start visible-end window-size)))
+
+(defn- next-view-prefetch-window
+  [rows current-bounds visible-start visible-end window-size]
   (let [rows (vec rows)
-        rows-count (count rows)]
-    (if (<= rows-count view-prefetch-limit)
-      rows
-      (let [center-index (quot (+ start-index end-index) 2)
-            max-start (- rows-count view-prefetch-limit)
-            start-index (min max-start
-                             (max 0 (- center-index
-                                       (quot view-prefetch-limit 2))))]
-        (subvec rows start-index (+ start-index view-prefetch-limit))))))
+        [start end] (next-view-prefetch-bounds
+                     (count rows) current-bounds visible-start visible-end window-size)]
+    (if (and start end)
+      (subvec rows start (inc end))
+      [])))
 
 (defn- rendered-item-index
   [^js item]
@@ -2113,20 +2162,30 @@
 
 (defn- use-view-row-prefetch
   ([rows]
-   (use-view-row-prefetch rows view-prefetch-limit))
+   (use-view-row-prefetch rows
+                          (initial-view-prefetch-count
+                           (or (.-innerHeight js/window) 0)
+                           (lazy-item-placeholder-height false))
+                          (view-prefetch-row-count
+                           (or (.-innerHeight js/window) 0)
+                           (lazy-item-placeholder-height false)
+                           64)))
   ([rows initial-prefetch-count]
-   (let [[rendered-range set-rendered-range!] (hooks/use-state nil)
+   (use-view-row-prefetch rows initial-prefetch-count initial-prefetch-count))
+  ([rows initial-prefetch-count window-size]
+   (let [[prefetch-bounds set-prefetch-bounds!] (hooks/use-state nil)
+         rows-vec (vec rows)
          prefetch-rows (cond
-                         (empty? rows)
+                         (empty? rows-vec)
                          []
 
-                         rendered-range
-                         (view-prefetch-window rows
-                                               (first rendered-range)
-                                               (second rendered-range))
+                         prefetch-bounds
+                         (subvec rows-vec
+                                 (first prefetch-bounds)
+                                 (inc (second prefetch-bounds)))
 
                          :else
-                         (subvec (vec rows) 0 (min (count rows) initial-prefetch-count)))
+                         (subvec rows-vec 0 (min (count rows-vec) initial-prefetch-count)))
          prefetch-ready? (db-hooks/use-block-prefetch prefetch-rows)
          [initial-prefetch-ready? set-initial-prefetch-ready!] (hooks/use-state prefetch-ready?)]
      (hooks/use-effect!
@@ -2137,14 +2196,20 @@
      [(or initial-prefetch-ready? prefetch-ready?)
       (fn [^js rendered-items]
         (when (pos? (alength rendered-items))
-          (let [next-range [(rendered-item-index (aget rendered-items 0))
-                            (rendered-item-index
-                             (aget rendered-items (dec (alength rendered-items))))]]
-            (set-rendered-range!
-             (fn [current-range]
-               (if (= current-range next-range)
-                 current-range
-                 next-range))))))])))
+          (let [visible-start (rendered-item-index (aget rendered-items 0))
+                visible-end (rendered-item-index
+                             (aget rendered-items (dec (alength rendered-items))))]
+            (set-prefetch-bounds!
+             (fn [current-bounds]
+               (let [next-bounds (next-view-prefetch-bounds
+                                  (count rows-vec)
+                                  current-bounds
+                                  visible-start
+                                  visible-end
+                                  window-size)]
+                 (if (= current-bounds next-bounds)
+                   current-bounds
+                   next-bounds)))))))])))
 
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view?]} item-render]
@@ -2162,11 +2227,20 @@
                        (-> (:config option)
                            (assoc :viewel (js/document.getElementById (:viewid option)))))
         {:keys [item-height overscan-px]} (table-virtualization-metrics)
+        viewport-height (or (some-> scroll-parent .-clientHeight)
+                            (.-innerHeight js/window)
+                            0)
         initial-prefetch-count (initial-view-prefetch-count
-                                (or (some-> scroll-parent .-clientHeight) 0)
+                                viewport-height
                                 item-height)
+        prefetch-window-size (view-prefetch-row-count
+                              viewport-height
+                              item-height
+                              overscan-px)
         [_initial-rows-ready? prefetch-rows!]
-        (use-view-row-prefetch (:data table) initial-prefetch-count)]
+        (use-view-row-prefetch (:data table)
+                               initial-prefetch-count
+                               prefetch-window-size)]
     (when (seq rows)
       (virtualized-list
        {:ref #(reset! *scroller-ref %)
