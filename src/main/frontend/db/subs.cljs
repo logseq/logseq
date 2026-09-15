@@ -46,12 +46,18 @@
   (js/clearTimeout timer-id))
 (defn ^:no-doc schedule-load-batch! [callback]
   (js/setTimeout callback 0))
+(declare mounted?)
+
+;; `mounted?` lets the loader drop a queued load whose slot lost its last
+;; subscriber before the request went out (a row scrolled past). The
+;; unsubscribe in subscribe! forgets the slot's in-flight token, so the
+;; rejection is ignored and a later subscribe starts a fresh load.
 (defn <load-block [graph-id block-uuid]
-  (loader/load! graph-id [:block block-uuid] schedule-load-batch!))
+  (loader/load! graph-id [:block block-uuid] schedule-load-batch! mounted?))
 (defn <load-children [graph-id parent-uuid]
-  (loader/load! graph-id [:children parent-uuid] schedule-load-batch!))
+  (loader/load! graph-id [:children parent-uuid] schedule-load-batch! mounted?))
 (defn <load-resource [graph-id resource-key]
-  (loader/load! graph-id [:resource resource-key] schedule-load-batch!))
+  (loader/load! graph-id [:resource resource-key] schedule-load-batch! mounted?))
 
 (defn- mounted?
   [slot-key]

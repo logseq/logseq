@@ -2040,3 +2040,62 @@
                               "An unrelated newer graph revision does not stale the result.")]
                   (is (= 1 @calls))
                   (unsubscribe))))))))
+
+(deftest loader-sends-one-wave-at-a-time-and-only-subscribed-slots-test
+  (async done
+         (let [u1 (random-uuid)
+               u2 (random-uuid)
+               u3 (random-uuid)
+               worker-calls (atom [])
+               first-wave (p/deferred)
+               scheduled-load (atom nil)
+               response-for (fn [request]
+                              {:basis-rev 1
+                               :slots (into {}
+                                            (map (fn [u] [[:block u] {:value (block u 1 "t")}]))
+                                            (:blocks request))
+                               :groups (into {}
+                                             (map (fn [u] [[:block u] #{[:block u]}]))
+                                             (:blocks request))})
+               unsubscribes (atom [])]
+           (reset! state/*db-worker
+                   (fn [api graph-id request]
+                     (if (= :thread-api/get-render-snapshots api)
+                       (do
+                         (swap! worker-calls conj [api graph-id request])
+                         (if (= 1 (count @worker-calls))
+                           first-wave
+                           (p/resolved (response-for request))))
+                       (p/resolved nil))))
+           (finish-async!
+            done
+            (p/with-redefs [subs/schedule-load-batch! #(reset! scheduled-load %)]
+              (->
+               (p/let [unsub-1 (subs/subscribe-block! u1 (fn []))
+                       _ (swap! unsubscribes conj (subs/subscribe-block! u2 (fn [])))
+                       ;; u1 leaves before the wave goes out.
+                       _ (unsub-1)
+                       _ (@scheduled-load)
+                       _ (p/delay 0)
+                       _ (is (= [[u2]]
+                              (mapv (fn [[_ _ request]] (:blocks request)) @worker-calls))
+                             "A slot with no subscriber left is dropped before the wave is sent.")
+                       ;; u3 arrives while the first wave is out: it waits in the renderer.
+                       _ (swap! unsubscribes conj (subs/subscribe-block! u3 (fn [])))
+                       _ (@scheduled-load)
+                       _ (p/delay 0)
+                       _ (is (= 1 (count @worker-calls))
+                             "A second wave is held while the first is in flight.")
+                       _ (p/resolve! first-wave (response-for {:blocks [u2]}))
+                       _ (p/delay 0)
+                       _ (is (= [[u2] [u3]]
+                              (mapv (fn [[_ _ request]] (:blocks request)) @worker-calls))
+                             "The held wave is sent when the first completes.")]
+                 (is (= {:status :ready :value (block u2 1 "t")}
+                        (subs/block-snapshot u2)))
+                 (is (= {:status :ready :value (block u3 1 "t")}
+                        (subs/block-snapshot u3))))
+               (p/finally
+                 (fn []
+                   (doseq [unsubscribe! @unsubscribes]
+                     (unsubscribe!))))))))))
