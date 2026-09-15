@@ -2212,6 +2212,49 @@
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
+(deftest expand-without-selection-expands-shallowest-collapsed-level
+  (async done
+         (let [root-id #uuid "11111111-1111-1111-1111-111111111111"
+               parent-id #uuid "22222222-2222-2222-2222-222222222222"
+               deep-a-id #uuid "33333333-3333-3333-3333-333333333333"
+               shallow-a-id #uuid "44444444-4444-4444-4444-444444444444"
+               deep-b-id #uuid "55555555-5555-5555-5555-555555555555"
+               shallow-b-id #uuid "66666666-6666-6666-6666-666666666666"
+               blocks [{:block/uuid root-id
+                        :block/collapsed? true}
+                       {:block/uuid parent-id
+                        :block/level 1}
+                       {:block/uuid deep-a-id
+                        :block/level 2
+                        :block/collapsed? true}
+                       {:block/uuid shallow-a-id
+                        :block/level 1
+                        :block/collapsed? true}
+                       {:block/uuid deep-b-id
+                        :block/level 2
+                        :block/collapsed? true}
+                       {:block/uuid shallow-b-id
+                        :block/level 1
+                        :block/collapsed? true}]
+               expanded (atom [])]
+           (-> (p/with-redefs [util/stop (constantly nil)
+                               state/editing? (constantly false)
+                               state/selection? (constantly false)
+                               editor/<all-blocks-with-level (fn [_]
+                                                               (p/resolved blocks))
+                               editor/expand-block! (fn [block-id & _]
+                                                      (swap! expanded conj block-id))]
+                 (editor/expand! nil))
+               (p/then
+                (fn []
+                  (is (= {shallow-a-id 1
+                          shallow-b-id 1}
+                         (frequencies @expanded)))))
+               (p/catch
+                (fn [error]
+                  (is false (str error))))
+               (p/finally done)))))
+
 (deftest db-based-save-assets-honors-explicit-target-block
   (async done
     (let [draft-uuid #uuid "8789a99e-5147-41a1-a836-4e0a6f03fe9e"
