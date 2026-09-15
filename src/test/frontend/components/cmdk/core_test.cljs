@@ -41,16 +41,18 @@
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
     (let [calls (atom 0)
-          [schedule! cancel!] (cmdk/make-search-debouncer #(swap! calls inc))]
-      (doseq [delay [0 100 200 300 400]]
+          [schedule! cancel!] (cmdk/make-search-debouncer #(swap! calls inc))
+          keystroke-gap 80
+          last-keystroke (* 4 keystroke-gap)]
+      (doseq [delay (range 0 (+ last-keystroke 1) keystroke-gap)]
         (js/setTimeout schedule! delay))
       (js/setTimeout
        (fn []
          (cancel!)
          (is (= 1 @calls)
-             "five keystrokes 100 ms apart should trigger one search")
+             "five keystrokes 80 ms apart should trigger one search")
          (done))
-       700))))
+       (+ last-keystroke cmdk/search-debounce-ms 80)))))
 
 (defn- keydown-event
   [{:keys [key key-code composing?]}]

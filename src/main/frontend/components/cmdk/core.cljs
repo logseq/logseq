@@ -1023,9 +1023,11 @@
   (persist-cmdk-query-state! state)
   (load-results :default state))
 
+(def search-debounce-ms 400)
+
 (defn make-search-debouncer
   [refresh-fn]
-  (util/cancelable-debounce refresh-fn 150))
+  (util/cancelable-debounce refresh-fn search-debounce-ms))
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value) true))
