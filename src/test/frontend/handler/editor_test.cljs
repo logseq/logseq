@@ -2816,4 +2816,4 @@
                                           :logseq.property/created-by-ref]})))
     (is (not (editor/db-collapsable?
               {:block/title "hello"
-               :logseq.property/created-from-property {:db/ident :user.property/p1}}))))))
+               :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
