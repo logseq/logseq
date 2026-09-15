@@ -127,6 +127,13 @@
              #{:logseq.class/Journal :logseq.class/Whiteboard
                :logseq.class/Pdf-annotation}))
 
+(def private-tag-titles
+  "Titles of private built-in tags. Used when a parsed tag has not been resolved
+   to a :db/ident yet, e.g. creating a page via search with `Foo #Tag`."
+  (->> private-tags
+       (keep #(get-in built-in-classes [% :title]))
+       set))
+
 (def block-kind-tags
   #{:logseq.class/Cards :logseq.class/Code-block
     :logseq.class/Math-block :logseq.class/Quote-block

@@ -2,8 +2,7 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.config :as config-handler]
@@ -102,6 +101,13 @@
                   (js/setTimeout #(poll! (- remaining-ms 100)) 100)))))]
     (poll! 5000)))
 
+(defn- private-create-page-tag?
+  "True when a parsed tag is a private built-in class. Ctrl-K parses tags
+  without a db, so new tags may only have :block/title."
+  [tag]
+  (or (contains? ldb/private-tags (:db/ident tag))
+      (contains? ldb/private-tag-titles (:block/title tag))))
+
 (defn <create!
   ([title]
    (<create! title {}))
@@ -125,11 +131,11 @@
          (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
-              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+              (seq (filter private-create-page-tag? (:block/tags parsed-result))))
          (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
-                                (keep #(when (ldb/private-tags (:db/ident %))
+                                (keep #(when (private-create-page-tag? %)
                                          (pr-str (:block/title %)))
                                       (:block/tags parsed-result)))])
                              :error)
