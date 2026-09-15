@@ -2146,7 +2146,7 @@
                                                            :logseq.property/empty-placeholder
                                                            value)
                                                          opts)))))))
-        (case type
+        (case type)
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
