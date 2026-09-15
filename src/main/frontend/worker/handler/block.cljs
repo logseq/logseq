@@ -50,7 +50,10 @@
 (def ^:private canonical-block-excluded-attrs
   #{:block/children
     :block/properties
-    :block/properties-text-values})
+    :block/properties-text-values
+    ;; Legacy many-ref; migrate deletes this attr. 4k-movies still stores
+    ;; a copy of :block/refs here and expanding it doubled snapshot work.
+    :block/path-refs})
 
 (defn- valid-revision?
   [value]
@@ -92,16 +95,6 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
-(defn- ident-eid
-  [db ident]
-  (when (keyword? ident)
-    (some-> (first (d/datoms db :avet :db/ident ident)) :e)))
-
-(defn- property-ident-uuid
-  [db property-ident]
-  (when-let [property-eid (ident-eid db property-ident)]
-    (eavt-scalar db property-eid :block/uuid)))
-
 (defn- tagged-with-ident?
   [db eid tag-ident]
   (some (fn [datom]
@@ -120,19 +113,13 @@
                   (str value))]
       (some-> label string/lower-case))))
 
-(defn- canonical-positioned-properties-map
-  [db block]
-  (let [block-id (:db/id block)
-        idents-by-position
-        (property-handler/block-positioned-property-idents-by-position
-         db block-id)]
-    (into {}
-          (keep (fn [[position idents]]
-                  (let [property-uuids
-                        (into [] (keep #(property-ident-uuid db %)) idents)]
-                    (when (seq property-uuids)
-                      [position property-uuids]))))
-          idents-by-position)))
+(defn- inline-ref-attr?
+  "Table cells need property/tag/parent refs. :block/refs is only required
+  to resolve [[id]] titles; a Movie row's 37 refs are the same pages already
+  inlined on actors/genre plus path-refs."
+  [attr replace-id-refs?]
+  (or (not= attr :block/refs)
+      replace-id-refs?))
 
 (declare block-refs-count)
 
@@ -175,7 +162,8 @@
     (let [block
           (reduce
            (fn [result {:keys [a v]}]
-             (if (canonical-attr? a)
+             (if (and (canonical-attr? a)
+                      (inline-ref-attr? a replace-id-refs?))
                (let [{value-type :db/valueType
                       cardinality :db/cardinality} (render-attr-schema db a)
                      value (if (= :db.type/ref value-type)
@@ -192,10 +180,6 @@
                          (property-handler/display-property-map db entity-id))
                   block)]
       (cond-> (assoc block
-                     :block.temp/property-keys
-                     (property-handler/block-property-keys db entity)
-                     :block.temp/positioned-properties
-                     (canonical-positioned-properties-map db entity)
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
         (string? raw-title)

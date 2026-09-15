@@ -3245,9 +3245,13 @@
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (when-let [property-uuids
-             (seq (get (:block.temp/positioned-properties block) position))]
-    [positioned-properties-content config block position property-uuids]))
+  (let [block-uuid (:block/uuid block)
+        {:keys [status value]}
+        (db-hooks/use-resource-snapshot
+         (when (uuid? block-uuid)
+           [:block-positioned-properties block-uuid position]))]
+    (when (and (= :ready status) (seq value))
+      [positioned-properties-content config block position value])))
 
 (hsx/defc loaded-block-reactions
   [block]

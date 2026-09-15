@@ -519,10 +519,8 @@
   (is (not (contains? block :block/children)))
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
-  (is (every? #{:block.temp/positioned-properties
-                :block.temp/refs-count
-                :block.temp/order-list-index
-                :block.temp/property-keys}
+  (is (every? #{:block.temp/refs-count
+                :block.temp/order-list-index}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
@@ -1099,8 +1097,10 @@
         target (get-in response [:blocks resource-block])]
     (is (not (contains? (:blocks response) positioned-property))
         "Property definitions stay off the row snapshot. The row inlines their UUIDs.")
-    (is (contains? (set (get-in target [:block.temp/positioned-properties :block-right]))
-                   positioned-property))
+    (is (not (contains? target :block.temp/positioned-properties))
+        "Positioned chips load through :block-positioned-properties, not the row snapshot.")
+    (is (= "right" (:user.property/positioned target))
+        "The written property value stays on the row.")
     (is (not (contains? target :block.temp/breadcrumb))
         "Ancestor data loads only when a breadcrumb is displayed.")
     (is (= response

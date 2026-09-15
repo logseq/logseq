@@ -24,6 +24,11 @@
 (defn- render-block-below
   [block properties property-by-uuid]
   (with-redefs [property-component/use-has-hidden-properties (constantly false)
+                db-hooks/use-resource-snapshot
+                (fn [resource-key]
+                  (is (= [:block-positioned-properties (:block/uuid block) :block-below]
+                         resource-key))
+                  {:status :ready :value properties})
                 db-hooks/use-blocks (fn [property-uuids]
                                       (mapv property-by-uuid property-uuids))
                 db-hooks/use-block (fn [property-uuid]
@@ -38,10 +43,7 @@
                 hooks/use-state (fn [init] [init (fn [_])])
                 hooks/use-effect! (fn [_f _deps] nil)]
     (render-static
-     (block/block-positioned-properties
-      {}
-      (assoc block :block.temp/positioned-properties {:block-below properties})
-      :block-below))))
+     (block/block-positioned-properties {} block :block-below))))
 
 (deftest icon-only-block-does-not-emit-bottom-properties-row
   (let [icon-uuid #uuid "11111111-1111-1111-1111-111111111111"

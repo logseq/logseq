@@ -203,7 +203,6 @@
           references (concat [(:block/page block)
                               (:block/parent block)
                               (:block/link block)]
-                             (:block/refs block)
                              (:block/tags block))]
       (is (= {:block/uuid target-uuid
               :block/tx-id 10
@@ -216,9 +215,11 @@
                           [:block/uuid :block/tx-id :block/title :block/order
                            :block/collapsed? :block/created-at
                            :user.property/priority])))
-      (is (= 5 (count references)))
+      (is (= 4 (count references)))
       (doseq [reference references]
         (assert-shallow-identity-ref reference))
+      (is (nil? (:block/refs block))
+          "Plain titles skip :block/refs. Table cells already have property/tag refs.")
       (is (= #uuid "10000000-0000-0000-0000-000000000007"
              (get-in block
                      [:block/tags 0
@@ -234,20 +235,62 @@
           "Property references retain the scalar content required to render their value.")
       (is (= 1 (:block.temp/order-list-index block))
           "Canonical blocks retain worker-derived ordered-list indexes.")
-      (is (map? (:block.temp/positioned-properties block)))
+      (is (not (contains? block :block.temp/positioned-properties))
+          "Positioned property chips load through their own resource.")
       (is (not (contains? block :block.temp/breadcrumb)))
       (is (integer? (:block.temp/refs-count block)))
-      (is (some #{:user.property/priority} (:block.temp/property-keys block))
-          "Own property idents are persisted for collapse.")
+      (is (not (contains? block :block.temp/property-keys))
+          "Collapse can read own property idents from the row map.")
       (is (not (contains? block :block/children)))
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
                     (remove #{:block.temp/order-list-index
-                              :block.temp/positioned-properties
-                              :block.temp/property-keys
                               :block.temp/refs-count}
                             (keys block)))))))
+
+(deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          actor-uuid (random-uuid)
+          row-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Movies"
+                     :block/name "movies"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid actor-uuid
+                     :block/tx-id 1
+                     :block/title "Paul Walker"
+                     :block/name "paul walker"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -3
+                     :db/ident :user.property/actors
+                     :db/valueType :db.type/ref
+                     :db/cardinality :db.cardinality/many
+                     :block/uuid (random-uuid)
+                     :block/tx-id 1
+                     :block/title "Actors"}
+                    {:block/uuid row-uuid
+                     :block/tx-id 1
+                     :block/title "2 Fast 2 Furious (2003)"
+                     :block/page -1
+                     :block/refs [-1 -2]
+                     :block/path-refs [-1 -2]
+                     :user.property/actors [-2]}])
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid row-uuid]))]
+        (is (nil? (:block/refs block)))
+        (is (nil? (:block/path-refs block))
+            "Legacy path-refs are excluded. They duplicate :block/refs on imported graphs.")
+        (is (= actor-uuid (get-in block [:user.property/actors 0 :block/uuid]))
+            "Displayed column values stay as shallow identities.")
+        (is (not (contains? block :block.temp/positioned-properties)))
+        (is (not (contains? block :block.temp/property-keys)))))))
 
 (deftest canonical-block-full-replacement-drops-retracted-attributes-test
   (when-let [canonical-block (canonical-block-api)]
@@ -368,8 +411,8 @@
             "A row load must not hydrate every :block/refs target as its own canonical block.")
         (is (not (contains? (set (keys (:blocks response))) ref-uuid))
             "Unrequested :block/refs targets stay out of the snapshot.")
-        (is (some? (get-in response [:blocks target-uuid :block/refs]))
-            "The requested row still inlines shallow ref identities.")
+        (is (nil? (get-in response [:blocks target-uuid :block/refs]))
+            "Plain-title rows skip :block/refs. Property and tag refs stay inlined.")
         (doseq [[block-uuid block] (:blocks response)]
           (is (= block-uuid (:block/uuid block)))
           (is (= block
@@ -391,8 +434,10 @@
         (is (= #{(:block/uuid task)} (set (keys (:blocks response))))
             "Property definitions stay off the snapshot. The row inlines their UUIDs.")
         (is (not (contains? (set (keys (:blocks response))) status-uuid)))
-        (is (contains? (set (get-in block [:block.temp/positioned-properties :block-left]))
-                       status-uuid))))))
+        (is (not (contains? block :block.temp/positioned-properties))
+            "Positioned chips are not part of the row snapshot.")
+        (is (some? (:logseq.property/status block))
+            "The written status value stays on the row for table cells.")))))
 
 (deftest canonical-blocks-omits-absent-requested-uuids-at-the-same-basis-test
   (when-let [canonical-blocks (canonical-blocks-api)]
@@ -652,10 +697,9 @@
     (when-let [canonical-block (canonical-block-api)]
       (d/transact! conn [{:db/id (:db/id with-class)
                           :block/tx-id 1}])
-      (is (some #{:user.property/p1}
-                (:block.temp/property-keys
-                 (canonical-block @conn (d/entity @conn (:db/id with-class)))))
-          "Canonical renderer maps persist class-provided property keys."))))
+      (is (not (contains? (canonical-block @conn (d/entity @conn (:db/id with-class)))
+                          :block.temp/property-keys))
+          "Row snapshots skip property-keys. Table cells read values from the row map."))))
 
 (deftest canonical-block-positions-default-task-status-test
   (when-let [canonical-block (canonical-block-api)]
@@ -673,15 +717,19 @@
                          {:db/id (:db/id task-doing) :block/tx-id 1}])
       (let [only-block (canonical-block @conn (d/entity @conn (:db/id task-only)))
             doing-block (canonical-block @conn (d/entity @conn (:db/id task-doing)))
-            only-left (set (get-in only-block [:block.temp/positioned-properties :block-left]))
-            doing-left (set (get-in doing-block [:block.temp/positioned-properties :block-left]))]
-        (is (contains? only-left status-uuid)
-            "Tag-only #Task still exposes the default status icon.")
+            only-left (set (property-handler/block-positioned-property-idents
+                            @conn (:db/id task-only) :block-left))
+            doing-left (set (property-handler/block-positioned-property-idents
+                             @conn (:db/id task-doing) :block-left))]
+        (is (not (contains? only-block :block.temp/positioned-properties)))
+        (is (contains? only-left :logseq.property/status)
+            "Tag-only #Task still exposes the default status icon via the property resource.")
         (is (not (contains? only-block :logseq.property/status))
             "Canonical row maps omit unset status so table/query cells stay empty.")
-        (is (contains? doing-left status-uuid)
+        (is (contains? doing-left :logseq.property/status)
             "Explicit status still positions.")
-        (is (some? (:logseq.property/status doing-block)))))))
+        (is (some? (:logseq.property/status doing-block)))
+        (is (uuid? status-uuid))))))
 
 (deftest get-block-and-children-positions-default-task-status-test
   (let [conn (db-test/create-conn-with-blocks
@@ -793,11 +841,11 @@
                      :block/tags :logseq.class/Page}
                     {:block/uuid first-uuid
                      :block/tx-id 1
-                     :block/title "One"
+                     :block/title (str "One [[" page-uuid "]]")
                      :block/refs [-1]}
                     {:block/uuid second-uuid
                      :block/tx-id 1
-                     :block/title "Two"
+                     :block/title (str "Two [[" page-uuid "]]")
                      :block/refs [-1]}])
       (let [response (canonical-blocks @conn [first-uuid second-uuid])
             first-ref (get-in response [:blocks first-uuid :block/refs 0])
