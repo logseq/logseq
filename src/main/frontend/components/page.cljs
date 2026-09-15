@@ -416,6 +416,31 @@
         (block/db-properties-cp config page {:sidebar-properties? true})
         [:hr.my-4]])]))
 
+(defn- defer-class-page-below-fold?
+  "Tags/class objects are the first paint. Children trees and linked
+  refs must not share that snapshot batch."
+  [page {:keys [sidebar? tag-dialog?]}]
+  (and (entity/class? page)
+       (not sidebar?)
+       (not tag-dialog?)))
+
+(hsx/defc after-first-paint
+  [content]
+  (let [[ready? set-ready!] (hooks/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (set-ready! true)
+       js/undefined)
+     [])
+    (when ready?
+      content)))
+
+(defn- maybe-after-first-paint
+  [defer? content]
+  (if (and defer? content)
+    (after-first-paint content)
+    content))
+
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
@@ -440,7 +465,8 @@
         recycled? (ldb/recycled? page)
         page-display-title (when (entity/page? page)
                              (route-handler/built-in-page-title (:block/title page)))
-        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))]
+        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
+        defer-body? (defer-class-page-below-fold? page option)]
     (if page
       (when (or title block?)
         (if recycled?
@@ -477,7 +503,9 @@
                 (lsp-pagebar-slot)]
                (when (and (entity/page? page)
                           (not (ldb/library? page)))
-                 (property-component/bidirectional-properties-area page config))])
+                 (maybe-after-first-paint
+                  defer-body?
+                  (property-component/bidirectional-properties-area page config)))])
 
             (when (and block? (not sidebar?))
               (block/breadcrumb {} repo (:block/uuid page) {:block page}))
@@ -493,49 +521,53 @@
               (tabs page {:current-page? option
                           :sidebar? sidebar?}))
 
-            (when (not tag-dialog?)
-              (if recycle-page?
-                (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
-                [:div.ls-page-blocks
-                 {:style {:margin-left (if (util/mobile?) 0 -20)}
-                  :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
-                 (or (:page-blocks-content option)
-                     (page-blocks-cp
-                      page
-                      (merge option
-                             {:sidebar? sidebar?
-                              :on-page-blocks-rendered (:on-page-blocks-rendered option)
-                              :container-id container-id})))]))]
+            (maybe-after-first-paint
+             defer-body?
+             (when (not tag-dialog?)
+               (if recycle-page?
+                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
+                 [:div.ls-page-blocks
+                  {:style {:margin-left (if (util/mobile?) 0 -20)}
+                   :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
+                  (or (:page-blocks-content option)
+                      (page-blocks-cp
+                       page
+                       (merge option
+                              {:sidebar? sidebar?
+                               :on-page-blocks-rendered (:on-page-blocks-rendered option)
+                               :container-id container-id})))])))]
 
-           (when-not (or preview? recycle-page?)
-             [:div.flex.flex-col.gap-8
-              {:class (when-not (util/mobile?) "ml-1")}
-              (when today?
-                (today-queries repo page today? sidebar?))
+           (maybe-after-first-paint
+            defer-body?
+            (when-not (or preview? recycle-page?)
+              [:div.flex.flex-col.gap-8
+               {:class (when-not (util/mobile?) "ml-1")}
+               (when today?
+                 (today-queries repo page today? sidebar?))
 
-              (when today?
-                (scheduled/scheduled-and-deadlines title))
+               (when today?
+                 (scheduled/scheduled-and-deadlines title))
 
-              (when (entity/class? page)
-                (class-component/class-children page))
+               (when (entity/class? page)
+                 (class-component/class-children page))
 
               ;; referenced blocks
-              (when (and (not tag-dialog?)
-                         (not linked-refs?))
-                [:div.fade-in.delay {:key "page-references"}
-                 ^{:key (str title "-refs")}
-                 [reference/references (:block/uuid page) {:sidebar? sidebar?
-                                             :journals? journals?
-                                             :refs-count (:refs-count option)
-                                             :linked-refs-section? true}]])
+               (when (and (not tag-dialog?)
+                          (not linked-refs?))
+                 [:div.fade-in.delay {:key "page-references"}
+                  ^{:key (str title "-refs")}
+                  [reference/references (:block/uuid page) {:sidebar? sidebar?
+                                              :journals? journals?
+                                              :refs-count (:refs-count option)
+                                              :linked-refs-section? true}]])
 
-              (when-not (or unlinked-refs?
-                            sidebar?
-                            tag-dialog?
-                            home?
-                            class-page? property-page?)
-                [:div.fade-in.delay {:key "page-unlinked-references"}
-                 (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])])]))
+               (when-not (or unlinked-refs?
+                             sidebar?
+                             tag-dialog?
+                             home?
+                             class-page? property-page?)
+                 [:div.fade-in.delay {:key "page-unlinked-references"}
+                  (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])]))]))
       [:div.opacity-75 (t :page/not-found)])))
 
 (defn- page-resource-key
@@ -558,13 +590,28 @@
 (hsx/defc loaded-page
   [option page-uuid]
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
-        breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
-        refs-count (db-hooks/use-resource [:block-ref-count page-uuid])]
-    (when (and page breadcrumb-data)
-      (page-inner (assoc option
-                         :page (assoc page :block.temp/breadcrumb
-                                      (breadcrumb-model/resource-ancestors breadcrumb-data))
-                         :refs-count refs-count)))))
+        [extras? set-extras!] (hooks/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (when page
+         (set-extras! true))
+       js/undefined)
+     [page])
+    (let [breadcrumb-data (:value
+                           (db-hooks/use-resource-snapshot
+                            (when extras?
+                              [:block-breadcrumb page-uuid 16])))
+          refs-count (:value
+                      (db-hooks/use-resource-snapshot
+                       (when extras?
+                         [:block-ref-count page-uuid])))]
+      (when page
+        (page-inner (assoc option
+                           :page (cond-> page
+                                   breadcrumb-data
+                                   (assoc :block.temp/breadcrumb
+                                          (breadcrumb-model/resource-ancestors breadcrumb-data)))
+                           :refs-count refs-count))))))
 
 (hsx/defc page-resource
   [option resource-key]

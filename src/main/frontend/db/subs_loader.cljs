@@ -3,7 +3,8 @@
   (:require [frontend.state :as state]
             [promesa.core :as p]))
 
-(def ^:private limits {:blocks 1000 :children 25 :resources 25})
+(def ^:private flush-kind-order [:resources :blocks :children])
+(def ^:private limits {:resources 25 :blocks 1000 :children 25})
 (def ^:private slot-kind {:block :blocks :children :children :resource :resources})
 
 (defonce ^:private *batch (atom {}))
@@ -20,11 +21,15 @@
     entries))
 
 (defn- request-groups
+  "Flush view-data and other resources before block/children trees.
+  One mixed batch used to wait on open-block-tree before Tags/All Pages
+  could paint their first window."
   [entries]
   (let [entries-by-kind (group-by (comp slot-kind first :slot-key) entries)]
-    (mapcat (fn [[kind limit]]
-              (map vec (partition-all limit (get entries-by-kind kind))))
-            limits)))
+    (mapcat (fn [kind]
+              (map vec (partition-all (get limits kind)
+                                      (get entries-by-kind kind))))
+            flush-kind-order)))
 
 (defn- worker-request
   [entries]
