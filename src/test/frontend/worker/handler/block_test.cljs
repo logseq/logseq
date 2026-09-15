@@ -336,6 +336,8 @@
           property (d/entity @conn property-id)
           canonical-property (canonical-block @conn property)
           display-property (property-handler/display-property-map @conn property-id)]
+      (is (zero? (:block.temp/refs-count canonical-property))
+          "Property column headers skip refs-count. Incoming refs are every user of the property.")
       (is (not (contains? canonical-property :property/closed-values))
           "Closed values stay off the row snapshot. Table columns only need ident/type.")
       (is (seq (:property/closed-values display-property)))
