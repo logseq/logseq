@@ -1206,5 +1206,25 @@
 
 (deftest add-new-row-uses-explicit-add-row-control
   (let [markup (render-static
-                (views/add-new-row {} {:data-fns {:add-new-object! (fn [_ _])}}))]
-    (is (string/includes? markup "ls-table-add-row"))))
+                (views/add-new-row {} {:data-fns {:add-new-object! (fn [_ _ _])}}))]
+    (is (string/includes? markup "ls-table-add-row"))
+    (is (string/includes? markup "type=\"button\""))))
+
+(deftest add-new-table-object-passes-options-map
+  (let [calls (atom [])
+        table {:data-fns {:add-new-object!
+                          (fn [view table' opts]
+                            (swap! calls conj [view table' opts]))}}]
+    (#'views/add-new-table-object! table :view-entity)
+    (is (= [[:view-entity table {}]] @calls))))
+
+(deftest grouped-add-new-object-fn-keeps-three-arg-contract
+  (let [calls (atom [])
+        add-new-object! (fn [view table opts]
+                          (swap! calls conj [view table opts]))
+        grouped (#'views/grouped-add-new-object-fn
+                 add-new-object! :view :outer-table
+                 {:db/ident :user.property/status} "Open")]
+    (grouped :ignored-view :ignored-table {})
+    (is (= [[:view :outer-table {:properties {:user.property/status "Open"}}]]
+           @calls))))

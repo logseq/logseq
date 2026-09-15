@@ -1556,8 +1556,9 @@
 
                        :copy
                        (when block-uuid
-                         (editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks
-                                                                     :selected-ids [block-uuid]}))
+                         (editor-handler/copy-selection-blocks true
+                                                              :selected-blocks selected-blocks
+                                                              :selected-ids [block-uuid]))
 
                        :set-property
                        (state/pub-event! [:editor/new-property (cond-> {:target (.-currentTarget e)
@@ -2215,6 +2216,23 @@
              (shui/select-item {:value "and"} (t :view.filter/match-all-filters))
              (shui/select-item {:value "or"} (t :view.filter/match-any-filter)))))])])))
 
+(defn- add-new-table-object!
+  ([table view-entity]
+   (add-new-table-object! table view-entity {}))
+  ([table view-entity opts]
+   (when-let [f (get-in table [:data-fns :add-new-object!])]
+     (f view-entity table opts))))
+
+(defn- grouped-add-new-object-fn
+  [add-new-object! view-entity outer-table group-by-property value]
+  (fn [_view _table _opts]
+    (add-new-object! view-entity outer-table
+                     {:properties
+                      {(:db/ident group-by-property)
+                       (if (map? value)
+                         (:db/id value)
+                         value)}})))
+
 (hsx/defc new-record-button
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
@@ -2226,19 +2244,19 @@
       :size :sm
       :title label
       :on-click (fn [_]
-                  (let [f (get-in table [:data-fns :add-new-object!])]
-                    (f view-entity table)))}
+                  (add-new-table-object! table view-entity))}
      (ui/icon (if asset? "upload" "plus") {:size 15})
      [:span.text-sm label])))
 
 (hsx/defc add-new-row
   [view-entity table]
-  [:div.ls-table-add-row.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
-   {:on-click (fn [_]
-                (let [f (get-in table [:data-fns :add-new-object!])]
-                  (f view-entity table)))}
+  (shui/button
+   {:variant :ghost
+    :class "ls-table-add-row w-full justify-start py-1 px-2 h-auto rounded-none text-muted-foreground hover:text-foreground text-sm border-b"
+    :on-click (fn [_]
+                (add-new-table-object! table view-entity))}
    (ui/icon "plus" {:size 14})
-   [:div (t :view.table/add-row)]])
+   [:span (t :view.table/add-row)]))
 
 (defn- table-filters->persist-state
   [filters]
@@ -3617,13 +3635,9 @@
            add-new-object! outer-table]}]
   (let [group-table (if (fn? add-new-object!)
                       (assoc-in table' [:data-fns :add-new-object!]
-                                (fn [_]
-                                  (add-new-object! view-entity outer-table
-                                                   {:properties
-                                                    {(:db/ident group-by-property)
-                                                     (if (map? value)
-                                                       (:db/id value)
-                                                       value)}})))
+                                (grouped-add-new-object-fn
+                                 add-new-object! view-entity outer-table
+                                 group-by-property value))
                       table')
         title [:div
                {:class (when-not list-view? "my-2")}
