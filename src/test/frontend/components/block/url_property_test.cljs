@@ -38,4 +38,7 @@
   (testing "ordinary page URLs stay links"
     (let [url "https://www.imdb.com/title/tt5849986/"]
       (is (false? (text-util/image-url? url)))
+      (is (false? (#'block/show-link? url url))))
+    (let [url "https://www.themoviedb.org/movie/27205"]
+      (is (false? (text-util/image-url? url)))
       (is (false? (#'block/show-link? url url))))))

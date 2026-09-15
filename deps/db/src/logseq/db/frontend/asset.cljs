@@ -18,11 +18,20 @@
         (.then (fn [dig] (js/Uint8Array. dig)))
         (.then decode-digest))))
 
+(defn- http-url?
+  [s]
+  (and (string? s)
+       (or (string/starts-with? s "http://")
+           (string/starts-with? s "https://"))))
+
 (defn- strip-url-suffix
-  "Drop query/hash so URL pathnames can be parsed like file names."
+  "Drop query/hash from HTTP(S) URLs so pathnames can be parsed like file names.
+  Local filenames that contain `#` or `?` are left unchanged."
   [s]
   (when (string? s)
-    (first (string/split s #"[?#]" 2))))
+    (if (http-url? s)
+      (first (string/split s #"[?#]" 2))
+      s)))
 
 (defn- path-basename
   "Last path segment of a file path or URL."

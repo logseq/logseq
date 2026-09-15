@@ -489,6 +489,7 @@
                    :current-idx current-idx}
         *groups (atom #{})
         virtualize? (and (not grouped?)
+                         (not (fn? get-group-name))
                          (>= (count matched) auto-complete-virtualize-threshold))
         render-f (fn [matched]
                    (for [[idx item] matched]

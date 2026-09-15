@@ -81,6 +81,13 @@
       (is (= (mapv str (range 5))
              (fuzzy/fuzzy-search data "   " :limit 5))))))
 
+(deftest fuzzy-search-normalized-empty-query-still-returns-results
+  (testing "punctuation-only queries that clean-str empties still score on large lists"
+    (let [data (into (mapv #(str "page-" %) (range 400))
+                     ["watched"])]
+      (is (seq (fuzzy/fuzzy-search data "_" :limit 5)))
+      (is (seq (fuzzy/fuzzy-search data "/" :limit 5))))))
+
 (deftest fuzzy-search-large-list-prefilters-then-ranks
   (testing "a large list still finds a later exact title without scoring every item as the only path"
     (let [data (into (mapv #(str "page-" %) (range 400))
@@ -97,7 +104,7 @@
   (testing "filtering 10k titles stays well under a frame budget"
     (let [data (mapv #(str "item-" %) (range 10000))
           start (js/performance.now)
-          result (fuzzy/fuzzy-search data "item-9999" :limit 10)
+          result (vec (fuzzy/fuzzy-search data "item-9999" :limit 10))
           elapsed (- (js/performance.now) start)]
       (is (some #(= % "item-9999") result))
       (is (< elapsed 200)

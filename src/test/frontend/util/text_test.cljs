@@ -54,9 +54,12 @@
   (testing "image extensions still match"
     (is (true? (text-util/image-url? "https://cdn.example.com/poster.jpg")))
     (is (true? (text-util/image-url? "https://cdn.example.com/poster.webp?w=300"))))
-  (testing "Amazon/IMDb/TMDB hosts match even without an extension"
+  (testing "Amazon/IMDb/TMDB CDN hosts match even without an extension"
     (is (true? (text-util/image-url? "https://m.media-amazon.com/images/M/MV5BNT17G7zk")))
-    (is (true? (text-util/image-url? "https://image.tmdb.org/t/p/w500/abc"))))
+    (is (true? (text-util/image-url? "https://image.tmdb.org/t/p/w500/abc")))
+    (is (true? (text-util/image-url? "https://i.imgur.com/abc123"))))
   (testing "non-image URLs do not match"
     (is (false? (text-util/image-url? "https://www.imdb.com/title/tt5849986/")))
+    (is (false? (text-util/image-url? "https://www.themoviedb.org/movie/27205")))
+    (is (false? (text-util/image-url? "https://imgur.com/a/album")))
     (is (false? (text-util/image-url? "not-a-url")))))

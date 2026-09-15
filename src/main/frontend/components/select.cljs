@@ -45,8 +45,9 @@
       row)))
 
 (def default-input-debounce-ms
-  "Debounce live-filter work (fuzzy search + on-input lookups) so typing
-  on large graphs does not rescore the full picker list every keystroke."
+  "Delay before `*input` (the query used by fuzzy-search) and `on-input`
+  update. The visible field updates immediately; scoring waits this long
+  after the last keystroke."
   200)
 
 (hsx/defc search-input

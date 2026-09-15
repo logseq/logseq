@@ -104,9 +104,8 @@
       :else (recur q (rest s)))))
 
 (defn- cheap-candidate?
-  [query s]
-  (let [q (search-normalize (clean-str query) true)
-        s (search-normalize (clean-str (str s)) true)]
+  [q s]
+  (let [s (search-normalize (clean-str (str s)) true)]
     (boolean
      (and (seq q)
           (seq s)
@@ -116,9 +115,12 @@
 (defn- search-candidates
   [data query extract-fn]
   (if (> (count data) large-list-prefilter-threshold)
-    (filter (fn [item]
-              (cheap-candidate? query (if extract-fn (extract-fn item) item)))
-            data)
+    (let [q (search-normalize (clean-str query) true)]
+      (if (string/blank? q)
+        data
+        (filter (fn [item]
+                  (cheap-candidate? q (if extract-fn (extract-fn item) item)))
+                data)))
     data))
 
 (defn fuzzy-search

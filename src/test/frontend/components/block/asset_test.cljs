@@ -91,7 +91,10 @@
             "https://m.media-amazon.com/images/M/MV5BNT17G7zk"))))
   (testing "still works for ordinary file basenames"
     (is (= "poster"
-           (db-asset/asset-name->title "poster.png")))))
+           (db-asset/asset-name->title "poster.png"))))
+  (testing "does not treat # or ? in a local filename as a URL suffix"
+    (is (= "poster#v1"
+           (db-asset/asset-name->title "poster#v1.jpg")))))
 
 (deftest display-asset-title-avoids-raw-urls-test
   (testing "prefers a human title over a URL"
@@ -103,4 +106,20 @@
     (is (= "MV5BNT17G7zk"
            (block-asset/display-asset-title
             {:block/title "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"
-             :logseq.property.asset/external-url "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"})))))
+             :logseq.property.asset/external-url "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"}))))
+  (testing "blank external URL does not wipe a URL-valued title stem"
+    (is (= "MV5BNT17G7zk"
+           (block-asset/display-asset-title
+            {:block/title "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"
+             :logseq.property.asset/external-url ""})))
+    (is (= "MV5BNT17G7zk.jpg"
+           (block-asset/link-file-name
+            {:block/title "https://m.media-amazon.com/images/M/MV5BNT17G7zk.jpg"
+             :logseq.property.asset/external-url ""}
+            :jpg))))
+  (testing "long human titles stay whole in download names"
+    (let [title (apply str (repeat 20 "abcdefg"))]
+      (is (= (str title ".jpg")
+             (block-asset/link-file-name {:block/title title} :jpg)))
+      (is (< (count (block-asset/display-asset-title {:block/title title}))
+             (count title))))))

@@ -17,16 +17,15 @@
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
 (def ^:private image-url-hosts
-  "Hosts that serve images even when the URL has no file extension.
-  Movie-graph poster properties commonly use Amazon/IMDb/TMDB CDNs."
+  "CDN hosts that serve image bytes even without a file extension.
+  Page-bearing hosts (themoviedb.org, imgur.com albums) stay out so
+  ordinary links are not rendered as broken images."
   #{"m.media-amazon.com"
     "images-na.ssl-images-amazon.com"
     "images-amazon.com"
     "ia.media-imdb.com"
     "image.tmdb.org"
-    "www.themoviedb.org"
-    "i.imgur.com"
-    "imgur.com"})
+    "i.imgur.com"})
 
 (def ^:private image-url-exts
   #{"gif" "svg" "jpeg" "ico" "png" "jpg" "bmp" "webp" "avif" "cr2"})

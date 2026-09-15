@@ -162,8 +162,14 @@
   "Build picker-row hiccup only for visible rows. Prebuilding this for every
   property on a large graph is what made live-filter feel lagged."
   [x]
-  (if (:convert-page-to-property? x)
+  (cond
+    (:convert-page-to-property? x)
     (t :property/convert-page-to-property (:block/title x))
+
+    (and (:label x) (not (:db/ident x)) (not (:property x)))
+    (:label x)
+
+    :else
     (let [property-title (or (db-property/built-in-display-title x t)
                              (:block/title x))
           ident (:db/ident x)

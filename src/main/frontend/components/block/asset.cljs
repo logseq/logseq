@@ -44,19 +44,22 @@
     (str (subs s 0 (- display-title-max-len 3)) "...")
     (str s)))
 
+(defn- url-stem-or-url
+  [url]
+  (let [stem (when (string? url) (db-asset/asset-name->title url))]
+    (if (or (string/blank? stem) (= stem url))
+      url
+      stem)))
+
 (defn display-url-title
   "Readable label for a remote URL. Uses the file stem so Amazon poster
   hashes stay on one line instead of wrapping into fragments."
   [url]
-  (let [stem (when (string? url) (db-asset/asset-name->title url))]
-    (truncate-display-title
-     (if (or (string/blank? stem) (= stem url))
-       url
-       stem))))
+  (truncate-display-title (url-stem-or-url url)))
 
-(defn display-asset-title
-  "Visible asset title. Never returns a raw URL — those wrap with
-  `word-break: break-all` and look like garbled filename fragments."
+(defn- asset-title
+  "Full human title or URL stem. Used for download/open names; UI display
+  may truncate separately."
   [asset-block]
   (let [title (:block/title asset-block)
         external-url (:logseq.property.asset/external-url asset-block)]
@@ -64,25 +67,32 @@
       (and (string? title)
            (not (string/blank? title))
            (not (url-like? title)))
-      (truncate-display-title title)
+      title
 
-      (string? external-url)
-      (display-url-title external-url)
+      (and (string? external-url)
+           (not (string/blank? external-url)))
+      (url-stem-or-url external-url)
 
       (url-like? title)
-      (display-url-title title)
+      (url-stem-or-url title)
 
       :else
-      (truncate-display-title (or title "")))))
+      (or title ""))))
+
+(defn display-asset-title
+  "Visible asset title. Never returns a raw URL — those wrap with
+  `word-break: break-all` and look like garbled filename fragments."
+  [asset-block]
+  (truncate-display-title (asset-title asset-block)))
 
 (defn link-file-name
-  "Builds the display file name for `asset-block` using resolved extension `ext`."
+  "Builds the download/open file name for `asset-block` using resolved extension `ext`."
   [asset-block ext]
-  (let [title (display-asset-title asset-block)
+  (let [title (asset-title asset-block)
         ext-name (when ext (name ext))]
     (cond-> title
       (and ext-name
-           (not (string/ends-with? (string/lower-case title)
+           (not (string/ends-with? (string/lower-case (or title ""))
                                    (str "." ext-name))))
       (str "." ext-name))))
 
