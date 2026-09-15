@@ -2152,7 +2152,9 @@
 (defn- offset-view-context
   [window-context row-offset]
   (when (and window-context (integer? row-offset) (pos? row-offset))
-    (assoc window-context :row-offset row-offset)))
+    (cond-> (assoc window-context :row-offset row-offset)
+      (integer? (:initial-row-count window-context))
+      (update :initial-row-count inc))))
 
 (defn- offset-view-data-key
   "Remaining-id leftover collected 40938 pages in 84ms, sorted in 269ms,
@@ -2161,21 +2163,23 @@
   (when-let [ctx (offset-view-context window-context row-offset)]
     [:view-data view-uuid ctx]))
 
+(defn- table-row-from-offset
+  [offset-rows row-offset idx]
+  (when (and (integer? idx)
+             (integer? row-offset)
+             offset-rows
+             (>= idx row-offset)
+             (< idx (+ row-offset (count offset-rows))))
+    (nth offset-rows (- idx row-offset))))
+
 (defn- table-row-at
-  [first-rows offset-rows row-offset idx]
-  (cond
-    (and (integer? idx) (not (neg? idx)) (< idx (count first-rows)))
-    (nth first-rows idx)
-
-    (and (integer? idx)
-         (integer? row-offset)
-         offset-rows
-         (>= idx row-offset)
-         (< idx (+ row-offset (count offset-rows))))
-    (nth offset-rows (- idx row-offset))
-
-    :else
-    nil))
+  ([first-rows offset-rows row-offset idx]
+   (table-row-at first-rows offset-rows row-offset nil nil idx))
+  ([first-rows offset-rows row-offset stale-rows stale-offset idx]
+   (or (when (and (integer? idx) (not (neg? idx)) (< idx (count first-rows)))
+         (nth first-rows idx))
+       (table-row-from-offset offset-rows row-offset idx)
+       (table-row-from-offset stale-rows stale-offset idx))))
 
 (defn- scroll-list-offset-top
   "Virtuoso's list sits below page chrome. `#main-content-container`
@@ -2275,15 +2279,51 @@
 (defn- viewport-row-range
   "On-screen rows from scroll position. Virtuoso's mounted overscan range
   is not a hydrate window."
-  [scroll-top viewport-height item-height total-count]
-  (when (and (pos? item-height) (pos? total-count))
-    (let [start (max 0 (js/Math.floor (/ (max 0 scroll-top) item-height)))
-          end (min (dec total-count)
-                   (js/Math.floor (/ (+ (max 0 scroll-top)
-                                        (max 0 viewport-height)
-                                        -1)
-                                     item-height)))]
-      [start (max start end)])))
+  ([scroll-top viewport-height item-height total-count]
+   (viewport-row-range scroll-top 0 viewport-height item-height total-count))
+  ([scroll-top list-offset-top viewport-height item-height total-count]
+   (when (and (pos? item-height) (pos? total-count))
+     (let [start (scrolled-row-offset scroll-top list-offset-top item-height)
+           end (min (dec total-count)
+                    (scrolled-row-offset (+ (max 0 scroll-top)
+                                            (max 0 viewport-height)
+                                            -1)
+                                         list-offset-top
+                                         item-height))]
+       [start (max start end)]))))
+
+(defn- offset-window-covers-visible?
+  [row-offset window-size visible-start visible-end]
+  (and (integer? row-offset)
+       (integer? window-size)
+       (pos? window-size)
+       (integer? visible-start)
+       (integer? visible-end)
+       (<= row-offset visible-start)
+       (>= (+ row-offset (dec window-size)) visible-end)))
+
+(defn- next-scrolled-row-offset
+  "Keep the current offset window until the visible range leaves it.
+  Replacing it every row of scroll left 27 empty Movies rows."
+  [current-offset window-size visible-start visible-end first-window-count]
+  (let [first-end (when (and (integer? first-window-count) (pos? first-window-count))
+                    (dec first-window-count))]
+    (cond
+      (not (integer? visible-start))
+      current-offset
+
+      (offset-window-covers-visible?
+       current-offset window-size visible-start visible-end)
+      current-offset
+
+      (and first-end (integer? visible-end) (<= visible-end first-end))
+      current-offset
+
+      (and first-end (integer? visible-end) (<= visible-start first-end))
+      first-window-count
+
+      :else
+      visible-start)))
 
 (defn- initial-view-prefetch-count
   "First paint hydrates only the rows that fit on screen."
@@ -2470,6 +2510,8 @@
         all-row-ids (or (:all-row-ids option) (:data table) rows)
         offset-rows (:offset-rows option)
         row-offset (:row-offset option)
+        stale-rows (:stale-offset-rows option)
+        stale-offset (:stale-row-offset option)
         prefetch-source (if (seq offset-rows) offset-rows all-row-ids)
         row-previews (:row-previews option)
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
@@ -2511,24 +2553,31 @@
         :custom-scroll-parent scroll-parent
         :compute-item-key (fn [idx]
                             (str "table-row-"
-                                 (or (table-row-at all-row-ids offset-rows row-offset idx)
+                                 (or (table-row-at all-row-ids offset-rows row-offset
+                                                   stale-rows stale-offset idx)
                                      idx)))
         :skipAnimationFrameInResizeObserver true
         :fixed-item-height item-height
         :default-item-height item-height
         :total-count total-count
         :item-content (fn [idx]
-                        (let [row-uuid (table-row-at all-row-ids offset-rows row-offset idx)
-                              in-offset? (and (seq offset-rows)
-                                              (integer? row-offset)
-                                              (>= idx row-offset)
-                                              (< idx (+ row-offset (count offset-rows))))]
+                        (let [row-uuid (table-row-at all-row-ids offset-rows row-offset
+                                                     stale-rows stale-offset idx)
+                              live-offset? (some? (table-row-from-offset offset-rows row-offset idx))
+                              stale-offset? (and (not live-offset?)
+                                                 (some? (table-row-from-offset stale-rows stale-offset idx)))]
                           (if (and row-uuid
                                    (or (viewport-hydrate-ready?
                                         initial-rows-ready? hydrate-row-uuids row-uuid)
                                        (row-has-first-window-title? row-previews row-uuid)))
-                            (lazy-item (if in-offset? offset-rows all-row-ids)
-                                       (if in-offset? (- idx row-offset) idx)
+                            (lazy-item (cond
+                                         live-offset? offset-rows
+                                         stale-offset? stale-rows
+                                         :else all-row-ids)
+                                       (cond
+                                         live-offset? (- idx row-offset)
+                                         stale-offset? (- idx stale-offset)
+                                         :else idx)
                                        option
                                        (fn [row]
                                          (table-row table row {} option)))
@@ -2539,6 +2588,7 @@
                              [0 (dec (count offset-rows))]
                              (or (viewport-row-range
                                   (or (some-> scroll-parent .-scrollTop) 0)
+                                  (scroll-list-offset-top scroll-parent)
                                   viewport-height
                                   item-height
                                   total-count)
@@ -2552,11 +2602,25 @@
                               (js/requestAnimationFrame
                                #(set-mount-unpinned-cells! true)))
                             (let [scroll-top (or (some-> scroll-parent .-scrollTop) 0)
-                                  next-offset (scrolled-row-offset
-                                               scroll-top
-                                               (scroll-list-offset-top scroll-parent)
-                                               item-height)]
-                              (when (and on-viewport-filled! (pos? next-offset))
+                                  list-offset (scroll-list-offset-top scroll-parent)
+                                  window-size (max (if (seq offset-rows)
+                                                     (count offset-rows)
+                                                     0)
+                                                   (inc initial-prefetch-count))
+                                  [vis-start vis-end]
+                                  (or (viewport-row-range
+                                       scroll-top list-offset
+                                       viewport-height item-height total-count)
+                                      [])
+                                  next-offset (next-scrolled-row-offset
+                                               row-offset window-size
+                                               vis-start vis-end
+                                               (count all-row-ids))]
+                              (when (and on-viewport-filled!
+                                         (pos? scroll-top)
+                                         (integer? next-offset)
+                                         (pos? next-offset)
+                                         (not= next-offset row-offset))
                                 (on-viewport-filled! next-offset)))))}
        (:disable-virtualized? option)))))
 
@@ -3588,6 +3652,7 @@
                                         viewport-height)
         window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
         [row-offset set-row-offset!] (hooks/use-state nil)
+        [stale-offset-window set-stale-offset-window!] (hooks/use-state nil)
         offset-key (offset-view-data-key (:block/uuid view-entity)
                                          (:window-context plan)
                                          row-offset)
@@ -3604,6 +3669,7 @@
         offset-rows (when offset-data
                       (view-data->rows offset-data))
         row-previews (merge (:row-previews window-or-full-data)
+                            (:previews stale-offset-window)
                             (:row-previews offset-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
@@ -3622,6 +3688,14 @@
 
                  (seq row-previews)
                  (assoc :row-previews row-previews))]
+    (hooks/use-effect!
+     (fn []
+       (when (and offset-data (integer? row-offset))
+         (set-stale-offset-window! {:row-offset row-offset
+                                    :rows (view-data->rows offset-data)
+                                    :previews (:row-previews offset-data)}))
+       nil)
+     [row-offset offset-data])
     (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
@@ -3638,6 +3712,8 @@
                                             :all-row-ids all-row-ids
                                             :offset-rows offset-rows
                                             :row-offset row-offset
+                                            :stale-offset-rows (:rows stale-offset-window)
+                                            :stale-row-offset (:row-offset stale-offset-window)
                                             :filters (or filters {})
                                             :sorting sorting
                                             :set-filters! ignore!

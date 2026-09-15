@@ -460,8 +460,9 @@
     (is (nil? (#'views/offset-view-data-key view-uuid window-context nil))
         "The offset window must not start before the user scrolls.")
     (is (nil? (#'views/offset-view-data-key view-uuid window-context 0)))
-    (is (= [:view-data view-uuid (assoc window-context :row-offset 72)]
-           (#'views/offset-view-data-key view-uuid window-context 72)))
+    (is (= [:view-data view-uuid (assoc window-context :row-offset 72 :initial-row-count 31)]
+           (#'views/offset-view-data-key view-uuid window-context 72))
+        "Offset windows add one row so a clipped first visible row still fills the screen."))
     (is (nil? (:full ready)))
     (is (= [:view-data view-uuid full-context] (:primary single)))
     (is (nil? (:full single)))))
@@ -558,13 +559,31 @@
     (doseq [idx (range 66 72)]
       (is (nil? (#'views/table-row-at first-window offset-window 72 idx))
           (str "Offset 72 leaves visible Movies row " idx " empty.")))
-    (let [movies-offset (mapv (fn [_] (random-uuid)) (range 26))]
-      (doseq [idx (range 66 92)]
+    (let [movies-offset (mapv (fn [_] (random-uuid)) (range 27))]
+      (doseq [idx (range 66 93)]
         (is (some? (#'views/table-row-at first-window movies-offset 66 idx))
-            (str "Offset 66 must cover visible Movies row " idx "."))))
+            (str "Offset 66 must cover visible Movies row " idx ".")))
+      (let [next-offset (mapv (fn [_] (random-uuid)) (range 27))]
+        (is (= (nth movies-offset 10)
+               (#'views/table-row-at first-window nil 90 movies-offset 66 76))
+            "The previous offset window stays addressable until the next one arrives.")))
     (let [short-offset (mapv (fn [_] (random-uuid)) (range 11))]
       (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
           "A shorter Tags offset window must not throw on stale first-window bounds."))))
+
+(deftest scrolled-offset-stays-put-until-the-visible-range-leaves-test
+  (is (true? (#'views/offset-window-covers-visible? 26 27 28 51)))
+  (is (false? (#'views/offset-window-covers-visible? 26 27 28 53)))
+  (is (nil? (#'views/next-scrolled-row-offset nil 27 0 22 26))
+      "The first window still covers the open screen. Do not fetch an offset.")
+  (is (= 26 (#'views/next-scrolled-row-offset nil 27 4 30 26))
+      "The first wheel past the first window fetches the next screen, not every row.")
+  (is (= 26 (#'views/next-scrolled-row-offset 26 27 30 52 26))
+      "Keep the same offset window while the visible rows stay inside it.")
+  (is (= 40 (#'views/next-scrolled-row-offset 26 27 40 66 26))
+      "Move the window only after the visible range leaves it.")
+  (is (= [66 92] (#'views/viewport-row-range 2400 196 852 33 40000))
+      "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97."))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
