@@ -22,6 +22,25 @@
     (testing "id-only lookup matches object entities"
       (is (= ids (db-class/get-class-object-ids @conn (parent-class-id @conn)))))))
 
+(deftest get-class-object-ids-does-not-hydrate-each-object-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Object " idx)
+                              :build/tags [:Parent]}})
+                    (range 80))
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Parent {:block/title "Parent"}}
+               :pages-and-blocks pages})
+        class-id (parent-class-id @conn)
+        entity* d/entity
+        calls (atom 0)]
+    (with-redefs [d/entity (fn [db x]
+                             (swap! calls inc)
+                             (entity* db x))]
+      (let [ids (db-class/get-class-object-ids @conn class-id)]
+        (is (= 80 (count ids)))
+        (is (zero? @calls)
+            "First-window Tags queries must not hydrate one entity per object.")))))
+
 (deftest get-class-objects-filters-hidden-objects-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Parent {:block/title "Parent"}
@@ -34,11 +53,18 @@
                                           :logseq.property/deleted-at 1}}
                                   {:page {:block/title "Hidden"
                                           :build/tags [:Child]
-                                          :logseq.property/hide? true}}]})
+                                          :logseq.property/hide? true}}
+                                  {:page {:block/title "Hidden parent"
+                                          :logseq.property/hide? true}
+                                   :blocks [{:block/title "Nested hidden"
+                                             :build/tags [:Child]}]}
+                                  {:page {:block/title "Visible parent"}
+                                   :blocks [{:block/title "Nested visible"
+                                             :build/tags [:Child]}]}]})
         titles (->> (db-class/get-class-objects @conn (parent-class-id @conn))
                     (map :block/title)
                     set)]
-    (is (= #{"Visible"} titles))))
+    (is (= #{"Visible" "Nested visible"} titles))))
 
 (deftest get-class-objects-includes-hide-by-default-properties-test
   (let [conn (db-test/create-conn-with-blocks
