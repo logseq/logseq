@@ -2429,6 +2429,14 @@
     :else
     nil))
 
+(defn- table-body-row-ids
+  "Grouped tables pass [group-value row-uuids] as :all-row-ids. Prefetch
+  must see the group's UUIDs, not the scalar group value."
+  [all-row-ids table-data rows]
+  (if (and (sequential? all-row-ids) (every? uuid? all-row-ids))
+    all-row-ids
+    (or table-data rows)))
+
 (defn- prefetch-rows-in-bounds
   "Offset windows can be shorter than the previous first-window bounds.
   Tags crashed when [0 25] was applied to 11 leftover rows."
@@ -2538,7 +2546,7 @@
         prefetch-window-size (view-prefetch-row-count
                               viewport-height
                               item-height)
-        all-row-ids (or (:all-row-ids option) (:data table) rows)
+        all-row-ids (table-body-row-ids (:all-row-ids option) (:data table) rows)
         offset-rows (:offset-rows option)
         row-offset (:row-offset option)
         stale-rows (:stale-offset-rows option)
@@ -3340,9 +3348,11 @@
         body-fn (fn []
                   (let [render (view-cp view-entity
                                         (assoc group-table :rows group)
-                                        (assoc option
-                                               :disable-virtualized? true
-                                               :hide-action-bar? gallery?)
+                                        (-> option
+                                            (dissoc :all-row-ids :offset-rows :row-offset
+                                                    :stale-offset-rows :stale-row-offset)
+                                            (assoc :disable-virtualized? true
+                                                   :hide-action-bar? gallery?))
                                         view-opts)]
                     (if (and list-view? (not (util/mobile?)))
                       [:div.-ml-2 render]
@@ -3750,7 +3760,8 @@
                                             :partition (:partition paint)
                                             :data data
                                             :full-data data
-                                            :all-row-ids all-row-ids
+                                            :all-row-ids (when (= :flat (:partition paint))
+                                                           all-row-ids)
                                             :offset-rows offset-rows
                                             :row-offset row-offset
                                             :stale-offset-rows (:rows stale-offset-window)

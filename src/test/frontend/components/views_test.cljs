@@ -310,6 +310,18 @@
                       {:value {:kind :scalar :value "B"}
                        :rows [row-b row-c]}]})))))
 
+(deftest grouped-table-prefetch-uses-group-uuids-not-group-values-test
+  (let [row-a (random-uuid)
+        row-b (random-uuid)
+        group-rows [row-a row-b]
+        grouped-pairs [[{:kind :scalar :value "Open"} group-rows]]]
+    (is (= group-rows
+           (#'views/table-body-row-ids grouped-pairs group-rows nil))
+        "A grouped [value rows] all-row-ids list must not be prefetched as block UUIDs.")
+    (is (= group-rows
+           (#'views/table-body-row-ids group-rows nil nil))
+        "Flat windowed tables still prefetch the UUID list.")))
+
 (deftest view-row-hydrates-only-its-uuid-through-use-block-test
   (let [row-uuid (random-uuid)
         block {:block/uuid row-uuid
