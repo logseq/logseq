@@ -850,10 +850,10 @@
              (not allow-empty-block-below?)
              (not (render-tag-class-page? db (d/entity db block-id)))))))))
 
-(defn block-positioned-property-idents
-  "Property idents visible at a render position. Table snapshots only need
-  these idents plus UUIDs; they must not build display-property maps."
-  [db block-id position]
+(defn block-positioned-property-idents-by-position
+  "All visible positioned property idents for a block, grouped once.
+  Callers that need one position should use block-positioned-property-idents."
+  [db block-id]
   (let [block (d/entity db block-id)
         class-page? (render-tag-class-page? db block)
         own-property-ids (direct-block-property-ids db block-id)
@@ -865,15 +865,34 @@
                        (->> classes-properties
                             (map :db/ident)
                             (concat own-property-ids)
-                            distinct))]
-    (->> property-ids
-         (filter (fn [property-id]
-                   (render-positioned-property? db block-id property-id position
-                                                {:allow-empty-block-below?
-                                                 (contains? classes-property-ids-set property-id)})))
-         (keep #(d/entity db %))
-         db-property/sort-properties
-         (map :db/ident))))
+                            distinct))
+        grouped (group-by
+                 (fn [property-id]
+                   (some (fn [position]
+                           (when (render-positioned-property?
+                                  db block-id property-id position
+                                  {:allow-empty-block-below?
+                                   (contains? classes-property-ids-set property-id)})
+                             position))
+                         render-property-positions))
+                 property-ids)]
+    (into {}
+          (keep (fn [[position idents]]
+                  (when (and position (seq idents))
+                    [position
+                     (->> idents
+                          (keep #(d/entity db %))
+                          db-property/sort-properties
+                          (mapv :db/ident))])))
+          grouped)))
+
+(defn block-positioned-property-idents
+  "Property idents visible at a render position. Table snapshots only need
+  these idents plus UUIDs; they must not build display-property maps."
+  [db block-id position]
+  (vec (get (block-positioned-property-idents-by-position db block-id)
+            position
+            [])))
 
 (defn block-positioned-properties
   [db block-id position]

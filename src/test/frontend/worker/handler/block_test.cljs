@@ -376,6 +376,24 @@
                  (canonical-block db
                                   (d/entity db [:block/uuid block-uuid])))))))))
 
+(deftest canonical-blocks-does-not-hydrate-positioned-property-definitions-test
+  (when-let [canonical-blocks (canonical-blocks-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Page"}
+                  :blocks [{:block/title "task doing"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.doing}}]}])
+          task (db-test/find-block-by-content @conn "task doing")
+          status-uuid (:block/uuid (d/entity @conn :logseq.property/status))]
+      (d/transact! conn [{:db/id (:db/id task) :block/tx-id 1}])
+      (let [response (canonical-blocks @conn [(:block/uuid task)])
+            block (get-in response [:blocks (:block/uuid task)])]
+        (is (= #{(:block/uuid task)} (set (keys (:blocks response))))
+            "Property definitions stay off the snapshot. The row inlines their UUIDs.")
+        (is (not (contains? (set (keys (:blocks response))) status-uuid)))
+        (is (contains? (set (get-in block [:block.temp/positioned-properties :block-left]))
+                       status-uuid))))))
+
 (deftest canonical-blocks-omits-absent-requested-uuids-at-the-same-basis-test
   (when-let [canonical-blocks (canonical-blocks-api)]
     (let [{:keys [conn target-uuid]} (canonical-block-fixture)

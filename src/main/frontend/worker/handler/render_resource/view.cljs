@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.common :as common]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -373,16 +372,9 @@
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))
-          initial-blocks (when-let [initial-row-count (:initial-row-count context)]
-                           (let [initial-row-uuids (->> (:rows value)
-                                                        (take initial-row-count)
-                                                        vec)]
-                             (:blocks (block-handler/canonical-blocks
-                                       db initial-row-uuids))))
           value-partition (:partition value)]
       [(view-watch-keys db view-uuid owner feature-type config value-partition)
-       value
-       (common/block-slots initial-blocks)])))
+       value])))
 
 (def resource-renderers
   {:views (common/renderer 3 views)

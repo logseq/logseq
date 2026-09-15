@@ -68,11 +68,19 @@
                          {:basis-rev basis-rev}))
     basis-rev))
 
+(def ^:dynamic *attr-schema-cache* nil)
+
 (defn- render-attr-schema
   [db attr]
-  (or (get (d/schema db) attr)
-      (when-let [attr-entity (d/entity db attr)]
-        (select-keys attr-entity [:db/valueType :db/cardinality]))))
+  (let [cache *attr-schema-cache*]
+    (if-let [hit (and cache (contains? @cache attr))]
+      (get @cache attr)
+      (let [schema (or (get (d/schema db) attr)
+                       (when-let [attr-entity (d/entity db attr)]
+                         (select-keys attr-entity [:db/valueType :db/cardinality])))]
+        (when cache
+          (vswap! cache assoc attr schema))
+        schema))))
 
 (defn- canonical-attr?
   [attr]
@@ -114,17 +122,17 @@
 
 (defn- canonical-positioned-properties-map
   [db block]
-  (let [block-id (:db/id block)]
-    (->> property-handler/render-property-positions
-         (keep (fn [position]
-                 (let [property-uuids
-                       (into []
-                             (keep #(property-ident-uuid db %))
-                             (property-handler/block-positioned-property-idents
-                              db block-id position))]
-                   (when (seq property-uuids)
-                     [position property-uuids]))))
-         (into {}))))
+  (let [block-id (:db/id block)
+        idents-by-position
+        (property-handler/block-positioned-property-idents-by-position
+         db block-id)]
+    (into {}
+          (keep (fn [[position idents]]
+                  (let [property-uuids
+                        (into [] (keep #(property-ident-uuid db %)) idents)]
+                    (when (seq property-uuids)
+                      [position property-uuids]))))
+          idents-by-position)))
 
 (declare block-refs-count)
 
@@ -208,23 +216,16 @@
                          {:block-uuid block-uuid})))
   (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
             property-handler/*block-class-properties-cache* (volatile! {})
-            property-handler/*positioned-property-meta-cache* (volatile! {})]
+            property-handler/*positioned-property-meta-cache* (volatile! {})
+            *attr-schema-cache* (volatile! {})]
     (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
-        dependencies
-        (fn [block]
-          (let [positioned-properties
-                (->> property-handler/render-property-positions
-                     (mapcat #(property-handler/block-positioned-property-idents
-                               db (:db/id block) %))
-                     (keep #(d/entity db %)))]
-            ;; Table/All Pages/class-object rows already inline shallow ref
-            ;; identities. Expanding every :block/refs target into a full
-            ;; canonical block makes a screen-sized scroll window take seconds.
-            (distinct (cons block positioned-properties))))
+        ;; Only the requested rows. Property definitions and :block/refs
+        ;; stay as inlined identities on the row; expanding them into
+        ;; sibling snapshots made a 25-row table window take seconds.
         dependencies-by-root
         (into {}
               (map (fn [block]
-                     [(:block/uuid block) (vec (dependencies block))]))
+                     [(:block/uuid block) [block]]))
               requested)
         groups (into {}
                      (map (fn [[block-uuid entities]]
