@@ -34,11 +34,18 @@
         cached (model/remember-ready-page-view nil repo {:current-page? true} view)]
     (is (= repo (:repo cached)))
     (is (= view (model/remembered-page-view cached repo {:current-page? true})))
+    (is (= view (model/remembered-page-view cached repo {:mobile-page? true})))
     (is (nil? (model/remembered-page-view cached repo {:sidebar? true}))
         "Sidebar pages must not reuse the main-route last-ready view")
+    (is (nil? (model/remembered-page-view cached repo {:page-name "plugin-page"}))
+        "Plugin page-cp callers must not reuse the main-route last-ready view")
     (is (nil? (model/remembered-page-view cached "graph-b" {:current-page? true})))
     (is (= cached
-           (model/remember-ready-page-view cached repo {:sidebar? true} view)))))
+           (model/remember-ready-page-view cached repo {:sidebar? true} view)))
+    (is (= cached
+           (model/remember-ready-page-view cached repo {:page-name "plugin-page"} view))
+        "Plugin page-cp callers must not steal the main-route last-ready view")
+    (is (some? (model/remember-ready-page-view nil repo {:mobile-page? true} view)))))
 
 (deftest cached-route-page-uuid-skips-identity-when-warm-test
   (let [page-uuid (random-uuid)]

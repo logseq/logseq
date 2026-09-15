@@ -611,7 +611,9 @@
 (hsx/defc loaded-page
   [option page-uuid]
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
-        [extras? set-extras!] (hooks/use-state false)]
+        [extras? set-extras!] (hooks/use-state false)
+        repo (state/get-current-repo)
+        ready? (page-model/page-body-ready? page)]
     (hooks/use-effect!
      (fn []
        (if-not page
@@ -622,6 +624,15 @@
                timeout-id (js/setTimeout #(set-extras! true) delay-ms)]
            #(js/clearTimeout timeout-id))))
      [page])
+    (hooks/use-effect!
+     (fn []
+       (when ready?
+         (when-let [next-cache (page-model/remember-ready-page-view
+                                @*main-page-view repo option
+                                {:option option :page-uuid page-uuid})]
+           (reset! *main-page-view next-cache)))
+       nil)
+     [ready? repo page-uuid])
     (let [breadcrumb-data (:value
                            (db-hooks/use-resource-snapshot
                             (when extras?
@@ -630,7 +641,7 @@
                       (db-hooks/use-resource-snapshot
                        (when extras?
                          [:block-ref-count page-uuid])))]
-      (when (page-model/page-body-ready? page)
+      (when ready?
         (page-inner (assoc option
                            :page (page-model/attach-inline-breadcrumb
                                   page
@@ -642,17 +653,9 @@
   [option resource-key]
   (let [{:keys [status value error]}
         (db-hooks/use-resource-snapshot resource-key)
-        repo (state/get-current-repo)
         last-ready (page-model/remembered-page-view
-                    @*main-page-view repo option)
+                    @*main-page-view (state/get-current-repo) option)
         view (page-model/resolve-page-view status value option last-ready)]
-    (hooks/use-effect!
-     (fn []
-       (when-let [next-cache (page-model/remember-ready-page-view
-                              @*main-page-view repo option view)]
-         (reset! *main-page-view next-cache))
-       nil)
-     [repo (:page-uuid view)])
     (case status
       :loading (when view
                  ^{:key (:page-uuid view)}

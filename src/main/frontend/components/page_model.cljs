@@ -16,13 +16,12 @@
   (some? page))
 
 (defn main-page-option?
-  "Sidebar, embed, and preview containers must not steal the main-route
-   last-ready page used to avoid blank zoom-back frames."
+  "Only the owned main or mobile page route may update or reuse the last-ready
+   zoom-back view. Inferring this from exclusions would let plugin page-cp
+   callers such as cp_page_editor overwrite the singleton cache."
   [option]
-  (not (or (:sidebar? option)
-           (:embed? option)
-           (:preview? option)
-           (:tag-dialog? option))))
+  (boolean (or (:current-page? option)
+               (:mobile-page? option))))
 
 (defn remember-ready-page-view
   [cached repo option view]
