@@ -87,6 +87,11 @@
   (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc)))
 
+(def cmdk-search-settle-ms
+  "Wait past frontend.components.cmdk.core/search-debounce-ms (300) so fill
+  does not race the debounced search."
+  400)
+
 (defn search
   [text]
   (if (w/visible? ".cp__cmdk-search-input")
@@ -98,15 +103,14 @@
         (assert/assert-in-normal-mode?)
         (w/click :#search-button))
       (w/wait-for ".cp__cmdk-search-input")
-      (w/fill ".cp__cmdk-search-input" text))))
+      (w/fill ".cp__cmdk-search-input" text)))
+  (wait-timeout cmdk-search-settle-ms))
 
 (defn search-and-click
   [search-text]
   (search search-text)
   (let [result (.first (w/get-by-test-id search-text))]
-    (repeat-until-visible 5 result #(do
-                                      (search search-text)
-                                      (wait-timeout 300)))
+    (repeat-until-visible 5 result #(wait-timeout cmdk-search-settle-ms))
     (w/click result)))
 
 (defn wait-editor-gone
