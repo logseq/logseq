@@ -70,7 +70,7 @@
    (state/set-editing-block-id! [(or container-id :comments-area) (:block/uuid block)])
    (state/set-state! :editor/container-id container-id)
    (state/set-state! :editor/content (or content "") :nested-path (:block/uuid block))
-   (state/set-state! :editor/last-key-code nil)
+   (state/set-last-key-code! nil)
    (state/set-state! :editor/set-timestamp-block nil)
    (state/set-state! :editor/cursor-range nil)
    (when (number? cursor-position)
