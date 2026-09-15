@@ -2,8 +2,7 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.config :as config-handler]
@@ -125,11 +124,11 @@
          (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
-              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+              (seq (filter ldb/private-create-page-tag? (:block/tags parsed-result))))
          (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
-                                (keep #(when (ldb/private-tags (:db/ident %))
+                                (keep #(when (ldb/private-create-page-tag? %)
                                          (pr-str (:block/title %)))
                                       (:block/tags parsed-result)))])
                              :error)

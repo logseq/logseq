@@ -9,7 +9,9 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db :as db-db]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.page :as outliner-page]))
 
 (deftest create-class
@@ -111,6 +113,81 @@
          #"can't include \"#\""
          (outliner-page/create! conn "#tagstyle" {}))
         "Page can't have leading '#' in title")))
+
+(defn- parsed-tag
+  "Tag map produced when search/create parses a hashtag without a db, matching
+  Ctrl-K `Foo #Tag`."
+  [title]
+  (gp-block/page-name->map title nil true nil {:class? true}))
+
+(deftest create-page-with-tag-named-tag
+  (let [conn (db-test/create-conn)
+        built-in-tag (d/entity @conn :logseq.class/Tag)]
+    (is (thrown-with-msg?
+         js/Error
+         #"New page can't set built-in tags"
+         (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Tag")]}))
+        "Creating a page with #Tag must not create a user Tag class")
+    (is (nil? (db-test/find-page-by-title @conn "Foo"))
+        "Page is not created when #Tag is rejected")
+    (let [tag-after (d/entity @conn :logseq.class/Tag)
+          tag-ents (d/q '[:find [?e ...] :where [?e :block/title "Tag"]] @conn)]
+      (is (= (:db/id built-in-tag) (:db/id tag-after)))
+      (is (= :logseq.class/Tag (:db/ident tag-after)))
+      (is (true? (:logseq.property/built-in? tag-after)))
+      (is (= 1 (count tag-ents))
+          "Built-in Tag class is not duplicated"))
+    (is (nil? (:errors (db-validate/validate-db @conn)))
+        "Graph remains valid")))
+
+(deftest create-page-with-existing-public-and-new-tags
+  (let [conn (db-test/create-conn)
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Task")]})
+        foo (d/entity @conn [:block/uuid foo-uuid])
+        [_ bar-uuid] (outliner-page/create! conn "Bar" {:tags [(parsed-tag "Movie")]})
+        bar (d/entity @conn [:block/uuid bar-uuid])
+        movie (db-test/find-page-by-title @conn "Movie")]
+    (is (contains? (set (map :db/ident (:block/tags foo))) :logseq.class/Task)
+        "Public built-in #Task is reused instead of duplicated")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Task"]] @conn))))
+    (is (ldb/class? movie)
+        "A new user tag is still created")
+    (is (nil? (:block/type movie))
+        "New tags must not keep file-graph :block/type from a db-less parse")
+    (is (contains? (set (map :db/ident (:block/tags bar))) (:db/ident movie)))
+    (is (nil? (:errors (db-validate/validate-db @conn)))
+        "Graph remains valid after creating a page with a new tag")))
+
+(deftest create-page-with-public-tag-reuses-existing-page
+  (let [conn (db-test/create-conn)
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Task")]})
+        [_ foo-uuid-again] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Task")]})]
+    (is (= foo-uuid foo-uuid-again)
+        "A second create of Foo #Task returns the existing page")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn)))
+        "A second create must not insert another Foo page")))
+
+(deftest create-page-with-page-tag-reuses-page-class
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Page")]})
+        foo (d/entity @conn [:block/uuid page-uuid])]
+    (is (= "Foo" (:block/title foo)))
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Page"]] @conn)))
+        "#Page must reuse the built-in Page class")
+    (is (contains? (set (map :db/ident (:block/tags foo))) :logseq.class/Page))))
+
+(deftest create-page-with-resolved-user-tag-titled-tag
+  (let [conn (db-test/create-conn)
+        [_ class-uuid] (outliner-page/create! conn "MyTag" {:class? true})
+        my-tag (d/entity @conn [:block/uuid class-uuid])
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {:tags [{:db/ident (:db/ident my-tag)
+                                                               :block/title "Tag"
+                                                               :block/uuid (random-uuid)}]})
+        foo (d/entity @conn [:block/uuid foo-uuid])]
+    (is (contains? (set (map :db/ident (:block/tags foo))) (:db/ident my-tag))
+        "An explicit user-class ident is reused even when the title is Tag")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Tag"]] @conn)))
+        "Must not resolve a titled-Tag user class to the built-in Tag class")))
 
 (deftest delete-page
   (let [conn (db-test/create-conn-with-blocks
