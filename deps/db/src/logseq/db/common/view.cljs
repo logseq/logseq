@@ -527,15 +527,16 @@
     (d/rseek-datoms db :avet attr)))
 
 (defn- avet-take-eids
-  [datoms match? row-limit]
+  [datoms match? row-limit row-offset]
   (let [xf (cond-> (comp (map :e) (filter match?) (distinct))
+             (pos? (or row-offset 0)) (comp (drop row-offset))
              row-limit (comp (take row-limit)))]
     (into [] xf datoms)))
 
 (defn- sort-eids-from-avet
   "Walk one AVET attr instead of reading a sort value per row. A 40k All
   Pages first window was spending ~2s in sort-eids-by-sorting."
-  [db match? sorting row-limit leftover-eids]
+  [db match? sorting row-limit leftover-eids row-offset]
   (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])]
     (when (= 1 (count sorts))
       (let [{:keys [id asc?]} (first sorts)]
@@ -549,7 +550,7 @@
                          (let [all (vec (d/datoms db :avet id))]
                            (if asc? all (rseq all))))]
             (when (seq datoms)
-              (let [matched (avet-take-eids datoms match? row-limit)]
+              (let [matched (avet-take-eids datoms match? row-limit row-offset)]
                 (if (or row-limit (nil? leftover-eids))
                   matched
                   (let [seen (set matched)]
@@ -585,20 +586,21 @@
           eid-vec)))
 
 (defn- take-sorted-eids
-  [db eids sorting row-limit]
+  [db eids sorting row-limit row-offset]
   (let [eid-vec (vec eids)
         wanted (set eid-vec)
         match? #(contains? wanted %)
         ;; 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
         ;; set already fits the window, so sort those eids directly.
         use-eid-sort? (and row-limit (<= (count eid-vec) row-limit))
-        sorted (if use-eid-sort?
-                 (sort-eids-by-sorting db eid-vec sorting)
-                 (or (sort-eids-from-avet db match? sorting row-limit eid-vec)
-                     (sort-eids-by-sorting db eid-vec sorting)))]
-    (if row-limit
-      (vec (take row-limit sorted))
-      (vec sorted))))
+        avet (when-not use-eid-sort?
+               (sort-eids-from-avet db match? sorting row-limit eid-vec row-offset))
+        sorted (or avet (sort-eids-by-sorting db eid-vec sorting))]
+    (if avet
+      (vec sorted)
+      (if row-limit
+        (vec (->> sorted (drop (or row-offset 0)) (take row-limit)))
+        (vec sorted)))))
 
 (defn- feature-filters?
   [filters input]
@@ -632,7 +634,7 @@
   "A 26-row All Pages window does not need the 40938-id vector. Count
   pages, then walk AVET until the window is full. Returns nil when the
   sort attr is not an AVET first-window attr so the collect path runs."
-  [db feat-type class-id sorting row-limit]
+  [db feat-type class-id sorting row-limit row-offset]
   (case feat-type
     :all-pages
     (let [exclude-ids (get-exclude-page-ids db)
@@ -640,7 +642,8 @@
                                     #(all-pages-eid? db exclude-ids %)
                                     sorting
                                     row-limit
-                                    nil)]
+                                    nil
+                                    row-offset)]
       (when data
         {:count (count-all-page-ids db exclude-ids)
          :data data}))
@@ -657,7 +660,7 @@
                                  (distinct))
                            class-ids)]
         {:count (count tag-eids)
-         :data (take-sorted-eids db tag-eids sorting row-limit)}))
+         :data (take-sorted-eids db tag-eids sorting row-limit row-offset)}))
 
     nil))
 
@@ -891,10 +894,10 @@
 (defn- get-feature-row-data
   "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities.
   A row-limit first window must not sort every remaining id."
-  [db feat-type class-id sorting filters input row-limit]
+  [db feat-type class-id sorting filters input row-limit row-offset]
   (let [first-window? (and row-limit (not (feature-filters? filters input)))]
     (or (when first-window?
-          (first-window-feature-row-data db feat-type class-id sorting row-limit))
+          (first-window-feature-row-data db feat-type class-id sorting row-limit row-offset))
         (when-let [eids (case feat-type
                           :all-pages
                           (get-all-page-ids db)
@@ -906,12 +909,12 @@
                           nil)]
           (let [filtered (filter-eids db eids filters input)]
             {:count (count filtered)
-             :data (take-sorted-eids db filtered sorting row-limit)})))))
+             :data (take-sorted-eids db filtered sorting row-limit row-offset)})))))
 
 (defn- maybe-limit-rows
-  [rows row-limit]
+  [rows row-limit row-offset]
   (if row-limit
-    (vec (take row-limit rows))
+    (vec (->> rows (drop (or row-offset 0)) (take row-limit)))
     (vec rows)))
 
 (defn- get-entities
@@ -1086,7 +1089,7 @@
      (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting row-limit]
+  [db view-id {:keys [journals? view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting row-limit row-offset]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -1115,7 +1118,7 @@
                                     (not query?)
                                     (nil? group-by-property-ident))
                            (get-feature-row-data db feat-type class-id sorting filters input
-                                                 row-limit))]
+                                                 row-limit row-offset))]
        (if fast-row-data
          fast-row-data
          (let [entities-result (if query?
@@ -1241,7 +1244,7 @@
                                  (distinct data')
                                  data')]
                       (if (and row-limit (nil? group-by-property-ident))
-                        (maybe-limit-rows rows row-limit)
+                        (maybe-limit-rows rows row-limit row-offset)
                         rows))}
              (= feat-type :linked-references)
              (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))

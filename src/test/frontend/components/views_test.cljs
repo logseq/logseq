@@ -431,21 +431,18 @@
   (let [view-uuid (random-uuid)
         window-context {:feature-type :class-objects :initial-row-count 30}
         full-context {:feature-type :class-objects}
-        pending (#'views/view-data-resource-keys view-uuid window-context full-context false)
-        ready (#'views/view-data-resource-keys view-uuid window-context full-context true)
-        single (#'views/view-data-resource-keys view-uuid nil full-context false)]
+        pending (#'views/view-data-resource-keys view-uuid window-context full-context)
+        ready (#'views/view-data-resource-keys view-uuid window-context full-context)
+        single (#'views/view-data-resource-keys view-uuid nil full-context)]
     (is (= [:view-data view-uuid window-context] (:primary pending)))
     (is (nil? (:full pending))
-        "The remaining-id query does not start until the first window paints.")
-    (is (nil? (#'views/full-view-data-key
-               {:ready-keys {:full [:view-data view-uuid full-context]}}
-               false))
-        "The remaining-id query must not start before the user scrolls.")
-    (is (= [:view-data view-uuid full-context]
-           (#'views/full-view-data-key
-            {:ready-keys {:full [:view-data view-uuid full-context]}}
-            true)))
-    (is (= [:view-data view-uuid full-context] (:full ready)))
+        "Windowed views never request the leftover 40938-id list.")
+    (is (nil? (#'views/offset-view-data-key view-uuid window-context nil))
+        "The offset window must not start before the user scrolls.")
+    (is (nil? (#'views/offset-view-data-key view-uuid window-context 0)))
+    (is (= [:view-data view-uuid (assoc window-context :row-offset 72)]
+           (#'views/offset-view-data-key view-uuid window-context 72)))
+    (is (nil? (:full ready)))
     (is (= [:view-data view-uuid full-context] (:primary single)))
     (is (nil? (:full single)))))
 
@@ -471,10 +468,11 @@
         (is (= 30 (get-in plan [:pending-keys :primary 2 :initial-row-count])))
         (is (nil? (get-in plan [:pending-keys :full]))
             "The remaining-id query does not start before the first window paints.")
-        (is (= [:view-data view-uuid (:full-context plan)]
-               (get-in plan [:ready-keys :full])))
-        (is (nil? (get-in plan [:ready-keys :full 2 :initial-row-count]))
-            "The follow-up query is the full id list.")
+        (is (nil? (get-in plan [:ready-keys :full]))
+            "Do not request the leftover id list after the first window paints.")
+        (is (nil? (#'views/offset-view-data-key
+                   view-uuid (get-in plan [:pending-keys :primary 2]) 0))
+            "The follow-up query is a scrolled offset window, not every remaining id.")
         (is (true? (:ready? paint))
             "Tags and All Pages must paint from the first window without the full id list.")
         (is (= 4000 (:items-count paint)))
@@ -519,14 +517,22 @@
         "Mounted overscan rows stay empty placeholders and skip use-block.")))
 
 (deftest remaining-ids-move-prefetch-off-the-first-window-test
-  (let [stale-first-window [0 25]
-        window-size 26]
-    (is (= stale-first-window
-           (#'views/next-view-prefetch-bounds 26 stale-first-window 72 97 window-size))
-        "Until remaining ids exist, the hydrate set cannot leave the first 26 rows.")
-    (is (= [72 97]
-           (#'views/next-view-prefetch-bounds 40938 stale-first-window 72 97 window-size))
-        "After remaining ids arrive, hydrate the scrolled screen instead of the first window.")))
+  (let [first-window (mapv (fn [_] (random-uuid)) (range 26))
+        offset-window (mapv (fn [_] (random-uuid)) (range 26))]
+    (is (= [0 25]
+           (#'views/next-view-prefetch-bounds 26 [0 25] 72 97 26))
+        "An offset window is one screen of UUIDs. Prefetch that short vector, not 40938 ids.")
+    (is (nil? (#'views/table-row-at first-window nil nil 72))
+        "Row 72 is unknown before the offset window arrives.")
+    (is (= (nth offset-window 0)
+           (#'views/table-row-at first-window offset-window 72 72)))
+    (is (= (nth first-window 0)
+           (#'views/table-row-at first-window offset-window 72 0))
+        "The first window stays addressable after the offset window arrives.")
+    (is (= 72 (#'views/scrolled-row-offset 2400 33)))
+    (let [short-offset (mapv (fn [_] (random-uuid)) (range 11))]
+      (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
+          "A shorter Tags offset window must not throw on stale first-window bounds."))))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))

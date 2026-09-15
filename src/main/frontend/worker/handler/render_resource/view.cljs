@@ -60,6 +60,7 @@
     :input
     :group-by-property-ident
     :initial-row-count
+    :row-offset
     :query-row-uuids})
 
 (defn- valid-sorting?
@@ -106,6 +107,10 @@
                           (pos? (:initial-row-count context))
                           ;; Cap matches views/view-prefetch-max-rows / snapshot batch.
                           (<= (:initial-row-count context) 1000)))
+                 (or (not (contains? context :row-offset))
+                     (and (contains? context :initial-row-count)
+                          (integer? (:row-offset context))
+                          (not (neg? (:row-offset context)))))
                  (or (not (contains? context :query-row-uuids))
                      (and (vector? (:query-row-uuids context))
                           (every? uuid? (:query-row-uuids context)))))
@@ -395,13 +400,15 @@
                                  (:query-row-uuids context))
           option (cond-> (-> context
                              (dissoc :feature-type :query-row-uuids
-                                     :initial-row-count)
+                                     :initial-row-count :row-offset)
                              (assoc :view-feature-type feature-type))
                    owner (assoc :view-for-id (:db/id owner))
                    (= :query-result feature-type)
                    (assoc :query-entity-ids query-entity-ids)
                    (:initial-row-count context)
-                   (assoc :row-limit (:initial-row-count context)))
+                   (assoc :row-limit (:initial-row-count context))
+                   (contains? context :row-offset)
+                   (assoc :row-offset (:row-offset context)))
           result (db-view/get-view-data db (:db/id view) option)
           value (normalize-view-data db result
                                      (some? (:group-by-property-ident config)))

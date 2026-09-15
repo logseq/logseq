@@ -1736,7 +1736,8 @@
                     (let [preview (get previews row)]
                       (and (= row (:block/uuid preview))
                            (string? (:block/title preview))
-                           (integer? (:db/id preview)))))
+                           (integer? (:db/id preview))
+                           (true? (:block.temp/first-window-preview? preview)))))
                   initial-rows)
           "First-window titles travel with the IDs so the table can paint without use-block.")
       (is (= response
@@ -1764,7 +1765,34 @@
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
-(deftest opaque-query-resource-declares-watch-all-test
+(deftest all-pages-view-data-row-offset-returns-the-scrolled-window-without-remaining-ids-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          view-uuid (add-view! conn :all-pages)
+          first-key [:view-data view-uuid
+                     {:feature-type :all-pages
+                      :sorting [{:id :block/title :asc? true}]
+                      :initial-row-count 2}]
+          offset-key [:view-data view-uuid
+                      {:feature-type :all-pages
+                       :sorting [{:id :block/title :asc? true}]
+                       :initial-row-count 2
+                       :row-offset 1}]
+          first-value (:value (call-resource api conn first-key))
+          offset-value (:value (call-resource api conn offset-key))
+          first-rows (:rows first-value)
+          offset-rows (:rows offset-value)
+          preview (get (:row-previews offset-value) (first offset-rows))]
+      (is (= 2 (count first-rows)))
+      (is (= 2 (count offset-rows)))
+      (is (= (second first-rows) (first offset-rows))
+          "The offset window starts after the first row, not after collecting every page id.")
+      (is (not= first-rows offset-rows))
+      (is (= (count offset-rows) (count (:row-previews offset-value))))
+      (is (true? (:block.temp/first-window-preview? preview)))
+      (is (string? (:block/title preview)))
+      (is (not-any? #(contains? (:slots (call-resource api conn offset-key)) [:block %])
+                    offset-rows)))))
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)
           resource-key [:query {:kind :dsl :query "(task TODO)"}]]

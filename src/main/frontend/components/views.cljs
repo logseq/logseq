@@ -2117,17 +2117,40 @@
   (or window-data full-data))
 
 (defn- view-data-resource-keys
-  [view-uuid window-context full-context window-ready?]
-  {:primary [:view-data view-uuid (or window-context full-context)]
-   :full (when (and window-context window-ready?)
-           [:view-data view-uuid full-context])})
+  [view-uuid window-context full-context]
+  {:primary [:view-data view-uuid (or window-context full-context)]})
 
-(defn- full-view-data-key
-  "Remaining-id normalize of 40938 UUIDs was 473ms after first paint.
-  Do not start it until the user scrolls."
-  [plan need-remaining-ids?]
-  (when need-remaining-ids?
-    (get-in plan [:ready-keys :full])))
+(defn- offset-view-context
+  [window-context row-offset]
+  (when (and window-context (integer? row-offset) (pos? row-offset))
+    (assoc window-context :row-offset row-offset)))
+
+(defn- offset-view-data-key
+  "Remaining-id leftover collected 40938 pages in 84ms, sorted in 269ms,
+  and normalized UUIDs in 496ms. Request one scrolled window instead."
+  [view-uuid window-context row-offset]
+  (when-let [ctx (offset-view-context window-context row-offset)]
+    [:view-data view-uuid ctx]))
+
+(defn- table-row-at
+  [first-rows offset-rows row-offset idx]
+  (cond
+    (and (integer? idx) (not (neg? idx)) (< idx (count first-rows)))
+    (nth first-rows idx)
+
+    (and (integer? idx)
+         (integer? row-offset)
+         offset-rows
+         (>= idx row-offset)
+         (< idx (+ row-offset (count offset-rows))))
+    (nth offset-rows (- idx row-offset))
+
+    :else
+    nil))
+
+(defn- scrolled-row-offset
+  [scroll-top item-height]
+  (max 0 (js/Math.floor (/ (max 0 scroll-top) item-height))))
 
 (defn- measured-viewport-height
   "0 is a real clientHeight before layout. `(or 0 window-height)` would
@@ -2280,6 +2303,25 @@
     :else
     nil))
 
+(defn- prefetch-rows-in-bounds
+  "Offset windows can be shorter than the previous first-window bounds.
+  Tags crashed when [0 25] was applied to 11 leftover rows."
+  [rows bounds]
+  (let [rows-vec (vec rows)]
+    (cond
+      (empty? rows-vec)
+      []
+
+      (nil? bounds)
+      rows-vec
+
+      :else
+      (let [start (max 0 (min (first bounds) (dec (count rows-vec))))
+            end (min (count rows-vec) (inc (second bounds)))]
+        (if (< start end)
+          (subvec rows-vec start end)
+          [])))))
+
 (defn- use-view-row-prefetch
   ([rows]
    (use-view-row-prefetch rows
@@ -2294,16 +2336,8 @@
   ([rows initial-prefetch-count window-size]
    (let [[prefetch-bounds set-prefetch-bounds!] (hooks/use-state nil)
          rows-vec (vec rows)
-         prefetch-rows (cond
-                         (empty? rows-vec)
-                         []
-
-                         prefetch-bounds
-                         (subvec rows-vec
-                                 (first prefetch-bounds)
-                                 (inc (second prefetch-bounds)))
-
-                         :else
+         prefetch-rows (if prefetch-bounds
+                         (prefetch-rows-in-bounds rows-vec prefetch-bounds)
                          (subvec rows-vec 0 (min (count rows-vec) initial-prefetch-count)))
          prefetch-ready? (db-hooks/use-block-prefetch prefetch-rows)
          [initial-prefetch-ready? set-initial-prefetch-ready!] (hooks/use-state prefetch-ready?)]
@@ -2359,9 +2393,12 @@
                               viewport-height
                               item-height)
         all-row-ids (or (:all-row-ids option) (:data table) rows)
+        offset-rows (:offset-rows option)
+        row-offset (:row-offset option)
+        prefetch-source (if (seq offset-rows) offset-rows all-row-ids)
         row-previews (:row-previews option)
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
-        (use-view-row-prefetch all-row-ids
+        (use-view-row-prefetch prefetch-source
                                initial-prefetch-count
                                prefetch-window-size)
         [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state false)
@@ -2369,28 +2406,23 @@
         total-count (table-total-count all-row-ids (:items-count option))
         option (assoc option
                       :table-view? true
-                      :mount-unpinned-cells? mount-unpinned-cells?)]
-    ;; Remaining-id grew 26 -> 40938 while hydrate stayed on the first
-    ;; window. items-rendered did not run again, so scrollTop 2400
-    ;; kept empty placeholders. Refresh the visible window here.
+                      :mount-unpinned-cells? mount-unpinned-cells?)
+        can-paint? (table-body-can-paint?
+                    initial-rows-ready? hydrate-row-uuids row-previews)]
+    ;; Offset-window rows replace the 40938-id list. Refresh hydrate
+    ;; onto those UUIDs when the scrolled window arrives.
     (hooks/use-effect!
      (fn []
-       (when (pos? (or (some-> scroll-parent .-scrollTop) 0))
-         (prefetch-rows!
-          (viewport-row-range
-           (or (some-> scroll-parent .-scrollTop) 0)
-           viewport-height
-           item-height
-           total-count))))
-     [(count all-row-ids)])
+       (when (seq offset-rows)
+         (prefetch-rows! [0 (dec (count offset-rows))])))
+     [(count offset-rows) row-offset])
     (cond
       (not (seq rows))
       nil
 
       ;; Logs: view-data was ready at 44ms, then skeletons waited for the
       ;; 24-block hydrate. First-window titles skip that gate.
-      (not (table-body-can-paint?
-            initial-rows-ready? hydrate-row-uuids row-previews))
+      (not can-paint?)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
@@ -2401,37 +2433,48 @@
         :increase-viewport-by {:top overscan-px :bottom overscan-px}
         :custom-scroll-parent scroll-parent
         :compute-item-key (fn [idx]
-                            (str "table-row-" (util/nth-safe all-row-ids idx)))
+                            (str "table-row-"
+                                 (or (table-row-at all-row-ids offset-rows row-offset idx)
+                                     idx)))
         :skipAnimationFrameInResizeObserver true
         :fixed-item-height item-height
         :default-item-height item-height
         :total-count total-count
         :item-content (fn [idx]
-                        (let [row-uuid (util/nth-safe all-row-ids idx)]
-                          (if (or (viewport-hydrate-ready?
-                                   initial-rows-ready? hydrate-row-uuids row-uuid)
-                                  (row-has-first-window-title? row-previews row-uuid))
-                            (lazy-item all-row-ids idx option
+                        (let [row-uuid (table-row-at all-row-ids offset-rows row-offset idx)
+                              in-offset? (and (seq offset-rows)
+                                              (integer? row-offset)
+                                              (>= idx row-offset)
+                                              (< idx (+ row-offset (count offset-rows))))]
+                          (if (and row-uuid
+                                   (or (viewport-hydrate-ready?
+                                        initial-rows-ready? hydrate-row-uuids row-uuid)
+                                       (row-has-first-window-title? row-previews row-uuid)))
+                            (lazy-item (if in-offset? offset-rows all-row-ids)
+                                       (if in-offset? (- idx row-offset) idx)
+                                       option
                                        (fn [row]
                                          (table-row table row {} option)))
                             (lazy-item-placeholder true false))))
         :items-rendered (fn [props]
                           (prefetch-rows!
-                           (or (viewport-row-range
-                                (or (some-> scroll-parent .-scrollTop) 0)
-                                viewport-height
-                                item-height
-                                total-count)
-                               props))
+                           (if (seq offset-rows)
+                             [0 (dec (count offset-rows))]
+                             (or (viewport-row-range
+                                  (or (some-> scroll-parent .-scrollTop) 0)
+                                  viewport-height
+                                  item-height
+                                  total-count)
+                                 props)))
                           (when (seq props)
                             (set-items-rendered! true)
                             (set-mount-unpinned-cells! true)
-                            ;; Remaining-id normalize of 40938 UUIDs was 473ms
-                            ;; and remounted the painted rows. Start it when
-                            ;; the user actually scrolls past the first window.
                             (when (and on-viewport-filled!
                                        (pos? (or (some-> scroll-parent .-scrollTop) 0)))
-                              (on-viewport-filled!))))}
+                              (on-viewport-filled!
+                               (scrolled-row-offset
+                                (or (some-> scroll-parent .-scrollTop) 0)
+                                item-height)))))}
        (:disable-virtualized? option)))))
 
 (hsx/defc table-view
@@ -3405,8 +3448,8 @@
     {:initial-row-count initial-row-count
      :window-context window-context
      :full-context full-context
-     :pending-keys (view-data-resource-keys view-uuid window-context full-context false)
-     :ready-keys (view-data-resource-keys view-uuid window-context full-context true)}))
+     :pending-keys (view-data-resource-keys view-uuid window-context full-context)
+     :ready-keys (view-data-resource-keys view-uuid window-context full-context)}))
 
 (defn- loaded-view-paint
   [view-data]
@@ -3443,19 +3486,24 @@
                                         query-row-uuids
                                         viewport-height)
         window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
-        [viewport-filled? set-viewport-filled!] (hooks/use-state false)
-        full-key (full-view-data-key plan viewport-filled?)
-        full-snapshot (db-hooks/use-resource-snapshot full-key)
-        full-data (when full-key
-                    (case (:status full-snapshot)
-                      :ready (:value full-snapshot)
-                      :error (throw (:error full-snapshot))
-                      nil))
-        view-data (paint-view-data full-data window-or-full-data)
-        lookup-data (settled-view-data full-data window-or-full-data)
+        [row-offset set-row-offset!] (hooks/use-state nil)
+        offset-key (offset-view-data-key (:block/uuid view-entity)
+                                         (:window-context plan)
+                                         row-offset)
+        offset-snapshot (db-hooks/use-resource-snapshot offset-key)
+        offset-data (when offset-key
+                      (case (:status offset-snapshot)
+                        :ready (:value offset-snapshot)
+                        :error (throw (:error offset-snapshot))
+                        nil))
+        view-data (paint-view-data nil window-or-full-data)
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
-                      (view-data->rows lookup-data))
+                      (view-data->rows window-or-full-data))
+        offset-rows (when offset-data
+                      (view-data->rows offset-data))
+        row-previews (merge (:row-previews window-or-full-data)
+                            (:row-previews offset-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         option (cond-> (assoc option
@@ -3471,8 +3519,8 @@
                            (when collapsed?
                              (deactivate-deferred-view!)))})
 
-                 (seq (:row-previews view-data))
-                 (assoc :row-previews (:row-previews view-data)))]
+                 (seq row-previews)
+                 (assoc :row-previews row-previews))]
     (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
@@ -3481,12 +3529,14 @@
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
-                                            :on-viewport-filled! #(set-viewport-filled! true)
+                                            :on-viewport-filled! set-row-offset!
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data
                                             :full-data data
                                             :all-row-ids all-row-ids
+                                            :offset-rows offset-rows
+                                            :row-offset row-offset
                                             :filters (or filters {})
                                             :sorting sorting
                                             :set-filters! ignore!

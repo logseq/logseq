@@ -95,6 +95,52 @@
     (is (= 3 (:count result)))
     (is (= ["A" "B"] titles))))
 
+(deftest get-view-data-all-pages-row-offset-returns-the-scrolled-window-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "alpha" :block/updated-at 1}}
+                {:page {:block/title "beta" :block/updated-at 2}}
+                {:page {:block/title "gamma" :block/updated-at 3}}
+                {:page {:block/title "delta" :block/updated-at 4}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/title :asc? true}]}
+        full (db-view/get-view-data @conn view-id option)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 2 :row-offset 1))
+        titles (map (fn [id] (:block/title (d/entity @conn id))) (:data window))]
+    (is (= 4 (:count window) (:count full)))
+    (is (= ["beta" "delta"] titles)
+        "row-offset drops the first window and takes the next screen.")
+    (is (= (subvec (vec (:data full)) 1 3) (:data window)))))
+
+(deftest get-view-data-class-objects-row-offset-returns-the-scrolled-window-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "A" :block/updated-at 10 :build/tags [:Topic]}}
+                {:page {:block/title "B" :block/updated-at 20 :build/tags [:Topic]}}
+                {:page {:block/title "C" :block/updated-at 30 :build/tags [:Topic]}}
+                {:page {:block/title "D" :block/updated-at 40 :build/tags [:Topic]}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        full (db-view/get-view-data @conn view-id option)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 2 :row-offset 2))
+        titles (map (fn [id] (:block/title (d/entity @conn id))) (:data window))]
+    (is (= 4 (:count window) (:count full)))
+    (is (= ["C" "D"] titles))
+    (is (= (subvec (vec (:data full)) 2 4) (:data window)))
+    (with-redefs [db-class/get-class-object-ids
+                  (fn [& _args]
+                    (throw (js/Error. "offset window must not walk hidden ancestors")))]
+      (is (= ["C" "D"]
+             (map (fn [id] (:block/title (d/entity @conn id)))
+                  (:data (db-view/get-view-data
+                          @conn view-id (assoc option :row-limit 2 :row-offset 2)))))
+          "Scroll uses the tag-index first-window path, not leftover get-class-object-ids."))))
+
 (deftest get-view-data-class-objects-id-path-stays-bounded-with-many-rows-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Topic " idx)
