@@ -708,6 +708,27 @@
               (db-test/readable-properties (d/entity @conn :user.class/D))))
           "D removes the direct Root parent inherited through C"))))
 
+(deftest hide-empty-value-on-empty-node-many-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:similar-to {:logseq.property/type :node
+                                         :db/cardinality :db.cardinality/many}}
+               :classes {:Movie {:build/class-properties [:similar-to]}}
+               :pages-and-blocks
+               [{:page {:block/title "You Can't Say No (2018)"
+                        :build/tags [:Movie]
+                        :build/properties {:similar-to :logseq.property/empty-placeholder}}}]})
+        property (d/entity @conn :user.property/similar-to)]
+    (outliner-property/set-block-property! conn
+                                           [:block/uuid (:block/uuid property)]
+                                           :logseq.property/hide-empty-value
+                                           true)
+    (is (true? (:logseq.property/hide-empty-value (d/entity @conn :user.property/similar-to))))
+    (outliner-property/set-block-property! conn
+                                           [:block/uuid (:block/uuid property)]
+                                           :logseq.property/hide-empty-value
+                                           false)
+    (is (false? (:logseq.property/hide-empty-value (d/entity @conn :user.property/similar-to))))))
+
 (deftest delete-property-value!
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:C1 {}

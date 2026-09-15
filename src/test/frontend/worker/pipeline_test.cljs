@@ -15,9 +15,11 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest save-block-resolves-page-refs-in-worker-test
@@ -1234,3 +1236,119 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest hide-empty-value-on-empty-node-many-property-is-valid-tx
+  (testing "toggling hide-empty-value on a node/many property succeeds even when a page has an empty value"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:similar-to {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+                 :classes {:Movie {:build/class-properties [:similar-to]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "You Can't Say No (2018)"
+                          :build/tags [:Movie]}}
+                  {:page {:block/title "Empty placeholder movie"
+                          :build/tags [:Movie]
+                          :build/properties {:similar-to :logseq.property/empty-placeholder}}}]})
+          property (d/entity @conn :user.property/similar-to)
+          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
+          placeholder-page (db-test/find-page-by-title @conn "Empty placeholder movie")]
+      (is (some? property))
+      (is (= :db.cardinality/many (:db/cardinality property)))
+      (is (nil? (:user.property/similar-to page)))
+      (is (= :logseq.property/empty-placeholder
+             (:db/ident (first (:user.property/similar-to placeholder-page)))))
+      (let [page-errors (:errors (db-validate/validate-db @conn))]
+        (is (empty? page-errors)
+            (str "Setup graph should already be valid: " (pr-str page-errors))))
+      (ldb/transact! conn
+                     (keep (fn [ent]
+                             (when-let [refs (seq (outliner-pipeline/db-rebuild-block-refs @conn ent))]
+                               {:db/id (:db/id ent)
+                                :block/refs refs}))
+                           [page placeholder-page (d/entity @conn :user.class/Movie)])
+                     {:outliner-op :save-block})
+      (with-transact-pipeline
+        (fn []
+          (outliner-op/apply-ops!
+           conn
+           [[:set-block-property [(:block/uuid property)
+                                  :logseq.property/hide-empty-value
+                                  true]]]
+           {})
+          (is (true? (:logseq.property/hide-empty-value
+                      (d/entity @conn :user.property/similar-to)))
+              "Hide empty value persists")
+          (outliner-op/apply-ops!
+           conn
+           [[:set-block-property [(:block/uuid property)
+                                  :logseq.property/hide-empty-value
+                                  false]]]
+           {})
+          (is (false? (:logseq.property/hide-empty-value
+                       (d/entity @conn :user.property/similar-to)))
+              "Hide empty value can be toggled off")
+          (is (empty? (:errors (worker-db-validate/validate-db conn :fix false)))
+              "Graph remains valid after both toggles"))))))
+
+(deftest hide-empty-value-does-not-revise-reference-owners-test
+  (testing "display-config changes stamp the property, not every page that refs it"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:similar-to {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+                 :classes {:Movie {:build/class-properties [:similar-to]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "You Can't Say No (2018)"
+                          :build/tags [:Movie]}}]})
+          property (d/entity @conn :user.property/similar-to)
+          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
+          movie-class (d/entity @conn :user.class/Movie)
+          _ (d/transact! conn [[:db/add (:db/id page) :block/refs (:db/id property)]
+                               [:db/add (:db/id property) :block/tx-id 10]
+                               [:db/add (:db/id page) :block/tx-id 10]
+                               [:db/add (:db/id movie-class) :block/tx-id 10]])
+          db-before @conn
+          tx-report (assoc (d/with db-before
+                                   [[:db/add (:db/id property)
+                                     :logseq.property/hide-empty-value
+                                     true]
+                                    [:db/add (:db/id property)
+                                     :block/updated-at
+                                     (js/Date.now)]])
+                           :tx-meta {:outliner-op :save-block})
+          result (worker-pipeline/transact-pipeline tx-report)]
+      (is (not= (revision db-before property)
+                (revision (:db-after result) property))
+          "Display-config change still revises the property entity.")
+      (is (= (revision db-before page)
+             (revision (:db-after result) page))
+          "Hide empty value must not fan out revisions to pages that reference the property.")
+      (is (= (revision db-before movie-class)
+             (revision (:db-after result) movie-class))
+          "Hide empty value must not revise the class that provides the property."))))
+
+(deftest hide-empty-value-succeeds-when-reference-owner-is-invalid-test
+  (testing "toggling hide-empty-value must not revalidate pages that only reference the property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:similar-to {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+                 :classes {:Movie {:build/class-properties [:similar-to]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "You Can't Say No (2018)"
+                          :build/tags [:Movie]}}]})
+          property (d/entity @conn :user.property/similar-to)
+          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")]
+      (d/transact! conn [[:db/add (:db/id page) :block/refs (:db/id property)]
+                         [:db/retract (:db/id page) :block/title]])
+      (is (seq (:errors (db-validate/validate-db @conn)))
+          "Planted an invalid reference owner to simulate a dirty graph")
+      (with-transact-pipeline
+        (fn []
+          (outliner-op/apply-ops!
+           conn
+           [[:set-block-property [(:block/uuid property)
+                                  :logseq.property/hide-empty-value
+                                  true]]]
+           {})
+          (is (true? (:logseq.property/hide-empty-value
+                      (d/entity @conn :user.property/similar-to)))
+              "Hide empty value persists even when a referencing page is invalid"))))))

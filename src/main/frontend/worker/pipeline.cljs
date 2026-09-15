@@ -556,9 +556,37 @@
                    tx-data)]
     (throw (ex-info "journal page protected attr updated" violation))))
 
-(defn- projected-reference-content-datom?
+(def ^:private timestamp-only-attrs
+  #{:block/tx-id :block/updated-at})
+
+(def ^:private property-display-config-attrs
+  "Property display metadata. Changing these must not fan :block/tx-id out to
+  every page/block that references the property (and revalidate those owners)."
+  #{:logseq.property/hide?
+    :logseq.property/hide-empty-value
+    :logseq.property/ui-position
+    :logseq.property/view-context
+    :logseq.property/public?})
+
+(defn- timestamp-only-datom?
   [datom]
-  (not (contains? #{:block/tx-id :block/updated-at} (:a datom))))
+  (contains? timestamp-only-attrs (:a datom)))
+
+(defn- property-display-config-datom?
+  [datom]
+  (contains? property-display-config-attrs (:a datom)))
+
+(defn- projected-reference-content-datom?
+  "Datoms whose change should revise reference owners (pages/blocks that ref
+  this entity). Timestamp-only and property display-config changes must not."
+  [datom]
+  (not (or (timestamp-only-datom? datom)
+           (property-display-config-datom? datom))))
+
+(defn- local-revision-datom?
+  "Datoms that should stamp :block/tx-id on the changed entity itself."
+  [datom]
+  (not (timestamp-only-datom? datom)))
 
 (defn- reference-attrs
   [db]
@@ -625,7 +653,7 @@
   [{:keys [tx-data tx-meta] :as tx-report}]
   (let [revision-datom? (if (:fix-db? tx-meta)
                           #(not= :block/tx-id (:a %))
-                          projected-reference-content-datom?)]
+                          local-revision-datom?)]
     (into (projected-reference-owner-ids tx-report)
           (comp
            (filter revision-datom?)
