@@ -612,7 +612,7 @@
       "The name column is on-screen even when unpinned.")
   (is (true? (#'views/eager-table-cells? false {:id :select} false)))
   (is (false? (#'views/eager-table-cells? false {:id :user.property/actors} true))
-      "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row."))
+      "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row.")
   (is (true? (#'views/eager-table-cells? false {:id :user.property/actors} false)))
   (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
       "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
