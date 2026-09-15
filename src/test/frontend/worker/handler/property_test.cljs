@@ -117,7 +117,7 @@
       (d/transact! conn [{:db/id (:db/id plain)
                           :logseq.property/priority :logseq.property/empty-placeholder}])
       (is (contains? (positioned-idents @conn (:db/id plain) :block-left)
-                     :logseq.property/priority)))))
+                     :logseq.property/priority)))
     (testing "untagged blocks do not get a status icon"
       (is (not (contains? (positioned-idents db (:db/id plain) :block-left)
                           :logseq.property/status))))
