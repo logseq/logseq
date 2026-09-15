@@ -127,6 +127,24 @@
              #{:logseq.class/Journal :logseq.class/Whiteboard
                :logseq.class/Pdf-annotation}))
 
+(def private-tag-titles
+  "Titles of private built-in tags that cannot be applied to a new page.
+   Used when a parsed tag has not been resolved to a :db/ident yet, e.g.
+   creating a page via search with `Foo #Tag`. Excludes #Page, which new
+   pages already have as their type tag."
+  (->> (disj private-tags :logseq.class/Page)
+       (keep #(get-in built-in-classes [% :title]))
+       set))
+
+(defn private-create-page-tag?
+  "True when a tag cannot be applied to a new page. Title matching is only a
+   fallback when :db/ident is missing; an explicit ident is authoritative.
+   #Page is allowed because new pages already have it as their type tag."
+  [tag]
+  (or (contains? (disj private-tags :logseq.class/Page) (:db/ident tag))
+      (and (nil? (:db/ident tag))
+           (contains? private-tag-titles (:block/title tag)))))
+
 (def block-kind-tags
   #{:logseq.class/Cards :logseq.class/Code-block
     :logseq.class/Math-block :logseq.class/Quote-block
