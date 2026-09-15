@@ -1793,6 +1793,8 @@
       (is (string? (:block/title preview)))
       (is (not-any? #(contains? (:slots (call-resource api conn offset-key)) [:block %])
                     offset-rows)))))
+
+(deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)
           resource-key [:query {:kind :dsl :query "(task TODO)"}]]
