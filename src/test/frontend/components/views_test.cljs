@@ -370,7 +370,7 @@
   (is (true? (#'views/eager-table-cells? false)))
   (is (true? (#'views/eager-table-cells? nil)))
   (is (false? (#'views/eager-table-cells? true))
-      "Grouped tables disable row virtualization and keep per-cell lazy mounts.")))
+      "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
 
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))

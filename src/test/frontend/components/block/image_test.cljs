@@ -56,4 +56,4 @@
     (is (= :img.rounded-sm.relative.fade-in.fade-in-faster (first image)))
     (is (= blob-src (:src (second image))))
     (is (nil? (:on-error (second image)))
-        "Local blob assets keep the img and do not attach on-error."))))
+        "Local blob assets keep the img and do not attach on-error.")))
