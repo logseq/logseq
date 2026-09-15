@@ -144,7 +144,8 @@
           :else (number->roman idx))))))
 
 (defn entity-forward-map
-  [db entity {:keys [properties exclude-attrs]}]
+  [db entity {:keys [properties exclude-attrs include-derived?]
+              :or {include-derived? true}}]
   (when entity
     (let [property-set (some-> properties set)
           excluded-attrs (set exclude-attrs)
@@ -167,17 +168,21 @@
                         (assoc m a v'))))
                   {:db/id (:db/id entity)}
                   datoms)
-          own-property-keys (->> (d/datoms db :eavt (:db/id entity))
-                                 (map :a)
-                                 distinct
-                                 (filter db-property/property?)
-                                 vec)]
-      (cond-> (assoc result :block.temp/property-keys own-property-keys)
+          own-property-keys (when include-derived?
+                              (->> (d/datoms db :eavt (:db/id entity))
+                                   (map :a)
+                                   distinct
+                                   (filter db-property/property?)
+                                   vec))]
+      (cond-> result
+        include-derived?
+        (assoc :block.temp/property-keys own-property-keys)
+
         raw-title
         (assoc :block/title raw-title
                :block/raw-title raw-title)
 
-        list-type
+        (and include-derived? list-type)
         (assoc :block.temp/order-list-index
                (order-list-index entity list-type))))))
 

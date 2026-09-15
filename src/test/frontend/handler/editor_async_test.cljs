@@ -16,6 +16,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
+            [frontend.worker.handler.block :as worker-block-handler]
             [frontend.worker.handler.comments :as worker-comments]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
@@ -1000,3 +1001,107 @@
         (p/then
          (fn []
            (is (= (:block/uuid comment-block) @resolved-block-ref)))))))
+
+(deftest-async copied-selection-loads-the-complete-structured-tree
+  (let [repo test-helper/test-db
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        root-uuid (random-uuid)
+        collapsed-uuid (random-uuid)
+        collapsed-child-uuid (random-uuid)
+        query-uuid (random-uuid)
+        property-value-uuid (random-uuid)
+        independent-uuid (random-uuid)
+        chain-uuids (vec (repeatedly 101 random-uuid))
+        chain-blocks
+        (mapv (fn [index block-uuid]
+                {:db/id (- (+ 100 index))
+                 :block/uuid block-uuid
+                 :block/tx-id 1
+                 :block/title (str "Chain " index)
+                 :block/page -1
+                 :block/parent (if (zero? index) -3 (- (+ 99 index)))
+                 :block/order "a0"})
+              (range (count chain-uuids))
+              chain-uuids)]
+    (d/transact!
+     (conn/get-db repo false)
+     (concat
+      [{:db/id -1
+        :block/uuid page-uuid
+        :block/tx-id 1
+        :block/title "Page"
+        :block/name "page"
+        :block/tags :logseq.class/Page}
+       {:db/id -2
+        :db/ident :user.property/Text
+        :db/valueType :db.type/ref
+        :db/cardinality :db.cardinality/one
+        :block/uuid property-uuid
+        :block/tx-id 1
+        :block/title "Text"
+        :block/tags :logseq.class/Property}
+       {:db/id -3
+        :block/uuid root-uuid
+        :block/tx-id 1
+        :block/title "Root"
+        :block/page -1
+        :block/parent -1
+        :block/order "a0"}
+       {:db/id -4
+        :block/uuid collapsed-uuid
+        :block/tx-id 1
+        :block/title "Collapsed"
+        :block/page -1
+        :block/parent -3
+        :block/order "a1"
+        :block/collapsed? true}
+       {:db/id -5
+        :block/uuid collapsed-child-uuid
+        :block/tx-id 1
+        :block/title "Collapsed child"
+        :block/page -1
+        :block/parent -4
+        :block/order "a0"}
+       {:db/id -6
+        :block/uuid query-uuid
+        :block/tx-id 1
+        :block/title "Query"
+        :block/page -1
+        :block/order "a3"}
+       {:db/id -7
+        :block/uuid independent-uuid
+        :block/tx-id 1
+        :block/title "Independent"
+        :block/page -1
+        :block/parent -1
+        :block/order "a1"}
+       {:db/id -8
+        :block/uuid property-value-uuid
+        :block/tx-id 1
+        :block/title "Property value"
+        :block/page -1
+        :block/parent -3
+        :block/order "a2"
+        :logseq.property/created-from-property -2
+        :logseq.property/query -6}]
+      chain-blocks))
+    (let [db (conn/get-db repo)
+          expected-uuids
+          (conj (mapv :block/uuid
+                      (ldb/get-block-and-children
+                       db root-uuid {:include-property-block? true}))
+                independent-uuid)]
+      (p/with-redefs
+       [state/<invoke-db-worker
+        (fn [_api repo' requests]
+          (let [db' (conn/get-db repo')]
+            (p/resolved
+             (mapv (fn [{:keys [id opts]}]
+                     (let [id' (if (string? id) (uuid id) id)]
+                       (assoc (worker-block-handler/get-block-and-children db' id' opts)
+                              :id id)))
+                   requests))))]
+       (p/let [blocks (#'editor/<get-all-blocks-by-ids
+                        repo [root-uuid (nth chain-uuids 50) independent-uuid])]
+         (is (= expected-uuids (mapv :block/uuid blocks))))))))

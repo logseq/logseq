@@ -1206,20 +1206,28 @@
           children
           (cons root children))))))
 
-(defn- get-all-blocks-by-ids
+(defn- <get-all-blocks-by-ids
   [repo ids]
   (p/let [loaded-blocks (db-async/<get-blocks repo ids {:children? false})]
     (let [loaded-blocks (unwrap-block-results loaded-blocks)
           blocks-by-uuid (zipmap (map :block/uuid loaded-blocks) loaded-blocks)]
       (p/loop [ids ids
-               result []]
+               result []
+               seen #{}]
         (if (seq ids)
-          (p/let [blocks (<sorted-block-and-children
-                          repo
-                          (get blocks-by-uuid (first ids))
-                          {:include-property-block? true})
-                  result (vec (concat result blocks))]
-            (p/recur (remove (set (map :block/uuid result)) (rest ids)) result))
+          (let [block-id (first ids)]
+            (if (contains? seen block-id)
+              (p/recur (rest ids) result seen)
+              (p/let [blocks (<sorted-block-and-children
+                              repo
+                              (get blocks-by-uuid block-id)
+                              {:all? true
+                               :include-collapsed-children? true
+                               :include-property-block? true
+                               :render-data? nil})]
+                (p/recur (rest ids)
+                         (into result blocks)
+                         (into seen (keep :block/uuid) blocks)))))
           result)))))
 
 (def ^:private copied-block-derived-attrs
@@ -1266,7 +1274,7 @@
                              :quick-copy? true))]
       (when (seq blocks)
         (util/copy-to-clipboard! content)
-        (p/let [copied-source-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
+        (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
                 html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
                 _ (let [copied-blocks (cond->> copied-source-blocks
                         true
