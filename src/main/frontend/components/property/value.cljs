@@ -468,7 +468,7 @@
                (shui/select-item {:key (str (:db/id choice))
                                   :value (:db/id choice)}
                                  (repeat-unit-label choice)))
-             unit-choices))]]))
+             unit-choices)))]]))
 
 (hsx/defc repeat-setting
   [block property]
