@@ -8,7 +8,9 @@
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -360,6 +362,52 @@
   (is (= 50 (#'views/initial-view-prefetch-count 10000 33))
       "Initial table hydration remains bounded on tall viewports.")
   (is (= 1 (#'views/initial-view-prefetch-count 0 33))))
+
+(deftest table-virtualization-uses-fixed-row-height
+  (is (= {:item-height 33 :overscan-px 480}
+         (#'views/table-virtualization-metrics))
+      "Large table views keep a known row height so Virtuoso can skip layout measurement."))
+
+(deftest table-cells-render-eagerly-once-rows-are-windowed
+  (is (true? (#'views/eager-table-cells? :class-objects)))
+  (is (true? (#'views/eager-table-cells? :all-pages))))
+
+(deftest table-cell-plain-value-exposes-clipped-text
+  (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))
+  (is (= "You Can't Say No (2018)"
+         (#'views/table-cell-plain-value {:block/title "You Can't Say No (2018)"}
+                                         {:id :block/title})))
+  (is (= "https://www.imdb.com/title/tt5849986/"
+         (#'views/table-cell-plain-value
+          {:user.property/imdb-url "https://www.imdb.com/title/tt5849986/"}
+          {:id :user.property/imdb-url
+           :get-value (fn [row] (:user.property/imdb-url row))}))))
+
+(deftest table-body-virtualizes-before-prefetch-settles
+  (let [virtual-opts (atom nil)
+        row-uuid (random-uuid)
+        markup
+        (with-redefs [hooks/use-state (fn [initial] [initial (constantly nil)])
+                      hooks/use-effect! (fn [& _args])
+                      hooks/use-ref (fn [value] #js {:current value})
+                      db-hooks/use-block-prefetch (constantly false)
+                      util/app-scroll-container-node (constantly #js {:clientHeight 800})
+                      ui/virtualized-list
+                      (fn [opts]
+                        (reset! virtual-opts opts)
+                        [:div.ls-table-virtuoso])]
+          (render-static
+           (views/table-body
+            {:data [row-uuid] :rows [row-uuid]}
+            {:config {} :viewid "movies-table"}
+            [row-uuid]
+            (atom nil)
+            (constantly nil))))]
+    (is (string/includes? markup "ls-table-virtuoso")
+        "The table list mounts immediately instead of waiting on a skeleton.")
+    (is (not (string/includes? markup "h-8 w-full")))
+    (is (= 33 (:fixed-item-height @virtual-opts)))
+    (is (= 480 (get-in @virtual-opts [:increase-viewport-by :top])))))
 
 (deftest gallery-loading-row-keeps-the-card-size-test
   (with-redefs [db-hooks/use-block (constantly nil)]

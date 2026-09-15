@@ -7,6 +7,10 @@
     @apply max-h-[200px] !max-w-[80px] overflow-hidden;
   }
 
+  .asset-image-fallback {
+    @apply truncate max-w-full;
+  }
+
   a.tag {
     @apply text-sm whitespace-nowrap;
   }
@@ -88,6 +92,18 @@
 
   .ls-table-cell {
     @apply overflow-hidden;
+
+    > div {
+      @apply min-w-0 overflow-hidden;
+    }
+
+    .property-value-inner,
+    .jtrigger,
+    .inline,
+    a,
+    .asset-image-fallback {
+      @apply min-w-0 max-w-full overflow-hidden text-ellipsis;
+    }
   }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;

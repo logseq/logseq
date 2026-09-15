@@ -1304,8 +1304,10 @@
        cell-placeholder)]))
 
 (defn- eager-table-cells?
-  [view-feature-type]
-  (= :all-pages view-feature-type))
+  "Visible rows are already windowed by Virtuoso. Per-cell IntersectionObserver
+  left wide tables blank during scroll."
+  [_view-feature-type]
+  true)
 
 (defn- click-cell
   [node]
@@ -1357,6 +1359,25 @@
         (when (< next-cell-left container-left)
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
+
+(defn- table-cell-plain-value
+  "Plain text used for native title tooltips on clipped table cells."
+  [row column]
+  (let [id (:id column)]
+    (cond
+      (contains? #{:select :id :add-property} id)
+      nil
+
+      (= :block/title id)
+      (some-> (:block/title row) str)
+
+      (fn? (:get-value column))
+      (let [value ((:get-value column) row)]
+        (when (some? value)
+          (str value)))
+
+      :else
+      nil)))
 
 (hsx/defc table-cell-container
   [cell-opts body]
@@ -1419,10 +1440,13 @@
                            select? (= (:id column) :select)
                            add-property? (= (:id column) :add-property)
                            style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :style style}]
+                           cell-title (table-cell-plain-value row column)
+                           cell-opts (cond-> {:key id
+                                              :select? select?
+                                              :add-property? add-property?
+                                              :style style}
+                                       (not (string/blank? cell-title))
+                                       (assoc :title cell-title))]
                        (if (and scrolling? (not (:block/title row)))
                          (table-cell-container cell-opts nil)
                          (when-let [render (get column :cell)]
@@ -2035,6 +2059,15 @@
   [table-view?]
   (if table-view? 33 24))
 
+(def ^:private table-row-overscan-px 480)
+
+(defn- table-virtualization-metrics
+  "Fixed row height plus extra overscan so Virtuoso does not measure every
+  table row while scrolling a large DB view."
+  []
+  {:item-height (lazy-item-placeholder-height true)
+   :overscan-px table-row-overscan-px})
+
 (def ^:private view-prefetch-limit 50)
 
 (defn- initial-view-prefetch-count
@@ -2110,34 +2143,33 @@
   (let [scroll-parent (get-scroll-parent
                        (-> (:config option)
                            (assoc :viewel (js/document.getElementById (:viewid option)))))
+        {:keys [item-height overscan-px]} (table-virtualization-metrics)
         initial-prefetch-count (initial-view-prefetch-count
-                                (.-clientHeight scroll-parent)
-                                (lazy-item-placeholder-height true))
-        [initial-rows-ready? prefetch-rows!]
+                                (or (some-> scroll-parent .-clientHeight) 0)
+                                item-height)
+        [_initial-rows-ready? prefetch-rows!]
         (use-view-row-prefetch (:data table) initial-prefetch-count)]
     (when (seq rows)
-      (if initial-rows-ready?
-        (virtualized-list
-         {:ref #(reset! *scroller-ref %)
-          :increase-viewport-by {:top 300 :bottom 300}
-          :custom-scroll-parent scroll-parent
-          :compute-item-key (fn [idx]
-                              (str "table-row-" (util/nth-safe rows idx)))
-          :skipAnimationFrameInResizeObserver true
-          :total-count (count rows)
-          :item-content (fn [idx]
-                          (let [option (assoc option :table-view? true)]
-                            (lazy-item (:data table) idx option
-                                       (fn [row]
-                                         (table-row table row {} option)))))
-          :items-rendered (fn [props]
-                            (prefetch-rows! props)
-                            (when (seq props)
-                              (set-items-rendered! true)))}
-         (:disable-virtualized? option))
-        [:div.flex.flex-col.gap-1.py-1
-         (for [idx (range 3)]
-           (shui/skeleton {:key idx :class "h-8 w-full"}))]))))
+      (virtualized-list
+       {:ref #(reset! *scroller-ref %)
+        :increase-viewport-by {:top overscan-px :bottom overscan-px}
+        :custom-scroll-parent scroll-parent
+        :compute-item-key (fn [idx]
+                            (str "table-row-" (util/nth-safe rows idx)))
+        :skipAnimationFrameInResizeObserver true
+        :fixed-item-height item-height
+        :default-item-height item-height
+        :total-count (count rows)
+        :item-content (fn [idx]
+                        (let [option (assoc option :table-view? true)]
+                          (lazy-item (:data table) idx option
+                                     (fn [row]
+                                       (table-row table row {} option)))))
+        :items-rendered (fn [props]
+                          (prefetch-rows! props)
+                          (when (seq props)
+                            (set-items-rendered! true)))}
+       (:disable-virtualized? option)))))
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
