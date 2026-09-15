@@ -57,3 +57,17 @@
       (is (not (contains? titles "deleted-prop"))))
     (testing "private built-in properties stay out of the Property table"
       (is (not (contains? titles "Property type"))))))
+
+(deftest private-create-page-tag-test
+  (testing "ident is authoritative"
+    (is (true? (db-class/private-create-page-tag? {:db/ident :logseq.class/Tag
+                                                   :block/title "Tag"})))
+    (is (false? (db-class/private-create-page-tag? {:db/ident :user.class/MyTag
+                                                    :block/title "Tag"})))
+    (is (false? (db-class/private-create-page-tag? {:db/ident :logseq.class/Page
+                                                    :block/title "Page"}))))
+  (testing "title is a fallback only when ident is missing"
+    (is (true? (db-class/private-create-page-tag? {:block/title "Tag"})))
+    (is (true? (db-class/private-create-page-tag? {:block/title "Property"})))
+    (is (false? (db-class/private-create-page-tag? {:block/title "Page"})))
+    (is (false? (db-class/private-create-page-tag? {:block/title "Task"})))))

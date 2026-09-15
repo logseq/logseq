@@ -366,6 +366,8 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def private-tag-titles db-class/private-tag-titles)
+(def private-create-page-tag? db-class/private-create-page-tag?)
 (def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
