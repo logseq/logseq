@@ -598,9 +598,13 @@
         [extras? set-extras!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
-       (when page
-         (set-extras! true))
-       js/undefined)
+       (if-not page
+         js/undefined
+         (let [delay-ms (if (entity/class? page)
+                          class-page-below-fold-delay-ms
+                          0)
+               timeout-id (js/setTimeout #(set-extras! true) delay-ms)]
+           #(js/clearTimeout timeout-id))))
      [page])
     (let [breadcrumb-data (:value
                            (db-hooks/use-resource-snapshot
