@@ -2812,8 +2812,7 @@
   (testing "created-from-property metadata does not make a node collapsable"
     (is (not (editor/db-collapsable?
               {:block/title "hello"
-               :block.temp/property-keys [:logseq.property/created-from-property
-                                          :logseq.property/created-by-ref]})))
+               :block.temp/property-keys [:logseq.property/created-from-property]})))
     (is (not (editor/db-collapsable?
               {:block/title "hello"
                :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
