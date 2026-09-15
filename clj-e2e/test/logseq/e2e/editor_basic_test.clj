@@ -1016,8 +1016,8 @@
       (b/new-block title)
       (util/exit-edit)
       (util/search title)
-      (assert/assert-is-visible
-       (loc/filter ".cp__cmdk .breadcrumb" :has-text page-name)))))
+      (let [breadcrumb (loc/filter ".cp__cmdk .breadcrumb" :has-text page-name)]
+        (util/repeat-until-visible 5 breadcrumb #(util/search title))))))
 
 (deftest comments-update-and-title-edit
   (testing "a submitted comment renders immediately and its thread title is editable"
@@ -1292,7 +1292,8 @@
           block-selector (format "#ls-block-%s" uuid)]
       (assert/assert-is-visible
        (loc/filter (str block-selector " .block-tag") :has-text "Task"))
-      (w/click (str block-selector " .block-title-wrap"))
+      (w/click (loc/filter (str block-selector " .block-title-wrap")
+                           :has-text "sample task"))
       (util/move-cursor-to-end)
       (util/input-command "Priority High")
       (util/exit-edit)
@@ -1302,7 +1303,8 @@
       (is (= "High"
              (get-in (ls-api-call! :editor.getBlock uuid)
                      [":logseq.property/priority" "title"])))
-      (w/click (str block-selector " .block-title-wrap"))
+      (w/click (loc/filter (str block-selector " .block-title-wrap")
+                           :has-text "sample task"))
       (util/move-cursor-to-end)
       (util/input-command "Scheduled")
       (w/click
@@ -1311,7 +1313,8 @@
       (assert/assert-is-visible
        (loc/filter (str block-selector " .bottom-property-pill")
                    :has-text "Scheduled"))
-      (w/click (str block-selector " .block-title-wrap"))
+      (w/click (loc/filter (str block-selector " .block-title-wrap")
+                           :has-text "sample task"))
       (util/move-cursor-to-end)
       (util/input-command "No priority")
       (util/exit-edit)

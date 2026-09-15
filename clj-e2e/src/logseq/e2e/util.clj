@@ -110,7 +110,7 @@
   [search-text]
   (search search-text)
   (let [result (.first (w/get-by-test-id search-text))]
-    (repeat-until-visible 5 result #(wait-timeout cmdk-search-settle-ms))
+    (repeat-until-visible 5 result #(search search-text))
     (w/click result)))
 
 (defn wait-editor-gone
