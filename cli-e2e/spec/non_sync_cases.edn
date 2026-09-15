@@ -406,6 +406,26 @@
      :list ["--fields" "--limit" "--sort" "--order"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "created-entity-result-metadata",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case metadata"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-block",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case block"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-task",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case task"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-asset",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case asset"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
   {:id "block-upsert-and-show-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],

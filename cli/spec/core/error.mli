@@ -6,7 +6,6 @@ type code =
   | Agent_bridge_lock_failed
   | Agent_master_prompt_invalid
   | Agent_name_invalid
-  | Agent_prompt_template_invalid
   | Ambiguous_page_name
   | Ambiguous_property_name
   | Ambiguous_tag_name
@@ -84,8 +83,6 @@ type code =
   | Missing_source
   | Missing_tag_name
   | Missing_target
-  | Missing_template_code_block
-  | Missing_template_vars
   | Not_asset
   | Not_implemented
   | Page_hierarchy_parent_cycle
@@ -125,7 +122,6 @@ type code =
   | Task_tag_not_found
   | Unknown_command
   | Unknown_query
-  | Unknown_template_vars
   | Unsupported_input_format
   | Unsupported_output_format
   | Upsert_id_not_found

@@ -2563,7 +2563,9 @@ let () =
               (execute_with_output Remove.execute action cfg Output.Mode.Json)
           in
           expect_bool "remove page succeeds" false (Cli_result.is_error result);
-          let data = expect_some "remove page data" (Cli_result.data_value result) in
+          let data =
+            expect_some "remove page data" (Cli_result.data_value result)
+          in
           expect_bool "remove page result" true
             (expect_some "remove page result bool"
                (Edn_util.get_bool data "result"));
@@ -3657,56 +3659,6 @@ let () =
 
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
-      let nested =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "block/uuid",
-              Edn_util.uuid "00000000-0000-4000-8000-000000000401" );
-            ( Edn_util.keyword "block/children",
-              Edn_util.vector
-                [
-                  Edn_util.map
-                    [
-                      ( Edn_util.keyword "block/uuid",
-                        Edn_util.uuid "00000000-0000-4000-8000-000000000402" );
-                    ];
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "block/title", Edn_util.string "No uuid");
-                      ( Edn_util.keyword "block/children",
-                        Edn_util.vector
-                          [
-                            Edn_util.map
-                              [
-                                ( Edn_util.keyword "block/uuid",
-                                  Edn_util.uuid
-                                    "00000000-0000-4000-8000-000000000403" );
-                              ];
-                          ] );
-                    ];
-                ] );
-          ]
-      in
-      let inserted =
-        Edn_util.vector
-          [
-            nested;
-            Edn_util.map
-              [
-                ( Edn_util.keyword "block/uuid",
-                  Edn_util.uuid "00000000-0000-4000-8000-000000000404" );
-              ];
-            Edn_util.map
-              [
-                ( Edn_util.keyword "block/uuid",
-                  Edn_util.uuid "00000000-0000-4000-8000-000000000402" );
-              ];
-          ]
-      in
-      expect_equal "collected uuids"
-        "00000000-0000-4000-8000-000000000401,00000000-0000-4000-8000-000000000402,00000000-0000-4000-8000-000000000403,00000000-0000-4000-8000-000000000404"
-        (Vec.string_concat ","
-           (Add.collect_uuids_from_value inserted |> Add.unique));
       let child =
         Block.make ~uuid:"00000000-0000-4000-8000-000000000502" ~title:"Child"
           ()
@@ -3723,6 +3675,93 @@ let () =
         "00000000-0000-4000-8000-000000000501,00000000-0000-4000-8000-000000000502"
         (Vec.string_concat ","
            (Add.collect_action_block_uuids (Vec.of_array [| root; duplicate |]))));
+
+  List.iter
+    (fun missing_child ->
+      test_promise
+        (if missing_child then
+           "CLI parity create rejects an unresolved requested descendant"
+         else "CLI parity create returns only action entities in preorder")
+        (fun () ->
+          let root_uuid = "00000000-0000-4000-8000-000000000801" in
+          let child_uuid = "00000000-0000-4000-8000-000000000802" in
+          let ref_uuid = "00000000-0000-4000-8000-000000000899" in
+          let entity id uuid =
+            Printf.sprintf "[\"^ \",\"~:db/id\",%d,\"~:block/uuid\",\"~u%s\"]"
+              id uuid
+          in
+          let server =
+            invoke_server (fun body ->
+                if
+                  Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                    body
+                then
+                  "[" ^ entity 801 root_uuid ^ "," ^ entity 899 ref_uuid ^ "]"
+                else if Js.String.includes ~search:child_uuid body then
+                  if missing_child then "null" else entity 802 child_uuid
+                else if Js.String.includes ~search:root_uuid body then
+                  entity 801 root_uuid
+                else if Js.String.includes ~search:ref_uuid body then
+                  entity 899 ref_uuid
+                else entity 627 "00000000-0000-4000-8000-000000000627")
+          in
+          with_server server (fun base_url ->
+              let cfg =
+                {
+                  (config ~repo:"demo" ()) with
+                  Cli_config.base_url = Some base_url;
+                }
+              in
+              let action =
+                expect_ok "create action"
+                  (Add.build_add_block_action
+                     {
+                       Add.target_id = Some 627L;
+                       target_uuid = None;
+                       target_page_name = None;
+                       pos = None;
+                       status = None;
+                       tags_edn = None;
+                       properties_edn = None;
+                       content = None;
+                       blocks_edn =
+                         Some
+                           (Printf.sprintf
+                              "[{:block/title \"Root\" :block/uuid #uuid \
+                               \"%s\" :block/children [{:block/title \"Child\" \
+                               :block/uuid #uuid \"%s\"}]}]"
+                              root_uuid child_uuid);
+                       blocks_file = None;
+                     }
+                     Vec.empty
+                     (Cli_primitive.create_repo "demo"))
+              in
+              let* result =
+                effect_to_promise
+                  (Add.execute_add_block action
+                     (config_with_output cfg Output.Mode.Json)
+                     Output.Mode.Json)
+              in
+              if missing_child then (
+                expect_bool "missing child fails" true
+                  (Cli_result.is_error result);
+                let err =
+                  expect_some "resolution error" result.Cli_result.error
+                in
+                expect_equal "resolution code" "add-id-resolution-failed"
+                  (Error.code_to_string err.Error.code))
+              else (
+                expect_bool "create succeeds" false (Cli_result.is_error result);
+                let data =
+                  expect_some "result data" (Cli_result.data_value result)
+                in
+                let ids =
+                  expect_some "result ids" (Edn_util.get data "result")
+                in
+                expect_equal "requested entity IDs" "[801 802]"
+                  (Melange_edn_melange.to_edn_string ids));
+              Js.Promise.resolve pass)))
+    [ false; true ];
 
   test "CLI parity add action validates targets metadata and status" (fun () ->
       let base_opts =
@@ -5361,8 +5400,8 @@ let () =
               match err.Error.context with
               | None ->
                   fail_test
-                    "graph_validate_result Error.make should include structured \
-                     context, not only message"
+                    "graph_validate_result Error.make should include \
+                     structured context, not only message"
               | Some context -> (
                   match
                     Option.bind (Edn_util.get context "errors") Edn_util.as_seq
@@ -5405,8 +5444,7 @@ let () =
              Option.bind (Edn_util.get edn_value "error") (fun error ->
                  Option.bind (Edn_util.get error "errors") Edn_util.as_seq)
            with
-          | Some errors ->
-              expect_int "edn error.errors" 1 (Vec.length errors)
+          | Some errors -> expect_int "edn error.errors" 1 (Vec.length errors)
           | None ->
               fail_test
                 "edn error should include structured errors, not only message");
@@ -6211,8 +6249,9 @@ let () =
       expect_parse_error_code "completion unsupported shell" ":invalid-options"
         [| "completion"; "fish" |]);
 
-  test "CLI parity path-specific short aliases resolve to command specific meanings"
-    (fun () ->
+  test
+    "CLI parity path-specific short aliases resolve to command specific \
+     meanings" (fun () ->
       let validate =
         expect_parse_ok "graph validate -f" [| "graph"; "validate"; "-f" |]
       in
@@ -6260,7 +6299,8 @@ let () =
         "'(-g --graph)'{-g=,--graph=}'[Graph name]:graph:{_logseq_graphs}'";
       expect_named_contains "zsh output choices" zsh
         "'(-o --output)'{-o=,--output=}'[Output format]:mode:(human json edn)'";
-      expect_named_contains "zsh nested leaf function" zsh "_logseq_graph_list()";
+      expect_named_contains "zsh nested leaf function" zsh
+        "_logseq_graph_list()";
       expect_named_contains "zsh show id option" zsh "'--id=[Entity id]::id:'";
       expect_named_contains "zsh show level option" zsh
         "'--level=[Tree depth]:n:'";
@@ -6803,35 +6843,6 @@ let () =
         (agent_task_entity ~assignees:[| "other-host" |] ());
       expect_reason "already routed" "already-routed"
         (agent_task_entity ~session_id:"codex-1" ()));
-
-  test "CLI parity agent prompt template validates required and unknown vars"
-    (fun () ->
-      let template body =
-        {
-          Agent.kind = Agent.Task;
-          body;
-          required_vars = Vec.of_array [| "graph"; "task-block-tree" |];
-          allowed_vars =
-            Vec.of_array [| "graph"; "agent-name"; "task-block-tree" |];
-        }
-      in
-      ignore
-        (expect_ok "valid template"
-           (Agent.validate_prompt_template
-              (template "{{graph}}\n{{task-block-tree}}\n{{agent-name}}")));
-      expect_error_code "blank template" ":missing-template-code-block"
-        (Agent.validate_prompt_template (template "   "));
-      expect_error_code "unknown var" ":unknown-template-vars"
-        (Agent.validate_prompt_template
-           (template "{{graph}}\n{{task-block-tree}}\n{{other}}"));
-      expect_error_code "missing var" ":missing-template-vars"
-        (Agent.validate_prompt_template (template "{{graph}}"));
-      let documented_template =
-        template "{{graph}}\n{{task-block-tree}}\n'{{documented-only}}'"
-      in
-      ignore
-        (expect_ok "quoted docs var ignored"
-           (Agent.validate_prompt_template documented_template)));
 
   test "CLI parity parse covers additional command option surfaces" (fun () ->
       let list_node =
