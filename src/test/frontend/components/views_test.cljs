@@ -658,7 +658,12 @@
     (is (= [] (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] false))
         "Movies applied 17 class properties before the first table frame.")
     (is (= [{:db/ident :user.property/actors}]
-           (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] true)))))
+           (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] true)))
+    (is (false? (#'views/lazy-item-should-subscribe? {:block/title "Æon Flux"} false))
+        "Preview rows subscribed via use-block before the first title frame committed.")
+    (is (true? (#'views/lazy-item-should-subscribe? {:block/title "Æon Flux"} true)))
+    (is (true? (#'views/lazy-item-should-subscribe? nil false))
+        "Rows without a first-window preview still subscribe immediately.")))
 
 (deftest first-paint-skips-unpinned-property-columns-test
   (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]
@@ -785,8 +790,10 @@
        (views/view {:view-parent-uuid owner-uuid
                     :view-feature-type :class-objects}))
       (is (= [[:views owner-uuid :class-objects]] @resource-calls))
-      (is (= [view-uuid] @block-calls))
-      (is (= view-entity (first @rendered)))
+      (is (= [view-uuid] @block-calls)
+          "use-block still hydrates the view definition.")
+      (is (= {:block/uuid view-uuid} (first @rendered))
+          "First static paint keeps the pending view. items-rendered swaps in the hydrated entity.")
       (is (= owner-uuid (get-in @rendered [1 :view-parent-uuid]))))))
 
 (deftest selected-view-starts-view-data-before-the-view-entity-arrives-test

@@ -2243,7 +2243,14 @@
   [*notified? on-first-table-paint!]
   (when (and on-first-table-paint! (not (.-current *notified?)))
     (set! (.-current *notified?) true)
-    (on-first-table-paint!)))
+    (js/requestAnimationFrame on-first-table-paint!)))
+
+(defn- lazy-item-should-subscribe?
+  "Preview rows painted titles first. Immediate use-block remounted
+  every visible All Pages / Movies row before that frame committed."
+  [preview mount-unpinned-cells?]
+  (or (nil? preview)
+      (true? mount-unpinned-cells?)))
 
 (defn- row-has-first-window-title?
   [row-previews row-uuid]
@@ -2431,16 +2438,17 @@
       (lazy-item-placeholder table-view? gallery-view?))))
 
 (hsx/defc lazy-item
-  [data idx {:keys [gallery-view? table-view? row-previews]} item-render]
+  [data idx {:keys [gallery-view? table-view? row-previews mount-unpinned-cells?]} item-render]
   (let [row-uuid (util/nth-safe data idx)
         preview (get row-previews row-uuid)
         [subscribe? set-subscribe!] (hooks/use-state (nil? preview))]
     (hooks/use-effect!
      (fn []
-       (when-not subscribe?
-         (set-subscribe! true))
-       js/undefined)
-     [])
+       (when (and (not subscribe?)
+                  (lazy-item-should-subscribe? preview mount-unpinned-cells?))
+         (let [frame (js/requestAnimationFrame #(set-subscribe! true))]
+           #(js/cancelAnimationFrame frame))))
+     [mount-unpinned-cells?])
     (cond
       (and preview (not subscribe?))
       (item-render preview)
@@ -3686,25 +3694,41 @@
   [view-entity option]
   (view-aux view-entity option))
 
+(hsx/defc selected-view-hydrate
+  "use-block in selected-view re-rendered All Pages before the first
+  lazy-item. Keep the subscription off the table render path."
+  [view-uuid first-paint-done? set-hydrated-entity!]
+  (let [entity (db-hooks/use-block view-uuid)]
+    (hooks/use-effect!
+     (fn []
+       (when (and first-paint-done? entity)
+         (set-hydrated-entity! entity))
+       js/undefined)
+     [first-paint-done? entity])
+    nil))
+
 (hsx/defc selected-view
   [view-uuids option]
   (let [[requested-view-uuid set-requested-view-uuid!] (hooks/use-state nil)
         [first-paint-done? set-first-paint-done!] (hooks/use-state false)
+        [hydrated-entity set-hydrated-entity!] (hooks/use-state nil)
         selected-view-uuid (if (some #{requested-view-uuid} view-uuids)
                              requested-view-uuid
                              (first view-uuids))
-        view-entity (db-hooks/use-block selected-view-uuid)
-        pending-view {:block/uuid selected-view-uuid}]
-    ^{:key (str "view-" selected-view-uuid)}
-    [sub-view (first-paint-view-entity view-entity pending-view first-paint-done?)
-     (assoc option
-            :view-uuids view-uuids
-            :set-current-view-uuid! set-requested-view-uuid!
-            :on-first-table-paint!
-            (fn []
-              (set-first-paint-done! true)
-              (when-let [notify! (:on-first-table-paint! option)]
-                (notify!))))]))
+        pending-view {:block/uuid selected-view-uuid}
+        view-entity (first-paint-view-entity hydrated-entity pending-view first-paint-done?)]
+    [:<>
+     [selected-view-hydrate selected-view-uuid first-paint-done? set-hydrated-entity!]
+     ^{:key (str "view-" selected-view-uuid)}
+     [sub-view view-entity
+      (assoc option
+             :view-uuids view-uuids
+             :set-current-view-uuid! set-requested-view-uuid!
+             :on-first-table-paint!
+             (fn []
+               (set-first-paint-done! true)
+               (when-let [notify! (:on-first-table-paint! option)]
+                 (notify!))))]]))
 
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]

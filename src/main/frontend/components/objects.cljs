@@ -128,12 +128,13 @@
         properties (first-paint-class-properties fetched first-paint-done?)
         _ (hooks/use-effect!
            (fn []
-             (p/let [result (db-async/<get-class-properties
-                              (state/get-current-repo)
-                              (:db/id class))]
-               (set-fetched! (or result [])))
+             (when first-paint-done?
+               (p/let [result (db-async/<get-class-properties
+                                (state/get-current-repo)
+                                (:db/id class))]
+                 (set-fetched! (or result []))))
              nil)
-           [(:db/id class) class-properties])]
+           [(:db/id class) class-properties first-paint-done?])]
     [:div.ml-1
      (class-objects-inner config class properties
                           {:on-first-table-paint! #(set-first-paint-done! true)})]))
