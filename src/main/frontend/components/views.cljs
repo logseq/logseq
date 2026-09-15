@@ -466,6 +466,14 @@
   [opacity]
   (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
+(defn- first-window-title-text
+  [block]
+  (some->> (:block/title block) str string/trim string/split-lines first))
+
+(defn- first-window-title-preview?
+  [block]
+  (true? (:block.temp/first-window-preview? block)))
+
 (hsx/defc ^:large-vars/cleanup-todo block-title
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
@@ -1364,14 +1372,6 @@
         (when (< next-cell-left container-left)
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
-
-(defn- first-window-title-text
-  [block]
-  (some->> (:block/title block) str string/trim string/split-lines first))
-
-(defn- first-window-title-preview?
-  [block]
-  (true? (:block.temp/first-window-preview? block)))
 
 (defn- table-cell-plain-value
   "Plain text used for native title tooltips on clipped table cells."
