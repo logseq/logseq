@@ -498,33 +498,10 @@ let default_sqlite_export_path config repo =
     (graph_name ^ "_" ^ string_of_int timestamp_seconds ^ ".sqlite")
 
 let export_payload opts =
-  let edn_option_fields =
-    match opts.edn_options with
-    | Some value -> Option.value (Edn_util.as_map value) ~default:Vec.empty
-    | None -> Vec.empty
-  in
-  let export_type =
-    Option.value
-      (Vec.find_map
-         (fun (key, value) ->
-           if Edn_util.key_matches "export-type" key then Some value else None)
-         edn_option_fields)
-      ~default:(kw "graph")
-  in
-  let graph_options =
-    edn_option_fields
-    |> Vec.filter (fun (key, _) -> not (Edn_util.key_matches "export-type" key))
-    |> Edn_util.map_vec
-  in
-  let fields = ref (Vec.singleton (kw "export-type", export_type)) in
-  (match graph_options with
-  | value
-    when Option.value
-           (Option.map Vec.is_empty (Edn_util.as_map value))
-           ~default:false ->
-      ()
-  | _ -> fields := Vec.push_back !fields (kw "graph-options", graph_options));
-  Edn_util.map_vec !fields
+  match opts.edn_options with
+  | Some value when Option.is_some (Edn_util.get value "export-type") -> value
+  | Some value -> Edn_util.assoc "export-type" (kw "graph") value
+  | None -> Edn_util.map_vec (Vec.singleton (kw "export-type", kw "graph"))
 
 let write_pretty_edn path data =
   try
@@ -1232,8 +1209,8 @@ let metadata () =
           (Vec.of_array
              [|
                "logseq graph export --graph my-graph --type edn --file \
-                /tmp/my-graph.edn --edn-options '{:export-type :graph \
-                :include-timestamps? true}' --pretty-print";
+                /tmp/my-graph.edn --edn-options '{:export-type :graph-human \
+                :graph-options {:include-timestamps? true}}' --pretty-print";
                "logseq graph export --graph my-graph --type sqlite --file \
                 /tmp/my-graph.sqlite";
              |])
