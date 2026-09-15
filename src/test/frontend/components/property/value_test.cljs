@@ -409,4 +409,4 @@
             :logseq.property.repeat/recur-unit.hour
             :logseq.property.repeat/recur-unit.day
             :logseq.property.repeat/recur-unit.week]
-           (idents :datetime))))))
+           (idents :datetime)))))
