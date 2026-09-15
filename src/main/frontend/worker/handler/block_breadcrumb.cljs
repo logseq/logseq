@@ -17,12 +17,33 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
+(defn- lookup-eid
+  [db eid]
+  (when (integer? eid) eid))
+
 (defn- resolve-ref-id
+  "Search breadcrumbs pass page/parent as uuid, ident, or a pulled map
+  that may omit :db/id. Raw (d/entity db uuid) is not a Datascript lookup."
   [db ref-or-id]
   (cond
-    (integer? ref-or-id) ref-or-id
-    (or (de/entity? ref-or-id) (map? ref-or-id)) (:db/id ref-or-id)
-    :else (:db/id (d/entity db ref-or-id))))
+    (integer? ref-or-id)
+    ref-or-id
+
+    (uuid? ref-or-id)
+    (lookup-eid db (:db/id (d/entity db [:block/uuid ref-or-id])))
+
+    (keyword? ref-or-id)
+    (lookup-eid db (:db/id (d/entity db ref-or-id)))
+
+    (or (de/entity? ref-or-id) (map? ref-or-id))
+    (or (lookup-eid db (:db/id ref-or-id))
+        (when (uuid? (:block/uuid ref-or-id))
+          (lookup-eid db (:db/id (d/entity db [:block/uuid (:block/uuid ref-or-id)]))))
+        (when (keyword? (:db/ident ref-or-id))
+          (lookup-eid db (:db/id (d/entity db (:db/ident ref-or-id))))))
+
+    :else
+    (lookup-eid db (:db/id (d/entity db ref-or-id)))))
 
 (defn- tag-summary
   [db tag-id]

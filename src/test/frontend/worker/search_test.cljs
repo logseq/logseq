@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
@@ -575,6 +576,52 @@
                  :title "Search target"})]
     (is (= ["Teams" "Parent"]
            (mapv :block/title (:block.temp/breadcrumb result))))))
+
+(deftest search-breadcrumb-resolves-page-uuid-and-ident-refs-test
+  (let [conn (db-test/create-conn)
+        page (d/entity @conn :logseq.class/Page)
+        page-uuid (:block/uuid page)]
+    (is (uuid? page-uuid))
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity @conn page-uuid)))
+        "CMDK page maps often carry only :block/uuid.")
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity
+                    @conn {:block/uuid page-uuid :block/title "Page"})))
+        "Pulled :block/page can omit :db/id.")
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity
+                    @conn :logseq.class/Page))))
+    (is (seq (block-breadcrumb/block-breadcrumb @conn page))
+        "Built-in Page is a CMDK hit for queries like page 1.")
+    (let [result (#'search/search-result->block-result
+                  conn
+                  "page"
+                  nil
+                  {:enable-snippet? false
+                   :include-breadcrumb? true
+                   :built-in? true}
+                  {:id (str page-uuid)
+                   :page (str page-uuid)
+                   :title "Page"})]
+      (is (= page-uuid (:block/uuid result)))
+      (is (vector? (:block.temp/breadcrumb result))))))
+
+(deftest search-breadcrumb-survives-every-named-page-test
+  (let [conn (db-test/create-conn)
+        failures (into []
+                       (keep (fn [datom]
+                               (let [block (d/entity @conn (:e datom))]
+                                 (try
+                                   (block-breadcrumb/block-breadcrumb @conn block)
+                                   nil
+                                   (catch :default e
+                                     {:title (:block/title block)
+                                      :ident (:db/ident block)
+                                      :message (ex-message e)
+                                      :data (ex-data e)})))))
+                       (d/datoms @conn :avet :block/name))]
+    (is (empty? failures) (pr-str failures))))
 
 (deftest search-result-keeps-tag-identities-for-ui-entity-predicates
   (let [page-id #uuid "00000000-0000-0000-0000-000000000124"
