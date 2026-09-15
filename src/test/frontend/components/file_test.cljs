@@ -11,23 +11,27 @@
           repo-dir "/graphs/file-component"
           worker-calls (atom [])
           fs-calls (atom [])]
-      (p/with-redefs [state/<invoke-db-worker
-                      (fn [qkw repo' path]
-                        (swap! worker-calls conj [qkw repo' path])
-                        (p/resolved "worker content"))
-                      fs/read-file
-                      (fn [dir path]
-                        (swap! fs-calls conj [dir path])
-                        (p/resolved "fs content"))]
-        (-> (p/let [relative-content (file-content/<read-file-content repo repo-dir "logseq/config.edn")
+      ;; `done` runs after with-redefs has restored the vars: the restore is
+      ;; a later step of the with-redefs promise, so signalling `done` from
+      ;; inside the body lets the next test start with the stubs still
+      ;; installed and then see them vanish.
+      (-> (p/with-redefs [state/<invoke-db-worker
+                          (fn [qkw repo' path]
+                            (swap! worker-calls conj [qkw repo' path])
+                            (p/resolved "worker content"))
+                          fs/read-file
+                          (fn [dir path]
+                            (swap! fs-calls conj [dir path])
+                            (p/resolved "fs content"))]
+            (p/let [relative-content (file-content/<read-file-content repo repo-dir "logseq/config.edn")
                     absolute-content (file-content/<read-file-content repo repo-dir "/tmp/outside.md")]
               (is (= "worker content" relative-content))
               (is (= "fs content" absolute-content))
               (is (= [[:thread-api/get-file-content repo "logseq/config.edn"]]
                      @worker-calls))
               (is (= [[nil "/tmp/outside.md"]]
-                     @fs-calls)))
-            (p/catch
-             (fn [error]
-               (is false (str error))))
-            (p/finally done))))))
+                     @fs-calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
