@@ -47,4 +47,4 @@
   (is (true? (ui/date-picker-form-target?
               #js {:target #js {:closest (fn [_] #js {})}})))
   (is (false? (ui/date-picker-form-target?
-               #js {:target #js {:closest (fn [_] nil)}})))))
+               #js {:target #js {:closest (fn [_] nil)}}))))
