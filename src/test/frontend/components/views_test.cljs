@@ -585,7 +585,7 @@
   (is (= 26 (#'views/next-scrolled-row-offset 26 27 40 66 26 false))
       "An in-flight Movies offset must finish. A new key cancelled the fetch and left 27 empty rows.")
   (is (= [66 92] (#'views/viewport-row-range 2400 196 852 33 40000))
-      "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97.")))
+      "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97."))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
