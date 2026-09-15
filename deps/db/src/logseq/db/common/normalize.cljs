@@ -116,17 +116,20 @@
 (defn reorder-retract-entity
   [tx-data]
   (let [retract-ops (filter retract-entity-op? tx-data)
+        recreated-block-uuids (into #{}
+                                    (keep (fn [item]
+                                            (when (and (vector? item)
+                                                       (>= (count item) 4)
+                                                       (= (first item) :db/add)
+                                                       (= (nth item 2) :block/uuid))
+                                              (nth item 3))))
+                                    tx-data)
         {recreated-block-retract-ops true
          end-retract-ops false} (->> retract-ops
-                                     (group-by (fn [[_ [_ id]]]
-                                                 (boolean
-                                                  (some (fn [x]
-                                                          (and
-                                                           (vector? x)
-                                                           (>= (count x) 4)
-                                                           (= (first x) :db/add)
-                                                           (= (nth x 2) :block/uuid)
-                                                           (= (nth x 3) id))) tx-data)))))
+                                     (group-by (fn [[_ e]]
+                                                 (and (vector? e)
+                                                      (= :block/uuid (first e))
+                                                      (contains? recreated-block-uuids (second e))))))
         retract-keys (->> retract-ops
                           (map second)
                           (mapcat retract-entity-match-keys)
