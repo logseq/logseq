@@ -4,7 +4,12 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
-            [logseq.common.config :as common-config]))
+            [logseq.outliner.page :as outliner-page]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.graph-parser.block :as gp-block]))
 
 (deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
@@ -95,6 +100,112 @@
     (is (= (str "#[[" class-uuid "]]") (:block/title block)))
     (is (= class-uuid (-> block :block/refs first :block/uuid)))
     (is (= class-uuid (-> block :block/tags first :block/uuid)))))
+
+(defn- page-uuids-named
+  [db title]
+  (d/q '[:find [?uuid ...]
+         :in $ ?name
+         :where
+         [?e :block/name ?name]
+         [?e :block/uuid ?uuid]
+         [?e :block/tags :logseq.class/Page]]
+       db
+       (common-util/page-name-sanity-lc title)))
+
+(deftest insert-blocks-reuses-page-created-after-reference-parsing
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        parsed-ref (gp-block/page-name->map "Esc Dup" @conn true
+                                            date-time-util/default-journal-title-formatter)
+        parsed-uuid (:block/uuid parsed-ref)
+        [_ existing-uuid] (outliner-page/create! conn "Esc Dup" {})
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "[[" parsed-uuid "]]")
+                  :block/raw-title (str "[[" parsed-uuid "]]")
+                  :block/refs [parsed-ref]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
+    (is (= (str "[[" existing-uuid "]]")
+           (:block/title (first (:blocks result)))
+           (:block/raw-title (first (:blocks result)))))
+    (is (= existing-uuid
+           (:block/uuid (first (:block/refs (first (:blocks result)))))))))
+
+(deftest insert-blocks-reuses-page-when-ref-tags-are-a-scalar-keyword
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        [_ existing-uuid] (outliner-page/create! conn "Esc Dup" {})
+        parsed-uuid (random-uuid)
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "[[" parsed-uuid "]]")
+                  :block/raw-title (str "[[" parsed-uuid "]]")
+                  :block/refs [{:block/uuid parsed-uuid
+                                :block/title "Esc Dup"
+                                :block/name "esc dup"
+                                :block/tags :logseq.class/Page}]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
+    (is (= existing-uuid
+           (:block/uuid (first (:block/refs (first (:blocks result)))))))))
+
+(deftest insert-blocks-resolves-journal-class-tagged-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        journal-title "Dec 16th, 2024"
+        journal-day 20241216
+        canonical-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+        journal-ref (fn [page-uuid]
+                      {:block/uuid page-uuid
+                       :block/title journal-title
+                       :block/name (common-util/page-name-sanity-lc journal-title)
+                       :block/journal-day journal-day
+                       :block/tags [:logseq.class/Journal]})
+        host (db-test/find-block-by-content @conn "host")
+        insert-ref! (fn [page-uuid]
+                      (let [result (outliner-core/insert-blocks
+                                    @conn
+                                    [{:block/uuid (random-uuid)
+                                      :block/title (str "[[" page-uuid "]]")
+                                      :block/raw-title (str "[[" page-uuid "]]")
+                                      :block/refs [(journal-ref page-uuid)]}]
+                                    host
+                                    {:sibling? true
+                                     :keep-uuid? true})]
+                        (d/transact! conn (:tx-data result))
+                        result))]
+    (testing "creates a missing journal with the journal-day uuid"
+      (let [parsed-uuid (random-uuid)
+            result (insert-ref! parsed-uuid)
+            journal (ldb/get-journal-page-by-day @conn journal-day)]
+        (is (not= parsed-uuid canonical-uuid))
+        (is (= canonical-uuid (:block/uuid journal)))
+        (is (= 1 (count (d/datoms @conn :avet :block/journal-day journal-day))))
+        (is (= [:logseq.class/Journal] (map :db/ident (:block/tags journal))))
+        (is (= canonical-uuid
+               (:block/uuid (first (:block/refs (first (:blocks result)))))))))
+    (testing "reuses the existing journal instead of minting another uuid"
+      (let [parsed-uuid (random-uuid)
+            result (insert-ref! parsed-uuid)
+            journal (ldb/get-journal-page-by-day @conn journal-day)]
+        (is (= canonical-uuid (:block/uuid journal)))
+        (is (= 1 (count (d/datoms @conn :avet :block/journal-day journal-day))))
+        (is (= canonical-uuid
+               (:block/uuid (first (:block/refs (first (:blocks result)))))))))))
 
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
