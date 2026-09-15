@@ -515,6 +515,31 @@
     :else (let [c (compare va vb)]
             (if asc? c (- c)))))
 
+(def ^:private avet-first-window-sort-attrs
+  #{:block/updated-at :block/created-at :block/title :block/name})
+
+(defn- sort-eids-from-avet
+  "Walk one AVET attr instead of reading a sort value per row. A 40k All
+  Pages first window was spending ~2s in sort-eids-by-sorting."
+  [db eids sorting row-limit]
+  (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])]
+    (when (= 1 (count sorts))
+      (let [{:keys [id asc?]} (first sorts)]
+        (when (contains? avet-first-window-sort-attrs id)
+          (let [datoms (vec (d/datoms db :avet id))]
+            (when (seq datoms)
+              (let [wanted (set eids)
+                    ordered (if asc? datoms (rseq datoms))
+                    base-xf (comp (map :e) (filter wanted) (distinct))
+                    xf (if row-limit
+                         (comp base-xf (take row-limit))
+                         base-xf)
+                    matched (into [] xf ordered)]
+                (if row-limit
+                  matched
+                  (let [seen (set matched)]
+                    (into matched (remove seen) eids)))))))))))
+
 (defn- sort-eids-by-sorting
   [db eids sorting]
   (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])
@@ -543,6 +568,14 @@
                     (recur (inc i))
                     c)))))
           eid-vec)))
+
+(defn- take-sorted-eids
+  [db eids sorting row-limit]
+  (let [sorted (or (sort-eids-from-avet db eids sorting row-limit)
+                   (sort-eids-by-sorting db eids sorting))]
+    (if row-limit
+      (vec (take row-limit sorted))
+      (vec sorted))))
 
 (defn- empty-attr-values?
   [raw empty-id]
@@ -771,9 +804,10 @@
              (transient [])
              (d/datoms db :avet :block/name)))))
 
-(defn- get-feature-row-ids
-  "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities."
-  [db feat-type class-id sorting filters input]
+(defn- get-feature-row-data
+  "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities.
+  A row-limit first window must not sort every remaining id."
+  [db feat-type class-id sorting filters input row-limit]
   (when-let [eids (case feat-type
                     :all-pages
                     (get-all-page-ids db)
@@ -783,7 +817,9 @@
                       (db-class/get-class-object-ids db class-id))
 
                     nil)]
-    (sort-eids-by-sorting db (filter-eids db eids filters input) sorting)))
+    (let [filtered (filter-eids db eids filters input)]
+      {:count (count filtered)
+       :data (take-sorted-eids db filtered sorting row-limit)})))
 
 (defn- maybe-limit-rows
   [rows row-limit]
@@ -988,13 +1024,13 @@
                        (or sorting [{:id :block/updated-at :asc? false}])
                        sorting*))
            class-id (or view-for-id (:db/id (:logseq.property/view-for view)))
-           fast-row-ids (when (and (contains? #{:all-pages :class-objects} feat-type)
-                                   (not query?)
-                                   (nil? group-by-property-ident))
-                          (get-feature-row-ids db feat-type class-id sorting filters input))]
-       (if fast-row-ids
-         {:count (count fast-row-ids)
-          :data (maybe-limit-rows fast-row-ids row-limit)}
+           fast-row-data (when (and (contains? #{:all-pages :class-objects} feat-type)
+                                    (not query?)
+                                    (nil? group-by-property-ident))
+                           (get-feature-row-data db feat-type class-id sorting filters input
+                                                 row-limit))]
+       (if fast-row-data
+         fast-row-data
          (let [entities-result (if query?
                                  (keep (fn [id]
                                          (let [e (d/entity db id)]

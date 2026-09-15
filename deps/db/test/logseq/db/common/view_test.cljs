@@ -198,6 +198,27 @@
         (str "First-window All Pages query must stay cheap enough to paint immediately, took "
              elapsed-ms "ms"))))
 
+(deftest get-view-data-all-pages-first-window-does-not-sort-every-page-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Page " idx)
+                              :block/updated-at idx}})
+                    (range 2500))
+        conn (db-test/create-conn-with-blocks {:pages-and-blocks pages})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/updated-at :asc? false}]}
+        started (js/Date.now)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 30))
+        elapsed-ms (- (js/Date.now) started)
+        full (db-view/get-view-data @conn view-id option)]
+    (is (= 2500 (:count window) (:count full)))
+    (is (= 30 (count (:data window))))
+    (is (= (take 30 (:data full)) (:data window))
+        "AVET top-N must match a full updated-at sort.")
+    (is (< elapsed-ms 150)
+        (str "A 2500-page first window must not sort every page, took "
+             elapsed-ms "ms"))))
+
 (defn- result-titles
   [conn result]
   (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
