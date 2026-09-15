@@ -455,8 +455,9 @@
         "A 127-row mounted range would skip the first screen if used as hydrate bounds.")
     (is (= [0 29] (#'views/prefetch-visible-range [0 29]))
         "Table prefetch takes the viewport range, not Virtuoso's mounted list.")
-    (is (= [:div {:style {:min-height 33}}]
-           (#'views/lazy-item-placeholder true false))
+    (is (string/includes?
+         (render-static (views/lazy-item-placeholder true false))
+         "min-height:33px")
         "Mounted overscan rows stay empty placeholders and skip use-block.")))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test

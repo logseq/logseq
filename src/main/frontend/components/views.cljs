@@ -2243,7 +2243,7 @@
                  current-bounds
                  next-bounds))))))])))
 
-(defn- lazy-item-placeholder
+(hsx/defc lazy-item-placeholder
   [table-view? gallery-view?]
   (if gallery-view?
     [:div.ls-card-item {:aria-hidden true}]
