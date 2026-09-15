@@ -1713,6 +1713,21 @@
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
 
+(deftest class-objects-view-data-includes-the-height-derived-initial-block-window-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-a view-row]} (render-resource-fixture)
+          resource-key [:view-data view-a
+                        {:feature-type :class-objects
+                         :sorting [{:id :block/title :asc? true}]
+                         :initial-row-count 1}]
+          response (call-resource api conn resource-key)
+          value (:value response)]
+      (is (= 1 (count (:rows value))))
+      (is (contains? (set (:rows value)) view-row))
+      (is (contains? (:slots response) [:block view-row]))
+      (is (= response
+             (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)

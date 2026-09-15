@@ -2059,7 +2059,7 @@
   [table-view?]
   (if table-view? 33 24))
 
-(def ^:private table-row-overscan-px 480)
+(def ^:private table-row-overscan-px 1650)
 
 (defn- table-virtualization-metrics
   "Fixed row height plus extra overscan so Virtuoso does not measure every
@@ -2068,7 +2068,19 @@
   {:item-height (lazy-item-placeholder-height true)
    :overscan-px table-row-overscan-px})
 
-(def ^:private view-prefetch-limit 50)
+(def ^:private view-prefetch-limit 160)
+
+(def ^:private windowed-view-feature-types
+  #{:all-pages :class-objects})
+
+(defn- windowed-view-feature?
+  [view-feature-type group-by-property-ident]
+  (and (contains? windowed-view-feature-types view-feature-type)
+       (nil? group-by-property-ident)))
+
+(defn- settled-view-data
+  [full-data window-data]
+  (or full-data window-data))
 
 (defn- initial-view-prefetch-count
   [viewport-height item-height]
@@ -3134,20 +3146,36 @@
         filters (:logseq.property.table/filters view-entity)
         debounced-input (hooks/use-debounced-value input 300)
         initial-row-count
-        (when (= :all-pages view-feature-type)
+        (when (windowed-view-feature? view-feature-type group-by-property-ident)
           (let [scroll-parent (get-scroll-parent config)
                 viewport-height (or (some-> scroll-parent .-clientHeight)
                                     (.-innerHeight js/window))]
             (initial-view-prefetch-count
              viewport-height
              (lazy-item-placeholder-height true))))
-        resource-context (view-resource-context view-feature-type sorting filters
+        window-context (when initial-row-count
+                         (view-resource-context view-feature-type sorting filters
                                                 debounced-input
                                                 group-by-property-ident
                                                 query-row-uuids
-                                                initial-row-count)
-        view-data (db-hooks/use-resource
-                   [:view-data (:block/uuid view-entity) resource-context])
+                                                initial-row-count))
+        full-context (view-resource-context view-feature-type sorting filters
+                                            debounced-input
+                                            group-by-property-ident
+                                            query-row-uuids
+                                            nil)
+        window-key (when window-context
+                     [:view-data (:block/uuid view-entity) window-context])
+        window-snapshot (db-hooks/use-resource-snapshot window-key)
+        window-data (when window-key
+                      (case (:status window-snapshot)
+                        :ready (:value window-snapshot)
+                        :error (throw (:error window-snapshot))
+                        nil))
+        view-data (settled-view-data
+                   (db-hooks/use-resource
+                    [:view-data (:block/uuid view-entity) full-context])
+                   window-data)
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         option (cond-> (assoc option

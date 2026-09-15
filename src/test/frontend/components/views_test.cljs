@@ -334,10 +334,10 @@
     (is (= (subvec rows 0 10)
            (#'views/view-prefetch-window (subvec rows 0 10) 90 99))
         "A filtered view can shrink before Virtuoso reports its new range.")
-    (is (= (subvec medium-rows 0 50)
+    (is (= (subvec medium-rows 0 160)
            (#'views/view-prefetch-window medium-rows 0 30))
         "A medium view only retains a bounded render-ahead window.")
-    (is (= (subvec large-rows 975 1025)
+    (is (= (subvec large-rows 920 1080)
            (#'views/view-prefetch-window large-rows 1000 1000))
         "Large views retain one bounded window around the rendered rows.")
     (with-redefs [subs/subscribe-block!
@@ -357,12 +357,22 @@
 
 (deftest initial-view-prefetch-count-follows-the-viewport-test
   (is (= 30 (#'views/initial-view-prefetch-count 990 33)))
-  (is (= 50 (#'views/initial-view-prefetch-count 10000 33))
+  (is (= 160 (#'views/initial-view-prefetch-count 10000 33))
       "Initial table hydration remains bounded on tall viewports.")
   (is (= 1 (#'views/initial-view-prefetch-count 0 33))))
 
+(deftest windowed-view-feature-covers-tags-and-all-pages-test
+  (is (true? (#'views/windowed-view-feature? :all-pages nil)))
+  (is (true? (#'views/windowed-view-feature? :class-objects nil)))
+  (is (false? (#'views/windowed-view-feature? :class-objects :block/page))
+      "Grouped class tables keep a single full query.")
+  (is (false? (#'views/windowed-view-feature? :linked-references nil)))
+  (is (= :full (#'views/settled-view-data :full :window)))
+  (is (= :window (#'views/settled-view-data nil :window)))
+  (is (nil? (#'views/settled-view-data nil nil))))
+
 (deftest table-virtualization-uses-fixed-row-height
-  (is (= {:item-height 33 :overscan-px 480}
+  (is (= {:item-height 33 :overscan-px 1650}
          (#'views/table-virtualization-metrics))
       "Large table views keep a known row height so Virtuoso can skip layout measurement."))
 

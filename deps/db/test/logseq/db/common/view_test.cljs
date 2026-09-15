@@ -62,6 +62,37 @@
         titles (map (fn [id] (:block/title (d/entity @conn id))) ids)]
     (is (= ["alpha" "beta" "gamma"] titles))))
 
+(deftest get-view-data-all-pages-row-limit-keeps-full-count-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "alpha" :block/updated-at 1}}
+                {:page {:block/title "beta" :block/updated-at 2}}
+                {:page {:block/title "gamma" :block/updated-at 3}}]})
+        view-id (create-view-id conn :all-pages)
+        result (db-view/get-view-data @conn view-id {:view-feature-type :all-pages
+                                                     :sorting [{:id :block/title :asc? true}]
+                                                     :row-limit 2})
+        titles (map (fn [id] (:block/title (d/entity @conn id))) (:data result))]
+    (is (= 3 (:count result)))
+    (is (= ["alpha" "beta"] titles))))
+
+(deftest get-view-data-class-objects-row-limit-keeps-full-count-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "A" :block/updated-at 10 :build/tags [:Topic]}}
+                {:page {:block/title "B" :block/updated-at 20 :build/tags [:Topic]}}
+                {:page {:block/title "C" :block/updated-at 30 :build/tags [:Topic]}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id
+                                                     :sorting [{:id :block/title :asc? true}]
+                                                     :row-limit 2})
+        titles (map (fn [id] (:block/title (d/entity @conn id))) (:data result))]
+    (is (= 3 (:count result)))
+    (is (= ["A" "B"] titles))))
+
 (deftest get-view-data-class-objects-sort-keeps-rows-with-missing-sort-value-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}

@@ -231,8 +231,7 @@
              (not (:logseq.property/public? e))))
     (entity-util/hidden? e)))
 
-(defn get-class-objects
-  "Get class objects including children classes'"
+(defn- class-object-eids
   [db class-id]
   (let [class-children (get-structured-children db class-id)
         class-ids (distinct (conj class-children class-id))]
@@ -246,7 +245,17 @@
                              seen' (conj seen eid)]
                          (if (hidden-class-object? e)
                            [seen' result]
-                           [seen' (conj! result e)])))))
+                           [seen' (conj! result eid)])))))
                  [#{} (transient [])])
          second
          persistent!)))
+
+(defn get-class-object-ids
+  "Class-object entity ids including children classes', without hidden objects."
+  [db class-id]
+  (class-object-eids db class-id))
+
+(defn get-class-objects
+  "Get class objects including children classes'"
+  [db class-id]
+  (mapv #(d/entity db %) (class-object-eids db class-id)))

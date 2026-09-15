@@ -18,7 +18,9 @@
         ids (map :db/id objects)]
     (testing "an object tagged by both parent and child class is returned once"
       (is (= 1 (count ids)))
-      (is (= 1 (count (distinct ids)))))))
+      (is (= 1 (count (distinct ids)))))
+    (testing "id-only lookup matches object entities"
+      (is (= ids (db-class/get-class-object-ids @conn (parent-class-id @conn)))))))
 
 (deftest get-class-objects-filters-hidden-objects-test
   (let [conn (db-test/create-conn-with-blocks

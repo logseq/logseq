@@ -353,43 +353,66 @@
              (transient [])
              (d/datoms db :avet property-ident)))))
 
-(def ^:private fast-all-pages-sort-ids
+(def ^:private fast-id-sort-ids
   "Sort ids supported by a datom-order fast path"
   #{:block/updated-at :block/created-at :block/title :block/name})
+
+(defn- fast-id-sorting
+  [sorting]
+  (let [major-sorting (or (first sorting)
+                          {:id :block/updated-at :asc? false})
+        minor-sorting (seq (rest sorting))]
+    (when (and (empty? minor-sorting)
+               (contains? fast-id-sort-ids (:id major-sorting)))
+      major-sorting)))
+
+(defn- sort-eids-by-indexed-attr
+  [db eids sort-id asc?]
+  (let [get-sort-value (memoize
+                        (fn [eid]
+                          (get (entity-plus/unsafe->Entity db eid) sort-id)))
+        cmp (fn [eid-a eid-b]
+              (let [va (get-sort-value eid-a)
+                    vb (get-sort-value eid-b)
+                    c (cond
+                        (and (nil? va) (nil? vb)) 0
+                        (nil? va) 1
+                        (nil? vb) -1
+                        :else (compare va vb))]
+                (if asc? c (- c))))]
+    (sort cmp eids)))
+
+(defn- get-all-page-ids
+  [db]
+  (let [exclude-ids (get-exclude-page-ids db)]
+    (persistent!
+     (reduce (fn [result datom]
+               (let [eid (:e datom)]
+                 (if (contains? exclude-ids eid)
+                   result
+                   (conj! result eid))))
+             (transient [])
+             (d/datoms db :avet :block/name)))))
 
 (defn- get-all-page-ids-fast
   "Fast path for all-pages where only sorted page ids are needed. Avoids
   hydrating every page entity by deriving ordering from indexed datoms."
   [db sorting]
-  (let [major-sorting (or (first sorting)
-                          {:id :block/updated-at :asc? false})
-        minor-sorting (seq (rest sorting))]
-    (when (and (empty? minor-sorting)
-               (contains? fast-all-pages-sort-ids (:id major-sorting)))
-      (let [exclude-ids (get-exclude-page-ids db)
-            page-ids (persistent!
-                      (reduce (fn [result datom]
-                                (let [eid (:e datom)]
-                                  (if (contains? exclude-ids eid)
-                                    result
-                                    (conj! result eid))))
-                              (transient [])
-                              (d/datoms db :avet :block/name)))
-            sort-id (:id major-sorting)
-            asc? (:asc? major-sorting)
-            get-sort-value (memoize
-                            (fn [eid]
-                              (get (entity-plus/unsafe->Entity db eid) sort-id)))
-            cmp (fn [eid-a eid-b]
-                  (let [va (get-sort-value eid-a)
-                        vb (get-sort-value eid-b)
-                        c (cond
-                            (and (nil? va) (nil? vb)) 0
-                            (nil? va) 1
-                            (nil? vb) -1
-                            :else (compare va vb))]
-                    (if asc? c (- c))))]
-        (sort cmp page-ids)))))
+  (when-let [{:keys [id asc?]} (fast-id-sorting sorting)]
+    (sort-eids-by-indexed-attr db (get-all-page-ids db) id asc?)))
+
+(defn- get-class-object-ids-fast
+  "Fast path for class-objects where only sorted object ids are needed."
+  [db class-id sorting]
+  (when (and class-id (fast-id-sorting sorting))
+    (let [{:keys [id asc?]} (fast-id-sorting sorting)]
+      (sort-eids-by-indexed-attr db (db-class/get-class-object-ids db class-id) id asc?))))
+
+(defn- maybe-limit-rows
+  [rows row-limit]
+  (if row-limit
+    (vec (take row-limit rows))
+    (vec rows)))
 
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting {:keys [include-ref-pages-count?]
@@ -563,7 +586,7 @@
      (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
+  [db view-id {:keys [journals? view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting row-limit]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -587,15 +610,21 @@
                      (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                        (or sorting [{:id :block/updated-at :asc? false}])
                        sorting*))
-           fast-all-pages-ids (when (and (= feat-type :all-pages)
-                                         (not query?)
-                                         (nil? group-by-property-ident)
-                                         (empty? filters)
-                                         (string/blank? input))
-                                (get-all-page-ids-fast db sorting))]
-       (if fast-all-pages-ids
-         {:count (count fast-all-pages-ids)
-          :data fast-all-pages-ids}
+           class-id (or view-for-id (:db/id (:logseq.property/view-for view)))
+           fast-row-ids (when (and (contains? #{:all-pages :class-objects} feat-type)
+                                   (not query?)
+                                   (nil? group-by-property-ident)
+                                   (empty? filters)
+                                   (string/blank? input))
+                          (case feat-type
+                            :all-pages
+                            (get-all-page-ids-fast db sorting)
+
+                            :class-objects
+                            (get-class-object-ids-fast db class-id sorting)))]
+       (if fast-row-ids
+         {:count (count fast-row-ids)
+          :data (maybe-limit-rows fast-row-ids row-limit)}
          (let [entities-result (if query?
                                  (keep (fn [id]
                                          (let [e (d/entity db id)]
@@ -715,9 +744,12 @@
              (linked-references-page-list-view-data view entities-result entities)
              (cond->
              {:count (count filtered-entities)
-              :data (if dedupe-data?
-                      (distinct data')
-                      data')}
+              :data (let [rows (if dedupe-data?
+                                 (distinct data')
+                                 data')]
+                      (if (and row-limit (nil? group-by-property-ident))
+                        (maybe-limit-rows rows row-limit)
+                        rows))}
              (= feat-type :linked-references)
              (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
              query?
