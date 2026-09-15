@@ -22,6 +22,19 @@
   (w/click ".view-action-type")
   (w/click (util/get-by-text view-type true)))
 
+(defn- add-new-view!
+  ([]
+   (add-new-view! "Table View"))
+  ([view-type]
+   (w/click ".views button[title='Add new view']")
+   (assert/assert-is-visible
+    (loc/filter "[role='menuitem']" :has-text "List View"))
+   (assert/assert-is-visible
+    (loc/filter "[role='menuitem']" :has-text "Gallery View"))
+   (w/click (loc/filter "[role='menuitem']" :has-text view-type))
+   (assert/assert-is-visible
+    (loc/filter ".views > button" :has-text "New view"))))
+
 (defn- seed-table-view!
   [tag-name]
   (let [container-page (page/get-page-name)]
@@ -40,13 +53,14 @@
                                   "Priority" priority}}))
     (page/goto-page tag-name)
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
-    (w/click ".views button[title='Add new view']")
-    (assert/assert-is-visible
-     (loc/filter ".views > button" :has-text "New view"))
+    (add-new-view!)
     (select-view-type "List View")
     (assert/assert-is-visible ".view-action-type .ls-icon-list")
     (select-view-type "Table View")
     (assert/assert-is-visible ".view-action-type .ls-icon-table")
+    (assert/assert-is-visible ".ls-table-resize-handle")
+    (assert/assert-is-visible
+     (loc/filter ".ls-table-add-row" :has-text "Add row"))
     (assert/assert-is-visible
      (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
     (assert/assert-is-visible
@@ -72,6 +86,20 @@
     (dotimes [_ item-index]
       (k/arrow-down))
     (k/arrow-right)))
+
+(deftest table-row-context-menu-shows-in-app-actions-test
+  (seed-table-view! "table-row-context-menu")
+  (util/right-click
+   (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
+  (assert/assert-is-visible ".ls-context-menu-content")
+  (assert/assert-is-visible
+   (loc/filter "[role='menuitem']" :has-text "Open"))
+  (assert/assert-is-visible
+   (loc/filter "[role='menuitem']" :has-text "Copy"))
+  (assert/assert-is-visible
+   (loc/filter "[role='menuitem']" :has-text "Set property"))
+  (assert/assert-is-visible
+   (loc/filter "[role='menuitem']" :has-text "Delete")))
 
 (deftest table-row-selection-shows-action-bar-test
   (seed-table-view! "table-row-selection-actions")
@@ -112,7 +140,7 @@
     (assert/assert-is-visible
      (loc/filter ".ls-view-body" :has-text object-title))
 
-    (w/click ".views button[title='Add new view']")
+    (add-new-view!)
     (w/click (loc/filter ".views > button" :has-text "New view"))
     (w/click (loc/filter "[role='menuitem']" :has-text "Rename"))
     (w/click "[role='menu'] .block-title-wrap")
@@ -178,7 +206,7 @@
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
 
-  (w/click (view-action-button "plus"))
+  (w/click ".view-actions .ls-table-add-row")
   (assert/assert-is-visible ".cp__right-sidebar.open")
   (util/wait-editor-visible)
   (util/press-seq "New table object")
