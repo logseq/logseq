@@ -2910,41 +2910,20 @@ let execute_create_block mode (action : block_create) config =
                             | Ok _ -> (
                                 match resolved_plan with
                                 | None -> pure result
-                                | Some resolved_plan -> (
-                                    match result_ids_of_cli_result result with
-                                    | None ->
-                                        pure
-                                          (Cli_result.error
-                                             ~command:Command_id.Upsert_block
-                                             mode
-                                             (Error.make
-                                                Error.Add_id_resolution_failed
-                                                "unable to resolve created ids"))
-                                    | Some ids ->
-                                        bind
-                                          (resolve_block_uuids_by_id
-                                             invoke_config action.repo ids)
-                                          (function
-                                          | Error err ->
-                                              pure
-                                                (Cli_result.error
-                                                   ~command:
-                                                     Command_id.Upsert_block
-                                                   mode err)
-                                          | Ok block_uuids ->
-                                              bind
-                                                (apply_resolved_update_plan
-                                                   invoke_config action.repo
-                                                   block_uuids resolved_plan)
-                                                (function
-                                                | Error err ->
-                                                    pure
-                                                      (Cli_result.error
-                                                         ~command:
-                                                           Command_id
-                                                           .Upsert_block mode
-                                                         err)
-                                                | Ok _ -> pure result)))))))))
+                                | Some resolved_plan ->
+                                    bind
+                                      (apply_resolved_update_plan invoke_config
+                                         action.repo
+                                         (block_uuids_of_add_action add_action)
+                                         resolved_plan)
+                                      (function
+                                        | Error err ->
+                                            pure
+                                              (Cli_result.error
+                                                 ~command:
+                                                   Command_id.Upsert_block mode
+                                                 err)
+                                        | Ok _ -> pure result)))))))
 
 let execute_with_mode action config mode =
   let open Cli_effect in
