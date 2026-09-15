@@ -91,6 +91,38 @@
                      :block/order (:block/order ent)}]))))
        (into (sorted-map))))
 
+(deftest reorder-retract-entity-preserves-transaction-groups-test
+  (let [recreated-uuid (random-uuid)
+        deleted-uuid (random-uuid)
+        unrelated-before [:db/add 7 :block/title "unrelated before" 1]
+        numeric-retract [:db/retractEntity 42]
+        lookup-datom [:db/retract [:block/uuid deleted-uuid] :block/title "deleted" 1]
+        recreated-retract [:db/retractEntity [:block/uuid recreated-uuid]]
+        uuid-add [:db/add -1 :block/uuid recreated-uuid 1]
+        recreated-datom [:db/add [:block/uuid recreated-uuid] :block/title "recreated" 1]
+        lookup-retract [:db/retractEntity [:block/uuid deleted-uuid]]
+        numeric-datom [:db/retract 42 :block/title "numeric" 1]
+        unrelated-after [:db/add 8 :block/title "unrelated after" 1]
+        tx-data [unrelated-before
+                 numeric-retract
+                 lookup-datom
+                 recreated-retract
+                 uuid-add
+                 recreated-datom
+                 lookup-retract
+                 numeric-datom
+                 unrelated-after]]
+    (is (= [recreated-retract
+            lookup-datom
+            recreated-datom
+            numeric-datom
+            unrelated-before
+            uuid-add
+            unrelated-after
+            numeric-retract
+            lookup-retract]
+           (vec (db-normalize/reorder-retract-entity tx-data))))))
+
 (deftest normalize-tx-data-keeps-title-retract-without-replacement-test
   (let [conn (new-conn)
         page-uuid (create-page! conn "Page")
