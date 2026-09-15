@@ -334,9 +334,12 @@
           property-id (:db/id (d/entity @conn :logseq.property/priority))
           _ (d/transact! conn [[:db/add property-id :block/tx-id 10]])
           property (d/entity @conn property-id)
-          canonical-property (canonical-block @conn property)]
-      (is (seq (:property/closed-values canonical-property)))
-      (is (every? :block/uuid (:property/closed-values canonical-property))))))
+          canonical-property (canonical-block @conn property)
+          display-property (property-handler/display-property-map @conn property-id)]
+      (is (not (contains? canonical-property :property/closed-values))
+          "Closed values stay off the row snapshot. Table columns only need ident/type.")
+      (is (seq (:property/closed-values display-property)))
+      (is (every? :block/uuid (:property/closed-values display-property))))))
 
 (deftest canonical-block-allows-db-id-only-reference-identities-test
   (when-let [canonical-block (canonical-block-api)]

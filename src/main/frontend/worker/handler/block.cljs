@@ -95,16 +95,6 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
-(defn- tagged-with-ident?
-  [db eid tag-ident]
-  (some (fn [datom]
-          (= tag-ident (eavt-scalar db (:v datom) :db/ident)))
-        (d/datoms db :eavt eid :block/tags)))
-
-(defn- property-entity?
-  [db eid]
-  (tagged-with-ident? db eid :logseq.class/Property))
-
 (defn- block-order-list-type
   [db eid]
   (when-let [value (eavt-scalar db eid :logseq.property/order-list-type)]
@@ -126,8 +116,9 @@
 (defn canonical-block
   [db entity]
   (let [entity-id (:db/id entity)
-        block-uuid (:block/uuid entity)
-        block-tx-id (:block/tx-id entity)
+        block-uuid (or (:block/uuid entity)
+                       (eavt-scalar db entity-id :block/uuid))
+        block-tx-id (eavt-scalar db entity-id :block/tx-id)
         stored-title (eavt-scalar db entity-id :block/title)
         journal? (some? (eavt-scalar db entity-id :block/journal-day))
         ;; Entity :block/title walks every :block/refs target to replace
@@ -136,14 +127,16 @@
         replace-id-refs? (and (not journal?)
                               (string? stored-title)
                               (string/includes? stored-title "[["))
+        title-entity (when (or journal? replace-id-refs?)
+                       (d/entity db entity-id))
         raw-title (cond
-                    journal? (:block/raw-title entity)
-                    replace-id-refs? (:block/raw-title entity)
+                    journal? (:block/raw-title title-entity)
+                    replace-id-refs? (:block/raw-title title-entity)
                     (string? stored-title) stored-title
                     :else nil)
         display-title (cond
-                        journal? (:block/title entity)
-                        replace-id-refs? (:block/title entity)
+                        journal? (:block/title title-entity)
+                        replace-id-refs? (:block/title title-entity)
                         (string? stored-title) stored-title
                         :else nil)
         order-list-type (block-order-list-type db entity-id)]
@@ -174,11 +167,7 @@
                    (assoc result a value)))
                result))
            {:db/id entity-id}
-           (d/datoms db :eavt entity-id))
-          block (if (property-entity? db entity-id)
-                  (merge block
-                         (property-handler/display-property-map db entity-id))
-                  block)]
+           (d/datoms db :eavt entity-id))]
       (cond-> (assoc block
                      :block.temp/refs-count
                      (block-refs-count db entity-id))
@@ -190,7 +179,7 @@
 
         order-list-type
         (assoc :block.temp/order-list-index
-               (worker-plain/order-list-index entity order-list-type))))))
+               (worker-plain/order-list-index (d/entity db entity-id) order-list-type))))))
 
 (defn canonical-blocks
   [db block-uuids]
@@ -199,31 +188,28 @@
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
   (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
-            property-handler/*block-class-properties-cache* (volatile! {})
-            property-handler/*positioned-property-meta-cache* (volatile! {})
             *attr-schema-cache* (volatile! {})]
-    (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
+    (let [requested
+          (keep (fn [block-uuid]
+                  (when-let [eid (:e (first (d/datoms db :avet :block/uuid block-uuid)))]
+                    {:db/id eid :block/uuid block-uuid}))
+                block-uuids)
         ;; Only the requested rows. Property definitions and :block/refs
         ;; stay as inlined identities on the row; expanding them into
         ;; sibling snapshots made a 25-row table window take seconds.
-        dependencies-by-root
-        (into {}
-              (map (fn [block]
-                     [(:block/uuid block) [block]]))
-              requested)
+        ;; Do not d/entity here: entity-plus ILookup on a Movie walks title/refs.
         groups (into {}
-                     (map (fn [[block-uuid entities]]
-                            [block-uuid (into #{} (keep :block/uuid) entities)]))
-                     dependencies-by-root)
-        entities (distinct (mapcat val dependencies-by-root))]
+                     (map (fn [{:keys [block/uuid]}]
+                            [uuid #{uuid}]))
+                     requested)]
     {:basis-rev (render-basis-rev db)
      :groups groups
      :blocks
      (into {}
-           (map (fn [entity]
-                  (let [block (canonical-block db entity)]
+           (map (fn [row]
+                  (let [block (canonical-block db row)]
                     [(:block/uuid block) block])))
-           entities)})))
+           requested)})))
 
 (defn direct-children-membership
   [db parent-uuid]
