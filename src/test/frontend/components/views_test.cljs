@@ -147,11 +147,19 @@
          (#'views/view-display-type {} :all-pages))))
 
 (deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
-  (is (true? (#'views/view-head-ready-on-mount? :logseq.property.view/type.list))
+  (is (true? (#'views/view-head-ready-on-mount?
+              :logseq.property.view/type.list nil))
       "Unlinked-references is a list view and never fires table items-rendered.")
-  (is (true? (#'views/view-head-ready-on-mount? :logseq.property.view/type.gallery)))
-  (is (false? (#'views/view-head-ready-on-mount? :logseq.property.view/type.table))
-      "Table chrome still waits for the first painted rows."))
+  (is (true? (#'views/view-head-ready-on-mount?
+              :logseq.property.view/type.gallery nil)))
+  (is (false? (#'views/view-head-ready-on-mount?
+               :logseq.property.view/type.table :flat))
+      "Flat table chrome still waits for the first painted rows.")
+  (is (true? (#'views/view-head-ready-on-mount?
+              :logseq.property.view/type.table :grouped))
+      "Grouped tables never fire table items-rendered. Chrome must mount with the groups.")
+  (is (true? (#'views/view-head-ready-on-mount?
+              :logseq.property.view/type.table :grouped-list))))
 
 (deftest default-view-title-matches-the-feature-type
   (is (= :view/linked-references

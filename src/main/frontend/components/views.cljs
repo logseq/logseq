@@ -2265,10 +2265,12 @@
     (js/requestAnimationFrame on-first-table-paint!)))
 
 (defn- view-head-ready-on-mount?
-  "Table chrome waits for Virtuoso items-rendered. List and gallery
-  never fire that, so unlinked-references search stayed unmounted."
-  [display-type]
-  (not= display-type :logseq.property.view/type.table))
+  "Table chrome waits for Virtuoso items-rendered. List, gallery, and
+  grouped tables never fire that. Group-by remounts the view-container
+  onto a full snapshot and left .view-actions unmounted."
+  [display-type partition]
+  (or (not= display-type :logseq.property.view/type.table)
+      (contains? #{:grouped :grouped-list} partition)))
 
 (defn- lazy-item-should-subscribe?
   "Preview rows painted titles first. Immediate use-block remounted
@@ -3389,7 +3391,8 @@
 (hsx/defc ^:large-vars/cleanup-todo view-inner
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config on-first-table-paint!] :as option*}
    *scroller-ref]
-  (let [[head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type))
+  (let [view-partition (:partition option*)
+        [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition))
         journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
@@ -3484,12 +3487,12 @@
 
     (hooks/use-effect!
      (fn []
-       (when (view-head-ready-on-mount? display-type)
+       (when (view-head-ready-on-mount? display-type view-partition)
          (set-head-ready! true)
          (when on-first-table-paint!
            (on-first-table-paint!)))
        js/undefined)
-     [display-type])
+     [display-type view-partition])
 
     (run-effects! option table-map *scroller-ref gallery?)
 
