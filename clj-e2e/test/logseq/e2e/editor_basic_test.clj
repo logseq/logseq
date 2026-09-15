@@ -1397,7 +1397,7 @@
        (format ".ls-page-blocks #ls-block-%s" uuid)))))
 
 (deftest collapsed-subtree-stays-collapsed-after-bullet-zoom-back-test
-  (testing "bullet zoom-in then back keeps the parent subtree collapsed"
+  (testing "bullet zoom-in then back keeps the parent subtree collapsed without an empty remount"
     (let [page-name (p/get-page-name)
           parent (ls-api-call! :editor.appendBlockInPage page-name "zoom collapse parent")
           uuid (get parent "uuid")

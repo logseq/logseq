@@ -476,4 +476,7 @@
   (testing "legacy payloads fall back to UUID stubs"
     (let [ancestor-uuid (random-uuid)]
       (is (= [{:block/uuid ancestor-uuid}]
-             (model/resource-ancestors {:ancestor-uuids [ancestor-uuid]}))))))
+             (model/resource-ancestors {:ancestor-uuids [ancestor-uuid]})))))
+
+  (testing "a missing resource stays empty so the page body can paint first"
+    (is (= [] (model/resource-ancestors nil)))))

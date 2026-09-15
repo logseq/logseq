@@ -9,6 +9,7 @@
             [frontend.components.graph-actions :as graph-actions]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
+            [frontend.components.page-model :as page-model]
             [frontend.components.plugins :as plugins]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
@@ -21,6 +22,7 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
+            [frontend.db.subs :as subs]
             [frontend.extensions.graph :as graph]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -575,13 +577,17 @@
                   (reference/unlinked-references (:block/uuid page) {:sidebar? sidebar?})])]))]))
       [:div.opacity-75 (t :page/not-found)])))
 
+(defn- page-lookup
+  [option]
+  (or (:block/uuid option)
+      (some-> (:page option) :block/uuid)
+      (get-sanity-page-name option (:page-name option) nil)))
+
 (defn- page-resource-key
   [option]
   (let [route-page-name (get-page-name option)
         block-route-name (get-block-route-name option)
-        page-lookup (or (:block/uuid option)
-                        (some-> (:page option) :block/uuid)
-                        (get-sanity-page-name option (:page-name option) nil))]
+        page-lookup (page-lookup option)]
     (cond
       (and route-page-name block-route-name)
       [:route-block route-page-name block-route-name]
@@ -591,6 +597,16 @@
       [:page-identity page-lookup]
 
       :else nil)))
+
+(defonce ^:private *main-page-view (atom nil))
+
+(defn- page-lookup-uuid
+  [page-lookup]
+  (cond
+    (uuid? page-lookup) page-lookup
+    (and (string? page-lookup) (util/uuid-string? page-lookup))
+    (uuid page-lookup)
+    :else nil))
 
 (hsx/defc loaded-page
   [option page-uuid]
@@ -614,30 +630,47 @@
                       (db-hooks/use-resource-snapshot
                        (when extras?
                          [:block-ref-count page-uuid])))]
-      (when page
+      (when (page-model/page-body-ready? page)
         (page-inner (assoc option
-                           :page (cond-> page
-                                   breadcrumb-data
-                                   (assoc :block.temp/breadcrumb
-                                          (breadcrumb-model/resource-ancestors breadcrumb-data)))
+                           :page (page-model/attach-inline-breadcrumb
+                                  page
+                                  (when breadcrumb-data
+                                    (breadcrumb-model/resource-ancestors breadcrumb-data)))
                            :refs-count refs-count))))))
 
 (hsx/defc page-resource
   [option resource-key]
   (let [{:keys [status value error]}
-        (db-hooks/use-resource-snapshot resource-key)]
+        (db-hooks/use-resource-snapshot resource-key)
+        last-ready (page-model/remembered-page-view
+                    @*main-page-view (state/get-current-repo) option)
+        view (page-model/resolve-page-view status value option last-ready)]
+    (when-let [next-cache (page-model/remember-ready-page-view
+                           @*main-page-view (state/get-current-repo) option view)]
+      (reset! *main-page-view next-cache))
     (case status
-      :loading nil
+      :loading (when view
+                 ^{:key (:page-uuid view)}
+                 [loaded-page (:option view) (:page-uuid view)])
       :ready (if value
-               (loaded-page option value)
+               ^{:key value}
+               [loaded-page option value]
                [:div.opacity-75 (t :page/not-found)])
       :error (throw error)
       nil)))
 
 (hsx/defc page-aux
   [option]
-  (when-let [resource-key (page-resource-key option)]
-    (page-resource option resource-key)))
+  (let [page-uuid (page-lookup-uuid (page-lookup option))
+        cached-uuid (page-model/cached-route-page-uuid
+                     page-uuid
+                     (get-block-route-name option)
+                     (when page-uuid
+                       (:status (subs/block-snapshot page-uuid))))]
+    (if cached-uuid
+      (loaded-page option cached-uuid)
+      (when-let [resource-key (page-resource-key option)]
+        (page-resource option resource-key))))))
 
 (hsx/defc page-cp
   [option]
