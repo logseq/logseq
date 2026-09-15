@@ -90,7 +90,8 @@
 (deftest table-row-context-menu-shows-in-app-actions-test
   (seed-table-view! "table-row-context-menu")
   (util/right-click
-   (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
+   (loc/filter ".ls-view-body .ls-table-row .ls-table-cell[data-column-id=':block/title']"
+               :has-text "Alpha table object"))
   (assert/assert-is-visible ".ls-context-menu-content")
   (assert/assert-is-visible
    (loc/filter "[role='menuitem']" :has-text "Open"))
