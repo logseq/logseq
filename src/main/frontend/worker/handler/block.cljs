@@ -95,13 +95,34 @@
 
 (declare block-refs-count)
 
+(defn- eavt-scalar
+  [db eid attr]
+  (when-let [datom (first (d/datoms db :eavt eid attr))]
+    (:v datom)))
+
 (defn canonical-block
   [db entity]
   (let [entity-id (:db/id entity)
         block-uuid (:block/uuid entity)
         block-tx-id (:block/tx-id entity)
-        raw-title (:block/raw-title entity)
-        display-title (:block/title entity)
+        stored-title (eavt-scalar db entity-id :block/title)
+        journal? (some? (eavt-scalar db entity-id :block/journal-day))
+        ;; Entity :block/title walks every :block/refs target to replace
+        ;; id-refs. Table rows (All Pages / Movies) have plain titles; doing
+        ;; that for a screen-sized snapshot is multi-second work.
+        replace-id-refs? (and (not journal?)
+                              (string? stored-title)
+                              (string/includes? stored-title "[["))
+        raw-title (cond
+                    journal? (:block/raw-title entity)
+                    replace-id-refs? (:block/raw-title entity)
+                    (string? stored-title) stored-title
+                    :else nil)
+        display-title (cond
+                        journal? (:block/title entity)
+                        replace-id-refs? (:block/title entity)
+                        (string? stored-title) stored-title
+                        :else nil)
         order-list-type (worker-plain/order-list-type entity)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"

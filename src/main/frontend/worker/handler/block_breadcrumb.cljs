@@ -10,6 +10,11 @@
   [message data]
   (throw (ex-info message data)))
 
+(defn- eavt-scalar
+  [db eid attr]
+  (when-let [datom (first (d/datoms db :eavt eid attr))]
+    (:v datom)))
+
 (defn shallow-ref-identity
   [db ref-or-id]
   (let [ref (if (or (de/entity? ref-or-id) (map? ref-or-id))
@@ -18,8 +23,12 @@
         ref-id (:db/id ref)
         ref-uuid (:block/uuid ref)
         ref-ident (:db/ident ref)
-        ref-title (:block/title ref)
-        ref-name (:block/name ref)
+        ;; Avoid Entity :block/title — it expands id-refs through every
+        ;; :block/refs target. Table cells only need the stored title.
+        ref-title (let [title (eavt-scalar db ref-id :block/title)]
+                    (when (string? title) title))
+        ref-name (let [page-name (eavt-scalar db ref-id :block/name)]
+                   (when (string? page-name) page-name))
         ref-tags (mapv (fn [tag]
                          (select-keys tag [:db/id :block/uuid :db/ident]))
                        (:block/tags ref))
@@ -37,9 +46,10 @@
         asset-height (:logseq.property.asset/height ref)
         asset-resize-metadata (:logseq.property.asset/resize-metadata ref)
         asset-external-url (:logseq.property.asset/external-url ref)
-        property-value-title (when (or (:block/closed-value-property ref)
-                                       (:logseq.property/created-from-property ref))
-                               (:block/title ref))]
+        property-value-title (when (and ref-title
+                                         (or (:block/closed-value-property ref)
+                                             (:logseq.property/created-from-property ref)))
+                                 ref-title)]
     (when-not ref
       (fail! "Missing canonical block reference" {:ref-id ref-id}))
     (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
