@@ -690,30 +690,9 @@ let insert_opts = function
              (kw "outliner-op", kw "insert-blocks");
            |])
 
-let collect_uuids_from_value value =
-  let rec loop acc value =
-    match Edn_util.as_map value with
-    | Some fields ->
-        let acc =
-          match
-            Option.bind
-              (Edn_util.get value "block/uuid")
-              Edn_util.as_string_like
-          with
-          | Some uuid -> Vec.push_back acc uuid
-          | _ -> acc
-        in
-        Vec.fold_left (fun acc (k, v) -> loop (loop acc k) v) acc fields
-    | None -> (
-        match Edn_util.as_seq value with
-        | Some values -> Vec.fold_left loop acc values
-        | None -> acc)
-  in
-  loop Vec.empty value
-
 let collect_action_block_uuids blocks =
   blocks |> flatten_blocks
-  |> Vec.filter_map (fun block -> block.Block.uuid)
+  |> Vec.map (fun block -> Option.get block.Block.uuid)
   |> Uuid_refs_types.unique_preserve_order
 
 let result_ids ids =
@@ -819,13 +798,9 @@ let resolve_properties config repo properties =
                (resolve_property_assignment invoke_config repo)
                properties))
 
-let resolve_created_ids config repo blocks insert_result =
+let resolve_created_ids config repo blocks =
   let open Cli_effect in
-  let uuids =
-    let uuids = collect_uuids_from_value insert_result in
-    if Vec.is_empty uuids then collect_action_block_uuids blocks
-    else Uuid_refs_types.unique_preserve_order uuids
-  in
+  let uuids = collect_action_block_uuids blocks in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure (Ok acc)
@@ -849,10 +824,9 @@ let resolve_created_ids config repo blocks insert_result =
 let target_not_found_error () =
   Error.make Error.Target_not_found "target block not found"
 
-let resolve_created_ids_or_target_error config repo target_uuid blocks
-    insert_result =
+let resolve_created_ids_or_target_error config repo target_uuid blocks =
   let open Cli_effect in
-  bind (resolve_created_ids config repo blocks insert_result) (function
+  bind (resolve_created_ids config repo blocks) (function
     | Ok ids -> pure (Ok ids)
     | Error err when err.Error.code = Error.Add_id_resolution_failed ->
         bind
@@ -1037,12 +1011,8 @@ let execute_add_block action config mode =
                               (Cli_result.error ~command:Command_id.Upsert_block
                                  mode err)
                         | Ok refs_by_uuid ->
-                            let all_blocks = Block.flatten action.blocks in
                             let block_uuids =
-                              Vec.filter_map
-                                (fun block -> block.Block.uuid)
-                                all_blocks
-                              |> Uuid_refs_types.unique_preserve_order
+                              collect_action_block_uuids action.blocks
                             in
                             let block_for_insert block =
                               {
@@ -1088,34 +1058,26 @@ let execute_add_block action config mode =
                                 (Vec.singleton insert_op)
                             in
                             let rec insert_tree target_uuid pos blocks =
-                              if Vec.is_empty blocks then pure Edn_util.nil
+                              if Vec.is_empty blocks then pure ()
                               else
                                 bind (insert_blocks target_uuid pos blocks)
-                                  (fun insert_result ->
-                                    let rec insert_children acc remaining =
+                                  (fun _ ->
+                                    let rec insert_children remaining =
                                       match Vec.pop_front remaining with
-                                      | None -> pure acc
-                                      | Some (block, rest) -> (
-                                          match block.Block.uuid with
-                                          | None -> insert_children acc rest
-                                          | Some uuid ->
-                                              bind
-                                                (insert_tree uuid
-                                                   Block.Last_child
-                                                   block.Block.children)
-                                                (fun child_result ->
-                                                  let acc =
-                                                    if Edn_util.is_null acc then
-                                                      child_result
-                                                    else acc
-                                                  in
-                                                  insert_children acc rest))
+                                      | None -> pure ()
+                                      | Some (block, rest) ->
+                                          bind
+                                            (insert_tree
+                                               (Option.get block.Block.uuid)
+                                               Block.Last_child
+                                               block.Block.children)
+                                            (fun () -> insert_children rest)
                                     in
-                                    insert_children insert_result blocks)
+                                    insert_children blocks)
                             in
                             bind
                               (insert_tree target_uuid action.pos action.blocks)
-                              (fun insert_result ->
+                              (fun () ->
                                 let metadata_ops =
                                   metadata_ops block_uuids action.status tags
                                     properties
@@ -1130,7 +1092,7 @@ let execute_add_block action config mode =
                                     bind
                                       (resolve_created_ids_or_target_error
                                          invoke_config action.repo target_uuid
-                                         all_blocks insert_result) (function
+                                         action.blocks) (function
                                       | Error err ->
                                           pure
                                             (Cli_result.error

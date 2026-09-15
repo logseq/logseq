@@ -4,7 +4,6 @@ type code =
   | Agent_bridge_lock_failed
   | Agent_master_prompt_invalid
   | Agent_name_invalid
-  | Agent_prompt_template_invalid
   | Ambiguous_page_name
   | Ambiguous_property_name
   | Ambiguous_tag_name
@@ -82,8 +81,6 @@ type code =
   | Missing_source
   | Missing_tag_name
   | Missing_target
-  | Missing_template_code_block
-  | Missing_template_vars
   | Not_asset
   | Not_implemented
   | Page_hierarchy_parent_cycle
@@ -123,7 +120,6 @@ type code =
   | Task_tag_not_found
   | Unknown_command
   | Unknown_query
-  | Unknown_template_vars
   | Unsupported_input_format
   | Unsupported_output_format
   | Upsert_id_not_found
@@ -159,7 +155,6 @@ let code_to_string = function
   | Agent_bridge_lock_failed -> "agent-bridge-lock-failed"
   | Agent_master_prompt_invalid -> "agent-master-prompt-invalid"
   | Agent_name_invalid -> "agent-name-invalid"
-  | Agent_prompt_template_invalid -> "agent-prompt-template-invalid"
   | Ambiguous_page_name -> "ambiguous-page-name"
   | Ambiguous_property_name -> "ambiguous-property-name"
   | Ambiguous_tag_name -> "ambiguous-tag-name"
@@ -237,8 +232,6 @@ let code_to_string = function
   | Missing_source -> "missing-source"
   | Missing_tag_name -> "missing-tag-name"
   | Missing_target -> "missing-target"
-  | Missing_template_code_block -> "missing-template-code-block"
-  | Missing_template_vars -> "missing-template-vars"
   | Not_asset -> "not-asset"
   | Not_implemented -> "not-implemented"
   | Page_hierarchy_parent_cycle -> "page-hierarchy-parent-cycle"
@@ -279,7 +272,6 @@ let code_to_string = function
   | Task_tag_not_found -> "task-tag-not-found"
   | Unknown_command -> "unknown-command"
   | Unknown_query -> "unknown-query"
-  | Unknown_template_vars -> "unknown-template-vars"
   | Unsupported_input_format -> "unsupported-input-format"
   | Unsupported_output_format -> "unsupported-output-format"
   | Upsert_id_not_found -> "upsert-id-not-found"
