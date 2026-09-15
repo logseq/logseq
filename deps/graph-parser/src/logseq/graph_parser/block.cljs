@@ -801,7 +801,7 @@
                                   ;; fix start_pos
                                   (assoc pos-meta :end_pos
                                          (if (seq headings)
-                                           (get-in (last headings) [:meta :start_pos])
+                                           (get-in (peek headings) [:meta :start_pos])
                                            nil)))
                       ;; Remove properties, deadline/scheduled and logbook text from title in db graphs
                       options' (assoc options
@@ -836,66 +836,50 @@
                                (fn [b]
                                  (not= "macro" (:block/type b)))
                                blocks)
-        result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-                      parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
-                                :block/level 0
-                                :block/level-spaces 0}]
+        result (loop [remaining-blocks blocks
+                      frames [{:ref page-id :level 0 :indent 0}]
                       result []]
-                 (if (empty? blocks)
-                   (map #(dissoc % :block/level-spaces) result)
-                   (let [[block & others] blocks
-                         level-spaces (:block/level-spaces block)
-                         {uuid' :block/uuid :block/keys [level parent] :as last-parent} (last parents)
-                         parent-spaces (:block/level-spaces last-parent)
-                         [blocks parents result]
+                 (if (empty? remaining-blocks)
+                   result
+                   (let [[block & others] remaining-blocks
+                         input-level (:block/level block)
+                         [ancestor-frames last-popped-frame]
+                         (loop [stack frames
+                                last-popped-frame nil]
+                           (let [top-frame (peek stack)]
+                             (if (< input-level (:indent top-frame))
+                               (recur (pop stack) top-frame)
+                               [stack last-popped-frame])))
+                         {:keys [level parent indent] :as top-frame} (peek ancestor-frames)
+                         [resolved-block base-frames comparison-indent]
                          (cond
-                           (= level-spaces parent-spaces)        ; sibling
-                           (let [block (assoc block
-                                              :block/parent parent
-                                              :block/level level)
-                                 parents' (conj (vec (butlast parents)) block)
-                                 result' (conj result block)]
-                             [others parents' result'])
+                           (= input-level indent)               ; sibling
+                           [(assoc block :block/parent parent :block/level level)
+                            (pop ancestor-frames)
+                            input-level]
 
-                           (> level-spaces parent-spaces)         ; child
-                           (let [parent (if uuid' [:block/uuid uuid'] (:page/id last-parent))
-                                 block (cond->
-                                        (assoc block
-                                               :block/parent parent)
-                                         ;; fix block levels with wrong order
-                                         ;; For example:
-                                         ;;   - a
-                                         ;; - b
-                                         ;; What if the input indentation is two spaces instead of 4 spaces
-                                         (>= (- level-spaces parent-spaces) 1)
-                                         (assoc :block/level (inc level)))
-                                 parents' (conj parents block)
-                                 result' (conj result block)]
-                             [others parents' result'])
+                           (nil? last-popped-frame)              ; child
+                           [(cond-> (assoc block :block/parent (:ref top-frame))
+                              ;; A jump in input indentation adds one tree level.
+                              (>= (- input-level indent) 1)
+                              (assoc :block/level (inc level)))
+                            ancestor-frames
+                            input-level]
 
-                           (< level-spaces parent-spaces)
-                           (cond
-                             (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
-                             (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                                   blocks (cons (assoc (first blocks)
-                                                       :block/level (dec level))
-                                                (rest blocks))]
-                               [blocks parents' result])
-
-                             :else
-                             (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
-                                   left (first r)
-                                   parent-id (if-let [block-id (:block/uuid (last f))]
-                                               [:block/uuid block-id]
-                                               page-id)
-                                   block (assoc block
-                                                :block/parent parent-id
-                                                :block/level (:block/level left)
-                                                :block/level-spaces (:block/level-spaces left))
-
-                                   parents' (->> (concat f [block]) vec)
-                                   result' (conj result block)]
-                               [others parents' result'])))]
-                     (recur blocks parents result))))
+                           :else                                ; irregular outdent
+                           ;; Reuse the nearest removed indentation slot for later siblings.
+                           [(assoc block
+                                   :block/parent (or (:ref top-frame) page-id)
+                                   :block/level (:level last-popped-frame))
+                            ancestor-frames
+                            (:indent last-popped-frame)])
+                         frame {:ref (when-let [block-uuid (:block/uuid resolved-block)]
+                                       [:block/uuid block-uuid])
+                                :parent (:block/parent resolved-block)
+                                :level (:block/level resolved-block)
+                                :indent comparison-indent}]
+                     (recur others
+                            (conj base-frames frame)
+                            (conj result resolved-block)))))
         result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
     (concat result' other-blocks)))
