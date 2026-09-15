@@ -504,6 +504,27 @@
         (d/datoms db :eavt (:db/id entity) :block/tags)))
 
 (def ^:dynamic *block-class-properties-cache* nil)
+(def ^:dynamic *positioned-property-meta-cache* nil)
+
+(declare render-property-position)
+
+(defn- positioned-property-meta
+  [db property-id]
+  (let [cache *positioned-property-meta-cache*]
+    (if-let [hit (and cache (get @cache property-id))]
+      hit
+      (let [property (d/entity db property-id)
+            meta (when property
+                   {:property property
+                    :position (render-property-position db property)
+                    :public? (not (false? (:logseq.property/public? property)))
+                    :hide? (boolean (:logseq.property/hide? property))
+                    :hide-empty? (boolean (:logseq.property/hide-empty-value property))
+                    :default? (or (some? (:logseq.property/default-value property))
+                                  (some? (:logseq.property/scalar-default-value property)))})]
+        (when (and cache meta)
+          (vswap! cache assoc property-id meta))
+        meta))))
 
 (defn- block-class-properties
   [db block]
@@ -813,15 +834,16 @@
 
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
-  (when-let [property (d/entity db property-id)]
-    (let [property-position (render-property-position db property)
-          property-value (block-direct-property-value db block-id property-id)]
+  (when-let [{:keys [public? hide? hide-empty? default?]
+              property-position :position}
+             (positioned-property-meta db property-id)]
+    (let [property-value (block-direct-property-value db block-id property-id)
+          empty-value? (and (nil? property-value) (not default?))]
       (and
-       (not (false? (:logseq.property/public? property)))
+       public?
        (= property-position position)
-       (not (and (:logseq.property/hide-empty-value property)
-                 (positioned-property-empty? db block-id property)))
-       (not (:logseq.property/hide? property))
+       (not (and hide-empty? empty-value?))
+       (not hide?)
        (not (and
              (= property-position :block-below)
              (nil? property-value)

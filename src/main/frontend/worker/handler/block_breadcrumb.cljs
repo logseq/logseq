@@ -44,15 +44,9 @@
       (uuid? choice-uuid) (assoc :block/uuid choice-uuid)
       (keyword? choice-ident) (assoc :db/ident choice-ident))))
 
-(defn- ref-extras
-  "Read renderer identity extras from eavt. Page refs need tags; property,
-  class, and asset refs also need type/icon/closed-value fields. Entity
-  ILookup of those attrs walks inbound refs and is multi-second on Movies."
-  [db ref-id]
-  (let [ref-title (let [title (eavt-scalar db ref-id :block/title)]
-                    (when (string? title) title))
-        ref-tags (mapv #(tag-summary db %) (eavt-values db ref-id :block/tags))
-        choice-exclusions
+(defn- property-or-asset-extras
+  [db ref-id ref-title]
+  (let [choice-exclusions
         (mapv #(choice-summary db %)
               (eavt-values db ref-id :logseq.property/choice-exclusions))
         property-type (eavt-scalar db ref-id :logseq.property/type)
@@ -70,7 +64,6 @@
         property-value-title (when (and ref-title (or closed-value? created-from-property?))
                                ref-title)]
     (cond-> {}
-      (seq ref-tags) (assoc :block/tags ref-tags)
       (seq choice-exclusions)
       (assoc :logseq.property/choice-exclusions choice-exclusions)
       (some? property-type) (assoc :logseq.property/type property-type)
@@ -86,6 +79,25 @@
       (some? asset-external-url)
       (assoc :logseq.property.asset/external-url asset-external-url)
       (some? property-value-title) (assoc :block/title property-value-title))))
+
+(defn- ref-extras
+  "Read renderer identity extras from eavt. Page refs need tags only.
+  Property, class, closed-value, and asset refs also need type/icon fields."
+  [db ref-id]
+  (let [ref-title (let [title (eavt-scalar db ref-id :block/title)]
+                    (when (string? title) title))
+        ref-ident (eavt-scalar db ref-id :db/ident)
+        ref-name (eavt-scalar db ref-id :block/name)
+        asset-type (eavt-scalar db ref-id :logseq.property.asset/type)
+        ref-tags (mapv #(tag-summary db %) (eavt-values db ref-id :block/tags))
+        extras (cond-> {}
+                 (seq ref-tags) (assoc :block/tags ref-tags))
+        page-ref? (and (string? ref-name)
+                       (not (keyword? ref-ident))
+                       (nil? asset-type))]
+    (if page-ref?
+      extras
+      (merge extras (property-or-asset-extras db ref-id ref-title)))))
 
 (defn- compute-shallow-ref-identity
   [db ref-id]

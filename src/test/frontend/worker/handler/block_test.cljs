@@ -374,7 +374,7 @@
           (is (= block-uuid (:block/uuid block)))
           (is (= block
                  (canonical-block db
-                                  (d/entity db [:block/uuid block-uuid]))))))))))
+                                  (d/entity db [:block/uuid block-uuid])))))))))
 
 (deftest canonical-blocks-omits-absent-requested-uuids-at-the-same-basis-test
   (when-let [canonical-blocks (canonical-blocks-api)]

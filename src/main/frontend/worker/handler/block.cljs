@@ -207,7 +207,8 @@
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
   (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
-            property-handler/*block-class-properties-cache* (volatile! {})]
+            property-handler/*block-class-properties-cache* (volatile! {})
+            property-handler/*positioned-property-meta-cache* (volatile! {})]
     (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
         dependencies
         (fn [block]
