@@ -2305,25 +2305,31 @@
 (defn- next-scrolled-row-offset
   "Keep the current offset window until the visible range leaves it.
   Replacing it every row of scroll left 27 empty Movies rows."
-  [current-offset window-size visible-start visible-end first-window-count]
-  (let [first-end (when (and (integer? first-window-count) (pos? first-window-count))
-                    (dec first-window-count))]
-    (cond
-      (not (integer? visible-start))
-      current-offset
+  ([current-offset window-size visible-start visible-end first-window-count]
+   (next-scrolled-row-offset current-offset window-size visible-start visible-end
+                             first-window-count true))
+  ([current-offset window-size visible-start visible-end first-window-count offset-ready?]
+   (let [first-end (when (and (integer? first-window-count) (pos? first-window-count))
+                     (dec first-window-count))]
+     (cond
+       (not (integer? visible-start))
+       current-offset
 
-      (offset-window-covers-visible?
-       current-offset window-size visible-start visible-end)
-      current-offset
+       (and (integer? current-offset) (not (true? offset-ready?)))
+       current-offset
 
-      (and first-end (integer? visible-end) (<= visible-end first-end))
-      current-offset
+       (offset-window-covers-visible?
+        current-offset window-size visible-start visible-end)
+       current-offset
 
-      (and first-end (integer? visible-end) (<= visible-start first-end))
-      first-window-count
+       (and first-end (integer? visible-end) (<= visible-end first-end))
+       current-offset
 
-      :else
-      visible-start)))
+       (and first-end (integer? visible-end) (<= visible-start first-end))
+       first-window-count
+
+       :else
+       visible-start))))
 
 (defn- initial-view-prefetch-count
   "First paint hydrates only the rows that fit on screen."
@@ -2615,7 +2621,8 @@
                                   next-offset (next-scrolled-row-offset
                                                row-offset window-size
                                                vis-start vis-end
-                                               (count all-row-ids))]
+                                               (count all-row-ids)
+                                               (boolean (seq offset-rows)))]
                               (when (and on-viewport-filled!
                                          (pos? scroll-top)
                                          (integer? next-offset)

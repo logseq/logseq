@@ -462,7 +462,7 @@
     (is (nil? (#'views/offset-view-data-key view-uuid window-context 0)))
     (is (= [:view-data view-uuid (assoc window-context :row-offset 72 :initial-row-count 31)]
            (#'views/offset-view-data-key view-uuid window-context 72))
-        "Offset windows add one row so a clipped first visible row still fills the screen."))
+        "Offset windows add one row so a clipped first visible row still fills the screen.")
     (is (nil? (:full ready)))
     (is (= [:view-data view-uuid full-context] (:primary single)))
     (is (nil? (:full single)))))
@@ -582,8 +582,10 @@
       "Keep the same offset window while the visible rows stay inside it.")
   (is (= 40 (#'views/next-scrolled-row-offset 26 27 40 66 26))
       "Move the window only after the visible range leaves it.")
+  (is (= 26 (#'views/next-scrolled-row-offset 26 27 40 66 26 false))
+      "An in-flight Movies offset must finish. A new key cancelled the fetch and left 27 empty rows.")
   (is (= [66 92] (#'views/viewport-row-range 2400 196 852 33 40000))
-      "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97."))
+      "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97.")))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
