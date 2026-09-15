@@ -1671,10 +1671,10 @@
                      platform/post-message! (fn [& _] nil)]
          (notify-invalid-data {:tx-meta {:some "data"}} ["error1"])
          (is (= 1 (count @broadcast-calls)))
-         (is (= [:notification [:storage/invalid-data-writing :error nil nil nil
+         (is (= [:notification [nil :error nil :storage/invalid-data-writing nil
                                {:i18n-key :storage/invalid-data-writing}]]
                 (first @broadcast-calls))
-             "Stable uid replaces stacked invalid-data toasts"))))))
+             "Stable uid in the fourth payload slot replaces stacked toasts"))))))
 
 (deftest notify-invalid-data-skips-undo-redo-in-production
   (restoring-worker-state

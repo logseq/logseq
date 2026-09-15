@@ -1072,7 +1072,7 @@
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [:storage/invalid-data-writing :error nil nil nil
+                                          [nil :error nil :storage/invalid-data-writing nil
                                            {:i18n-key :storage/invalid-data-writing}])
     (platform/post-message! (platform/current)
                             :capture-error
