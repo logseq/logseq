@@ -258,7 +258,8 @@
     (when-let [entity (d/entity db [:block/uuid block-uuid])]
       {:block/uuid block-uuid
        :db/id (:db/id entity)
-       :block/title (:block/title entity)})))
+       :block/title (:block/title entity)
+       :block.temp/first-window-preview? true})))
 
 (defn- first-window-row-previews
   "UUID rows still need a second use-block snapshot for titles.

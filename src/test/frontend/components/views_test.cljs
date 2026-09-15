@@ -308,17 +308,21 @@
           "A mounted row supplies one UUID and owns no loader closure."))))
 
 (deftest lazy-item-paints-first-window-title-before-use-block-test
-  (let [row-uuid (random-uuid)]
+  (let [row-uuid (random-uuid)
+        preview {:block/uuid row-uuid
+                 :block/title "Æon Flux (2005)"
+                 :block.temp/first-window-preview? true}]
+    (is (true? (#'views/first-window-title-preview? preview)))
+    (is (= "Æon Flux (2005)" (#'views/first-window-title-text preview)))
     (with-redefs [db-hooks/use-block (fn [_] nil)]
       (is (string/includes?
            (render-static
             (views/lazy-item
              [row-uuid]
              0
-             {:row-previews {row-uuid {:block/uuid row-uuid
-                                       :block/title "Æon Flux (2005)"}}}
+             {:row-previews {row-uuid preview}}
              (fn [item]
-               (.createElement react "span" nil (:block/title item)))))
+               (.createElement react "span" nil (#'views/first-window-title-text item)))))
            "Æon Flux (2005)")
           "First-window titles paint when view-data arrives, before the block snapshot."))))
 

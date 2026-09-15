@@ -533,13 +533,12 @@
        [:div.flex.flex-row
         (let [render (fn [block]
                        [:div
-                        (inline-title
-                         {:table? true
-                          :block/uuid (:block/uuid block)}
-                         (some->> (:block/title block)
-                                  string/trim
-                                  string/split-lines
-                                  first))])]
+                        (if (first-window-title-preview? block)
+                          (first-window-title-text block)
+                          (inline-title
+                           {:table? true
+                            :block/uuid (:block/uuid block)}
+                           (first-window-title-text block)))])]
           (if many?
             (->> (map render block*)
                  (interpose [:div.mr-1 ","]))
@@ -1365,6 +1364,14 @@
         (when (< next-cell-left container-left)
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
+
+(defn- first-window-title-text
+  [block]
+  (some->> (:block/title block) str string/trim string/split-lines first))
+
+(defn- first-window-title-preview?
+  [block]
+  (true? (:block.temp/first-window-preview? block)))
 
 (defn- table-cell-plain-value
   "Plain text used for native title tooltips on clipped table cells."

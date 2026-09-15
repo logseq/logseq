@@ -1759,6 +1759,7 @@
       (is (= view-row (:block/uuid preview)))
       (is (= "Object row" (:block/title preview))
           "The first window includes the name so Tags/Movies can paint before use-block.")
+      (is (true? (:block.temp/first-window-preview? preview)))
       (is (integer? (:db/id preview)))
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
