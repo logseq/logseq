@@ -147,19 +147,26 @@
          (#'views/view-display-type {} :all-pages))))
 
 (deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
-  (is (true? (#'views/view-head-ready-on-mount?
-              :logseq.property.view/type.list nil))
-      "Unlinked-references is a list view and never fires table items-rendered.")
-  (is (true? (#'views/view-head-ready-on-mount?
-              :logseq.property.view/type.gallery nil)))
-  (is (false? (#'views/view-head-ready-on-mount?
-               :logseq.property.view/type.table :flat))
-      "Flat table chrome still waits for the first painted rows.")
-  (is (true? (#'views/view-head-ready-on-mount?
-              :logseq.property.view/type.table :grouped))
-      "Grouped tables never fire table items-rendered. Chrome must mount with the groups.")
-  (is (true? (#'views/view-head-ready-on-mount?
-              :logseq.property.view/type.table :grouped-list))))
+  (let [rows [(random-uuid)]]
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.list nil rows))
+        "Unlinked-references is a list view and never fires table items-rendered.")
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.gallery nil rows)))
+    (is (false? (#'views/view-head-ready-on-mount?
+                 :logseq.property.view/type.table :flat rows))
+        "Flat table chrome still waits for the first painted rows.")
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.table :grouped rows))
+        "Grouped tables never fire table items-rendered. Chrome must mount with the groups.")
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.table :grouped-list rows)))
+    (is (true? (#'views/empty-table-ready-on-mount? []))
+        "Empty unused property tables never mount Virtuoso.")
+    (is (false? (#'views/empty-table-ready-on-mount? rows)))
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.table :flat []))
+        "Empty tables keep the property column and view-actions on mount.")))
 
 (deftest default-view-title-matches-the-feature-type
   (is (= :view/linked-references

@@ -2264,13 +2264,20 @@
     (set! (.-current *notified?) true)
     (js/requestAnimationFrame on-first-table-paint!)))
 
+(defn- empty-table-ready-on-mount?
+  "Empty tables skip Virtuoso. items-rendered never flips
+   mount-unpinned-cells?, so unused property pages hid the property
+   column and left .view-actions unmounted."
+  [rows]
+  (not (seq rows)))
+
 (defn- view-head-ready-on-mount?
-  "Table chrome waits for Virtuoso items-rendered. List, gallery, and
-  grouped tables never fire that. Group-by remounts the view-container
-  onto a full snapshot and left .view-actions unmounted."
-  [display-type partition]
+  "Table chrome waits for Virtuoso items-rendered. List, gallery,
+  grouped, and empty tables never fire that."
+  [display-type partition rows]
   (or (not= display-type :logseq.property.view/type.table)
-      (contains? #{:grouped :grouped-list} partition)))
+      (contains? #{:grouped :grouped-list} partition)
+      (empty-table-ready-on-mount? rows)))
 
 (defn- lazy-item-should-subscribe?
   "Preview rows painted titles first. Immediate use-block remounted
@@ -2668,8 +2675,9 @@
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
-  (let [[items-rendered? set-items-rendered!] (hooks/use-state false)
-        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state false)
+  (let [empty-rows? (empty-table-ready-on-mount? (:rows table))
+        [items-rendered? set-items-rendered!] (hooks/use-state empty-rows?)
+        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state empty-rows?)
         option (assoc option
                       :mount-unpinned-cells? mount-unpinned-cells?
                       :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
@@ -3392,7 +3400,7 @@
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config on-first-table-paint!] :as option*}
    *scroller-ref]
   (let [view-partition (:partition option*)
-        [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition))
+        [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition data))
         journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
@@ -3487,12 +3495,12 @@
 
     (hooks/use-effect!
      (fn []
-       (when (view-head-ready-on-mount? display-type view-partition)
+       (when (view-head-ready-on-mount? display-type view-partition data)
          (set-head-ready! true)
          (when on-first-table-paint!
            (on-first-table-paint!)))
        js/undefined)
-     [display-type view-partition])
+     [display-type view-partition (empty-table-ready-on-mount? data)])
 
     (run-effects! option table-map *scroller-ref gallery?)
 
