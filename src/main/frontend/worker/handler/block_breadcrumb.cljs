@@ -86,15 +86,19 @@
                  (:block/refs entity)))))
 
 (defn block-breadcrumb
-  [db block]
-  (let [parents (vec (ldb/get-block-parents
-                      db (:block/uuid block) {:depth load-depth}))
-        page (:block/page block)
-        breadcrumb-ancestors (if (and page
-                                      (not= (:db/id page) (:db/id (first parents))))
-                               (into [page] parents)
-                               parents)]
-    (cond-> (mapv #(breadcrumb-entity db %) breadcrumb-ancestors)
-      (:logseq.property/created-from-property block)
-      (conj (breadcrumb-entity db
-                               (:logseq.property/created-from-property block))))))
+  ([db block]
+   (block-breadcrumb db block load-depth))
+  ([db block depth]
+   (when-not (and (integer? depth) (pos? depth))
+     (fail! "Invalid breadcrumb load depth" {:load-depth depth}))
+   (let [parents (vec (ldb/get-block-parents
+                        db (:block/uuid block) {:depth depth}))
+         page (:block/page block)
+         breadcrumb-ancestors (if (and page
+                                         (not= (:db/id page) (:db/id (first parents))))
+                                 (into [page] parents)
+                                 parents)]
+     (cond-> (mapv #(breadcrumb-entity db %) breadcrumb-ancestors)
+       (:logseq.property/created-from-property block)
+       (conj (breadcrumb-entity db
+                                 (:logseq.property/created-from-property block)))))))
