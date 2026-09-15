@@ -1303,11 +1303,17 @@
        (cell-render-f)
        cell-placeholder)]))
 
+(defn- always-eager-column?
+  [column]
+  (contains? #{:block/title :select :id} (:id column)))
+
 (defn- eager-table-cells?
-  "Virtuoso already windows visible rows. Skip per-cell IntersectionObserver
-  there. Grouped tables set :disable-virtualized? and still need lazy cells."
-  [disable-virtualized?]
-  (not disable-virtualized?))
+  "Virtuoso windows rows. Unpinned property columns stay lazy. The name
+  column is on-screen even when it is not pinned, so it stays eager."
+  [disable-virtualized? column lazy-column?]
+  (and (not disable-virtualized?)
+       (or (always-eager-column? column)
+           (not lazy-column?))))
 
 (defn- click-cell
   [node]
@@ -1425,7 +1431,6 @@
 (hsx/defc table-row-inner
   [table row props {:keys [show-add-property? scrolling? disable-virtualized?]}]
   (let [*ref (hooks/use-ref nil)
-        eager-cells? (eager-table-cells? disable-virtualized?)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -1434,7 +1439,7 @@
                                   :cell (fn [_table _row _column])})
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column _cell-option]
+        row-cell-f (fn [column cell-option]
                      (let [id (str (:id row) "-" (:id column))
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
@@ -1446,14 +1451,18 @@
                                               :add-property? add-property?
                                               :style style}
                                        (not (string/blank? cell-title))
-                                       (assoc :title cell-title))]
+                                       (assoc :title cell-title))
+                           eager-cell? (eager-table-cells?
+                                        disable-virtualized?
+                                        column
+                                        (:lazy? cell-option))]
                        (if (and scrolling? (not (:block/title row)))
                          (table-cell-container cell-opts nil)
                          (when-let [render (get column :cell)]
                            (let [cell-render (fn []
                                                (table-cell-container
                                                 cell-opts (render table row column style)))]
-                             (if eager-cells?
+                             (if eager-cell?
                                [:div.h-full (cell-render)]
                                (lazy-table-cell cell-render
                                                 (table-cell-container cell-opts nil))))))))]
@@ -2083,6 +2092,12 @@
   [full-data window-data]
   (or full-data window-data))
 
+(defn- paint-view-data
+  "Paint the first window. Remaining ids are a lookup list. Replacing
+  26 painted rows with 3883 remounted Movies mid-paint."
+  [full-data window-data]
+  (or window-data full-data))
+
 (defn- view-data-resource-keys
   [view-uuid window-context full-context window-ready?]
   {:primary [:view-data view-uuid (or window-context full-context)]
@@ -2117,11 +2132,18 @@
        (contains? hydrate-row-uuids row-uuid)))
 
 (defn- viewport-filled?
-  "The remaining-id query starts only after the first screen has
-  hydrated rows. An empty prefetch is `every?` true and must not count."
+  "Virtuoso mounts after the first screen has hydrated rows. An empty
+  prefetch is `every?` true and must not count."
   [initial-rows-ready? hydrate-row-uuids]
   (and initial-rows-ready?
        (boolean (seq hydrate-row-uuids))))
+
+(defn- table-total-count
+  "First-window view-data already has the full count. Use it for the
+  scrollbar so remaining ids do not have to replace the painted rows."
+  [rows items-count]
+  (max (count rows)
+       (if (number? items-count) items-count 0)))
 
 (defn- viewport-row-range
   "On-screen rows from scroll position. Virtuoso's mounted overscan range
@@ -2302,18 +2324,13 @@
         prefetch-window-size (view-prefetch-row-count
                               viewport-height
                               item-height)
+        all-row-ids (or (:all-row-ids option) (:data table) rows)
         [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
-        (use-view-row-prefetch (:data table)
+        (use-view-row-prefetch all-row-ids
                                initial-prefetch-count
                                prefetch-window-size)
-        on-viewport-filled! (:on-viewport-filled! option)]
-    (hooks/use-effect!
-     (fn []
-       (when (and (viewport-filled? initial-rows-ready? hydrate-row-uuids)
-                  on-viewport-filled!)
-         (on-viewport-filled!))
-       js/undefined)
-     [initial-rows-ready? hydrate-row-uuids on-viewport-filled!])
+        on-viewport-filled! (:on-viewport-filled! option)
+        total-count (table-total-count all-row-ids (:items-count option))]
     (cond
       (not (seq rows))
       nil
@@ -2331,17 +2348,17 @@
         :increase-viewport-by {:top overscan-px :bottom overscan-px}
         :custom-scroll-parent scroll-parent
         :compute-item-key (fn [idx]
-                            (str "table-row-" (util/nth-safe rows idx)))
+                            (str "table-row-" (util/nth-safe all-row-ids idx)))
         :skipAnimationFrameInResizeObserver true
         :fixed-item-height item-height
         :default-item-height item-height
-        :total-count (count rows)
+        :total-count total-count
         :item-content (fn [idx]
                         (let [option (assoc option :table-view? true)
-                              row-uuid (util/nth-safe (:data table) idx)]
+                              row-uuid (util/nth-safe all-row-ids idx)]
                           (if (viewport-hydrate-ready?
                                initial-rows-ready? hydrate-row-uuids row-uuid)
-                            (lazy-item (:data table) idx option
+                            (lazy-item all-row-ids idx option
                                        (fn [row]
                                          (table-row table row {} option)))
                             (lazy-item-placeholder true false))))
@@ -2351,10 +2368,13 @@
                                 (or (some-> scroll-parent .-scrollTop) 0)
                                 viewport-height
                                 item-height
-                                (count rows))
+                                total-count)
                                props))
                           (when (seq props)
-                            (set-items-rendered! true)))}
+                            (set-items-rendered! true)
+                            (when (and (viewport-filled? initial-rows-ready? hydrate-row-uuids)
+                                       on-viewport-filled!)
+                              (on-viewport-filled!))))}
        (:disable-virtualized? option)))))
 
 (hsx/defc table-view
@@ -3374,8 +3394,11 @@
                       :ready (:value full-snapshot)
                       :error (throw (:error full-snapshot))
                       nil))
-        view-data (settled-view-data full-data window-or-full-data)
+        view-data (paint-view-data full-data window-or-full-data)
+        lookup-data (settled-view-data full-data window-or-full-data)
         paint (loaded-view-paint view-data)
+        all-row-ids (when (:ready? paint)
+                      (view-data->rows lookup-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         option (cond-> (assoc option
@@ -3403,6 +3426,7 @@
                                             :partition (:partition paint)
                                             :data data
                                             :full-data data
+                                            :all-row-ids all-row-ids
                                             :filters (or filters {})
                                             :sorting sorting
                                             :set-filters! ignore!

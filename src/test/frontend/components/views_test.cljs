@@ -386,7 +386,10 @@
         "An empty prefetch is every? true. Do not mount placeholder rows or remaining ids.")
     (is (false? (#'views/viewport-filled? false #{row-uuid})))
     (is (true? (#'views/viewport-filled? true #{row-uuid}))
-        "Opening a table starts remaining ids only after the viewport hydrate set exists.")))
+        "Opening a table mounts Virtuoso only after the viewport hydrate set exists.")
+    (is (= 3883 (#'views/table-total-count (range 26) 3883))
+        "The first window already has the full count. Do not wait for remaining ids.")
+    (is (= 26 (#'views/table-total-count (range 26) nil)))))
 
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
@@ -397,6 +400,9 @@
   (is (= :full (#'views/settled-view-data :full :window)))
   (is (= :window (#'views/settled-view-data nil :window)))
   (is (nil? (#'views/settled-view-data nil nil)))
+  (is (= :window (#'views/paint-view-data :full :window))
+      "Remaining ids must not replace the painted first window.")
+  (is (= :full (#'views/paint-view-data :full nil)))
   (let [view-uuid (random-uuid)
         window-context {:feature-type :class-objects :initial-row-count 30}
         full-context {:feature-type :class-objects}
@@ -581,10 +587,14 @@
             "Rows outside the scrolled window stay placeholders instead of blocking paint.")))))
 
 (deftest table-cells-render-eagerly-once-rows-are-windowed
-  (is (true? (#'views/eager-table-cells? false)))
-  (is (true? (#'views/eager-table-cells? nil)))
-  (is (false? (#'views/eager-table-cells? true))
-      "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
+  (is (true? (#'views/eager-table-cells? false {:id :block/title} true))
+      "The name column is on-screen even when unpinned.")
+  (is (true? (#'views/eager-table-cells? false {:id :select} false)))
+  (is (false? (#'views/eager-table-cells? false {:id :user.property/actors} true))
+      "Unpinned property columns stay lazy. Movies first paint mounted 23 property cells per row.")
+  (is (true? (#'views/eager-table-cells? false {:id :user.property/actors} false)))
+  (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
+      "Grouped tables disable row virtualization and keep per-cell lazy mounts.")))
 
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))
