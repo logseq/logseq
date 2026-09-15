@@ -63,6 +63,23 @@
                {:db/id 10
                 :db/ident :logseq.property/priority.low}))))
 
+(deftest canonical-property-without-closed-values-still-selects-priority-test
+  (let [property {:db/ident :logseq.property/priority
+                  :logseq.property/type :default}
+        empty-value {:db/id 9
+                     :db/ident :logseq.property/empty-placeholder}
+        high-value {:db/id 10
+                    :db/ident :logseq.property/priority.high
+                    :logseq.property/icon {:type :tabler-icon :id "priorityLvlHigh"}}]
+    (is (false? (property-value/select-type? {} property))
+        "use-block property snapshots omit :property/closed-values.")
+    (is (true? (#'property-value/property-value-select-type? {} property empty-value))
+        "No priority must still take the select/dashed-icon path.")
+    (is (true? (#'property-value/closed-choice-value? high-value)))
+    (is (true? (#'property-value/property-value-select-type? {} property high-value))
+        "Closed choices keep their icon on the value ref.")
+    (is (false? (#'property-value/closed-choice-value? empty-value)))))
+
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?
        {:property/closed-values

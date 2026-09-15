@@ -99,6 +99,16 @@
       (and (map? value)
            (= (:db/ident value) :logseq.property/empty-placeholder))))
 
+(defn- closed-choice-value?
+  "Canonical property snapshots omit :property/closed-values. Choice refs still
+  carry their icon (and sometimes :block/closed-value-property) on the value."
+  [value]
+  (boolean
+   (and (map? value)
+        (not (empty-placeholder-value? value))
+        (or (some? (:logseq.property/icon value))
+            (some? (:block/closed-value-property value))))))
+
 (defn- value->db-id
   [value]
   (cond
@@ -222,6 +232,14 @@
         (seq (:property/closed-values property))
         (and (= (:db/ident property) :logseq.property/default-value)
              (= (:logseq.property/type block) :number)))))
+
+(defn- property-value-select-type?
+  "select-type? only sees :property/closed-values. Positioned chips load the
+  property through use-block, which is a canonical snapshot without that key."
+  [block property value]
+  (or (select-type? block property)
+      (empty-placeholder-value? value)
+      (closed-choice-value? value)))
 
 (defn direct-value-picker-type?
   [type]
@@ -1507,7 +1525,7 @@
        (empty-placeholder-value? value)
        (property-empty-btn-value property opts)
 
-       closed-values?
+       (or closed-values? (closed-choice-value? value))
        (closed-value-item value opts)
 
        (or (entity/page? value)
@@ -2096,7 +2114,7 @@
   (let [type (:logseq.property/type property)
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
-        select-type?' (or (select-type? block property)
+        select-type?' (or (property-value-select-type? block property value*)
                           (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         empty-placeholder? (empty-placeholder-value? value*)
@@ -2138,7 +2156,7 @@
                                                                                      choice)) choices)]
                                                      (when choice
                                                        (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
-            (single-value-select block property value
+            (single-value-select block property select-value
                                  select-opts
                                  (assoc opts
                                         :editing? editing?
