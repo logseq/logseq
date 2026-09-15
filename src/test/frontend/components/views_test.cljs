@@ -383,7 +383,7 @@
         "Visible rows stay empty until the whole viewport hydrate set is ready.")
     (is (true? (#'views/viewport-hydrate-ready? true #{row-uuid} row-uuid)))
     (is (false? (#'views/viewport-filled? true #{}))
-        "An empty prefetch is every? true and must not start remaining ids.")
+        "An empty prefetch is every? true. Do not mount placeholder rows or remaining ids.")
     (is (false? (#'views/viewport-filled? false #{row-uuid})))
     (is (true? (#'views/viewport-filled? true #{row-uuid}))
         "Opening a table starts remaining ids only after the viewport hydrate set exists.")))

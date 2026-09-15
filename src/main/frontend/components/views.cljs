@@ -2314,7 +2314,18 @@
          (on-viewport-filled!))
        js/undefined)
      [initial-rows-ready? hydrate-row-uuids on-viewport-filled!])
-    (when (seq rows)
+    (cond
+      (not (seq rows))
+      nil
+
+      ;; Logs: Tags/Movies first paint was 21-22 empty placeholder rows.
+      ;; Mount Virtuoso only after the viewport hydrate set is ready.
+      (not (viewport-filled? initial-rows-ready? hydrate-row-uuids))
+      [:div.flex.flex-col.space-2.gap-2.my-2
+       (for [idx (range 3)]
+         (shui/skeleton {:key idx :class "h-6 w-full"}))]
+
+      :else
       (virtualized-list
        {:ref #(reset! *scroller-ref %)
         :increase-viewport-by {:top overscan-px :bottom overscan-px}
