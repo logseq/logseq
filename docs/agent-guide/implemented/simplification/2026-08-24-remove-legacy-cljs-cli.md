@@ -2,9 +2,9 @@
 
 ## Problem
 
-Logseq has one shipped CLI implementation under `cli/`, built from OCaml with
-Dune, Melange, and Vite, but it still retains most of the superseded Shadow
-ClojureScript implementation under `src/main/logseq/cli/` and its tests under
+Before this change, Logseq shipped one CLI implementation under `cli/`, built
+from OCaml with Dune, Melange, and Vite, but retained most of the superseded
+Shadow ClojureScript implementation under `src/main/logseq/cli/` and its tests under
 `src/test/logseq/cli/`.
 
 The release migration deliberately removed the `:logseq-cli` Shadow build and
@@ -13,10 +13,10 @@ made `cli/_build/default/dist/logseq-cli.js` the only producer of the staged
 preparation, and Desktop runtime staging all use that OCaml/Melange artifact.
 `scripts/test-cli-release-config.mjs` rejects any active Shadow CLI build path.
 
-The remaining legacy command tree has no production entry point. Repository-wide
+The legacy command tree had no production entry point. Repository-wide
 namespace searches find no production consumer outside its own implementation.
-It contains 31 production files and about 14,800 lines, while 26 dedicated test
-files add about 16,800 more lines. Keeping this parallel implementation makes
+It contained 31 production files and about 14,800 lines, while 26 dedicated test
+files added about 16,800 more lines. Keeping this parallel implementation makes
 search results, tests, and maintenance work describe a binary that users cannot
 build or run.
 
@@ -24,9 +24,12 @@ Not every namespace under `src/main/logseq/cli/` is obsolete. Electron,
 db-worker-node, and worker handlers still import shared daemon and transport
 helpers. Those imports are part of the active runtime and must remain.
 
-## Proposal
+## Decision
 
-Delete only the legacy CLJS CLI closure that is unreachable from active
+Implemented in commit `df2623ea94d5d18c166cbb7acd2e0ef5adef2404`
+(`enhance(cli): remove legacy CLJS CLI`) on 2026-08-26.
+
+Removed only the legacy CLJS CLI closure that is unreachable from active
 production builds:
 
 - `src/main/logseq/cli/command/`;
@@ -41,7 +44,7 @@ production builds:
 - `src/main/logseq/cli/tree_text.cljs`; and
 - `src/main/logseq/cli/uuid_refs.cljs`.
 
-Delete their implementation-specific CLJS tests:
+Removed their implementation-specific CLJS tests:
 
 - `src/test/logseq/cli/command/`;
 - `src/test/logseq/cli/auth_test.cljs`;
@@ -53,17 +56,17 @@ Delete their implementation-specific CLJS tests:
 - `src/test/logseq/cli/output_mode_test.cljs`; and
 - `src/test/logseq/cli/uuid_refs_test.cljs`.
 
-Remove the obsolete root `.carve/ignore` entry that still describes
+Removed the obsolete root `.carve/ignore` entry that still describes
 `logseq.cli.main/main` as a Shadow `:node-script` entry point.
 
-Update the retained `src/test/logseq/cli/server_test.cljs` and
+Updated the retained `src/test/logseq/cli/server_test.cljs` and
 `src/test/frontend/worker/db_worker_node_test.cljs` namespaces to require
-`logseq.db-worker.server-list` directly and replace their
+`logseq.db-worker.server-list` directly and replaced their
 `logseq.cli.config/server-list-path` calls with `server-list/path`. These tests
 exercise the active db-worker-node runtime and must not retain a dependency on
 the deleted CLI configuration namespace.
 
-Retain the active CLJS runtime boundary and its tests:
+Retained the active CLJS runtime boundary and its tests:
 
 - `logseq.cli.common` and `logseq.cli.common.db-worker`, used by Electron and
   worker handlers;
@@ -75,13 +78,13 @@ Retain the active CLJS runtime boundary and its tests:
   server and transport helpers; and
 - `logseq.cli.test-helper`, which is also consumed by db-worker-node tests.
 
-Keep the shared helpers in their existing namespace for this decision. Moving
+Kept the shared helpers in their existing namespace for this decision. Moving
 them to a neutral namespace would add unrelated churn without reducing the
 duplicate CLI implementation.
 
-Update `docs/cli/logseq-cli.md` so its query example points to the shipped OCaml
+Updated `docs/cli/logseq-cli.md` so its query example points to the shipped OCaml
 implementation in `cli/lib/query.ml` instead of `logseq.cli.command.query`.
-Preserve `static/logseq-cli.js` as a generated artifact of the existing
+Preserved `static/logseq-cli.js` as a generated artifact of the existing
 OCaml/Melange staging flow; it is not part of the source deletion.
 
 ## Alternatives considered
@@ -106,34 +109,29 @@ runtime imports but is not required to remove the parallel CLI. It can be
 considered separately if the `logseq.cli` name remains confusing after the
 obsolete implementation is gone.
 
-## Acceptance criteria
+## Consequences
 
-- The 31 unreachable CLJS source files and 26 implementation-specific test
-  files listed by the proposal are removed.
-- `src/test/logseq/cli/server_test.cljs` and
-  `src/test/frontend/worker/db_worker_node_test.cljs` use
-  `logseq.db-worker.server-list/path` directly and no longer require
-  `logseq.cli.config`.
-- The eight active CLJS production namespaces and their focused tests remain,
-  and repository-wide namespace search still accounts for every Electron,
-  db-worker-node, worker, and test-helper consumer.
-- Root Carve configuration no longer identifies `logseq.cli.main/main` as a
-  Shadow CLI entry point.
-- `shadow-cljs.edn`, root build scripts, CLI E2E preflight, npm package
-  preparation, and Desktop staging continue to identify
-  `cli/_build/default/dist/logseq-cli.js` as the sole CLI producer.
-- `docs/cli/logseq-cli.md` no longer points readers to a deleted CLJS command
-  namespace.
-- `node scripts/test-cli-release-config.mjs` passes.
-- `pnpm --dir cli test` passes.
-- `bb -f cli-e2e/bb.edn test` builds, stages, and tests fresh CLI,
-  db-worker-node, and db-sync node-adapter artifacts.
-- Focused CLJS tests for `logseq.cli.common`, `logseq.cli.common.db-worker`,
-  `logseq.cli.log`, `logseq.cli.profile`, `logseq.cli.root-dir`,
-  `logseq.cli.server`, `logseq.cli.style`, and `logseq.cli.transport` pass.
-- `bb dev:lint-and-test` passes.
+### Verification
 
-## Risks
+Source and commit inspection on 2026-09-15 confirmed that:
+
+- The 31 legacy source files and 26 implementation-specific test files are
+  removed; the eight active runtime namespaces and their focused tests remain.
+- Both retained runtime test namespaces use `server-list/path` directly and no
+  longer require `logseq.cli.config`.
+- Root Carve configuration no longer identifies `logseq.cli.main/main` as an
+  entry point, and the CLI query documentation points to `cli/lib/query.ml`.
+- `scripts/test-cli-release-config.mjs` includes assertions rejecting the
+  removed source/test paths, stale configuration imports, and the old query
+  documentation reference. It also checks the OCaml/Melange staging boundary
+  and rejects an active Shadow CLI build.
+
+The lifecycle transition records verified source changes. The release-config
+check, OCaml CLI tests, CLI E2E tests, focused CLJS tests, and full
+`bb dev:lint-and-test` suite were not rerun for this documentation transition;
+this record does not assert fresh passing results for those checks.
+
+### Operational risks
 
 - A developer may have used the old CLJS namespaces manually even though they
   have no build, package, or documented public entry point. This decision
@@ -145,6 +143,3 @@ obsolete implementation is gone.
   will describe runtime infrastructure as well as the historical location of
   the removed CLI. Renaming them is outside this simplification.
 
-## Questions
-
-- None.
