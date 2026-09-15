@@ -101,13 +101,6 @@
                   (js/setTimeout #(poll! (- remaining-ms 100)) 100)))))]
     (poll! 5000)))
 
-(defn- private-create-page-tag?
-  "True when a parsed tag is a private built-in class. Ctrl-K parses tags
-  without a db, so new tags may only have :block/title."
-  [tag]
-  (or (contains? ldb/private-tags (:db/ident tag))
-      (contains? ldb/private-tag-titles (:block/title tag))))
-
 (defn <create!
   ([title]
    (<create! title {}))
@@ -131,11 +124,11 @@
          (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
-              (seq (filter private-create-page-tag? (:block/tags parsed-result))))
+              (seq (filter ldb/private-create-page-tag? (:block/tags parsed-result))))
          (notification/show! (i18n/interpolate-rich-text-node
                               (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
-                                (keep #(when (private-create-page-tag? %)
+                                (keep #(when (ldb/private-create-page-tag? %)
                                          (pr-str (:block/title %)))
                                       (:block/tags parsed-result)))])
                              :error)

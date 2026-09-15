@@ -158,6 +158,37 @@
     (is (nil? (:errors (db-validate/validate-db @conn)))
         "Graph remains valid after creating a page with a new tag")))
 
+(deftest create-page-with-public-tag-reuses-existing-page
+  (let [conn (db-test/create-conn)
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Task")]})
+        [_ foo-uuid-again] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Task")]})]
+    (is (= foo-uuid foo-uuid-again)
+        "A second create of Foo #Task returns the existing page")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn)))
+        "A second create must not insert another Foo page")))
+
+(deftest create-page-with-page-tag-reuses-page-class
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (outliner-page/create! conn "Foo" {:tags [(parsed-tag "Page")]})
+        foo (d/entity @conn [:block/uuid page-uuid])]
+    (is (= "Foo" (:block/title foo)))
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Page"]] @conn)))
+        "#Page must reuse the built-in Page class")
+    (is (contains? (set (map :db/ident (:block/tags foo))) :logseq.class/Page))))
+
+(deftest create-page-with-resolved-user-tag-titled-tag
+  (let [conn (db-test/create-conn)
+        [_ class-uuid] (outliner-page/create! conn "MyTag" {:class? true})
+        my-tag (d/entity @conn [:block/uuid class-uuid])
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {:tags [{:db/ident (:db/ident my-tag)
+                                                               :block/title "Tag"
+                                                               :block/uuid (random-uuid)}]})
+        foo (d/entity @conn [:block/uuid foo-uuid])]
+    (is (contains? (set (map :db/ident (:block/tags foo))) (:db/ident my-tag))
+        "An explicit user-class ident is reused even when the title is Tag")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Tag"]] @conn)))
+        "Must not resolve a titled-Tag user class to the built-in Tag class")))
+
 (deftest delete-page
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "D1"}
