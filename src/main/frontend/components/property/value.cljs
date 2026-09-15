@@ -233,13 +233,22 @@
         (and (= (:db/ident property) :logseq.property/default-value)
              (= (:logseq.property/type block) :number)))))
 
+(defn- built-in-closed-choice-property?
+  [property]
+  (boolean
+   (seq (:closed-values
+         (get db-property/built-in-properties (:db/ident property))))))
+
 (defn- property-value-select-type?
   "select-type? only sees :property/closed-values. Positioned chips load the
-  property through use-block, which is a canonical snapshot without that key."
+   property through use-block, which is a canonical snapshot without that key.
+   Empty-placeholder alone is not enough: unused text properties then rendered
+   a 0-width nested ls-block that open-last-block tried to click."
   [block property value]
   (or (select-type? block property)
-      (empty-placeholder-value? value)
-      (closed-choice-value? value)))
+      (closed-choice-value? value)
+      (and (empty-placeholder-value? value)
+           (built-in-closed-choice-property? property))))
 
 (defn direct-value-picker-type?
   [type]

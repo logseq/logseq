@@ -78,7 +78,13 @@
     (is (true? (#'property-value/closed-choice-value? high-value)))
     (is (true? (#'property-value/property-value-select-type? {} property high-value))
         "Closed choices keep their icon on the value ref.")
-    (is (false? (#'property-value/closed-choice-value? empty-value)))))
+    (is (false? (#'property-value/closed-choice-value? empty-value)))
+    (is (false? (#'property-value/property-value-select-type?
+                 {}
+                 {:db/ident :user.property/reactive-priority
+                  :logseq.property/type :default}
+                 empty-value))
+        "Empty text properties must not become 0-width nested select blocks.")))
 
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?
