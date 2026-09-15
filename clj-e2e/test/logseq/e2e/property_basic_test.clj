@@ -177,4 +177,4 @@
             "arrow keys should highlight a non-first tag")
         (k/enter)
         (assert/assert-is-visible (format ".block-tag :text('%s')" target))
-        (assert/assert-have-count (format ".block-tag :text('%s')" other) 0))))))
+        (assert/assert-have-count (format ".block-tag :text('%s')" other) 0)))))
