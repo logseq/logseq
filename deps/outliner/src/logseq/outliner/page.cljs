@@ -184,7 +184,7 @@
             (keyword? tag) (d/entity db tag)
             :else tag)]
     (when (and (or (de/entity? v) (map? v))
-               (ldb/private-create-page-tag? v))
+               (db-class/private-create-page-tag? v))
       (throw-private-create-page-tag (:block/title v)))
     (cond
       (de/entity? v)
@@ -202,7 +202,7 @@
         (cond
           existing
           (do
-            (when (ldb/private-create-page-tag? existing)
+            (when (db-class/private-create-page-tag? existing)
               (throw-private-create-page-tag (:block/title existing)))
             (if by-uuid v (:db/id existing)))
 
