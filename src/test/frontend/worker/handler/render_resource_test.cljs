@@ -916,6 +916,9 @@
                       :ancestor-uuids [page parent-a parent-b positioned-property]
                       :ancestors breadcrumb-ancestors
                       :ref-titles {}}]
+        (is (= ["Page Identity" "Parent A" "Parent B"]
+               (mapv :block/title (take 3 breadcrumb-ancestors)))
+            "Shallow breadcrumb identities keep ancestor titles for CMDK and [[ search.")
         (assert-resource-envelope @conn
                                   resource-key
                                   #{[:entity target]
