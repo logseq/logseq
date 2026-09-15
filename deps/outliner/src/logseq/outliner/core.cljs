@@ -188,6 +188,14 @@
                                  tags'))))))))
       m)))
 
+(defn- ref-tags
+  [ref]
+  (let [tags (:block/tags ref)]
+    (cond
+      (keyword? tags) [tags]
+      (or (sequential? tags) (set? tags)) tags
+      :else nil)))
+
 (defn- ref-tag-idents
   [ref]
   (into #{} (keep (fn [tag]
@@ -195,7 +203,7 @@
                       (keyword? tag) tag
                       (map? tag) (:db/ident tag)
                       :else nil))
-                  (:block/tags ref))))
+                  (ref-tags ref))))
 
 (defn- new-page-ref?
   [ref]
