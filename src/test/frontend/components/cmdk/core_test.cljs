@@ -69,8 +69,8 @@
 
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
-    (is (> cmdk/search-debounce-ms 200)
-        "Debounce must be slower than the old per-character 150 ms cadence.")
+    (is (= 300 cmdk/search-debounce-ms)
+        "CMDK search waits 300ms after typing stops.")
     (let [calls (atom 0)
           [schedule! cancel!] (cmdk/make-search-debouncer #(swap! calls inc))
           keystroke-gap 80

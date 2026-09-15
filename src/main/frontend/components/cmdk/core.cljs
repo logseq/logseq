@@ -1023,7 +1023,7 @@
   (persist-cmdk-query-state! state)
   (load-results :default state))
 
-(def search-debounce-ms 400)
+(def search-debounce-ms 300)
 
 (defn make-search-debouncer
   [refresh-fn]
