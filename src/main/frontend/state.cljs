@@ -810,14 +810,12 @@ should be done through this fn in order to get global config and config defaults
       (update db path f))))
 
 (defn set-state!
-  [path value & {:keys [nested-path changed-paths]}]
+  [path value & {:keys [nested-path]}]
   (vswap! *profile-state update path inc)
   (let [old-v (read-state-value (rfx/snapshot) path nested-path)]
     (when (not= old-v value)
       (let [db' (assoc-state-db (rfx/snapshot) path value nested-path)]
-        (if (seq changed-paths)
-          (rfx/replace-state-paths! db' changed-paths)
-          (rfx/replace-state! db' (full-state-path path nested-path))))))
+        (rfx/replace-state! db' (full-state-path path nested-path)))))
   nil)
 
 (defn update-state!
