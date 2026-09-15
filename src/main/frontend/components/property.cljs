@@ -230,7 +230,6 @@
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                          :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!
-                         :choose-first-on-enter? true
                          :transform-fn property-transform-fn}
                         select-opts))]])))
 

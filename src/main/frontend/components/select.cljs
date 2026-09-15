@@ -19,14 +19,6 @@
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defn result-at-idx
-  "Return the search result at `idx`, clamped to the list bounds.
-  Used by `:choose-first-on-enter?` so Enter selects the keyboard-highlighted
-  item instead of always the first result."
-  [results idx]
-  (when (seq results)
-    (nth results (min (max 0 (or idx 0)) (dec (count results))))))
-
 (hsx/defc render-item
   [result chosen? multiple-choices? *selected-choices]
   (let [value (if (map? result) (or (:label result)
@@ -119,7 +111,6 @@
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           choose-first-on-enter?
            clear-input-on-chosen?]
     :or {limit 100
          prompt-key :select/default-prompt
@@ -135,9 +126,6 @@
   (let [*input (hooks/use-memo #(atom "") [])
         *toggle (hooks/use-memo #(atom nil) [])
         *selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
-        ;; Shared with `ui/auto-complete` so `:choose-first-on-enter?` can read
-        ;; the keyboard highlight instead of always taking `(first search-result)`.
-        *current-idx (hooks/use-memo #(atom 0) [])
         [input] (hooks/use-atom *input)
         [selected-choices] (hooks/use-atom *selected-choices)
         _ (hooks/use-effect!
@@ -215,24 +203,12 @@
                                (when on-chosen
                                  (on-chosen chosen true @*selected-choices e))))))
         input-opts* (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
-        input-opts' (if choose-first-on-enter?
-                      (let [on-key-down (:on-key-down input-opts*)]
-                        (assoc input-opts*
-                               :on-key-down
-                               (fn [e]
-                                 (if (and (= "Enter" (util/ekey e)) (seq search-result))
-                                   (do
-                                     (util/stop e)
-                                     (choose-result! (result-at-idx search-result @*current-idx) e))
-                                   (when on-key-down
-                                     (on-key-down e))))))
-                      input-opts*)
         input-container (or
                          input-container
                          (search-input *input
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
-                                        :input-opts input-opts'
+                                        :input-opts input-opts*
                                         :on-input on-input}))
         results-container-f (fn []
                               (if loading?
@@ -248,7 +224,6 @@
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
                                     :class             "cp__select-results"
                                     :on-chosen         choose-result!
-                                    :current-idx-atom  *current-idx
                                     :empty-placeholder (empty-placeholder t)})]
 
                                  (when (and multiple-choices? (fn? on-apply))
