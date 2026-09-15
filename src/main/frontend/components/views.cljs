@@ -2298,7 +2298,7 @@
                                          item-height))]
        [start (max start end)]))))
 
-(def ^:private offset-prefetch-lead-rows 16)
+(def ^:private offset-prefetch-lead-rows 8)
 
 (defn- offset-window-covers-visible?
   [row-offset window-size visible-start visible-end]
@@ -2339,7 +2339,9 @@
          visible-start
          current-offset)
 
-       (and first-end (integer? visible-end) (<= visible-end first-end))
+       (and first-end
+            (integer? visible-end)
+            (< visible-end (- first-end offset-prefetch-lead-rows)))
        current-offset
 
        (and first-end (integer? visible-end) (<= visible-start first-end))
