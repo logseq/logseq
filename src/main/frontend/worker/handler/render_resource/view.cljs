@@ -92,7 +92,9 @@
                      (and (contains? #{:all-pages :class-objects} (:feature-type context))
                           (integer? (:initial-row-count context))
                           (pos? (:initial-row-count context))
-                          (<= (:initial-row-count context) 50)))
+                          ;; Keep this aligned with views/view-prefetch-limit so the
+                          ;; first window can fill a tall viewport without blanks.
+                          (<= (:initial-row-count context) 160)))
                  (or (not (contains? context :query-row-uuids))
                      (and (vector? (:query-row-uuids context))
                           (every? uuid? (:query-row-uuids context)))))

@@ -1,6 +1,7 @@
 (ns logseq.db.common.view-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]))
@@ -128,6 +129,351 @@
     (is (= (take 30 (:data full)) (:data window)))
     (is (every? integer? (:data window)))
     (is (every? integer? (:data full)))))
+
+(defn- first-window-without-row-hydration
+  [conn view-id option]
+  (let [entity* d/entity
+        entity-calls (atom 0)
+        started (js/Date.now)
+        result (with-redefs [db-class/get-class-objects
+                             (fn [& _args]
+                               (throw (js/Error. "first window must not hydrate class objects")))
+                             entity-plus/unsafe->Entity
+                             (fn [& _args]
+                               (throw (js/Error. "first window must not build row entities to sort")))
+                             d/entity
+                             (fn [db x]
+                               (swap! entity-calls inc)
+                               (entity* db x))]
+                 (db-view/get-view-data @conn view-id option))]
+    {:result result
+     :entity-calls @entity-calls
+     :elapsed-ms (- (js/Date.now) started)}))
+
+(deftest get-view-data-class-objects-first-window-is-instant-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Topic " idx)
+                              :block/updated-at idx
+                              :build/tags [:Topic]}})
+                    (range 400))
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks pages})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        {:keys [result entity-calls elapsed-ms]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :block/title :asc? true}]
+                       :row-limit 30})]
+    (is (<= entity-calls 3)
+        "Opening Tags must not hydrate one entity per object.")
+    (is (= 400 (:count result)))
+    (is (= 30 (count (:data result)))
+        "The first paint uses only the first window of ids.")
+    (is (every? integer? (:data result)))
+    (is (< elapsed-ms 400)
+        (str "First-window Tags query must stay cheap enough to paint immediately, took "
+             elapsed-ms "ms"))))
+
+(deftest get-view-data-all-pages-first-window-is-instant-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Page " idx)
+                              :block/updated-at idx}})
+                    (range 200))
+        conn (db-test/create-conn-with-blocks {:pages-and-blocks pages})
+        view-id (create-view-id conn :all-pages)
+        {:keys [result entity-calls elapsed-ms]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :all-pages
+                       :sorting [{:id :block/updated-at :asc? false}]
+                       :row-limit 30})]
+    (is (<= entity-calls 3)
+        "Opening All Pages must not hydrate one entity per page.")
+    (is (= 200 (:count result)))
+    (is (= 30 (count (:data result))))
+    (is (every? integer? (:data result)))
+    (is (< elapsed-ms 400)
+        (str "First-window All Pages query must stay cheap enough to paint immediately, took "
+             elapsed-ms "ms"))))
+
+(defn- result-titles
+  [conn result]
+  (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
+
+(defn- topic-conn
+  [pages & {:keys [properties]}]
+  (db-test/create-conn-with-blocks
+   (cond-> {:classes {:Topic {:block/title "Topic"}}
+            :pages-and-blocks pages}
+     properties
+     (assoc :properties properties))))
+
+(deftest get-view-data-class-objects-number-property-sort-test
+  (let [conn (topic-conn
+              [{:page {:block/title "A" :build/tags [:Topic]
+                       :build/properties {:user.property/score 2}}}
+               {:page {:block/title "B" :build/tags [:Topic]
+                       :build/properties {:user.property/score 10}}}
+               {:page {:block/title "C" :build/tags [:Topic]
+                       :build/properties {:user.property/score 1}}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? false}]))
+        window (first-window-without-row-hydration
+                conn view-id (assoc option
+                                    :sorting [{:id :user.property/score :asc? true}]
+                                    :row-limit 2))]
+    (is (= ["C" "A" "B"] (result-titles conn asc)))
+    (is (= ["B" "A" "C"] (result-titles conn desc)))
+    (is (= 3 (:count (:result window))))
+    (is (= ["C" "A"] (result-titles conn (:result window))))
+    (is (<= (:entity-calls window) 3)
+        "Custom property sort must stay on the id-only path.")))
+
+(deftest get-view-data-class-objects-number-sort-first-window-is-instant-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Topic " idx)
+                              :block/updated-at idx
+                              :build/tags [:Topic]
+                              :build/properties {:user.property/score idx}}})
+                    (range 200))
+        conn (topic-conn pages :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        {:keys [result entity-calls elapsed-ms]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :user.property/score :asc? false}]
+                       :row-limit 30})]
+    (is (<= entity-calls 3))
+    (is (= 200 (:count result)))
+    (is (= 30 (count (:data result))))
+    (is (= (mapv #(str "Topic " %) (range 199 169 -1))
+           (result-titles conn result)))
+    (is (< elapsed-ms 400)
+        (str "Sorted first window must stay cheap, took " elapsed-ms "ms"))))
+
+(deftest get-view-data-class-objects-title-is-filter-uses-id-path-test
+  (let [conn (topic-conn
+              [{:page {:block/title "A" :build/tags [:Topic]}}
+               {:page {:block/title "B" :build/tags [:Topic]}}
+               {:page {:block/title "C" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        {:keys [result entity-calls]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :block/title :asc? true}]
+                       :filters {:or? false
+                                 :filters [[:block/title :is #{"B"}]]}})]
+    (is (<= entity-calls 3)
+        "A title :is filter must not hydrate every object.")
+    (is (= ["B"] (result-titles conn result)))
+    (is (= 1 (:count result)))))
+
+(deftest get-view-data-class-objects-title-is-not-and-empty-filter-test
+  (let [conn (topic-conn
+              [{:page {:block/title "A" :build/tags [:Topic]}}
+               {:page {:block/title "B" :build/tags [:Topic]}}
+               {:page {:block/title "C" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        is-not (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                           :filters [[:block/title :is-not #{"B"}]]}))
+        empty (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                          :filters [[:block/title :is :empty]]}))]
+    (is (= ["A" "C"] (result-titles conn is-not)))
+    (is (= [] (result-titles conn empty)))))
+
+(deftest get-view-data-class-objects-text-contains-and-input-filter-test
+  (let [conn (topic-conn
+              [{:page {:block/title "Alpha" :build/tags [:Topic]}}
+               {:page {:block/title "Alpine" :build/tags [:Topic]}}
+               {:page {:block/title "Beta" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        contains (first-window-without-row-hydration
+                  conn view-id (assoc option :filters {:or? false
+                                                       :filters [[:block/title :text-contains "alp"]]}))
+        input (first-window-without-row-hydration
+               conn view-id (assoc option :input "be"))]
+    (is (<= (:entity-calls contains) 3))
+    (is (= ["Alpha" "Alpine"] (result-titles conn (:result contains))))
+    (is (<= (:entity-calls input) 3))
+    (is (= ["Beta"] (result-titles conn (:result input))))))
+
+(deftest get-view-data-class-objects-number-filter-and-sort-test
+  (let [conn (topic-conn
+              [{:page {:block/title "A" :build/tags [:Topic]
+                       :build/properties {:user.property/score 2}}}
+               {:page {:block/title "B" :build/tags [:Topic]
+                       :build/properties {:user.property/score 10}}}
+               {:page {:block/title "C" :build/tags [:Topic]
+                       :build/properties {:user.property/score 1}}}
+               {:page {:block/title "D" :build/tags [:Topic]
+                       :build/properties {:user.property/score 7}}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :user.property/score :asc? true}]}
+        gt (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                        :filters [[:user.property/score :number-gt 2]]}))
+        between (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                            :filters [[:user.property/score :between [2 7]]]}))
+        window (first-window-without-row-hydration
+                conn view-id (assoc option
+                                    :filters {:or? false
+                                              :filters [[:user.property/score :number-gt 2]]}
+                                    :row-limit 1))]
+    (is (= ["D" "B"] (result-titles conn gt)))
+    (is (= ["A" "D"] (result-titles conn between)))
+    (is (= 2 (:count (:result window))))
+    (is (= ["D"] (result-titles conn (:result window))))
+    (is (<= (:entity-calls window) 3))))
+
+(deftest get-view-data-class-objects-or-and-and-filters-test
+  (let [conn (topic-conn
+              [{:page {:block/title "A" :build/tags [:Topic]
+                       :build/properties {:user.property/score 1}}}
+               {:page {:block/title "B" :build/tags [:Topic]
+                       :build/properties {:user.property/score 5}}}
+               {:page {:block/title "C" :build/tags [:Topic]
+                       :build/properties {:user.property/score 9}}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        or-result (db-view/get-view-data @conn view-id (assoc option :filters {:or? true
+                                                                              :filters [[:block/title :is #{"A"}]
+                                                                                        [:user.property/score :number-gt 5]]}))
+        and-result (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                               :filters [[:block/title :text-contains "B"]
+                                                                                         [:user.property/score :number-gte 5]]}))]
+    (is (= ["A" "C"] (result-titles conn or-result)))
+    (is (= ["B"] (result-titles conn and-result)))))
+
+(deftest get-view-data-class-objects-ref-filter-first-window-is-instant-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Page " idx)}
+                       :blocks [{:block/title (str "Obj " idx)
+                                 :build/tags [:Topic]}]})
+                    (range 80))
+        conn (topic-conn pages)
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        page-0-uuid (:block/uuid (d/entity @conn (d/q '[:find ?e .
+                                                        :in $ ?title
+                                                        :where [?e :block/title ?title]]
+                                                      @conn
+                                                      "Page 0")))
+        {:keys [result entity-calls elapsed-ms]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :block/title :asc? true}]
+                       :filters {:or? false
+                                 :filters [[:block/page :is #{page-0-uuid}]]}})]
+    (is (<= entity-calls 5)
+        "A ref :is filter must resolve match ids once, not hydrate every object.")
+    (is (= ["Obj 0"] (result-titles conn result)))
+    (is (< elapsed-ms 400)
+        (str "Filtered first window must stay cheap, took " elapsed-ms "ms"))))
+
+(deftest get-view-data-class-objects-combined-sort-filter-input-first-window-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str (if (even? idx) "Keep " "Skip ") idx)
+                              :block/updated-at idx
+                              :build/tags [:Topic]
+                              :build/properties {:user.property/score idx}}})
+                    (range 120))
+        conn (topic-conn pages :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        {:keys [result entity-calls elapsed-ms]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :user.property/score :asc? false}]
+                       :filters {:or? false
+                                 :filters [[:user.property/score :number-gte 40]]}
+                       :input "Keep"
+                       :row-limit 10})]
+    (is (<= entity-calls 3)
+        "Combined sort, filter, and search must stay on the id-only path.")
+    (is (= 40 (:count result))
+        "Keep even scores from 40 to 118 inclusive.")
+    (is (= (mapv #(str "Keep " %) [118 116 114 112 110 108 106 104 102 100])
+           (result-titles conn result)))
+    (is (< elapsed-ms 400)
+        (str "Combined first window must stay cheap, took " elapsed-ms "ms"))))
+
+(deftest get-view-data-class-objects-missing-custom-sort-value-stays-last-test
+  (let [conn (topic-conn
+              [{:page {:block/title "With score" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3}}}
+               {:page {:block/title "Without score" :build/tags [:Topic]}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id
+                                                     :sorting [{:id :user.property/score :asc? false}]})]
+    (is (= ["With score" "Without score"] (result-titles conn result)))))
+
+(deftest get-view-data-class-objects-status-closed-value-sort-test
+  (let [conn (topic-conn
+              [{:page {:block/title "Doing" :build/tags [:Topic]
+                       :build/properties {:logseq.property/status :logseq.property/status.doing}}}
+               {:page {:block/title "Todo" :build/tags [:Topic]
+                       :build/properties {:logseq.property/status :logseq.property/status.todo}}}
+               {:page {:block/title "Done" :build/tags [:Topic]
+                       :build/properties {:logseq.property/status :logseq.property/status.done}}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id
+                                                     :sorting [{:id :logseq.property/status :asc? true}]})
+        orders (mapv (fn [id]
+                       (:block/order (:logseq.property/status (d/entity @conn id))))
+                     (:data result))]
+    (is (= 3 (:count result)))
+    (is (= (sort orders) orders)
+        "Closed-value sort must follow :block/order, not title.")
+    (is (= (set (result-titles conn result)) #{"Doing" "Todo" "Done"}))))
+
+(deftest get-view-data-all-pages-title-filter-and-sort-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "alpha" :block/updated-at 1}}
+                {:page {:block/title "alpine" :block/updated-at 2}}
+                {:page {:block/title "beta" :block/updated-at 3}}]})
+        view-id (create-view-id conn :all-pages)
+        {:keys [result entity-calls]}
+        (first-window-without-row-hydration
+         conn view-id {:view-feature-type :all-pages
+                       :sorting [{:id :block/title :asc? false}]
+                       :filters {:or? false
+                                 :filters [[:block/title :text-contains "alp"]]}})]
+    (is (<= entity-calls 3))
+    (is (= ["alpine" "alpha"] (result-titles conn result)))))
 
 (deftest get-view-data-class-objects-sort-keeps-rows-with-missing-sort-value-test
   (let [conn (db-test/create-conn-with-blocks

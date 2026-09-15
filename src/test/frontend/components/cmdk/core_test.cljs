@@ -60,7 +60,12 @@
     (gobj/set event "type" "input")
     (gobj/set event "target" #js {:value "t"})
     (cmdk/handle-input-change state event "t" false)
-    (is (= "t" @(::cmdk/input state)))))
+    (is (= "t" @(::cmdk/input state)))
+    (let [search-calls (atom 0)]
+      (with-redefs [cmdk/load-results (fn [& _args] (swap! search-calls inc))]
+        (cmdk/handle-input-change state event "ta" false)
+        (is (zero? @search-calls)
+            "The input event used while typing must not search.")))))
 
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done

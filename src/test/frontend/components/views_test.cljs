@@ -417,6 +417,17 @@
         (is (false? (:ready? (#'views/loaded-view-paint nil)))
             "A cold view stays on the short skeleton until that first window exists.")))))
 
+(deftest first-window-fills-a-tall-viewport-up-to-the-prefetch-limit-test
+  (let [view-uuid (random-uuid)
+        plan (#'views/loaded-view-resource-plan
+              view-uuid :class-objects [{:id :block/title :asc? true}]
+              nil "" nil nil 6000)]
+    (is (= 160 (:initial-row-count plan)))
+    (is (= 160 (get-in plan [:pending-keys :primary 2 :initial-row-count]))
+        "A 4k-tall viewport still gets a first window large enough to fill the screen.")
+    (is (nil? (get-in plan [:pending-keys :full]))
+        "The remaining-id query still waits until that first window paints.")))
+
 (defn- overscan-row-count
   [item-height overscan-px]
   (js/Math.ceil (/ overscan-px item-height)))
@@ -441,6 +452,32 @@
     (is (true? (prefetch-covers-virtualized-viewport?
                 @#'views/view-prefetch-limit viewport-height item-height overscan-px))
         "The subscribed window must be large enough that a fast scroll does not show empty rows.")))
+
+(deftest consecutive-fast-scroll-keeps-every-visible-row-subscribed-test
+  (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
+        {:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
+        viewport-height 990
+        ready-title "Scrolled row is ready"]
+    (doseq [jump-index [0 30 90 400 800 1500]]
+      (let [scroll-top (* jump-index item-height)
+            [start end] (visible-overscan-row-range
+                         scroll-top viewport-height item-height overscan-px (count rows))
+            prefetched (#'views/view-prefetch-window rows start end)
+            needed (subvec rows start (inc end))]
+        (is (every? (set prefetched) needed)
+            (str "Jumping to row " jump-index " must keep the visible and overscan rows subscribed."))
+        (with-redefs [db-hooks/use-block
+                      (fn [block-uuid]
+                        (when (contains? (set prefetched) block-uuid)
+                          {:block/uuid block-uuid
+                           :block/title ready-title}))]
+          (is (string/includes?
+               (render-static
+                (views/lazy-item rows jump-index {:table-view? true}
+                                 (fn [item]
+                                   (.createElement react "span" nil (:block/title item)))))
+               ready-title)
+              (str "Row " jump-index " must render data immediately after the jump.")))))))
 
 (deftest fast-scroll-keeps-visible-and-overscan-rows-ready-to-render-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))

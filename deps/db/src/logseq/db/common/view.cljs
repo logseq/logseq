@@ -322,9 +322,14 @@
                         hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
+(defn- ident-eid
+  [db ident]
+  (when-let [datom (first (d/datoms db :avet :db/ident ident))]
+    (:e datom)))
+
 (defn- get-exclude-page-ids
   [db]
-  (let [property-tag-id (:db/id (d/entity db :logseq.class/Property))]
+  (let [property-tag-id (ident-eid db :logseq.class/Property)]
     (persistent!
      (reduce (fn [result d]
                (conj! result (:e d)))
@@ -353,34 +358,387 @@
              (transient [])
              (d/datoms db :avet property-ident)))))
 
-(def ^:private fast-id-sort-ids
-  "Sort ids supported by a datom-order fast path"
-  #{:block/updated-at :block/created-at :block/title :block/name})
+(defn- indexed-attr-value
+  [db eid attr]
+  (when-let [datom (first (d/datoms db :eavt eid attr))]
+    (:v datom)))
 
-(defn- fast-id-sorting
-  [sorting]
-  (let [major-sorting (or (first sorting)
-                          {:id :block/updated-at :asc? false})
-        minor-sorting (seq (rest sorting))]
-    (when (and (empty? minor-sorting)
-               (contains? fast-id-sort-ids (:id major-sorting)))
-      major-sorting)))
+(defn- indexed-attr-values
+  [db eid attr]
+  (mapv :v (d/datoms db :eavt eid attr)))
 
-(defn- sort-eids-by-indexed-attr
-  [db eids sort-id asc?]
-  (let [get-sort-value (memoize
-                        (fn [eid]
-                          (get (entity-plus/unsafe->Entity db eid) sort-id)))
-        cmp (fn [eid-a eid-b]
-              (let [va (get-sort-value eid-a)
-                    vb (get-sort-value eid-b)
-                    c (cond
-                        (and (nil? va) (nil? vb)) 0
-                        (nil? va) 1
-                        (nil? vb) -1
-                        :else (compare va vb))]
-                (if asc? c (- c))))]
-    (sort cmp eids)))
+(defn- attr-keyword
+  [db eid attr]
+  (when-let [v (indexed-attr-value db eid attr)]
+    (if (integer? v)
+      (indexed-attr-value db v :db/ident)
+      v)))
+
+(defn- uuid->eid
+  [db uuid]
+  (when-let [datom (first (d/datoms db :avet :block/uuid uuid))]
+    (:e datom)))
+
+(defn- ref-value-content
+  [db value-eid]
+  (or (indexed-attr-value db value-eid :block/title)
+      (indexed-attr-value db value-eid :logseq.property/value)))
+
+(defn- match-item->id
+  [db v]
+  (cond
+    (nil? v) nil
+    (uuid? v) (uuid->eid db v)
+    (keyword? v) (ident-eid db v)
+    (number? v) v
+    (de/entity? v) (:db/id v)
+    (and (map? v) (contains? v :db/id)) (:db/id v)
+    :else nil))
+
+(defn- match-item-content
+  [db v]
+  (cond
+    (uuid? v)
+    (some-> (uuid->eid db v) (->> (ref-value-content db)))
+
+    (keyword? v)
+    (some-> (ident-eid db v) (->> (ref-value-content db)))
+
+    (and (integer? v) (indexed-attr-value db v :block/uuid))
+    (ref-value-content db v)
+
+    (de/entity? v)
+    (or (:block/title v) (:logseq.property/value v))
+
+    (map? v)
+    (or (:block/title v) (:logseq.property/value v))
+
+    :else v))
+
+(defn- match-journal-day
+  [db match]
+  (cond
+    (and (map? match) (contains? match :block/journal-day))
+    (:block/journal-day match)
+
+    (de/entity? match)
+    (:block/journal-day match)
+
+    (uuid? match)
+    (indexed-attr-value db (uuid->eid db match) :block/journal-day)
+
+    (integer? match)
+    (or (indexed-attr-value db match :block/journal-day) match)
+
+    :else nil))
+
+(defn- property-attr-schema
+  [db property-ident]
+  (let [prop-eid (ident-eid db property-ident)
+        value-type (when prop-eid (attr-keyword db prop-eid :db/valueType))
+        cardinality (when prop-eid (attr-keyword db prop-eid :db/cardinality))
+        prop-type (when prop-eid (attr-keyword db prop-eid :logseq.property/type))
+        built-in-ref? (contains? #{:block/page :block/tags :block/refs :block/parent} property-ident)
+        ref? (or built-in-ref?
+                 (= value-type :db.type/ref)
+                 (contains? db-property-type/all-ref-property-types prop-type))
+        closed-eids (when prop-eid
+                      (mapv :e (d/datoms db :avet :block/closed-value-property prop-eid)))
+        closed-order (when (seq closed-eids)
+                       (if (every? #(indexed-attr-value db % :block/order) closed-eids)
+                         (into {} (map (fn [eid]
+                                         [eid (indexed-attr-value db eid :block/order)])
+                                       closed-eids))
+                         (into {} (map-indexed (fn [idx eid] [eid idx])
+                                               (sort-by #(or (indexed-attr-value db % :block/order) "")
+                                                        closed-eids)))))]
+    {:ident property-ident
+     :type prop-type
+     :ref? ref?
+     :many? (or (= property-ident :block/tags)
+                (= cardinality :db.cardinality/many))
+     :closed-order closed-order}))
+
+(defn- eid-sort-value
+  [db {:keys [ident type ref? many? closed-order]} eid]
+  (cond
+    (= ident :block.temp/refs-count)
+    (common-initial-data/get-block-refs-count db eid)
+
+    :else
+    (let [vs (indexed-attr-values db eid ident)]
+      (cond
+        (empty? vs)
+        nil
+
+        closed-order
+        (closed-order (first vs))
+
+        (and ref? (= type :date))
+        (indexed-attr-value db (first vs) :block/journal-day)
+
+        (and many? (or (= type :number) (= type :datetime)))
+        (let [nums (keep (fn [v]
+                           (let [n (if ref?
+                                     (or (indexed-attr-value db v :logseq.property/value)
+                                         (ref-value-content db v))
+                                     v)]
+                             (when (number? n) n)))
+                         vs)]
+          (when (seq nums)
+            (reduce + nums)))
+
+        many?
+        (let [col (keep (fn [v]
+                          (if ref? (ref-value-content db v) v))
+                        vs)]
+          (when (seq col)
+            (string/join ", " col)))
+
+        ref?
+        (let [v (first vs)]
+          (if (or (= type :number) (= type :datetime))
+            (or (indexed-attr-value db v :logseq.property/value)
+                (ref-value-content db v))
+            (ref-value-content db v)))
+
+        :else
+        (first vs)))))
+
+(defn- compare-sort-values
+  [va vb asc?]
+  (cond
+    (and (nil? va) (nil? vb)) 0
+    (nil? va) 1
+    (nil? vb) -1
+    :else (let [c (compare va vb)]
+            (if asc? c (- c)))))
+
+(defn- sort-eids-by-sorting
+  [db eids sorting]
+  (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])
+        schemas (mapv (fn [{:keys [id asc?]}]
+                        (assoc (property-attr-schema db id)
+                               :asc? (boolean asc?)))
+                      sorts)
+        eid-vec (vec eids)
+        value-maps (mapv (fn [schema]
+                           (persistent!
+                            (reduce (fn [acc eid]
+                                      (if-let [v (eid-sort-value db schema eid)]
+                                        (assoc! acc eid v)
+                                        acc))
+                                    (transient {})
+                                    eid-vec)))
+                         schemas)]
+    (sort (fn [a b]
+            (loop [i 0]
+              (if (>= i (count schemas))
+                0
+                (let [c (compare-sort-values (get (nth value-maps i) a)
+                                             (get (nth value-maps i) b)
+                                             (:asc? (nth schemas i)))]
+                  (if (zero? c)
+                    (recur (inc i))
+                    c)))))
+          eid-vec)))
+
+(defn- empty-attr-values?
+  [raw empty-id]
+  (or (empty? raw)
+      (every? (fn [v]
+                (or (nil? v)
+                    (= v empty-id)
+                    (and (string? v) (string/blank? v))
+                    (and (coll? v) (empty? v))))
+              raw)))
+
+(defn- compile-filter-clause
+  [db [property-ident operator match]]
+  (let [schema (property-attr-schema db property-ident)
+        match-set? (set? match)]
+    {:schema schema
+     :operator operator
+     :match match
+     :match-eids (when (and match-set? (seq match) (not (contains? match :empty)))
+                   (into #{} (keep #(match-item->id db %)) match))
+     :match-contents (when (and match-set? (seq match) (not (contains? match :empty)))
+                       (into #{} (keep #(match-item-content db %)) match))
+     :journal-day (when (#{:date-before :date-after} operator)
+                    (match-journal-day db match))
+     :timestamp (when (#{:before :after} operator)
+                  (common-util/get-timestamp match))}))
+
+(defn- eid-clause-match?
+  [db eid {:keys [schema operator match match-eids match-contents journal-day timestamp]} empty-id]
+  (if (nil? match)
+    true
+    (let [{:keys [ident type ref?]} schema
+          raw (indexed-attr-values db eid ident)
+          contents (mapv (fn [v]
+                           (if (and ref? (integer? v))
+                             (ref-value-content db v)
+                             v))
+                         raw)
+          first-raw (first raw)
+          treat-as-entity? (and ref?
+                                (integer? first-raw)
+                                (or (indexed-attr-value db first-raw :db/ident)
+                                    (not (contains? db-property-type/closed-value-property-types type))))
+          empty-values? (empty-attr-values? raw empty-id)
+          scalar-match (if (set? match) match #{match})
+          hits-scalar? (fn [vs]
+                         (boolean (some #(contains? scalar-match %) vs)))
+          hits-eids? (fn [vs]
+                       (boolean (some #(contains? match-eids %) vs)))]
+      (boolean
+       (case operator
+         :is
+         (cond
+           (boolean? match)
+           (= (boolean (first contents)) match)
+
+           (= :empty match)
+           empty-values?
+
+           (and (coll? match) (empty? match))
+           true
+
+           (and ref? (set? match))
+           (if treat-as-entity?
+             (hits-eids? raw)
+             (boolean (seq (set/intersection (set contents) match-contents))))
+
+           :else
+           (hits-scalar? (if ref? contents raw)))
+
+         :is-not
+         (cond
+           (boolean? match)
+           (not= (boolean (first contents)) match)
+
+           (= :empty match)
+           (not empty-values?)
+
+           (and (coll? match) (empty? match) (seq raw))
+           true
+
+           (and (coll? match) (seq match) empty-values?)
+           true
+
+           (and ref? (set? match))
+           (if treat-as-entity?
+             (not (hits-eids? raw))
+             (empty? (set/intersection (set contents) match-contents)))
+
+           :else
+           (not (hits-scalar? (if ref? contents raw))))
+
+         :text-contains
+         (some (fn [c]
+                 (and (some? c)
+                      (string/includes? (string/lower-case (str c))
+                                        (string/lower-case (str match)))))
+               contents)
+
+         :text-not-contains
+         (not-any? (fn [c]
+                     (string/includes? (str c) (str match)))
+                   contents)
+
+         :number-gt
+         (when (seq contents)
+           (if match
+             (some (fn [c] (and (number? c) (> c match))) contents)
+             true))
+
+         :number-gte
+         (when (seq contents)
+           (if match
+             (some (fn [c] (and (number? c) (>= c match))) contents)
+             true))
+
+         :number-lt
+         (when (seq contents)
+           (if match
+             (some (fn [c] (and (number? c) (< c match))) contents)
+             true))
+
+         :number-lte
+         (when (seq contents)
+           (if match
+             (some (fn [c] (and (number? c) (<= c match))) contents)
+             true))
+
+         :between
+         (if (seq match)
+           (let [[start end] match]
+             (some (fn [c]
+                     (and (number? c)
+                          (if start (<= start c) true)
+                          (if end (<= c end) true)))
+                   contents))
+           true)
+
+         :date-before
+         (when (seq raw)
+           (if match
+             (some (fn [v]
+                     (let [day (if (integer? v)
+                                 (indexed-attr-value db v :block/journal-day)
+                                 v)]
+                       (and day journal-day (< day journal-day))))
+                   raw)
+             true))
+
+         :date-after
+         (when (seq raw)
+           (if match
+             (some (fn [v]
+                     (let [day (if (integer? v)
+                                 (indexed-attr-value db v :block/journal-day)
+                                 v)]
+                       (and day journal-day (> day journal-day))))
+                   raw)
+             true))
+
+         :before
+         (when (seq raw)
+           (if timestamp
+             (some (fn [v] (and (number? v) (<= v timestamp)))
+                   (if ref? contents raw))
+             true))
+
+         :after
+         (when (seq raw)
+           (if timestamp
+             (some (fn [v] (and (number? v) (>= v timestamp)))
+                   (if ref? contents raw))
+             true))
+
+         true)))))
+
+(defn- title-matches-input?
+  [db eid input]
+  (or (string/blank? input)
+      (when-let [title (indexed-attr-value db eid :block/title)]
+        (string/includes? (string/lower-case title) (string/lower-case input)))))
+
+(defn- filter-eids
+  [db eids filters input]
+  (let [clauses (or (:filters filters) [])]
+    (if (and (string/blank? input) (empty? clauses))
+      (vec eids)
+      (let [compiled (mapv #(compile-filter-clause db %) clauses)
+            empty-id (ident-eid db :logseq.property/empty-placeholder)
+            check-f (if (:or? filters) some every?)]
+        (into []
+              (filter (fn [eid]
+                        (and (title-matches-input? db eid input)
+                             (or (empty? compiled)
+                                 (check-f #(eid-clause-match? db eid % empty-id)
+                                          compiled)))))
+              eids)))))
 
 (defn- get-all-page-ids
   [db]
@@ -394,19 +752,19 @@
              (transient [])
              (d/datoms db :avet :block/name)))))
 
-(defn- get-all-page-ids-fast
-  "Fast path for all-pages where only sorted page ids are needed. Avoids
-  hydrating every page entity by deriving ordering from indexed datoms."
-  [db sorting]
-  (when-let [{:keys [id asc?]} (fast-id-sorting sorting)]
-    (sort-eids-by-indexed-attr db (get-all-page-ids db) id asc?)))
+(defn- get-feature-row-ids
+  "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities."
+  [db feat-type class-id sorting filters input]
+  (when-let [eids (case feat-type
+                    :all-pages
+                    (get-all-page-ids db)
 
-(defn- get-class-object-ids-fast
-  "Fast path for class-objects where only sorted object ids are needed."
-  [db class-id sorting]
-  (when class-id
-    (when-let [{:keys [id asc?]} (fast-id-sorting sorting)]
-      (sort-eids-by-indexed-attr db (db-class/get-class-object-ids db class-id) id asc?))))
+                    :class-objects
+                    (when class-id
+                      (db-class/get-class-object-ids db class-id))
+
+                    nil)]
+    (sort-eids-by-sorting db (filter-eids db eids filters input) sorting)))
 
 (defn- maybe-limit-rows
   [rows row-limit]
@@ -613,15 +971,8 @@
            class-id (or view-for-id (:db/id (:logseq.property/view-for view)))
            fast-row-ids (when (and (contains? #{:all-pages :class-objects} feat-type)
                                    (not query?)
-                                   (nil? group-by-property-ident)
-                                   (empty? filters)
-                                   (string/blank? input))
-                          (case feat-type
-                            :all-pages
-                            (get-all-page-ids-fast db sorting)
-
-                            :class-objects
-                            (get-class-object-ids-fast db class-id sorting)))]
+                                   (nil? group-by-property-ident))
+                          (get-feature-row-ids db feat-type class-id sorting filters input))]
        (if fast-row-ids
          {:count (count fast-row-ids)
           :data (maybe-limit-rows fast-row-ids row-limit)}
