@@ -1709,3 +1709,68 @@
       (is (= "completion updated and focused" (util/get-edit-content)))
       (ls-api-call! :editor.removeBlock uuid)
       (assert/assert-have-count (str "#ls-block-" uuid) 0))))
+
+;; The caret helpers read a hidden mirror of the editing textarea, one per
+;; editor. A helper that resolves another editor's mirror, or none, returns no
+;; position, and the arrow key then does nothing at all: the caret stays on its
+;; row while the block still has rows above and below it. These two tests hold
+;; the behaviour through the content, so they need no access to the mirror.
+
+(def ^:private caret-row "abcdefghij klmnopqrst")
+
+(defn- block-of-three-rows!
+  "A block of 3 identical newline-separated rows, caret left at the end."
+  []
+  (b/new-block "")
+  (util/input (string/join "\n" [caret-row caret-row caret-row]))
+  (util/move-cursor-to-end)
+  (is (= (string/join "\n" [caret-row caret-row caret-row])
+         (util/get-edit-content))))
+
+(deftest arrow-up-down-move-the-caret-inside-a-block-test
+  (testing "up and down move the caret one row inside the block, not to another block"
+    (block-of-three-rows!)
+    (k/arrow-up)
+    (util/press-seq "X")
+    (is (= (string/join "\n" [caret-row (str caret-row "X") caret-row])
+           (util/get-edit-content))
+        "up from the end of the last row puts the caret at the end of the middle row")
+    (k/arrow-down)
+    (util/press-seq "Y")
+    (is (= (string/join "\n" [caret-row (str caret-row "X") (str caret-row "Y")])
+           (util/get-edit-content))
+        "down from the middle row puts the caret back on the last row")))
+
+(deftest shift-arrow-up-selects-inside-a-block-test
+  (testing "shift with up selects up to the previous row of the same block"
+    (block-of-three-rows!)
+    (k/shift+arrow-up)
+    (util/press-seq "Z")
+    (is (= (string/join "\n" [caret-row (str caret-row "Z")])
+           (util/get-edit-content))
+        "the selection covered the last row and the newline before it")))
+
+(defn- editor-box-heights
+  "clientHeight and scrollHeight of the editing textarea."
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const editor = document.querySelector('.editor-wrapper textarea');
+       return JSON.stringify({client: editor.clientHeight, scroll: editor.scrollHeight});
+     })();")
+   json/keyword-keys-object-mapper))
+
+(deftest heading-editor-shows-every-row-test
+  (testing "the editor of a heading block is sized for the heading font when it opens"
+    (let [title (string/join " " (repeat 12 "heading row"))]
+      ;; "# " at the start becomes the heading property, so the content is
+      ;; the title alone.
+      (b/new-block (str "# " title))
+      (util/exit-edit)
+      (w/click (loc/filter ".block-title-wrap" :has-text "heading row"))
+      (util/wait-editor-visible)
+      (is (= title (util/get-edit-content)))
+      (let [{:keys [client scroll]} (editor-box-heights)]
+        (is (<= scroll client)
+            (str "textarea clientHeight " client " scrollHeight " scroll))))))
