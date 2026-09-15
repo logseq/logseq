@@ -670,7 +670,7 @@
     (if cached-uuid
       (loaded-page option cached-uuid)
       (when-let [resource-key (page-resource-key option)]
-        (page-resource option resource-key))))))
+        (page-resource option resource-key)))))
 
 (hsx/defc page-cp
   [option]
