@@ -15,10 +15,23 @@
     [?view :logseq.property/view-for ?owner]
     [?view :logseq.property.view/feature-type ?feature-type]])
 
+(defn- view-owner
+  [db owner-lookup]
+  (cond
+    (uuid? owner-lookup)
+    (common/entity-by-uuid! db :owner-uuid owner-lookup)
+
+    (and (string? owner-lookup) (not (string/blank? owner-lookup)))
+    (or (ldb/get-page db owner-lookup)
+        (common/fail! "Missing view owner page" {:owner-lookup owner-lookup}))
+
+    :else
+    (common/fail! "Invalid view owner" {:owner-lookup owner-lookup})))
+
 (defn- views
   [db resource-key _runtime]
-  (let [[_ owner-uuid feature-type] resource-key
-        owner (common/entity-by-uuid! db :owner-uuid owner-uuid)]
+  (let [[_ owner-lookup feature-type] resource-key
+        owner (view-owner db owner-lookup)]
     (when-not (keyword? feature-type)
       (common/fail! "Invalid view feature type" {:feature-type feature-type}))
     [#{resource-key}

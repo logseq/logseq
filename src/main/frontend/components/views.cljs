@@ -3407,13 +3407,13 @@
         selected-view-uuid (if (some #{requested-view-uuid} view-uuids)
                              requested-view-uuid
                              (first view-uuids))
-        view-entity (db-hooks/use-block selected-view-uuid)]
-    (when view-entity
-      ^{:key (str "view-" selected-view-uuid)}
-      [sub-view view-entity
-       (assoc option
-              :view-uuids view-uuids
-              :set-current-view-uuid! set-requested-view-uuid!)])))
+        view-entity (db-hooks/use-block selected-view-uuid)
+        pending-view {:block/uuid selected-view-uuid}]
+    ^{:key (str "view-" selected-view-uuid)}
+    [sub-view (or view-entity pending-view)
+     (assoc option
+            :view-uuids view-uuids
+            :set-current-view-uuid! set-requested-view-uuid!)]))
 
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]

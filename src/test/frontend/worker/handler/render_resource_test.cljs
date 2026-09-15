@@ -1624,12 +1624,15 @@
     (let [{:keys [conn view-owner view-a view-b]}
           (render-resource-fixture)
           resource-key [:views view-owner :class-objects]
-          response (call-resource api conn resource-key)]
+          response (call-resource api conn resource-key)
+          by-name (call-resource api conn [:views "projects" :class-objects])]
       (assert-resource-envelope @conn
                                 resource-key
                                 #{resource-key}
                                 [view-a view-b]
-                                response))))
+                                response)
+      (is (= [view-a view-b] (:value by-name))
+          "All Pages can resolve $$$views by page name and skip page-identity."))))
 
 (deftest view-data-resource-supports-every-feature-with-flat-uuid-rows-test
   (when-let [api (render-resource-api)]

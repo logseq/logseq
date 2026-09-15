@@ -679,6 +679,26 @@
       (is (= view-entity (first @rendered)))
       (is (= owner-uuid (get-in @rendered [1 :view-parent-uuid]))))))
 
+(deftest selected-view-starts-view-data-before-the-view-entity-arrives-test
+  (let [owner-uuid (random-uuid)
+        view-uuid (random-uuid)
+        rendered (atom nil)]
+    (with-redefs [db-hooks/use-resource
+                  (fn [_resource-key]
+                    [view-uuid])
+                  db-hooks/use-block
+                  (fn [_requested-uuid]
+                    nil)
+                  views/view-aux
+                  (fn [view option]
+                    (reset! rendered [view option])
+                    [:span "view"])]
+      (render-static
+       (views/view {:view-parent-uuid owner-uuid
+                    :view-feature-type :class-objects}))
+      (is (= {:block/uuid view-uuid} (first @rendered))
+          "Tags/All Pages must request view-data without waiting for the view block snapshot."))))
+
 (deftest view-and-reaction-membership-reloads-only-while-mounted-test
   (async done
          (let [owner-uuid (random-uuid)

@@ -289,8 +289,38 @@
             "Legacy path-refs are excluded. They duplicate :block/refs on imported graphs.")
         (is (= actor-uuid (get-in block [:user.property/actors 0 :block/uuid]))
             "Displayed column values stay as shallow identities.")
+        (is (= #{:db/id :block/uuid :block/title :block/name :block/tags}
+               (set (keys (first (:user.property/actors block)))))
+            "Page-valued cells are one eavt scan: uuid/title/name/tags. No property extras.")
         (is (not (contains? block :block.temp/positioned-properties)))
         (is (not (contains? block :block.temp/property-keys)))))))
+
+(deftest canonical-block-uses-stored-journal-title-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          journal-uuid (random-uuid)
+          journal-title "20260915"]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Mentioned"
+                     :block/name "mentioned"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid journal-uuid
+                     :block/tx-id 1
+                     :block/title journal-title
+                     :block/name journal-title
+                     :block/journal-day 20260915
+                     :block/tags :logseq.class/Journal
+                     :block/refs [-1]}])
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid journal-uuid]))]
+        (is (= journal-title (:block/title block)))
+        (is (= journal-title (:block/raw-title block)))
+        (is (nil? (:block/refs block))
+            "Journal table rows keep the stored date title and skip Entity ref walks.")))))
 
 (deftest canonical-block-full-replacement-drops-retracted-attributes-test
   (when-let [canonical-block (canonical-block-api)]

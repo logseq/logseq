@@ -130,22 +130,18 @@
                        (eavt-scalar db entity-id :block/uuid))
         block-tx-id (eavt-scalar db entity-id :block/tx-id)
         stored-title (eavt-scalar db entity-id :block/title)
-        journal? (some? (eavt-scalar db entity-id :block/journal-day))
         ;; Entity :block/title walks every :block/refs target to replace
-        ;; id-refs. Table rows (All Pages / Movies) have plain titles; doing
-        ;; that for a screen-sized snapshot is multi-second work.
-        replace-id-refs? (and (not journal?)
-                              (string? stored-title)
+        ;; id-refs. Table rows (All Pages / Movies / journals) have plain
+        ;; titles; doing that for a screen-sized snapshot is multi-second work.
+        replace-id-refs? (and (string? stored-title)
                               (string/includes? stored-title "[["))
-        title-entity (when (or journal? replace-id-refs?)
+        title-entity (when replace-id-refs?
                        (d/entity db entity-id))
         raw-title (cond
-                    journal? (:block/raw-title title-entity)
                     replace-id-refs? (:block/raw-title title-entity)
                     (string? stored-title) stored-title
                     :else nil)
         display-title (cond
-                        journal? (:block/title title-entity)
                         replace-id-refs? (:block/title title-entity)
                         (string? stored-title) stored-title
                         :else nil)
