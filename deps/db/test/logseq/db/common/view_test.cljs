@@ -291,10 +291,10 @@
                 :sorting [{:id :block/title :asc? true}]}
         is-not (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
                                                                            :filters [[:block/title :is-not #{"B"}]]}))
-        empty (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
-                                                                          :filters [[:block/title :is :empty]]}))]
+        empty-result (db-view/get-view-data @conn view-id (assoc option :filters {:or? false
+                                                                                 :filters [[:block/title :is :empty]]}))]
     (is (= ["A" "C"] (result-titles conn is-not)))
-    (is (= [] (result-titles conn empty)))))
+    (is (= [] (result-titles conn empty-result)))))
 
 (deftest get-view-data-class-objects-text-contains-and-input-filter-test
   (let [conn (topic-conn

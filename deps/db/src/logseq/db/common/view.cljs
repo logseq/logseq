@@ -375,8 +375,8 @@
       v)))
 
 (defn- uuid->eid
-  [db uuid]
-  (when-let [datom (first (d/datoms db :avet :block/uuid uuid))]
+  [db block-uuid]
+  (when-let [datom (first (d/datoms db :avet :block/uuid block-uuid))]
     (:e datom)))
 
 (defn- ref-value-content
@@ -460,7 +460,8 @@
      :closed-order closed-order}))
 
 (defn- eid-sort-value
-  [db {:keys [ident type ref? many? closed-order]} eid]
+  [db {:keys [ident ref? many? closed-order] :as schema} eid]
+  (let [prop-type (:type schema)]
   (cond
     (= ident :block.temp/refs-count)
     (common-initial-data/get-block-refs-count db eid)
@@ -474,10 +475,10 @@
         closed-order
         (closed-order (first vs))
 
-        (and ref? (= type :date))
+        (and ref? (= prop-type :date))
         (indexed-attr-value db (first vs) :block/journal-day)
 
-        (and many? (or (= type :number) (= type :datetime)))
+        (and many? (or (= prop-type :number) (= prop-type :datetime)))
         (let [nums (keep (fn [v]
                            (let [n (if ref?
                                      (or (indexed-attr-value db v :logseq.property/value)
@@ -497,13 +498,13 @@
 
         ref?
         (let [v (first vs)]
-          (if (or (= type :number) (= type :datetime))
+          (if (or (= prop-type :number) (= prop-type :datetime))
             (or (indexed-attr-value db v :logseq.property/value)
                 (ref-value-content db v))
             (ref-value-content db v)))
 
         :else
-        (first vs)))))
+        (first vs))))))
 
 (defn- compare-sort-values
   [va vb asc?]
@@ -570,8 +571,9 @@
                   (common-util/get-timestamp match))}))
 
 (defn- clause-row
-  [db eid {:keys [ident type ref?]} empty-id]
-  (let [raw (indexed-attr-values db eid ident)
+  [db eid {:keys [ident ref?] :as schema} empty-id]
+  (let [prop-type (:type schema)
+        raw (indexed-attr-values db eid ident)
         first-raw (first raw)]
     {:raw raw
      :ref? ref?
@@ -583,7 +585,7 @@
      :treat-as-entity? (and ref?
                             (integer? first-raw)
                             (or (indexed-attr-value db first-raw :db/ident)
-                                (not (contains? db-property-type/closed-value-property-types type))))
+                                (not (contains? db-property-type/closed-value-property-types prop-type))))
      :empty-values? (empty-attr-values? raw empty-id)}))
 
 (defn- hits-values?
