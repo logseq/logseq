@@ -18,7 +18,7 @@
     (:v datom)))
 
 (defn- lookup-eid
-  [db eid]
+  [eid]
   (when (integer? eid) eid))
 
 (defn- resolve-ref-id
@@ -30,20 +30,20 @@
     ref-or-id
 
     (uuid? ref-or-id)
-    (lookup-eid db (:db/id (d/entity db [:block/uuid ref-or-id])))
+    (lookup-eid (:db/id (d/entity db [:block/uuid ref-or-id])))
 
     (keyword? ref-or-id)
-    (lookup-eid db (:db/id (d/entity db ref-or-id)))
+    (lookup-eid (:db/id (d/entity db ref-or-id)))
 
     (or (de/entity? ref-or-id) (map? ref-or-id))
-    (or (lookup-eid db (:db/id ref-or-id))
+    (or (lookup-eid (:db/id ref-or-id))
         (when (uuid? (:block/uuid ref-or-id))
-          (lookup-eid db (:db/id (d/entity db [:block/uuid (:block/uuid ref-or-id)]))))
+          (lookup-eid (:db/id (d/entity db [:block/uuid (:block/uuid ref-or-id)]))))
         (when (keyword? (:db/ident ref-or-id))
-          (lookup-eid db (:db/id (d/entity db (:db/ident ref-or-id))))))
+          (lookup-eid (:db/id (d/entity db (:db/ident ref-or-id))))))
 
     :else
-    (lookup-eid db (:db/id (d/entity db ref-or-id)))))
+    (lookup-eid (:db/id (d/entity db ref-or-id)))))
 
 (defn- tag-summary
   [db tag-id]
