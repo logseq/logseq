@@ -1,5 +1,5 @@
 (ns logseq.e2e.property-basic-test
-  (:require [clojure.test :refer [deftest use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -93,3 +93,88 @@
     (assert/assert-have-count
      (loc/filter ".ls-view-body" :has-text target-title)
      0)))
+
+(defn- create-text-property!
+  [block-title property-name]
+  (b/new-block block-title)
+  (util/input-command "Add property")
+  (w/click "input[placeholder]")
+  (util/input property-name)
+  (w/click (w/get-by-text "New option:"))
+  (w/click (loc/and "span" (util/get-by-text "Text" true)))
+  (k/esc)
+  (util/double-esc)
+  (assert/assert-is-visible (format ".property-k:text('%s')" property-name)))
+
+(defn- picker-chosen-has-text?
+  [text]
+  (w/visible? (loc/filter ".ls-property-dialog .cp__select-results a.menu-link.chosen"
+                          :has-text text)))
+
+(defn- move-picker-highlight-to!
+  [text]
+  (loop [attempts 12]
+    (cond
+      (picker-chosen-has-text? text) true
+      (zero? attempts) false
+      :else (do
+              (k/arrow-down)
+              (util/wait-timeout 50)
+              (recur (dec attempts))))))
+
+(defn- open-add-property-picker!
+  []
+  (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
+  (w/wait-for ".ls-property-dialog .cp__select-input"))
+
+(deftest keyboard-highlight-selects-property-and-tag-test
+  (testing "Enter applies the highlighted property/tag, not the first visible item"
+    (let [property-one "kbnav-alpha"
+          property-two "kbnav-beta"
+          tag-one "kbtag-alpha"
+          tag-two "kbtag-beta"]
+      (create-text-property! "kbnav property seed one" property-one)
+      (create-text-property! "kbnav property seed two" property-two)
+      (b/new-block "kbtag seed one")
+      (util/set-tag tag-one)
+      (util/double-esc)
+      (b/new-block "kbtag seed two")
+      (util/set-tag tag-two)
+      (util/double-esc)
+
+      (b/new-block "kbnav picker target")
+      (open-add-property-picker!)
+      (w/fill ".ls-property-dialog .cp__select-input" "kbnav")
+      (assert/assert-is-visible (loc/filter ".ls-property-dialog a.menu-link" :has-text property-one))
+      (assert/assert-is-visible (loc/filter ".ls-property-dialog a.menu-link" :has-text property-two))
+      (let [target (if (picker-chosen-has-text? property-two) property-one property-two)
+            other (if (= target property-two) property-one property-two)]
+        (is (move-picker-highlight-to! target)
+            "arrow keys should highlight a non-first property")
+        (k/enter)
+        (assert/assert-is-visible
+         (format ".ls-property-dialog input[placeholder='Set %s']" target))
+        (assert/assert-have-count
+         (format ".ls-property-dialog input[placeholder='Set %s']" other)
+         0)
+        (k/esc)
+        (util/double-esc)
+        (assert/assert-is-visible (format ".property-k:text('%s')" target))
+        (assert/assert-have-count (format ".property-k:text('%s')" other) 0))
+
+      (b/new-block "kbtag picker target")
+      (open-add-property-picker!)
+      (w/fill ".ls-property-dialog .cp__select-input" "Tags")
+      (assert/assert-is-visible (loc/filter ".ls-property-dialog a.menu-link" :has-text "Tags"))
+      (k/enter)
+      (w/wait-for ".ls-property-dialog .cp__select-input")
+      (w/fill ".ls-property-dialog .cp__select-input" "kbtag")
+      (assert/assert-is-visible (loc/filter ".ls-property-dialog a.menu-link" :has-text tag-one))
+      (assert/assert-is-visible (loc/filter ".ls-property-dialog a.menu-link" :has-text tag-two))
+      (let [target (if (picker-chosen-has-text? tag-two) tag-one tag-two)
+            other (if (= target tag-two) tag-one tag-two)]
+        (is (move-picker-highlight-to! target)
+            "arrow keys should highlight a non-first tag")
+        (k/enter)
+        (assert/assert-is-visible (format ".block-tag :text('%s')" target))
+        (assert/assert-have-count (format ".block-tag :text('%s')" other) 0))))))
