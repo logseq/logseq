@@ -2139,10 +2139,6 @@
   (and (contains? windowed-view-feature-types view-feature-type)
        (nil? group-by-property-ident)))
 
-(defn- settled-view-data
-  [full-data window-data]
-  (or full-data window-data))
-
 (defn- paint-view-data
   "Paint the first window. Remaining ids are a lookup list. Replacing
   26 painted rows with 3883 remounted Movies mid-paint."
@@ -2231,7 +2227,7 @@
     (or view-entity pending-view)
     pending-view))
 
-(defn- first-paint-class-properties
+(defn first-paint-class-properties
   "Movies fetched 17 class properties before view-data. Keep the first
   table frame on name/select/id."
   [fetched first-paint-done?]
@@ -2308,13 +2304,6 @@
                                    (quot window-size 2))))]
           [start (+ start (dec window-size))])))))
 
-(defn- view-prefetch-window
-  [rows start-index end-index window-size]
-  (let [rows (vec rows)]
-    (if-let [[start end] (view-prefetch-bounds (count rows) start-index end-index window-size)]
-      (subvec rows start (inc end))
-      [])))
-
 (defn- prefetch-bounds-cover-visible?
   [current-bounds visible-start visible-end rows-count window-size]
   (let [[need-start need-end] (view-prefetch-bounds
@@ -2331,15 +2320,6 @@
        current-bounds visible-start visible-end rows-count window-size)
     current-bounds
     (view-prefetch-bounds rows-count visible-start visible-end window-size)))
-
-(defn- next-view-prefetch-window
-  [rows current-bounds visible-start visible-end window-size]
-  (let [rows (vec rows)
-        [start end] (next-view-prefetch-bounds
-                     (count rows) current-bounds visible-start visible-end window-size)]
-    (if (and start end)
-      (subvec rows start (inc end))
-      [])))
 
 (defn- rendered-item-index
   [^js item]

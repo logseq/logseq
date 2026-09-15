@@ -14,6 +14,23 @@
 
 (def ^:private test-graph-id "view-resource-test")
 
+(defn- test-prefetch-window
+  [rows start-index end-index window-size]
+  (let [rows (vec rows)]
+    (if-let [[start end] (#'views/view-prefetch-bounds
+                          (count rows) start-index end-index window-size)]
+      (subvec rows start (inc end))
+      [])))
+
+(defn- test-next-prefetch-window
+  [rows current-bounds visible-start visible-end window-size]
+  (let [rows (vec rows)
+        [start end] (#'views/next-view-prefetch-bounds
+                     (count rows) current-bounds visible-start visible-end window-size)]
+    (if (and start end)
+      (subvec rows start (inc end))
+      [])))
+
 (defn- render-static
   [element]
   (let [previous-react (gobj/get js/globalThis "React")]
@@ -358,15 +375,15 @@
     (is (= 30 window-size)
         "A 990px table prefetch window is one screen, not both overscan sides.")
     (is (= (subvec rows 40 70)
-           (#'views/view-prefetch-window rows 40 40 window-size))
+           (test-prefetch-window rows 40 40 window-size))
         "A 100-row view still hydrates only one screen around the cursor.")
     (is (= (subvec rows 0 10)
-           (#'views/view-prefetch-window (subvec rows 0 10) 90 99 window-size))
+           (test-prefetch-window (subvec rows 0 10) 90 99 window-size))
         "A filtered view can shrink before Virtuoso reports its new range.")
     (is (= (subvec medium-rows 0 window-size)
-           (#'views/view-prefetch-window medium-rows 0 29 window-size))
+           (test-prefetch-window medium-rows 0 29 window-size))
         "A medium view only retains a screen-sized hydrate window.")
-    (is (= (#'views/view-prefetch-window large-rows 1000 1000 window-size)
+    (is (= (test-prefetch-window large-rows 1000 1000 window-size)
            (subvec large-rows 1000 1030))
         "Large views retain one screen-sized window around the rendered rows.")
     (with-redefs [subs/subscribe-block!
@@ -428,9 +445,6 @@
   (is (false? (#'views/windowed-view-feature? :class-objects :block/page))
       "Grouped class tables keep a single full query.")
   (is (false? (#'views/windowed-view-feature? :linked-references nil)))
-  (is (= :full (#'views/settled-view-data :full :window)))
-  (is (= :window (#'views/settled-view-data nil :window)))
-  (is (nil? (#'views/settled-view-data nil nil)))
   (is (= :window (#'views/paint-view-data :full :window))
       "Remaining ids must not replace the painted first window.")
   (is (= :full (#'views/paint-view-data :full nil)))
@@ -469,7 +483,7 @@
             plan (#'views/loaded-view-resource-plan
                   view-uuid feature-type sorting nil "" nil nil 990)
             paint (#'views/loaded-view-paint
-                   (#'views/settled-view-data nil window-data))]
+                   (#'views/paint-view-data nil window-data))]
         (is (= 30 (:initial-row-count plan)))
         (is (= 30 (get-in plan [:pending-keys :primary 2 :initial-row-count])))
         (is (nil? (get-in plan [:pending-keys :full]))
@@ -551,7 +565,7 @@
         "The same on-screen range keeps the same one-screen window.")
     (is (not= first-bounds moved)
         "The window moves when the visible screen leaves the current rows.")
-    (let [jumped (#'views/next-view-prefetch-window rows first-bounds 800 829 window-size)]
+    (let [jumped (test-next-prefetch-window rows first-bounds 800 829 window-size)]
       (is (not= (subvec rows 0 30) jumped))
       (is (every? (set jumped) (subvec rows 800 830))
           "A jump still keeps the new visible screen subscribed."))))
@@ -565,7 +579,7 @@
       (let [scroll-top (* jump-index item-height)
             [start end] (visible-viewport-row-range
                          scroll-top viewport-height item-height (count rows))
-            prefetched (#'views/view-prefetch-window
+            prefetched (test-prefetch-window
                         rows start end
                         (#'views/view-prefetch-row-count
                          viewport-height item-height))
@@ -593,7 +607,7 @@
         scroll-top (* jump-index item-height)
         [start end] (visible-viewport-row-range
                      scroll-top viewport-height item-height (count rows))
-        prefetched (#'views/view-prefetch-window
+        prefetched (test-prefetch-window
                     rows start end
                     (#'views/view-prefetch-row-count viewport-height item-height))
         needed (subvec rows start (inc end))

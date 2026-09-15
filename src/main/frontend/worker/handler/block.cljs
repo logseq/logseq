@@ -76,7 +76,7 @@
 (defn- render-attr-schema
   [db attr]
   (let [cache *attr-schema-cache*]
-    (if-let [hit (and cache (contains? @cache attr))]
+    (if (and cache (contains? @cache attr))
       (get @cache attr)
       (let [schema (or (get (d/schema db) attr)
                        (when-let [attr-entity (d/entity db attr)]

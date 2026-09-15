@@ -72,12 +72,6 @@
          (.click title-node)))
      100)))
 
-(defn- first-paint-class-properties
-  [fetched first-paint-done?]
-  (if first-paint-done?
-    (or fetched [])
-    []))
-
 (hsx/defc class-objects-inner
   [config class properties {:keys [on-first-table-paint!]}]
   (let [*ref (hooks/use-ref nil)
@@ -125,7 +119,7 @@
         class-properties (:logseq.property.class/properties live-class)
         [fetched set-fetched!] (hooks/use-state nil)
         [first-paint-done? set-first-paint-done!] (hooks/use-state false)
-        properties (first-paint-class-properties fetched first-paint-done?)
+        properties (views/first-paint-class-properties fetched first-paint-done?)
         _ (hooks/use-effect!
            (fn []
              (when first-paint-done?
