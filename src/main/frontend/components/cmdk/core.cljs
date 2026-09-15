@@ -1029,6 +1029,12 @@
   [refresh-fn]
   (util/cancelable-debounce refresh-fn search-debounce-ms))
 
+(defn search-on-input-event?
+  "Typing updates the input immediately. Search waits for the debounced
+  refresh, except for an explicit refresh after composition ends."
+  [refresh? composing? composing-end?]
+  (and refresh? (or (not composing?) composing-end?)))
+
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value) true))
   ([state e input] (handle-input-change state e input true))
@@ -1048,7 +1054,7 @@
      (when container
        (set! (.-scrollTop container) 0))
      ;; retrieve the load-results function and update all the results
-     (when (and refresh? (or (not composing?) composing-end?))
+     (when (search-on-input-event? refresh? composing? composing-end?)
        (refresh-results! state)))))
 
 (defn- open-current-item-link

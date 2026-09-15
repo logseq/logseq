@@ -38,8 +38,34 @@
              (is false (str error))))
           (p/finally done)))))
 
+(defn- cmdk-input-state
+  []
+  {::cmdk/input (atom "")
+   ::cmdk/input-ref (atom #js {:value ""})
+   ::cmdk/focus-source (atom nil)
+   ::cmdk/highlighted-item (atom {:text "Tag"})
+   ::cmdk/pending-scroll-item-idx (atom 2)
+   ::cmdk/scroll-container-ref (atom nil)})
+
+(deftest cmdk-input-change-does-not-search-on-the-keystroke-test
+  (is (false? (cmdk/search-on-input-event? false false false))
+      "Each typed character updates input only; search is not armed on the keystroke.")
+  (is (false? (cmdk/search-on-input-event? false true false)))
+  (is (true? (cmdk/search-on-input-event? true false false)))
+  (is (false? (cmdk/search-on-input-event? true true false))
+      "IME composition does not search on each key.")
+  (is (true? (cmdk/search-on-input-event? true true true)))
+  (let [state (cmdk-input-state)
+        event (js-obj)]
+    (gobj/set event "type" "input")
+    (gobj/set event "target" #js {:value "t"})
+    (cmdk/handle-input-change state event "t" false)
+    (is (= "t" @(::cmdk/input state)))))
+
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
+    (is (> cmdk/search-debounce-ms 200)
+        "Debounce must be slower than the old per-character 150 ms cadence.")
     (let [calls (atom 0)
           [schedule! cancel!] (cmdk/make-search-debouncer #(swap! calls inc))
           keystroke-gap 80
@@ -48,9 +74,14 @@
         (js/setTimeout schedule! delay))
       (js/setTimeout
        (fn []
+         (is (zero? @calls)
+             "Search must not run at the old 150 ms per-character cadence."))
+       (+ last-keystroke 200))
+      (js/setTimeout
+       (fn []
          (cancel!)
          (is (= 1 @calls)
-             "five keystrokes 80 ms apart should trigger one search")
+             "five keystrokes 80 ms apart should trigger one search after the pause")
          (done))
        (+ last-keystroke cmdk/search-debounce-ms 80)))))
 
