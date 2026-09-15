@@ -227,10 +227,16 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
-        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        [load-failed? set-load-failed!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
-       (when (and (seq src) (:block/uuid asset-block))
+       (set-load-failed! false)
+       js/undefined)
+     [src])
+    (hooks/use-effect!
+     (fn []
+       (when (and (seq src) (:block/uuid asset-block) (not load-failed?))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -240,7 +246,7 @@
                                                         {:logseq.property.asset/width width
                                                          :logseq.property.asset/height height}))))))
        (fn []))
-     [])
+     [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
           image-src (when (seq src)
                       (fs/asset-path-normalize src))
@@ -258,15 +264,16 @@
                     (when (= "IMG" (some-> (.-target e) (.-nodeName)))
                       (open-lightbox! e)))
         :ref *el-ref}
-       [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         (cond-> {:loading "lazy"
-                  :referrerPolicy "no-referrer"
-                  :src src'}
-           (not gallery-view?)
-           (assoc :title title))
-         metadata)]
-       (when (and (not breadcrumb?)
+       (block-image/image-or-fallback
+        {:src src'
+         :title title
+         :gallery-view? gallery-view?
+         :metadata metadata
+         :load-failed? load-failed?
+         :on-error (fn [_]
+                     (set-load-failed! true))})
+       (when (and (not load-failed?)
+                  (not breadcrumb?)
                   (not positioned?))
          [:<>
           (let [handle-copy!

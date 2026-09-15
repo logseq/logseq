@@ -117,6 +117,15 @@
     @apply items-center;
   }
 
+  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a,
+  .property-pair.property-panel-row[data-property-type=url] .asset-image-fallback {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .hidden-properties-toggle-row {
     @apply pr-3;
   }

@@ -2006,6 +2006,14 @@ html.is-mac {
       max-width: 80px;
     }
 
+    .asset-image-fallback {
+      display: inline-block;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
+    }
+
     .image-resize {
       display: none;
     }
