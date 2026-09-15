@@ -2105,10 +2105,10 @@
            [:view-data view-uuid full-context])})
 
 (defn- full-view-data-key
-  "The remaining-id query is a resource and would jump the queue
-  ahead of the first screen of row snapshots."
-  [plan viewport-filled?]
-  (when viewport-filled?
+  "Remaining-id normalize of 40938 UUIDs was 473ms after first paint.
+  Do not start it until the user scrolls."
+  [plan need-remaining-ids?]
+  (when need-remaining-ids?
     (get-in plan [:ready-keys :full])))
 
 (defn- measured-viewport-height
@@ -2372,8 +2372,11 @@
                                props))
                           (when (seq props)
                             (set-items-rendered! true)
-                            (when (and (viewport-filled? initial-rows-ready? hydrate-row-uuids)
-                                       on-viewport-filled!)
+                            ;; Remaining-id normalize of 40938 UUIDs was 473ms
+                            ;; and remounted the painted rows. Start it when
+                            ;; the user actually scrolls past the first window.
+                            (when (and on-viewport-filled!
+                                       (pos? (or (some-> scroll-parent .-scrollTop) 0)))
                               (on-viewport-filled!))))}
        (:disable-virtualized? option)))))
 

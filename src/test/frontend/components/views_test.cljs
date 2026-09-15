@@ -415,7 +415,7 @@
     (is (nil? (#'views/full-view-data-key
                {:ready-keys {:full [:view-data view-uuid full-context]}}
                false))
-        "The remaining-id query must not start before the viewport is filled.")
+        "The remaining-id query must not start before the user scrolls.")
     (is (= [:view-data view-uuid full-context]
            (#'views/full-view-data-key
             {:ready-keys {:full [:view-data view-uuid full-context]}}

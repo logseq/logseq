@@ -177,6 +177,22 @@
         (str "First-window Tags query must stay cheap enough to paint immediately, took "
              elapsed-ms "ms"))))
 
+(deftest get-view-data-all-pages-first-window-count-matches-hidden-filter-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Alpha" :block/updated-at 10}}
+                {:page {:block/title "Beta" :block/updated-at 20}}
+                {:page {:block/title "Hidden" :block/updated-at 30 :logseq.property/hide? true}}
+                {:page {:block/title "Deleted" :block/updated-at 40 :logseq.property/deleted-at 1}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/updated-at :asc? false}]}
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        full (db-view/get-view-data @conn view-id option)]
+    (is (= (:count full) (:count window)))
+    (is (= 2 (:count window)))
+    (is (= (take 10 (:data full)) (:data window)))))
+
 (deftest get-view-data-all-pages-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Page " idx)
@@ -197,6 +213,31 @@
     (is (< elapsed-ms 400)
         (str "First-window All Pages query must stay cheap enough to paint immediately, took "
              elapsed-ms "ms"))))
+
+(deftest get-view-data-class-objects-small-set-sorts-the-eids-test
+  (let [pages (mapv (fn [idx]
+                      {:page {:block/title (str "Tag " idx)
+                              :block/updated-at idx
+                              :build/tags [:Topic]}})
+                    (range 21))
+        conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks pages})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/updated-at :asc? false}]}
+        started (js/Date.now)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 26))
+        elapsed-ms (- (js/Date.now) started)
+        full (db-view/get-view-data @conn view-id option)]
+    (is (= 21 (:count window) (:count full)))
+    (is (= 21 (count (:data window))))
+    (is (= (:data full) (:data window))
+        "A leftover set that already fits the window must sort those eids, not the AVET index.")
+    (is (< elapsed-ms 50)
+        (str "21 Tags must not copy the updated-at index, took " elapsed-ms "ms"))))
 
 (deftest get-view-data-all-pages-first-window-does-not-sort-every-page-test
   (let [pages (mapv (fn [idx]

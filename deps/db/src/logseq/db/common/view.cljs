@@ -518,27 +518,42 @@
 (def ^:private avet-first-window-sort-attrs
   #{:block/updated-at :block/created-at :block/title :block/name})
 
+(defn- avet-ordered-datoms
+  "AVET is a sorted-set slice. `nth` from the high end is O(n) per
+  step and took 1719ms to pick 26 All Pages rows."
+  [db attr asc?]
+  (if asc?
+    (d/datoms db :avet attr)
+    (d/rseek-datoms db :avet attr)))
+
+(defn- avet-take-eids
+  [datoms match? row-limit]
+  (let [xf (cond-> (comp (map :e) (filter match?) (distinct))
+             row-limit (comp (take row-limit)))]
+    (into [] xf datoms)))
+
 (defn- sort-eids-from-avet
   "Walk one AVET attr instead of reading a sort value per row. A 40k All
   Pages first window was spending ~2s in sort-eids-by-sorting."
-  [db eids sorting row-limit]
+  [db match? sorting row-limit leftover-eids]
   (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])]
     (when (= 1 (count sorts))
       (let [{:keys [id asc?]} (first sorts)]
         (when (contains? avet-first-window-sort-attrs id)
-          (let [datoms (vec (d/datoms db :avet id))]
+          (let [                ;; All Pages rseek+take is 1ms. Movies copied 79034 updated-at
+                ;; datoms in 132ms to pick 26 recent rows. Tags with 21 eids
+                ;; never reach here: take-sorted-eids sorts those eids.
+                use-rseek-window? (boolean row-limit)
+                datoms (if use-rseek-window?
+                         (avet-ordered-datoms db id (boolean asc?))
+                         (let [all (vec (d/datoms db :avet id))]
+                           (if asc? all (rseq all))))]
             (when (seq datoms)
-              (let [wanted (set eids)
-                    ordered (if asc? datoms (rseq datoms))
-                    base-xf (comp (map :e) (filter wanted) (distinct))
-                    xf (if row-limit
-                         (comp base-xf (take row-limit))
-                         base-xf)
-                    matched (into [] xf ordered)]
-                (if row-limit
+              (let [matched (avet-take-eids datoms match? row-limit)]
+                (if (or row-limit (nil? leftover-eids))
                   matched
                   (let [seen (set matched)]
-                    (into matched (remove seen) eids)))))))))))
+                    (into matched (remove seen) leftover-eids)))))))))))
 
 (defn- sort-eids-by-sorting
   [db eids sorting]
@@ -571,11 +586,80 @@
 
 (defn- take-sorted-eids
   [db eids sorting row-limit]
-  (let [sorted (or (sort-eids-from-avet db eids sorting row-limit)
-                   (sort-eids-by-sorting db eids sorting))]
+  (let [eid-vec (vec eids)
+        wanted (set eid-vec)
+        match? #(contains? wanted %)
+        ;; 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
+        ;; set already fits the window, so sort those eids directly.
+        use-eid-sort? (and row-limit (<= (count eid-vec) row-limit))
+        sorted (if use-eid-sort?
+                 (sort-eids-by-sorting db eid-vec sorting)
+                 (or (sort-eids-from-avet db match? sorting row-limit eid-vec)
+                     (sort-eids-by-sorting db eid-vec sorting)))]
     (if row-limit
       (vec (take row-limit sorted))
       (vec sorted))))
+
+(defn- feature-filters?
+  [filters input]
+  (or (not (string/blank? input))
+      (seq (or (:filters filters) []))))
+
+(defn- avet-slice-count
+  "Datascript AVET slices are Iters. `count` walked 41111 :block/name
+  datoms in 72ms. BTSet est-count is a tree distance. nbb-logseq does
+  not load that ns, so tests fall back to `count` on small fixtures."
+  [datoms]
+  (cond
+    (nil? datoms) 0
+    (counted? datoms) (count datoms)
+    (exists? js/me.tonsky.persistent_sorted_set.est_count)
+    (js/me.tonsky.persistent_sorted_set.est_count datoms)
+    :else (count datoms)))
+
+(defn- count-all-page-ids
+  [db exclude-ids]
+  (- (avet-slice-count (d/datoms db :avet :block/name))
+     (count (keep #(when (indexed-attr-value db % :block/name) %)
+                  exclude-ids))))
+
+(defn- all-pages-eid?
+  [db exclude-ids eid]
+  (and (not (contains? exclude-ids eid))
+       (some? (indexed-attr-value db eid :block/name))))
+
+(defn- first-window-feature-row-data
+  "A 26-row All Pages window does not need the 40938-id vector. Count
+  pages, then walk AVET until the window is full. Returns nil when the
+  sort attr is not an AVET first-window attr so the collect path runs."
+  [db feat-type class-id sorting row-limit]
+  (case feat-type
+    :all-pages
+    (let [exclude-ids (get-exclude-page-ids db)
+          data (sort-eids-from-avet db
+                                    #(all-pages-eid? db exclude-ids %)
+                                    sorting
+                                    row-limit
+                                    nil)]
+      (when data
+        {:count (count-all-page-ids db exclude-ids)
+         :data data}))
+
+    :class-objects
+    (when class-id
+      (let [class-ids (cons class-id (db-class/get-structured-children db class-id))
+            ;; Tag datom collect is 8.8ms for 3883 Movies. The 90ms was
+            ;; hidden-by-ancestor parent walks that hid none. 21 Tags must
+            ;; not rseek 79034 updated-at datoms (1407ms).
+            tag-eids (into []
+                           (comp (mapcat (fn [id] (d/datoms db :avet :block/tags id)))
+                                 (map :e)
+                                 (distinct))
+                           class-ids)]
+        {:count (count tag-eids)
+         :data (take-sorted-eids db tag-eids sorting row-limit)}))
+
+    nil))
 
 (defn- empty-attr-values?
   [raw empty-id]
@@ -808,18 +892,21 @@
   "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities.
   A row-limit first window must not sort every remaining id."
   [db feat-type class-id sorting filters input row-limit]
-  (when-let [eids (case feat-type
-                    :all-pages
-                    (get-all-page-ids db)
+  (let [first-window? (and row-limit (not (feature-filters? filters input)))]
+    (or (when first-window?
+          (first-window-feature-row-data db feat-type class-id sorting row-limit))
+        (when-let [eids (case feat-type
+                          :all-pages
+                          (get-all-page-ids db)
 
-                    :class-objects
-                    (when class-id
-                      (db-class/get-class-object-ids db class-id))
+                          :class-objects
+                          (when class-id
+                            (db-class/get-class-object-ids db class-id))
 
-                    nil)]
-    (let [filtered (filter-eids db eids filters input)]
-      {:count (count filtered)
-       :data (take-sorted-eids db filtered sorting row-limit)})))
+                          nil)]
+          (let [filtered (filter-eids db eids filters input)]
+            {:count (count filtered)
+             :data (take-sorted-eids db filtered sorting row-limit)})))))
 
 (defn- maybe-limit-rows
   [rows row-limit]
