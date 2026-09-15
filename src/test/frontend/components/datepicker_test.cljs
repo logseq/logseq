@@ -43,8 +43,26 @@
     (is (not (string/includes? html "ml-2")))
     (is (not (string/includes? html "5.75rem")))))
 
+(defn- form-target-event
+  [matching-selectors]
+  (let [hits (set matching-selectors)]
+    #js {:target #js {:closest (fn [sel]
+                                  (when (some hits
+                                              (map string/trim (string/split sel #",")))
+                                    #js {}))}}))
+
 (deftest date-picker-form-target-ignores-enter-in-inputs-test
   (is (true? (ui/date-picker-form-target?
-              #js {:target #js {:closest (fn [_] #js {})}})))
+              (form-target-event [".ls-property-date-picker" "input"]))))
+  (is (true? (ui/date-picker-form-target?
+              (form-target-event [".ls-editor-date-picker" "[role='combobox']"]))))
+  (is (true? (ui/date-picker-form-target?
+              (form-target-event [".ls-property-date-picker" "button"]))))
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event [".ls-property-date-picker" "button" "[role='gridcell']"])))
+      "Enter on a calendar day button still confirms the date")
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event ["input"])))
+      "Enter outside the picker is not swallowed")
   (is (false? (ui/date-picker-form-target?
                #js {:target #js {:closest (fn [_] nil)}}))))

@@ -956,10 +956,22 @@
                     (shui/tooltip-content content-props tooltip-content))
                    (shui/tooltip-content content-props tooltip-content)))))
 
+(def ^:private date-picker-root-selector
+  ".ls-editor-date-picker, .ls-property-date-picker")
+
+(def ^:private date-picker-form-control-selector
+  "input, textarea, select, [contenteditable='true'], [role='combobox']")
+
 (defn date-picker-form-target?
   "True when Enter should stay in a date-picker form control instead of confirming the date."
   [^js e]
-  (boolean (some-> (.-target e) (.closest "input, textarea, select, [contenteditable='true']"))))
+  (let [target (.-target e)]
+    (boolean
+     (and target
+          (.closest target date-picker-root-selector)
+          (or (.closest target date-picker-form-control-selector)
+              (and (.closest target "button")
+                   (not (.closest target "[role='gridcell']"))))))))
 
 (hsx/defc DelDateButton
   [on-delete]

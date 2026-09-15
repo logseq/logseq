@@ -348,6 +348,10 @@
   #{:logseq.property.repeat/recur-unit.minute
     :logseq.property.repeat/recur-unit.hour})
 
+(defn- choice-db-ident
+  [choice]
+  (or (:db/ident choice) (:db-ident choice)))
+
 (defn- property-ref-id
   [value]
   (cond
@@ -375,19 +379,21 @@
   (or (property-ref-id (get block :logseq.property.repeat/recur-unit))
       (property-ref-id (:logseq.property/default-value recur-unit-property))
       (some (fn [choice]
-              (when (= :logseq.property.repeat/recur-unit.day (:db/ident choice))
+              (when (= :logseq.property.repeat/recur-unit.day (choice-db-ident choice))
                 (:db/id choice)))
             (:property/closed-values recur-unit-property))))
 
 (defn- repeat-unit-choices
   [block property recur-unit-property]
-  (let [date? (= :date (:logseq.property/type property))]
+  (let [date? (= :date (:logseq.property/type property))
+        current-id (property-ref-id (get block :logseq.property.repeat/recur-unit))]
     (cond->> (db-property/scoped-closed-values
               recur-unit-property block
               {:values (:property/closed-values recur-unit-property)})
       date?
       (remove (fn [choice]
-                (contains? datetime-only-recur-units (:db/ident choice)))))))
+                (and (contains? datetime-only-recur-units (choice-db-ident choice))
+                     (not= (:db/id choice) current-id)))))))
 
 (defn- repeat-unit-label
   [choice]
@@ -398,6 +404,8 @@
   [block property recur-frequency-property recur-unit-property]
   (let [frequency (repeat-frequency-value block)
         [frequency-str set-frequency-str!] (hooks/use-state (str frequency))
+        label-id (hooks/use-memo #(str "ls-repeat-every-label-" (random-uuid)) [])
+        frequency-id (hooks/use-memo #(str "ls-repeat-frequency-" (random-uuid)) [])
         unit-choices (repeat-unit-choices block property recur-unit-property)
         unit-id (repeat-unit-value-id block recur-unit-property)
         selected-choice (or (some (fn [choice]
@@ -405,7 +413,7 @@
                                        choice))
                                   unit-choices)
                             (some (fn [choice]
-                                    (when (= :logseq.property.repeat/recur-unit.day (:db/ident choice))
+                                    (when (= :logseq.property.repeat/recur-unit.day (choice-db-ident choice))
                                       choice))
                                   unit-choices)
                             (first unit-choices))
@@ -426,14 +434,18 @@
        nil)
      [frequency])
     [:div.flex.flex-row.items-center.gap-2.ls-repeat-task-frequency.text-sm
-     [:div.flex-none.text-muted-foreground
+     [:label.flex-none.text-muted-foreground
+      {:id label-id
+       :for frequency-id}
       (t :property.repeat/every)]
      (shui/input
-      {:type "number"
+      {:id frequency-id
+       :type "number"
        :min 1
        :step 1
        :class "ls-repeat-frequency-input !h-8 !w-14 !px-2 !py-0"
        :value frequency-str
+       :aria-labelledby label-id
        :disabled config/publishing?
        :on-mouse-down util/stop-propagation
        :on-change (fn [e]
@@ -461,7 +473,8 @@
          config/publishing?
          (assoc :disabled true))
        (shui/select-trigger
-        {:class "h-8 w-full"}
+        {:class "h-8 w-full"
+         :aria-labelledby label-id}
         [:span.truncate (or (some-> selected-choice repeat-unit-label) "")])
        (shui/select-content
         (map (fn [choice]

@@ -226,7 +226,7 @@
     (when-let [property (d/entity @conn property-ident)]
       (mapv (fn [entity]
               (select-keys (entity-util/entity->map entity)
-                           [:db/id :block/uuid :block/title :block/order
+                           [:db/id :db/ident :block/uuid :block/title :block/order
                             :logseq.property/value
                             :logseq.property/icon
                             :logseq.property/choice-checkbox-state]))

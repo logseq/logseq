@@ -396,17 +396,33 @@
         day {:db/id 3 :db/ident :logseq.property.repeat/recur-unit.day}
         week {:db/id 4 :db/ident :logseq.property.repeat/recur-unit.week}
         property {:property/closed-values [minute hour day week]}
-        idents (fn [property-type]
+        idents (fn [block property-type]
                  (map :db/ident
                       (#'property-value/repeat-unit-choices
-                       {}
+                       block
                        {:logseq.property/type property-type}
                        property)))]
     (is (= [:logseq.property.repeat/recur-unit.day
             :logseq.property.repeat/recur-unit.week]
-           (idents :date)))
+           (idents {} :date)))
     (is (= [:logseq.property.repeat/recur-unit.minute
             :logseq.property.repeat/recur-unit.hour
             :logseq.property.repeat/recur-unit.day
             :logseq.property.repeat/recur-unit.week]
-           (idents :datetime)))))
+           (idents {} :datetime)))
+    (is (= [:logseq.property.repeat/recur-unit.minute
+            :logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents {:logseq.property.repeat/recur-unit minute} :date))
+        "Keep a persisted minute/hour unit visible until the user changes it")))
+
+(deftest repeat-unit-choices-use-compact-or-worker-idents-test
+  (let [minute {:db/id 1 :db-ident :logseq.property.repeat/recur-unit.minute}
+        hour {:db/id 2 :db/ident :logseq.property.repeat/recur-unit.hour}
+        day {:db/id 3 :db/ident :logseq.property.repeat/recur-unit.day}
+        property {:property/closed-values [minute hour day]}]
+    (is (= [day]
+           (#'property-value/repeat-unit-choices
+            {}
+            {:logseq.property/type :date}
+            property)))))
