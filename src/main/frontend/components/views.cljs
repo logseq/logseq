@@ -3371,6 +3371,12 @@
                       view-opts)))])
       (merge {:title-trigger? false} foldable-options))]))
 
+(defn- view-instance-key
+  "Pending views have a UUID before db/id. Keying on db/id remounted
+  All Pages / Tags / Movies after the first-window titles were ready."
+  [view-entity]
+  (str "view-" (or (:block/uuid view-entity) (:db/id view-entity))))
+
 (hsx/defc view-container
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
@@ -3385,7 +3391,7 @@
      * add-property!: `fn` to add a new property (or column)"
   [view-entity option]
   (let [*scroller-ref (hooks/use-memo #(atom nil) [])]
-    ^{:key (str "view-" (:db/id view-entity))}
+    ^{:key (view-instance-key view-entity)}
     [view-inner view-entity
      (cond-> option
        (or config/publishing? (:logseq.property.view/group-by-property view-entity))

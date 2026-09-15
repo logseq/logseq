@@ -643,6 +643,12 @@
   (is (false? (#'views/eager-table-cells? true {:id :block/title} false))
       "Grouped tables disable row virtualization and keep per-cell lazy mounts."))
 
+(deftest view-instance-key-survives-pending-entity-hydrate-test
+  (let [view-uuid (random-uuid)]
+    (is (= (#'views/view-instance-key {:block/uuid view-uuid})
+           (#'views/view-instance-key {:block/uuid view-uuid :db/id 78981}))
+        "All Pages remounted the painted table when db/id arrived.")))
+
 (deftest first-paint-skips-unpinned-property-columns-test
   (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]
     (is (= [{:id :block/title} {:id :select}]
