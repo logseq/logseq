@@ -288,6 +288,18 @@
         }
       }
 
+      &:has(.ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 0.75rem) / 2);
+      }
+
+      &:has(.ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 1.5rem) / 3);
+      }
+
+      &:has(.ui__toast ~ .ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
+        max-height: calc((100dvh - 5rem - 2.25rem) / 4);
+      }
+
       @media (min-width: 500px) {
         width: 22.5rem;
         right: 2rem;
