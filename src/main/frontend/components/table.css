@@ -104,6 +104,11 @@
     .asset-image-fallback {
       @apply min-w-0 max-w-full overflow-hidden text-ellipsis;
     }
+
+    a,
+    .asset-image-fallback {
+      @apply inline-block;
+    }
   }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;

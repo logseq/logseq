@@ -367,8 +367,10 @@
       "Large table views keep a known row height so Virtuoso can skip layout measurement."))
 
 (deftest table-cells-render-eagerly-once-rows-are-windowed
-  (is (true? (#'views/eager-table-cells? :class-objects)))
-  (is (true? (#'views/eager-table-cells? :all-pages))))
+  (is (true? (#'views/eager-table-cells? false)))
+  (is (true? (#'views/eager-table-cells? nil)))
+  (is (false? (#'views/eager-table-cells? true))
+      "Grouped tables disable row virtualization and keep per-cell lazy mounts.")))
 
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))

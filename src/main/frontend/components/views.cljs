@@ -1304,10 +1304,10 @@
        cell-placeholder)]))
 
 (defn- eager-table-cells?
-  "Visible rows are already windowed by Virtuoso. Per-cell IntersectionObserver
-  left wide tables blank during scroll."
-  [_view-feature-type]
-  true)
+  "Virtuoso already windows visible rows. Skip per-cell IntersectionObserver
+  there. Grouped tables set :disable-virtualized? and still need lazy cells."
+  [disable-virtualized?]
+  (not disable-virtualized?))
 
 (defn- click-cell
   [node]
@@ -1423,9 +1423,9 @@
      body)))
 
 (hsx/defc table-row-inner
-  [table row props {:keys [show-add-property? scrolling? view-feature-type]}]
+  [table row props {:keys [show-add-property? scrolling? disable-virtualized?]}]
   (let [*ref (hooks/use-ref nil)
-        eager-cells? (eager-table-cells? view-feature-type)
+        eager-cells? (eager-table-cells? disable-virtualized?)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
