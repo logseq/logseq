@@ -651,12 +651,12 @@ Implemented routing constraints:
 - an ancestor task session id is passed to the master as inherited routing
   context for descendant tasks.
 
-Prompt templates from the AgentBridge registry are loaded and validated at
-startup, and invalid custom templates are replaced with defaults. The current
-dispatch path discards that returned template set and constructs hard-coded
-master prompts instead. Custom registry templates therefore must not be
-documented as affecting dispatched prompts until the dispatch path consumes
-them.
+The per-agent `AgentBridge master prompt` wrapper supplies the prompt for a new
+master session. Startup reads and validates its code block, creates the default
+when absent, and repairs a wrapper with missing code. Task and comment dispatch
+text comes solely from `build_master_task_dispatch_prompt` and
+`build_master_comment_dispatch_prompt`. Registry Task/Comment template blocks
+are not read.
 
 The generated master instructions say that only the master may write graph
 results, subagents are read-only, and a launched child session id must be saved

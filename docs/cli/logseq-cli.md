@@ -392,6 +392,10 @@ JSON key migration (flat -> namespaced):
 | `data.items[].cardinality` | `data.items[].db/cardinality` |
 | `data.root.children[]` | `data.root.block/children[]` |
 - `upsert page`, `upsert block`, `upsert task`, and `upsert asset` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+  - In create mode, block/task/asset results contain only the requested entities. Insertion targets, references (including automatically created pages), tags, properties, and property values are excluded.
+  - Block trees return every requested descendant in input-tree preorder: root, its children and their descendants in sibling order, then the next root. UUIDs are deduplicated by first occurrence. For `[Root(Child(Grandchild)), Sibling]`, the result is `[Root-id Child-id Grandchild-id Sibling-id]`.
+  - The same contract applies to `--blocks` and `--blocks-file`. A requested UUID that cannot be resolved fails the command with `add-id-resolution-failed`; creation does not return a partial success list. Writes may already have completed when resolution fails.
+  - Command-level `--update-tags` and `--update-properties` in block create mode apply to the requested top-level blocks. Returning descendants does not make these updates recursive.
   - Human example:
     ```text
     Upserted page:
