@@ -2274,9 +2274,9 @@
 (defn- view-head-ready-on-mount?
   "Table chrome waits for Virtuoso items-rendered. List, gallery,
   grouped, and empty tables never fire that."
-  [display-type partition rows]
+  [display-type view-partition rows]
   (or (not= display-type :logseq.property.view/type.table)
-      (contains? #{:grouped :grouped-list} partition)
+      (contains? #{:grouped :grouped-list} view-partition)
       (empty-table-ready-on-mount? rows)))
 
 (defn- lazy-item-should-subscribe?
