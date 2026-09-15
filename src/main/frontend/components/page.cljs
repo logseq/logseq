@@ -587,25 +587,25 @@
   [option]
   (let [route-page-name (get-page-name option)
         block-route-name (get-block-route-name option)
-        page-lookup (page-lookup option)]
+        lookup (page-lookup option)]
     (cond
       (and route-page-name block-route-name)
       [:route-block route-page-name block-route-name]
 
-      (or (uuid? page-lookup)
-          (and (string? page-lookup) (not (string/blank? page-lookup))))
-      [:page-identity page-lookup]
+      (or (uuid? lookup)
+          (and (string? lookup) (not (string/blank? lookup))))
+      [:page-identity lookup]
 
       :else nil)))
 
 (defonce ^:private *main-page-view (atom nil))
 
 (defn- page-lookup-uuid
-  [page-lookup]
+  [lookup]
   (cond
-    (uuid? page-lookup) page-lookup
-    (and (string? page-lookup) (util/uuid-string? page-lookup))
-    (uuid page-lookup)
+    (uuid? lookup) lookup
+    (and (string? lookup) (util/uuid-string? lookup))
+    (uuid lookup)
     :else nil))
 
 (hsx/defc loaded-page
