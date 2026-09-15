@@ -163,6 +163,12 @@
                              :i18n-args [(pr-str tag-title)]
                              :type :error}})))
 
+(defn- disallowed-private-create-page-tag?
+  "Private tags cannot be applied to a new page. #Page is allowed because new
+  pages already have it as their type tag."
+  [ent]
+  (contains? (disj ldb/private-tags :logseq.class/Page) (:db/ident ent)))
+
 (defn- existing-class-for-title
   [db title]
   (when (string? title)
@@ -183,12 +189,12 @@
             (uuid? tag) (d/entity db [:block/uuid tag])
             (keyword? tag) (d/entity db tag)
             :else tag)]
-    (when (and (or (de/entity? v) (map? v))
-               (db-class/private-create-page-tag? v))
-      (throw-private-create-page-tag (:block/title v)))
     (cond
       (de/entity? v)
-      (:db/id v)
+      (do
+        (when (disallowed-private-create-page-tag? v)
+          (throw-private-create-page-tag (:block/title v)))
+        (:db/id v))
 
       (map? v)
       (let [by-uuid (when (:block/uuid v)
@@ -202,7 +208,7 @@
         (cond
           existing
           (do
-            (when (db-class/private-create-page-tag? existing)
+            (when (disallowed-private-create-page-tag? existing)
               (throw-private-create-page-tag (:block/title existing)))
             (if by-uuid v (:db/id existing)))
 
