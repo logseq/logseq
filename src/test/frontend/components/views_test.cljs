@@ -549,7 +549,19 @@
     (is (= (nth first-window 0)
            (#'views/table-row-at first-window offset-window 72 0))
         "The first window stays addressable after the offset window arrives.")
-    (is (= 72 (#'views/scrolled-row-offset 2400 33)))
+    (is (= 72 (#'views/scrolled-row-offset 2400 0 33))
+        "With no chrome, 2400px is row 72.")
+    (is (= 66 (#'views/scrolled-row-offset 2400 196 33))
+        "Movies chrome is 196px. scrollTop 2400 is row 66, not 72.")
+    (is (= 69 (#'views/scrolled-row-offset 2400 98 33))
+        "All Pages chrome is 98px. scrollTop 2400 is row 69, not 72.")
+    (doseq [idx (range 66 72)]
+      (is (nil? (#'views/table-row-at first-window offset-window 72 idx))
+          (str "Offset 72 leaves visible Movies row " idx " empty.")))
+    (let [movies-offset (mapv (fn [_] (random-uuid)) (range 26))]
+      (doseq [idx (range 66 92)]
+        (is (some? (#'views/table-row-at first-window movies-offset 66 idx))
+            (str "Offset 66 must cover visible Movies row " idx "."))))
     (let [short-offset (mapv (fn [_] (random-uuid)) (range 11))]
       (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
           "A shorter Tags offset window must not throw on stale first-window bounds."))))

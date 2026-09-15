@@ -2177,9 +2177,22 @@
     :else
     nil))
 
+(defn- scroll-list-offset-top
+  "Virtuoso's list sits below page chrome. `#main-content-container`
+  scrollTop includes that chrome; the first visible row index does not."
+  [scroll-parent]
+  (if-let [list (some-> scroll-parent (.querySelector "[data-testid=\"virtuoso-item-list\"]"))]
+    (max 0 (+ (- (.-top (.getBoundingClientRect list))
+                 (.-top (.getBoundingClientRect scroll-parent)))
+              (or (.-scrollTop scroll-parent) 0)))
+    0))
+
 (defn- scrolled-row-offset
-  [scroll-top item-height]
-  (max 0 (js/Math.floor (/ (max 0 scroll-top) item-height))))
+  ([scroll-top item-height]
+   (scrolled-row-offset scroll-top 0 item-height))
+  ([scroll-top list-offset-top item-height]
+   (max 0 (js/Math.floor (/ (max 0 (- scroll-top (max 0 (or list-offset-top 0))))
+                            item-height)))))
 
 (defn- measured-viewport-height
   "0 is a real clientHeight before layout. `(or 0 window-height)` would
@@ -2538,12 +2551,13 @@
                             (when set-mount-unpinned-cells!
                               (js/requestAnimationFrame
                                #(set-mount-unpinned-cells! true)))
-                            (when (and on-viewport-filled!
-                                       (pos? (or (some-> scroll-parent .-scrollTop) 0)))
-                              (on-viewport-filled!
-                               (scrolled-row-offset
-                                (or (some-> scroll-parent .-scrollTop) 0)
-                                item-height)))))}
+                            (let [scroll-top (or (some-> scroll-parent .-scrollTop) 0)
+                                  next-offset (scrolled-row-offset
+                                               scroll-top
+                                               (scroll-list-offset-top scroll-parent)
+                                               item-height)]
+                              (when (and on-viewport-filled! (pos? next-offset))
+                                (on-viewport-filled! next-offset)))))}
        (:disable-virtualized? option)))))
 
 (hsx/defc table-view
