@@ -1002,7 +1002,7 @@
          (fn []
            (is (= (:block/uuid comment-block) @resolved-block-ref)))))))
 
-(deftest-async copied-selection-loads-the-complete-structured-tree
+(deftest-async ^:large-vars/cleanup-todo copied-selection-loads-the-complete-structured-tree
   (let [repo test-helper/test-db
         page-uuid (random-uuid)
         property-uuid (random-uuid)
