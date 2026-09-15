@@ -392,9 +392,9 @@
     (is (nil? (:full single)))))
 
 (deftest table-virtualization-uses-fixed-row-height
-  (is (= {:item-height 33 :overscan-px 1650}
+  (is (= {:item-height 33 :overscan-px 66}
          (#'views/table-virtualization-metrics))
-      "Large table views keep a known row height so Virtuoso can skip layout measurement."))
+      "Overscan is two placeholder rows. 1650px each side was mounting ~127 use-block rows."))
 
 (deftest tags-and-all-pages-paint-as-soon-as-the-first-window-arrives-test
   (doseq [feature-type [:class-objects :all-pages]]
@@ -437,19 +437,27 @@
 
 (defn- visible-viewport-row-range
   [scroll-top viewport-height item-height total-count]
-  (let [start (max 0 (js/Math.floor (/ scroll-top item-height)))
-        end (min (dec total-count)
-                 (js/Math.floor (/ (+ scroll-top viewport-height -1)
-                                   item-height)))]
-    [start end]))
+  (#'views/viewport-row-range scroll-top viewport-height item-height total-count))
 
 (deftest table-prefetch-matches-one-screen-not-overscan-test
-  (let [{:keys [item-height]} (#'views/table-virtualization-metrics)
+  (let [{:keys [item-height overscan-px]} (#'views/table-virtualization-metrics)
         viewport-height 990
-        window-size (#'views/view-prefetch-row-count viewport-height item-height)]
+        window-size (#'views/view-prefetch-row-count viewport-height item-height)
+        overscan-rows (quot overscan-px item-height)]
     (is (= (#'views/initial-view-prefetch-count viewport-height item-height)
            window-size)
-        "Prefetch hydrates the on-screen rows. Overscan placeholders stay empty.")))
+        "Prefetch hydrates the on-screen rows. Overscan placeholders stay empty.")
+    (is (= 2 overscan-rows)
+        "Virtuoso keeps two placeholder rows, not a 50-row overscan side.")
+    (is (= [0 29] (#'views/viewport-row-range 0 viewport-height item-height 40000)))
+    (is (= [0 29] (#'views/view-prefetch-bounds 40000 0 29 window-size)))
+    (is (= [48 77] (#'views/view-prefetch-bounds 40000 0 126 window-size))
+        "A 127-row mounted range would skip the first screen if used as hydrate bounds.")
+    (is (= [0 29] (#'views/prefetch-visible-range [0 29]))
+        "Table prefetch takes the viewport range, not Virtuoso's mounted list.")
+    (is (= [:div {:style {:min-height 33}}]
+           (#'views/lazy-item-placeholder true false))
+        "Mounted overscan rows stay empty placeholders and skip use-block.")))
 
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))

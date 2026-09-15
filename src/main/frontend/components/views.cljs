@@ -2059,14 +2059,15 @@
   [table-view?]
   (if table-view? 33 24))
 
-(def ^:private table-row-overscan-px 1650)
+(def ^:private table-row-overscan-rows 2)
 
 (defn- table-virtualization-metrics
-  "Fixed row height plus extra overscan so Virtuoso does not measure every
-  table row while scrolling a large DB view."
+  "Fixed row height so Virtuoso can skip measurement. Overscan is two
+  placeholder rows, not a second snapshot window."
   []
-  {:item-height (lazy-item-placeholder-height true)
-   :overscan-px table-row-overscan-px})
+  (let [item-height (lazy-item-placeholder-height true)]
+    {:item-height item-height
+     :overscan-px (* item-height table-row-overscan-rows)}))
 
 (def ^:private view-prefetch-max-rows 1000)
 
@@ -2091,6 +2092,19 @@
 (defn- rows-for-height
   [height-px item-height]
   (max 1 (js/Math.ceil (/ (max 0 height-px) item-height))))
+
+(defn- viewport-row-range
+  "On-screen rows from scroll position. Virtuoso's mounted overscan range
+  is not a hydrate window."
+  [scroll-top viewport-height item-height total-count]
+  (when (and (pos? item-height) (pos? total-count))
+    (let [start (max 0 (js/Math.floor (/ (max 0 scroll-top) item-height)))
+          end (min (dec total-count)
+                   (js/Math.floor (/ (+ (max 0 scroll-top)
+                                        (max 0 viewport-height)
+                                        -1)
+                                     item-height)))]
+      [start (max start end)])))
 
 (defn- initial-view-prefetch-count
   "First paint hydrates only the rows that fit on screen."
@@ -2161,6 +2175,26 @@
   [^js item]
   (.-index item))
 
+(defn- prefetch-visible-range
+  "Accept the on-screen [start end] or Virtuoso's mounted items. A
+  two-index vector is the viewport; a mounted list still works for
+  gallery cards."
+  [rendered]
+  (cond
+    (and (vector? rendered)
+         (= 2 (count rendered))
+         (number? (first rendered))
+         (number? (second rendered)))
+    rendered
+
+    (array? rendered)
+    (when (pos? (alength rendered))
+      [(rendered-item-index (aget rendered 0))
+       (rendered-item-index (aget rendered (dec (alength rendered))))])
+
+    :else
+    nil))
+
 (defn- use-view-row-prefetch
   ([rows]
    (use-view-row-prefetch rows
@@ -2194,22 +2228,26 @@
           (set-initial-prefetch-ready! true)))
       [prefetch-ready?])
      [(or initial-prefetch-ready? prefetch-ready?)
-      (fn [^js rendered-items]
-        (when (pos? (alength rendered-items))
-          (let [visible-start (rendered-item-index (aget rendered-items 0))
-                visible-end (rendered-item-index
-                             (aget rendered-items (dec (alength rendered-items))))]
-            (set-prefetch-bounds!
-             (fn [current-bounds]
-               (let [next-bounds (next-view-prefetch-bounds
-                                  (count rows-vec)
-                                  current-bounds
-                                  visible-start
-                                  visible-end
-                                  window-size)]
-                 (if (= current-bounds next-bounds)
-                   current-bounds
-                   next-bounds)))))))])))
+      (set prefetch-rows)
+      (fn [rendered]
+        (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+          (set-prefetch-bounds!
+           (fn [current-bounds]
+             (let [next-bounds (next-view-prefetch-bounds
+                                (count rows-vec)
+                                current-bounds
+                                visible-start
+                                visible-end
+                                window-size)]
+               (if (= current-bounds next-bounds)
+                 current-bounds
+                 next-bounds))))))])))
+
+(defn- lazy-item-placeholder
+  [table-view? gallery-view?]
+  (if gallery-view?
+    [:div.ls-card-item {:aria-hidden true}]
+    [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))
 
 (hsx/defc lazy-item
   [data idx {:keys [gallery-view? table-view?]} item-render]
@@ -2217,9 +2255,7 @@
         item (db-hooks/use-block row-uuid)]
     (if item
       (item-render item)
-      (if gallery-view?
-        [:div.ls-card-item {:aria-hidden true}]
-        [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))))
+      (lazy-item-placeholder table-view? gallery-view?))))
 
 (hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
@@ -2236,7 +2272,7 @@
         prefetch-window-size (view-prefetch-row-count
                               viewport-height
                               item-height)
-        [_initial-rows-ready? prefetch-rows!]
+        [_initial-rows-ready? hydrate-row-uuids prefetch-rows!]
         (use-view-row-prefetch (:data table)
                                initial-prefetch-count
                                prefetch-window-size)]
@@ -2252,12 +2288,21 @@
         :default-item-height item-height
         :total-count (count rows)
         :item-content (fn [idx]
-                        (let [option (assoc option :table-view? true)]
-                          (lazy-item (:data table) idx option
-                                     (fn [row]
-                                       (table-row table row {} option)))))
+                        (let [option (assoc option :table-view? true)
+                              row-uuid (util/nth-safe (:data table) idx)]
+                          (if (contains? hydrate-row-uuids row-uuid)
+                            (lazy-item (:data table) idx option
+                                       (fn [row]
+                                         (table-row table row {} option)))
+                            (lazy-item-placeholder true false))))
         :items-rendered (fn [props]
-                          (prefetch-rows! props)
+                          (prefetch-rows!
+                           (or (viewport-row-range
+                                (or (some-> scroll-parent .-scrollTop) 0)
+                                viewport-height
+                                item-height
+                                (count rows))
+                               props))
                           (when (seq props)
                             (set-items-rendered! true)))}
        (:disable-virtualized? option)))))
@@ -2474,7 +2519,7 @@
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
-        [_initial-rows-ready? prefetch-rows!] (use-view-row-prefetch blocks)
+        [_initial-rows-ready? _hydrate-row-uuids prefetch-rows!] (use-view-row-prefetch blocks)
         render-card (fn [idx]
                       (lazy-item blocks idx
                                  (assoc (gallery-lazy-item-opts option)
