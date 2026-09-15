@@ -1259,6 +1259,20 @@
                                 0
                                 response))))
 
+(deftest block-ref-count-resource-skips-class-incoming-refs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn class-page class-visible-child]} (render-resource-fixture)
+          class-id (entity-id @conn class-page)
+          child-id (entity-id @conn class-visible-child)
+          resource-key [:block-ref-count class-page]
+          _ (d/transact! conn [[:db/add child-id :block/refs class-id]])
+          response (call-resource api conn resource-key)]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:refs class-page]}
+                                0
+                                response))))
+
 (deftest block-unlinked-ref-exists-resource-gates-empty-reference-views-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn page view-row]} (render-resource-fixture)

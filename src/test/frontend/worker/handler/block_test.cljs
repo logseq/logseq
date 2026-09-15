@@ -373,6 +373,27 @@
       (is (seq (:property/closed-values display-property)))
       (is (every? :block/uuid (:property/closed-values display-property))))))
 
+(deftest canonical-class-skips-refs-count-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          class-uuid (random-uuid)
+          page-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid class-uuid
+                     :block/tx-id 1
+                     :block/title "Movie"
+                     :block/name "movie"
+                     :block/tags :logseq.class/Tag}
+                    {:db/id -2
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Mentions movie"
+                     :block/refs [-1]}])
+      (let [block (canonical-block @conn (d/entity @conn [:block/uuid class-uuid]))]
+        (is (zero? (:block.temp/refs-count block))
+            "Class/tag rows skip refs-count. Incoming refs are every tagged object.")))))
+
 (deftest canonical-block-allows-db-id-only-reference-identities-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)

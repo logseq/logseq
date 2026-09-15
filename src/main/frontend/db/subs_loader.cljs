@@ -3,9 +3,22 @@
   (:require [frontend.state :as state]
             [promesa.core :as p]))
 
-(def ^:private flush-kind-order [:resources :blocks :children])
-(def ^:private limits {:resources 25 :blocks 1000 :children 25})
+(def ^:private view-resource-kinds #{:view-data :views})
+(def ^:private flush-kind-order [:view-resources :resources :blocks :children])
+(def ^:private limits {:view-resources 25 :resources 25 :blocks 1000 :children 25})
 (def ^:private slot-kind {:block :blocks :children :children :resource :resources})
+
+(defn- entry-flush-kind
+  "view-data/views must leave in their own request. A mixed resource
+  batch waits on block-ref-count before the first table window can paint."
+  [{:keys [slot-key]}]
+  (let [slot (first slot-key)]
+    (if (= :resource slot)
+      (let [resource-kind (first (second slot-key))]
+        (if (contains? view-resource-kinds resource-kind)
+          :view-resources
+          :resources))
+      (get {:block :blocks :children :children} slot))))
 
 (defonce ^:private *batch (atom {}))
 
@@ -21,11 +34,11 @@
     entries))
 
 (defn- request-groups
-  "Flush view-data and other resources before block/children trees.
-  One mixed batch used to wait on open-block-tree before Tags/All Pages
-  could paint their first window."
+  "Flush view-data before other resources, then blocks, then children.
+  One mixed batch used to wait on open-block-tree or block-ref-count
+  before Tags/All Pages could paint their first window."
   [entries]
-  (let [entries-by-kind (group-by (comp slot-kind first :slot-key) entries)]
+  (let [entries-by-kind (group-by entry-flush-kind entries)]
     (mapcat (fn [kind]
               (map vec (partition-all (get limits kind)
                                       (get entries-by-kind kind))))

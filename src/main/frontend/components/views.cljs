@@ -2116,6 +2116,13 @@
   (and initial-rows-ready?
        (contains? hydrate-row-uuids row-uuid)))
 
+(defn- viewport-filled?
+  "The remaining-id query starts only after the first screen has
+  hydrated rows. An empty prefetch is `every?` true and must not count."
+  [initial-rows-ready? hydrate-row-uuids]
+  (and initial-rows-ready?
+       (boolean (seq hydrate-row-uuids))))
+
 (defn- viewport-row-range
   "On-screen rows from scroll position. Virtuoso's mounted overscan range
   is not a hydrate window."
@@ -2302,10 +2309,11 @@
         on-viewport-filled! (:on-viewport-filled! option)]
     (hooks/use-effect!
      (fn []
-       (when (and initial-rows-ready? on-viewport-filled!)
+       (when (and (viewport-filled? initial-rows-ready? hydrate-row-uuids)
+                  on-viewport-filled!)
          (on-viewport-filled!))
        js/undefined)
-     [initial-rows-ready? on-viewport-filled!])
+     [initial-rows-ready? hydrate-row-uuids on-viewport-filled!])
     (when (seq rows)
       (virtualized-list
        {:ref #(reset! *scroller-ref %)

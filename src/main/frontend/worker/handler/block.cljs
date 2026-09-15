@@ -105,6 +105,10 @@
   [db eid]
   (tagged-with-ident? db eid :logseq.class/Property))
 
+(defn- class-entity?
+  [db eid]
+  (tagged-with-ident? db eid :logseq.class/Tag))
+
 (defn- block-order-list-type
   [db eid]
   (when-let [value (eavt-scalar db eid :logseq.property/order-list-type)]
@@ -376,6 +380,11 @@
     ;; Property pages are referenced by every node that uses them.
     ;; Walking that set for 18 Movie column headers was ~3.5s.
     (property-entity? db block-id)
+    0
+
+    ;; Class/tag pages hide their objects from refs-count. Walking
+    ;; Movie's 3883 :block/refs to return 0 blocked the first Tags window.
+    (class-entity? db block-id)
     0
 
     (and (empty? (d/datoms db :avet :block/refs block-id))
