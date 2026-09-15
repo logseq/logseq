@@ -3267,29 +3267,30 @@
 
 (defn- missing-internal-page-parent-order-tx
   "Namespace import sets :block/parent without :block/order. Only repair
-  internal pages so class pages that share the same rewrite stay unordered."
+  internal pages so class pages that share the same rewrite stay unordered.
+  Insertion boundary uses every direct child so repaired page orders do not
+  collide with content-block siblings."
   [db]
   (->> (d/datoms db :avet :block/parent)
-       (keep (fn [d]
-               (let [child (d/entity db (:e d))]
-                 (when (entity-util/internal-page? child)
-                   child))))
+       (map (fn [d] (d/entity db (:e d))))
        (group-by :block/parent)
        (mapcat
-        (fn [[_parent siblings]]
-          (let [missing (vec (remove #(string? (:block/order %)) siblings))
-                max-order (->> siblings
+        (fn [[_parent children]]
+          (let [missing (->> children
+                             (filter entity-util/internal-page?)
+                             (remove #(string? (:block/order %)))
+                             vec)
+                max-order (->> children
                                (keep :block/order)
                                (filter string?)
                                sort
                                last)]
-            (map (fn [child order]
-                   {:db/id (:db/id child)
-                    :block/order order})
-                 missing
-                 (if (seq missing)
-                   (db-order/gen-n-keys (count missing) max-order nil)
-                   [])))))))
+            (when (seq missing)
+              (map (fn [child order]
+                     {:db/id (:db/id child)
+                      :block/order order})
+                   missing
+                   (db-order/gen-n-keys (count missing) max-order nil))))))))
 
 (defn- ensure-imported-page-parent-orders!
   [conn]

@@ -2483,6 +2483,31 @@ abc
     (is (string? (:block/order australia))
         "Doc-file import assigns string :block/order when setting :block/parent")))
 
+(deftest-async import-namespaced-pages-order-after-parent-content-blocks
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
+                "pages/Country.md" "- Overview\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})
+          country (db-test/find-page-by-title @conn "Country")
+          australia (db-test/find-page-by-title @conn "Australia")
+          overview (db-test/find-block-by-content @conn "Overview")
+          child-orders (->> (:block/_parent country)
+                            (keep :block/order)
+                            (filter string?)
+                            vec)]
+    (is (= (:db/id country) (:db/id (:block/parent overview)))
+        "Parent page content is a direct child of Country")
+    (is (string? (:block/order overview))
+        "Parent page content block already has string order")
+    (is (string? (:block/order australia))
+        "Imported child page Australia has string order")
+    (is (not= (:block/order australia) (:block/order overview))
+        "Repaired page order does not collide with a content-block sibling")
+    (is (= (count child-orders) (count (distinct child-orders)))
+        "All direct children of Country have unique orders")))
+
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)
         standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
