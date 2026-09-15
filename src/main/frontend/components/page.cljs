@@ -642,12 +642,17 @@
   [option resource-key]
   (let [{:keys [status value error]}
         (db-hooks/use-resource-snapshot resource-key)
+        repo (state/get-current-repo)
         last-ready (page-model/remembered-page-view
-                    @*main-page-view (state/get-current-repo) option)
+                    @*main-page-view repo option)
         view (page-model/resolve-page-view status value option last-ready)]
-    (when-let [next-cache (page-model/remember-ready-page-view
-                           @*main-page-view (state/get-current-repo) option view)]
-      (reset! *main-page-view next-cache))
+    (hooks/use-effect!
+     (fn []
+       (when-let [next-cache (page-model/remember-ready-page-view
+                              @*main-page-view repo option view)]
+         (reset! *main-page-view next-cache))
+       nil)
+     [repo (:page-uuid view)])
     (case status
       :loading (when view
                  ^{:key (:page-uuid view)}
