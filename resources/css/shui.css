@@ -540,6 +540,10 @@ kbd.shui-shortcut-key-pressed,
   }
 }
 
+.ui__toaster-viewport:has(.ls-wrap-widen) {
+  width: min(680px, calc(100vw - 2rem));
+}
+
 .ui__toast-content {
   &.untitled {
     .ui__toast-header {
@@ -547,15 +551,15 @@ kbd.shui-shortcut-key-pressed,
     }
 
     .ui__toast-body {
-      @apply flex-initial py-2;
+      @apply min-h-0 flex-1 overflow-y-auto overscroll-contain py-2;
     }
 
     .ui__toast-text {
-      @apply flex flex-row items-center gap-2 overflow-auto;
+      @apply flex min-h-0 min-w-0 flex-1 flex-row items-start gap-2 overflow-y-auto overscroll-contain;
     }
 
     .ui__toast-description {
-      @apply max-w-full overflow-auto;
+      @apply max-h-full max-w-full min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain select-text;
     }
   }
 }
