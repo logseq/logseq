@@ -2089,9 +2089,25 @@
    :full (when (and window-context window-ready?)
            [:view-data view-uuid full-context])})
 
+(defn- measured-viewport-height
+  "0 is a real clientHeight before layout. `(or 0 window-height)` would
+  keep it and hydrate one row."
+  [parent-height window-height]
+  (cond
+    (and (number? parent-height) (pos? parent-height)) parent-height
+    (and (number? window-height) (pos? window-height)) window-height
+    :else 0))
+
 (defn- rows-for-height
   [height-px item-height]
   (max 1 (js/Math.ceil (/ (max 0 height-px) item-height))))
+
+(defn- viewport-hydrate-ready?
+  "Paint viewport rows together. A single ready row plus placeholders
+  is not an open table."
+  [initial-rows-ready? hydrate-row-uuids row-uuid]
+  (and initial-rows-ready?
+       (contains? hydrate-row-uuids row-uuid)))
 
 (defn- viewport-row-range
   "On-screen rows from scroll position. Virtuoso's mounted overscan range
@@ -2263,16 +2279,16 @@
                        (-> (:config option)
                            (assoc :viewel (js/document.getElementById (:viewid option)))))
         {:keys [item-height overscan-px]} (table-virtualization-metrics)
-        viewport-height (or (some-> scroll-parent .-clientHeight)
-                            (.-innerHeight js/window)
-                            0)
+        viewport-height (measured-viewport-height
+                         (some-> scroll-parent .-clientHeight)
+                         (.-innerHeight js/window))
         initial-prefetch-count (initial-view-prefetch-count
                                 viewport-height
                                 item-height)
         prefetch-window-size (view-prefetch-row-count
                               viewport-height
                               item-height)
-        [_initial-rows-ready? hydrate-row-uuids prefetch-rows!]
+        [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
         (use-view-row-prefetch (:data table)
                                initial-prefetch-count
                                prefetch-window-size)]
@@ -2290,7 +2306,8 @@
         :item-content (fn [idx]
                         (let [option (assoc option :table-view? true)
                               row-uuid (util/nth-safe (:data table) idx)]
-                          (if (contains? hydrate-row-uuids row-uuid)
+                          (if (viewport-hydrate-ready?
+                               initial-rows-ready? hydrate-row-uuids row-uuid)
                             (lazy-item (:data table) idx option
                                        (fn [row]
                                          (table-row table row {} option)))
@@ -3304,8 +3321,9 @@
         sorting (effective-view-sorting view-entity)
         filters (:logseq.property.table/filters view-entity)
         debounced-input (hooks/use-debounced-value input 300)
-        viewport-height (or (some-> (get-scroll-parent config) .-clientHeight)
-                            (.-innerHeight js/window))
+        viewport-height (measured-viewport-height
+                         (some-> (get-scroll-parent config) .-clientHeight)
+                         (.-innerHeight js/window))
         plan (loaded-view-resource-plan (:block/uuid view-entity)
                                         view-feature-type
                                         sorting

@@ -369,6 +369,20 @@
   (is (= 182 (#'views/view-prefetch-row-count 6000 33))
       "Prefetch stays one screen. Virtuoso overscan is not hydrated."))
 
+(deftest measured-viewport-height-ignores-unlaid-out-parents-test
+  (is (= 990 (#'views/measured-viewport-height 0 990))
+      "A 0 clientHeight is pre-layout. Using it hydrates one row.")
+  (is (= 990 (#'views/measured-viewport-height nil 990)))
+  (is (= 880 (#'views/measured-viewport-height 880 990)))
+  (is (= 30 (#'views/initial-view-prefetch-count
+             (#'views/measured-viewport-height 0 990)
+             33))
+      "Opening a table must request one screen, not 1 row.")
+  (let [row-uuid (random-uuid)]
+    (is (false? (#'views/viewport-hydrate-ready? false #{row-uuid} row-uuid))
+        "Visible rows stay empty until the whole viewport hydrate set is ready.")
+    (is (true? (#'views/viewport-hydrate-ready? true #{row-uuid} row-uuid)))))
+
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
   (is (true? (#'views/windowed-view-feature? :class-objects nil)))
