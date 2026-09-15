@@ -444,9 +444,11 @@
            item-render
            class
            header
-           grouped?]
+           grouped?
+           current-idx-atom]
     :as opts}]
-  (let [*current-idx (hooks/use-memo #(atom 0) [])
+  (let [*owned-idx (hooks/use-memo #(atom 0) [])
+        *current-idx (or current-idx-atom *owned-idx)
         [current-idx] (hooks/use-atom *current-idx)
         shortcut-state {:matched matched
                         :opts opts
