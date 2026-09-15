@@ -1716,6 +1716,35 @@
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
 
+(deftest view-data-resource-returns-empty-rows-after-the-view-is-deleted-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-owner view-a view-b]}
+          (render-resource-fixture)
+          resource-key [:view-data view-a
+                        {:feature-type :class-objects
+                         :sorting [{:id :block/title :asc? true}]}]
+          views-key [:views view-owner :class-objects]
+          live (call-resource api conn resource-key)
+          _ (is (seq (get-in live [:value :rows]))
+                "The live view must return rows before delete.")
+          _ (d/transact! conn [[:db/retractEntity [:block/uuid view-a]]])
+          response (call-resource api conn resource-key)
+          batch (render-engine/render-snapshots
+                 @conn
+                 {:blocks []
+                  :children []
+                  :resources [resource-key views-key]}
+                 {})]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:entity view-a]}
+                                {:partition :flat :count 0 :rows []}
+                                response)
+      (is (= [view-b] (get-in batch [:slots [:resource views-key] :value]))
+          "A deleted view-data snapshot must not fail sibling :views in the same batch.")
+      (is (= {:partition :flat :count 0 :rows []}
+             (get-in batch [:slots [:resource resource-key] :value]))))))
+
 (deftest all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)

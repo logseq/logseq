@@ -3193,10 +3193,10 @@
                             (shui/dropdown-menu-item
                              {:key "Delete"
                               :on-click (fn []
+                                          (set-current-view-uuid!
+                                           (first (remove #{view-uuid} view-uuids)))
                                           (p/do!
                                            (editor-handler/delete-block-aux! view)
-                                           (set-current-view-uuid!
-                                            (first (remove #{view-uuid} view-uuids)))
                                            (shui/popup-hide!)))}
                              (t :ui/delete)))])
                        {:as-dropdown? true

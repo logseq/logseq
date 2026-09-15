@@ -370,55 +370,66 @@
       (contains? result :properties)
       (assoc :properties (mapv identity (:properties result))))))
 
+(defn- missing-view-data
+  "Delete still has an in-flight :view-data snapshot. Fail-fast here
+  rejects the whole get-render-snapshots batch and crashes the page."
+  [view-uuid]
+  [#{[:entity view-uuid]}
+   {:partition :flat
+    :count 0
+    :rows []}])
+
 (defn- view-data
   [db resource-key _runtime]
   (let [[_ view-uuid context] resource-key
         context (require-view-context! context)
-        feature-type (:feature-type context)
-        view (common/entity-by-uuid! db :view-uuid view-uuid)
-        stored-feature-type (:logseq.property.view/feature-type view)
-        owner (require-view-owner! feature-type
-                                   (:logseq.property/view-for view)
-                                   view-uuid)]
-    (when (and stored-feature-type
-               (not= stored-feature-type feature-type))
-      (common/fail! "View resource feature does not match its definition"
-             {:view-uuid view-uuid
-              :feature-type feature-type
-              :stored-feature-type stored-feature-type}))
-    (let [query-row-uuids (:query-row-uuids context)]
-      (when-not (= (= :query-result feature-type)
-                   (contains? context :query-row-uuids))
-        (common/fail! "Invalid query-result view rows"
-               {:feature-type feature-type
-                :query-row-uuids query-row-uuids})))
-    (let [config (effective-view-config view context)
-          query-entity-ids (mapv (fn [block-uuid]
-                                   (:db/id (common/entity-by-uuid! db
-                                                            :query-row-uuid
-                                                            block-uuid)))
-                                 (:query-row-uuids context))
-          option (cond-> (-> context
-                             (dissoc :feature-type :query-row-uuids
-                                     :initial-row-count :row-offset)
-                             (assoc :view-feature-type feature-type))
-                   owner (assoc :view-for-id (:db/id owner))
-                   (= :query-result feature-type)
-                   (assoc :query-entity-ids query-entity-ids)
-                   (:initial-row-count context)
-                   (assoc :row-limit (:initial-row-count context))
-                   (contains? context :row-offset)
-                   (assoc :row-offset (:row-offset context)))
-          result (db-view/get-view-data db (:db/id view) option)
-          value (normalize-view-data db result
-                                     (some? (:group-by-property-ident config)))
-          value (cond-> value
-                  (and (:initial-row-count context)
-                       (= :flat (:partition value)))
-                  (assoc :row-previews (first-window-row-previews db (:rows value))))
-          value-partition (:partition value)]
-      [(view-watch-keys db view-uuid owner feature-type config value-partition)
-       value])))
+        feature-type (:feature-type context)]
+    (common/require-uuid! :view-uuid view-uuid)
+    (if-let [view (d/entity db [:block/uuid view-uuid])]
+      (let [stored-feature-type (:logseq.property.view/feature-type view)
+            owner (require-view-owner! feature-type
+                                       (:logseq.property/view-for view)
+                                       view-uuid)]
+        (when (and stored-feature-type
+                   (not= stored-feature-type feature-type))
+          (common/fail! "View resource feature does not match its definition"
+                        {:view-uuid view-uuid
+                         :feature-type feature-type
+                         :stored-feature-type stored-feature-type}))
+        (let [query-row-uuids (:query-row-uuids context)]
+          (when-not (= (= :query-result feature-type)
+                       (contains? context :query-row-uuids))
+            (common/fail! "Invalid query-result view rows"
+                          {:feature-type feature-type
+                           :query-row-uuids query-row-uuids})))
+        (let [config (effective-view-config view context)
+              query-entity-ids (mapv (fn [block-uuid]
+                                       (:db/id (common/entity-by-uuid! db
+                                                                      :query-row-uuid
+                                                                      block-uuid)))
+                                     (:query-row-uuids context))
+              option (cond-> (-> context
+                                 (dissoc :feature-type :query-row-uuids
+                                         :initial-row-count :row-offset)
+                                 (assoc :view-feature-type feature-type))
+                       owner (assoc :view-for-id (:db/id owner))
+                       (= :query-result feature-type)
+                       (assoc :query-entity-ids query-entity-ids)
+                       (:initial-row-count context)
+                       (assoc :row-limit (:initial-row-count context))
+                       (contains? context :row-offset)
+                       (assoc :row-offset (:row-offset context)))
+              result (db-view/get-view-data db (:db/id view) option)
+              value (normalize-view-data db result
+                                         (some? (:group-by-property-ident config)))
+              value (cond-> value
+                      (and (:initial-row-count context)
+                           (= :flat (:partition value)))
+                      (assoc :row-previews (first-window-row-previews db (:rows value))))
+              value-partition (:partition value)]
+          [(view-watch-keys db view-uuid owner feature-type config value-partition)
+           value]))
+      (missing-view-data view-uuid))))
 
 (def resource-renderers
   {:views (common/renderer 3 views)
