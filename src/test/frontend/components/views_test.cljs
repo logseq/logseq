@@ -146,6 +146,13 @@
   (is (= :logseq.property.view/type.table
          (#'views/view-display-type {} :all-pages))))
 
+(deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
+  (is (true? (#'views/view-head-ready-on-mount? :logseq.property.view/type.list))
+      "Unlinked-references is a list view and never fires table items-rendered.")
+  (is (true? (#'views/view-head-ready-on-mount? :logseq.property.view/type.gallery)))
+  (is (false? (#'views/view-head-ready-on-mount? :logseq.property.view/type.table))
+      "Table chrome still waits for the first painted rows."))
+
 (deftest default-view-title-matches-the-feature-type
   (is (= :view/linked-references
          (#'views/default-view-title-key :linked-references)))
