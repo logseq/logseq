@@ -2363,6 +2363,19 @@
         option (assoc option
                       :table-view? true
                       :mount-unpinned-cells? mount-unpinned-cells?)]
+    ;; Remaining-id grew 26 -> 40938 while hydrate stayed on the first
+    ;; window. items-rendered did not run again, so scrollTop 2400
+    ;; kept empty placeholders. Refresh the visible window here.
+    (hooks/use-effect!
+     (fn []
+       (when (pos? (or (some-> scroll-parent .-scrollTop) 0))
+         (prefetch-rows!
+          (viewport-row-range
+           (or (some-> scroll-parent .-scrollTop) 0)
+           viewport-height
+           item-height
+           total-count))))
+     [(count all-row-ids)])
     (cond
       (not (seq rows))
       nil

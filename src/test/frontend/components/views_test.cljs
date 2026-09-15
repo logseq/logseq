@@ -514,6 +514,16 @@
          "min-height:33px")
         "Mounted overscan rows stay empty placeholders and skip use-block.")))
 
+(deftest remaining-ids-move-prefetch-off-the-first-window-test
+  (let [stale-first-window [0 25]
+        window-size 26]
+    (is (= stale-first-window
+           (#'views/next-view-prefetch-bounds 26 stale-first-window 72 97 window-size))
+        "Until remaining ids exist, the hydrate set cannot leave the first 26 rows.")
+    (is (= [72 97]
+           (#'views/next-view-prefetch-bounds 40938 stale-first-window 72 97 window-size))
+        "After remaining ids arrive, hydrate the scrolled screen instead of the first window.")))
+
 (deftest continuous-scroll-keeps-the-same-prefetch-window-until-the-range-moves-test
   (let [rows (mapv (fn [_] (random-uuid)) (range 2000))
         window-size 30
