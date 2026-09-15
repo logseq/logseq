@@ -370,6 +370,13 @@
   (is (nil? (#'property-value/parse-positive-int "")))
   (is (nil? (#'property-value/parse-positive-int nil))))
 
+(deftest select-ref-id-test
+  (is (= 83 (#'property-value/select-ref-id 83)))
+  (is (= 83 (#'property-value/select-ref-id {:db/id 83})))
+  (is (= 83 (#'property-value/select-ref-id "83")))
+  (is (nil? (#'property-value/select-ref-id "Status")))
+  (is (nil? (#'property-value/select-ref-id nil))))
+
 (deftest repeat-frequency-value-test
   (is (= 1 (#'property-value/repeat-frequency-value {})))
   (is (= 3 (#'property-value/repeat-frequency-value
