@@ -37,16 +37,15 @@
 (deftest remember-current-graph-id-in-tab-test
   (async done
     (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
-          original-invoke-db-worker state/<invoke-db-worker
           stored-graph (atom nil)]
       (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
       (when remember-f
-        (set! state/<invoke-db-worker
-              (fn [api repo]
-                (is (= :thread-api/get-graph-uuid api))
-                (is (= "logseq_db_work" repo))
-                (p/resolved #uuid "11111111-1111-1111-1111-111111111111")))
         (p/with-redefs [state/get-current-repo (constantly "logseq_db_work")
+                        state/<invoke-db-worker
+                        (fn [api repo]
+                          (is (= :thread-api/get-graph-uuid api))
+                          (is (= "logseq_db_work" repo))
+                          (p/resolved #uuid "11111111-1111-1111-1111-111111111111"))
                         frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
                                                                 (reset! stored-graph {:repo repo
                                                                                       :graph-id graph-id}))]
@@ -61,7 +60,6 @@
                  (is false (str error))))
               (p/finally
                (fn []
-                 (set! state/<invoke-db-worker original-invoke-db-worker)
                  (done)))))))))
 
 (deftest current-graph-id-uses-tab-memory-test
