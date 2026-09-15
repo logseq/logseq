@@ -1243,9 +1243,13 @@
          (on-sized! width)))
      [width])
 
-    [:a.ls-table-resize-handle
+    [:div.ls-table-resize-handle
      {:data-no-dnd true
-      :ref *el}]))
+      :ref *el
+      :role "separator"
+      :aria-orientation "vertical"
+      :aria-label (t :view.table/resize-column)
+      :title (t :view.table/resize-column)}]))
 
 (defn- table-header-cell
   [table column]
@@ -1507,11 +1511,116 @@
                                nil))))
      body)))
 
+(defn- table-property-column?
+  [column]
+  (boolean
+   (and column
+        (:property column)
+        (not (#{:select :id :add-property} (:id column))))))
+
+(defn- table-row-context-actions
+  [column {:keys [view-parent]}]
+  (cond-> [{:id :open
+            :label-key :ui/open}
+           {:id :open-sidebar
+            :label-key :sidebar.right/open}
+           {:id :copy
+            :label-key :ui/copy}
+           {:id :set-property
+            :label-key :property/set-property
+            :property-key (when (table-property-column? column)
+                            (:id column))}
+           {:id :unset-property
+            :label-key :property/unset-property}]
+    (not= :logseq.class/Page (:db/ident view-parent))
+    (conj {:id :delete
+           :label-key :ui/delete})))
+
+(defn- event-element
+  [^js e]
+  (let [target (.-target e)]
+    (if (and target (= 1 (.-nodeType target)))
+      target
+      (some-> target .-parentElement))))
+
+(defn- table-column-from-event
+  [e columns]
+  (when-let [column-id (some-> (event-element e)
+                               (.closest ".ls-table-cell")
+                               (.getAttribute "data-column-id"))]
+    (some (fn [column]
+            (when (= (str (:id column)) column-id)
+              column))
+          columns)))
+
+(defn- table-row-context-menu-event?
+  [e]
+  (let [target (event-element e)]
+    (not (or (nil? target)
+             (util/input? target)
+             (some-> target (.closest "input, textarea, [data-table-row-select]"))))))
+
+(defn- table-row-context-menu
+  [table row column {:keys [view-parent view-feature-type] :as option}]
+  (let [actions (table-row-context-actions column option)
+        block-uuid (:block/uuid row)
+        selected-blocks [row]]
+    [:<>
+     (for [{:keys [id label-key property-key]} actions]
+       (shui/dropdown-menu-item
+        {:key (name id)
+         :on-click (fn [e]
+                     (case id
+                       :open
+                       (when block-uuid
+                         (route-handler/redirect-to-page! block-uuid))
+
+                       :open-sidebar
+                       (when (:db/id row)
+                         (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block))
+
+                       :copy
+                       (when block-uuid
+                         (editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks
+                                                                     :selected-ids [block-uuid]}))
+
+                       :set-property
+                       (state/pub-event! [:editor/new-property (cond-> {:target (.-currentTarget e)
+                                                                        :selected-blocks selected-blocks}
+                                                                 property-key
+                                                                 (assoc :property-key property-key))])
+
+                       :unset-property
+                       (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
+                                                                :selected-blocks selected-blocks
+                                                                :view-parent view-parent
+                                                                :remove-property? true
+                                                                :select-opts {:show-new-when-not-exact-match? false}}])
+
+                       :delete
+                       (on-delete-rows view-parent view-feature-type table [block-uuid])
+
+                       nil))}
+        (t label-key)))]))
+
+(defn- show-table-row-context-menu!
+  [e table row column option]
+  (util/stop e)
+  (shui/popup-show!
+   e
+   (fn [{:keys [id]}]
+     [:div {:on-click #(shui/popup-hide! id)
+            :data-keep-selection true}
+      (table-row-context-menu table row column option)])
+   {:as-dropdown? true
+    :dropdown-menu? true
+    :content-props {:class "w-[220px] ls-context-menu-content"}}))
+
 (def ^:private table-fixed-row-height 33)
 
 (hsx/defc ^:large-vars/cleanup-todo table-row-inner
   [table row props {:keys [show-add-property? scrolling? disable-virtualized?
-                           mount-unpinned-cells?]}]
+                           mount-unpinned-cells?] :as option}]
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
@@ -1534,6 +1643,7 @@
                            cell-opts (cond-> {:key id
                                               :select? select?
                                               :add-property? add-property?
+                                              :data-column-id (str (:id column))
                                               :style style}
                                        (not (string/blank? cell-title))
                                        (assoc :title cell-title))
@@ -1569,6 +1679,12 @@
        :ref *ref
        :data-id (:db/id row)
        :blockid (str (:block/uuid row))
+       :on-context-menu (fn [e]
+                          (when (table-row-context-menu-event? e)
+                            (show-table-row-context-menu!
+                             e table row
+                             (table-column-from-event e (:columns table))
+                             option)))
        :on-key-down (fn [e]
                       (let [container (hooks/deref *ref)]
                         (when (dom/has-class? container "selected")
@@ -2128,26 +2244,27 @@
 (hsx/defc new-record-button
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
-                    (= (:block/name view-entity) "asset"))]
-    (ui/tooltip
-     (shui/button
-      {:variant "ghost"
-       :class "!px-1 text-muted-foreground"
-       :size :sm
-       :on-click (fn [_]
-                   (let [f (get-in table [:data-fns :add-new-object!])]
-                     (f view-entity table)))}
-      (ui/icon (if asset? "upload" "plus")))
-     [:div (t :node/new)])))
+                    (= (:block/name view-entity) "asset"))
+        label (if asset? (t :node/new) (t :view.table/add-row))]
+    (shui/button
+     {:variant "ghost"
+      :class "ls-table-add-row !px-2 text-muted-foreground hover:text-foreground"
+      :size :sm
+      :title label
+      :on-click (fn [_]
+                  (let [f (get-in table [:data-fns :add-new-object!])]
+                    (f view-entity table)))}
+     (ui/icon (if asset? "upload" "plus") {:size 15})
+     [:span.text-sm label])))
 
 (hsx/defc add-new-row
   [view-entity table]
-  [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
+  [:div.ls-table-add-row.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
    {:on-click (fn [_]
                 (let [f (get-in table [:data-fns :add-new-object!])]
                   (f view-entity table)))}
    (ui/icon "plus" {:size 14})
-   [:div (t :view/new)]])
+   [:div (t :view.table/add-row)]])
 
 (defn- table-filters->persist-state
   [filters]
@@ -3389,33 +3506,61 @@
   [view-feature-type]
   (get default-view-title-key-by-feature-type view-feature-type))
 
+(defn- view-type-choices
+  []
+  [{:id :logseq.property.view/type.table
+    :label-key :property.view-type/table
+    :icon "table"}
+   {:id :logseq.property.view/type.list
+    :label-key :property.view-type/list
+    :icon "list"}
+   {:id :logseq.property.view/type.gallery
+    :label-key :property.view-type/gallery
+    :icon "layout-grid"}])
+
+(defn- create-view-type-ident
+  [view-feature-type display-type]
+  (or display-type
+      (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+        :logseq.property.view/type.list)))
+
+(defn- create-view-properties
+  [view-parent view-feature-type {:keys [view-type-id group-by-property-id]}]
+  (cond-> {:logseq.property/view-for (:db/id view-parent)
+           :logseq.property.view/feature-type view-feature-type}
+    view-type-id
+    (assoc :logseq.property.view/type view-type-id)
+    group-by-property-id
+    (assoc :logseq.property.view/group-by-property group-by-property-id)))
+
 (defn- create-view!
-  [view-parent view-feature-type {:keys [auto-triggered?]}]
+  [view-parent view-feature-type {:keys [auto-triggered? display-type]}]
   (p/let [repo (state/get-current-repo)
           page (db-async/<get-block repo common-config/views-page-name {:children? false})]
     (when page
-      (p/let [list-view-type (when (contains? #{:linked-references :unlinked-references} view-feature-type)
-                               (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.property.view/type.list))
-              block-page-property (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+      (p/let [view-type-ident (create-view-type-ident view-feature-type display-type)
+              references? (contains? #{:linked-references :unlinked-references} view-feature-type)
+              view-type (when view-type-ident
+                          (state/<invoke-db-worker :thread-api/pull repo [:db/id] view-type-ident))
+              block-page-property (when references?
                                     (state/<invoke-db-worker :thread-api/pull repo [:db/id] :block/page))
-              properties (cond->
-                          {:logseq.property/view-for (:db/id view-parent)
-                           :logseq.property.view/feature-type view-feature-type}
-                           (contains? #{:linked-references :unlinked-references} view-feature-type)
-                           (assoc :logseq.property.view/type (:db/id list-view-type)
-                                  :logseq.property.view/group-by-property (:db/id block-page-property)))
-            view-title (if auto-triggered?
-                         (some-> (default-view-title-key view-feature-type) t)
-                         "")
-            view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
-            result (editor-handler/api-insert-new-block! view-title
-                                                         (cond->
-                                                          {:page (:block/uuid page)
-                                                           :properties properties
-                                                           :edit-block? false
-                                                           :outliner-op :create-view}
-                                                           auto-triggered?
-                                                           (assoc :custom-uuid view-block-id)))]
+              properties (create-view-properties
+                          view-parent view-feature-type
+                          {:view-type-id (:db/id view-type)
+                           :group-by-property-id (when references?
+                                                   (:db/id block-page-property))})
+              view-title (if auto-triggered?
+                           (some-> (default-view-title-key view-feature-type) t)
+                           "")
+              view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
+              result (editor-handler/api-insert-new-block! view-title
+                                                           (cond->
+                                                            {:page (:block/uuid page)
+                                                             :properties properties
+                                                             :edit-block? false
+                                                             :outliner-op :create-view}
+                                                             auto-triggered?
+                                                             (assoc :custom-uuid view-block-id)))]
         (db-async/<get-block repo (:block/uuid result) {:children? false})))))
 
 (def ^:private default-view-title-candidates
@@ -3520,9 +3665,25 @@
        :size :sm
        :title (t :view/add-new-view)
        :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
-       :on-click (fn []
-                   (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
-                     (set-current-view-uuid! (:block/uuid view))))}
+       :on-click (fn [e]
+                   (shui/popup-show!
+                    (.-currentTarget e)
+                    (fn []
+                      [:<>
+                       (for [{:keys [id label-key icon]} (view-type-choices)]
+                         (shui/dropdown-menu-item
+                          {:key (name id)
+                           :on-click (fn []
+                                       (p/let [view (create-view! view-parent view-feature-type
+                                                                  {:auto-triggered? false
+                                                                   :display-type id})]
+                                         (set-current-view-uuid! (:block/uuid view))
+                                         (shui/popup-hide!)))}
+                          (ui/icon icon {:size 15})
+                          (t label-key)))])
+                    {:as-dropdown? true
+                     :dropdown-menu? true
+                     :align "start"}))}
       (ui/icon "plus" {:size 15}))])))
 
 (hsx/defc view-head
@@ -3571,15 +3732,20 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       (pv/property-value (view-with-display-type view-entity display-type)
-                          (built-in-property :logseq.property.view/type)
-                          {:icon? true
-                           :popup-focus-trigger? false
-                           :popup-auto-focus-trigger? false})]
+       {:title (t :property.built-in/view-type)}
+       (ui/tooltip
+        (pv/property-value (view-with-display-type view-entity display-type)
+                           (built-in-property :logseq.property.view/type)
+                           {:icon? true
+                            :popup-focus-trigger? false
+                            :popup-auto-focus-trigger? false})
+        (t :property.built-in/view-type))]
 
       (more-actions view-entity columns table option)
 
-      (when add-new-object! (new-record-button table view-entity))]]))
+      (when (and add-new-object!
+                 (nil? (:logseq.property.view/group-by-property view-entity)))
+        (new-record-button table view-entity))]]))
 
 (defn- group-item-content
   [view-entity table' group group-by-property value option view-opts
@@ -3821,6 +3987,12 @@
   [view-entity]
   (str "view-" (or (:block/uuid view-entity) (:db/id view-entity))))
 
+(defn- view-option-for-container
+  [option]
+  (cond-> option
+    config/publishing?
+    (dissoc :add-new-object!)))
+
 (hsx/defc view-container
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
@@ -3837,9 +4009,7 @@
   (let [*scroller-ref (hooks/use-memo #(atom nil) [])]
     ^{:key (view-instance-key view-entity)}
     [view-inner view-entity
-     (cond-> option
-       (or config/publishing? (:logseq.property.view/group-by-property view-entity))
-       (dissoc :add-new-object!))
+     (view-option-for-container option)
      *scroller-ref]))
 
 (defn- get-query-columns

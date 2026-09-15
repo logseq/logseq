@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.config :as config]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
@@ -1443,3 +1444,64 @@
                        (set! outliner-op/delete-page! original-delete-page!)
                        (set! state/pub-event! original-pub-event!)
                        (done)))))))
+
+(deftest table-property-column-ignores-select-and-title
+  (is (false? (#'views/table-property-column? {:id :select})))
+  (is (false? (#'views/table-property-column? {:id :block/title})))
+  (is (true? (#'views/table-property-column?
+              {:id :user.property/score
+               :property {:db/ident :user.property/score}}))))
+
+(deftest table-row-context-actions-include-open-copy-and-delete
+  (let [column {:id :user.property/score
+                :name "Score"
+                :property {:db/ident :user.property/score}}
+        actions (#'views/table-row-context-actions
+                 column
+                 {:view-parent {:db/ident :user.class/Movie}})]
+    (is (= [:open :open-sidebar :copy :set-property :unset-property :delete]
+           (map :id actions)))
+    (is (= :user.property/score
+           (:property-key (some #(when (= :set-property (:id %)) %) actions))))))
+
+(deftest table-row-context-actions-hide-delete-on-page-class
+  (is (not (some #(= :delete (:id %))
+                 (#'views/table-row-context-actions
+                  nil
+                  {:view-parent {:db/ident :logseq.class/Page}})))))
+
+(deftest view-option-for-container-keeps-add-new-object
+  (is (fn? (:add-new-object!
+            (#'views/view-option-for-container {:add-new-object! identity})))))
+
+(deftest view-option-for-container-drops-add-new-object-when-publishing
+  (with-redefs [config/publishing? true]
+    (is (nil? (:add-new-object!
+               (#'views/view-option-for-container {:add-new-object! identity}))))))
+
+(deftest create-view-type-ident-defaults-references-to-list
+  (is (= :logseq.property.view/type.list
+         (#'views/create-view-type-ident :linked-references nil)))
+  (is (= :logseq.property.view/type.gallery
+         (#'views/create-view-type-ident :class-objects :logseq.property.view/type.gallery)))
+  (is (nil? (#'views/create-view-type-ident :class-objects nil))))
+
+(deftest create-view-properties-include-selected-type
+  (is (= {:logseq.property/view-for 1
+          :logseq.property.view/feature-type :class-objects
+          :logseq.property.view/type 9}
+         (#'views/create-view-properties
+          {:db/id 1}
+          :class-objects
+          {:view-type-id 9}))))
+
+(deftest view-type-choices-surface-list-and-gallery
+  (is (= [:logseq.property.view/type.table
+          :logseq.property.view/type.list
+          :logseq.property.view/type.gallery]
+         (map :id (#'views/view-type-choices)))))
+
+(deftest add-new-row-uses-explicit-add-row-control
+  (let [markup (render-static
+                (views/add-new-row {} {:data-fns {:add-new-object! (fn [_ _])}}))]
+    (is (string/includes? markup "ls-table-add-row"))))

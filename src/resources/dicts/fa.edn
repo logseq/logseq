@@ -1749,7 +1749,6 @@
  :view/all "همه"
  :view/export-edn "صادر کردن EDN"
  :view/linked-references "مراجع پیوندشده"
- :view/new "جدید"
  :view/new-property "ویژگی جدید"
  :view/new-view "نمای جدید"
  :view/rename "تغییر نام"
