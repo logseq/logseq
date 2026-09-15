@@ -35,32 +35,23 @@
                       (done))))))))
 
 (deftest remember-current-graph-id-in-tab-test
-  (async done
-    (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
-          stored-graph (atom nil)]
-      (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
-      (when remember-f
-        (p/with-redefs [state/get-current-repo (constantly "logseq_db_work")
-                        state/<invoke-db-worker
-                        (fn [api repo]
-                          (is (= :thread-api/get-graph-uuid api))
-                          (is (= "logseq_db_work" repo))
-                          (p/resolved #uuid "11111111-1111-1111-1111-111111111111"))
-                        frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
-                                                                (reset! stored-graph {:repo repo
-                                                                                      :graph-id graph-id}))]
-          (-> (remember-f)
-              (p/then
-               (fn []
-                 (is (= {:repo "logseq_db_work"
-                         :graph-id "11111111-1111-1111-1111-111111111111"}
-                        @stored-graph))))
-              (p/catch
-               (fn [error]
-                 (is false (str error))))
-              (p/finally
-               (fn []
-                 (done)))))))))
+  (let [remember-id-f (some-> (resolve 'frontend.handler.graph/remember-graph-id-in-tab!) deref)
+        stored-graph (atom nil)]
+    (is (fn? remember-id-f) "Current graph id should be remembered for same-tab reloads")
+    (when remember-id-f
+      (with-redefs [frontend.handler.graph/set-tab-graph!
+                    (fn [repo graph-id]
+                      (reset! stored-graph {:repo repo
+                                            :graph-id graph-id}))]
+        (remember-id-f "logseq_db_work" #uuid "11111111-1111-1111-1111-111111111111")
+        (is (= {:repo "logseq_db_work"
+                :graph-id "11111111-1111-1111-1111-111111111111"}
+               @stored-graph))
+        (remember-id-f "logseq_db_work" nil)
+        (is (= {:repo "logseq_db_work"
+                :graph-id "11111111-1111-1111-1111-111111111111"}
+               @stored-graph)
+            "A missing graph id must not clear the tab graph")))))
 
 (deftest current-graph-id-uses-tab-memory-test
   (let [current-graph-id-f (some-> (resolve 'frontend.handler.graph/current-graph-id) deref)]
