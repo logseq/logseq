@@ -3922,11 +3922,11 @@
 (hsx/defc subscribed-breadcrumb
   [config block-id opts]
   (when-let [breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
-    (let [ancestors (breadcrumb-model/resource-ancestors breadcrumb-data)]
-      (when (seq ancestors)
+    (let [breadcrumb-ancestors (breadcrumb-model/resource-ancestors breadcrumb-data)]
+      (when (seq breadcrumb-ancestors)
         (breadcrumb-aux config block-id
                         (assoc opts :ref-titles (:ref-titles breadcrumb-data))
-                        ancestors)))))
+                        breadcrumb-ancestors)))))
 
 (defn breadcrumb
   [config _repo block-id {:keys [block] :as opts}]

@@ -465,9 +465,9 @@
 
 (deftest resource-ancestors-prefers-inline-payload-test
   (testing "inline ancestors are used as-is, including an empty vector"
-    (let [ancestors [{:block/uuid (random-uuid) :block/title "Parent"}]]
-      (is (= ancestors
-             (model/resource-ancestors {:ancestors ancestors
+    (let [breadcrumb-ancestors [{:block/uuid (random-uuid) :block/title "Parent"}]]
+      (is (= breadcrumb-ancestors
+             (model/resource-ancestors {:ancestors breadcrumb-ancestors
                                          :ancestor-uuids [(random-uuid)]})))
       (is (= []
              (model/resource-ancestors {:ancestors []

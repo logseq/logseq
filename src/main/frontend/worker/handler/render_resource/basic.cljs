@@ -132,9 +132,9 @@
     (when-not (and (integer? load-depth) (pos? load-depth))
       (common/fail! "Invalid breadcrumb load depth" {:load-depth load-depth}))
     (if-let [block (d/entity db [:block/uuid block-uuid])]
-      (let [ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
-            ancestor-uuids (mapv :block/uuid ancestors)
-            ref-titles (breadcrumb-ref-titles (into [block] ancestors))
+      (let [breadcrumb-ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
+            ancestor-uuids (mapv :block/uuid breadcrumb-ancestors)
+            ref-titles (breadcrumb-ref-titles (into [block] breadcrumb-ancestors))
             watch-uuids (into (conj (set ancestor-uuids) block-uuid)
                               (keys ref-titles))
             watch-keys (into #{}
@@ -148,7 +148,7 @@
         [watch-keys
          {:target-uuid block-uuid
           :ancestor-uuids ancestor-uuids
-          :ancestors ancestors
+          :ancestors breadcrumb-ancestors
           :ref-titles ref-titles}])
       [#{[:entity block-uuid]}
        (empty-block-breadcrumb block-uuid)])))

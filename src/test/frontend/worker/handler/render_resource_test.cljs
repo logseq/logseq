@@ -911,11 +911,11 @@
                      [:block/uuid positioned-property]}])
       (let [resource-key [:block-breadcrumb target 16]
             target-block (d/entity @conn [:block/uuid target])
-            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 16)
+            breadcrumb-ancestors (block-breadcrumb/block-breadcrumb @conn target-block 16)
             response (call-resource api conn resource-key)
             expected {:target-uuid target
                       :ancestor-uuids [page parent-a parent-b positioned-property]
-                      :ancestors ancestors
+                      :ancestors breadcrumb-ancestors
                       :ref-titles {}}]
         (assert-resource-envelope @conn
                                   resource-key
@@ -928,7 +928,7 @@
                                   response)
         (is (every? uuid? (:ancestor-uuids (:value response))))
         (is (= ["Page Identity" "Parent A" "Parent B" "Positioned"]
-               (mapv :block/title (:ancestors (:value response))))))))
+               (mapv :block/title (:ancestors (:value response)))))))))
 
 (deftest block-breadcrumb-resource-honors-the-requested-depth-test
   (when-let [api (render-resource-api)]
@@ -960,7 +960,7 @@
                      :block/order "y2"}])
       (let [resource-key [:block-breadcrumb target 1]
             target-block (d/entity @conn [:block/uuid target])
-            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
+            breadcrumb-ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
             response (call-resource api conn resource-key)]
         (assert-resource-envelope @conn
                                   resource-key
@@ -969,7 +969,7 @@
                                     [:entity parent-b]}
                                   {:target-uuid target
                                    :ancestor-uuids [page parent-b]
-                                   :ancestors ancestors
+                                   :ancestors breadcrumb-ancestors
                                    :ref-titles {}}
                                   response)))))
 
@@ -1001,7 +1001,7 @@
                      :block/order "z1"}])
       (let [resource-key [:block-breadcrumb target-uuid 1]
             target-block (d/entity @conn [:block/uuid target-uuid])
-            ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
+            breadcrumb-ancestors (block-breadcrumb/block-breadcrumb @conn target-block 1)
             response (call-resource api conn resource-key)]
         (assert-resource-envelope @conn
                                   resource-key
@@ -1011,7 +1011,7 @@
                                     [:entity ref-uuid]}
                                   {:target-uuid target-uuid
                                    :ancestor-uuids [page parent-uuid]
-                                   :ancestors ancestors
+                                   :ancestors breadcrumb-ancestors
                                    :ref-titles {ref-uuid "Referenced title"}}
                                   response)
         (d/transact! conn
