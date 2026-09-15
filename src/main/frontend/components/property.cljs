@@ -158,6 +158,26 @@
        (ui/tooltip (svg/info)
                    [:span (t :property/type-change-warning)]))]))
 
+(defn- property-choice-label
+  "Build picker-row hiccup only for visible rows. Prebuilding this for every
+  property on a large graph is what made live-filter feel lagged."
+  [x]
+  (if (:convert-page-to-property? x)
+    (t :property/convert-page-to-property (:block/title x))
+    (let [property-title (or (db-property/built-in-display-title x t)
+                             (:block/title x))
+          ident (:db/ident x)
+          ns' (some-> ident (namespace))
+          plugin? (some-> ident (api-block/plugin-property-key?))
+          plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
+      [:span.flex.gap-1.items-center
+       {:title (str ident)}
+       (if plugin?
+         [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
+         [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
+       [:strong.font-normal property-title
+        (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" plugin-name)])]])))
+
 (hsx/defc property-select
   [select-opts]
   (let [[properties set-properties!] (hooks/use-state nil)
@@ -183,28 +203,13 @@
     (let [transform-fn (:transform-fn select-opts)
           items (->>
                  (map (fn [x]
-                        (let [convert? (:convert-page-to-property? x)]
-                          {:label (if convert?
-                                    (t :property/convert-page-to-property (:block/title x))
-                                    (let [property-title (or (db-property/built-in-display-title x t)
-                                                             (:block/title x))
-                                          ident (:db/ident x)
-                                          ns' (some-> ident (namespace))
-                                          plugin? (some-> ident (api-block/plugin-property-key?))
-                                          _plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
-                                      [:span.flex.gap-1.items-center
-                                       {:title (str ident)}
-                                       (if plugin?
-                                         [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
-                                         [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
-                                       [:strong.font-normal property-title
-                                        (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" _plugin-name)])]]))
-                           :value (or (:block/uuid x) (:db/ident x))
-                           :property x
-                           :db/ident (:db/ident x)
-                           :block/title (or (db-property/built-in-display-title x t)
-                                            (:block/title x))
-                           :convert-page-to-property? convert?})) properties)
+                        {:value (or (:block/uuid x) (:db/ident x))
+                         :property x
+                         :db/ident (:db/ident x)
+                         :block/title (or (db-property/built-in-display-title x t)
+                                          (:block/title x))
+                         :convert-page-to-property? (:convert-page-to-property? x)})
+                      properties)
                  (util/distinct-by-last-wins (fn [item] (or (:value item) (:db/ident item)))))
           property-transform-fn (fn [results input]
                                   (let [results (prefer-exact-property-title-match results input)
@@ -221,13 +226,14 @@
        [:div.ls-property-key
         (select/select (merge
                         {:items items
-                         :grouped? true
+                         :grouped? false
                          :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false
                          :new-case-sensitive? true
                          :show-new-when-not-exact-match? true
-                         ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
+                         :item-cp (fn [result _chosen?]
+                                    (property-choice-label result))
                          :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!
                          :transform-fn property-transform-fn}

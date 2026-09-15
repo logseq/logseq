@@ -44,11 +44,17 @@
        row]
       row)))
 
+(def default-input-debounce-ms
+  "Debounce live-filter work (fuzzy search + on-input lookups) so typing
+  on large graphs does not rescore the full picker list every keystroke."
+  200)
+
 (hsx/defc search-input
-  [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
+  [*input {:keys [prompt-key input-default-placeholder input-opts on-input input-debounce-ms]}]
   (let [[input set-input!] (hooks/use-state @*input)
         *input-el (hooks/use-ref nil)
-        auto-focus? (not (util/mobile?))]
+        auto-focus? (not (util/mobile?))
+        debounce-ms (or input-debounce-ms default-input-debounce-ms)]
     (hooks/use-effect!
      (fn []
        (when auto-focus?
@@ -60,13 +66,13 @@
      (fn []
        (reset! *input input)
        (when (fn? on-input) (on-input input)))
-     [(hooks/use-debounced-value input 100)])
+     [(hooks/use-debounced-value input debounce-ms)])
 
     (hooks/use-effect!
      (fn []
        (when (= "" @*input)
          (set-input! "")))
-     [(hooks/use-debounced-value @*input 100)])
+     [(hooks/use-debounced-value @*input debounce-ms)])
 
     (hooks/use-effect!
      (fn []
@@ -111,7 +117,7 @@
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           clear-input-on-chosen?]
+           clear-input-on-chosen? input-debounce-ms]
     :or {limit 100
          prompt-key :select/default-prompt
          empty-placeholder (fn [_t] [:div])
@@ -209,6 +215,7 @@
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
                                         :input-opts input-opts*
+                                        :input-debounce-ms input-debounce-ms
                                         :on-input on-input}))
         results-container-f (fn []
                               (if loading?
