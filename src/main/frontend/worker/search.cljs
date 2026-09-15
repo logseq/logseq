@@ -614,13 +614,20 @@ DROP TRIGGER IF EXISTS blocks_au;
     :logseq.property/deleted-at
     :logseq.property/built-in?])
 
+(def ^:private search-result-pull-selector-with-refs
+  (conj search-result-pull-selector
+        {:block/refs [:block/uuid :block/title]}))
+
 (defn- pull-search-result-blocks
-  [db results]
+  [db results option]
   (let [lookup-refs (mapv (fn [{:keys [id]}]
                             [:block/uuid (uuid id)])
-                          results)]
+                          results)
+        selector (if (:resolve-title-refs? option)
+                   search-result-pull-selector-with-refs
+                   search-result-pull-selector)]
     (if (seq lookup-refs)
-      (->> (d/pull-many db search-result-pull-selector lookup-refs)
+      (->> (d/pull-many db selector lookup-refs)
            (keep (fn [block]
                    (when-let [id (:block/uuid block)]
                      [(str id) block])))
@@ -750,6 +757,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([db keyword-results vector-results]
    (combine-results db keyword-results vector-results nil))
   ([db keyword-results vector-results q]
+   (combine-results db keyword-results vector-results q nil))
+  ([db keyword-results vector-results q option]
    (let [keyword-results (vec (or keyword-results []))
          vector-results (vec (or vector-results []))
          use-rrf? (seq vector-results)
@@ -757,7 +766,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                              (rrf-score-by-id [keyword-results vector-results]
                                               [keyword-rrf-weight vector-rrf-weight]))
          unique-results (unique-search-results (concat keyword-results vector-results))
-         block-by-id (pull-search-result-blocks db unique-results)
+         block-by-id (pull-search-result-blocks db unique-results option)
          merged (reduce (fn [acc {:keys [id] :as result}]
                           (let [block (get block-by-id id)]
                             (if (hidden-entity? block)
@@ -1000,7 +1009,8 @@ DROP TRIGGER IF EXISTS blocks_au;
            combined-result (combine-results @conn
                                             (concat exact-title-result fuzzy-result matched-result non-match-result)
                                             vector-result
-                                            q)
+                                            q
+                                            option)
            code-class (when code-only?
                         (d/entity @conn :logseq.class/Code-block))
            matched-count (when include-matched-count?
