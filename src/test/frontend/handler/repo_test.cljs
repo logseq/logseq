@@ -125,8 +125,7 @@
                  (repo-handler/remove-repo! repo))
                (p/then
                 (fn []
-                  (is (= [[:close (:url repo)]
-                          [:delete-db (:url repo)]
+                  (is (= [[:delete-db (:url repo)]
                           [:remove-search (:url repo)]
                           [:delete-repo repo]
                           [:set-current nil]
