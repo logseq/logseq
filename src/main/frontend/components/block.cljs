@@ -2843,7 +2843,8 @@
      (if (util/mobile?)
        (page-cp (assoc config
                        :disable-preview? true
-                       :tag? true)
+                       :tag? true
+                       :skip-async-load? true)
                 tag)
        [:div.flex.items-center
         {:on-mouse-over #(reset! *hover? true)
@@ -2886,6 +2887,7 @@
         (page-cp (assoc config
                         :disable-preview? true
                         :tag? true
+                        :skip-async-load? true
                         :hide-tag-symbol? true)
                  tag)])]))
 
@@ -2929,6 +2931,7 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
+                                                                      :skip-async-load? true
                                                                       :disable-preview? true) tag)]))
                                                  popup-opts))}
           (for [tag (take 2 block-tags)]
@@ -2936,6 +2939,7 @@
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
                               :tag? true
+                              :skip-async-load? true
                               :disable-preview? true
                               :disable-click? true) tag)])
           [:div.text-sm.opacity-50.ml-1
@@ -3108,20 +3112,18 @@
        show-add-property-button?)))
 
 (hsx/defc positioned-property-row
-  [block property-uuid opts]
-  (let [property (db-hooks/use-block property-uuid)]
-    (when (and property
-               (not (and (= :block-below (:property-position opts))
-                         (hidden-block-below-property? property))))
-      (if (= :block-below (:property-position opts))
-        (bottom-property-pill-cp block property opts)
-        (pv/property-value block property (assoc opts :show-tooltip? true))))))
+  [block property opts]
+  (when-not (and (= :block-below (:property-position opts))
+                 (hidden-block-below-property? property))
+    (if (= :block-below (:property-position opts))
+      (bottom-property-pill-cp block property opts)
+      (pv/property-value block property (assoc opts :show-tooltip? true)))))
 
 (defn- bottom-property-pill-items
-  [block property-uuids opts]
-  (mapv (fn [property-uuid]
-          (positioned-property-row block property-uuid opts))
-        property-uuids))
+  [block properties opts]
+  (mapv (fn [property]
+          (positioned-property-row block property opts))
+        properties))
 
 (defn- measure-bottom-pills-overflow!
   [^js el *overflow?]
@@ -3151,9 +3153,9 @@
      label)))
 
 (hsx/defc block-below-positioned-properties-cp
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count property-uuids)])
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
@@ -3170,7 +3172,7 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) property-uuids show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3187,7 +3189,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block property-uuids (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
@@ -3206,26 +3208,22 @@
                                                      :tab-index 0)))]]))
 
 (hsx/defc block-below-positioned-properties-gate
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
-  (when-let [properties (db-hooks/use-blocks property-uuids)]
-    (let [visible-property-uuids (into []
-                                       (comp (remove hidden-block-below-property?)
-                                             (keep :block/uuid))
-                                       properties)]
-      (when (show-block-below-properties-row?
-             visible-property-uuids
-             {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
-              :show-hidden-properties-control? show-hidden-properties-control?
-              :show-add-property-button? show-add-property-button?})
-        [block-below-positioned-properties-cp block
-         visible-property-uuids
-         opts
-         show-hidden-properties-pill-toggle?
-         show-hidden-properties-control?
-         show-add-property-button?]))))
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [visible-properties (into [] (remove hidden-block-below-property?) properties)]
+    (when (show-block-below-properties-row?
+           visible-properties
+           {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+            :show-hidden-properties-control? show-hidden-properties-control?
+            :show-add-property-button? show-add-property-button?})
+      [block-below-positioned-properties-cp block
+       visible-properties
+       opts
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?])))
 
 (hsx/defc positioned-properties-content
-  [config block position property-uuids]
+  [config block position properties]
   (let [opts (merge config
                     {:icon? true
                      :page-cp page-cp
@@ -3250,7 +3248,7 @@
         :block-below
         [block-below-positioned-properties-gate
          block
-         property-uuids
+         properties
          opts
          show-hidden-properties-pill-toggle?
          show-hidden-properties-control?
@@ -3258,19 +3256,14 @@
 
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
-         (for [property-uuid property-uuids]
-           ^{:key (str (:block/uuid block) "-" property-uuid)}
-           (positioned-property-row block property-uuid opts))])))
+         (for [property properties]
+           ^{:key (str (:block/uuid block) "-" (:block/uuid property))}
+           (positioned-property-row block property opts))])))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (let [block-uuid (:block/uuid block)
-        {:keys [status value]}
-        (db-hooks/use-resource-snapshot
-         (when (uuid? block-uuid)
-           [:block-positioned-properties block-uuid position]))]
-    (when (and (= :ready status) (seq value))
-      [positioned-properties-content config block position value])))
+  (when-let [properties (seq (get-in block [:block.temp/positioned-properties position]))]
+    [positioned-properties-content config block position properties]))
 
 (hsx/defc loaded-block-reactions
   [block]
