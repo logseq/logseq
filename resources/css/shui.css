@@ -522,6 +522,32 @@ kbd.shui-shortcut-key-pressed,
     active:opacity-80 hover:text-red-rx-09 rounded-md !h-6 !w-6;
   }
 
+  /* Day highlight must win over ghost-button focus rings. */
+  [role="gridcell"] > button:focus,
+  [role="gridcell"] > button:focus-visible {
+    box-shadow: none;
+    outline: none;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-shadow: 0 0 #0000;
+  }
+
+  [role="gridcell"][data-today="true"] > button {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+
+  [role="gridcell"][data-selected="true"] > button,
+  [role="gridcell"][data-focused="true"] > button,
+  [role="gridcell"][data-selected="true"] > button:hover,
+  [role="gridcell"][data-selected="true"] > button:focus,
+  [role="gridcell"][data-selected="true"] > button:focus-visible,
+  [role="gridcell"][data-focused="true"] > button:hover,
+  [role="gridcell"][data-focused="true"] > button:focus,
+  [role="gridcell"][data-focused="true"] > button:focus-visible {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
   input[type=number] {
     appearance: textfield;
     -moz-appearance: textfield;
