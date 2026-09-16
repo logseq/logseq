@@ -57,6 +57,8 @@
   [slot-key]
   (seq (get @*listeners slot-key)))
 
+(loader/set-still-wanted-fn! mounted?)
+
 (defn- notify!
   [slot-key]
   (doseq [listener (vals (get @*listeners slot-key))]

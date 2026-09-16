@@ -178,9 +178,14 @@
     (let [selected-ids (row-selection-map row-selection :selected-ids)]
       (filter #(true? (get selected-ids (table-row-id %))) rows))))
 
+(defn- table-action-rows
+  [table]
+  (when-not (:full-data-loading? table)
+    (or (:full-data table) (:rows table))))
+
 (defn- table-selection-summary
   [table row-selection]
-  (let [rows (:rows table)
+  (let [rows (table-action-rows table)
         selected-rows (table-get-selection-rows row-selection rows)
         selected-count (count selected-rows)
         rows-count (count rows)]
@@ -466,7 +471,29 @@
   [opacity]
   (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
-(hsx/defc ^:large-vars/cleanup-todo block-title
+(defn- first-window-title-text
+  [block]
+  (some->> (:block/title block) str string/trim string/split-lines first))
+
+(defn- first-window-title-preview?
+  [block]
+  (true? (:block.temp/first-window-preview? block)))
+
+(defn- first-window-block-title
+  "Tags/Movies first paint spent block-title hooks on every preview row."
+  [block]
+  [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer
+   [:div.flex.flex-row
+    [:div (first-window-title-text block)]]])
+
+(defn- first-window-list-block
+  "List view first paint should show the preview title before full block hydration."
+  [block]
+  [:div.ls-block.flex.flex-row.items-center
+   {:style {:min-height 24}}
+   [:div.block-content (first-window-title-text block)]])
+
+(hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -533,20 +560,20 @@
        [:div.flex.flex-row
         (let [render (fn [block]
                        [:div
-                        (inline-title
-                         {:table? true
-                          :block/uuid (:block/uuid block)}
-                         (some->> (:block/title block)
-                                  string/trim
-                                  string/split-lines
-                                  first))])]
+                        (if (first-window-title-preview? block)
+                          (first-window-title-text block)
+                          (inline-title
+                           {:table? true
+                            :block/uuid (:block/uuid block)}
+                           (first-window-title-text block)))])]
           (if many?
             (->> (map render block*)
                  (interpose [:div.mr-1 ","]))
             (render block*)))]
        [:div])
 
-     (when-not (util/mobile?)
+     (when (and (not (util/mobile?))
+                (not (first-window-title-preview? block)))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
           [:div.flex.flex-row.items-center
@@ -567,6 +594,15 @@
                          (add-to-sidebar!))}
             (ui/icon "layout-sidebar-right"))]]))]))
 
+(defn- block-title
+  [block* opts]
+  (let [block (if (db-property/many? (:property opts))
+                (first block*)
+                block*)]
+    (if (first-window-title-preview? block)
+      (first-window-block-title block)
+      [block-title-interactive block* opts])))
+
 (defn- page-column
   []
   {:id :block/page
@@ -577,7 +613,8 @@
    :cell (fn [_table row _column]
            (when-let [page (:block/page row)]
              (when-let [page-cp (state/get-component :block/page-cp)]
-               (page-cp {:disable-preview? true} page))))})
+               (page-cp {:disable-preview? true
+                         :skip-async-load? true} page))))})
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column? add-page-column? advanced-query?]
@@ -987,7 +1024,8 @@
          option))))))
 
 (hsx/defc more-actions
-  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}
+  [view-entity columns {:keys [column-visible? column-toggle-visibility
+                               full-data-loading?] :as table}
    {:keys [display-type group-by-property-ident]}]
   (let [table? (= display-type :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
@@ -1055,7 +1093,11 @@
          (groups-sort-order view-entity (:logseq.property.view/sort-groups-desc? view-entity)))
        (shui/dropdown-menu-item
         {:key "export-edn"
-         :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
+         :disabled full-data-loading?
+         :on-click #(when-let [rows (table-action-rows table)]
+                      (db-export-handler/export-view-nodes-data
+                       rows
+                       {:group-by? (some? group-by-property-ident)}))}
         (t :view/export-edn)))))))
 
 (defn- get-column-size
@@ -1249,6 +1291,18 @@
                      (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
          (clear-selection!))))))
 
+(defn- always-eager-column?
+  [column]
+  (contains? #{:block/title :select :id} (:id column)))
+
+(defn- visible-unpinned-columns
+  "Movies first paint mounted 24 cells per row. Keep name/select/id
+  on the first frame and mount property columns after that paint."
+  [unpinned-columns mount-unpinned-cells?]
+  (if (false? mount-unpinned-cells?)
+    (filterv always-eager-column? unpinned-columns)
+    (vec unpinned-columns)))
+
 (defn- table-header
   [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option}]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
@@ -1262,7 +1316,11 @@
                       :content (table-header-cell table column)
                       :disabled? (= (:id column) :select)})
         pinned-items (mapv build-item pinned)
-        unpinned-items (if show-add-property?
+        unpinned (visible-unpinned-columns
+                  unpinned
+                  (:mount-unpinned-cells? option))
+        unpinned-items (if (and show-add-property?
+                                (not (false? (:mount-unpinned-cells? option))))
                          (conj (mapv build-item unpinned)
                                {:id "add property"
                                 :prop {:style {:width "-webkit-fill-available"
@@ -1304,8 +1362,12 @@
        cell-placeholder)]))
 
 (defn- eager-table-cells?
-  [view-feature-type]
-  (= :all-pages view-feature-type))
+  "Virtuoso windows rows. Unpinned property columns stay lazy. The name
+  column is on-screen even when it is not pinned, so it stays eager."
+  [disable-virtualized? column lazy-column?]
+  (and (not disable-virtualized?)
+       (or (always-eager-column? column)
+           (not lazy-column?))))
 
 (defn- click-cell
   [node]
@@ -1358,6 +1420,25 @@
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
 
+(defn- table-cell-plain-value
+  "Plain text used for native title tooltips on clipped table cells."
+  [row column]
+  (let [id (:id column)]
+    (cond
+      (contains? #{:select :id :add-property} id)
+      nil
+
+      (= :block/title id)
+      (some-> (:block/title row) str)
+
+      (fn? (:get-value column))
+      (let [value ((:get-value column) row)]
+        (when (some? value)
+          (str value)))
+
+      :else
+      nil)))
+
 (hsx/defc table-cell-container
   [cell-opts body]
   (let [*ref (hooks/use-ref nil)]
@@ -1401,36 +1482,58 @@
                                nil))))
      body)))
 
-(hsx/defc table-row-inner
-  [table row props {:keys [show-add-property? scrolling? view-feature-type]}]
+(def ^:private table-fixed-row-height 33)
+
+(hsx/defc ^:large-vars/cleanup-todo table-row-inner
+  [table row props {:keys [show-add-property? scrolling? disable-virtualized?
+                           mount-unpinned-cells?]}]
   (let [*ref (hooks/use-ref nil)
-        eager-cells? (eager-table-cells? view-feature-type)
         pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
-        unpinned-columns (if show-add-property?
-                           (conj (vec unpinned)
-                                 {:id :add-property
-                                  :cell (fn [_table _row _column])})
-                           unpinned)
+        unpinned-columns (visible-unpinned-columns
+                          (if (and show-add-property?
+                                   (not (false? mount-unpinned-cells?)))
+                            (conj (vec unpinned)
+                                  {:id :add-property
+                                   :cell (fn [_table _row _column])})
+                            unpinned)
+                          mount-unpinned-cells?)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column _cell-option]
+        row-cell-f (fn [column cell-option]
                      (let [id (str (:id row) "-" (:id column))
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
                            add-property? (= (:id column) :add-property)
                            style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :style style}]
+                           cell-title (table-cell-plain-value row column)
+                           cell-opts (cond-> {:key id
+                                              :select? select?
+                                              :add-property? add-property?
+                                              :style style}
+                                       (not (string/blank? cell-title))
+                                       (assoc :title cell-title))
+                           lazy-column? (:lazy? cell-option)
+                           eager-cell? (eager-table-cells?
+                                        disable-virtualized?
+                                        column
+                                        lazy-column?)]
                        (if (and scrolling? (not (:block/title row)))
                          (table-cell-container cell-opts nil)
                          (when-let [render (get column :cell)]
                            (let [cell-render (fn []
                                                (table-cell-container
                                                 cell-opts (render table row column style)))]
-                             (if eager-cells?
+                             (cond
+                               eager-cell?
                                [:div.h-full (cell-render)]
+
+                               ;; Movies first paint spent ~9ms/row on 23
+                               ;; IntersectionObservers. Mount them after
+                               ;; the name column has painted.
+                               (false? mount-unpinned-cells?)
+                               (table-cell-container cell-opts nil)
+
+                               :else
                                (lazy-table-cell cell-render
                                                 (table-cell-container cell-opts nil))))))))]
     (shui/table-row
@@ -1496,38 +1599,73 @@
                  (assoc :block.temp/refs-count (:block.temp/refs-count row)))]
     (table-row-inner table row' props option)))
 
+(hsx/defc table-row-placeholder
+  [table idx option]
+  (let [pinned-columns (get-in table [:state :pinned-columns])
+        unpinned (get-in table [:state :unpinned-columns])
+        show-add-property? (:show-add-property? option)
+        sized-columns (get-in table [:state :sized-columns])
+        unpinned-columns (cond-> (vec unpinned)
+                           show-add-property?
+                           (conj {:id :add-property}))
+        cell (fn [column]
+               (let [width (get-column-size column sized-columns)
+                     add-property? (= (:id column) :add-property)
+                     select? (= (:id column) :select)]
+                 [:div.ls-table-cell.flex.relative.h-full
+                  {:key (str "placeholder-" idx "-" (:id column))
+                   :style {:width width :min-width width}}
+                  [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                                      (cond
+                                        select? " px-0"
+                                        add-property? ""
+                                        :else " border-r px-2"))}]]))]
+    [:div.ls-table-row.ls-block.flex.flex-row.items-center.border-b.transition-colors.bg-gray-01.items-stretch
+     {:key (str "placeholder-" idx)
+      :aria-hidden true
+      :style {:height table-fixed-row-height
+              :max-height table-fixed-row-height
+              :overflow "hidden"}}
+     (when (seq pinned-columns)
+       (into [:div.sticky-columns.flex.flex-row]
+             (map cell pinned-columns)))
+     (when (seq unpinned-columns)
+       (into [:div.flex.flex-row]
+             (map cell unpinned-columns)))]))
+
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
   (let [[show-input? set-show-input!] (hooks/use-state false)]
-    (if show-input?
-      [:div.flex.flex-row.items-center
-       (shui/input
-        {:placeholder (t :view.filter/type-to-search)
-         :auto-focus true
-         :value input
-         :on-change (fn [e]
-                      (let [value (util/evalue e)]
-                        (on-change value)))
-         :on-key-down (fn [e]
-                        (when (= "Escape" (util/ekey e))
-                          (set-show-input! false)
-                          (set-input! "")))
-         :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
-       (shui/button
-        {:variant "ghost"
-         :class "text-muted-foreground !px-1"
-         :size :sm
-         :on-click #(do
-                      (set-show-input! false)
-                      (set-input! ""))}
-        (ui/icon "x"))]
-      (shui/button
-       {:variant "ghost"
-        ;; FIXME: remove ring when focused
-        :class "text-muted-foreground !px-1"
-        :size :sm
-        :on-click #(set-show-input! true)}
-       (ui/icon "search" {:size 15})))))
+    [:div.flex.flex-row.items-center
+     (shui/button
+      {:variant "ghost"
+       :class "text-muted-foreground !px-1"
+       :size :sm
+       :on-click #(when-not show-input?
+                    (set-show-input! true))}
+      (ui/icon "search" {:size 15}))
+     (when show-input?
+       [:<>
+        (shui/input
+         {:placeholder (t :view.filter/type-to-search)
+          :auto-focus true
+          :value input
+          :on-change (fn [e]
+                       (let [value (util/evalue e)]
+                         (on-change value)))
+          :on-key-down (fn [e]
+                         (when (= "Escape" (util/ekey e))
+                           (set-show-input! false)
+                           (set-input! "")))
+          :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+        (shui/button
+         {:variant "ghost"
+          :class "text-muted-foreground !px-1"
+          :size :sm
+          :on-click #(do
+                       (set-show-input! false)
+                       (set-input! ""))}
+         (ui/icon "x"))])]))
 
 (defn datetime-property?
   [property]
@@ -2033,49 +2171,394 @@
 
 (defn- lazy-item-placeholder-height
   [table-view?]
-  (if table-view? 33 24))
+  (if table-view? table-fixed-row-height 24))
 
-(def ^:private view-prefetch-limit 50)
+(def ^:private table-row-overscan-rows 2)
+
+(defn- table-virtualization-metrics
+  "Fixed row height so Virtuoso can skip measurement. Overscan is two
+  placeholder rows, not a second snapshot window."
+  []
+  (let [item-height (lazy-item-placeholder-height true)]
+    {:item-height item-height
+     :overscan-px (* item-height table-row-overscan-rows)}))
+
+(def ^:private view-prefetch-max-rows 1000)
+
+(def ^:private windowed-view-feature-types
+  #{:all-pages :class-objects})
+
+(defn- windowed-view-feature?
+  [view-feature-type group-by-property-ident]
+  (and (contains? windowed-view-feature-types view-feature-type)
+       (nil? group-by-property-ident)))
+
+(defn- offset-view-row-count
+  "One screen is already painted. Fetch the current screen plus the next
+  so rapid scroll does not run off the window mid-fetch."
+  [screen-rows]
+  (min view-prefetch-max-rows (* 2 (max 0 screen-rows))))
+
+(defn- offset-view-context
+  [window-context row-offset]
+  (when (and window-context (integer? row-offset) (pos? row-offset))
+    (cond-> (assoc window-context :row-offset row-offset)
+      (integer? (:initial-row-count window-context))
+      (update :initial-row-count offset-view-row-count))))
+
+(defn- offset-view-data-key
+  "Remaining-id leftover collected 40938 pages in 84ms, sorted in 269ms,
+  and normalized UUIDs in 496ms. Request one scrolled window instead."
+  [view-uuid window-context row-offset]
+  (when-let [ctx (offset-view-context window-context row-offset)]
+    [:view-data view-uuid ctx]))
+
+(defn- table-row-from-offset
+  [offset-rows row-offset idx]
+  (when (and (integer? idx)
+             (integer? row-offset)
+             offset-rows
+             (>= idx row-offset)
+             (< idx (+ row-offset (count offset-rows))))
+    (nth offset-rows (- idx row-offset))))
+
+(defn- table-row-at
+  ([first-rows offset-rows row-offset idx]
+   (table-row-at first-rows offset-rows row-offset nil nil idx))
+  ([first-rows offset-rows row-offset stale-rows stale-offset idx]
+   (or (when (and (integer? idx) (not (neg? idx)) (< idx (count first-rows)))
+         (nth first-rows idx))
+       (table-row-from-offset offset-rows row-offset idx)
+       (table-row-from-offset stale-rows stale-offset idx))))
+
+(defn- table-row-key
+  [first-rows offset-rows row-offset stale-rows stale-offset idx]
+  (str "table-row-"
+       idx
+       "-"
+       (or (table-row-at first-rows offset-rows row-offset
+                         stale-rows stale-offset idx)
+           "placeholder")))
+
+(defn- windowed-view-row
+  [rows {:keys [all-row-ids offset-rows row-offset stale-offset-rows stale-row-offset]} idx]
+  (if (seq all-row-ids)
+    (table-row-at all-row-ids offset-rows row-offset
+                  stale-offset-rows stale-row-offset idx)
+    (util/nth-safe rows idx)))
+
+(defn- windowed-view-row-key
+  [prefix rows option idx]
+  (str prefix "-" idx "-" (or (windowed-view-row rows option idx)
+                              "placeholder")))
+
+(defn- matching-stale-offset-window
+  [stale-window window-context]
+  (when (= (:context stale-window) window-context)
+    stale-window))
+
+(defn- scroll-list-offset-top
+  "Virtuoso's list sits below page chrome. `#main-content-container`
+  scrollTop includes that chrome; the first visible row index does not."
+  [scroll-parent]
+  (if-let [list (some-> scroll-parent (.querySelector "[data-testid=\"virtuoso-item-list\"]"))]
+    (max 0 (+ (- (.-top (.getBoundingClientRect list))
+                 (.-top (.getBoundingClientRect scroll-parent)))
+              (or (.-scrollTop scroll-parent) 0)))
+    0))
+
+(defn- scrolled-row-offset
+  ([scroll-top item-height]
+   (scrolled-row-offset scroll-top 0 item-height))
+  ([scroll-top list-offset-top item-height]
+   (max 0 (js/Math.floor (/ (max 0 (- scroll-top (max 0 (or list-offset-top 0))))
+                            item-height)))))
+
+(defn- measured-viewport-height
+  "0 is a real clientHeight before layout. `(or 0 window-height)` would
+  keep it and hydrate one row."
+  [parent-height window-height]
+  (cond
+    (and (number? parent-height) (pos? parent-height)) parent-height
+    (and (number? window-height) (pos? window-height)) window-height
+    :else 0))
+
+(defn- rows-for-height
+  [height-px item-height]
+  (max 1 (js/Math.ceil (/ (max 0 height-px) item-height))))
+
+(defn- viewport-filled?
+  "Virtuoso mounts after the first screen has hydrated rows. An empty
+  prefetch is `every?` true and must not count."
+  [initial-rows-ready? hydrate-row-uuids]
+  (and initial-rows-ready?
+       (boolean (seq hydrate-row-uuids))))
+
+(defn- first-window-titles-ready?
+  [row-previews]
+  (boolean (seq row-previews)))
+
+(defn- table-body-can-paint?
+  "First-window view-data already carries titles. Do not hold an empty
+  table for the follow-up use-block snapshot."
+  [initial-rows-ready? hydrate-row-uuids row-previews]
+  (or (first-window-titles-ready? row-previews)
+      (viewport-filled? initial-rows-ready? hydrate-row-uuids)))
+
+(defn- first-paint-view-entity
+  "Pending views paint titles before use-block. Swapping in db/id
+  re-rendered All Pages / Tags / Movies before the first lazy-item."
+  [view-entity pending-view first-paint-done?]
+  (if (and first-paint-done?
+           (= (:block/uuid view-entity) (:block/uuid pending-view)))
+    (or view-entity pending-view)
+    pending-view))
+
+(defn first-paint-class-properties
+  "Movies fetched 17 class properties before view-data. Keep the first
+  table frame on name/select/id."
+  [fetched first-paint-done?]
+  (if first-paint-done?
+    (or fetched [])
+    []))
+
+(defn- notify-first-table-paint!
+  [*notified? on-first-table-paint!]
+  (when (and on-first-table-paint! (not (.-current *notified?)))
+    (set! (.-current *notified?) true)
+    (js/requestAnimationFrame on-first-table-paint!)))
+
+(defn- empty-table-ready-on-mount?
+  "Empty tables skip Virtuoso. items-rendered never flips
+   mount-unpinned-cells?, so unused property pages hid the property
+   column and left .view-actions unmounted."
+  [rows]
+  (not (seq rows)))
+
+(defn- view-head-ready-on-mount?
+  "View tabs and actions mount with the view chrome. Table rows can
+  still wait for their first hydrated window."
+  [_display-type _view-partition _rows]
+  true)
+
+(defn- lazy-item-should-subscribe?
+  "Preview rows painted titles first. Immediate use-block remounted
+  every visible All Pages / Movies row before that frame committed."
+  [preview mount-unpinned-cells?]
+  (or (nil? preview)
+      (true? mount-unpinned-cells?)))
+
+(defn- table-total-count
+  "First-window view-data already has the full count. Use it for the
+  scrollbar so remaining ids do not have to replace the painted rows."
+  [rows items-count]
+  (max (count rows)
+       (if (number? items-count) items-count 0)))
+
+(defn- windowed-view-total-count
+  [rows {:keys [all-row-ids items-count]}]
+  (if (seq all-row-ids)
+    (table-total-count all-row-ids items-count)
+    (count rows)))
+
+(defn- viewport-row-range
+  "On-screen rows from scroll position. Virtuoso's mounted overscan range
+  is not a hydrate window."
+  ([scroll-top viewport-height item-height total-count]
+   (viewport-row-range scroll-top 0 viewport-height item-height total-count))
+  ([scroll-top list-offset-top viewport-height item-height total-count]
+   (when (and (pos? item-height) (pos? total-count))
+     (let [start (scrolled-row-offset scroll-top list-offset-top item-height)
+           end (min (dec total-count)
+                    (scrolled-row-offset (+ (max 0 scroll-top)
+                                            (max 0 viewport-height)
+                                            -1)
+                                         list-offset-top
+                                         item-height))]
+       [start (max start end)]))))
+
+(def ^:private offset-prefetch-lead-rows 8)
+
+(defn- offset-window-covers-visible?
+  [row-offset window-size visible-start visible-end]
+  (and (integer? row-offset)
+       (integer? window-size)
+       (pos? window-size)
+       (integer? visible-start)
+       (integer? visible-end)
+       (<= row-offset visible-start)
+       (>= (+ row-offset (dec window-size)) visible-end)))
+
+(defn- offset-window-near-end?
+  [row-offset window-size visible-end]
+  (and (integer? row-offset)
+       (integer? window-size)
+       (integer? visible-end)
+       (>= visible-end (- (+ row-offset window-size) offset-prefetch-lead-rows))))
+
+(defn- next-scrolled-row-offset
+  "Keep the current offset window until the visible range leaves it.
+  Replacing it every row of scroll left 27 empty Movies rows."
+  ([current-offset window-size visible-start visible-end first-window-count]
+   (next-scrolled-row-offset current-offset window-size visible-start visible-end
+                             first-window-count true))
+  ([current-offset window-size visible-start visible-end first-window-count offset-ready?]
+   (let [first-end (when (and (integer? first-window-count) (pos? first-window-count))
+                     (dec first-window-count))]
+     (cond
+       (not (integer? visible-start))
+       current-offset
+
+       (and (integer? current-offset) (not (true? offset-ready?)))
+       (if (and (integer? visible-start)
+                (integer? window-size)
+                (or (< visible-start current-offset)
+                    (> visible-start (+ current-offset window-size))))
+         visible-start
+         current-offset)
+
+       (offset-window-covers-visible?
+        current-offset window-size visible-start visible-end)
+       (if (offset-window-near-end? current-offset window-size visible-end)
+         visible-start
+         current-offset)
+
+       (and first-end
+            (integer? visible-end)
+            (< visible-end (- first-end offset-prefetch-lead-rows)))
+       current-offset
+
+       (and first-end (integer? visible-end) (<= visible-start first-end))
+       first-window-count
+
+       :else
+       visible-start))))
 
 (defn- initial-view-prefetch-count
+  "First paint hydrates only the rows that fit on screen."
   [viewport-height item-height]
-  (-> (js/Math.ceil (/ viewport-height item-height))
-      (max 1)
-      (min view-prefetch-limit)))
+  (min view-prefetch-max-rows (rows-for-height viewport-height item-height)))
 
-(defn- view-prefetch-window
-  [rows start-index end-index]
-  (let [rows (vec rows)
-        rows-count (count rows)]
-    (if (<= rows-count view-prefetch-limit)
-      rows
-      (let [center-index (quot (+ start-index end-index) 2)
-            max-start (- rows-count view-prefetch-limit)
-            start-index (min max-start
-                             (max 0 (- center-index
-                                       (quot view-prefetch-limit 2))))]
-        (subvec rows start-index (+ start-index view-prefetch-limit))))))
+(defn- view-prefetch-row-count
+  "Hydrate one screen. Virtuoso overscan keeps placeholders and does not
+  belong in the snapshot batch."
+  [viewport-height item-height]
+  (initial-view-prefetch-count viewport-height item-height))
+
+(defn- view-prefetch-bounds
+  [rows-count start-index end-index window-size]
+  (cond
+    (zero? rows-count)
+    nil
+
+    (<= rows-count window-size)
+    [0 (dec rows-count)]
+
+    :else
+    (let [max-start (- rows-count window-size)
+          visible-count (inc (- end-index start-index))]
+      (if (<= visible-count window-size)
+        (let [start (min max-start (max 0 start-index))]
+          [start (+ start (dec window-size))])
+        (let [center-index (quot (+ start-index end-index) 2)
+              start (min max-start
+                         (max 0 (- center-index
+                                   (quot window-size 2))))]
+          [start (+ start (dec window-size))])))))
+
+(defn- prefetch-bounds-cover-visible?
+  [current-bounds visible-start visible-end rows-count window-size]
+  (let [[need-start need-end] (view-prefetch-bounds
+                               rows-count visible-start visible-end window-size)]
+    (and (some? current-bounds)
+         (some? need-start)
+         (<= (first current-bounds) need-start)
+         (>= (second current-bounds) need-end))))
+
+(defn- next-view-prefetch-bounds
+  "Keep the current screen-sized window until the visible range approaches an edge."
+  [rows-count current-bounds visible-start visible-end window-size]
+  (if (prefetch-bounds-cover-visible?
+       current-bounds visible-start visible-end rows-count window-size)
+    current-bounds
+    (view-prefetch-bounds rows-count visible-start visible-end window-size)))
 
 (defn- rendered-item-index
   [^js item]
   (.-index item))
 
+(defn- prefetch-visible-range
+  "Accept the on-screen [start end] or Virtuoso's mounted items. A
+  two-index vector is the viewport; a mounted list still works for
+  gallery cards."
+  [rendered]
+  (cond
+    (and (vector? rendered)
+         (= 2 (count rendered))
+         (number? (first rendered))
+         (number? (second rendered)))
+    rendered
+
+    (array? rendered)
+    (when (pos? (alength rendered))
+      [(rendered-item-index (aget rendered 0))
+       (rendered-item-index (aget rendered (dec (alength rendered))))])
+
+    :else
+    nil))
+
+(defn- uuid-row-ids
+  [rows]
+  (when (and (sequential? rows) (every? uuid? rows))
+    rows))
+
+(defn- table-body-row-ids
+  "Grouped tables pass [group-value row-uuids] as :all-row-ids. Prefetch
+  must see the group's UUIDs, not the scalar group value. List views
+  keep :grouped-list partitions; painting those as table rows called
+  use-block on [breadcrumb-uuid row-uuids] and crashed the page."
+  [all-row-ids table-data rows]
+  (or (uuid-row-ids all-row-ids)
+      (uuid-row-ids table-data)
+      (uuid-row-ids rows)
+      []))
+
+(defn- prefetch-rows-in-bounds
+  "Offset windows can be shorter than the previous first-window bounds.
+  Tags crashed when [0 25] was applied to 11 leftover rows."
+  [rows bounds]
+  (let [rows-vec (vec rows)]
+    (cond
+      (empty? rows-vec)
+      []
+
+      (nil? bounds)
+      rows-vec
+
+      :else
+      (let [start (max 0 (min (first bounds) (dec (count rows-vec))))
+            end (min (count rows-vec) (inc (second bounds)))]
+        (if (< start end)
+          (subvec rows-vec start end)
+          [])))))
+
 (defn- use-view-row-prefetch
   ([rows]
-   (use-view-row-prefetch rows view-prefetch-limit))
+   (use-view-row-prefetch rows
+                          (initial-view-prefetch-count
+                           (or (.-innerHeight js/window) 0)
+                           (lazy-item-placeholder-height false))
+                          (view-prefetch-row-count
+                           (or (.-innerHeight js/window) 0)
+                           (lazy-item-placeholder-height false))))
   ([rows initial-prefetch-count]
-   (let [[rendered-range set-rendered-range!] (hooks/use-state nil)
-         prefetch-rows (cond
-                         (empty? rows)
-                         []
-
-                         rendered-range
-                         (view-prefetch-window rows
-                                               (first rendered-range)
-                                               (second rendered-range))
-
-                         :else
-                         (subvec (vec rows) 0 (min (count rows) initial-prefetch-count)))
+   (use-view-row-prefetch rows initial-prefetch-count initial-prefetch-count))
+  ([rows initial-prefetch-count window-size]
+   (let [[prefetch-bounds set-prefetch-bounds!] (hooks/use-state nil)
+         rows-vec (vec rows)
+         prefetch-rows (if prefetch-bounds
+                         (prefetch-rows-in-bounds rows-vec prefetch-bounds)
+                         (subvec rows-vec 0 (min (count rows-vec) initial-prefetch-count)))
          prefetch-ready? (db-hooks/use-block-prefetch prefetch-rows)
          [initial-prefetch-ready? set-initial-prefetch-ready!] (hooks/use-state prefetch-ready?)]
      (hooks/use-effect!
@@ -2084,64 +2567,209 @@
           (set-initial-prefetch-ready! true)))
       [prefetch-ready?])
      [(or initial-prefetch-ready? prefetch-ready?)
-      (fn [^js rendered-items]
-        (when (pos? (alength rendered-items))
-          (let [next-range [(rendered-item-index (aget rendered-items 0))
-                            (rendered-item-index
-                             (aget rendered-items (dec (alength rendered-items))))]]
-            (set-rendered-range!
-             (fn [current-range]
-               (if (= current-range next-range)
-                 current-range
-                 next-range))))))])))
+      (set prefetch-rows)
+      (fn [rendered]
+        (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+          (set-prefetch-bounds!
+           (fn [current-bounds]
+             (let [next-bounds (next-view-prefetch-bounds
+                                (count rows-vec)
+                                current-bounds
+                                visible-start
+                                visible-end
+                                window-size)]
+               (if (= current-bounds next-bounds)
+                 current-bounds
+                 next-bounds))))))])))
 
-(hsx/defc lazy-item
-  [data idx {:keys [gallery-view? table-view?]} item-render]
-  (let [row-uuid (util/nth-safe data idx)
-        item (db-hooks/use-block row-uuid)]
+(hsx/defc lazy-item-placeholder
+  [table-view? gallery-view? table idx option]
+  (if gallery-view?
+    [:div.ls-card-item {:aria-hidden true}]
+    (if (and table-view? table)
+      (table-row-placeholder table idx option)
+      (let [height (lazy-item-placeholder-height table-view?)]
+        [:div {:style (cond-> {:min-height height}
+                        table-view?
+                        (assoc :height height
+                               :max-height height
+                               :overflow "hidden"))}]))))
+
+(hsx/defc lazy-item-subscribed
+  [row-uuid preview item-render table-view? gallery-view? table idx option]
+  (let [item (or (db-hooks/use-block row-uuid) preview)]
     (if item
       (item-render item)
-      (if gallery-view?
-        [:div.ls-card-item {:aria-hidden true}]
-        [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))))
+      (lazy-item-placeholder table-view? gallery-view? table idx option))))
 
-(hsx/defc table-body
+(hsx/defc lazy-item
+  [data idx {:keys [gallery-view? table-view? row-previews mount-unpinned-cells? table] :as option} item-render]
+  (let [row-uuid (util/nth-safe data idx)
+        preview (get row-previews row-uuid)
+        [subscribe? set-subscribe!] (hooks/use-state (nil? preview))]
+    (hooks/use-effect!
+     (fn []
+       (when (and (not subscribe?)
+                  (lazy-item-should-subscribe? preview mount-unpinned-cells?))
+         (let [frame (js/requestAnimationFrame #(set-subscribe! true))]
+           #(js/cancelAnimationFrame frame))))
+     [mount-unpinned-cells?])
+    (cond
+      (and preview (not subscribe?))
+      (item-render preview)
+
+      row-uuid
+      [lazy-item-subscribed row-uuid preview item-render table-view? gallery-view? table idx option]
+
+      :else
+      (lazy-item-placeholder table-view? gallery-view? table idx option))))
+
+(hsx/defc ^:large-vars/cleanup-todo table-body
   [table option rows *scroller-ref set-items-rendered!]
   (let [scroll-parent (get-scroll-parent
                        (-> (:config option)
                            (assoc :viewel (js/document.getElementById (:viewid option)))))
+        {:keys [item-height overscan-px]} (table-virtualization-metrics)
+        viewport-height (measured-viewport-height
+                         (some-> scroll-parent .-clientHeight)
+                         (.-innerHeight js/window))
         initial-prefetch-count (initial-view-prefetch-count
-                                (.-clientHeight scroll-parent)
-                                (lazy-item-placeholder-height true))
-        [initial-rows-ready? prefetch-rows!]
-        (use-view-row-prefetch (:data table) initial-prefetch-count)]
-    (when (seq rows)
-      (if initial-rows-ready?
-        (virtualized-list
-         {:ref #(reset! *scroller-ref %)
-          :increase-viewport-by {:top 300 :bottom 300}
-          :custom-scroll-parent scroll-parent
-          :compute-item-key (fn [idx]
-                              (str "table-row-" (util/nth-safe rows idx)))
-          :skipAnimationFrameInResizeObserver true
-          :total-count (count rows)
-          :item-content (fn [idx]
-                          (let [option (assoc option :table-view? true)]
-                            (lazy-item (:data table) idx option
+                                viewport-height
+                                item-height)
+        prefetch-window-size (view-prefetch-row-count
+                              viewport-height
+                              item-height)
+        all-row-ids (table-body-row-ids (:all-row-ids option) (:data table) rows)
+        offset-rows (:offset-rows option)
+        row-offset (:row-offset option)
+        stale-rows (:stale-offset-rows option)
+        stale-offset (:stale-row-offset option)
+        prefetch-source (if (seq offset-rows) offset-rows all-row-ids)
+        row-previews (:row-previews option)
+        [initial-rows-ready? hydrate-row-uuids prefetch-rows!]
+        (use-view-row-prefetch prefetch-source
+                               (if (seq row-previews) 0 initial-prefetch-count)
+                               prefetch-window-size)
+        mount-unpinned-cells? (:mount-unpinned-cells? option)
+        set-mount-unpinned-cells! (:set-mount-unpinned-cells! option)
+        on-viewport-filled! (:on-viewport-filled! option)
+        total-count (table-total-count all-row-ids (:items-count option))
+        request-scrolled-offset!
+        (fn []
+          (let [scroll-top (or (some-> scroll-parent .-scrollTop) 0)
+                list-offset (scroll-list-offset-top scroll-parent)
+                window-size (max (if (seq offset-rows)
+                                   (count offset-rows)
+                                   0)
+                                 (offset-view-row-count initial-prefetch-count))
+                [vis-start vis-end]
+                (or (viewport-row-range
+                     scroll-top list-offset
+                     viewport-height item-height total-count)
+                    [])
+                next-offset (next-scrolled-row-offset
+                             row-offset window-size
+                             vis-start vis-end
+                             (count all-row-ids)
+                             (boolean (seq offset-rows)))]
+            (when (and on-viewport-filled!
+                       (pos? scroll-top)
+                       (integer? next-offset)
+                       (pos? next-offset)
+                       (not= next-offset row-offset))
+              (on-viewport-filled! next-offset))))
+        option (assoc option
+                      :table-view? true
+                      :table table
+                      :mount-unpinned-cells? mount-unpinned-cells?)
+        can-paint? (table-body-can-paint?
+                    initial-rows-ready? hydrate-row-uuids row-previews)
+        *first-paint-notified? (hooks/use-ref false)]
+    ;; Offset-window rows replace the 40938-id list. Refresh hydrate
+    ;; onto those UUIDs when the scrolled window arrives.
+    (hooks/use-effect!
+     (fn []
+       (when (seq offset-rows)
+         (prefetch-rows! [0 (dec (count offset-rows))])))
+     [(count offset-rows) row-offset])
+    (hooks/use-effect!
+     (fn []
+       (when can-paint?
+         (let [frame (js/requestAnimationFrame request-scrolled-offset!)]
+           #(js/cancelAnimationFrame frame))))
+     [can-paint? row-offset (count offset-rows) total-count viewport-height])
+    (cond
+      (not (seq rows))
+      nil
+
+      ;; Logs: view-data was ready at 44ms, then skeletons waited for the
+      ;; 24-block hydrate. First-window titles skip that gate.
+      (not can-paint?)
+      [:div.flex.flex-col.space-2.gap-2.my-2
+       (for [idx (range 3)]
+         (shui/skeleton {:key idx :class "h-6 w-full"}))]
+
+      :else
+      (virtualized-list
+       {:ref #(reset! *scroller-ref %)
+        :increase-viewport-by {:top overscan-px :bottom overscan-px}
+        :custom-scroll-parent scroll-parent
+        :compute-item-key (fn [idx]
+                            (table-row-key all-row-ids offset-rows row-offset
+                                           stale-rows stale-offset idx))
+        :skipAnimationFrameInResizeObserver true
+        :fixed-item-height item-height
+        :default-item-height item-height
+        :total-count total-count
+        :item-content (fn [idx]
+                        (let [row-uuid (table-row-at all-row-ids offset-rows row-offset
+                                                     stale-rows stale-offset idx)
+                              live-offset? (some? (table-row-from-offset offset-rows row-offset idx))
+                              stale-offset? (and (not live-offset?)
+                                                 (some? (table-row-from-offset stale-rows stale-offset idx)))]
+                          (if row-uuid
+                            (lazy-item (cond
+                                         live-offset? offset-rows
+                                         stale-offset? stale-rows
+                                         :else all-row-ids)
+                                       (cond
+                                         live-offset? (- idx row-offset)
+                                         stale-offset? (- idx stale-offset)
+                                         :else idx)
+                                       option
                                        (fn [row]
-                                         (table-row table row {} option)))))
-          :items-rendered (fn [props]
-                            (prefetch-rows! props)
-                            (when (seq props)
-                              (set-items-rendered! true)))}
-         (:disable-virtualized? option))
-        [:div.flex.flex-col.gap-1.py-1
-         (for [idx (range 3)]
-           (shui/skeleton {:key idx :class "h-8 w-full"}))]))))
+                                         (table-row table row {} option)))
+                            (lazy-item-placeholder true false table idx option))))
+        :items-rendered (fn [props]
+                          (prefetch-rows!
+                           (if (seq offset-rows)
+                             [0 (dec (count offset-rows))]
+                             (or (viewport-row-range
+                                  (or (some-> scroll-parent .-scrollTop) 0)
+                                  (scroll-list-offset-top scroll-parent)
+                                  viewport-height
+                                  item-height
+                                  total-count)
+                                 props)))
+                          (when (seq props)
+                            (set-items-rendered! true)
+                            (notify-first-table-paint!
+                             *first-paint-notified?
+                             (:on-first-table-paint! option))
+                            (when set-mount-unpinned-cells!
+                              (js/requestAnimationFrame
+                               #(set-mount-unpinned-cells! true)))
+                            (request-scrolled-offset!)))}
+       (:disable-virtualized? option)))))
 
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
-  (let [[items-rendered? set-items-rendered!] (hooks/use-state false)]
+  (let [empty-rows? (empty-table-ready-on-mount? (:rows table))
+        [items-rendered? set-items-rendered!] (hooks/use-state empty-rows?)
+        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state empty-rows?)
+        option (assoc option
+                      :mount-unpinned-cells? mount-unpinned-cells?
+                      :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
@@ -2154,38 +2782,57 @@
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (hsx/defc list-view
-  [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
+  [{:keys [config ref-matched-children-ids disable-virtualized?
+           on-viewport-filled!] :as option} view-entity {:keys [rows]} *scroller-ref]
   (let [view-feature-type (:logseq.property.view/feature-type view-entity)
         references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
         config (assoc config :container-id (view-container-id config))
-        lazy-item-render (fn [rows idx]
-                           (lazy-item rows idx (assoc option :list-view? true)
+        lazy-item-render (fn [row-uuid]
+                           (lazy-item [row-uuid] 0 (assoc option :list-view? true)
                                       (fn [block]
-                                        (let [config' (cond->
-                                                       (assoc config
-                                                              :list-view? true
-                                                              :block-level 1)
-                                                        references-view?
-                                                        (assoc :ref? true)
-                                                        (= :linked-references view-feature-type)
-                                                        (assoc :ref-matched-children-ids ref-matched-children-ids
-                                                               :reference-view-parent-uuid
-                                                               (:view-parent-uuid option)))]
-                                          (block-container config' block)))))
+                                        (if (first-window-title-preview? block)
+                                          (first-window-list-block block)
+                                          (let [config' (cond->
+                                                        (assoc config
+                                                               :list-view? true
+                                                               :block-level 1)
+                                                         references-view?
+                                                         (assoc :ref? true)
+                                                         (= :linked-references view-feature-type)
+                                                         (assoc :ref-matched-children-ids ref-matched-children-ids
+                                                                :reference-view-parent-uuid
+                                                                (:view-parent-uuid option)))]
+                                            (block-container config' block))))))
+        notify-visible-range! (fn [rendered]
+                                (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+                                  (when-let [next-offset (next-scrolled-row-offset
+                                                          (:row-offset option)
+                                                          (count (:offset-rows option))
+                                                          visible-start
+                                                          visible-end
+                                                          (or (:initial-row-count option)
+                                                              (count rows))
+                                                          (seq (:offset-rows option)))]
+                                    (when on-viewport-filled!
+                                      (on-viewport-filled! next-offset)))))
         list-cp (fn [rows]
                   (when (seq rows)
-                    (virtualized-list
-                     {:ref #(reset! *scroller-ref %)
-                      :class "content"
-                      :custom-scroll-parent (get-scroll-parent config)
-                      :increase-viewport-by {:top 64 :bottom 64}
-                      :compute-item-key (fn [idx]
-                                          (let [block-id (util/nth-safe rows idx)]
-                                            (str "list-row-" block-id)))
-                      :total-count (count rows)
-                      :skipAnimationFrameInResizeObserver true
-                      :item-content (fn [idx] (lazy-item-render rows idx))}
-                     disable-virtualized?)))
+                    (let [total-count (windowed-view-total-count rows option)]
+                      (virtualized-list
+                       {:ref #(reset! *scroller-ref %)
+                        :class "content"
+                        :custom-scroll-parent (get-scroll-parent config)
+                        :increase-viewport-by {:top 64 :bottom 64}
+                        :compute-item-key (fn [idx]
+                                            (windowed-view-row-key "list-row" rows option idx))
+                        :total-count total-count
+                        :skipAnimationFrameInResizeObserver true
+                        :items-rendered notify-visible-range!
+                        :item-content (fn [idx]
+                                        (if-let [row-uuid (windowed-view-row rows option idx)]
+                                          (lazy-item-render row-uuid)
+                                          (lazy-item-placeholder false false nil nil nil)))}
+                       disable-virtualized?))))
         breadcrumb (state/get-component :block/breadcrumb)
         all-uuids? (every? uuid? rows)]
     (if all-uuids?
@@ -2201,7 +2848,7 @@
                           {:show-page? false})]
              (list-cp blocks)])
           ^{:key (str "partition-" idx)}
-          [:<> (lazy-item-render rows idx)])))))
+          [:<> (lazy-item-render row)])))))
 
 (defn- gallery-property-value-opts
   [config]
@@ -2343,7 +2990,7 @@
           :view-parent (:logseq.property/view-for (:view-entity table))}))])))
 
 (hsx/defc gallery-view
-  [{:keys [config view-parent view-feature-type] :as option} table view-entity blocks _row-selection *scroller-ref]
+  [{:keys [config view-parent view-feature-type on-viewport-filled!] :as option} table view-entity blocks _row-selection *scroller-ref]
   (let [config' (assoc config :container-id (view-container-id config))
         columns (:columns table)
         dimensions (gallery-card-dimensions view-entity)
@@ -2351,35 +2998,51 @@
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
-        [_initial-rows-ready? prefetch-rows!] (use-view-row-prefetch blocks)
+        [_initial-rows-ready? _hydrate-row-uuids prefetch-rows!] (use-view-row-prefetch blocks)
+        total-count (windowed-view-total-count blocks option)
+        notify-visible-range! (fn [rendered]
+                                (prefetch-rows! rendered)
+                                (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+                                  (when-let [next-offset (next-scrolled-row-offset
+                                                          (:row-offset option)
+                                                          (count (:offset-rows option))
+                                                          visible-start
+                                                          visible-end
+                                                          (or (:initial-row-count option)
+                                                              (count blocks))
+                                                          (seq (:offset-rows option)))]
+                                    (when on-viewport-filled!
+                                      (on-viewport-filled! next-offset)))))
         render-card (fn [idx]
-                      (lazy-item blocks idx
+                      (if-let [row-uuid (windowed-view-row blocks option idx)]
+                        (lazy-item [row-uuid] 0
                                  (assoc (gallery-lazy-item-opts option)
                                         :gallery-view? true)
                                  (fn [block]
                                    (gallery-card-item table view-entity block config'
                                                       {:asset-property-ident asset-property-ident
-                                                       :display-property-idents display-property-idents}))))]
+                                                       :display-property-idents display-property-idents})))
+                        (lazy-item-placeholder false true nil nil nil)))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
      (when (seq blocks)
        (if (:disable-virtualized? option)
          [:div.virtuoso-grid-list
-          (for [idx (range (count blocks))]
+          (for [idx (range total-count)]
             [:div.virtuoso-grid-item
-             {:key (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx))}
+             {:key (windowed-view-row-key (str (:db/id view-entity) "-card") blocks option idx)}
              (render-card idx)])]
          (ui/virtualized-grid
           {:ref #(reset! *scroller-ref %)
-           :total-count (count blocks)
+           :total-count total-count
            :increase-viewport-by {:top (* 2 (:height dimensions))
                                   :bottom (* 2 (:height dimensions))}
            :custom-scroll-parent (get-scroll-parent config)
            :skipAnimationFrameInResizeObserver true
            :compute-item-key (fn [idx]
-                               (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
-           :items-rendered prefetch-rows!
+                               (windowed-view-row-key (str (:db/id view-entity) "-card") blocks option idx))
+           :items-rendered notify-visible-range!
            :item-content render-card})))
      (when-not (:hide-action-bar? option)
        (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
@@ -2647,59 +3310,63 @@
   [view-parent current-view-uuid view-uuid
    {:keys [view-uuids data items-count set-current-view-uuid!
            show-items-count? config references?]}]
-  (when-let [view (db-hooks/use-block view-uuid)]
-    (let [refs-total-count (:refs-total-count config)
-          current-view? (= current-view-uuid view-uuid)]
-      (shui/button
-       {:key (str "view-tab-" view-uuid)
-        :variant :text
-        :size :sm
-        :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-        :on-click (fn [e]
-                    (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
-                      (shui/popup-show!
-                       (.-target e)
-                       (fn []
-                         [:<>
-                          (shui/dropdown-menu-sub
-                           (shui/dropdown-menu-sub-trigger
-                            (t :view/rename))
-                           (shui/dropdown-menu-sub-content
-                            (when-let [block-container-cp (state/get-component :block/container)]
-                              (block-container-cp {:display-title (display-view-title view)
-                                                   :hide-block-control? true} view))))
-                          (when (> (count view-uuids) 1)
-                            (shui/dropdown-menu-item
-                             {:key "Delete"
-                              :on-click (fn []
-                                          (p/do!
-                                           (editor-handler/delete-block-aux! view)
-                                           (set-current-view-uuid!
-                                            (first (remove #{view-uuid} view-uuids)))
-                                           (shui/popup-hide!)))}
-                             (t :ui/delete)))])
-                       {:as-dropdown? true
-                        :dropdown-menu? true
-                        :align "start"
-                        :focus-trigger? false
-                        :content-props {:onClick shui/popup-hide!
-                                        :onCloseAutoFocus #(.preventDefault %)}})
-                      (set-current-view-uuid! view-uuid)))}
-       (when-not references?
-         (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                                :logseq.property.view/type.table)]
-           (when-let [icon (:logseq.property/icon (built-in-property display-type))]
-             (icon-component/icon icon {:color? true
-                                        :size 15}))))
+  (let [hydrated-view (db-hooks/use-block view-uuid)
+        view (or hydrated-view {:block/uuid view-uuid})
+        refs-total-count (:refs-total-count config)
+        current-view? (= current-view-uuid view-uuid)]
+    (shui/button
+     {:key (str "view-tab-" view-uuid)
+      :data-view-tab-id (str "view-tab-" view-uuid)
+      :variant :text
+      :size :sm
+      :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+      :on-click (fn [e]
+                  (if (and hydrated-view current-view? (not= (:db/id view) (:db/id view-parent)))
+                    (shui/popup-show!
+                     (.-target e)
+                     (fn []
+                       [:<>
+                        (shui/dropdown-menu-sub
+                         (shui/dropdown-menu-sub-trigger
+                          (t :view/rename))
+                         (shui/dropdown-menu-sub-content
+                          (when-let [block-container-cp (state/get-component :block/container)]
+                            (block-container-cp {:display-title (display-view-title view)
+                                                 :hide-block-control? true} view))))
+                        (when (> (count view-uuids) 1)
+                          (shui/dropdown-menu-item
+                           {:key "Delete"
+                            :on-click (fn []
+                                        (set-current-view-uuid!
+                                         (first (remove #{view-uuid} view-uuids)))
+                                        (p/do!
+                                         (editor-handler/delete-block-aux! view)
+                                         (shui/popup-hide!)))}
+                           (t :ui/delete)))])
+                     {:as-dropdown? true
+                      :dropdown-menu? true
+                      :align "start"
+                      :focus-trigger? false
+                      :content-props {:onClick shui/popup-hide!
+                                      :onCloseAutoFocus #(.preventDefault %)}})
+                    (set-current-view-uuid! view-uuid)))}
+     (when-not references?
+       (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                              :logseq.property.view/type.table)]
+         (when-let [icon (:logseq.property/icon (built-in-property display-type))]
+           (icon-component/icon icon {:color? true
+                                      :size 15}))))
+     (if hydrated-view
        (display-view-title view)
-       (when (and current-view? show-items-count? (> items-count 0) (seq data))
-         [:span.text-muted-foreground.text-xs
-          items-count
-          (when (and refs-total-count
-                     (> refs-total-count items-count))
-            [:span
-             [:span "/"]
-             [:span {:title (t :view.table/total-refs-count)} refs-total-count]])])))))
+       [:span.inline-block.w-8])
+     (when (and current-view? show-items-count? (> items-count 0) (seq data))
+       [:span.text-muted-foreground.text-xs
+        items-count
+        (when (and refs-total-count
+                   (> refs-total-count items-count))
+          [:span
+           [:span "/"]
+           [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]))))
 
 (hsx/defc views-tab
   [view-parent current-view-uuid
@@ -2819,9 +3486,11 @@
         body-fn (fn []
                   (let [render (view-cp view-entity
                                         (assoc group-table :rows group)
-                                        (assoc option
-                                               :disable-virtualized? true
-                                               :hide-action-bar? gallery?)
+                                        (-> option
+                                            (dissoc :all-row-ids :offset-rows :row-offset
+                                                    :stale-offset-rows :stale-row-offset)
+                                            (assoc :disable-virtualized? true
+                                                   :hide-action-bar? gallery?))
                                         view-opts)]
                     (if (and list-view? (not (util/mobile?)))
                       [:div.-ml-2 render]
@@ -2856,13 +3525,20 @@
                     {:group-value group-value}))))
 
 (hsx/defc ^:large-vars/cleanup-todo view-inner
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config on-first-table-paint!] :as option*}
    *scroller-ref]
-  (let [journals? (:journals? config)
+  (let [view-partition (:partition option*)
+        [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition data))
+        journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
-                          vec))
+                          vec)
+                      :on-first-table-paint!
+                      (fn []
+                        (set-head-ready! true)
+                        (when on-first-table-paint!
+                          (on-first-table-paint!))))
         visible-columns (-> (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
                               (zipmap hidden-columns (repeat false))
                               ;; This case can happen for imported tables
@@ -2902,6 +3578,7 @@
         table-map {:view-entity view-entity
                    :data data
                    :full-data full-data
+                   :full-data-loading? (:full-data-loading? option*)
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
@@ -2945,12 +3622,23 @@
        #(state/set-state! [:view/table-selection selection-id] nil))
      [selection-id])
 
+    (hooks/use-effect!
+     (fn []
+       (when (view-head-ready-on-mount? display-type view-partition data)
+         (set-head-ready! true)
+         (when on-first-table-paint!
+           (on-first-table-paint!)))
+       js/undefined)
+     [display-type view-partition (empty-table-ready-on-mount? data)])
+
     (run-effects! option table-map *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
      (ui/foldable
-      (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
+      (if head-ready?
+        (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
+        [:div.ls-view-head])
       (fn []
         [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
          (filters-row view-entity table option)
@@ -2990,6 +3678,12 @@
                       view-opts)))])
       (merge {:title-trigger? false} foldable-options))]))
 
+(defn- view-instance-key
+  "Pending views have a UUID before db/id. Keying on db/id remounted
+  All Pages / Tags / Movies after the first-window titles were ready."
+  [view-entity]
+  (str "view-" (or (:block/uuid view-entity) (:db/id view-entity))))
+
 (hsx/defc view-container
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
@@ -3004,7 +3698,7 @@
      * add-property!: `fn` to add a new property (or column)"
   [view-entity option]
   (let [*scroller-ref (hooks/use-memo #(atom nil) [])]
-    ^{:key (str "view-" (:db/id view-entity))}
+    ^{:key (view-instance-key view-entity)}
     [view-inner view-entity
      (cond-> option
        (or config/publishing? (:logseq.property.view/group-by-property view-entity))
@@ -3088,7 +3782,47 @@
     (= :query-result view-feature-type)
     (assoc :query-row-uuids query-row-uuids)))
 
-(hsx/defc loaded-view-aux
+(defn- loaded-view-resource-plan
+  [view-uuid view-feature-type sorting filters input group-by-property-ident
+   query-row-uuids viewport-height]
+  (let [initial-row-count
+        (when (windowed-view-feature? view-feature-type group-by-property-ident)
+          (initial-view-prefetch-count
+           viewport-height
+           (lazy-item-placeholder-height true)))
+        window-context (when initial-row-count
+                         (view-resource-context view-feature-type sorting filters
+                                                input
+                                                group-by-property-ident
+                                                query-row-uuids
+                                                initial-row-count))
+        full-context (view-resource-context view-feature-type sorting filters
+                                            input
+                                            group-by-property-ident
+                                            query-row-uuids
+                                            nil)]
+    {:initial-row-count initial-row-count
+     :window-context window-context
+     :full-context full-context
+     :resource-key [:view-data view-uuid (or window-context full-context)]
+     :full-key (when window-context
+                 [:view-data view-uuid full-context])}))
+
+(defn- loaded-view-paint
+  [view-data]
+  (if (nil? view-data)
+    {:ready? false}
+    {:ready? true
+     :rows (view-data->rows view-data)
+     :items-count (:count view-data)
+     :partition (:partition view-data)
+     :view-data view-data}))
+
+(defn- view-paint-source
+  [view-data previous-view-data]
+  (or view-data previous-view-data))
+
+(hsx/defc ^:large-vars/cleanup-todo loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
@@ -3101,21 +3835,60 @@
         sorting (effective-view-sorting view-entity)
         filters (:logseq.property.table/filters view-entity)
         debounced-input (hooks/use-debounced-value input 300)
-        initial-row-count
-        (when (= :all-pages view-feature-type)
-          (let [scroll-parent (get-scroll-parent config)
-                viewport-height (or (some-> scroll-parent .-clientHeight)
-                                    (.-innerHeight js/window))]
-            (initial-view-prefetch-count
-             viewport-height
-             (lazy-item-placeholder-height true))))
-        resource-context (view-resource-context view-feature-type sorting filters
-                                                debounced-input
-                                                group-by-property-ident
-                                                query-row-uuids
-                                                initial-row-count)
-        view-data (db-hooks/use-resource
-                   [:view-data (:block/uuid view-entity) resource-context])
+        viewport-height (measured-viewport-height
+                         (some-> (get-scroll-parent config) .-clientHeight)
+                         (.-innerHeight js/window))
+        plan (loaded-view-resource-plan (:block/uuid view-entity)
+                                        view-feature-type
+                                        sorting
+                                        filters
+                                        debounced-input
+                                        group-by-property-ident
+                                        query-row-uuids
+                                        viewport-height)
+        window-context (:window-context plan)
+        window-context-key (pr-str window-context)
+        window-or-full-data (db-hooks/use-resource (:resource-key plan))
+        [previous-view-data set-previous-view-data!] (hooks/use-state nil)
+        [full-data-active? set-full-data-active!] (hooks/use-state false)
+        full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
+                                                        (:full-key plan)))
+        [row-offset-state set-row-offset-state!] (hooks/use-state nil)
+        [stale-offset-window set-stale-offset-window!] (hooks/use-state nil)
+        *view-layout (hooks/use-ref [display-type group-by-property-ident])
+        row-offset (when (= (:context row-offset-state) window-context)
+                     (:offset row-offset-state))
+        set-current-row-offset! (fn [row-offset]
+                                  (set-row-offset-state! {:offset row-offset
+                                                          :context window-context}))
+        matched-stale-offset-window (matching-stale-offset-window stale-offset-window
+                                                                  window-context)
+        offset-key (offset-view-data-key (:block/uuid view-entity)
+                                         window-context
+                                         row-offset)
+        offset-snapshot (db-hooks/use-resource-snapshot offset-key)
+        offset-data (when offset-key
+                      (case (:status offset-snapshot)
+                        :ready (:value offset-snapshot)
+                        :error (throw (:error offset-snapshot))
+                        nil))
+        full-view-data (when (and full-data-active? (:full-key plan))
+                         (case (:status full-snapshot)
+                           :ready (:value full-snapshot)
+                           :error (throw (:error full-snapshot))
+                           nil))
+        view-data (view-paint-source window-or-full-data previous-view-data)
+        paint (loaded-view-paint view-data)
+        all-row-ids (when (:ready? paint)
+                      (view-data->rows view-data))
+        full-rows (if (:full-key plan)
+                    (some-> full-view-data view-data->rows)
+                    all-row-ids)
+        offset-rows (when offset-data
+                      (view-data->rows offset-data))
+        row-previews (merge (:row-previews view-data)
+                            (:previews matched-stale-offset-window)
+                            (:row-previews offset-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         option (cond-> (assoc option
@@ -3129,19 +3902,69 @@
                          :on-pointer-down
                          (fn [collapsed?]
                            (when collapsed?
-                             (deactivate-deferred-view!)))}))]
-    (if (nil? view-data)
+                             (deactivate-deferred-view!)))})
+
+                 (seq row-previews)
+                 (assoc :row-previews row-previews))]
+    (hooks/use-effect!
+     (fn []
+       (when window-or-full-data
+         (set-previous-view-data! window-or-full-data))
+       js/undefined)
+     [window-or-full-data])
+    (hooks/use-effect!
+     (fn []
+       (when (and offset-data (integer? row-offset))
+         (set-stale-offset-window! {:row-offset row-offset
+                                    :rows (view-data->rows offset-data)
+                                    :previews (:row-previews offset-data)
+                                    :context window-context}))
+       nil)
+     [row-offset offset-data window-context-key])
+    (hooks/use-effect!
+     (fn []
+       (set-row-offset-state! nil)
+       (set-stale-offset-window! nil)
+       js/undefined)
+     [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       (let [next-layout [display-type group-by-property-ident]]
+         (when (not= (.-current *view-layout) next-layout)
+           (set! (.-current *view-layout) next-layout)
+           (set-previous-view-data! nil)
+           (set-row-offset-state! nil)
+           (set-stale-offset-window! nil)))
+       js/undefined)
+     [display-type group-by-property-ident])
+    (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
-      (let [data (view-data->rows view-data)
+      (let [data (:rows paint)
+            notify-windowed-paint! (fn []
+                                     (when (:full-key plan)
+                                       (set-full-data-active! true))
+                                     (when-let [notify! (:on-first-table-paint! option)]
+                                       (notify!)))
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
-                                            :view-data view-data
-                                            :partition (:partition view-data)
+                                            :on-viewport-filled! set-current-row-offset!
+                                            :on-first-table-paint! notify-windowed-paint!
+                                            :initial-row-count (:initial-row-count plan)
+                                            :view-data (:view-data paint)
+                                            :partition (:partition paint)
                                             :data data
-                                            :full-data data
+                                            :full-data full-rows
+                                            :full-data-loading? (and (:full-key plan)
+                                                                     (nil? full-rows))
+                                            :all-row-ids (when (= :flat (:partition paint))
+                                                           all-row-ids)
+                                            :offset-rows offset-rows
+                                            :row-offset row-offset
+                                            :stale-offset-rows (:rows matched-stale-offset-window)
+                                            :stale-row-offset (:row-offset matched-stale-offset-window)
                                             :filters (or filters {})
                                             :sorting sorting
                                             :set-filters! ignore!
@@ -3149,7 +3972,7 @@
                                             :set-data! ignore!
                                             :set-input! set-input!
                                             :input input
-                                            :items-count (:count view-data)
+                                            :items-count (:items-count paint)
                                             :group-by-property-ident group-by-property-ident
                                             :ref-pages-count (:ref-pages-count view-data)
                                             :ref-matched-children-ids
@@ -3192,19 +4015,41 @@
   [view-entity option]
   (view-aux view-entity option))
 
+(hsx/defc selected-view-hydrate
+  "use-block in selected-view re-rendered All Pages before the first
+  lazy-item. Keep the subscription off the table render path."
+  [view-uuid first-paint-done? set-hydrated-entity!]
+  (let [entity (db-hooks/use-block view-uuid)]
+    (hooks/use-effect!
+     (fn []
+       (when (and first-paint-done? entity)
+         (set-hydrated-entity! entity))
+       js/undefined)
+     [first-paint-done? entity])
+    nil))
+
 (hsx/defc selected-view
   [view-uuids option]
   (let [[requested-view-uuid set-requested-view-uuid!] (hooks/use-state nil)
+        [first-paint-done? set-first-paint-done!] (hooks/use-state false)
+        [hydrated-entity set-hydrated-entity!] (hooks/use-state nil)
         selected-view-uuid (if (some #{requested-view-uuid} view-uuids)
                              requested-view-uuid
                              (first view-uuids))
-        view-entity (db-hooks/use-block selected-view-uuid)]
-    (when view-entity
-      ^{:key (str "view-" selected-view-uuid)}
-      [sub-view view-entity
-       (assoc option
-              :view-uuids view-uuids
-              :set-current-view-uuid! set-requested-view-uuid!)])))
+        pending-view {:block/uuid selected-view-uuid}
+        view-entity (first-paint-view-entity hydrated-entity pending-view first-paint-done?)]
+    [:<>
+     [selected-view-hydrate selected-view-uuid first-paint-done? set-hydrated-entity!]
+     ^{:key (str "view-" selected-view-uuid)}
+     [sub-view view-entity
+      (assoc option
+             :view-uuids view-uuids
+             :set-current-view-uuid! set-requested-view-uuid!
+             :on-first-table-paint!
+             (fn []
+               (set-first-paint-done! true)
+               (when-let [notify! (:on-first-table-paint! option)]
+                 (notify!))))]]))
 
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]
