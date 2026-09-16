@@ -368,6 +368,13 @@
            (#'views/table-body-row-ids nil grouped-list-partitions grouped-list-partitions))
         "List→Table must not treat :grouped-list [breadcrumb rows] partitions as block UUIDs.")))
 
+(deftest view-search-keeps-the-search-icon-button-test
+  (let [html (render-static
+              (views/search "" {:on-change (fn [_])
+                                :set-input! (fn [_])}))]
+    (is (string/includes? html "ls-icon-search")
+        "table-view-search e2e clicks .view-actions button:has(.ls-icon-search).")))
+
 (deftest view-row-hydrates-only-its-uuid-through-use-block-test
   (let [row-uuid (random-uuid)
         block {:block/uuid row-uuid

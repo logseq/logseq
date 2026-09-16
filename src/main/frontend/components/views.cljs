@@ -1600,35 +1600,36 @@
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
   (let [[show-input? set-show-input!] (hooks/use-state false)]
-    (if show-input?
-      [:div.flex.flex-row.items-center
-       (shui/input
-        {:placeholder (t :view.filter/type-to-search)
-         :auto-focus true
-         :value input
-         :on-change (fn [e]
-                      (let [value (util/evalue e)]
-                        (on-change value)))
-         :on-key-down (fn [e]
-                        (when (= "Escape" (util/ekey e))
-                          (set-show-input! false)
-                          (set-input! "")))
-         :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
-       (shui/button
-        {:variant "ghost"
-         :class "text-muted-foreground !px-1"
-         :size :sm
-         :on-click #(do
-                      (set-show-input! false)
-                      (set-input! ""))}
-        (ui/icon "x"))]
-      (shui/button
-       {:variant "ghost"
-        ;; FIXME: remove ring when focused
-        :class "text-muted-foreground !px-1"
-        :size :sm
-        :on-click #(set-show-input! true)}
-       (ui/icon "search" {:size 15})))))
+    [:div.flex.flex-row.items-center
+     (shui/button
+      {:variant "ghost"
+       :class "text-muted-foreground !px-1"
+       :size :sm
+       :on-click #(when-not show-input?
+                    (set-show-input! true))}
+      (ui/icon "search" {:size 15}))
+     (when show-input?
+       [:<>
+        (shui/input
+         {:placeholder (t :view.filter/type-to-search)
+          :auto-focus true
+          :value input
+          :on-change (fn [e]
+                       (let [value (util/evalue e)]
+                         (on-change value)))
+          :on-key-down (fn [e]
+                         (when (= "Escape" (util/ekey e))
+                           (set-show-input! false)
+                           (set-input! "")))
+          :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+        (shui/button
+         {:variant "ghost"
+          :class "text-muted-foreground !px-1"
+          :size :sm
+          :on-click #(do
+                       (set-show-input! false)
+                       (set-input! ""))}
+         (ui/icon "x"))])]))
 
 (defn datetime-property?
   [property]
