@@ -486,6 +486,13 @@
    [:div.flex.flex-row
     [:div (first-window-title-text block)]]])
 
+(defn- first-window-list-block
+  "List view first paint should show the preview title before full block hydration."
+  [block]
+  [:div.ls-block.flex.flex-row.items-center
+   {:style {:min-height 24}}
+   [:div.block-content (first-window-title-text block)]])
+
 (hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
@@ -2736,17 +2743,19 @@
         lazy-item-render (fn [row-uuid]
                            (lazy-item [row-uuid] 0 (assoc option :list-view? true)
                                       (fn [block]
-                                        (let [config' (cond->
-                                                       (assoc config
-                                                              :list-view? true
-                                                              :block-level 1)
-                                                        references-view?
-                                                        (assoc :ref? true)
-                                                        (= :linked-references view-feature-type)
-                                                        (assoc :ref-matched-children-ids ref-matched-children-ids
-                                                               :reference-view-parent-uuid
-                                                               (:view-parent-uuid option)))]
-                                          (block-container config' block)))))
+                                        (if (first-window-title-preview? block)
+                                          (first-window-list-block block)
+                                          (let [config' (cond->
+                                                        (assoc config
+                                                               :list-view? true
+                                                               :block-level 1)
+                                                         references-view?
+                                                         (assoc :ref? true)
+                                                         (= :linked-references view-feature-type)
+                                                         (assoc :ref-matched-children-ids ref-matched-children-ids
+                                                                :reference-view-parent-uuid
+                                                                (:view-parent-uuid option)))]
+                                            (block-container config' block))))))
         notify-visible-range! (fn [rendered]
                                 (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
                                   (when-let [next-offset (next-scrolled-row-offset

@@ -409,6 +409,29 @@
       (is (empty? @calls)
           "Preview paint must not subscribe use-block on the first frame."))))
 
+(deftest list-view-preview-paints-title-before-block-container-test
+  (let [row-uuid (random-uuid)
+        preview {:block/uuid row-uuid
+                 :block/title "Brazil (1985)"
+                 :block.temp/first-window-preview? true}
+        calls (atom [])]
+    (with-redefs [db-hooks/use-block
+                  (fn [requested-uuid]
+                    (swap! calls conj requested-uuid)
+                    nil)]
+      (is (string/includes?
+           (render-static
+            (views/lazy-item
+             [row-uuid]
+             0
+             {:row-previews {row-uuid preview}
+              :list-view? true}
+             (fn [item]
+               (#'views/first-window-list-block item))))
+           "Brazil (1985)")
+          "List view first paint should show the preview title instead of waiting for the full block container.")
+      (is (empty? @calls)))))
+
 (deftest filter-value-renders-referenced-uuid-content-test
   (let [value-uuid (random-uuid)
         table {:data-fns {:set-filters! (fn [_])}
