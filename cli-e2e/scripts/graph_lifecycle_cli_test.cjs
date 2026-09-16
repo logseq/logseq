@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, execFile } = require('node:child_process');
+const execFileAsync = require('node:util').promisify(execFile);
 const lifecycle = require('../../deps/graph-lifecycle');
 const cli = path.resolve(__dirname, '../../static/logseq-cli.js');
 function fixture(t) {
@@ -13,7 +14,7 @@ function fixture(t) {
     const listing = path.join(root, 'server-list');
     if (fs.existsSync(listing)) for (const line of fs.readFileSync(listing, 'utf8').trim().split('\n').filter(Boolean)) {
       const pid = Number(line.split(' ')[0]);
-      if (lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL');
+      if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
     }
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -61,9 +62,9 @@ for (const command of [['server', 'stop'], ['graph', 'remove']]) {
     const publications = () => fs.readdirSync(ctx.dir).filter(name => /^runtime-.*\.json$/.test(name));
     for (let iteration = 0; iteration < 3; iteration++) {
       const previous = lifecycle.snapshot(storage, 'demo').workers[0];
-      process.kill(previous.identity.pid, 'SIGKILL');
+      process.kill(previous.pid, 'SIGKILL');
       const deadline = Date.now() + 5000;
-      while (lifecycle.processIdentity(previous.identity.pid)) {
+      while (lifecycle.pidExists(previous.pid)) {
         assert.ok(Date.now() < deadline, 'Crashed worker must exit before recovery');
         await new Promise(resolve => setTimeout(resolve, 10));
       }
@@ -94,15 +95,17 @@ test('CLI stops its registered worker before admission and restarts the graph', 
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     pid = Number(fs.readFileSync(path.join(root, 'before-admission')));
-    ok('demo', 'server', 'stop');
+    // Let this parent's event loop reap the child while the separate CLI waits for exit.
+    await execFileAsync(process.execPath, [cli, 'server', 'stop', '--root-dir', root,
+      '--graph', 'demo', '--output', 'json'], { timeout: 45000 });
     await rejected;
-    assert.equal(lifecycle.processIdentity(pid), null);
+    assert.equal(lifecycle.pidExists(pid), false);
     assert.ok(fs.existsSync(path.join(storage.graphsDir, 'demo')));
     ok('demo', 'server', 'restart');
     ok('demo', 'list', 'page', '--limit', '1');
     ok('demo', 'graph', 'remove');
   } finally {
-    if (pid && lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL');
+    if (pid && lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
     await rejected;
   }
 });
@@ -113,7 +116,7 @@ test('CLI target command remains responsive with three unrelated workers paused'
   for (const graph of ['demo', 'other1', 'other2', 'other3']) {
     ok(graph, 'graph', 'create');
     ok(graph, 'list', 'page', '--limit', '1');
-    if (graph !== 'demo') others.push(lifecycle.snapshot(storage, graph).workers[0].identity.pid);
+    if (graph !== 'demo') others.push(lifecycle.snapshot(storage, graph).workers[0].pid);
   }
   const baseline = ok('demo', 'list', 'page', '--limit', '1', '--profile');
   let paused;

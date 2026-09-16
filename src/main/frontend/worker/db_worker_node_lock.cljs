@@ -91,7 +91,7 @@
     (fs/unlinkSync path)))
 
 (defn create-lock!
-  [{:keys [root-dir storage repo owner-source process-start]}]
+  [{:keys [root-dir storage repo owner-source ticket generation]}]
   (p/create
    (fn [resolve reject]
      (try
@@ -108,7 +108,8 @@
                lock {:repo repo
                      :root-dir root-dir
                      :storage (js->clj storage :keywordize-keys true)
-                     :process-start process-start
+                     :ticket ticket
+                     :generation generation
                      :pid (.-pid js/process)
                      :lock-id (str (random-uuid))
                      :owner-source (normalize-owner-source owner-source)}]
@@ -166,13 +167,14 @@
       lock)))
 
 (defn ensure-lock!
-  [{:keys [root-dir storage repo owner-source process-start]}]
+  [{:keys [root-dir storage repo owner-source ticket generation]}]
   (let [root-dir (resolve-root-dir root-dir)
         storage (or storage (lifecycle/resolveStorage root-dir (graphs-dir root-dir)))
-             path (node-path/join (repo-dir (.-graphsDir ^js storage) repo) "db-worker.lock")]
+        path (node-path/join (repo-dir (.-graphsDir ^js storage) repo) "db-worker.lock")]
     (p/let [lock (create-lock! {:root-dir root-dir :storage storage
-                                :repo repo
-                                :process-start process-start
-                                :owner-source owner-source})]
+                              :repo repo
+                              :ticket ticket
+                              :generation generation
+                              :owner-source owner-source})]
       {:path path
        :lock lock})))

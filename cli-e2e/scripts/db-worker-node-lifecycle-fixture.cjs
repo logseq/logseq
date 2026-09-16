@@ -65,14 +65,15 @@ const mode = args[args.indexOf('--mode') + 1];
   const runtime = await lifecycle.admit({ storage, repo, owner, ticket: option('--admission-ticket'),
     generation: option('--graph-generation') });
   const lock = { repo, pid: process.pid, 'lock-id': runtime.ticket,
-    'root-dir': runtime.root, 'process-start': runtime.identity.birth, 'owner-source': owner, storage };
+    'root-dir': runtime.root, ticket: runtime.ticket, generation: runtime.generation, 'owner-source': owner, storage };
   const graphDir = runtime.graphDir;
   fs.writeFileSync(path.join(graphDir, 'db-worker.lock'), JSON.stringify(lock));
   fs.writeFileSync(path.join(graphDir, 'db.sqlite-wal'), 'preserved');
   const server = http.createServer((request, response) => {
     if (request.url === '/healthz') {
       response.end(JSON.stringify({ ...lock, 'root-dir': runtime.root, host: '127.0.0.1',
-        port: server.address().port, status: 'ready' }));
+        port: server.address().port, status: 'ready',
+        ...(option('--health-field') ? { [option('--health-field')]: JSON.parse(option('--health-value')) } : {}) }));
     } else if (request.url === '/v1/shutdown') {
       response.end('{}');
       if (mode === 'stubborn') {

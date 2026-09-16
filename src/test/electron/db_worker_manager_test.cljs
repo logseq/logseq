@@ -472,12 +472,12 @@
                           (p/catch (fn [error] (is (= :graph-not-exists (:code (ex-data error)))))))
                     _ (p/all [(db-worker/ensure-window-stopped! mgr :window-1)
                               (db-worker/ensure-window-stopped! mgr :window-2)])]
-              (is (nil? (lifecycle/processIdentity (:pid first-runtime))))
+              (is (false? (lifecycle/pidExists (:pid first-runtime))))
               (is (empty? (:repos @(:state mgr))))
               (is (not (fs/existsSync (node-path/join root "graphs/demo/db-worker.lock"))))
               (p/let [reopened (db-worker/ensure-runtime! repo :window-3)]
                 (is (not= (:pid first-runtime) (:pid reopened)))
-                (is (some? (lifecycle/processIdentity (:pid reopened)))))))
+                (is (true? (lifecycle/pidExists (:pid reopened)))))))
           (p/catch (fn [error] (is false (str error))))
           (p/then (fn [_] (lifecycle/deleteGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) repo)))
           (p/then (fn [_] (fs/rmSync root #js {:recursive true :force true})))

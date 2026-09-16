@@ -938,6 +938,8 @@
                            (is (= (.-pid js/process) (:pid health-body)))
                            (is (= (node-path/resolve data-dir) (:root-dir health-body)))
                            (is (contains? health-body :owner-source))
+                           (is (string? (:ticket health-body)))
+                           (is (string? (:generation health-body)))
                            (is (contains? health-body :revision))
                            (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -947,6 +949,8 @@
                        _ (is (fs/existsSync lock-file))
                        lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                        _ (is (= repo (gobj/get lock-contents "repo")))
+                       _ (is (= (:ticket health-body) (gobj/get lock-contents "ticket")))
+                       _ (is (= (:generation health-body) (gobj/get lock-contents "generation")))
                        _ (is (nil? (gobj/get lock-contents "host")))
                        _ (is (nil? (gobj/get lock-contents "port")))
                        _ (invoke host port "thread-api/transact"

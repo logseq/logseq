@@ -308,7 +308,7 @@
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
    :lock-id (get-in @*lock-info [:lock :lock-id])
-   :process-start (get-in (js->clj @*admission :keywordize-keys true) [:identity :birth])
+   :ticket (some-> ^js @*admission .-ticket)
    :generation (some-> ^js @*admission .-generation)
    :root-dir root-dir
    :storage (select-keys (js->clj @*admission :keywordize-keys true) [:root :graphsDir :lifecycleDir])
@@ -609,7 +609,8 @@
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir :storage storage
                                                                  :repo repo
-                                                                 :process-start (get-in (js->clj admission :keywordize-keys true) [:identity :birth])
+                                                                 :ticket (.-ticket admission)
+                                                                 :generation (.-generation admission)
                                                                  :owner-source owner-source})
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db

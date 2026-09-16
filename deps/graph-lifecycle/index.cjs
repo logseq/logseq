@@ -64,78 +64,17 @@ function sameStorage(ctx, value) {
     && canonicalRoot(value.lifecycleDir) === ctx.lifecycleDir;
 }
 
-// A positive PID probe is insufficient: retain the OS birth marker and command.
-// Unknown status and permission errors propagate instead of counting as exit.
-function processIdentity(pid) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) fail('Invalid process identity');
-  try { process.kill(pid, 0); }
-  catch (error) { if (error.code === 'ESRCH') return null; throw error; }
-  if (process.platform === 'linux') {
-    try {
-      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      if (fields[0] === 'Z') return null;
-      const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-      return { pid, birth: fields[19], command: argv.join(' '), argv };
-    } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
-  }
-  if (process.platform === 'win32') {
-    const result = cp.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      `Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" | Select-Object CreationDate,CommandLine | ConvertTo-Json -Compress`],
-    { encoding: 'utf8', windowsHide: true });
-    if (result.error) throw result.error;
-    if (result.status !== 0) fail('Cannot inspect process identity');
-    if (!result.stdout.trim()) return null;
-    const info = JSON.parse(result.stdout);
-    if (!info.CreationDate || !info.CommandLine) fail('Incomplete process identity');
-    return { pid, birth: String(info.CreationDate), command: info.CommandLine };
-  }
-  const result = cp.spawnSync('ps', ['-p', String(pid), '-o', 'lstart=', '-o', 'stat=', '-o', 'command='],
-    { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
-  if (result.error) throw result.error;
-  if (result.status === 1 && !result.stdout.trim()) return null;
-  if (result.status !== 0) fail('Cannot inspect process identity');
-  const match = result.stdout.trim().match(/^(\w+\s+\w+\s+\d+\s+[\d:]+\s+\d+)\s+(\S+)\s+(.+)$/);
-  if (!match) fail('Incomplete process identity');
-  if (match[2].startsWith('Z')) return null;
-  return { pid, birth: match[1], command: match[3], exiting: match[2].includes('E') };
+// PID existence deliberately does not establish OS process-instance identity.
+function pidExists(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) fail('Invalid PID');
+  try { process.kill(pid, 0); return true; }
+  catch (error) { if (error.code === 'ESRCH') return false; throw error; }
 }
-function sameProcess(a, b) {
-  return a && b && a.pid === b.pid && a.birth === b.birth && (a.command === b.command || b.exiting === true);
-}
-function verifiedProcess(identity) {
-  const actual = processIdentity(identity.pid);
-  if (actual && !sameProcess(identity, actual)) fail(`Process identity changed for PID ${identity.pid}`);
-  return actual;
-}
-function verifiedAlive(identity) {
-  return verifiedProcess(identity) !== null;
-}
-function signalVerified(identity, signal) {
-  const actual = verifiedProcess(identity);
-  // macOS P_WEXIT may replace argv with "(node)" while the same process exits.
-  // Keep waiting for disappearance; never treat this transition as completed exit.
-  if (actual && !actual.exiting) process.kill(identity.pid, signal);
-}
-function argument(identity, flag) {
-  if (identity.argv) {
-    const index = identity.argv.indexOf(flag);
-    return index < 0 ? null : identity.argv[index + 1];
-  }
-  const match = identity.command.match(new RegExp(`(?:^|\\s)${flag}\\s+(.+?)(?=\\s+--[a-z-]+(?:\\s|$)|$)`));
-  return match ? match[1].replace(/^"(.*)"$/, '$1') : null;
-}
-// Return null when argv cannot establish graph identity. Only false is safe to skip.
-function belongsTo(ctx, identity) {
-  if (!/db-worker-node/.test(identity.command)) return null;
-  const repo = argument(identity, '--repo');
-  if (!repo) return null;
-  if (graphName(repo) !== ctx.repo) return false;
-  const root = argument(identity, '--root-dir');
-  if (!root) return null;
-  // Direct worker invocations use the documented root/graphs default at their boundary.
-  const graphsDir = argument(identity, '--graphs-dir') || path.join(root, 'graphs');
-  return canonicalRoot(graphsDir) === ctx.graphsDir;
+function signalProcess(pid, signal) {
+  if (pid === process.pid) fail('Cannot stop the calling process');
+  if (!pidExists(pid)) return;
+  try { process.kill(pid, signal); }
+  catch (error) { if (error.code !== 'ESRCH') throw error; }
 }
 
 async function acquireLease(ctx, operation) {
@@ -153,8 +92,8 @@ async function acquireLease(ctx, operation) {
     }
     const current = state(ctx);
     const previous = current.owner;
-    if (previous && verifiedAlive(previous.identity)) fail('Lifecycle owner remains alive');
-    const owner = { id: id(), identity: processIdentity(process.pid), operation };
+    if (previous && pidExists(previous.pid)) fail('Lifecycle owner remains alive');
+    const owner = { id: id(), pid: process.pid, operation };
     current.owner = owner;
     writeJSON(ctx.stateFile, current);
     let released = false;
@@ -200,7 +139,7 @@ async function createGraph(storage, repo) {
     if (current.phase === 'available' && fs.existsSync(ctx.graphDir)) return current.generation;
     if (current.deletion && !current.deletion.moved && fs.existsSync(ctx.graphDir))
       fail('Graph deletion must finish before recreation');
-    if (current.workers.some(worker => verifiedAlive(worker.identity))) fail('Graph still has a live worker');
+    if (current.workers.some(worker => pidExists(worker.pid))) fail('Graph still has a live worker');
     fs.mkdirSync(ctx.graphDir, { recursive: true });
     const next = { generation: id(), phase: 'available', workers: [], owner: current.owner };
     writeJSON(ctx.stateFile, next);
@@ -221,10 +160,11 @@ async function admit({ storage, repo, ticket, generation, owner }) {
     let record;
     if (ticket) {
       record = current.workers.find(worker => worker.ticket === ticket);
-      if (!record || record.owner !== owner || record.generation !== current.generation || !sameProcess(record.identity, processIdentity(process.pid)))
+      if (!record || record.owner !== owner || record.pid !== process.pid)
         fail('Worker admission generation or process identity changed');
+      validateRegistration(ctx, current, record);
     } else {
-      record = { ticket: id(), generation: current.generation, identity: processIdentity(process.pid), owner, root: ctx.root };
+      record = runtimeRecord({ ...ctx, ticket: id(), generation: current.generation, pid: process.pid, owner });
       current.workers.push(record);
       writeJSON(ctx.stateFile, current);
     }
@@ -238,7 +178,8 @@ function publish(runtime, lock, port) {
   runtime.release();
 }
 function runtimeRecord(runtime) {
-  return { ticket: runtime.ticket, generation: runtime.generation, identity: runtime.identity, owner: runtime.owner, root: runtime.root };
+  const { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo } = runtime;
+  return { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo };
 }
 function checkAdmission(runtime) {
   requireAvailable(runtime, readJSON(runtime.stateFile), runtime.generation);
@@ -276,42 +217,68 @@ function request(port, endpoint, method = 'GET', headers = {}) {
     req.end();
   });
 }
-async function health(ctx, identity, port) {
+function validateRegistration(ctx, current, record) {
+  if (!Number.isSafeInteger(record.pid) || record.pid <= 0 || !record.ticket || !record.owner
+      || !record.root || record.generation !== current.generation || record.repo !== ctx.repo
+      || record.graphsDir !== ctx.graphsDir || record.lifecycleDir !== ctx.lifecycleDir)
+    fail('Invalid worker registration');
+}
+function readRuntime(ctx, record) {
+  const runtime = readJSON(runtimeFile(ctx, record.ticket));
+  if (runtime && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
+    fail('Worker runtime identity differs from registration');
+  return runtime;
+}
+async function health(ctx, target, port) {
   const response = await request(port, '/healthz');
   const value = JSON.parse(response.body);
-  if (![200, 503].includes(response.status) || value.pid !== identity.pid || value.port !== port
-      || !sameStorage(ctx, value.storage)
-      || graphName(value.repo) !== ctx.repo || value.host !== '127.0.0.1') fail('Worker endpoint identity mismatch');
-  if (value['process-start'] && value['process-start'] !== identity.birth) fail('Worker process identity mismatch');
+  if (![200, 503].includes(response.status) || value.pid !== target.pid || value.port !== port
+      || !sameStorage(ctx, value.storage) || graphName(value.repo) !== ctx.repo
+      || value.host !== '127.0.0.1' || value.ticket !== target.ticket
+      || value.generation !== target.generation || value['owner-source'] !== target.owner
+      || !target.lock || value['lock-id'] !== target.lock['lock-id']) fail('Worker endpoint identity mismatch');
   return value;
 }
 function validateLock(ctx, lock, target) {
-  if (graphName(lock.repo) !== ctx.repo || lock.pid !== target.identity.pid
+  if (graphName(lock.repo) !== ctx.repo || lock.pid !== target.pid
       || !lock['lock-id'] || !sameStorage(ctx, lock.storage)
-      || (target.owner && lock['owner-source'] !== target.owner)
-      || (lock['process-start'] && lock['process-start'] !== target.identity.birth)
+      || lock['owner-source'] !== target.owner || lock.ticket !== target.ticket
+      || lock.generation !== target.generation
       || (target.lock && lock['lock-id'] !== target.lock['lock-id'])) fail('Graph lock identity mismatch');
 }
 async function discover(ctx, current) {
   const targets = new Map();
   for (const record of current.workers) {
-    const runtime = readJSON(runtimeFile(ctx, record.ticket));
-    targets.set(record.identity.pid, { ...record, ...runtime });
+    validateRegistration(ctx, current, record);
+    if (targets.has(record.pid)) fail('Duplicate worker registration');
+    const target = { ...record, ...readRuntime(ctx, record) };
+    if (target.lock) validateLock(ctx, target.lock, target);
+    targets.set(record.pid, target);
   }
   const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
-  const published = entries(ctx.root);
+  const attachLock = candidate => {
+    const target = targets.get(candidate.pid);
+    if (target) { validateLock(ctx, candidate, target); target.lock = candidate; }
+    else if (pidExists(candidate.pid)) fail('Graph lock has an unregistered live owner');
+  };
+  if (lock) attachLock(lock);
+  const unlinked = path.join(ctx.graphsDir, 'Unlinked graphs');
+  if (fs.existsSync(unlinked) && fs.statSync(unlinked).isDirectory()) {
+    for (const directory of fs.readdirSync(unlinked, { withFileTypes: true })) {
+      if (!directory.isDirectory()) continue;
+      const moved = readJSON(path.join(unlinked, directory.name, 'db-worker.lock'));
+      if (moved && graphName(moved.repo) === ctx.repo) attachLock(moved);
+    }
+  }
   const probes = [];
-  const candidates = [...published];
-  if (lock) candidates.push({ pid: lock.pid });
-  for (const candidate of candidates) {
-    let target = targets.get(candidate.pid);
-    const identity = target ? target.identity : processIdentity(candidate.pid);
-    if (!identity) continue;
-    const membership = target ? true : belongsTo(ctx, identity);
-    if (membership !== true) {
-      if (lock?.pid === candidate.pid) fail('Live lock owner has unresolved graph identity');
-      if (membership === false) continue;
-      if (candidate.port) probes.push(async () => {
+  for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
+    for (const candidate of entries(root)) {
+      if (!pidExists(candidate.pid)) continue;
+      const target = targets.get(candidate.pid);
+      if (target) {
+        if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
+        target.port = candidate.port;
+      } else probes.push(async () => {
         let value;
         try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
         catch (error) {
@@ -320,48 +287,13 @@ async function discover(ctx, current) {
         }
         if (value?.repo && graphName(value.repo) === ctx.repo
             && (!value.storage || sameStorage(ctx, value.storage)))
-          fail('Published graph worker has unresolved process identity');
+          fail('Published graph worker is unregistered');
       });
-      continue;
-    }
-    if (target) verifiedAlive(identity);
-    else target = { ticket: id(), generation: current.generation, identity, root: ctx.root };
-    if (candidate.port) {
-      if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
-      target.port = candidate.port;
-    }
-    targets.set(candidate.pid, target);
-  }
-  const probeResults = await Promise.allSettled(probes.map(probe => probe()));
-  for (const result of probeResults) if (result.status === 'rejected') throw result.reason;
-  if (lock) {
-    const target = targets.get(lock.pid);
-    if (target) { validateLock(ctx, lock, target); target.lock = lock; }
-    else if (processIdentity(lock.pid)) fail('Unresolved graph lock identity');
-  }
-  const movedProbes = [];
-  const unlinked = path.join(ctx.graphsDir, 'Unlinked graphs');
-  if (fs.existsSync(unlinked) && fs.statSync(unlinked).isDirectory()) {
-    for (const directory of fs.readdirSync(unlinked, { withFileTypes: true })) {
-      if (!directory.isDirectory()) continue;
-      const moved = readJSON(path.join(unlinked, directory.name, 'db-worker.lock'));
-      if (!moved || graphName(moved.repo) !== ctx.repo) continue;
-      const target = targets.get(moved.pid);
-      if (!target) continue;
-      validateLock(ctx, moved, target);
-      if (verifiedAlive(target.identity) && target.port) movedProbes.push(async () => {
-        const value = await health(ctx, target.identity, target.port);
-        if (value['lock-id'] !== moved['lock-id']) fail('Moved graph lock identity mismatch');
-      });
-      target.lock = moved;
     }
   }
-  const movedResults = await Promise.allSettled(movedProbes.map(probe => probe()));
-  for (const result of movedResults) if (result.status === 'rejected') throw result.reason;
-  // Persist every adopted identity before requesting shutdown or allowing metadata removal.
-  current.workers = [...targets.values()];
-  writeJSON(ctx.stateFile, current);
-  return { targets: current.workers, lock };
+  const results = await Promise.allSettled(probes.map(probe => probe()));
+  for (const result of results) if (result.status === 'rejected') throw result.reason;
+  return { targets: [...targets.values()], lock };
 }
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
@@ -372,7 +304,7 @@ async function removeEntries(root, removed) {
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
       const previous = readJSON(lockFile);
-      if (previous && !processIdentity(previous.pid)) {
+      if (previous && !pidExists(previous.pid)) {
         if (readJSON(lockFile)?.['lock-id'] === previous['lock-id']) fs.unlinkSync(lockFile);
       }
       if (Date.now() >= deadline) fail('Timed out acquiring server-list lock');
@@ -380,7 +312,7 @@ async function removeEntries(root, removed) {
     }
   }
   try {
-    const retained = entries(root).filter(entry => !removed.some(target => target.identity.pid === entry.pid && target.port === entry.port));
+    const retained = entries(root).filter(entry => !removed.some(target => target.pid === entry.pid && target.port === entry.port));
     const file = path.join(root, 'server-list');
     const temporary = `${file}.${id()}.tmp`;
     try {
@@ -392,21 +324,21 @@ async function removeEntries(root, removed) {
     fs.unlinkSync(lockFile);
   }
 }
-async function waitExit(identity, milliseconds) {
+async function waitExit(pid, milliseconds) {
   const deadline = Date.now() + milliseconds;
   do {
-    if (!verifiedAlive(identity)) return true;
+    if (!pidExists(pid)) return true;
     await sleep(50);
   } while (Date.now() < deadline);
-  return !verifiedAlive(identity);
+  return !pidExists(pid);
 }
 async function terminate(ctx, target, deleting) {
-  if (!verifiedAlive(target.identity)) return;
-  if (target.identity.pid === process.pid) fail('Cannot stop the calling process');
+  if (!pidExists(target.pid)) return;
+  if (target.pid === process.pid) fail('Cannot stop the calling process');
   let responsive = false;
   if (target.port) {
     try {
-      await health(ctx, target.identity, target.port);
+      await health(ctx, target, target.port);
       responsive = true;
     } catch (error) {
       if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
@@ -422,24 +354,24 @@ async function terminate(ctx, target, deleting) {
     }
   }
   for (const [stage, milliseconds] of [['graceful', 5000], ['SIGTERM', 1000], ['SIGKILL', 2000]]) {
-    if (stage !== 'graceful') signalVerified(target.identity, stage);
+    if (stage !== 'graceful') signalProcess(target.pid, stage);
     process.stderr.write(`[graph-lifecycle] ${JSON.stringify({ event: 'worker-termination',
       repo: ctx.repo, graphsDir: ctx.graphsDir, generation: target.generation,
-      ticket: target.ticket, identity: target.identity, stage })}\n`);
-    if (await waitExit(target.identity, milliseconds)) return;
+      ticket: target.ticket, pid: target.pid, stage })}\n`);
+    if (await waitExit(target.pid, milliseconds)) return;
   }
-  fail(`Timed out stopping worker ${target.identity.pid}`, 'server-stop-timeout');
+  fail(`Timed out stopping worker ${target.pid}`, 'server-stop-timeout');
 }
 function removeMatchingLock(file, lock) {
   const actual = readJSON(file);
   if (!actual) return;
   if (actual.pid !== lock.pid || actual['lock-id'] !== lock['lock-id'] || actual.repo !== lock.repo)
     fail('Graph lock identity changed during cleanup');
-  if (processIdentity(actual.pid)) fail('Cannot remove a live graph lock');
+  if (pidExists(actual.pid)) fail('Cannot remove a live graph lock');
   fs.unlinkSync(file);
 }
 async function cleanup(ctx, current, targets, lock) {
-  for (const target of targets) if (verifiedAlive(target.identity)) fail('Worker remains alive during cleanup');
+  for (const target of targets) if (pidExists(target.pid)) fail('Worker remains alive during cleanup');
   if (lock) removeMatchingLock(path.join(ctx.graphDir, 'db-worker.lock'), lock);
   else if (readJSON(path.join(ctx.graphDir, 'db-worker.lock'))) fail('Unexpected graph lock appeared during cleanup');
   const unlinked = path.join(ctx.graphsDir, 'Unlinked graphs');
@@ -448,7 +380,7 @@ async function cleanup(ctx, current, targets, lock) {
       if (!directory.isDirectory()) continue;
       const file = path.join(unlinked, directory.name, 'db-worker.lock');
       const moved = readJSON(file);
-      if (moved && graphName(moved.repo) === ctx.repo && targets.some(target => target.identity.pid === moved.pid
+      if (moved && graphName(moved.repo) === ctx.repo && targets.some(target => target.pid === moved.pid
           && target.lock?.['lock-id'] === moved['lock-id'])) removeMatchingLock(file, moved);
     }
   }
@@ -468,8 +400,8 @@ async function stopUnderLease(ctx, current, deleting, owner) {
   const { targets, lock } = await discover(ctx, current);
   if (!deleting) {
     for (const target of targets) {
-      if (!verifiedAlive(target.identity)) continue;
-      const source = target.owner || target.lock?.['owner-source'];
+      if (!pidExists(target.pid)) continue;
+      const source = target.owner;
       if (source !== owner && !(owner === 'cli' && source === 'unknown'))
         fail('Server is owned by another process', 'server-owned-by-other');
     }
@@ -568,7 +500,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
     const current = state(ctx);
     requireAvailable(ctx, current, generation || observed);
     const { targets, lock } = await discover(ctx, current);
-    const live = targets.filter(target => verifiedAlive(target.identity));
+    const live = targets.filter(target => pidExists(target.pid));
     if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
     if (live.length) {
       const target = live[0];
@@ -587,16 +519,16 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
     const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
       stdio: 'ignore', env });
     child.on('error', () => {}); // Readiness or the missing PID reports spawn failure.
-    const identity = child.pid && processIdentity(child.pid);
-    if (!identity) fail('Worker failed to spawn', 'server-start-failed');
+    const pid = child.pid;
+    if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');
     child.unref();
-    const spawned = { ticket, generation: current.generation, identity, owner, root: ctx.root };
+    const spawned = runtimeRecord({ ...ctx, ticket, generation: current.generation, pid, owner });
     current.workers = [spawned];
     try { writeJSON(ctx.stateFile, current); }
     catch (error) {
       // An unregistered child must exit before the parent releases admission exclusion.
-      signalVerified(identity, 'SIGKILL');
-      if (!await waitExit(identity, 2000)) fail('Unregistered worker did not exit');
+      signalProcess(pid, 'SIGKILL');
+      if (!await waitExit(pid, 2000)) fail('Unregistered worker did not exit');
       throw error;
     }
     return spawned;
@@ -604,14 +536,14 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
   const deadline = Date.now() + 30000;
   for (;;) {
     requireAvailable(ctx, readJSON(ctx.stateFile), record.generation);
-    if (!verifiedAlive(record.identity)) fail('Worker exited before becoming ready', 'server-start-failed');
-    const runtime = readJSON(runtimeFile(ctx, record.ticket));
+    if (!pidExists(record.pid)) fail('Worker exited before becoming ready', 'server-start-failed');
+    const runtime = readRuntime(ctx, record);
     const port = runtime?.port || record.port;
     if (port) {
-      const value = await health(ctx, record.identity, port);
       const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
       if (!lock) fail('Worker has no canonical graph lock', 'server-start-failed');
       validateLock(ctx, lock, { ...record, lock: runtime?.lock || record.lock });
+      const value = await health(ctx, { ...record, lock }, port);
       if (value.status === 'ready') return { ...value, generation: record.generation };
     }
     if (Date.now() >= deadline) fail('Worker failed to become ready', 'server-start-failed');
@@ -640,5 +572,5 @@ function observe(storage, repo, generation, onChange) {
   return close;
 }
 
-module.exports = { resolveStorage, context, snapshot, processIdentity, withLease, createGraph, admit, publish,
+module.exports = { resolveStorage, context, snapshot, pidExists, withLease, createGraph, admit, publish,
   checkAdmission, recordStop, abortAdmission, startGraph, stopGraph, deleteGraph, observe };
