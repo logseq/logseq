@@ -52,16 +52,17 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
-(deftest compact-closed-values-require-worker-loading-test
-  (is (#'property-value/compact-closed-values?
+(deftest closed-values-need-worker-load-even-when-snapshot-has-ids-test
+  (is (#'property-value/closed-values-need-worker-load?
        {:property/closed-values
         [{:db-ident :logseq.property.view/type.table}
-         {:db-ident :logseq.property.view/type.list}]}))
-  (is (not (#'property-value/compact-closed-values?
-            {:property/closed-values
-             [{:db/id 1 :db/ident :logseq.property.view/type.table}
-              {:db/id 2 :db/ident :logseq.property.view/type.list}]})))
-  (is (not (#'property-value/compact-closed-values? {}))))
+         {:db-ident :logseq.property.view/type.list}]})
+      "Compact ident-only snapshots still load the full set.")
+  (is (#'property-value/closed-values-need-worker-load?
+       {:property/closed-values
+        [{:db/id 1 :block/title "Todo"}]})
+      "A snapshot that only has the current choice still reloads all choices.")
+  (is (not (#'property-value/closed-values-need-worker-load? {}))))
 
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])

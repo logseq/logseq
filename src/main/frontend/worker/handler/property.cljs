@@ -191,17 +191,13 @@
                           default-value)])))
              (into {}))))))
 
+(declare property-closed-values)
+
 (defn ^:api get-class-properties
   [db class]
   (mapv (fn [property]
           (let [m (worker-plain/entity-forward-map db property {})
-                closed-values (mapv (fn [choice]
-                                      (select-keys (entity-util/entity->map choice)
-                                                   [:db/id :block/uuid :block/title :block/order
-                                                    :logseq.property/value
-                                                    :logseq.property/icon
-                                                    :logseq.property/choice-checkbox-state]))
-                                    (:property/closed-values property))]
+                closed-values (property-closed-values db property)]
             (cond-> m
               (seq closed-values)
               (assoc :property/closed-values closed-values))))
@@ -224,13 +220,7 @@
   [repo property-ident]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (when-let [property (d/entity @conn property-ident)]
-      (mapv (fn [entity]
-              (select-keys (entity-util/entity->map entity)
-                           [:db/id :block/uuid :block/title :block/order
-                            :logseq.property/value
-                            :logseq.property/icon
-                            :logseq.property/choice-checkbox-state]))
-            (:block/_closed-value-property property)))))
+      (property-closed-values @conn property))))
 
 (def-thread-api :thread-api/get-property-node-selector-data
   [repo option]
@@ -467,21 +457,20 @@
     (when-let [description (d/entity db description-id)]
       (entity-direct-map db description [:db/id :block/title :block/uuid]))))
 
-(defn- display-property-closed-values
+(defn ^:api property-closed-values
+  "All closed values for a property, as plain maps the UI can render.
+  Uses the reverse ref (`:block/_closed-value-property`) rather than AVET:
+  `:block/closed-value-property` is not in the static indexed schema, so AVET
+  can miss choices that VAET still has."
   [db property]
-  (->> (d/datoms db :avet :block/closed-value-property (:db/id property))
-       (keep (fn [datom]
-               (when-let [value (d/entity db (:e datom))]
-                 (when-not (ldb/recycled? value)
-                   value))))
-       (sort-by :block/order)
+  (->> (db-property/get-closed-property-values db (or (:db/id property) property))
        (mapv #(entity-direct-map db % display-property-value-keys))))
 
 (defn- display-property-map*
   [db property-id]
   (when-let [entity (d/entity db property-id)]
     (let [description (display-property-description db entity)
-          closed-values (display-property-closed-values db entity)]
+          closed-values (property-closed-values db entity)]
       (cond-> (entity-direct-map db entity display-property-keys)
         description
         (assoc :logseq.property/description description)
@@ -763,7 +752,7 @@
 
 (defn- property-has-closed-values?
   [db property]
-  (boolean (seq (d/datoms db :avet :block/closed-value-property (:db/id property)))))
+  (boolean (seq (db-property/get-closed-property-values db (:db/id property)))))
 
 (defn- render-bottom-position-property?
   [db property]
