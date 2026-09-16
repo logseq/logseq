@@ -370,9 +370,48 @@
 
 (defn- select-ref-id
   [value]
-  (or (property-ref-id value)
-      (when (string? value)
-        (parse-positive-int value))))
+  (cond
+    (nil? value) nil
+    (number? value) (when (pos? value) value)
+    (string? value) (parse-positive-int value)
+    (map? value) (or (:db/id value)
+                     (select-ref-id (:value value)))
+    (boolean? value) nil
+    (keyword? value) nil
+    :else (select-ref-id (aget value "value"))))
+
+(defn- property-select-label
+  [property]
+  (or (db-property/built-in-display-title property t)
+      (:block/title property)))
+
+(defn- repeat-closed-select
+  [{:keys [selected-id options disabled? labelledby on-select placeholder]}]
+  (let [selected (or (some (fn [option]
+                             (when (= selected-id (:id option))
+                               option))
+                           options)
+                     (first options))
+        selected-label (:label selected)
+        selected-value (when selected-id (str selected-id))]
+    (shui/select
+     (cond-> {:on-value-change (fn [v]
+                                 (when-let [id (select-ref-id v)]
+                                   (on-select id)))}
+       selected-value (assoc :value selected-value)
+       disabled? (assoc :disabled true))
+     (shui/select-trigger
+      (cond-> {:class "h-8 w-full"}
+        labelledby (assoc :aria-labelledby labelledby))
+      (if selected-label
+        (shui/select-value {} selected-label)
+        (shui/select-value {:placeholder (or placeholder "")})))
+     (shui/select-content
+      (map (fn [{:keys [id label]}]
+             (shui/select-item {:key (str id)
+                                 :value (str id)}
+                                label))
+           options)))))
 
 (defn- repeat-frequency-value
   [block]
@@ -478,26 +517,15 @@
                         (.blur (.-target e))
                         (util/stop e)))})
      [:div.flex-1.min-w-0
-      (shui/select
-       (cond-> {:items (mapv (fn [choice]
-                                {:label (repeat-unit-label choice)
-                                 :value (:db/id choice)})
-                             unit-choices)
-                :on-value-change persist-unit!}
-         selected-id
-         (assoc :value selected-id)
-         config/publishing?
-         (assoc :disabled true))
-       (shui/select-trigger
-        {:class "h-8 w-full"
-         :aria-labelledby label-id}
-        [:span.truncate (or (some-> selected-choice repeat-unit-label) "")])
-      (shui/select-content
-       (map (fn [choice]
-               (shui/select-item {:key (str (:db/id choice))
-                                  :value (:db/id choice)}
-                                 (repeat-unit-label choice)))
-             unit-choices)))]]))
+      (repeat-closed-select
+       {:selected-id selected-id
+        :options (mapv (fn [choice]
+                           {:id (:db/id choice)
+                            :label (repeat-unit-label choice)})
+                         unit-choices)
+        :labelledby label-id
+        :disabled? config/publishing?
+        :on-select persist-unit!})]]))
 
 (hsx/defc repeat-when-controls
   [block status-property status-done full-properties when-id set-when-id!]
@@ -506,18 +534,13 @@
                                   (and (not (ldb/built-in? property'))
                                        (>= (count (:property/closed-values property')) 2))))
                         (concat [status-property])
-                        (util/distinct-by :db/id))
+                        (util/distinct-by :db/id)
+                        (remove nil?))
         property-options (mapv (fn [property']
-                                 {:label (or (db-property/built-in-display-title property' t)
-                                             (:block/title property'))
-                                  :value (:db/id property')})
+                                 {:id (:db/id property')
+                                  :label (property-select-label property')})
                                properties)
         selected-when-id (or when-id (:db/id status-property))
-        selected-when (or (some (fn [option]
-                                  (when (= selected-when-id (:value option))
-                                    option))
-                                property-options)
-                          (first property-options))
         when-property (or (some (fn [property']
                                   (when (= selected-when-id (:db/id property'))
                                     property'))
@@ -531,29 +554,17 @@
     [:div.flex.flex-col.gap-2.text-sm
      [:div.text-muted-foreground
       (t :property.repeat/when)]
-     (shui/select
-      (cond->
-        {:items property-options
-         :on-value-change (fn [v]
-                            (when-let [id (select-ref-id v)]
-                              (set-when-id! id)
-                              (when (:db/id block)
-                                (db-property-handler/set-block-property!
-                                 (:db/id block)
-                                 :logseq.property.repeat/checked-property
-                                 id))))}
-        selected-when-id
-        (assoc :value selected-when-id))
-      (shui/select-trigger
-       {:class "h-8 w-full"}
-       [:span.truncate (or (:label selected-when)
-                           (t :property/select-property-placeholder))])
-      (shui/select-content
-       (map (fn [{:keys [label value]}]
-              (shui/select-item {:key (str value)
-                                 :value value}
-                                label))
-            property-options)))
+     (repeat-closed-select
+      {:selected-id selected-when-id
+       :options property-options
+       :placeholder (t :property/select-property-placeholder)
+       :on-select (fn [id]
+                    (set-when-id! id)
+                    (when (:db/id block)
+                      (db-property-handler/set-block-property!
+                       (:db/id block)
+                       :logseq.property.repeat/checked-property
+                       id)))})
      [:div.flex.flex-row.gap-1.text-sm
       [:div.text-muted-foreground
        (t :property.repeat/is-label)]

@@ -390,10 +390,18 @@
 (deftest select-ref-id-test
   (is (= 83 (#'property-value/select-ref-id 83)))
   (is (= 83 (#'property-value/select-ref-id {:db/id 83})))
+  (is (= 83 (#'property-value/select-ref-id {:value 83})))
   (is (= 83 (#'property-value/select-ref-id "83")))
+  (is (= 83 (#'property-value/select-ref-id #js {:value 83})))
+  (is (= 83 (#'property-value/select-ref-id #js {:value "83"})))
+  (is (= 83 (#'property-value/select-ref-id #js {:label "Status" :value 83})))
   (is (nil? (#'property-value/select-ref-id "83abc")))
   (is (nil? (#'property-value/select-ref-id "Status")))
   (is (nil? (#'property-value/select-ref-id nil))))
+
+(deftest property-select-label-test
+  (is (= "Priority" (#'property-value/property-select-label {:block/title "Priority"})))
+  (is (nil? (#'property-value/property-select-label {:db/id 83}))))
 
 (deftest repeat-frequency-value-test
   (is (= 1 (#'property-value/repeat-frequency-value {})))
