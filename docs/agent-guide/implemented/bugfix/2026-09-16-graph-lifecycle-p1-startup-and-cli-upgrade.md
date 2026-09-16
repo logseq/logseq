@@ -344,3 +344,54 @@ Temporary supporting logs (not required by permanent tests):
   fixture must capture the demonstrated old endpoint/lock behavior, with genuine
   historical-package validation retained as separate supporting evidence.
 
+
+## CI follow-up: consistent build revisions (2026-09-16)
+
+[Ubuntu CLI E2E job 104800904293](https://github.com/logseq/logseq/actions/runs/35098255711/job/104800904293)
+failed at case 20, `node-list-renders-block-ref-labels-json`, with
+`Failure(fetch failed)` after 19 passing cases. The failing upsert command logged
+three worker terminations; the earlier `graph-import-json` case passed.
+
+The new automatic retirement path exposes a pre-existing disagreement between
+build metadata generators. CLI used `git rev-parse --short HEAD` plus
+`git diff-index --quiet`; Shadow used `git describe --long --always --dirty`.
+A temporary Git fixture reproduced two disagreements:
+
+- Updating only a tracked file's timestamp produced `SHA-dirty` for CLI and
+  `SHA` for the worker, despite an empty content diff. `describe` refreshes the
+  index before deciding whether the worktree is dirty.
+- An annotated tag produced `SHA` for CLI and `tag-0-gSHA` for the worker.
+
+Revision mismatch retires the worker before each local ensure operation.
+Repeated operations within a command can therefore restart workers and invalidate
+an already selected HTTP endpoint. The CI log does not include the actual two
+revision strings; the diagnosis is supported by its repeated termination path
+and the deterministic metadata and runtime reproductions, rather than a direct
+read of the runner's artifacts.
+
+CLI now uses the same `git describe --long --always --dirty` invocation as
+Shadow. Explicit `LOGSEQ_REVISION` overrides remain unchanged, and runtime
+revision comparison remains strict. No automatic retry, relaxed identity check,
+or compatibility normalization was added.
+
+`cli_build_revision_test.mjs` covers clean, timestamp-only, modified and tagged
+worktrees plus explicit overrides using real temporary Git repositories and the
+actual Vite configuration. The timestamp and tag tests failed before the fix and
+all five passed afterward. A real CLI regression checks that consecutive commands
+retain one worker PID; it failed with mismatched local artifacts and passed after
+rebuilding both artifacts with equal revisions. Both tests are included in the
+existing non-sync lifecycle case.
+
+Post-fix verification used freshly rebuilt CLI and worker artifacts, both
+reporting `ba70aafca7-dirty`. On macOS ARM64 with Electron's Node 24.15.0 runtime:
+
+- The original `node-list-renders-block-ref-labels-json` case passed and returned
+  `Task [[RefNodePage]]`.
+- The consecutive-command PID reuse regression passed.
+- The complete CLI non-sync suite, using `--skip-build --jobs 1 --verbose`, passed
+  all 98 cases in 375.18 seconds, including the new regression tests.
+- `git diff --check` and `spec-dev-tool check --all` passed.
+
+Ubuntu was not rerun locally, and the remote CI job has not validated this
+uncommitted patch. The verified Git metadata disagreement is platform-independent;
+confirmation of the exact Ubuntu failure remains dependent on the next CI run.
