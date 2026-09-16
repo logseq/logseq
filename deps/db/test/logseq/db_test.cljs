@@ -33,6 +33,44 @@
     (is (= 5 (:db/id (ldb/get-right-sibling (d/entity db 2)))))
     (is (= 2 (:db/id (ldb/get-left-sibling (d/entity db 5)))))))
 
+(deftest batch-sibling-lookup-preserves-navigation-results
+  (let [db (d/db-with
+            (d/empty-db {:block/parent {:db/valueType :db.type/ref}
+                         :logseq.property/created-from-property {:db/valueType :db.type/ref}
+                         :block/closed-value-property {:db/valueType :db.type/ref
+                                                       :db/cardinality :db.cardinality/many}})
+            [{:db/id 1 :block/title "Parent"}
+             {:db/id 10 :block/title "Property A"}
+             {:db/id 11 :block/title "Property B"}
+             {:db/id 2 :block/parent 1}
+             {:db/id 3 :block/parent 1 :block/order "a"}
+             {:db/id 4 :block/parent 1 :block/order "a"}
+             {:db/id 5 :block/parent 1 :block/order "b"}
+             {:db/id 6 :block/parent 1 :block/order "c"}
+             {:db/id 20 :block/parent 1 :logseq.property/created-from-property 10}
+             {:db/id 21 :block/parent 1 :block/order "a" :logseq.property/created-from-property 10}
+             {:db/id 22 :block/parent 1 :block/order "a" :logseq.property/created-from-property 10}
+             {:db/id 23 :block/parent 1 :block/order "b" :logseq.property/created-from-property 10}
+             {:db/id 24 :block/parent 1 :block/order "c" :logseq.property/created-from-property 10}
+             {:db/id 30 :block/parent 1 :block/order "a" :logseq.property/created-from-property 11}
+             {:db/id 31 :block/parent 1 :block/order "b" :logseq.property/created-from-property 11}
+             {:db/id 40 :block/parent 1 :block/order "a" :block/closed-value-property [10]}
+             {:db/id 41 :block/parent 1 :block/order "b" :block/closed-value-property [10]}])
+        blocks (mapv #(d/entity db %) [2 3 4 5 6 20 21 22 23 24 30 31 40 41])
+        expected (mapv (fn [block]
+                         [(:db/id block)
+                          (:db/id (ldb/get-left-sibling block))
+                          (:db/id (ldb/get-right-sibling block))])
+                       blocks)
+        lookup (ldb/batch-sibling-lookup db)]
+    (dotimes [_ 2]
+      (is (= expected
+             (mapv (fn [block]
+                     [(:db/id block)
+                      (:db/id (lookup block :left))
+                      (:db/id (lookup block :right))])
+                   blocks))))))
+
 ;;; datoms
 ;;; - 1 <----+
 ;;;   - 2    |

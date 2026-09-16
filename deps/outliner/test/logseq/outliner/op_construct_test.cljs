@@ -141,6 +141,35 @@
           (is (not= child-uuid
                     (get-in insert-op [1 1]))))))))
 
+(deftest inverse-operations-preserve-ordered-selected-roots-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "Container"
+                           :build/children
+                           [{:block/title "First"}
+                            {:block/title "Branch"
+                             :build/children [{:block/title "Intermediate"
+                                               :build/children [{:block/title "Leaf A"}
+                                                                {:block/title "Leaf B"}]}]}
+                            {:block/title "Last"}]}]}]})
+        db @conn
+        selected (mapv #(db-test/find-block-by-content db %)
+                       ["Leaf A" "Last" "Leaf B" "First" "Branch" "Last" "First" "Branch"])
+        ids (mapv :db/id selected)
+        target-id (:db/id (db-test/find-block-by-content db "Container"))
+        expected-roots (mapv #(-> (db-test/find-block-by-content db %) :block/uuid)
+                            ["Last" "First" "Branch"])]
+    (doseq [[op args inverse-op root-path]
+            [[:delete-blocks [ids {}] :insert-blocks [1 0 0 :block/uuid]]
+             [:move-blocks [ids target-id {:sibling? false}] :move-blocks [1 0 0]]]]
+      (testing (name op)
+        (let [{:keys [inverse-outliner-ops]}
+              (op-construct/derive-history-outliner-ops
+               db db [] {:outliner-op op :outliner-ops [[op args]]})]
+          (is (= [inverse-op inverse-op inverse-op] (mapv first inverse-outliner-ops)))
+          (is (= expected-roots (mapv #(get-in % root-path) inverse-outliner-ops))))))))
+
 (deftest compound-history-inverses-run-in-reverse-dependency-order-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

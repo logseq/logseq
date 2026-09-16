@@ -4900,6 +4900,41 @@
                 (is (= (:block/uuid parent-after)
                        (-> block-after :block/parent :block/uuid)))))))))))
 
+(deftest rebase-sibling-targets-follow-survivors-after-earlier-replay-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Page"}
+                 :blocks [{:block/title "Parent"
+                           :build/children [{:block/title "A"}
+                                            {:block/title "B"}
+                                            {:block/title "C"}
+                                            {:block/title "D"}
+                                            {:block/title "E"}]}]}]})
+        db-before @conn
+        parent-id (:db/id (db-test/find-block-by-content db-before "Parent"))
+        target-c (:block/uuid (db-test/find-block-by-content db-before "C"))
+        target-e (:block/uuid (db-test/find-block-by-content db-before "E"))
+        survivor-d (:block/uuid (db-test/find-block-by-content db-before "D"))
+        local-txs (mapv (fn [[op :as entry]]
+                          {:tx-id (random-uuid)
+                           :outliner-op op
+                           :forward-outliner-ops [entry]})
+                        [[:insert-blocks [[{:block/uuid (random-uuid) :block/title "First insert"}]
+                                          target-c {:sibling? true :keep-uuid? true}]]
+                         [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Second insert"}]
+                                          target-e {:sibling? true :keep-uuid? true}]]
+                         [:transact [[[:db/retractEntity [:block/uuid survivor-d]]] {}]]
+                         [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Third insert"}]
+                                          target-e {:sibling? true :keep-uuid? true}]]])]
+    (d/transact! conn [[:db/retractEntity [:block/uuid target-c]]
+                       [:db/retractEntity [:block/uuid target-e]]])
+    (let [results (#'sync-apply/rebase-local-txs! test-repo conn local-txs db-before)]
+      (is (= [:rebased :rebased :rebased :rebased] (mapv :status results)))
+      (is (= ["A" "B" "Third insert" "First insert" "Second insert"]
+             (->> (:block/_parent (d/entity @conn parent-id))
+                  ldb/sort-by-order
+                  (mapv :block/title)))))))
+
 (deftest rebase-replays-pending-insert-before-save-when-local-db-missed-pending-block-test
   (testing "stale local DB plus durable pending insert/save should recover the unsynced block during rebase"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
