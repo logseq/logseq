@@ -9,7 +9,32 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]))
+
+(deftest date-picker-day-focus-updates-selected-date-without-insert-test
+  (let [selected-date (js/Date. 2026 8 16)
+        focused-date (js/Date. 2026 8 17)
+        app-state* (atom {:date-picker/date selected-date})
+        calendar-opts* (atom nil)
+        inserted* (atom [])]
+    (with-redefs [rfx/use-sub (fn [sub] (get-in @app-state* sub))
+                  state/set-state! (fn [k v & _] (swap! app-state* assoc k v) nil)
+                  state/clear-editor-action! (fn [] nil)
+                  date/js-date->journal-title (constantly "September 17th, 2026")
+                  editor-handler/insert-command! (fn [& args]
+                                                   (swap! inserted* conj args))
+                  ui/nlp-calendar (fn [opts]
+                                    (reset! calendar-opts* opts)
+                                    (.createElement react "div"))]
+      (.renderToStaticMarkup react-dom-server (datepicker/date-picker "edit-block" nil))
+      ((:on-day-focus @calendar-opts*) focused-date)
+      (let [updated (:date-picker/date @app-state*)]
+        (is (= 2026 (.getFullYear updated)))
+        (is (= 8 (.getMonth updated)))
+        (is (= 17 (.getDate updated))))
+      (is (empty? @inserted*)
+          "Keyboard focus should move the selected day without inserting a date"))))
 
 (deftest repeated-selected-date-click-inserts-current-date-test
   (let [selected-date (js/Date. 2026 4 20)
@@ -32,6 +57,19 @@
              @inserted*))
       (is (nil? @commands/*current-command)))))
 
+(deftest calendar-day-highlight-classes-test
+  (let [html (.renderToStaticMarkup
+              react-dom-server
+              (shui/calendar {:mode "single"
+                              :selected (js/Date. 2026 8 16)
+                              :today (js/Date. 2026 8 16)}))]
+    (is (string/includes? html "data-today"))
+    (is (string/includes? html "data-selected"))
+    (is (string/includes? html "[&amp;&gt;button]:bg-primary"))
+    (is (string/includes? html "[&amp;&gt;button]:bg-accent"))
+    (is (string/includes? html "focus-visible:!ring-0"))
+    (is (string/includes? html "focus-visible:!ring-offset-0"))))
+
 (deftest date-year-input-fits-caption-without-overlapping-nav-test
   (let [html (.renderToStaticMarkup
               react-dom-server
@@ -42,6 +80,18 @@
     (is (string/includes? html "4.5rem"))
     (is (not (string/includes? html "ml-2")))
     (is (not (string/includes? html "5.75rem")))))
+
+(deftest date-month-select-uses-closable-menu-items-test
+  (let [html (.renderToStaticMarkup
+              react-dom-server
+              (ui/date-year-month-select {:name "months"
+                                          :value 8
+                                          :onChange (fn [_])}))]
+    (is (string/includes? html "ls-date-month-select"))
+    (is (string/includes? html "September"))
+    (is (string/includes? html "aria-haspopup=\"menu\""))
+    (is (not (string/includes? html "menuitemcheckbox")))
+    (is (not (string/includes? html "ui__dropdown-menu-checkbox-item")))))
 
 (defn- form-target-event
   [matching-selectors & {:keys [attrs]}]
