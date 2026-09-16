@@ -881,7 +881,7 @@
 
 (defn embed-node!
   "Insert a :block/link embed of `target` at `host`.
-   Returns the insert result, or nil when the embed would cycle."
+   Returns :inserted, or nil when the embed would cycle or cannot be resolved."
   ([host-block target]
    (embed-node! host-block target {}))
   ([host-block target {:keys [sibling? replace-empty-target? outliner-op skip-guard?]
@@ -901,12 +901,14 @@
         (do (show-cannot-embed-cycle!) nil)
 
         :else
-        (api-insert-new-block! ""
-                               {:block-uuid (:block/uuid host)
-                                :sibling? sibling?
-                                :replace-empty-target? replace-empty-target?
-                                :outliner-op outliner-op
-                                :other-attrs {:block/link (:db/id target')}}))))))
+        (p/do!
+         (api-insert-new-block! ""
+                                {:block-uuid (:block/uuid host)
+                                 :sibling? sibling?
+                                 :replace-empty-target? replace-empty-target?
+                                 :outliner-op outliner-op
+                                 :other-attrs {:block/link (:db/id target')}})
+         :inserted))))))
 
 (defn- unwrap-block-results
   [results]
