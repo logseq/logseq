@@ -2,6 +2,7 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.datepicker :as datepicker]
             [frontend.date :as date]
@@ -30,3 +31,43 @@
       (is (= [["edit-block" "[[May 20th, 2026]]" nil {:command :page-ref}]]
              @inserted*))
       (is (nil? @commands/*current-command)))))
+
+(deftest date-year-input-fits-caption-without-overlapping-nav-test
+  (let [html (.renderToStaticMarkup
+              react-dom-server
+              (ui/date-year-month-select {:name "years"
+                                          :value 2026
+                                          :onChange (fn [_])}))]
+    (is (string/includes? html "ls-date-year-input"))
+    (is (string/includes? html "4.5rem"))
+    (is (not (string/includes? html "ml-2")))
+    (is (not (string/includes? html "5.75rem")))))
+
+(defn- form-target-event
+  [matching-selectors & {:keys [attrs]}]
+  (let [hits (set matching-selectors)]
+    #js {:target #js {:closest (fn [sel]
+                                  (when (some hits
+                                              (map string/trim (string/split sel #",")))
+                                    #js {:getAttribute (fn [k] (get attrs k))}))}}))
+
+(deftest date-picker-form-target-ignores-enter-in-inputs-test
+  (is (true? (ui/date-picker-form-target?
+              (form-target-event [".ls-property-date-picker" "input"]))))
+  (is (true? (ui/date-picker-form-target?
+              (form-target-event [".ls-editor-date-picker" "[role='combobox']"]
+                                 :attrs {"aria-expanded" "true"}))))
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event [".ls-editor-date-picker" "[role='combobox']"]
+                                  :attrs {"aria-expanded" "false"})))
+      "Enter on a closed repeat select trigger still confirms the date")
+  (is (true? (ui/date-picker-form-target?
+              (form-target-event [".ls-property-date-picker" "button"]))))
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event [".ls-property-date-picker" "button" "[role='gridcell']"])))
+      "Enter on a calendar day button still confirms the date")
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event ["input"])))
+      "Enter outside the picker is not swallowed")
+  (is (false? (ui/date-picker-form-target?
+               #js {:target #js {:closest (fn [_] nil)}}))))

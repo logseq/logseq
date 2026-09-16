@@ -241,6 +241,18 @@ input[type='range'] {
   @apply flex flex-col gap-2 relative;
 }
 
+.ls-date-year-input,
+.ls-repeat-frequency-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+}
+
 .ls-editor-date-picker {
   box-sizing: border-box;
   max-width: calc(100vw - 32px);

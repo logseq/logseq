@@ -230,6 +230,7 @@
       (let [text (str command " test ")]
         (b/new-block text)
         (util/input-command command)
+        (w/wait-for date-picker-day-selector)
         (k/enter)
         (assert/assert-editor-mode)
         (util/exit-edit)

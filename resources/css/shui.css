@@ -523,7 +523,14 @@ kbd.shui-shortcut-key-pressed,
   }
 
   input[type=number] {
-    appearance: initial;
+    appearance: textfield;
+    -moz-appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
+    }
   }
 }
 
