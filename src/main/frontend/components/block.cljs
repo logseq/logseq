@@ -3068,6 +3068,19 @@
   [property]
   (= :logseq.property/icon (:db/ident property)))
 
+(defn- zoom-in-root-block?
+  "True when this block is the focused block-route root (bullet zoom-in)."
+  [config block]
+  (and (:block? config)
+       (= (:id config) (str (:block/uuid block)))))
+
+(defn- show-block-below-hidden-properties-pill-toggle?
+  "Outliner blocks only show this control on the zoom-in root."
+  [config block page? has-hidden-properties?]
+  (and has-hidden-properties?
+       (not page?)
+       (zoom-in-root-block? config block)))
+
 (defn- show-block-below-properties-row?
   [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
                                   show-hidden-properties-control?
@@ -3209,8 +3222,8 @@
                                 config
                                 (not config/publishing?))
         page? (entity/page? block)
-        show-hidden-properties-pill-toggle? (and has-hidden-properties?
-                                                 (not page?))
+        show-hidden-properties-pill-toggle? (show-block-below-hidden-properties-pill-toggle?
+                                             config block page? has-hidden-properties?)
         show-hidden-properties-control? (and has-hidden-properties?
                                              page?)
         show-page-add-property? (and (entity/page? block)
