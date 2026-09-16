@@ -1320,13 +1320,13 @@
   (mapv #(or (replay-entity-id-value db %) %) ids))
 
 (defn- rebase-find-existing-left-sibling
-  [current-db target]
-  (loop [sibling (ldb/get-left-sibling target)]
+  [current-db get-sibling-before target]
+  (loop [sibling (get-sibling-before target :left)]
     (if (nil? sibling)
       nil
       (if-let [current-sibling (and sibling (d/entity current-db [:block/uuid (:block/uuid sibling)]))]
         current-sibling
-        (recur (ldb/get-left-sibling sibling))))))
+        (recur (get-sibling-before sibling :left))))))
 
 (defn- rebase-target-ref
   [target-id]
@@ -1346,7 +1346,7 @@
     target-id))
 
 (defn- rebase-resolve-target-and-sibling
-  [current-db rebase-db-before target-id sibling?]
+  [current-db rebase-db-before get-sibling-before target-id sibling?]
   (let [target-ref (rebase-target-ref target-id)
         target (d/entity current-db target-ref)
         target-before (when rebase-db-before
@@ -1358,7 +1358,10 @@
       [target sibling?]
 
       (and target-before parent-before sibling?)
-      (if-let [left-sibling (rebase-find-existing-left-sibling current-db target-before)]
+      (if-let [left-sibling (rebase-find-existing-left-sibling
+                            current-db
+                            (or get-sibling-before (ldb/batch-sibling-lookup rebase-db-before))
+                            target-before)]
         [left-sibling true]
         (when-let [parent (d/entity current-db [:block/uuid (:block/uuid parent-before)])]
           [parent false]))
@@ -1400,7 +1403,7 @@
       (assoc :block/uuid block-uuid))))
 
 (defn- ^:large-vars/cleanup-todo replay-canonical-outliner-op!
-  [conn [op args] rebase-db-before]
+  [conn [op args] rebase-db-before & [get-sibling-before]]
   (case op
     :save-block
     (let [[block opts] args
@@ -1419,7 +1422,7 @@
     :insert-blocks
     (let [[blocks target-id opts] args
           db @conn
-          [target sibling?] (rebase-resolve-target-and-sibling db rebase-db-before target-id (:sibling? opts))]
+          [target sibling?] (rebase-resolve-target-and-sibling db rebase-db-before get-sibling-before target-id (:sibling? opts))]
       (when-not (and target (seq blocks))
         (invalid-rebase-op! op {:args args}))
       (outliner-core/insert-blocks! conn
@@ -1431,7 +1434,7 @@
     (let [[template-id target-id opts] args
           template-id' (replay-entity-id-value @conn template-id)
           target-id' (replay-entity-id-value @conn target-id)
-          [target sibling?] (rebase-resolve-target-and-sibling @conn rebase-db-before target-id' (:sibling? opts))]
+          [target sibling?] (rebase-resolve-target-and-sibling @conn rebase-db-before get-sibling-before target-id' (:sibling? opts))]
       (when-not (and template-id' (d/entity @conn template-id') target)
         (invalid-rebase-op! op {:args args
                                 :reason :missing-template-or-target-block}))
@@ -1475,7 +1478,7 @@
           ids' (replay-entity-id-coll @conn ids)
           target-id' (replay-entity-id-value @conn target-id)
           blocks (keep #(d/entity @conn %) ids')
-          [target sibling?] (rebase-resolve-target-and-sibling @conn rebase-db-before target-id' (:sibling? opts))]
+          [target sibling?] (rebase-resolve-target-and-sibling @conn rebase-db-before get-sibling-before target-id' (:sibling? opts))]
       (when (or (empty? blocks) (nil? target))
         (invalid-rebase-op! op {:args args}))
       (when (seq blocks)
@@ -1575,7 +1578,7 @@
         (ldb/transact! conn tx-data tx-meta)))))
 
 (defn- rebase-local-op!
-  [_repo conn local-tx rebase-db-before]
+  [_repo conn local-tx rebase-db-before get-sibling-before]
   (if (= :fix (:outliner-op local-tx))
     {:tx-id (:tx-id local-tx)
      :status :kept}
@@ -1601,7 +1604,7 @@
                tx-meta
                (fn [conn]
                  (doseq [op forward-ops']
-                   (replay-canonical-outliner-op! conn op rebase-db-before))))
+                   (replay-canonical-outliner-op! conn op rebase-db-before get-sibling-before))))
               status (if rebase-tx-report :rebased :no-op)]
           {:tx-id (:tx-id local-tx)
            :status status})
@@ -1618,9 +1621,10 @@
 
 (defn- rebase-local-txs!
   [repo conn local-txs rebase-db-before]
-  (mapv (fn [local-tx]
-          (rebase-local-op! repo conn local-tx rebase-db-before))
-        local-txs))
+  (let [get-sibling-before (when rebase-db-before (ldb/batch-sibling-lookup rebase-db-before))]
+    (mapv (fn [local-tx]
+            (rebase-local-op! repo conn local-tx rebase-db-before get-sibling-before))
+          local-txs)))
 
 (defn- fix-tx!
   [conn rebase-tx-report tx-meta]

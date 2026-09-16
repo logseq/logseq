@@ -17,6 +17,22 @@
 (defn- make-storage []
   (->InMemoryStorage (volatile! {})))
 
+(deftest ordinary-siblings-exclude-property-children
+  (let [db (d/db-with
+            (d/empty-db {:block/parent {:db/valueType :db.type/ref}
+                         :logseq.property/created-from-property {:db/valueType :db.type/ref}
+                         :block/closed-value-property {:db/valueType :db.type/ref}})
+            [{:db/id 1 :block/title "Parent"}
+             {:db/id 10 :block/title "Property"}
+             {:db/id 2 :block/parent 1 :block/order "a"}
+             {:db/id 3 :block/parent 1 :block/order "b"
+              :logseq.property/created-from-property 10}
+             {:db/id 4 :block/parent 1 :block/order "c"
+              :block/closed-value-property 10}
+             {:db/id 5 :block/parent 1 :block/order "d"}])]
+    (is (= 5 (:db/id (ldb/get-right-sibling (d/entity db 2)))))
+    (is (= 2 (:db/id (ldb/get-left-sibling (d/entity db 5)))))))
+
 ;;; datoms
 ;;; - 1 <----+
 ;;;   - 2    |

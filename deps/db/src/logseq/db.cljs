@@ -446,8 +446,8 @@
                         child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
                     (if (and child-order
                              (eligible? (compare child-order block-order))
-                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
-                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (not (seq (d/datoms db :eavt child-id :logseq.property/created-from-property)))
+                             (not (seq (d/datoms db :eavt child-id :block/closed-value-property)))
                              (or (nil? best-order)
                                  (closer? (compare child-order best-order))))
                       [child-id child-order]
@@ -492,6 +492,72 @@
 
       :else
       (get-ordinary-sibling block :left))))
+
+(defn- sibling-order-index
+  [children ordinary?]
+  (let [children (if ordinary?
+                   (sort-by (juxt :block/order :db/id) (filter :block/order children))
+                   (sort-by-order children))
+        groups (mapv (fn [group]
+                       (let [first-child (first group)]
+                         [(:block/order first-child)
+                          (:db/id first-child)
+                          (:db/id (if ordinary? first-child (last group)))]))
+                     (partition-by :block/order children))]
+    (loop [remaining (seq groups)
+           left-id nil
+           result (if ordinary? {nil [nil (:db/id (first children))]} {})]
+      (if-let [[order _ last-id] (first remaining)]
+        (recur (next remaining)
+               last-id
+               (assoc result order [left-id (second (second remaining))]))
+        result))))
+
+(defn- parent-sibling-index
+  [parent]
+  (let [children (:block/_raw-parent parent)
+        property-groups (group-by #(some-> % :logseq.property/created-from-property :db/id) children)]
+    {:ordinary (sibling-order-index
+                (remove :block/closed-value-property (get property-groups nil)) true)
+     :properties (reduce-kv (fn [result property-id blocks]
+                              (if property-id
+                                (assoc result property-id (sibling-order-index blocks false))
+                                result))
+                            {} property-groups)}))
+
+(defn batch-sibling-lookup
+  "Returns a lookup function taking a block from `db` and `:left` or `:right`.
+  Repeated parent lookups share order indexes for this batch and DB snapshot.
+  Equal orders are skipped, preserving each sibling kind's tie selection."
+  [db]
+  (let [*indexes (volatile! {})]
+    (fn [block direction]
+      (assert (contains? #{:left :right} direction))
+      (assert (or (nil? block) (identical? db (.-db block))))
+      (when-let [parent (:block/parent block)]
+        (let [closed-property (:block/closed-value-property block)
+              property-id (some-> block :logseq.property/created-from-property :db/id)
+              group-key (if closed-property
+                          [:closed closed-property]
+                          [:parent (:db/id parent)])]
+          (if-not (contains? @*indexes group-key)
+            (do
+              (vswap! *indexes assoc group-key nil)
+              ((if (= direction :left) get-left-sibling get-right-sibling) block))
+            (let [indexes (or (get @*indexes group-key)
+                              (let [indexes (if closed-property
+                                              (sibling-order-index (:block/_closed-value-property closed-property) false)
+                                              (parent-sibling-index parent))]
+                                (vswap! *indexes assoc group-key indexes)
+                                indexes))
+                  order-index (cond
+                                closed-property indexes
+                                property-id (get-in indexes [:properties property-id])
+                                :else (:ordinary indexes))
+                  sibling-id (nth (get order-index (:block/order block))
+                                  (if (= direction :left) 0 1) nil)]
+              (when sibling-id
+                (d/entity db sibling-id)))))))))
 
 (defn get-down
   [block]

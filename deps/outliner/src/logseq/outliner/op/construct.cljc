@@ -656,28 +656,33 @@
   [db-before ids]
   (let [resolved-entities (mapv #(block-entity db-before %) ids)
         unresolved-id? (some nil? resolved-entities)
-        entities (reduce (fn [acc ent]
-                           (if (some #(= (:db/id %) (:db/id ent)) acc)
-                             acc
-                             (conj acc ent)))
-                         []
-                         (remove nil? resolved-entities))
-        selected-ids (set (map :db/id entities))
+        [selected-ids entities] (reduce (fn [[seen result :as acc] ent]
+                                         (let [id (:db/id ent)]
+                                           (if (or (nil? ent) (contains? seen id))
+                                             acc
+                                             [(conj seen id) (conj result ent)])))
+                                       [#{} []] resolved-entities)
+        *ancestor-selected? (volatile! {})
         has-selected-ancestor? (fn [ent]
-                                 (loop [parent (:block/parent ent)]
-                                   (if-let [parent-id (some-> parent :db/id)]
-                                     (if (contains? selected-ids parent-id)
-                                       true
-                                       (recur (:block/parent parent)))
-                                     false)))]
+                                 (loop [parent (:block/parent ent)
+                                        path []]
+                                   (let [parent-id (:db/id parent)
+                                         selected? (contains? selected-ids parent-id)
+                                         cached (find @*ancestor-selected? parent-id)]
+                                     (if (or (nil? parent-id) selected? cached)
+                                       (let [result (or selected? (boolean (when cached (val cached))))]
+                                         (vswap! *ancestor-selected?
+                                                 #(reduce (fn [m id] (assoc m id result)) % path))
+                                         result)
+                                       (recur (:block/parent parent) (conj path parent-id))))))]
     {:roots (->> entities
                  (remove has-selected-ancestor?)
                  vec)
      :incomplete? (boolean unresolved-id?)}))
 
 (defn- block-restore-target
-  [ent]
-  (if-let [left-sibling-id (:db/id (ldb/get-left-sibling ent))]
+  [get-sibling ent]
+  (if-let [left-sibling-id (:db/id (get-sibling ent :left))]
     [left-sibling-id true]
     (when-let [parent-id (or (:db/id (:block/parent ent))
                              (:db/id (:block/page ent)))]
@@ -692,14 +697,14 @@
                     :keep-block-order? true}]])
 
 (defn- delete-root->restore-plan
-  [db-before root]
+  [db-before get-sibling root]
   (let [root-id (:db/id root)
         root-uuid (:block/uuid root)
         blocks (when root-uuid
                  (->> (ldb/get-block-and-children db-before root-uuid)
                       (keep #(build-insert-block-payload db-before %))
                       vec))
-        [target-id sibling?] (block-restore-target root)
+        [target-id sibling?] (block-restore-target get-sibling root)
         [target-id sibling?] (if (and target-id (= target-id root-id))
                                [(or (:db/id (:block/parent root))
                                     (:db/id (:block/page root)))
@@ -711,9 +716,9 @@
        :sibling? sibling?})))
 
 (defn- build-inverse-delete-blocks
-  [db-before ids]
+  [db-before get-sibling ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
-        plans (mapv #(delete-root->restore-plan db-before %) roots)]
+        plans (mapv #(delete-root->restore-plan db-before get-sibling %) roots)]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
@@ -722,9 +727,9 @@
            seq))))
 
 (defn- move-root->restore-op
-  [db-before root]
+  [db-before get-sibling root]
   (let [root-id (:db/id root)
-        [target-id sibling?] (block-restore-target root)]
+        [target-id sibling?] (block-restore-target get-sibling root)]
     (when (and (some? root-id)
                (some? target-id))
       [:move-blocks
@@ -733,9 +738,9 @@
         {:sibling? (boolean sibling?)}]])))
 
 (defn- build-inverse-move-blocks
-  [db-before ids]
+  [db-before get-sibling ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
-        restore-ops (mapv #(move-root->restore-op db-before %) roots)]
+        restore-ops (mapv #(move-root->restore-op db-before get-sibling %) roots)]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? restore-ops))
@@ -754,13 +759,13 @@
   (build-inverse-save-block db-before (into {} ent) nil))
 
 (defn- build-inverse-delete-page
-  [db-before page-uuid]
+  [db-before get-sibling page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
           today-page? (when-let [day (:block/journal-day page)]
                         (= (date-time-util/ms->journal-day (common-util/time-ms)) day))
-          root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
+          root-plans (mapv #(delete-root->restore-plan db-before get-sibling %) (page-top-level-blocks page))]
       (cond
         class-or-property?
         (let [page-save-op (entity->save-op db-before (assoc (into {} page) :db/ident (:db/ident page)))
@@ -848,7 +853,8 @@
 (defn- ^:large-vars/cleanup-todo build-strict-inverse-outliner-ops
   [db-before db-after tx-data forward-ops forward-op-group-sizes]
   (when (seq forward-ops)
-    (let [inverse-entries
+    (let [get-sibling (ldb/batch-sibling-lookup db-before)
+          inverse-entries
           (mapv (fn [[op args]]
                   (let [inverse-entry
                         (case op
@@ -864,7 +870,7 @@
 
                           :move-blocks
                           (let [[ids _target-id _opts] args]
-                            (build-inverse-move-blocks db-before ids))
+                            (build-inverse-move-blocks db-before get-sibling ids))
 
                           :indent-outdent-blocks
                           (let [[ids indent? opts] args]
@@ -880,7 +886,7 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before ids))
+                            (build-inverse-delete-blocks db-before get-sibling ids))
 
                           :create-page
                           (let [[_title opts] args]
@@ -889,7 +895,7 @@
 
                           :delete-page
                           (let [[page-uuid _opts] args]
-                            (build-inverse-delete-page db-before page-uuid))
+                            (build-inverse-delete-page db-before get-sibling page-uuid))
 
                           :upsert-property
                           (let [[property-id _schema _opts] args]
