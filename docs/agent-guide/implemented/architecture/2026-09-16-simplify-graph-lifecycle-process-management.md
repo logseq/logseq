@@ -100,6 +100,19 @@ repo, graph `generation`, owner source, PID, ticket, and graph `lock-id`.
   Remove command-line-based adoption of workers and attempts to infer ownership
   from executable names or graph arguments.
 
+Desktop startup stops revision-mismatched workers before creating the first
+window. It scans the configured storage root's server publications across all
+graphs and both CLI and Electron owners. Upgrade cleanup verifies the live
+`/healthz` PID, port, root, repo, owner, and revision against the publication and
+graph lock, then repeats the endpoint check under the graph lease. When the
+endpoint publishes a lock ID, that must also match; historical endpoints without
+it use the disk lock ID to guard metadata cleanup. It requests normal
+shutdown before using the shared signal escalation sequence and removes matching
+metadata only after exit. Current-revision workers and other storage roots remain
+running. This retires old workers without admitting them into the new protocol or
+migrating their registration format. An unresponsive endpoint cannot establish an
+outdated revision; cleanup reports the failure and Desktop does not open a window.
+
 Recorded metadata is application-level correlation, not fresh OS proof that a
 PID still belongs to the same process. The accepted weak case is a consistently
 registered PID whose worker cannot answer the protocol.
@@ -235,7 +248,9 @@ skip compilation. Results and environment details are recorded below.
 - A zombie or reused live PID can keep the existence probe positive and cause a
   false stop timeout. There is no platform-specific workaround in this design.
 - Unregistered or damaged lifecycle state is no longer repaired by command-line
-  discovery. It may require manual intervention.
+  discovery. Desktop upgrade cleanup can retire an unregistered worker whose
+  endpoint and graph lock agree; unresponsive or conflicting owners still require
+  intervention.
 - Correlated files can be stale together. File consistency is weaker than OS
   process-instance identity and must not be described as an equivalent guarantee.
 - Node signal behavior varies across platforms. The stages are escalation
@@ -338,6 +353,23 @@ bb --config /tmp/bb-empty.edn --classpath cli-e2e/src -e \
 Windows was not available and was not verified. The Linux runs exercise the
 previously failing paths on Node 24; they are not a rerun of GitHub-hosted CI or
 an x86_64 validation. The separate sync stress failure remains outside scope.
+
+### Desktop upgrade validation with computer use
+
+On macOS ARM64, packaged Desktop builds `2f3dd44f41` and
+`2f3dd44f41-dirty` were launched with an isolated HOME, user-data directory, and
+graph storage. Native UI interactions created a graph and edited a journal block
+through the sequence old -> new -> old -> new. Each version displayed the edits
+saved by the preceding version. Before upgrading, two old CLI-owned workers were
+left running; the new Desktop terminated both before opening its window.
+
+A real historical packaged worker (`be7c1d1-dirty`) exposed a missing case: its
+health endpoint did not publish a lock ID. Before the correction, Desktop logged
+`Outdated worker endpoint identity mismatch` and exited. After adding the
+regression test and correcting the upgrade identity check, the same live worker
+was shut down normally. The new Desktop opened its graph and accepted an edit
+through the UI. All 16 upgrade protocol tests passed. Test windows exited
+normally; the installed application and personal graphs were not replaced.
 
 ## Consequences
 
