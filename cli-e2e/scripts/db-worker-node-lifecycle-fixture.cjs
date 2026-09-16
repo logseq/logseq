@@ -64,11 +64,23 @@ const mode = args[args.indexOf('--mode') + 1];
   }
   const runtime = await lifecycle.admit({ storage, repo, owner, ticket: option('--admission-ticket'),
     generation: option('--graph-generation') });
+  async function barrier(stage) {
+    if (mode !== stage) return;
+    fs.writeFileSync(path.join(root, stage), String(process.pid));
+    while (!fs.existsSync(path.join(root, `release-${stage}`)))
+      await new Promise(resolve => setTimeout(resolve, 20));
+    fs.writeFileSync(path.join(root, `continued-${stage}`), String(process.pid));
+  }
+  await barrier('after-admission');
   const lock = { repo, pid: process.pid, 'lock-id': runtime.ticket,
     'root-dir': runtime.root, ticket: runtime.ticket, generation: runtime.generation, 'owner-source': owner, storage };
   const graphDir = runtime.graphDir;
-  fs.writeFileSync(path.join(graphDir, 'db-worker.lock'), JSON.stringify(lock));
-  fs.writeFileSync(path.join(graphDir, 'db.sqlite-wal'), 'preserved');
+  await lifecycle.withLease(runtime, 'lock', () => {
+    lifecycle.checkAdmission(runtime);
+    fs.writeFileSync(path.join(graphDir, 'db-worker.lock'), JSON.stringify(lock));
+    fs.writeFileSync(path.join(graphDir, 'db.sqlite-wal'), 'preserved');
+  });
+  await barrier('before-publication');
   const server = http.createServer((request, response) => {
     if (request.url === '/healthz') {
       response.end(JSON.stringify({ ...lock, 'root-dir': runtime.root, host: '127.0.0.1',
@@ -90,9 +102,12 @@ const mode = args[args.indexOf('--mode') + 1];
     }
   });
   process.on('SIGTERM', () => {});
-  server.listen(0, '127.0.0.1', () => {
-    lifecycle.publish(runtime, lock, server.address().port);
-    fs.appendFileSync(path.join(runtime.root, 'server-list'), `${process.pid} ${server.address().port}\n`);
-    if (process.send) process.send({ ready: true });
+  server.listen(0, '127.0.0.1', async () => {
+    try {
+      await lifecycle.publish(runtime, lock, server.address().port, () => {
+        fs.appendFileSync(path.join(runtime.root, 'server-list'), `${process.pid} ${server.address().port}\n`);
+      });
+      if (process.send) process.send({ ready: true });
+    } catch (error) { console.error(error); process.exit(1); }
   });
 })().catch(error => { console.error(error); process.exit(1); });

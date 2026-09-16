@@ -6,10 +6,25 @@ const path = require('node:path');
 const { fork } = require('node:child_process');
 const { once } = require('node:events');
 const lifecycle = require('../../deps/graph-lifecycle');
+const execFileAsync = require('node:util').promisify(require('node:child_process').execFile);
+const cli = path.resolve(__dirname, '../../static/logseq-cli.js');
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'logseq-worker-upgrade-')));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(async () => {
+    const listing = path.join(root, 'server-list');
+    const pids = fs.existsSync(listing) ? fs.readFileSync(listing, 'utf8').trim().split('\n')
+      .filter(Boolean).map(line => Number(line.split(' ')[0])) : [];
+    for (const pid of pids) {
+      if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
+      const deadline = Date.now() + 5000;
+      while (lifecycle.pidExists(pid)) {
+        assert.ok(Date.now() < deadline, 'Fixture worker must exit before removing storage');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   return lifecycle.resolveStorage(root, path.join(root, 'graphs'));
 }
 async function worker(t, storage, options = {}) {
@@ -137,3 +152,44 @@ test('startup retires historical workers whose health endpoint predates lock IDs
   assert.equal(fs.existsSync(path.join(target.directory, 'shutdown-requested')), true);
   assert.equal(fs.existsSync(path.join(target.directory, 'db-worker.lock')), false);
 });
+
+test('targeted retirement ignores an unrelated unverifiable worker and reports the retired target', async t => {
+  const storage = fixture(t);
+  const target = await worker(t, storage, { owner: 'electron', omitLockId: true });
+  const unrelated = await worker(t, storage, { repo: 'unrelated', health: { pid: 1 } });
+  const stopped = await lifecycle.stopOutdatedWorkers(storage, 'current', 'logseq_db_demo');
+  assert.deepEqual(stopped.map(item => item.pid), [target.pid]);
+  assert.equal(lifecycle.pidExists(target.pid), false);
+  assert.ok(lifecycle.pidExists(unrelated.pid));
+});
+
+test('targeted retirement preserves a matching revision and skips graphs without a lock', async t => {
+  const storage = fixture(t);
+  const current = await worker(t, storage, { revision: 'current' });
+  assert.deepEqual(await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo'), []);
+  assert.deepEqual(await lifecycle.stopOutdatedWorkers(storage, 'current', 'missing'), []);
+  assert.ok(lifecycle.pidExists(current.pid));
+});
+
+for (const owner of ['cli', 'electron']) {
+  for (const command of [['server', 'start'], ['server', 'stop'], ['graph', 'remove']]) {
+    test(`CLI ${command.join(' ')} retires only its target historical ${owner} worker`, async t => {
+      const storage = fixture(t);
+      const target = await worker(t, storage, { owner, omitLockId: true });
+      const unrelated = await worker(t, storage, { repo: 'unrelated', health: { pid: 1 } });
+      const { stdout } = await execFileAsync(process.execPath,
+        [cli, ...command, '--root-dir', storage.root, '--graph', 'demo', '--output', 'json'], { timeout: 45000 });
+      assert.equal(JSON.parse(stdout).error, undefined, stdout);
+      assert.equal(lifecycle.pidExists(target.pid), false);
+      assert.ok(lifecycle.pidExists(unrelated.pid));
+      if (command[1] === 'start') {
+        const [record] = lifecycle.snapshot(storage, 'demo').workers;
+        assert.notEqual(record.pid, target.pid);
+        assert.ok(lifecycle.pidExists(record.pid));
+        await lifecycle.stopGraph(storage, 'demo', 'cli');
+      } else if (command[1] === 'remove') {
+        assert.equal(lifecycle.snapshot(storage, 'demo').phase, 'deleted');
+      } else assert.equal(fs.existsSync(target.directory), true);
+    });
+  }
+}
