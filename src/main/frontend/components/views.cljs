@@ -3798,16 +3798,16 @@
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
       (let [data (:rows paint)
-            notify-first-table-paint! (fn []
-                                        (when (:full-key plan)
-                                          (set-full-data-active! true))
-                                        (when-let [notify! (:on-first-table-paint! option)]
-                                          (notify!)))
+            notify-windowed-paint! (fn []
+                                     (when (:full-key plan)
+                                       (set-full-data-active! true))
+                                     (when-let [notify! (:on-first-table-paint! option)]
+                                       (notify!)))
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
                                             :on-viewport-filled! set-current-row-offset!
-                                            :on-first-table-paint! notify-first-table-paint!
+                                            :on-first-table-paint! notify-windowed-paint!
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data
