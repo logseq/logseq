@@ -1,5 +1,12 @@
 # Graph Lifecycle Review Followups
 
+> Process identity update (2026-09-16):
+> [Simplify Graph Lifecycle Process Management](../architecture/2026-09-16-simplify-graph-lifecycle-process-management.md)
+> supersedes this document's OS birth-marker, command-line inspection, and
+> unregistered-worker adoption guarantees. The current protocol uses Node PID
+> existence probes and lifecycle metadata, with explicitly accepted PID reuse
+> races. Historical evidence and verification results below remain unchanged.
+
 ## Problem
 
 The review of all uncommitted changes on 2026-09-15 found four reproducible
