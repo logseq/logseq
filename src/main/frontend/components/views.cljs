@@ -178,9 +178,14 @@
     (let [selected-ids (row-selection-map row-selection :selected-ids)]
       (filter #(true? (get selected-ids (table-row-id %))) rows))))
 
+(defn- table-action-rows
+  [table]
+  (when-not (:full-data-loading? table)
+    (or (:full-data table) (:rows table))))
+
 (defn- table-selection-summary
   [table row-selection]
-  (let [rows (:rows table)
+  (let [rows (table-action-rows table)
         selected-rows (table-get-selection-rows row-selection rows)
         selected-count (count selected-rows)
         rows-count (count rows)]
@@ -1012,7 +1017,8 @@
          option))))))
 
 (hsx/defc more-actions
-  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}
+  [view-entity columns {:keys [column-visible? column-toggle-visibility
+                               full-data-loading?] :as table}
    {:keys [display-type group-by-property-ident]}]
   (let [table? (= display-type :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
@@ -1080,7 +1086,11 @@
          (groups-sort-order view-entity (:logseq.property.view/sort-groups-desc? view-entity)))
        (shui/dropdown-menu-item
         {:key "export-edn"
-         :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
+         :disabled full-data-loading?
+         :on-click #(when-let [rows (table-action-rows table)]
+                      (db-export-handler/export-view-nodes-data
+                       rows
+                       {:group-by? (some? group-by-property-ident)}))}
         (t :view/export-edn)))))))
 
 (defn- get-column-size
@@ -2251,7 +2261,8 @@
   "Pending views paint titles before use-block. Swapping in db/id
   re-rendered All Pages / Tags / Movies before the first lazy-item."
   [view-entity pending-view first-paint-done?]
-  (if first-paint-done?
+  (if (and first-paint-done?
+           (= (:block/uuid view-entity) (:block/uuid pending-view)))
     (or view-entity pending-view)
     pending-view))
 
@@ -3455,6 +3466,7 @@
         table-map {:view-entity view-entity
                    :data data
                    :full-data full-data
+                   :full-data-loading? (:full-data-loading? option*)
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
@@ -3680,6 +3692,8 @@
     {:initial-row-count initial-row-count
      :window-context window-context
      :full-context full-context
+     :full-key (when window-context
+                 [:view-data view-uuid full-context])
      :pending-keys (view-data-resource-keys view-uuid window-context full-context)
      :ready-keys (view-data-resource-keys view-uuid window-context full-context)}))
 
@@ -3720,6 +3734,9 @@
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
         window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
+        [full-data-active? set-full-data-active!] (hooks/use-state false)
+        full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
+                                                        (:full-key plan)))
         [row-offset-state set-row-offset-state!] (hooks/use-state nil)
         [stale-offset-window set-stale-offset-window!] (hooks/use-state nil)
         row-offset (when (= (:context row-offset-state) window-context)
@@ -3738,10 +3755,18 @@
                         :ready (:value offset-snapshot)
                         :error (throw (:error offset-snapshot))
                         nil))
+        full-view-data (when (and full-data-active? (:full-key plan))
+                         (case (:status full-snapshot)
+                           :ready (:value full-snapshot)
+                           :error (throw (:error full-snapshot))
+                           nil))
         view-data (paint-view-data nil window-or-full-data)
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
                       (view-data->rows window-or-full-data))
+        full-rows (if (:full-key plan)
+                    (some-> full-view-data view-data->rows)
+                    all-row-ids)
         offset-rows (when offset-data
                       (view-data->rows offset-data))
         row-previews (merge (:row-previews window-or-full-data)
@@ -3784,14 +3809,22 @@
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
       (let [data (:rows paint)
+            notify-first-table-paint! (fn []
+                                        (when (:full-key plan)
+                                          (set-full-data-active! true))
+                                        (when-let [notify! (:on-first-table-paint! option)]
+                                          (notify!)))
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
                                             :on-viewport-filled! set-current-row-offset!
+                                            :on-first-table-paint! notify-first-table-paint!
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data
-                                            :full-data data
+                                            :full-data full-rows
+                                            :full-data-loading? (and (:full-key plan)
+                                                                     (nil? full-rows))
                                             :all-row-ids (when (= :flat (:partition paint))
                                                            all-row-ids)
                                             :offset-rows offset-rows

@@ -423,12 +423,14 @@
               result (db-view/get-view-data db (:db/id view) option)
               value (normalize-view-data db result
                                          (some? (:group-by-property-ident config)))
+              include-row-previews? (and (:initial-row-count context)
+                                         (= :flat (:partition value)))
               value (cond-> value
-                      (and (:initial-row-count context)
-                           (= :flat (:partition value)))
+                      include-row-previews?
                       (assoc :row-previews (first-window-row-previews db (:rows value))))
               value-partition (:partition value)]
-          [(view-watch-keys db view-uuid owner feature-type config value-partition)
+          [(cond-> (view-watch-keys db view-uuid owner feature-type config value-partition)
+             include-row-previews? (conj [:attr :block/title]))
            value]))
       (missing-view-data view-uuid))))
 

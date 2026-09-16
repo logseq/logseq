@@ -499,10 +499,14 @@
   (let [view-uuid (random-uuid)
         window-context {:feature-type :class-objects :initial-row-count 30}
         full-context {:feature-type :class-objects}
+        plan (#'views/loaded-view-resource-plan
+              view-uuid :class-objects nil nil "" nil nil 990)
         pending (#'views/view-data-resource-keys view-uuid window-context full-context)
         ready (#'views/view-data-resource-keys view-uuid window-context full-context)
         single (#'views/view-data-resource-keys view-uuid nil full-context)]
     (is (= [:view-data view-uuid window-context] (:primary pending)))
+    (is (= [:view-data view-uuid (:full-context plan)] (:full-key plan))
+        "The full rows resource is available after the first table paint for bulk actions.")
     (is (nil? (:full pending))
         "Windowed views never request the leftover 40938-id list.")
     (is (nil? (#'views/offset-view-data-key view-uuid window-context nil))
@@ -763,10 +767,14 @@
 
 (deftest first-paint-keeps-pending-view-and-class-properties-test
   (let [view-uuid (random-uuid)
+        next-view-uuid (random-uuid)
         pending {:block/uuid view-uuid}
+        next-pending {:block/uuid next-view-uuid}
         entity {:block/uuid view-uuid :db/id 78981}]
     (is (= pending (#'views/first-paint-view-entity entity pending false)))
     (is (= entity (#'views/first-paint-view-entity entity pending true)))
+    (is (= next-pending (#'views/first-paint-view-entity entity next-pending true))
+        "A hydrated entity from the previous selected tab must not render the next tab.")
     (is (= [] (#'views/first-paint-class-properties [{:db/ident :user.property/actors}] false))
         "Movies applied 17 class properties before the first table frame.")
     (is (= [{:db/ident :user.property/actors}]
@@ -776,6 +784,25 @@
     (is (true? (#'views/lazy-item-should-subscribe? {:block/title "Æon Flux"} true)))
     (is (true? (#'views/lazy-item-should-subscribe? nil false))
         "Rows without a first-window preview still subscribe immediately.")))
+
+(deftest table-selection-summary-uses-full-data-for-windowed-actions-test
+  (let [first-row {:block/uuid (random-uuid)}
+        hidden-row {:block/uuid (random-uuid)}
+        table {:rows [first-row]
+               :full-data [first-row hidden-row]}
+        summary (#'views/table-selection-summary table {:selected-all? true})]
+    (is (= [first-row hidden-row] (:selected-rows summary))
+        "Select-all actions on a windowed table must target the full result, not the visible window.")
+    (is (true? (:selected-all? summary)))))
+
+(deftest table-selection-summary-waits-for-full-data-before-windowed-actions-test
+  (let [first-row {:block/uuid (random-uuid)}
+        table {:rows [first-row]
+               :full-data-loading? true}
+        summary (#'views/table-selection-summary table {:selected-all? true})]
+    (is (empty? (:selected-rows summary))
+        "Select-all actions must not silently fall back to the first window while full rows are loading.")
+    (is (false? (:selected-some? summary)))))
 
 (deftest first-paint-skips-unpinned-property-columns-test
   (let [columns [{:id :block/title} {:id :user.property/actors} {:id :select}]]

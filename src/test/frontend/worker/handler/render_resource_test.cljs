@@ -1277,6 +1277,20 @@
                                 0
                                 response))))
 
+(deftest block-ref-count-resource-skips-property-incoming-refs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn property-page property-visible-child]} (render-resource-fixture)
+          property-id (entity-id @conn property-page)
+          child-id (entity-id @conn property-visible-child)
+          resource-key [:block-ref-count property-page]
+          _ (d/transact! conn [[:db/add child-id :block/refs property-id]])
+          response (call-resource api conn resource-key)]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:refs property-page]}
+                                0
+                                response))))
+
 (deftest block-unlinked-ref-exists-resource-gates-empty-reference-views-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn page view-row]} (render-resource-fixture)
@@ -1766,6 +1780,8 @@
       (is (not-any? #(contains? (:slots response) [:block %])
                     initial-rows)
           "The first window stays an ID list. Full row snapshots still load through use-block.")
+      (is (contains? (:watch-keys response) [:attr :block/title])
+          "The first-window previews include titles, so title edits must refresh the view-data resource.")
       (is (= (count initial-rows) (count previews)))
       (is (every? (fn [row]
                     (let [preview (get previews row)]

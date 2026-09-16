@@ -551,8 +551,14 @@
                            (if asc? all (rseq all))))]
             (when (seq datoms)
               (let [matched (avet-take-eids datoms match? row-limit row-offset)]
-                (if (or row-limit (nil? leftover-eids))
+                (cond
+                  (and row-limit (< (count matched) row-limit))
+                  nil
+
+                  (or row-limit (nil? leftover-eids))
                   matched
+
+                  :else
                   (let [seen (set matched)]
                     (into matched (remove seen) leftover-eids)))))))))))
 

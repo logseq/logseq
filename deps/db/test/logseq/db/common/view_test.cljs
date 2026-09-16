@@ -646,6 +646,39 @@
     (is (= 2 (:count result)))
     (is (= #{"With timestamp" "Without timestamp"} (set titles)))))
 
+(deftest get-view-data-class-objects-row-offset-keeps-missing-sort-value-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "With timestamp 1"
+                        :block/updated-at 10
+                        :build/tags [:Topic]}}
+                {:page {:block/title "With timestamp 2"
+                        :block/updated-at 20
+                        :build/tags [:Topic]}}
+                {:page {:block/title "Without timestamp"
+                        :block/updated-at 1
+                        :build/tags [:Topic]}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        without-ts-id (d/q '[:find ?e .
+                             :in $ ?title
+                             :where [?e :block/title ?title]]
+                           @conn
+                           "Without timestamp")
+        without-ts-value (:block/updated-at (d/entity @conn without-ts-id))
+        _ (d/transact! conn [[:db/retract without-ts-id :block/updated-at without-ts-value]])
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/updated-at :asc? false}]}
+        full (db-view/get-view-data @conn view-id option)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 2 :row-offset 2))]
+    (is (= ["With timestamp 2" "With timestamp 1" "Without timestamp"]
+           (result-titles conn full)))
+    (is (= 3 (:count window)))
+    (is (= ["Without timestamp"] (result-titles conn window)))
+    (is (= (subvec (vec (:data full)) 2 3) (:data window)))))
+
 (deftest get-view-data-class-objects-simple-is-filter-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}
