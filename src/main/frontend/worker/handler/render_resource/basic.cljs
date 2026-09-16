@@ -205,7 +205,10 @@
   (let [block-uuid (second resource-key)
         block (common/entity-by-uuid! db :block-uuid block-uuid)]
     [#{[:refs block-uuid]}
-     (ldb/get-block-refs-count db (:db/id block))]))
+     (if (or (ldb/property? block)
+             (ldb/class? block))
+       0
+       (ldb/get-block-refs-count db (:db/id block)))]))
 
 (defn- block-unlinked-ref-exists
   [db resource-key {:keys [repo]}]

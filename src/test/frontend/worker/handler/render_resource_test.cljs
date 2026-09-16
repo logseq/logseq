@@ -519,10 +519,8 @@
   (is (not (contains? block :block/children)))
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
-  (is (every? #{:block.temp/positioned-properties
-                :block.temp/refs-count
-                :block.temp/order-list-index
-                :block.temp/property-keys}
+  (is (every? #{:block.temp/refs-count
+                :block.temp/order-list-index}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
@@ -693,11 +691,10 @@
             (is (= #{:value}
                    (set (keys (get slots [:block reference-block]))))
                 "A block wire slot has one canonical transaction ID in its value.")
-            (is (= resource-block
-                   (get-in slots [[:block resource-block]
-                                  :value :block/uuid])))
-            (is (contains? (get (:groups response) [:block reference-block])
-                           [:block resource-block]))
+            (is (not (contains? slots [:block resource-block]))
+                "Unrequested :block/refs targets stay out of the snapshot batch.")
+            (is (= #{[:block reference-block]}
+                   (get (:groups response) [:block reference-block])))
             (is (vector? (get-in slots [[:children journal-a] :items])))
             (is (= {:keys #{[:page-lookup "page identity"]}
                     :all? false}
@@ -719,16 +716,18 @@
     (is (= (reference-dependencies [reference-block resource-block])
            (reference-dependencies [resource-block reference-block]))
         "Each requested root must own the same hydration slots in every batch order.")
-    (is (contains? (reference-dependencies [resource-block reference-block])
-                   [:block resource-block])
-        "A root must own its referenced block even when it is not first in the batch.")
+    (is (= #{[:block reference-block]}
+           (reference-dependencies [resource-block reference-block]))
+        "A root does not pull unrequested :block/refs targets into its group.")
     (let [response (request [resource-block reference-block])
           patch (#'subs-loader/entry-response
                  response {:slot-key [:block reference-block]})]
-      (is (= resource-block
-             (get-in patch [:slots [:block resource-block]
+      (is (= reference-block
+             (get-in patch [:slots [:block reference-block]
                             :value :block/uuid]))
-          "The real loader partition must retain a later root's hydrated dependency."))))
+          "The loader partition for a root is that root's own snapshot.")
+      (is (nil? (get-in patch [:slots [:block resource-block]]))
+          "A later requested root is its own group, not a dependency of this one."))))
 
 (deftest render-snapshots-thread-api-fails-fast-without-a-database-test
   (when-let [api (get @thread-api/*thread-apis
@@ -917,6 +916,9 @@
                       :ancestor-uuids [page parent-a parent-b positioned-property]
                       :ancestors breadcrumb-ancestors
                       :ref-titles {}}]
+        (is (= ["Page Identity" "Parent A" "Parent B"]
+               (mapv :block/title (take 3 breadcrumb-ancestors)))
+            "Shallow breadcrumb identities keep ancestor titles for CMDK and [[ search.")
         (assert-resource-envelope @conn
                                   resource-key
                                   #{[:entity target]
@@ -1096,8 +1098,12 @@
         _ (d/transact! conn [[:db/add positioned-property-id :block/tx-id 20]])
         response (block-handler/canonical-blocks @conn [resource-block])
         target (get-in response [:blocks resource-block])]
-    (is (contains? (:blocks response) positioned-property)
-        "A positioned property row is ready in the same visible block load.")
+    (is (not (contains? (:blocks response) positioned-property))
+        "Property definitions stay off the row snapshot. The row inlines their UUIDs.")
+    (is (not (contains? target :block.temp/positioned-properties))
+        "Positioned chips load through :block-positioned-properties, not the row snapshot.")
+    (is (= "right" (:user.property/positioned target))
+        "The written property value stays on the row.")
     (is (not (contains? target :block.temp/breadcrumb))
         "Ancestor data loads only when a breadcrumb is displayed.")
     (is (= response
@@ -1135,7 +1141,8 @@
           expected {:full-properties
                     [{:property-uuid display-property
                       :property-ident :user.property/display
-                      :value property-value}]
+                      :value property-value
+                      :closed-value-uuids [closed-value]}]
                     :hidden-properties
                     [{:property-uuid hidden-property
                       :property-ident :user.property/hidden
@@ -1253,6 +1260,34 @@
       (assert-resource-envelope @conn
                                 resource-key
                                 #{[:refs journal-child-b]}
+                                0
+                                response))))
+
+(deftest block-ref-count-resource-skips-class-incoming-refs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn class-page class-visible-child]} (render-resource-fixture)
+          class-id (entity-id @conn class-page)
+          child-id (entity-id @conn class-visible-child)
+          resource-key [:block-ref-count class-page]
+          _ (d/transact! conn [[:db/add child-id :block/refs class-id]])
+          response (call-resource api conn resource-key)]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:refs class-page]}
+                                0
+                                response))))
+
+(deftest block-ref-count-resource-skips-property-incoming-refs-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn property-page property-visible-child]} (render-resource-fixture)
+          property-id (entity-id @conn property-page)
+          child-id (entity-id @conn property-visible-child)
+          resource-key [:block-ref-count property-page]
+          _ (d/transact! conn [[:db/add child-id :block/refs property-id]])
+          response (call-resource api conn resource-key)]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:refs property-page]}
                                 0
                                 response))))
 
@@ -1621,12 +1656,17 @@
     (let [{:keys [conn view-owner view-a view-b]}
           (render-resource-fixture)
           resource-key [:views view-owner :class-objects]
-          response (call-resource api conn resource-key)]
+          response (call-resource api conn resource-key)
+          by-name (call-resource api conn [:views "projects" :class-objects])]
       (assert-resource-envelope @conn
                                 resource-key
                                 #{resource-key}
                                 [view-a view-b]
-                                response))))
+                                response)
+      (is (= #{resource-key} (:watch-keys by-name))
+          "String owner lookups must watch the canonical UUID key used by invalidation.")
+      (is (= [view-a view-b] (:value by-name))
+          "All Pages can resolve $$$views by page name and skip page-identity."))))
 
 (deftest view-data-resource-supports-every-feature-with-flat-uuid-rows-test
   (when-let [api (render-resource-api)]
@@ -1693,7 +1733,36 @@
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
 
-(deftest all-pages-view-data-includes-the-height-derived-initial-block-window-test
+(deftest view-data-resource-returns-empty-rows-after-the-view-is-deleted-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-owner view-a view-b]}
+          (render-resource-fixture)
+          resource-key [:view-data view-a
+                        {:feature-type :class-objects
+                         :sorting [{:id :block/title :asc? true}]}]
+          views-key [:views view-owner :class-objects]
+          live (call-resource api conn resource-key)
+          _ (is (seq (get-in live [:value :rows]))
+                "The live view must return rows before delete.")
+          _ (d/transact! conn [[:db/retractEntity [:block/uuid view-a]]])
+          response (call-resource api conn resource-key)
+          batch (render-engine/render-snapshots
+                 @conn
+                 {:blocks []
+                  :children []
+                  :resources [resource-key views-key]}
+                 {})]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:entity view-a]}
+                                {:partition :flat :count 0 :rows []}
+                                response)
+      (is (= [view-b] (get-in batch [:slots [:resource views-key] :value]))
+          "A deleted view-data snapshot must not fail sibling :views in the same batch.")
+      (is (= {:partition :flat :count 0 :rows []}
+             (get-in batch [:slots [:resource resource-key] :value]))))))
+
+(deftest all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
           view-uuid (add-view! conn :all-pages)
@@ -1703,15 +1772,78 @@
                          :initial-row-count 2}]
           response (call-resource api conn resource-key)
           value (:value response)
-          initial-rows (take 2 (:rows value))]
+          initial-rows (take 2 (:rows value))
+          previews (:row-previews value)]
       (is (not (contains? value :initial-blocks)))
-      (is (every? #(contains? (:slots response) [:block %])
-                  (take 2 (:rows value))))
-      (is (every? #(contains? % :block.temp/positioned-properties)
-                  (map #(get-in response [:slots [:block %] :value])
-                       initial-rows)))
+      (is (= 2 (count initial-rows)))
+      (is (every? uuid? initial-rows))
+      (is (not-any? #(contains? (:slots response) [:block %])
+                    initial-rows)
+          "The first window stays an ID list. Full row snapshots still load through use-block.")
+      (is (contains? (:watch-keys response) [:attr :block/title])
+          "The first-window previews include titles, so title edits must refresh the view-data resource.")
+      (is (= (count initial-rows) (count previews)))
+      (is (every? (fn [row]
+                    (let [preview (get previews row)]
+                      (and (= row (:block/uuid preview))
+                           (string? (:block/title preview))
+                           (integer? (:db/id preview))
+                           (true? (:block.temp/first-window-preview? preview)))))
+                  initial-rows)
+          "First-window titles travel with the IDs so the table can paint without use-block.")
       (is (= response
              (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest class-objects-view-data-returns-the-first-window-ids-without-row-snapshots-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-a view-row]} (render-resource-fixture)
+          resource-key [:view-data view-a
+                        {:feature-type :class-objects
+                         :sorting [{:id :block/title :asc? true}]
+                         :initial-row-count 1}]
+          response (call-resource api conn resource-key)
+          value (:value response)
+          preview (get (:row-previews value) view-row)]
+      (is (= 1 (count (:rows value))))
+      (is (contains? (set (:rows value)) view-row))
+      (is (not (contains? (:slots response) [:block view-row]))
+          "Class-object first windows stay ID lists so open is not blocked on snapshots.")
+      (is (= view-row (:block/uuid preview)))
+      (is (= "Object row" (:block/title preview))
+          "The first window includes the name so Tags/Movies can paint before use-block.")
+      (is (true? (:block.temp/first-window-preview? preview)))
+      (is (integer? (:db/id preview)))
+      (is (= response
+             (-> response ldb/write-transit-str ldb/read-transit-str))))))
+
+(deftest all-pages-view-data-row-offset-returns-the-scrolled-window-without-remaining-ids-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          view-uuid (add-view! conn :all-pages)
+          first-key [:view-data view-uuid
+                     {:feature-type :all-pages
+                      :sorting [{:id :block/title :asc? true}]
+                      :initial-row-count 2}]
+          offset-key [:view-data view-uuid
+                      {:feature-type :all-pages
+                       :sorting [{:id :block/title :asc? true}]
+                       :initial-row-count 2
+                       :row-offset 1}]
+          first-value (:value (call-resource api conn first-key))
+          offset-value (:value (call-resource api conn offset-key))
+          first-rows (:rows first-value)
+          offset-rows (:rows offset-value)
+          preview (get (:row-previews offset-value) (first offset-rows))]
+      (is (= 2 (count first-rows)))
+      (is (= 2 (count offset-rows)))
+      (is (= (second first-rows) (first offset-rows))
+          "The offset window starts after the first row, not after collecting every page id.")
+      (is (not= first-rows offset-rows))
+      (is (= (count offset-rows) (count (:row-previews offset-value))))
+      (is (true? (:block.temp/first-window-preview? preview)))
+      (is (string? (:block/title preview)))
+      (is (not-any? #(contains? (:slots (call-resource api conn offset-key)) [:block %])
+                    offset-rows)))))
 
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
