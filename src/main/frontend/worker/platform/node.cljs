@@ -1,6 +1,7 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["fs" :as node-fs]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["fs" :as node-fs]
             ["fs/promises" :as fs]
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
@@ -487,9 +488,14 @@
       (fs/writeFile full-path (->buffer data)))))
 
 (defn- remove-vfs!
-  [^js pool]
+  [write-guard-fn ^js pool]
   (when pool
-    (fs/rm (.-repoDir pool) #js {:recursive true :force true})))
+    (p/let [_ (when write-guard-fn (write-guard-fn))
+            directory (.-repoDir pool)
+            entries (fs/readdir directory)]
+      (p/all (map (fn [entry]
+                    (fs/rm (node-path/join directory entry) #js {:recursive true :force true}))
+                  (remove #{"db-worker.lock"} (array-seq entries)))))))
 
 (defn- read-text!
   [data-dir path]
@@ -680,10 +686,11 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn
+  [{:keys [root-dir storage event-fn write-guard-fn owner-source
            embedding-endpoint embedding-model-id open-vector-index-fn]}]
   (let [root-dir (db-lock/resolve-root-dir root-dir)
-        data-dir (db-lock/graphs-dir root-dir)
+        storage (or storage (lifecycle/resolveStorage root-dir (db-lock/graphs-dir root-dir)))
+        data-dir (.-graphsDir ^js storage)
         owner-source (db-lock/normalize-owner-source owner-source)
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
         vector-embedding-enabled? (boolean
@@ -706,8 +713,7 @@
       {:env {:publishing? false
              :runtime :node
              :root-dir root-dir
-             :owner-source owner-source
-             :recreate-lock-fn recreate-lock-fn}
+             :owner-source owner-source}
        :storage {:install-opfs-pool (fn [sqlite-module pool-name]
                                       (install-opfs-pool data-dir sqlite-module pool-name))
                  :list-graphs (fn [] (list-graphs data-dir))
@@ -716,7 +722,7 @@
                                     (pool-path pool path))
                  :export-file export-file
                  :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
-                 :remove-vfs! (fn [pool] (remove-vfs! pool))
+                 :remove-vfs! (fn [pool] (remove-vfs! write-guard-fn pool))
                  :read-text! (fn [path] (read-text! data-dir path))
                  :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
                  :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))

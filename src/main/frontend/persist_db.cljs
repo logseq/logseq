@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.browser :as browser]
@@ -27,6 +28,7 @@
 (defonce *ensure-remote-chain (atom nil))
 (defonce *remote-ensure-epoch (atom 0))
 (defonce *pending-remote-session (atom nil))
+(defonce ^:private *repo-generations (atom {}))
 
 (declare <ensure-remote!)
 
@@ -41,6 +43,26 @@
 (defn- same-remote-repo?
   [repo runtime-repo]
   (graph-dir/same-repo? repo runtime-repo))
+
+(defn <invalidate-remote-repo!
+  "Cancels clients and pending recovery for the removed graph instance."
+  ([repo phase] (<invalidate-remote-repo! repo phase nil))
+  ([repo phase generation]
+   (if (and generation
+            (when-let [current (get @*repo-generations (graph-dir/repo-identity repo))]
+              (not= generation current)))
+     (p/resolved nil)
+     (let [client (when (same-remote-repo? repo @remote-repo) @remote-db)]
+    (when (or (same-remote-repo? repo @remote-repo)
+              (same-remote-repo? repo (:repo @*pending-remote-session)))
+      (swap! *remote-ensure-epoch inc)
+      (clear-remote-runtime!))
+    (when (same-remote-repo? repo (state/get-current-repo))
+      (state/set-current-repo! nil)
+      (db-subs/reset-graph! nil))
+    (when (= phase "deleted")
+      (state/delete-repo! {:url repo}))
+    (if client (remote/stop! client) (p/resolved nil))))))
 
 (defn- <stop-remote-if-current!
   [repo]
@@ -282,7 +304,7 @@
   client)
 
 (defn- <ensure-remote-impl!
-  [repo {:keys [only-if-current?]}]
+  [repo {:keys [only-if-current? generation]}]
   (let [current-for-repo? #(same-remote-repo? repo (state/get-current-repo))]
     (cond
       (nil? repo)
@@ -295,7 +317,10 @@
         (p/resolved nil))
 
       (same-remote-repo? repo @remote-repo)
-      (p/resolved @remote-db)
+      (if (and generation
+               (not= generation (get @*repo-generations (graph-dir/repo-identity repo))))
+        (p/rejected (ex-info "Graph generation changed" {:code :graph-not-exists :repo repo}))
+        (p/resolved @remote-db))
 
       :else
       (let [epoch (swap! *remote-ensure-epoch inc)
@@ -313,7 +338,11 @@
               (when (pending-remote-session? repo session-id)
                 (reset! *pending-remote-session nil))
               nil)
-            (p/let [runtime (ipc/ipc "db-worker-runtime" repo)
+            (p/let [runtime (ipc/ipc "db-worker-runtime" repo
+                                    {:generation (or generation
+                                                     (when only-if-current?
+                                                       (get @*repo-generations (graph-dir/repo-identity repo))))})
+                    _ (swap! *repo-generations assoc (graph-dir/repo-identity repo) (:generation runtime))
                     client (remote/start! (assoc runtime
                                                  :repo repo
                                                  :event-handler worker-handler/handle
@@ -402,7 +431,8 @@
   [repo data]
   (when repo
     (if (electron-runtime?)
-      (p/let [client (<ensure-remote! repo)]
+      (p/let [generation (ipc/ipc "createGraph" repo)
+              client (<ensure-remote! repo {:generation generation})]
         (protocol/<import-db client repo data))
       (protocol/<import-db (get-impl) repo data))))
 
@@ -412,7 +442,9 @@
   ([repo opts]
    (when repo
      (if (electron-runtime?)
-       (p/let [client (<ensure-remote! repo)]
+       (p/let [generation (when (:sync-download-graph? opts)
+                            (ipc/ipc "createGraph" repo))
+               client (<ensure-remote! repo (when generation {:generation generation}))]
          (protocol/<open-and-fetch-schema client repo opts))
        (protocol/<open-and-fetch-schema (get-impl) repo opts)))))
 
@@ -420,8 +452,9 @@
 ;; @shuyu Do we still need this?
 (defn <new [repo opts]
   {:pre [(<= (count repo) 128)]}
-  (p/let [impl (if (electron-runtime?)
-                 (<ensure-remote! repo)
+  (p/let [generation (when (electron-runtime?) (ipc/ipc "createGraph" repo))
+          impl (if (electron-runtime?)
+                 (<ensure-remote! repo {:generation generation})
                  (p/resolved (get-impl)))
           _ (protocol/<new impl repo opts)]
     (<export-db repo {})))
