@@ -185,7 +185,7 @@
          [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
          [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
        [:strong.font-normal property-title
-        (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" plugin-name)])]])))
+        (when plugin? [:span.ml-1.text-xs.opacity-40 plugin-name])]])))
 
 (hsx/defc property-select
   [select-opts]
@@ -237,7 +237,7 @@
        [:div.ls-property-key
         (select/select (merge
                         {:items items
-                         :grouped? true
+                         :virtualize? false
                          :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false

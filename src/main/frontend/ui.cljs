@@ -473,14 +473,18 @@
            item-render
            class
            header
-           grouped?]
+           grouped?
+           virtualize?]
+    :or {virtualize? true}
     :as opts}]
-  (let [*current-idx (hooks/use-memo #(atom 0) [])
+  (let [matched (vec matched)
+        *current-idx (hooks/use-memo #(atom 0) [])
         [current-idx] (hooks/use-atom *current-idx)
         *virtuoso (hooks/use-ref nil)
         shortcut-state {:matched matched
                         :opts opts
-                        ::current-idx *current-idx}
+                        ::current-idx *current-idx
+                        ::virtuoso *virtuoso}
         _ (shortcut/use-shortcut-handler! :shortcut.handler/auto-complete shortcut-state)
         item-opts {:on-chosen on-chosen
                    :on-shift-chosen on-shift-chosen
@@ -488,7 +492,8 @@
                    :*current-idx *current-idx
                    :current-idx current-idx}
         *groups (atom #{})
-        virtualize? (and (not grouped?)
+        virtualize? (and virtualize?
+                         (not grouped?)
                          (not (fn? get-group-name))
                          (>= (count matched) auto-complete-virtualize-threshold))
         render-f (fn [matched]
@@ -525,13 +530,6 @@
 
                   :else
                   (render-f (medley/indexed matched)))]
-    (hooks/use-effect!
-     (fn []
-       (when-let [el (js/document.getElementById "ui__ac")]
-         (set! (.-__lsVirtuoso el) (hooks/deref *virtuoso)))
-       #(when-let [el (js/document.getElementById "ui__ac")]
-          (js-delete el "__lsVirtuoso")))
-     [virtualize? matched])
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar

@@ -95,17 +95,24 @@
 (defn- subsequence?
   "True when query characters appear in order in s (not necessarily contiguous)."
   [query s]
-  (loop [q (seq query)
-         s (seq s)]
-    (cond
-      (empty? q) true
-      (empty? s) false
-      (= (first q) (first s)) (recur (rest q) (rest s))
-      :else (recur q (rest s)))))
+  (let [q-len (count query)
+        s-len (count s)]
+    (loop [qi 0 si 0]
+      (cond
+        (>= qi q-len) true
+        (>= si s-len) false
+        :else (let [idx (.indexOf s (nth query qi) si)]
+                (if (neg? idx)
+                  false
+                  (recur (inc qi) (inc idx))))))))
+
+(defn- item-search-string
+  [item extract-fn]
+  (str (if extract-fn (extract-fn item) item)))
 
 (defn- cheap-candidate?
   [q s]
-  (let [s (search-normalize (clean-str (str s)) true)]
+  (let [s (search-normalize (clean-str s) true)]
     (boolean
      (and (seq q)
           (seq s)
@@ -118,24 +125,30 @@
     (let [q (search-normalize (clean-str query) true)]
       (if (string/blank? q)
         data
-        (filter (fn [item]
-                  (cheap-candidate? q (if extract-fn (extract-fn item) item)))
-                data)))
+        (filterv (fn [item]
+                   (cheap-candidate? q (item-search-string item extract-fn)))
+                 data)))
     data))
+
+(defn- ranked-items
+  [scored limit]
+  (->> scored
+       (filter #(pos? (:score %)))
+       (sort-by :score (comp - compare))
+       (take limit)
+       (mapv :data)))
 
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
   (if (string/blank? query)
     (vec (take limit data))
-    (->> (take limit
-               (sort-by :score (comp - compare)
-                        (filter #(< 0 (:score %))
-                                (for [item (search-candidates data query extract-fn)]
-                                  (let [s (str (if extract-fn (extract-fn item) item))]
-                                    {:data item
-                                     :score (score query s)})))))
-         (map :data))))
+    (ranked-items
+     (map (fn [item]
+            {:data item
+             :score (score query (item-search-string item extract-fn))})
+          (search-candidates data query extract-fn))
+     limit)))
 
 (defn fuzzy-search-multi
   "Like fuzzy-search but scores each item against multiple extract-fns,
@@ -145,19 +158,18 @@
                  :or {limit 20}}]
   (if (string/blank? query)
     (vec (take limit data))
-    (->> (take limit
-               (sort-by :score (comp - compare)
-                        (filter #(< 0 (:score %))
-                                (for [item data]
-                                  (let [strings (->> extract-fns
-                                                     (map (fn [f] (str (f item))))
-                                                     (remove string/blank?))
-                                        best-score (if (seq strings)
-                                                     (apply max (map #(score query %) strings))
-                                                     0)]
-                                    {:data item
-                                     :score best-score})))))
-         (map :data))))
+    (ranked-items
+     (map (fn [item]
+            (let [strings (->> extract-fns
+                               (map (fn [f] (str (f item))))
+                               (remove string/blank?))
+                  best-score (if (seq strings)
+                               (apply max (map #(score query %) strings))
+                               0)]
+              {:data item
+               :score best-score}))
+          data)
+     limit)))
 
 
 (defn- zh-simplified-char?

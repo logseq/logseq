@@ -37,11 +37,7 @@
   "Last path segment of a file path or URL."
   [s]
   (when-let [s (strip-url-suffix s)]
-    (let [normalized (string/replace s #"\\+" "/")
-          idx (string/last-index-of normalized "/")]
-      (if idx
-        (subs normalized (inc idx))
-        normalized))))
+    (node-path/basename (string/replace s #"\\+" "/"))))
 
 (defn asset-path->type
   "Create asset type given asset path"

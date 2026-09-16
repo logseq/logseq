@@ -118,7 +118,7 @@
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           clear-input-on-chosen? input-debounce-ms]
+           clear-input-on-chosen? input-debounce-ms virtualize?]
     :or {limit 100
          prompt-key :select/default-prompt
          empty-placeholder (fn [_t] [:div])
@@ -228,6 +228,7 @@
                                   (ui/auto-complete
                                    search-result
                                    {:grouped? grouped?
+                                    :virtualize? virtualize?
                                     :item-render       (or item-cp (fn [result chosen?]
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
                                     :class             "cp__select-results"

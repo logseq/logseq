@@ -185,16 +185,16 @@
       matched)))
 
 (defn- scroll-auto-complete-item!
-  [idx]
-  (let [ac (gdom/getElement "ui__ac")
-        virtuoso (some-> ac (.-__lsVirtuoso))]
+  [state idx]
+  (let [^js virtuoso (some-> (get state :frontend.ui/virtuoso) .-current)]
     (if (and virtuoso (fn? (.-scrollToIndex virtuoso)))
       (.scrollToIndex virtuoso #js {:index idx :align "center"})
-      (when-let [element (gdom/getElement (str "ac-" idx))]
-        (let [modal (gobj/get ac "parentElement")
-              height (or (gobj/get modal "offsetHeight") 300)
-              scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
-          (set! (.-scrollTop modal) scroll-top))))))
+      (when-let [ac (gdom/getElement "ui__ac")]
+        (when-let [element (gdom/getElement (str "ac-" idx))]
+          (let [modal (gobj/get ac "parentElement")
+                height (or (gobj/get modal "offsetHeight") 300)
+                scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
+            (set! (.-scrollTop modal) scroll-top)))))))
 
 (defn auto-complete-prev
   [state e]
@@ -207,7 +207,7 @@
       (= @current-idx 0)
       (reset! current-idx (dec (count matched)))
       :else nil)
-    (scroll-auto-complete-item! @current-idx)))
+    (scroll-auto-complete-item! state @current-idx)))
 
 (defn auto-complete-next
   [state e]
@@ -218,7 +218,7 @@
       (if (>= @current-idx (dec total))
         (reset! current-idx 0)
         (swap! current-idx inc)))
-    (scroll-auto-complete-item! @current-idx)))
+    (scroll-auto-complete-item! state @current-idx)))
 
 (defn auto-complete-complete
   [state e]
