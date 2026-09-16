@@ -65,8 +65,8 @@
                               :today (js/Date. 2026 8 16)}))]
     (is (string/includes? html "data-today"))
     (is (string/includes? html "data-selected"))
-    (is (string/includes? html "[&>button]:bg-primary"))
-    (is (string/includes? html "[&>button]:bg-accent"))
+    (is (string/includes? html "[&amp;&gt;button]:bg-primary"))
+    (is (string/includes? html "[&amp;&gt;button]:bg-accent"))
     (is (string/includes? html "focus-visible:!ring-0"))
     (is (string/includes? html "focus-visible:!ring-offset-0"))))
 
