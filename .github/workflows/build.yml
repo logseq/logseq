@@ -83,7 +83,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build test asset
-        run: clojure -M:test compile test
+        run: pnpm cljs:test
 
       - name: Run ClojureScript query tests against basic query type
         run: DB_QUERY_TYPE=basic pnpm cljs:run-test -r frontend.db.query-dsl-test

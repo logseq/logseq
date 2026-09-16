@@ -96,7 +96,7 @@
     "cljs:release-electron": "clojure -M:cljs release app db-worker db-worker-node electron publishing",
     "cljs:release-app": "clojure -M:cljs release app db-worker db-worker-node",
     "cljs:release-publishing": "clojure -M:cljs release app publishing",
-    "cljs:test": "clojure -M:test compile test",
+    "cljs:test": "clojure -M:test compile db-worker-node test",
     "cljs:run-test": "cross-env LOGSEQ_STABLE_IDENTS=1 bb dev:run-test-namespaces -r \"^(?!logseq.db-sync.).*\" -e fix-me",
     "cljs:test-no-worker": "clojure -M:test compile test-no-worker",
     "cljs:run-test-no-worker": "node static/tests-no-worker.js",
