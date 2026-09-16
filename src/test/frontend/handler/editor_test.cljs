@@ -3123,9 +3123,7 @@
                                          "blockid" (str source-id)} %)}
         plain-node #js {:getAttribute #({"blockid" (str source-id)} %)}]
     (is (= wrapper-id (#'editor/selection-node-delete-uuid embed-node)))
-    (is (= source-id (#'editor/selection-node-delete-uuid plain-node)))
-    (is (= wrapper-id (editor/embed-uuid-from-node embed-node)))
-    (is (nil? (editor/embed-uuid-from-node plain-node)))))
+    (is (= source-id (#'editor/selection-node-delete-uuid plain-node)))))
 
 (deftest slash-node-embed-uses-shared-embed-node
   (async done

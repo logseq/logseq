@@ -511,9 +511,6 @@
  :editor.document-mode/toggle-desc "按 `D` 键或输入 {1} 切换文档模式"
 
  :editor.embed/cannot-embed-self-or-ancestor "不能将节点嵌入到自身或其祖先中"
- :editor.embed/delete-source-block "删除源块"
- :editor.embed/delete-source-block-confirm-title "确定要删除源块吗？这也会把它从原来的位置删除。"
- :editor.embed/remove-embed "移除嵌入"
 
  :editor.quick-add/add-to-today "添加到今天"
  :editor.quick-add/title "快速添加"

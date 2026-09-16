@@ -106,9 +106,7 @@
                       (state/hide-custom-context-menu!)
                       (shui/popup-hide!))}
 
-      (if (editor-handler/selection-embeds-only?)
-        (t :editor.embed/remove-embed)
-        (t :editor/delete-selection))
+      (t :editor/delete-selection)
       (ui/dropdown-shortcut :editor/delete))
 
      (shui/dropdown-menu-item
@@ -332,22 +330,13 @@
             (ui/dropdown-shortcut :editor/cut)))
 
          (when-not property-default-value?
-           (if embed-uuid
-             [:<>
-              (shui/dropdown-menu-item
-               {:key "remove-embed"
-                :on-click #(editor-handler/remove-embed! embed-uuid)}
-               (t :editor.embed/remove-embed)
-               (ui/dropdown-shortcut :editor/delete))
-              (shui/dropdown-menu-item
-               {:key "delete-source-block"
-                :on-click #(editor-handler/delete-source-block! block-id)}
-               (t :editor.embed/delete-source-block))]
-             (shui/dropdown-menu-item
-              {:key "delete"
-               :on-click #(editor-handler/delete-block-aux! block)}
-              (t :editor/delete-selection)
-              (ui/dropdown-shortcut :editor/delete))))
+           (shui/dropdown-menu-item
+            {:key "delete"
+             :on-click #(if embed-uuid
+                          (editor-handler/remove-embed! embed-uuid)
+                          (editor-handler/delete-block-aux! block))}
+            (t :editor/delete-selection)
+            (ui/dropdown-shortcut :editor/delete)))
 
          (shui/dropdown-menu-separator)
 

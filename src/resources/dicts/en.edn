@@ -511,9 +511,6 @@
  :editor.document-mode/toggle-desc "Click `D` or type {1} to toggle document mode"
 
  :editor.embed/cannot-embed-self-or-ancestor "Can't embed a node into itself or one of its ancestors"
- :editor.embed/delete-source-block "Delete source block"
- :editor.embed/delete-source-block-confirm-title "Delete the source block? This also removes it from its original location."
- :editor.embed/remove-embed "Remove embed"
 
  :editor.quick-add/add-to-today "Add to today"
  :editor.quick-add/title "Quick add"
