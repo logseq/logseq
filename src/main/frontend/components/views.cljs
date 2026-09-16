@@ -2482,13 +2482,21 @@
     :else
     nil))
 
+(defn- uuid-row-ids
+  [rows]
+  (when (and (sequential? rows) (every? uuid? rows))
+    rows))
+
 (defn- table-body-row-ids
   "Grouped tables pass [group-value row-uuids] as :all-row-ids. Prefetch
-  must see the group's UUIDs, not the scalar group value."
+  must see the group's UUIDs, not the scalar group value. List views
+  keep :grouped-list partitions; painting those as table rows called
+  use-block on [breadcrumb-uuid row-uuids] and crashed the page."
   [all-row-ids table-data rows]
-  (if (and (sequential? all-row-ids) (every? uuid? all-row-ids))
-    all-row-ids
-    (or table-data rows)))
+  (or (uuid-row-ids all-row-ids)
+      (uuid-row-ids table-data)
+      (uuid-row-ids rows)
+      []))
 
 (defn- prefetch-rows-in-bounds
   "Offset windows can be shorter than the previous first-window bounds.
@@ -3808,6 +3816,7 @@
                                                         (:full-key plan)))
         [row-offset-state set-row-offset-state!] (hooks/use-state nil)
         [stale-offset-window set-stale-offset-window!] (hooks/use-state nil)
+        *view-layout (hooks/use-ref [display-type group-by-property-ident])
         row-offset (when (= (:context row-offset-state) window-context)
                      (:offset row-offset-state))
         set-current-row-offset! (fn [row-offset]
@@ -3879,6 +3888,16 @@
        (set-stale-offset-window! nil)
        js/undefined)
      [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       (let [next-layout [display-type group-by-property-ident]]
+         (when (not= (.-current *view-layout) next-layout)
+           (set! (.-current *view-layout) next-layout)
+           (set-previous-view-data! nil)
+           (set-row-offset-state! nil)
+           (set-stale-offset-window! nil)))
+       js/undefined)
+     [display-type group-by-property-ident])
     (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
