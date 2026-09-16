@@ -2627,6 +2627,30 @@
         set-mount-unpinned-cells! (:set-mount-unpinned-cells! option)
         on-viewport-filled! (:on-viewport-filled! option)
         total-count (table-total-count all-row-ids (:items-count option))
+        request-scrolled-offset!
+        (fn []
+          (let [scroll-top (or (some-> scroll-parent .-scrollTop) 0)
+                list-offset (scroll-list-offset-top scroll-parent)
+                window-size (max (if (seq offset-rows)
+                                   (count offset-rows)
+                                   0)
+                                 (offset-view-row-count initial-prefetch-count))
+                [vis-start vis-end]
+                (or (viewport-row-range
+                     scroll-top list-offset
+                     viewport-height item-height total-count)
+                    [])
+                next-offset (next-scrolled-row-offset
+                             row-offset window-size
+                             vis-start vis-end
+                             (count all-row-ids)
+                             (boolean (seq offset-rows)))]
+            (when (and on-viewport-filled!
+                       (pos? scroll-top)
+                       (integer? next-offset)
+                       (pos? next-offset)
+                       (not= next-offset row-offset))
+              (on-viewport-filled! next-offset))))
         option (assoc option
                       :table-view? true
                       :mount-unpinned-cells? mount-unpinned-cells?)
@@ -2640,6 +2664,12 @@
        (when (seq offset-rows)
          (prefetch-rows! [0 (dec (count offset-rows))])))
      [(count offset-rows) row-offset])
+    (hooks/use-effect!
+     (fn []
+       (when can-paint?
+         (let [frame (js/requestAnimationFrame request-scrolled-offset!)]
+           #(js/cancelAnimationFrame frame))))
+     [can-paint? row-offset (count offset-rows) total-count viewport-height])
     (cond
       (not (seq rows))
       nil
@@ -2669,10 +2699,7 @@
                               live-offset? (some? (table-row-from-offset offset-rows row-offset idx))
                               stale-offset? (and (not live-offset?)
                                                  (some? (table-row-from-offset stale-rows stale-offset idx)))]
-                          (if (and row-uuid
-                                   (or (viewport-hydrate-ready?
-                                        initial-rows-ready? hydrate-row-uuids row-uuid)
-                                       (row-has-first-window-title? row-previews row-uuid)))
+                          (if row-uuid
                             (lazy-item (cond
                                          live-offset? offset-rows
                                          stale-offset? stale-rows
@@ -2704,28 +2731,7 @@
                             (when set-mount-unpinned-cells!
                               (js/requestAnimationFrame
                                #(set-mount-unpinned-cells! true)))
-                            (let [scroll-top (or (some-> scroll-parent .-scrollTop) 0)
-                                  list-offset (scroll-list-offset-top scroll-parent)
-                                  window-size (max (if (seq offset-rows)
-                                                     (count offset-rows)
-                                                     0)
-                                                   (offset-view-row-count initial-prefetch-count))
-                                  [vis-start vis-end]
-                                  (or (viewport-row-range
-                                       scroll-top list-offset
-                                       viewport-height item-height total-count)
-                                      [])
-                                  next-offset (next-scrolled-row-offset
-                                               row-offset window-size
-                                               vis-start vis-end
-                                               (count all-row-ids)
-                                               (boolean (seq offset-rows)))]
-                              (when (and on-viewport-filled!
-                                         (pos? scroll-top)
-                                         (integer? next-offset)
-                                         (pos? next-offset)
-                                         (not= next-offset row-offset))
-                                (on-viewport-filled! next-offset)))))}
+                            (request-scrolled-offset!)))}
        (:disable-virtualized? option)))))
 
 (hsx/defc table-view
