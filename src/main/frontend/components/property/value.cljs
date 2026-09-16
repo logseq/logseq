@@ -1209,18 +1209,18 @@
     (when class-data
       (select-node property opts' result))))
 
-(defn- compact-closed-values?
+(defn- closed-values-need-worker-load?
+  "Snapshots may include only the current choice (with :db/id), so the picker
+  always reloads the full closed-value set instead of trusting that list."
   [property]
-  (let [closed-values (:property/closed-values property)]
-    (and (seq closed-values)
-         (not-every? :db/id closed-values))))
+  (boolean (seq (:property/closed-values property))))
 
 (hsx/defc select
   [block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config? exit-edit?] :as opts}]
   (let [repo (state/get-current-repo)
-        load-closed-values? (compact-closed-values? property)
+        load-closed-values? (closed-values-need-worker-load? property)
         *values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
            [values] (hooks/use-atom *values)
            refresh-result-f (hooks/use-callback
