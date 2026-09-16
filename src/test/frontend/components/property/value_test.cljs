@@ -7,7 +7,41 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(deftest calendar-enter-commit-day-does-not-use-initial-day-when-focused-test
+  (let [initial-day (js/Date. 2026 7 17)
+        focused-day (js/Date. 2026 7 20)]
+    (is (= focused-day
+           (#'property-value/calendar-enter-commit-day focused-day initial-day))
+        "Enter commits the focused day, not the initially selected day.")
+    (is (= initial-day
+           (#'property-value/calendar-enter-commit-day nil initial-day))
+        "Enter falls back to the initially selected day when no other day is focused.")))
+
+(deftest calendar-window-enter-skips-focused-calendar-day-test
+  (let [day-event #js {:key "Enter"
+                       :target #js {:closest (fn [sel]
+                                               (when (= sel "[role='gridcell']")
+                                                 #js {}))}}
+        other-event #js {:key "Enter"
+                         :target #js {:closest (fn [_] nil)}}]
+    (is (false? (boolean (#'property-value/calendar-window-enter? day-event)))
+        "Window Enter must not handle a focused calendar day.")
+    (is (true? (boolean (#'property-value/calendar-window-enter? other-event))))))
+
+(deftest hide-property-date-picker-hides-parent-when-inlined-test
+  (let [hidden* (atom [])]
+    (with-redefs [shui/popup-hide! (fn
+                                     ([] (swap! hidden* conj :parent))
+                                     ([id] (swap! hidden* conj id)))
+                  shui/dialog-close! (fn [id] (swap! hidden* conj [:dialog id]))
+                  ui/hide-popups-until-preview-popup! (fn [] (swap! hidden* conj :until-preview))]
+      (#'property-value/hide-property-date-picker! :date-picker)
+      (is (= [:parent [:dialog :property-dialog] :until-preview] @hidden*)
+          "Inlined slash-command calendars hide the parent property dialog, not :date-picker."))))
 
 (deftest alias-node-selection-preserves-entity-id-semantics-test
   (async done

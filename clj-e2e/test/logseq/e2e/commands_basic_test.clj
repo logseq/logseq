@@ -65,9 +65,7 @@
       (is (= (:label initial) (:label (focused-date-picker-day)))
           (str command " should move focused date back with ArrowUp.")))
     (k/enter)
-    (if (= command "date picker")
-      (w/wait-for-not-visible ".ui__calendar")
-      (assert/assert-is-visible ".ui__calendar"))))
+    (w/wait-for-not-visible ".ui__calendar")))
 
 (deftest command-trigger-test
   (testing "/command trigger popup"
@@ -231,10 +229,35 @@
         (b/new-block text)
         (util/input-command command)
         (k/enter)
+        (w/wait-for-not-visible ".ui__calendar")
         (assert/assert-editor-mode)
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
+
+(deftest scheduled-deadline-keyboard-selects-focused-day-test
+  (testing "arrow + enter commits the focused day and closes the picker"
+    (doseq [command ["Scheduled" "Deadline"]]
+      (fixtures/create-page)
+      (b/new-block (str command " focused day"))
+      (util/input-command command)
+      (w/wait-for date-picker-day-selector)
+      (let [initial (focused-date-picker-day)]
+        (is (:focused initial)
+            (str command " should focus a calendar day when opened."))
+        (k/arrow-right)
+        (let [focused (focused-date-picker-day)]
+          (is (:focused focused)
+              (str command " should keep calendar focus after ArrowRight."))
+          (is (not= (:label initial) (:label focused))
+              (str command " should move focused date with ArrowRight."))
+          (k/enter)
+          (w/wait-for-not-visible ".ui__calendar")
+          (assert/assert-editor-mode)
+          (util/exit-edit)
+          (is (= command (util/get-text ".property-k")))
+          (is (not= "Today" (util/get-text ".ls-datetime a.page-ref"))
+              (str command " should commit the focused day, not today.")))))))
 
 (deftest date-command-keyboard-navigation-test
   (testing "date commands focus the calendar and support keyboard navigation"
