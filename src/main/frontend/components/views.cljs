@@ -2225,13 +2225,13 @@
 
 (defn- grouped-add-new-object-fn
   [add-new-object! view-entity outer-table group-by-property value]
-  (fn [_view _table _opts]
+  (fn [_view _table opts]
     (add-new-object! view-entity outer-table
-                     {:properties
-                      {(:db/ident group-by-property)
-                       (if (map? value)
-                         (:db/id value)
-                         value)}})))
+                     (update (or opts {}) :properties
+                             merge {(:db/ident group-by-property)
+                                    (if (map? value)
+                                      (:db/id value)
+                                      value)}))))
 
 (hsx/defc new-record-button
   [table view-entity]
@@ -3568,6 +3568,12 @@
                      :align "start"}))}
       (ui/icon "plus" {:size 15}))])))
 
+(defn- toolbar-add-object?
+  [view-entity add-new-object!]
+  (boolean
+   (and add-new-object!
+        (nil? (:logseq.property.view/group-by-property view-entity)))))
+
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
@@ -3625,8 +3631,7 @@
 
       (more-actions view-entity columns table option)
 
-      (when (and add-new-object!
-                 (nil? (:logseq.property.view/group-by-property view-entity)))
+      (when (toolbar-add-object? view-entity add-new-object!)
         (new-record-button table view-entity))]]))
 
 (defn- group-item-content

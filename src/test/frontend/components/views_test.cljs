@@ -1228,3 +1228,22 @@
     (grouped :ignored-view :ignored-table {})
     (is (= [[:view :outer-table {:properties {:user.property/status "Open"}}]]
            @calls))))
+
+(deftest grouped-add-new-object-fn-merges-caller-properties
+  (let [calls (atom [])
+        add-new-object! (fn [view table opts]
+                          (swap! calls conj [view table opts]))
+        grouped (#'views/grouped-add-new-object-fn
+                 add-new-object! :view :outer-table
+                 {:db/ident :user.property/status} "Open")]
+    (grouped :ignored-view :ignored-table {:properties {:user.property/score 5}})
+    (is (= [[:view :outer-table {:properties {:user.property/score 5
+                                              :user.property/status "Open"}}]]
+           @calls))))
+
+(deftest toolbar-add-object-hidden-when-grouped
+  (is (true? (#'views/toolbar-add-object? {} identity)))
+  (is (false? (#'views/toolbar-add-object?
+               {:logseq.property.view/group-by-property {:db/id 1}}
+               identity)))
+  (is (false? (#'views/toolbar-add-object? {} nil))))
