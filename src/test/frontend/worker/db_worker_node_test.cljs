@@ -1,5 +1,6 @@
 (ns frontend.worker.db-worker-node-test
-  (:require ["fs" :as fs]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["fs" :as fs]
             ["http" :as http]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is use-fixtures]]
@@ -10,6 +11,7 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
+            [logseq.cli.root-dir :as cli-root]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
@@ -157,9 +159,11 @@
   (db-worker-log/log-path root-dir repo))
 
 (defn- start-daemon!
-  "Start daemon with quiet logging by default"
+  "Creates the test graph explicitly before starting an embedded daemon."
   [opts]
-  (db-worker-node/start-daemon! (update opts :log-level #(or % "error"))))
+  (p/let [root (cli-root/ensure-root-dir! (:root-dir opts))
+          _ (lifecycle/createGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) (:repo opts))]
+    (db-worker-node/start-daemon! (update opts :log-level #(or % "error")))))
 
 (defn- semantic-search-integration-enabled?
   []
@@ -676,7 +680,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-create-empty-start")
                repo (str "logseq_db_create_empty_start_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -684,19 +687,11 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "create-empty-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :create-empty-db? true
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :create-empty-db? true
+                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
                          _ (is (= ["thread-api/create-or-open-db" [repo {:datoms []
@@ -712,7 +707,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-default-start")
                repo (str "logseq_db_default_start_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -720,18 +714,10 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "default-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
                          _ (is (= ["thread-api/create-or-open-db" [repo {}]]
@@ -746,7 +732,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-stop-close-db")
                repo (str "logseq_db_stop_close_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -754,56 +739,39 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "stop-close-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :log-level "error"})
                          _ (stop!)]
                    (is (= ["thread-api/init" []]
                           (first @invoke-calls)))
                    (is (= ["thread-api/create-or-open-db" [repo {}]]
                           (second @invoke-calls)))
                    (is (= ["thread-api/close-db" [repo]]
-                          (nth @invoke-calls 2)))))
+                          (last @invoke-calls)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest db-worker-node-start-daemon-registers-and-unregisters-derived-server-list-entry
+(deftest db-worker-node-stop-retains-publication-until-process-exit
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
                repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                server-list-file (server-list/path data-dir)]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [_method _args-transit]
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :lock-id "server-list-lock"
-                                                                          :owner-source :cli}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                             :repo repo
-                                                                             :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [port stop!]} (start-daemon! {:root-dir data-dir
+                                                              :repo repo
+                                                              :log-level "error"})
                          contents-after-start (.toString (fs/readFileSync server-list-file) "utf8")
                          _ (is (string/includes? contents-after-start (str (.-pid js/process) " " port)))
                          _ (stop!)
                          contents-after-stop (when (fs/existsSync server-list-file)
                                                (.toString (fs/readFileSync server-list-file) "utf8"))]
-                   (is (or (nil? contents-after-stop)
-                           (not (string/includes? contents-after-stop (str (.-pid js/process) " " port)))))))
+                   (is (string/includes? contents-after-stop (str (.-pid js/process) " " port)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -970,6 +938,8 @@
                            (is (= (.-pid js/process) (:pid health-body)))
                            (is (= (node-path/resolve data-dir) (:root-dir health-body)))
                            (is (contains? health-body :owner-source))
+                           (is (string? (:ticket health-body)))
+                           (is (string? (:generation health-body)))
                            (is (contains? health-body :revision))
                            (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -979,6 +949,8 @@
                        _ (is (fs/existsSync lock-file))
                        lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                        _ (is (= repo (gobj/get lock-contents "repo")))
+                       _ (is (= (:ticket health-body) (gobj/get lock-contents "ticket")))
+                       _ (is (= (:generation health-body) (gobj/get lock-contents "generation")))
                        _ (is (nil? (gobj/get lock-contents "host")))
                        _ (is (nil? (gobj/get lock-contents "port")))
                        _ (invoke host port "thread-api/transact"
@@ -1012,11 +984,11 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!)
                                   (p/finally (fn []
-                                               (is (not (fs/existsSync (lock-path data-dir repo))))
+                                               (is (fs/existsSync (lock-path data-dir repo))
+                                                   "Retain process management records until OS exit is confirmed")
                                                (let [contents (when (fs/existsSync server-list-file)
                                                                 (.toString (fs/readFileSync server-list-file) "utf8"))]
-                                                 (is (or (nil? contents)
-                                                         (not (string/includes? contents (str (.-pid js/process) " ")))))
+                                                 (is (string/includes? contents (str (.-pid js/process) " ")))
                                                  (done)))))
                               (done))))))))
 
@@ -1869,6 +1841,8 @@
                                   {}
                                   nil])
                        _ (first-stop!)
+                       ;; Embedded test daemons share a PID; simulate the supervisor cleanup.
+                       _ (db-lock/remove-lock! (lock-path data-dir repo))
                        {host :host port :port second-stop! :stop!}
                        (start-daemon! {:root-dir data-dir :repo repo})
                        _ (reset! daemon {:stop! second-stop!})
@@ -1881,3 +1855,18 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
+
+(deftest close-bound-repo-releases-db-after-sync-stop-fails
+  (async done
+         (let [calls (atom [])
+               proxy #js {:remoteInvoke (fn [method _]
+                                          (swap! calls conj method)
+                                          (if (= method "thread-api/db-sync-stop")
+                                            (p/rejected (js/Error. "sync close failed"))
+                                            (p/resolved (ldb/write-transit-str nil))))}]
+           (-> (#'db-worker-node/<close-bound-repo! proxy "demo")
+               (p/then (fn [_] (is false "shutdown failure must propagate")))
+               (p/catch (fn [error]
+                          (is (= "sync close failed" (.-message error)))
+                          (is (= ["thread-api/db-sync-stop" "thread-api/close-db"] @calls))))
+               (p/finally done)))))

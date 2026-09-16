@@ -18,7 +18,7 @@ Use this output contract for every `logseq-review-workflow` pass subagent.
 ### Candidate findings
 
 - **Severity:** Blocking | Important | Minor | Question
-- **Category:** Correctness | Data contract | Regression | Failure mode | Migration validation | Performance | Test coverage | Repository convention
+- **Category:** Correctness | Data contract | Regression | Failure mode | Migration validation | Performance | Test coverage | Repository convention | System Additions
 - **Location:** `path/to/file.cljs:line`
 - **Issue:** What is wrong.
 - **Evidence:** Code path, invariant, test, runtime observation, contract, or command output inspected.
@@ -36,3 +36,5 @@ Use this output contract for every `logseq-review-workflow` pass subagent.
 ```
 
 If there are no findings, state the files and behavior areas inspected and why they passed this pass.
+
+For System Additions, also include a separate `### Additions inventory` section with Retain / Simplify / Question assessments as defined in [`system-additions.md`](./system-additions.md), even when there are no candidate findings. Compare demonstrated benefit with ongoing maintenance obligations and investigate smaller alternatives. Inventory dispositions are not severity ratings; evidence-backed unnecessary complexity must also appear under candidate findings, not only in the inventory.
