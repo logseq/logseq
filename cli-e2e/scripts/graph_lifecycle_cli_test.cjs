@@ -53,6 +53,24 @@ test('CLI remove resumes configuration cleanup while retaining missing-graph err
   assert.equal(run('demo', 'graph', 'remove').json.error.code, 'graph-not-exists');
 });
 
+test('consecutive CLI commands reuse the worker built from the same source', async t => {
+  const { storage, ok } = fixture(t);
+  ok('demo', 'graph', 'create');
+  ok('demo', 'server', 'start');
+  const [original] = lifecycle.snapshot(storage, 'demo').workers;
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      ok('demo', 'list', 'page', '--limit', '1');
+      assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].pid, original.pid,
+        'Matching CLI/worker builds must not trigger revision retirement');
+    }
+  } finally {
+    // Keep this parent responsive while the actual CLI confirms child exit.
+    await execFileAsync(process.execPath, [cli, 'server', 'stop', '--root-dir', storage.root,
+      '--graph', 'demo', '--output', 'json'], { timeout: 45000 });
+  }
+});
+
 for (const command of [['server', 'stop'], ['graph', 'remove']]) {
   test(`CLI crash recovery retires runtime publications before ${command.join(' ')}`, async t => {
     const { storage, ok } = fixture(t);
