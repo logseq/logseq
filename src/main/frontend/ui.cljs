@@ -960,7 +960,7 @@
   ".ls-editor-date-picker, .ls-property-date-picker")
 
 (def ^:private date-picker-form-control-selector
-  "input, textarea, select, [contenteditable='true'], [role='combobox']")
+  "input, textarea, select, [contenteditable='true']")
 
 (defn date-picker-form-target?
   "True when Enter should stay in a date-picker form control instead of confirming the date."
@@ -970,6 +970,10 @@
      (and target
           (.closest target date-picker-root-selector)
           (or (.closest target date-picker-form-control-selector)
+              (some-> target
+                      (.closest "[role='combobox']")
+                      (.getAttribute "aria-expanded")
+                      (= "true"))
               (and (.closest target "button")
                    (not (.closest target "[role='gridcell']"))))))))
 

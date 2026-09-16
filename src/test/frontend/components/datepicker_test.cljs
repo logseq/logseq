@@ -44,18 +44,23 @@
     (is (not (string/includes? html "5.75rem")))))
 
 (defn- form-target-event
-  [matching-selectors]
+  [matching-selectors & {:keys [attrs]}]
   (let [hits (set matching-selectors)]
     #js {:target #js {:closest (fn [sel]
                                   (when (some hits
                                               (map string/trim (string/split sel #",")))
-                                    #js {}))}}))
+                                    #js {:getAttribute (fn [k] (get attrs k))}))}}))
 
 (deftest date-picker-form-target-ignores-enter-in-inputs-test
   (is (true? (ui/date-picker-form-target?
               (form-target-event [".ls-property-date-picker" "input"]))))
   (is (true? (ui/date-picker-form-target?
-              (form-target-event [".ls-editor-date-picker" "[role='combobox']"]))))
+              (form-target-event [".ls-editor-date-picker" "[role='combobox']"]
+                                 :attrs {"aria-expanded" "true"}))))
+  (is (false? (ui/date-picker-form-target?
+               (form-target-event [".ls-editor-date-picker" "[role='combobox']"]
+                                  :attrs {"aria-expanded" "false"})))
+      "Enter on a closed repeat select trigger still confirms the date")
   (is (true? (ui/date-picker-form-target?
               (form-target-event [".ls-property-date-picker" "button"]))))
   (is (false? (ui/date-picker-form-target?
