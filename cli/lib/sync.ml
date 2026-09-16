@@ -1146,7 +1146,13 @@ let execute_download mode config repo graph progress progress_explicit
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_download mode err)
   | Ok config -> (
-      invoke_global_config config ~create_empty_db:true >>= function
+      ( Server_runtime.create_graph config repo >>= function
+        | Error err -> Cli_effect.pure (Error err)
+        | Ok generation ->
+            invoke_global_config
+              { config with graph_generation = Some generation }
+              ~create_empty_db:true )
+      >>= function
       | Error err ->
           Cli_effect.pure
             (Cli_result.error ~command:Command_id.Sync_download mode err)

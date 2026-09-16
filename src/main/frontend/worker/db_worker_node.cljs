@@ -1,6 +1,7 @@
 (ns frontend.worker.db-worker-node
   "Node.js daemon entrypoint for db-worker."
-  (:require ["http" :as http]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["http" :as http]
             [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node-lock :as db-lock]
@@ -20,6 +21,9 @@
 (defonce ^:private *sse-clients (atom #{}))
 (defonce ^:private *lock-info (atom nil))
 (defonce ^:private *server-list-file (atom nil))
+(defonce ^:private *admission (atom nil))
+(defonce ^:private *stopping? (atom false))
+(defonce ^:private *requests (atom #{}))
 (def ^:private sse-keepalive-ms 15000)
 
 (defn- server-list-file-path
@@ -76,7 +80,11 @@
         (case flag
           "--root-dir" (recur (subvec args 2) (assoc opts :root-dir (second args)))
           "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
+          "--graphs-dir" (recur (subvec args 2) (assoc opts :graphs-dir (second args)))
+          "--lifecycle-dir" (recur (subvec args 2) (assoc opts :lifecycle-dir (second args)))
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
+          "--admission-ticket" (recur (subvec args 2) (assoc opts :admission-ticket (second args)))
+          "--graph-generation" (recur (subvec args 2) (assoc opts :graph-generation (second args)))
           "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
           "--embedding-endpoint" (recur (subvec args 2) (assoc opts :embedding-endpoint (second args)))
           "--embedding-model-id" (recur (subvec args 2) (assoc opts :embedding-model-id (second args)))
@@ -185,18 +193,19 @@
         method-str (normalize-method-str method-kw)]
     (<invoke! proxy method-str method-kw [])))
 
+(defn- <close-after!
+  [task close!]
+  (.then (js/Promise.resolve task)
+         (fn [result]
+           (.then (js/Promise.resolve (close!)) (fn [_] result)))
+         (fn [error]
+           (.then (js/Promise.resolve (close!)) (fn [_] (throw error))))))
+
 (defn- <close-bound-repo!
   [proxy repo]
-  (if (string/blank? repo)
-    (p/resolved nil)
-    (let [method-kw :thread-api/close-db
-          method-str (normalize-method-str method-kw)]
-      (-> (<invoke! proxy method-str method-kw [repo])
-          (p/catch (fn [error]
-                     (log/warn :db-worker-node-close-db-before-stop-failed
-                               {:repo repo
-                                :error error})
-                     nil))))))
+  (<close-after!
+   (<invoke! proxy "thread-api/db-sync-stop" :thread-api/db-sync-stop [])
+   #(<invoke! proxy "thread-api/close-db" :thread-api/close-db [repo])))
 
 (def ^:private non-repo-methods
   #{:thread-api/init
@@ -298,7 +307,11 @@
    :port (if (satisfies? IDeref port) @port port)
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
+   :lock-id (get-in @*lock-info [:lock :lock-id])
+   :process-start (get-in (js->clj @*admission :keywordize-keys true) [:identity :birth])
+   :generation (some-> ^js @*admission .-generation)
    :root-dir root-dir
+   :storage (select-keys (js->clj @*admission :keywordize-keys true) [:root :graphsDir :lifecycleDir])
    :revision (build-version/revision)})
 
 (defn- log-invoke-error!
@@ -363,6 +376,7 @@
 
 (defn- handle-shutdown!
   [stop-fn ^js res]
+  (reset! *stopping? true)
   (send-json! res 200 {:ok true})
   (js/setTimeout (fn []
                    (when stop-fn
@@ -386,6 +400,15 @@
                                    :port port
                                    :owner-source owner-source
                                    :root-dir root-dir}))
+
+      (and (not= request-path "/v1/shutdown")
+           (or @*stopping?
+               (try
+                 (lifecycle/checkAdmission @*admission)
+                 false
+                 (catch :default _ true))))
+      (send-json! res 410 {:ok false :error {:code :graph-not-exists
+                                            :message "Graph runtime is closed"}})
 
       (= request-path "/v1/events")
       (sse-handler req res)
@@ -412,7 +435,10 @@
   [proxy opts]
   (let [server (http/createServer
                 (fn [^js req ^js res]
-                  (handle-request! proxy opts req res)))]
+                  (let [result (handle-request! proxy opts req res)]
+                    (when (p/promise? result)
+                      (swap! *requests conj result)
+                      (p/finally result #(swap! *requests disj result))))))]
     (set! (.-requestTimeout server) 0)
     (set! (.-headersTimeout server) 0)
     (set! (.-timeout server) 0)
@@ -439,65 +465,50 @@
 
 (defn- assert-lock-owner!
   []
+  (lifecycle/checkAdmission @*admission)
   (let [{:keys [path lock]} @*lock-info]
     (db-lock/assert-lock-owner! path lock)))
 
-(defn- recreate-lock!
-  [target-repo]
-  (p/let [{:keys [path lock]} @*lock-info
-          _ (when-not (and (seq path) lock)
-              (throw (ex-info "lock owner missing"
-                              {:code :repo-locked
-                               :repo target-repo})))
-          _ (when (and (seq target-repo)
-                       (not (graph-dir/same-repo? target-repo (:repo lock))))
-              (throw (ex-info "graph lock repo mismatch"
-                              {:code :repo-locked
-                               :repo target-repo
-                               :bound-repo (:repo lock)})))
-          updated-lock (db-lock/update-lock! path lock)]
-    (swap! *lock-info assoc :lock updated-lock)
-    nil))
-
 (defn- close-server!
-  [server]
+  [^js server]
   (p/create
-   (fn [resolve _]
+   (fn [resolve reject]
      (try
-       (.close server (fn [] (resolve true)))
-       (catch :default _
-         (resolve true))))))
+       (.close server (fn [error] (if error (reject error) (resolve true))))
+       (.closeIdleConnections server)
+       (catch :default error
+         (reject error))))))
 
-(defn- clear-runtime-state!
-  [actual-port]
+(defn- quiesce-runtime!
+  []
   (reset! *ready? false)
-  (when-let [file-path @*server-list-file]
-    (server-list/remove-entry! file-path {:pid (.-pid js/process)
-                                          :port actual-port}))
+  (reset! *stopping? true)
   (doseq [^js res @*sse-clients]
     (try
       (.end res)
       (catch :default _)))
-  (reset! *sse-clients #{})
-  (when-let [lock-path (:path @*lock-info)]
-    (db-lock/remove-lock! lock-path)))
+  (reset! *sse-clients #{}))
 
 (defn- make-stop!
-  [{:keys [proxy repo actual-port server stopped? on-stopped!]}]
+  [{:keys [proxy repo server stopped? on-stopped!]}]
   (fn []
     (if @stopped?
-      (p/resolved true)
-      (do
-        (reset! stopped? true)
-        (-> (p/let [_ (<close-bound-repo! proxy repo)]
-              (clear-runtime-state! actual-port)
-              (close-server! server)
-              true)
-            (p/finally
-             (fn []
-               (when (fn? on-stopped!)
-                 (on-stopped!))
-               (db-worker-log/uninstall!))))))))
+      @stopped?
+      (let [_ (quiesce-runtime!)
+            result (-> (p/let [_ (p/all (map #(p/catch % identity) @*requests))
+                               _ (<close-after! (<close-bound-repo! proxy repo)
+                                                #(close-server! server))]
+                         (lifecycle/recordStop @*admission nil)
+                         (when (fn? on-stopped!) (on-stopped! nil))
+                         true)
+                       (p/catch (fn [error]
+                                  (lifecycle/recordStop @*admission error)
+                                  (log/error :db-worker-node-close-failed error)
+                                  (when (fn? on-stopped!) (on-stopped! error))
+                                  (throw error)))
+                       (p/finally #(db-worker-log/uninstall!)))]
+        (reset! stopped? result)
+        result))))
 
 (defn- resolve-listening-daemon!
   [{:keys [server proxy repo host port* stop!* stopped? on-stopped!]} resolve]
@@ -514,6 +525,7 @@
     (when-let [file-path @*server-list-file]
       (server-list/append-entry! file-path {:pid (.-pid js/process)
                                             :port actual-port}))
+    (lifecycle/publish @*admission (clj->js (:lock @*lock-info)) actual-port)
     (reset! stop!* stop!)
     (resolve {:host host
               :port actual-port
@@ -523,7 +535,7 @@
 (defn- start-http-server!
   [{:keys [proxy repo host port owner-source root-dir on-stopped!]}]
   (let [stop!* (atom nil)
-        stopped? (atom false)
+        stopped? (atom nil)
         port* (atom nil)
         server (make-server proxy {:bound-repo repo
                                    :host host
@@ -566,29 +578,38 @@
       (p/rejected (ex-info "repo is required" {:code :missing-repo}))
 
       :else
-      (try
-        (let [root-dir (root-dir/ensure-root-dir! root-dir)
-              server-list-file (server-list-file-path root-dir)]
-          (db-worker-log/install! {:root-dir root-dir
+      (-> (p/let [root-dir (root-dir/ensure-root-dir! root-dir)
+                  ^js storage (lifecycle/resolveStorage root-dir (or (:graphs-dir opts) (root-dir/graphs-dir root-dir)))
+                  _ (when (and (:lifecycle-dir opts) (not= (:lifecycle-dir opts) (.-lifecycleDir storage)))
+                      (throw (ex-info "Lifecycle directory identity mismatch" {})))
+                  ^js admission (lifecycle/admit #js {:storage storage :repo repo :owner (name owner-source)
+                                                  :ticket (:admission-ticket opts)
+                                                  :generation (:graph-generation opts)})
+                  _ (reset! *admission admission)
+                  root-dir (.-root admission)
+                  server-list-file (server-list-file-path root-dir)]
+          (db-worker-log/install! {:root-dir root-dir :storage storage
                                    :repo repo
                                    :log-level (keyword (or log-level "info"))})
           (log/info :db-worker-node-version {:build-time (build-version/build-time)
                                              :revision (build-version/revision)})
           (reset! *ready? false)
+          (reset! *stopping? false)
+          (reset! *requests #{})
           (reset! *lock-info nil)
           (reset! *server-list-file server-list-file)
           (set-main-thread-stub!)
-          (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+          (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir :storage storage
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
-                                                             :recreate-lock-fn recreate-lock!
                                                              :embedding-endpoint (:embedding-endpoint opts)
                                                              :embedding-model-id (:embedding-model-id opts)})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
-                      {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
+                      {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir :storage storage
                                                                  :repo repo
+                                                                 :process-start (get-in (js->clj admission :keywordize-keys true) [:identity :birth])
                                                                  :owner-source owner-source})
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
@@ -602,11 +623,9 @@
                                      :root-dir root-dir
                                      :on-stopped! on-stopped!}))
               (p/catch (fn [e]
-                         (when-let [lock-path (:path @*lock-info)]
-                           (db-lock/remove-lock! lock-path))
+                         (lifecycle/abortAdmission admission e)
                          (throw e)))))
-        (catch :default e
-          (p/rejected e))))))
+          (p/catch (fn [e] (throw e)))))))
 
 (defn main
   []
@@ -626,14 +645,18 @@
       (.exit js/process 1))
     (-> (p/let [{:keys [stop!] :as daemon}
                 (start-daemon! {:root-dir root-dir
+                                :graphs-dir (:graphs-dir opts)
+                                :lifecycle-dir (:lifecycle-dir opts)
                                 :repo repo
+                                :admission-ticket (:admission-ticket opts)
+                                :graph-generation (:graph-generation opts)
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
                                 :embedding-endpoint (:embedding-endpoint opts)
                                 :embedding-model-id (:embedding-model-id opts)
-                                :on-stopped! (fn []
+                                :on-stopped! (fn [error]
                                                (log/info :db-worker-node-stopped nil)
-                                               (.exit js/process 0))
+                                               (.exit js/process (if error 1 0)))
                                 :log-level (:log-level opts)})]
           (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
           (let [shutdown (fn [] (stop!))]

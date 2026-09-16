@@ -56,7 +56,7 @@ export default defineConfig({
     sourcemap: false,
     target: "node22",
     rollupOptions: {
-      external: nodeBuiltins,
+      external: (id) => id.startsWith("node:") || nodeBuiltins.includes(id),
       output: {
         exports: "auto",
         codeSplitting: false,

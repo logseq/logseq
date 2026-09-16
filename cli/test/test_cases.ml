@@ -678,8 +678,7 @@ let () =
               (Printf.sprintf "expected two graph info requests, got %d"
                  !request_count)));
 
-  test_promise "graph info reuses an existing db-worker from health json"
-    (fun () ->
+  test_promise "graph info rejects an unverified published endpoint" (fun () ->
       let root = temp_dir "logseq-cli-graph-info-existing-server-" in
       let request_count = ref 0 in
       let result_transit =
@@ -723,15 +722,10 @@ let () =
               [| "--root-dir"; root; "--graph"; "alpha"; "graph"; "info" |]
           in
           remove_tree root;
-          ignore (expect_cli_exit_zero "graph info existing server" result);
-          ignore
-            (expect_named_contains "existing server schema" result.stdout
-               "logseq.kv/schema-version  77");
-          if !request_count = 1 then Js.Promise.resolve pass
-          else
-            fail_promise
-              (Printf.sprintf "expected one graph info request, got %d"
-                 !request_count)));
+          if result.code <> 1 then
+            fail_test "unverified server must be rejected";
+          if !request_count = 0 then Js.Promise.resolve pass
+          else fail_promise "unverified endpoint received graph requests"));
 
   test_promise "list page human output formats timestamps for large result sets"
     (fun () ->
