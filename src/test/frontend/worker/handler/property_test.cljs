@@ -207,4 +207,4 @@
         p1 (first closed)]
     (is (= ["P1"] (map :block/title closed)))
     (is (= [t1] (map :db/id (:logseq.property/choice-classes p1)))
-        "Scoped tag ids must survive flattening so other tags do not see this choice"))))
+        "Scoped tag ids must survive flattening so other tags do not see this choice")))
