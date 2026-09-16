@@ -43,4 +43,4 @@
 
 (deftest library-nav-uses-built-in-library-page
   (is (uuid? (library-handler/page-uuid))
-      "Library left-nav can address the built-in Library page without a hidden route.")))
+      "Library left-nav can address the built-in Library page without a hidden route."))

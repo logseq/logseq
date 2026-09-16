@@ -262,7 +262,7 @@
              (set! editor-handler/save-current-block! original-save-current-block!)
              (set! state/<invoke-db-worker original-invoke-db-worker)
              (state/replace-state! previous-state)
-             (done))))))))
+             (done)))))))
 
 (deftest convert-page-to-block-removes-page-tag
   (async done

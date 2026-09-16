@@ -60,12 +60,6 @@
   []
   (redirect! {:to :all-pages}))
 
-(defn redirect-to-library!
-  []
-  (if (config/db-based-graph?)
-    (redirect-to-page! (library-handler/page-uuid))
-    (notification/show! (t :library/file-graph-unavailable) :warning)))
-
 (defn redirect-to-graph-view!
   []
   (redirect! {:to :graph}))
@@ -159,6 +153,12 @@
                        (boolean? push)
                        (assoc :push push))]
               (redirect! m)))))))))
+
+(defn redirect-to-library!
+  []
+  (if (config/db-based-graph?)
+    (redirect-to-page! (library-handler/page-uuid))
+    (notification/show! (t :library/file-graph-unavailable) :warning)))
 
 (defn built-in-page-title
   [page-name]
