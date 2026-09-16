@@ -2307,12 +2307,10 @@
   (not (seq rows)))
 
 (defn- view-head-ready-on-mount?
-  "Table chrome waits for Virtuoso items-rendered. List, gallery,
-  grouped, and empty tables never fire that."
-  [display-type view-partition rows]
-  (or (not= display-type :logseq.property.view/type.table)
-      (contains? #{:grouped :grouped-list} view-partition)
-      (empty-table-ready-on-mount? rows)))
+  "View tabs and actions mount with the view chrome. Table rows can
+  still wait for their first hydrated window."
+  [_display-type _view-partition _rows]
+  true)
 
 (defn- lazy-item-should-subscribe?
   "Preview rows painted titles first. Immediate use-block remounted

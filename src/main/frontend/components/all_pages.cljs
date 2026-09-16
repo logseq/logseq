@@ -1,22 +1,27 @@
 (ns frontend.components.all-pages
   "All pages"
-  (:require [frontend.components.block :as component-block]
-            [frontend.components.views :as views]
+  (:require [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db.hooks :as db-hooks]
             [logseq.common.config :as common-config]
-            [io.factorhouse.hsx.core :as hsx]))
+            [io.factorhouse.hsx.core :as hsx]
+            [reitit.frontend.easy :as rfe]))
+
+(defn- page-title-cell
+  [row]
+  (let [title (some-> (:block/title row) str)
+        page-name (or (:block/uuid row) (:block/name row) title)]
+    [:div.flex.h-full.min-w-0.items-center
+     [:a.page-ref.truncate
+      {:href (rfe/href :page {:name page-name})
+       :title title}
+      title]]))
 
 (defn- columns
   []
   (->> [{:id :block/title
          :name (t :page/name)
-         :cell (fn [_table row _column]
-                 (if (true? (:block.temp/first-window-preview? row))
-                   [:span.page-ref (some-> (:block/title row) str)]
-                   (component-block/page-cp {:show-non-exists-page? true
-                                             :skip-async-load? true
-                                             :with-tags? false} row)))
+         :cell (fn [_table row _column] (page-title-cell row))
          :type :string}
         {:id :block.temp/refs-count
          :name (t :page/backlinks)

@@ -11,7 +11,8 @@
             [frontend.db.subs :as subs]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]))
 
 (def ^:private test-graph-id "view-resource-test")
 
@@ -160,6 +161,24 @@
       (is (= view-parent-uuid (:view-parent-uuid @view-opts)))
       (is (= :all-pages (:view-feature-type @view-opts))))))
 
+(deftest all-pages-title-cell-keeps-table-row-alignment-test
+  (let [title-cell (:cell (first (#'all-pages/columns)))
+        page-uuid (random-uuid)
+        [wrapper-tag [link-tag attrs title]]
+        (with-redefs [rfe/href (fn [_route params]
+                                 (str "#/page/" (get params :name)))]
+          (title-cell nil
+                      {:block/title "Aligned page"
+                       :block/uuid page-uuid}
+                      nil))]
+    (is (string/includes? (name wrapper-tag) "h-full"))
+    (is (string/includes? (name wrapper-tag) "items-center"))
+    (is (string/includes? (name link-tag) "truncate"))
+    (is (string/includes? (:href attrs) (str page-uuid)))
+    (is (= "Aligned page" title))
+    (is (not (string/includes? (name link-tag) "page-reference"))
+        "All Pages cells use a plain page link, not page-cp preview DOM.")))
+
 (deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
   (let [rows [(random-uuid)]]
     (is (true? (#'views/view-head-ready-on-mount?
@@ -167,9 +186,9 @@
         "Unlinked-references is a list view and never fires table items-rendered.")
     (is (true? (#'views/view-head-ready-on-mount?
                 :logseq.property.view/type.gallery nil rows)))
-    (is (false? (#'views/view-head-ready-on-mount?
-                 :logseq.property.view/type.table :flat rows))
-        "Flat table chrome still waits for the first painted rows.")
+    (is (true? (#'views/view-head-ready-on-mount?
+                :logseq.property.view/type.table :flat rows))
+        "Flat table chrome mounts with the view tabs and actions.")
     (is (true? (#'views/view-head-ready-on-mount?
                 :logseq.property.view/type.table :grouped rows))
         "Grouped tables never fire table items-rendered. Chrome must mount with the groups.")
