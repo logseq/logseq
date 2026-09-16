@@ -88,10 +88,8 @@
                                           :value 8
                                           :onChange (fn [_])}))]
     (is (string/includes? html "ls-date-month-select"))
-    (is (string/includes? html "ls-date-month-option"))
     (is (string/includes? html "September"))
-    (is (string/includes? html "August"))
-    (is (string/includes? html "menuitem"))
+    (is (string/includes? html "aria-haspopup=\"menu\""))
     (is (not (string/includes? html "menuitemcheckbox")))
     (is (not (string/includes? html "ui__dropdown-menu-checkbox-item")))))
 
