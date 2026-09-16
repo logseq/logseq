@@ -510,7 +510,7 @@
         (reset! stopped? result)
         result))))
 
-(defn- resolve-listening-daemon!
+(defn- <resolve-listening-daemon!
   [{:keys [server proxy repo host port* stop!* stopped? on-stopped!]} resolve]
   (let [address (.address server)
         actual-port (if (number? address) address (.-port address))
@@ -521,16 +521,18 @@
                            :server server
                            :stopped? stopped?
                            :on-stopped! on-stopped!})]
-    (reset! *ready? true)
-    (when-let [file-path @*server-list-file]
-      (server-list/append-entry! file-path {:pid (.-pid js/process)
-                                            :port actual-port}))
-    (lifecycle/publish @*admission (clj->js (:lock @*lock-info)) actual-port)
-    (reset! stop!* stop!)
-    (resolve {:host host
-              :port actual-port
-              :server server
-              :stop! stop!})))
+    (p/let [_ (lifecycle/publish
+               @*admission (clj->js (:lock @*lock-info)) actual-port
+               (fn []
+                 (when-let [file-path @*server-list-file]
+                   (server-list/append-entry! file-path {:pid (.-pid js/process)
+                                                         :port actual-port}))
+                 (reset! stop!* stop!)
+                 (reset! *ready? true)))]
+      (resolve {:host host
+                :port actual-port
+                :server server
+                :stop! stop!}))))
 
 (defn- start-http-server!
   [{:keys [proxy repo host port owner-source root-dir on-stopped!]}]
@@ -549,17 +551,20 @@
      (fn [resolve reject]
        (.listen server port host
                 (fn []
-                  (resolve-listening-daemon! {:server server
-                                              :proxy proxy
-                                              :repo repo
-                                              :host host
-                                              :port* port*
-                                              :stop!* stop!*
-                                              :stopped? stopped?
-                                              :owner-source owner-source
-                                              :root-dir root-dir
-                                              :on-stopped! on-stopped!}
-                                             resolve)))
+                  (-> (<resolve-listening-daemon! {:server server
+                                                   :proxy proxy
+                                                   :repo repo
+                                                   :host host
+                                                   :port* port*
+                                                   :stop!* stop!*
+                                                   :stopped? stopped?
+                                                   :owner-source owner-source
+                                                   :root-dir root-dir
+                                                   :on-stopped! on-stopped!}
+                                                  resolve)
+                      (p/catch (fn [error]
+                                 (.close server)
+                                 (reject error))))))
        (.on server "error" (fn [error]
                               (when-let [lock-path (:path @*lock-info)]
                                 (db-lock/remove-lock! lock-path))
@@ -607,11 +612,15 @@
                                                              :embedding-model-id (:embedding-model-id opts)})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
-                      {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir :storage storage
-                                                                 :repo repo
-                                                                 :ticket (.-ticket admission)
-                                                                 :generation (.-generation admission)
-                                                                 :owner-source owner-source})
+                      {:keys [path lock]} (lifecycle/withLease
+                                           admission "lock"
+                                           (fn []
+                                             (lifecycle/checkAdmission admission)
+                                             (db-lock/ensure-lock! {:root-dir root-dir :storage storage
+                                                                    :repo repo
+                                                                    :ticket (.-ticket admission)
+                                                                    :generation (.-generation admission)
+                                                                    :owner-source owner-source})))
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]

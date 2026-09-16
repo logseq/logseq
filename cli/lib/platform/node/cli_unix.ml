@@ -39,6 +39,14 @@ module Lifecycle = struct
     = "stopGraph"
   [@@mel.module "@logseq/graph-lifecycle"]
 
+  external retire : storage -> string -> string -> Js.Json.t array Js.Promise.t
+    = "stopOutdatedWorkers"
+  [@@mel.module "@logseq/graph-lifecycle"]
+
+  let revision : string =
+    [%mel.raw
+      {|typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"|}]
+
   external delete :
     storage ->
     string ->
@@ -79,14 +87,21 @@ end
 
 let start_graph_runtime ~root_dir ~repo ~script ~owner_source ~create_empty_db
     ~generation =
-  Lifecycle.start
-    (Lifecycle.start_options ?generation ~storage:(Lifecycle.storage root_dir) ~repo ~script
-       ~owner:owner_source ~createEmpty:create_empty_db ())
+  let storage = Lifecycle.storage root_dir in
+  Lifecycle.retire storage Lifecycle.revision repo
+  |> Js.Promise.then_ (fun _ ->
+      Lifecycle.start
+        (Lifecycle.start_options ?generation ~storage ~repo ~script
+           ~owner:owner_source ~createEmpty:create_empty_db ()))
   |> Lifecycle.of_promise
   |> Cli_effect.map (Result.map Js.Json.stringify)
 
 let stop_graph_runtime ~root_dir ~repo ~owner_source =
-  Lifecycle.stop (Lifecycle.storage root_dir) repo owner_source
+  let storage = Lifecycle.storage root_dir in
+  Lifecycle.retire storage Lifecycle.revision repo
+  |> Js.Promise.then_ (fun retired ->
+      if Array.length retired > 0 then Js.Promise.resolve Js.Json.null
+      else Lifecycle.stop storage repo owner_source)
   |> Lifecycle.of_promise
   |> Cli_effect.map (Result.map (fun _ -> ()))
 
@@ -107,7 +122,9 @@ let delete_graph ~root_dir ~repo ~on_removed =
                (Lifecycle.commit_result ~ok:false
                   ~error:(Printexc.to_string exn) ()) [@u])))
   in
-  Lifecycle.delete (Lifecycle.storage root_dir) repo commit
+  let storage = Lifecycle.storage root_dir in
+  Lifecycle.retire storage Lifecycle.revision repo
+  |> Js.Promise.then_ (fun _ -> Lifecycle.delete storage repo commit)
   |> Lifecycle.of_promise
   |> Cli_effect.map (Result.map Lifecycle.existed)
 
