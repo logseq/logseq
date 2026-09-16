@@ -360,14 +360,6 @@
     (number? value) value
     :else nil))
 
-(defn- select-ref-id
-  [value]
-  (or (property-ref-id value)
-      (when (string? value)
-        (let [n (js/parseInt value 10)]
-          (when (and (not (js/isNaN n)) (pos? n))
-            n)))))
-
 (defn- parse-positive-int
   [raw]
   (let [s (some-> raw str string/trim)]
@@ -375,6 +367,12 @@
       (let [n (js/parseInt s 10)]
         (when (pos? n)
           n)))))
+
+(defn- select-ref-id
+  [value]
+  (or (property-ref-id value)
+      (when (string? value)
+        (parse-positive-int value))))
 
 (defn- repeat-frequency-value
   [block]
@@ -453,8 +451,7 @@
      [frequency])
     (hooks/use-effect!
      (fn []
-       (when persisted-unit-id
-         (set-unit-id! persisted-unit-id))
+       (set-unit-id! persisted-unit-id)
        nil)
      [persisted-unit-id])
     [:div.flex.flex-row.items-center.gap-2.ls-repeat-task-frequency.text-sm
@@ -495,12 +492,74 @@
         {:class "h-8 w-full"
          :aria-labelledby label-id}
         [:span.truncate (or (some-> selected-choice repeat-unit-label) "")])
-       (shui/select-content
-        (map (fn [choice]
+      (shui/select-content
+       (map (fn [choice]
                (shui/select-item {:key (str (:db/id choice))
                                   :value (:db/id choice)}
                                  (repeat-unit-label choice)))
              unit-choices)))]]))
+
+(hsx/defc repeat-when-controls
+  [block status-property status-done full-properties when-id set-when-id!]
+  (let [properties (->> full-properties
+                        (filter (fn [property']
+                                  (and (not (ldb/built-in? property'))
+                                       (>= (count (:property/closed-values property')) 2))))
+                        (concat [status-property])
+                        (util/distinct-by :db/id))
+        property-options (mapv (fn [property']
+                                 {:label (or (db-property/built-in-display-title property' t)
+                                             (:block/title property'))
+                                  :value (:db/id property')})
+                               properties)
+        selected-when-id (or when-id (:db/id status-property))
+        selected-when (or (some (fn [option]
+                                  (when (= selected-when-id (:value option))
+                                    option))
+                                property-options)
+                          (first property-options))
+        when-property (or (some (fn [property']
+                                  (when (= selected-when-id (:db/id property'))
+                                    property'))
+                                properties)
+                          status-property)
+        done-choice (or (some (fn [choice]
+                                (when (true? (:logseq.property/choice-checkbox-state choice))
+                                  choice))
+                              (:property/closed-values when-property))
+                        status-done)]
+    [:div.flex.flex-col.gap-2.text-sm
+     [:div.text-muted-foreground
+      (t :property.repeat/when)]
+     (shui/select
+      (cond->
+        {:items property-options
+         :on-value-change (fn [v]
+                            (when-let [id (select-ref-id v)]
+                              (set-when-id! id)
+                              (when (:db/id block)
+                                (db-property-handler/set-block-property!
+                                 (:db/id block)
+                                 :logseq.property.repeat/checked-property
+                                 id))))}
+        selected-when-id
+        (assoc :value selected-when-id))
+      (shui/select-trigger
+       {:class "h-8 w-full"}
+       [:span.truncate (or (:label selected-when)
+                           (t :property/select-property-placeholder))])
+      (shui/select-content
+       (map (fn [{:keys [label value]}]
+              (shui/select-item {:key (str value)
+                                 :value value}
+                                label))
+            property-options)))
+     [:div.flex.flex-row.gap-1.text-sm
+      [:div.text-muted-foreground
+       (t :property.repeat/is-label)]
+      (when done-choice
+        (or (db-property/built-in-display-title done-choice t)
+            (:block/title done-choice)))]]))
 
 (hsx/defc repeat-setting
   [block* property]
@@ -519,8 +578,7 @@
      [db-repeated?])
     (hooks/use-effect!
      (fn []
-       (when persisted-when-id
-         (set-when-id! persisted-when-id))
+       (set-when-id! persisted-when-id)
        nil)
      [persisted-when-id])
     (hooks/use-effect!
@@ -577,63 +635,7 @@
         [:div.text-muted-foreground
          (t :property.repeat/next-date)]
         (property-value block repeat-type-property opts)]
-       (let [properties (->> full-properties
-                             (filter (fn [property']
-                                       (and (not (ldb/built-in? property'))
-                                            (>= (count (:property/closed-values property')) 2))))
-                             (concat [status-property])
-                             (util/distinct-by :db/id))
-             property-options (mapv (fn [property']
-                                        {:label (or (db-property/built-in-display-title property' t)
-                                                    (:block/title property'))
-                                         :value (:db/id property')})
-                                      properties)
-             selected-when-id (or when-id (:db/id status-property))
-             selected-when (or (some (fn [option]
-                                          (when (= selected-when-id (:value option))
-                                            option))
-                                      property-options)
-                                (first property-options))
-             when-property (or (some (fn [property']
-                                          (when (= selected-when-id (:db/id property'))
-                                            property'))
-                                      properties)
-                                status-property)
-             done-choice (or
-                          (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice))
-                                (:property/closed-values when-property))
-                          status-done)]
-         [:div.flex.flex-col.gap-2.text-sm
-          [:div.text-muted-foreground
-           (t :property.repeat/when)]
-          (shui/select
-             (cond->
-               {:items property-options
-                :on-value-change (fn [v]
-                                     (when-let [id (select-ref-id v)]
-                                       (set-when-id! id)
-                                       (when (:db/id block)
-                                         (db-property-handler/set-block-property! (:db/id block)
-                                                                                  :logseq.property.repeat/checked-property
-                                                                                  id))))}
-               selected-when-id
-               (assoc :value selected-when-id))
-           (shui/select-trigger
-            {:class "h-8 w-full"}
-            [:span.truncate (or (:label selected-when)
-                                 (t :property/select-property-placeholder))])
-           (shui/select-content
-            (map (fn [{:keys [label value]}]
-                   (shui/select-item {:key (str value)
-                                       :value value}
-                                      label))
-                 property-options)))
-          [:div.flex.flex-row.gap-1.text-sm
-           [:div.text-muted-foreground
-            (t :property.repeat/is-label)]
-           (when done-choice
-             (or (db-property/built-in-display-title done-choice t)
-                 (:block/title done-choice)))]])])))
+       (repeat-when-controls block status-property status-done full-properties when-id set-when-id!)])))
 
 (defn- <resolve-journal-page-for-date
   ([^js d]
@@ -1401,18 +1403,18 @@
     (when class-data
       (select-node property opts' result))))
 
-(defn- compact-closed-values?
+(defn- closed-values-need-worker-load?
+  "Snapshots may include only the current choice (with :db/id), so the picker
+  always reloads the full closed-value set instead of trusting that list."
   [property]
-  (let [closed-values (:property/closed-values property)]
-    (and (seq closed-values)
-         (not-every? :db/id closed-values))))
+  (boolean (seq (:property/closed-values property))))
 
 (hsx/defc select
   [block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config? exit-edit?] :as opts}]
   (let [repo (state/get-current-repo)
-        load-closed-values? (compact-closed-values? property)
+        load-closed-values? (closed-values-need-worker-load? property)
         *values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
            [values] (hooks/use-atom *values)
            refresh-result-f (hooks/use-callback

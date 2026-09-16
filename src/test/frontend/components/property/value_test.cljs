@@ -1,13 +1,29 @@
 (ns frontend.components.property.value-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
+            [cljs.test :refer [async deftest is]]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest alias-node-selection-preserves-entity-id-semantics-test
   (async done
@@ -52,16 +68,17 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
-(deftest compact-closed-values-require-worker-loading-test
-  (is (#'property-value/compact-closed-values?
+(deftest closed-values-need-worker-load-even-when-snapshot-has-ids-test
+  (is (#'property-value/closed-values-need-worker-load?
        {:property/closed-values
         [{:db-ident :logseq.property.view/type.table}
-         {:db-ident :logseq.property.view/type.list}]}))
-  (is (not (#'property-value/compact-closed-values?
-            {:property/closed-values
-             [{:db/id 1 :db/ident :logseq.property.view/type.table}
-              {:db/id 2 :db/ident :logseq.property.view/type.list}]})))
-  (is (not (#'property-value/compact-closed-values? {}))))
+         {:db-ident :logseq.property.view/type.list}]})
+      "Compact ident-only snapshots still load the full set.")
+  (is (#'property-value/closed-values-need-worker-load?
+       {:property/closed-values
+        [{:db/id 1 :block/title "Todo"}]})
+      "A snapshot that only has the current choice still reloads all choices.")
+  (is (not (#'property-value/closed-values-need-worker-load? {}))))
 
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])
@@ -374,6 +391,7 @@
   (is (= 83 (#'property-value/select-ref-id 83)))
   (is (= 83 (#'property-value/select-ref-id {:db/id 83})))
   (is (= 83 (#'property-value/select-ref-id "83")))
+  (is (nil? (#'property-value/select-ref-id "83abc")))
   (is (nil? (#'property-value/select-ref-id "Status")))
   (is (nil? (#'property-value/select-ref-id nil))))
 
@@ -433,3 +451,85 @@
             {}
             {:logseq.property/type :date}
             property)))))
+
+(deftest repeat-setting-clears-stale-when-selection-test
+  (let [stale-when-id 90
+        calls* (atom [])
+        hook-index* (atom 0)
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :logseq.property.repeat/repeated? true}
+        status-property {:db/id 10
+                         :db/ident :logseq.property/status
+                         :property/closed-values
+                         [{:db/id 11
+                           :block/title "Done"
+                           :logseq.property/choice-checkbox-state true}]}
+        repeat-properties {:recur-frequency-property {:db/id 20
+                                                      :db/ident :logseq.property.repeat/recur-frequency}
+                           :recur-unit-property {:db/id 21
+                                                 :db/ident :logseq.property.repeat/recur-unit
+                                                 :property/closed-values
+                                                 [{:db/id 22
+                                                   :db/ident :logseq.property.repeat/recur-unit.day
+                                                   :block/title "Day"}]}
+                           :repeat-type-property {:db/id 30
+                                                  :db/ident :logseq.property.repeat/repeat-type
+                                                  :logseq.property/type :default}
+                           :status-property status-property
+                           :status-done {:db/id 11
+                                         :block/title "Done"}
+                           :full-properties [status-property]}]
+    (with-redefs [state/get-current-repo (constantly "test")
+                  db-hooks/use-block (constantly block)
+                  property-value/property-value (fn [& _args] [:span])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [f deps]
+                                      (when (= deps [nil])
+                                        (f)))
+                  hooks/use-state (fn [init]
+                                    (case (swap! hook-index* inc)
+                                      1 [init (fn [_])]
+                                      2 [stale-when-id #(swap! calls* conj [:when-id %])]
+                                      3 [repeat-properties (fn [_])]
+                                      [init (fn [_])]))]
+      (render-static
+       (property-value/repeat-setting block {:db/id 40
+                                             :db/ident :logseq.property/scheduled
+                                             :logseq.property/type :date}))
+      (is (some #{[:when-id nil]} @calls*)
+          "When the block no longer has a checked-property, stale local selection is cleared."))))
+
+(deftest repeat-every-controls-clears-stale-unit-selection-test
+  (let [stale-unit-id 90
+        calls* (atom [])
+        hook-index* (atom 0)
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        week {:db/id 22
+              :db/ident :logseq.property.repeat/recur-unit.week
+              :block/title "Week"}
+        recur-frequency-property {:db/id 20
+                                  :db/ident :logseq.property.repeat/recur-frequency}
+        recur-unit-property {:db/id 21
+                             :db/ident :logseq.property.repeat/recur-unit
+                             :property/closed-values [week]}]
+    (with-redefs [hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [f deps]
+                                      (when (= deps [nil])
+                                        (f)))
+                  hooks/use-state (fn [init]
+                                    (case (swap! hook-index* inc)
+                                      1 [init (fn [_])]
+                                      2 [stale-unit-id #(swap! calls* conj [:unit-id %])]
+                                      [init (fn [_])]))]
+      (render-static
+       (property-value/repeat-every-controls
+        block
+        {:db/id 40
+         :db/ident :logseq.property/scheduled
+         :logseq.property/type :date}
+        recur-frequency-property
+        recur-unit-property))
+      (is (some #{[:unit-id nil]} @calls*)
+          "When the block no longer has a recur unit, stale local selection is cleared."))))
