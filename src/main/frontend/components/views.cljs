@@ -1482,6 +1482,8 @@
                                nil))))
      body)))
 
+(def ^:private table-fixed-row-height 33)
+
 (hsx/defc ^:large-vars/cleanup-todo table-row-inner
   [table row props {:keys [show-add-property? scrolling? disable-virtualized?
                            mount-unpinned-cells?]}]
@@ -1596,6 +1598,40 @@
                                              tags)))
                  (assoc :block.temp/refs-count (:block.temp/refs-count row)))]
     (table-row-inner table row' props option)))
+
+(hsx/defc table-row-placeholder
+  [table idx option]
+  (let [pinned-columns (get-in table [:state :pinned-columns])
+        unpinned (get-in table [:state :unpinned-columns])
+        show-add-property? (:show-add-property? option)
+        sized-columns (get-in table [:state :sized-columns])
+        unpinned-columns (cond-> (vec unpinned)
+                           show-add-property?
+                           (conj {:id :add-property}))
+        cell (fn [column]
+               (let [width (get-column-size column sized-columns)
+                     add-property? (= (:id column) :add-property)
+                     select? (= (:id column) :select)]
+                 [:div.ls-table-cell.flex.relative.h-full
+                  {:key (str "placeholder-" idx "-" (:id column))
+                   :style {:width width :min-width width}}
+                  [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                                      (cond
+                                        select? " px-0"
+                                        add-property? ""
+                                        :else " border-r px-2"))}]]))]
+    [:div.ls-table-row.ls-block.flex.flex-row.items-center.border-b.transition-colors.bg-gray-01.items-stretch
+     {:key (str "placeholder-" idx)
+      :aria-hidden true
+      :style {:height table-fixed-row-height
+              :max-height table-fixed-row-height
+              :overflow "hidden"}}
+     (when (seq pinned-columns)
+       (into [:div.sticky-columns.flex.flex-row]
+             (map cell pinned-columns)))
+     (when (seq unpinned-columns)
+       (into [:div.flex.flex-row]
+             (map cell unpinned-columns)))]))
 
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
@@ -2135,7 +2171,7 @@
 
 (defn- lazy-item-placeholder-height
   [table-view?]
-  (if table-view? 33 24))
+  (if table-view? table-fixed-row-height 24))
 
 (def ^:private table-row-overscan-rows 2)
 
@@ -2558,25 +2594,27 @@
                  next-bounds))))))])))
 
 (hsx/defc lazy-item-placeholder
-  [table-view? gallery-view?]
+  [table-view? gallery-view? table idx option]
   (if gallery-view?
     [:div.ls-card-item {:aria-hidden true}]
-    (let [height (lazy-item-placeholder-height table-view?)]
-      [:div {:style (cond-> {:min-height height}
-                      table-view?
-                      (assoc :height height
-                             :max-height height
-                             :overflow "hidden"))}])))
+    (if (and table-view? table)
+      (table-row-placeholder table idx option)
+      (let [height (lazy-item-placeholder-height table-view?)]
+        [:div {:style (cond-> {:min-height height}
+                        table-view?
+                        (assoc :height height
+                               :max-height height
+                               :overflow "hidden"))}]))))
 
 (hsx/defc lazy-item-subscribed
-  [row-uuid preview item-render table-view? gallery-view?]
+  [row-uuid preview item-render table-view? gallery-view? table idx option]
   (let [item (or (db-hooks/use-block row-uuid) preview)]
     (if item
       (item-render item)
-      (lazy-item-placeholder table-view? gallery-view?))))
+      (lazy-item-placeholder table-view? gallery-view? table idx option))))
 
 (hsx/defc lazy-item
-  [data idx {:keys [gallery-view? table-view? row-previews mount-unpinned-cells?]} item-render]
+  [data idx {:keys [gallery-view? table-view? row-previews mount-unpinned-cells? table] :as option} item-render]
   (let [row-uuid (util/nth-safe data idx)
         preview (get row-previews row-uuid)
         [subscribe? set-subscribe!] (hooks/use-state (nil? preview))]
@@ -2592,10 +2630,10 @@
       (item-render preview)
 
       row-uuid
-      [lazy-item-subscribed row-uuid preview item-render table-view? gallery-view?]
+      [lazy-item-subscribed row-uuid preview item-render table-view? gallery-view? table idx option]
 
       :else
-      (lazy-item-placeholder table-view? gallery-view?))))
+      (lazy-item-placeholder table-view? gallery-view? table idx option))))
 
 (hsx/defc ^:large-vars/cleanup-todo table-body
   [table option rows *scroller-ref set-items-rendered!]
@@ -2653,6 +2691,7 @@
               (on-viewport-filled! next-offset))))
         option (assoc option
                       :table-view? true
+                      :table table
                       :mount-unpinned-cells? mount-unpinned-cells?)
         can-paint? (table-body-can-paint?
                     initial-rows-ready? hydrate-row-uuids row-previews)
@@ -2711,7 +2750,7 @@
                                        option
                                        (fn [row]
                                          (table-row table row {} option)))
-                            (lazy-item-placeholder true false))))
+                            (lazy-item-placeholder true false table idx option))))
         :items-rendered (fn [props]
                           (prefetch-rows!
                            (if (seq offset-rows)
@@ -2803,7 +2842,7 @@
                         :item-content (fn [idx]
                                         (if-let [row-uuid (windowed-view-row rows option idx)]
                                           (lazy-item-render row-uuid)
-                                          (lazy-item-placeholder false false)))}
+                                          (lazy-item-placeholder false false nil nil nil)))}
                        disable-virtualized?))))
         breadcrumb (state/get-component :block/breadcrumb)
         all-uuids? (every? uuid? rows)]
@@ -2994,7 +3033,7 @@
                                    (gallery-card-item table view-entity block config'
                                                       {:asset-property-ident asset-property-ident
                                                        :display-property-idents display-property-idents})))
-                        (lazy-item-placeholder false true)))]
+                        (lazy-item-placeholder false true nil nil nil)))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}

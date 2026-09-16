@@ -673,13 +673,29 @@
     (is (= [0 29] (#'views/prefetch-visible-range [0 29]))
         "Table prefetch takes the viewport range, not Virtuoso's mounted list.")
     (is (string/includes?
-         (render-static (views/lazy-item-placeholder true false))
+         (render-static (views/lazy-item-placeholder true false nil nil nil))
          "min-height:33px")
         "Mounted overscan rows stay empty placeholders and skip use-block.")
     (is (string/includes?
-         (render-static (views/lazy-item-placeholder true false))
+         (render-static (views/lazy-item-placeholder true false nil nil nil))
          "height:33px")
         "Table placeholders must keep the same fixed height as hydrated rows.")))
+
+(deftest table-placeholder-rows-keep-cell-borders-test
+  (let [table {:state {:pinned-columns [{:id :block/title
+                                         :cell (fn [_table _row _column _style])}]
+                       :unpinned-columns [{:id :block/updated-at
+                                           :cell (fn [_table _row _column _style])}]
+                       :sized-columns {:block/title 320
+                                       :block/updated-at 180}}}
+        html (render-static
+              (views/lazy-item-placeholder
+               true false table 42 {:show-add-property? false}))]
+    (is (string/includes? html "ls-table-row"))
+    (is (string/includes? html "ls-table-cell")
+        "Loading table slots render empty cells so borders stay visible.")
+    (is (string/includes? html "width:320px"))
+    (is (string/includes? html "width:180px"))))
 
 (deftest remaining-ids-move-prefetch-off-the-first-window-test
   (let [first-window (mapv (fn [_] (random-uuid)) (range 26))
