@@ -56,7 +56,6 @@
                           :repo url}))
     (let [current-repo (state/get-current-repo)]
       (p/do!
-       (persist-db/<close-db url)
        (db-persist/delete-graph! url)
        (search/remove-db! url)
        (state/delete-repo! repo)

@@ -31,6 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
+  graph_generation : string option;
   raw_file_config : Melange_edn_melange.any option;
   profile_session : Profile_types.session option;
 }
@@ -441,6 +442,7 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
                   base_url;
                   owner_source = Cli_primitive.Cli;
                   project_dir = None;
+                  graph_generation = None;
                   raw_file_config;
                   profile_session = None;
                 }
