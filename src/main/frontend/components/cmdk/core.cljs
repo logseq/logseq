@@ -546,6 +546,13 @@
           ;; (load-results :recents state)
           )))))
 
+(defn- refresh-results-key
+  [state]
+  [(state/get-current-repo)
+   @(::input state)
+   (:group @(::filter state))
+   (get-action)])
+
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (editor-handler/copy-block-ref! block-uuid ref/->block-ref)
@@ -1025,8 +1032,11 @@
 
 (defn- refresh-results!
   [state]
-  (persist-cmdk-query-state! state)
-  (load-results :default state))
+  (let [refresh-key (refresh-results-key state)]
+    (when-not (= refresh-key @(::last-refresh-key state))
+      (reset! (::last-refresh-key state) refresh-key)
+      (persist-cmdk-query-state! state)
+      (load-results :default state))))
 
 (def search-debounce-ms 300)
 
@@ -1213,7 +1223,7 @@
                                (.focus el)
                                (.select el)))
                            0))]
-         (load-results :default state)
+         (refresh-results! state)
          (fn []
            (when timeout-id
              (js/clearTimeout timeout-id)))))
@@ -1372,6 +1382,7 @@
      ::accel-start-ts (atom nil)
      ::highlighted-item (atom nil)
      ::focus-source (atom :keyboard)
+     ::last-refresh-key (atom nil)
      ::results (atom default-results)}))
 
 (defn- cmdk-will-unmount

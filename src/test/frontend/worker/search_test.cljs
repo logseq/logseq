@@ -444,6 +444,44 @@
           (is (not-any? #(string/includes? % "title match ?") @calls))
           (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
 
+(deftest search-blocks-normalizes-tag-title-query-before-sql
+  (testing "cmd-k tag queries should search the tag page title without paying FTS or broad LIKE scans"
+    (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (swap! calls conj {:sql sql :bind bind})
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              (if (= ["Movies" 10] bind)
+                                (clj->js [[page-id page-id "Movies"]])
+                                #js [])
+
+                              (string/includes? sql "title match ?")
+                              (throw (js/Error. "FTS should not run for exact tag title queries"))
+
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run for exact tag title queries"))
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "#Movies"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Movies"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (some #(= ["Movies" 10] (:bind %)) @calls))
+          (is (not-any? #(string/includes? (:sql %) "title match ?") @calls))
+          (is (not-any? #(string/includes? (:sql %) "lower(title) like ?") @calls)))))))
+
 (deftest combine-results-large-result-benchmark
   (testing "large search result sets combine without quadratic scans and keep page boost ranking"
     (let [ids (mapv test-uuid-string (range 1 2501))

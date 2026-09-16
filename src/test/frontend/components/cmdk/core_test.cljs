@@ -5,6 +5,7 @@
    [frontend.db.async :as db-async]
    [frontend.handler.db-based.recent :as db-recent-handler]
    [frontend.handler.editor :as editor-handler]
+   [frontend.state :as state]
    [frontend.util :as util]
    [goog.object :as gobj]
    [logseq.shui.ui :as shui]
@@ -107,6 +108,20 @@
              "five keystrokes 80 ms apart should trigger one search after the pause")
          (done))
        (+ last-keystroke cmdk/search-debounce-ms 80)))))
+
+(deftest refresh-results-skips-duplicate-search-key-test
+  (let [calls (atom [])
+        cmdk-state {::cmdk/input (atom "#Movies")
+                    ::cmdk/filter (atom {:group :nodes})
+                    ::cmdk/last-refresh-key (atom nil)}]
+    (with-redefs [cmdk/load-results (fn [& args] (swap! calls conj args))
+                  cmdk/persist-cmdk-query-state! (fn [_state])
+                  state/get-current-repo (constantly "repo-a")
+                  state/get-state (constantly nil)]
+      (#'cmdk/refresh-results! cmdk-state)
+      (#'cmdk/refresh-results! cmdk-state)
+      (is (= 1 (count @calls))
+          "Mount effects with the same repo/input/filter/action should issue one search."))))
 
 (defn- keydown-event
   [{:keys [key key-code composing?]}]

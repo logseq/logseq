@@ -464,6 +464,13 @@ DROP TRIGGER IF EXISTS blocks_au;
   [q]
   (boolean (re-find #"\S\s+\S" q)))
 
+(defn- tag-title-query
+  [q]
+  (when (and (string? q)
+             (string/starts-with? q "#")
+             (not (re-find #"\s" q)))
+    (not-empty (subs q 1))))
+
 (defn- exact-title-query?
   [q]
   (not (re-find #"\s" q)))
@@ -959,7 +966,9 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([conn search-db vector-index q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
                                    :as option
                                    :or {enable-snippet? true}}]
-   (when-not (string/blank? q)
+   (let [tag-title? (boolean (tag-title-query q))
+         q (or (tag-title-query q) q)]
+     (when-not (string/blank? q)
      (let [option (assoc option :enable-snippet? enable-snippet?)
            match-input (get-match-input q)
            non-match-input (when (<= (count q) 2)
@@ -978,13 +987,15 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (str select pg-sql " title match ? limit ?"))
            non-match-sql (str select pg-sql " title like ? limit ?")
            matched-result (when (and (not page-only?)
+                                     (not tag-title?)
                                      (not enough-exact-title-results?))
                             (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-           non-match-result (when (and (not page-only?) non-match-input)
+           non-match-result (when (and (not page-only?) (not tag-title?) non-match-input)
                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
                                    (map (fn [result]
                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
            skip-fuzzy? (or enough-exact-title-results?
+                           tag-title?
                            (and (multi-term-query? q)
                                 (seq matched-result)))
            fuzzy-result (when-not skip-fuzzy?
@@ -1020,7 +1031,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (if include-matched-count?
          {:items (take limit result)
           :matched-count matched-count}
-         (take limit result))))))
+         (take limit result)))))))
 
 (defn upsert-vector-blocks!
   [vector-index blocks]

@@ -2187,6 +2187,27 @@
        (table-row-from-offset offset-rows row-offset idx)
        (table-row-from-offset stale-rows stale-offset idx))))
 
+(defn- table-row-key
+  [first-rows offset-rows row-offset stale-rows stale-offset idx]
+  (str "table-row-"
+       idx
+       "-"
+       (or (table-row-at first-rows offset-rows row-offset
+                         stale-rows stale-offset idx)
+           "placeholder")))
+
+(defn- windowed-view-row
+  [rows {:keys [all-row-ids offset-rows row-offset stale-offset-rows stale-row-offset]} idx]
+  (if (seq all-row-ids)
+    (table-row-at all-row-ids offset-rows row-offset
+                  stale-offset-rows stale-row-offset idx)
+    (util/nth-safe rows idx)))
+
+(defn- windowed-view-row-key
+  [prefix rows option idx]
+  (str prefix "-" idx "-" (or (windowed-view-row rows option idx)
+                              "placeholder")))
+
 (defn- matching-stale-offset-window
   [stale-window window-context]
   (when (= (:context stale-window) window-context)
@@ -2303,6 +2324,12 @@
   (max (count rows)
        (if (number? items-count) items-count 0)))
 
+(defn- windowed-view-total-count
+  [rows {:keys [all-row-ids items-count]}]
+  (if (seq all-row-ids)
+    (table-total-count all-row-ids items-count)
+    (count rows)))
+
 (defn- viewport-row-range
   "On-screen rows from scroll position. Virtuoso's mounted overscan range
   is not a hydrate window."
@@ -2352,7 +2379,11 @@
        current-offset
 
        (and (integer? current-offset) (not (true? offset-ready?)))
-       current-offset
+       (if (and (integer? visible-start)
+                (integer? window-size)
+                (> visible-start (+ current-offset window-size)))
+         visible-start
+         current-offset)
 
        (offset-window-covers-visible?
         current-offset window-size visible-start visible-end)
@@ -2606,10 +2637,8 @@
         :increase-viewport-by {:top overscan-px :bottom overscan-px}
         :custom-scroll-parent scroll-parent
         :compute-item-key (fn [idx]
-                            (str "table-row-"
-                                 (or (table-row-at all-row-ids offset-rows row-offset
-                                                   stale-rows stale-offset idx)
-                                     idx)))
+                            (table-row-key all-row-ids offset-rows row-offset
+                                           stale-rows stale-offset idx))
         :skipAnimationFrameInResizeObserver true
         :fixed-item-height item-height
         :default-item-height item-height
@@ -2699,12 +2728,13 @@
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (hsx/defc list-view
-  [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
+  [{:keys [config ref-matched-children-ids disable-virtualized?
+           on-viewport-filled!] :as option} view-entity {:keys [rows]} *scroller-ref]
   (let [view-feature-type (:logseq.property.view/feature-type view-entity)
         references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
         config (assoc config :container-id (view-container-id config))
-        lazy-item-render (fn [rows idx]
-                           (lazy-item rows idx (assoc option :list-view? true)
+        lazy-item-render (fn [row-uuid]
+                           (lazy-item [row-uuid] 0 (assoc option :list-view? true)
                                       (fn [block]
                                         (let [config' (cond->
                                                        (assoc config
@@ -2717,20 +2747,36 @@
                                                                :reference-view-parent-uuid
                                                                (:view-parent-uuid option)))]
                                           (block-container config' block)))))
+        notify-visible-range! (fn [rendered]
+                                (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+                                  (when-let [next-offset (next-scrolled-row-offset
+                                                          (:row-offset option)
+                                                          (count (:offset-rows option))
+                                                          visible-start
+                                                          visible-end
+                                                          (or (:initial-row-count option)
+                                                              (count rows))
+                                                          (seq (:offset-rows option)))]
+                                    (when on-viewport-filled!
+                                      (on-viewport-filled! next-offset)))))
         list-cp (fn [rows]
                   (when (seq rows)
-                    (virtualized-list
-                     {:ref #(reset! *scroller-ref %)
-                      :class "content"
-                      :custom-scroll-parent (get-scroll-parent config)
-                      :increase-viewport-by {:top 64 :bottom 64}
-                      :compute-item-key (fn [idx]
-                                          (let [block-id (util/nth-safe rows idx)]
-                                            (str "list-row-" block-id)))
-                      :total-count (count rows)
-                      :skipAnimationFrameInResizeObserver true
-                      :item-content (fn [idx] (lazy-item-render rows idx))}
-                     disable-virtualized?)))
+                    (let [total-count (windowed-view-total-count rows option)]
+                      (virtualized-list
+                       {:ref #(reset! *scroller-ref %)
+                        :class "content"
+                        :custom-scroll-parent (get-scroll-parent config)
+                        :increase-viewport-by {:top 64 :bottom 64}
+                        :compute-item-key (fn [idx]
+                                            (windowed-view-row-key "list-row" rows option idx))
+                        :total-count total-count
+                        :skipAnimationFrameInResizeObserver true
+                        :items-rendered notify-visible-range!
+                        :item-content (fn [idx]
+                                        (if-let [row-uuid (windowed-view-row rows option idx)]
+                                          (lazy-item-render row-uuid)
+                                          (lazy-item-placeholder false false)))}
+                       disable-virtualized?))))
         breadcrumb (state/get-component :block/breadcrumb)
         all-uuids? (every? uuid? rows)]
     (if all-uuids?
@@ -2746,7 +2792,7 @@
                           {:show-page? false})]
              (list-cp blocks)])
           ^{:key (str "partition-" idx)}
-          [:<> (lazy-item-render rows idx)])))))
+          [:<> (lazy-item-render row)])))))
 
 (defn- gallery-property-value-opts
   [config]
@@ -2888,7 +2934,7 @@
           :view-parent (:logseq.property/view-for (:view-entity table))}))])))
 
 (hsx/defc gallery-view
-  [{:keys [config view-parent view-feature-type] :as option} table view-entity blocks _row-selection *scroller-ref]
+  [{:keys [config view-parent view-feature-type on-viewport-filled!] :as option} table view-entity blocks _row-selection *scroller-ref]
   (let [config' (assoc config :container-id (view-container-id config))
         columns (:columns table)
         dimensions (gallery-card-dimensions view-entity)
@@ -2897,34 +2943,50 @@
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
         [_initial-rows-ready? _hydrate-row-uuids prefetch-rows!] (use-view-row-prefetch blocks)
+        total-count (windowed-view-total-count blocks option)
+        notify-visible-range! (fn [rendered]
+                                (prefetch-rows! rendered)
+                                (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
+                                  (when-let [next-offset (next-scrolled-row-offset
+                                                          (:row-offset option)
+                                                          (count (:offset-rows option))
+                                                          visible-start
+                                                          visible-end
+                                                          (or (:initial-row-count option)
+                                                              (count blocks))
+                                                          (seq (:offset-rows option)))]
+                                    (when on-viewport-filled!
+                                      (on-viewport-filled! next-offset)))))
         render-card (fn [idx]
-                      (lazy-item blocks idx
+                      (if-let [row-uuid (windowed-view-row blocks option idx)]
+                        (lazy-item [row-uuid] 0
                                  (assoc (gallery-lazy-item-opts option)
                                         :gallery-view? true)
                                  (fn [block]
                                    (gallery-card-item table view-entity block config'
                                                       {:asset-property-ident asset-property-ident
-                                                       :display-property-idents display-property-idents}))))]
+                                                       :display-property-idents display-property-idents})))
+                        (lazy-item-placeholder false true)))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
      (when (seq blocks)
        (if (:disable-virtualized? option)
          [:div.virtuoso-grid-list
-          (for [idx (range (count blocks))]
+          (for [idx (range total-count)]
             [:div.virtuoso-grid-item
-             {:key (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx))}
+             {:key (windowed-view-row-key (str (:db/id view-entity) "-card") blocks option idx)}
              (render-card idx)])]
          (ui/virtualized-grid
           {:ref #(reset! *scroller-ref %)
-           :total-count (count blocks)
+           :total-count total-count
            :increase-viewport-by {:top (* 2 (:height dimensions))
                                   :bottom (* 2 (:height dimensions))}
            :custom-scroll-parent (get-scroll-parent config)
            :skipAnimationFrameInResizeObserver true
            :compute-item-key (fn [idx]
-                               (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
-           :items-rendered prefetch-rows!
+                               (windowed-view-row-key (str (:db/id view-entity) "-card") blocks option idx))
+           :items-rendered notify-visible-range!
            :item-content render-card})))
      (when-not (:hide-action-bar? option)
        (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
@@ -3192,59 +3254,63 @@
   [view-parent current-view-uuid view-uuid
    {:keys [view-uuids data items-count set-current-view-uuid!
            show-items-count? config references?]}]
-  (when-let [view (db-hooks/use-block view-uuid)]
-    (let [refs-total-count (:refs-total-count config)
-          current-view? (= current-view-uuid view-uuid)]
-      (shui/button
-       {:key (str "view-tab-" view-uuid)
-        :variant :text
-        :size :sm
-        :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-        :on-click (fn [e]
-                    (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
-                      (shui/popup-show!
-                       (.-target e)
-                       (fn []
-                         [:<>
-                          (shui/dropdown-menu-sub
-                           (shui/dropdown-menu-sub-trigger
-                            (t :view/rename))
-                           (shui/dropdown-menu-sub-content
-                            (when-let [block-container-cp (state/get-component :block/container)]
-                              (block-container-cp {:display-title (display-view-title view)
-                                                   :hide-block-control? true} view))))
-                          (when (> (count view-uuids) 1)
-                            (shui/dropdown-menu-item
-                             {:key "Delete"
-                              :on-click (fn []
-                                          (set-current-view-uuid!
-                                           (first (remove #{view-uuid} view-uuids)))
-                                          (p/do!
-                                           (editor-handler/delete-block-aux! view)
-                                           (shui/popup-hide!)))}
-                             (t :ui/delete)))])
-                       {:as-dropdown? true
-                        :dropdown-menu? true
-                        :align "start"
-                        :focus-trigger? false
-                        :content-props {:onClick shui/popup-hide!
-                                        :onCloseAutoFocus #(.preventDefault %)}})
-                      (set-current-view-uuid! view-uuid)))}
-       (when-not references?
-         (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                                :logseq.property.view/type.table)]
-           (when-let [icon (:logseq.property/icon (built-in-property display-type))]
-             (icon-component/icon icon {:color? true
-                                        :size 15}))))
+  (let [hydrated-view (db-hooks/use-block view-uuid)
+        view (or hydrated-view {:block/uuid view-uuid})
+        refs-total-count (:refs-total-count config)
+        current-view? (= current-view-uuid view-uuid)]
+    (shui/button
+     {:key (str "view-tab-" view-uuid)
+      :data-view-tab-id (str "view-tab-" view-uuid)
+      :variant :text
+      :size :sm
+      :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+      :on-click (fn [e]
+                  (if (and hydrated-view current-view? (not= (:db/id view) (:db/id view-parent)))
+                    (shui/popup-show!
+                     (.-target e)
+                     (fn []
+                       [:<>
+                        (shui/dropdown-menu-sub
+                         (shui/dropdown-menu-sub-trigger
+                          (t :view/rename))
+                         (shui/dropdown-menu-sub-content
+                          (when-let [block-container-cp (state/get-component :block/container)]
+                            (block-container-cp {:display-title (display-view-title view)
+                                                 :hide-block-control? true} view))))
+                        (when (> (count view-uuids) 1)
+                          (shui/dropdown-menu-item
+                           {:key "Delete"
+                            :on-click (fn []
+                                        (set-current-view-uuid!
+                                         (first (remove #{view-uuid} view-uuids)))
+                                        (p/do!
+                                         (editor-handler/delete-block-aux! view)
+                                         (shui/popup-hide!)))}
+                           (t :ui/delete)))])
+                     {:as-dropdown? true
+                      :dropdown-menu? true
+                      :align "start"
+                      :focus-trigger? false
+                      :content-props {:onClick shui/popup-hide!
+                                      :onCloseAutoFocus #(.preventDefault %)}})
+                    (set-current-view-uuid! view-uuid)))}
+     (when-not references?
+       (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                              :logseq.property.view/type.table)]
+         (when-let [icon (:logseq.property/icon (built-in-property display-type))]
+           (icon-component/icon icon {:color? true
+                                      :size 15}))))
+     (if hydrated-view
        (display-view-title view)
-       (when (and current-view? show-items-count? (> items-count 0) (seq data))
-         [:span.text-muted-foreground.text-xs
-          items-count
-          (when (and refs-total-count
-                     (> refs-total-count items-count))
-            [:span
-             [:span "/"]
-             [:span {:title (t :view.table/total-refs-count)} refs-total-count]])])))))
+       [:span.inline-block.w-8])
+     (when (and current-view? show-items-count? (> items-count 0) (seq data))
+       [:span.text-muted-foreground.text-xs
+        items-count
+        (when (and refs-total-count
+                   (> refs-total-count items-count))
+          [:span
+           [:span "/"]
+           [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]))))
 
 (hsx/defc views-tab
   [view-parent current-view-uuid
@@ -3696,6 +3762,10 @@
      :partition (:partition view-data)
      :view-data view-data}))
 
+(defn- view-paint-source
+  [view-data previous-view-data]
+  (or view-data previous-view-data))
+
 (hsx/defc ^:large-vars/cleanup-todo loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
@@ -3723,6 +3793,7 @@
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
         window-or-full-data (db-hooks/use-resource (:resource-key plan))
+        [previous-view-data set-previous-view-data!] (hooks/use-state nil)
         [full-data-active? set-full-data-active!] (hooks/use-state false)
         full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
                                                         (:full-key plan)))
@@ -3749,16 +3820,16 @@
                            :ready (:value full-snapshot)
                            :error (throw (:error full-snapshot))
                            nil))
-        view-data window-or-full-data
+        view-data (view-paint-source window-or-full-data previous-view-data)
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
-                      (view-data->rows window-or-full-data))
+                      (view-data->rows view-data))
         full-rows (if (:full-key plan)
                     (some-> full-view-data view-data->rows)
                     all-row-ids)
         offset-rows (when offset-data
                       (view-data->rows offset-data))
-        row-previews (merge (:row-previews window-or-full-data)
+        row-previews (merge (:row-previews view-data)
                             (:previews matched-stale-offset-window)
                             (:row-previews offset-data))
         query? (= view-feature-type :query-result)
@@ -3778,6 +3849,12 @@
 
                  (seq row-previews)
                  (assoc :row-previews row-previews))]
+    (hooks/use-effect!
+     (fn []
+       (when window-or-full-data
+         (set-previous-view-data! window-or-full-data))
+       js/undefined)
+     [window-or-full-data])
     (hooks/use-effect!
      (fn []
        (when (and offset-data (integer? row-offset))
@@ -3808,6 +3885,7 @@
          (view-container view-entity (assoc option
                                             :on-viewport-filled! set-current-row-offset!
                                             :on-first-table-paint! notify-windowed-paint!
+                                            :initial-row-count (:initial-row-count plan)
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data

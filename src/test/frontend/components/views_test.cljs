@@ -182,6 +182,18 @@
                 :logseq.property.view/type.table :flat []))
         "Empty tables keep the property column and view-actions on mount.")))
 
+(deftest view-tabs-reserve-a-slot-before-block-hydration-test
+  (let [view-parent {:db/id 1}
+        view-uuid (random-uuid)
+        html (with-redefs [db-hooks/use-block (constantly nil)]
+               (render-static
+                (views/views-tab view-parent view-uuid
+                                 {:view-uuids [view-uuid]
+                                  :set-current-view-uuid! (fn [_])
+                                  :view-feature-type :all-pages})))]
+    (is (string/includes? html (str "view-tab-" view-uuid))
+        "Each known view UUID should synchronously reserve a tab slot before the view block hydrates.")))
+
 (deftest default-view-title-matches-the-feature-type
   (is (= :view/linked-references
          (#'views/default-view-title-key :linked-references)))
@@ -544,6 +556,14 @@
         (is (false? (:ready? (#'views/loaded-view-paint nil)))
             "A cold view stays on the short skeleton until that first window exists.")))))
 
+(deftest loaded-view-keeps-previous-paint-while-next-search-loads-test
+  (let [ready-view-data {:partition :flat
+                         :count 1
+                         :rows [(random-uuid)]}]
+    (is (= ready-view-data (#'views/view-paint-source ready-view-data nil)))
+    (is (= ready-view-data (#'views/view-paint-source nil ready-view-data))
+        "Typing into the view search changes the resource key before the worker returns; keep the old view mounted so the input stays open.")))
+
 (deftest first-window-fills-a-tall-viewport-from-screen-height-test
   (let [view-uuid (random-uuid)
         plan (#'views/loaded-view-resource-plan
@@ -613,6 +633,31 @@
       (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
           "A shorter Tags offset window must not throw on stale first-window bounds."))))
 
+(deftest table-row-key-distinguishes-overlapping-windows-test
+  (let [row-id (random-uuid)
+        first-window [row-id]
+        offset-window [row-id]
+        keys (mapv #(#'views/table-row-key first-window offset-window 30 nil nil %)
+                   [0 30])]
+    (is (= 2 (count (distinct keys)))
+        "A row UUID can briefly appear in two windows; React keys still need to be unique per virtual row slot.")
+    (is (every? #(string/includes? % (str row-id)) keys))))
+
+(deftest windowed-view-row-helpers-use-the-shared-offset-windows-test
+  (let [first-window [(random-uuid)]
+        offset-window [(random-uuid)]
+        option {:all-row-ids first-window
+                :items-count 100
+                :offset-rows offset-window
+                :row-offset 30}]
+    (is (= 100 (#'views/windowed-view-total-count first-window option)))
+    (is (= (first first-window) (#'views/windowed-view-row first-window option 0)))
+    (is (= (first offset-window) (#'views/windowed-view-row first-window option 30)))
+    (is (nil? (#'views/windowed-view-row first-window option 29)))
+    (is (string/includes?
+         (#'views/windowed-view-row-key "list-row" first-window option 30)
+         (str (first offset-window))))))
+
 (deftest stale-offset-window-only-applies-to-the-same-resource-context-test
   (let [ctx {:feature-type :class-objects
              :sorting [{:id :block/title :asc? true}]
@@ -644,6 +689,8 @@
       "Move the window only after the visible range leaves it.")
   (is (= 26 (#'views/next-scrolled-row-offset 26 27 40 66 26 false))
       "An in-flight Movies offset must finish. A new key cancelled the fetch and left 27 empty rows.")
+  (is (= 400 (#'views/next-scrolled-row-offset 26 27 400 426 26 false))
+      "Continuous fast scroll must replace an obsolete in-flight offset once the visible range leaves it.")
   (is (= [66 92] (#'views/viewport-row-range 2400 196 852 33 40000))
       "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97."))
 
