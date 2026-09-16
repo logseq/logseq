@@ -1,5 +1,5 @@
 (ns frontend.worker.pipeline-test
-  (:require [cljs.test :refer [deftest is testing thrown-with-msg?]]
+  (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
