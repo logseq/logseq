@@ -344,6 +344,11 @@ async function terminate(ctx, target, deleting) {
       if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
     }
   }
+  await shutdownAndWait(ctx, target, deleting, responsive);
+}
+async function shutdownAndWait(ctx, target, deleting, responsive) {
+  if (target.pid === process.pid) fail('Cannot stop the calling process');
+  if (!pidExists(target.pid)) return;
   if (responsive) {
     try {
       const response = await request(target.port, '/v1/shutdown', 'POST',
@@ -361,6 +366,60 @@ async function terminate(ctx, target, deleting) {
     if (await waitExit(target.pid, milliseconds)) return;
   }
   fail(`Timed out stopping worker ${target.pid}`, 'server-stop-timeout');
+}
+
+// Upgrade cleanup validates the running HTTP endpoint against its graph lock.
+// It never admits an older worker into the current lifecycle protocol.
+async function stopOutdatedWorkers(storage, revision) {
+  if (typeof revision !== 'string' || !revision) fail('Desktop revision is required');
+  const results = await Promise.allSettled(entries(storage.root).map(async target => {
+    if (!pidExists(target.pid)) {
+      await removeEntries(storage.root, [target]);
+      return;
+    }
+    const probe = async () => {
+      const response = await request(target.port, '/healthz');
+      const value = JSON.parse(response.body);
+      if (![200, 503].includes(response.status) || value.pid !== target.pid
+          || value.port !== target.port || value.host !== '127.0.0.1'
+          || typeof value.revision !== 'string' || !value.revision
+          || !['cli', 'electron'].includes(value['owner-source'])
+          || typeof value.repo !== 'string' || !value.repo)
+        fail('Outdated worker endpoint identity mismatch');
+      return value;
+    };
+    const value = await probe();
+    if (canonicalRoot(value['root-dir']) !== storage.root
+        || (value.storage && !sameStorage(storage, value.storage))) return;
+    if (value.revision === revision) return;
+    const ctx = context(storage, value.repo);
+    await withLease(ctx, 'upgrade', async () => {
+      if (!pidExists(target.pid)) return;
+      const confirmed = await probe();
+      for (const key of ['pid', 'port', 'host', 'repo', 'root-dir', 'lock-id', 'owner-source', 'revision']) {
+        if (confirmed[key] !== value[key]) fail('Outdated worker identity changed before shutdown');
+      }
+      const lockFile = path.join(ctx.graphDir, 'db-worker.lock');
+      const lock = readJSON(lockFile);
+      if (!lock || lock.pid !== target.pid || lock.repo !== value.repo
+          || !lock['lock-id'] || lock['owner-source'] !== value['owner-source']
+          || (value['lock-id'] !== undefined && lock['lock-id'] !== value['lock-id']))
+        fail('Outdated worker graph lock identity mismatch');
+      await shutdownAndWait(ctx, { ...target, ticket: value.ticket, generation: value.generation }, false, true);
+      removeMatchingLock(lockFile, lock);
+      await removeEntries(storage.root, [target]);
+      const current = state(ctx);
+      for (const record of current.workers.filter(record => record.pid === target.pid)) {
+        const runtime = readRuntime(ctx, record);
+        if (runtime?.error) fail(`Worker close failed: ${runtime.error}`);
+        fs.rmSync(runtimeFile(ctx, record.ticket), { force: true });
+      }
+      current.workers = current.workers.filter(record => record.pid !== target.pid);
+      writeJSON(ctx.stateFile, current);
+    });
+  }));
+  const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+  if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
 }
 function removeMatchingLock(file, lock) {
   const actual = readJSON(file);
@@ -573,4 +632,4 @@ function observe(storage, repo, generation, onChange) {
 }
 
 module.exports = { resolveStorage, context, snapshot, pidExists, withLease, createGraph, admit, publish,
-  checkAdmission, recordStop, abortAdmission, startGraph, stopGraph, deleteGraph, observe };
+  checkAdmission, recordStop, abortAdmission, startGraph, stopGraph, deleteGraph, observe, stopOutdatedWorkers };

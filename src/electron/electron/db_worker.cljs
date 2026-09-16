@@ -2,6 +2,7 @@
   (:require ["@logseq/graph-lifecycle" :as lifecycle]
             [logseq.cli.server :as cli-server]
             [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.version :as version]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
 
@@ -259,6 +260,10 @@
                        (update-in [:epochs key] (fnil inc 0)))))))
 
 (declare manager)
+
+(defn <prepare-startup!
+  []
+  (lifecycle/stopOutdatedWorkers (cli-server/resolve-storage {}) (version/revision)))
 
 (defn- start-managed-daemon!
   [repo opts]
