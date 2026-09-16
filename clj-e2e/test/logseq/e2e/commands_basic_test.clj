@@ -21,6 +21,12 @@
 (def ^:private date-picker-day-selector
   ".ui__calendar [role='gridcell'] button, .ui__calendar button[role='gridcell']")
 
+(defn- opaque-color?
+  [color]
+  (boolean
+   (and (string? color)
+        (not (re-find #"(?i)^(transparent|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0(?:\.0+)?\s*\))$" color)))))
+
 (defn- focused-date-picker-day
   []
   (json/read-value
@@ -29,10 +35,12 @@
      "(() => {
        const active = document.activeElement;
        const dayButton = active?.closest?.(%s);
+       const cs = dayButton ? getComputedStyle(dayButton) : null;
        return JSON.stringify({
          focused: !!dayButton,
          text: dayButton?.textContent ?? null,
-         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null
+         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null,
+         bg: cs?.backgroundColor ?? null
        });
      })()"
      (json/write-value-as-string date-picker-day-selector)))
@@ -46,15 +54,22 @@
   (let [initial (focused-date-picker-day)]
     (is (:focused initial)
         (str command " should focus a calendar day when opened."))
+    (is (opaque-color? (:bg initial))
+        (str command " should highlight the focused calendar day when opened."))
     (k/arrow-right)
     (let [right (focused-date-picker-day)]
       (is (:focused right)
           (str command " should keep calendar focus after ArrowRight."))
       (is (not= (:label initial) (:label right))
           (str command " should move focused date with ArrowRight."))
+      (is (opaque-color? (:bg right))
+          (str command " should keep the highlight on the focused day after ArrowRight."))
       (k/arrow-left)
-      (is (= (:label initial) (:label (focused-date-picker-day)))
-          (str command " should move focused date back with ArrowLeft.")))
+      (let [back (focused-date-picker-day)]
+        (is (= (:label initial) (:label back))
+            (str command " should move focused date back with ArrowLeft."))
+        (is (opaque-color? (:bg back))
+            (str command " should keep the highlight on the focused day after ArrowLeft."))))
     (k/arrow-down)
     (let [down (focused-date-picker-day)]
       (is (:focused down)
@@ -242,6 +257,23 @@
     (doseq [command ["date picker" "Scheduled" "Deadline"]]
       (fixtures/create-page)
       (assert-date-picker-keyboard-navigation command))))
+
+(deftest date-picker-month-select-test
+  (testing "date picker month dropdown changes the visible month and closes"
+    (b/new-block "date picker month select test")
+    (util/input-command "date picker")
+    (w/wait-for date-picker-day-selector)
+    (w/wait-for ".ls-date-month-select")
+    (let [current (string/trim (util/get-text ".ls-date-month-select"))
+          target (if (= current "August") "March" "August")]
+      (w/click ".ls-date-month-select")
+      (w/wait-for ".ls-date-month-option")
+      (w/click (format ".ls-date-month-option:has-text('%s')" target))
+      (w/wait-for-not-visible "[role='menu']")
+      (is (= target (string/trim (util/get-text ".ls-date-month-select")))
+          "Month trigger should show the selected month.")
+      (is (string/includes? (util/get-text ".ui__calendar") target)
+          "Calendar caption should switch to the selected month."))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test
