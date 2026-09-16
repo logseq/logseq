@@ -419,7 +419,7 @@
                      (filter (fn [e]
                                (= (:db/id (:logseq.property/created-from-property e))
                                   (:db/id from-property)))
-                             (:block/_raw-parent parent))
+                             (entity-plus/lookup-entity parent :block/_parent nil))
 
                      :else
                      (:block/_parent parent)))))
@@ -515,7 +515,7 @@
 
 (defn- parent-sibling-index
   [parent]
-  (let [children (:block/_raw-parent parent)
+  (let [children (entity-plus/lookup-entity parent :block/_parent nil)
         property-groups (group-by #(some-> % :logseq.property/created-from-property :db/id) children)]
     {:ordinary (sibling-order-index
                 (remove :block/closed-value-property (get property-groups nil)) true)
