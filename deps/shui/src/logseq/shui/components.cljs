@@ -564,10 +564,10 @@
                              :month "rdp-month w-max space-y-3"
                              :month_caption "flex justify-start pt-1 relative items-center w-[276px]"
                              :caption_label "text-sm font-medium"
-                             :dropdowns "flex items-center justify-start gap-2"
+                             :dropdowns "flex items-center justify-start gap-2 min-w-0"
                              :months_dropdown "rdp-dropdown_month"
                              :years_dropdown "rdp-dropdown_year"
-                             :dropdown_root "relative flex h-8 items-center rounded-md border border-input bg-background px-2"
+                             :dropdown_root "relative flex h-8 items-center"
                              :dropdown "absolute inset-0 z-[2] w-full opacity-0 cursor-pointer"
                              :nav "absolute left-[200px] top-1 z-10 flex items-center gap-1"
                              :button_previous (cn (with-button-classes #js {:variant "outline"})

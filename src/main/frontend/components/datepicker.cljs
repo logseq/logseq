@@ -54,8 +54,7 @@
     (hooks/use-window-keydown
      (fn [^js e]
        (when (and (= "Enter" (.-key e))
-                  (not (some-> (.-target e)
-                               (.closest ".ls-nlp-calendar input"))))
+                  (not (ui/date-picker-form-target? e)))
          (select-handler! selected-date)
          (util/stop e)))
      [selected-date select-handler!])
