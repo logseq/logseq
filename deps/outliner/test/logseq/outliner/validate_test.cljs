@@ -1,6 +1,7 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.test.helper :as db-test]
@@ -217,6 +218,60 @@
          #"Can't convert this block to page"
          (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-location)] :logseq.class/Page))
         "Block with invalid location can't be tagged with #Page")))
+
+(deftest validate-page-conversion-title
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "ok"}
+                         {:block/title "dup" :build/tags [:logseq.class/Page]}
+                         {:block/title "dup"}
+                         {:block/title "   "}
+                         {:block/title "has/slash"}
+                         {:block/title "has#hash"}]}])
+        ok (db-test/find-block-by-content @conn "ok")
+        dup-block (->> (d/q '[:find [?b ...]
+                              :where
+                              [?b :block/title "dup"]
+                              [?b :block/page]]
+                            @conn)
+                       (map #(d/entity @conn %))
+                       (remove ldb/page?)
+                       first)
+        blank (db-test/find-block-by-content @conn "   ")
+        slash (db-test/find-block-by-content @conn "has/slash")
+        hash (db-test/find-block-by-content @conn "has#hash")]
+    (is (nil? (outliner-validate/validate-page-conversion-title @conn ok (:block/title ok)))
+        "Valid title can convert to a page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Page name can't be blank"
+         (outliner-validate/validate-page-conversion-title @conn blank (:block/title blank)))
+        "Blank titles are rejected")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Page name can't.*/"
+         (outliner-validate/validate-page-conversion-title @conn slash (:block/title slash)))
+        "Titles with / are rejected")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Page name can't.*#"
+         (outliner-validate/validate-page-conversion-title @conn hash (:block/title hash)))
+        "Titles with # are rejected")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-page-conversion-title @conn dup-block (:block/title dup-block)))
+        "Sibling page with the same title is rejected")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-tags-property @conn [(:db/id dup-block)] :logseq.class/Page))
+        "Intentional #Page tag path reuses the same uniqueness check")))
 
 (deftest validate-tags-property-deletion
   (let [conn (db-test/create-conn-with-blocks

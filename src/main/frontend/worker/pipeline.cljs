@@ -23,7 +23,8 @@
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.template :as outliner-template]))
+            [logseq.outliner.template :as outliner-template]
+            [logseq.outliner.validate :as outliner-validate]))
 
 (def ^:private rtc-tx-or-download-graph?
   (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
@@ -207,11 +208,35 @@
                nil))))
        tx-data))))
 
+(defn- block-title
+  [block]
+  (or (:block/raw-title block) (:block/title block)))
+
 (defn- remove-inline-page-class-from-title
   "Remove inline page tag from title"
   [block page-tag]
-  (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+  (-> (string/replace (or (block-title block) "") (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
       string/trim))
+
+(defn- descendant-block-page-tx
+  "Rewrite :block/page for non-page descendants after a parent type flip.
+  Skips descendants under an intermediate page so nested pages keep their own children."
+  [db root-id page-id]
+  (when page-id
+    (keep (fn [id]
+            (let [child (d/entity db id)]
+              (when-not (ldb/page? child)
+                (let [intermediate-page?
+                      (loop [parent (:block/parent child)]
+                        (cond
+                          (or (nil? parent) (= (:db/id parent) root-id)) false
+                          (ldb/page? parent) true
+                          :else (recur (:block/parent parent))))]
+                  (when (and (not intermediate-page?)
+                             (not= (:db/id (:block/page child)) page-id))
+                    {:db/id id
+                     :block/page page-id})))))
+          (ldb/get-block-full-children-ids db root-id))))
 
 (defn- fix-inline-built-in-page-classes
   [{:keys [db-after tx-data tx-meta]}]
@@ -260,10 +285,14 @@
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
-                   [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
-                     :block/tags :logseq.class/Page}
-                    [:db/retract id :block/page]]
+                   (let [page-title (or (block-title block-after) "")]
+                     (outliner-validate/validate-page-conversion-title db-after block-after page-title)
+                     (concat
+                      [{:db/id id
+                        :block/name (common-util/page-name-sanity-lc page-title)
+                        :block/tags :logseq.class/Page}
+                       [:db/retract id :block/page]]
+                      (descendant-block-page-tx db-after id id)))
 
                    ;; block->page
                    (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
@@ -271,6 +300,7 @@
                          block-parent (:block/parent block)
                          ;; remove inline #Page from title
                          page-title (remove-inline-page-class-from-title block page-tag)
+                         _ (outliner-validate/validate-page-conversion-title db-after block page-title)
                          ->page-tx (concat
                                     [{:db/id id
                                       :block/name (common-util/page-name-sanity-lc page-title)
@@ -278,7 +308,8 @@
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]]))
+                                       [:db/retract id :block/order]])
+                                    (descendant-block-page-tx db-after id id))
                          move-parent-to-library-tx (when (and (ldb/page? block-parent)
                                                               (nil? (:block/parent block-parent))
                                                               block-parent
@@ -299,8 +330,10 @@
                                            parent
                                            (recur (:block/parent parent)))))]
                      (when parent-page
-                       [[:db/retract id :block/name]
-                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+                       (concat
+                        [[:db/retract id :block/name]
+                         [:db/add id :block/page (:db/id parent-page)]]
+                        (descendant-block-page-tx db-after id (:db/id parent-page)))))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks

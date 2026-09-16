@@ -131,6 +131,30 @@
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
 
+(defn- page-tag-ident?
+  [tag]
+  (or (= :logseq.class/Page tag)
+      (= :logseq.class/Page (:db/ident tag))))
+
+(defn ^:api validate-page-conversion-title
+  "Validates a block title before block→page conversion.
+  Reused by the intentional #Page tag path, Library moves, and pipeline auto-#Page."
+  [db block title]
+  (let [title' (or title "")
+        node {:node block}]
+    (validate-page-title title' node)
+    (validate-page-title-characters title' node)
+    (let [page-tag (d/entity db :logseq.class/Page)
+          existing-tags (or (:block/tags block) [])
+          tags (cond-> (vec existing-tags)
+                 (and page-tag (not (some page-tag-ident? existing-tags)))
+                 (conj page-tag))
+          page-like {:db/id (:db/id block)
+                     :block/parent (:block/parent block)
+                     :block/tags tags
+                     :block/title title'}]
+      (validate-unique-for-page db title' page-like))))
+
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
   [new-title entity]
@@ -328,8 +352,7 @@
     (doseq [eid eids]
       (let [block (d/entity db eid)]
         (when (:block/parent block)
-          (validate-page-title (:block/title block) {:node block})
-          (validate-page-title-characters (:block/title block) {:node block})
+          (validate-page-conversion-title db block (or (:block/raw-title block) (:block/title block)))
 
           ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents

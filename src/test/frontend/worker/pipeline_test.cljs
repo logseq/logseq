@@ -1,5 +1,5 @@
 (ns frontend.worker.pipeline-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing thrown-with-msg?]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -18,6 +18,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest save-block-resolves-page-refs-in-worker-test
@@ -1234,3 +1235,201 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(defn- convert-block-to-page!
+  [conn block]
+  (ldb/transact! conn [{:db/id (:db/id block)
+                        :block/tags :logseq.class/Page}]))
+
+(defn- convert-page-to-block!
+  [conn page]
+  (ldb/transact! conn [[:db/retract (:db/id page) :block/tags :logseq.class/Page]]))
+
+(deftest toggle-page-and-block-rewrites-nested-descendants-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"
+                                            :build/children [{:block/title "grandchild"}]}]}]}])
+        page1 (db-test/find-page-by-title @conn "page1")
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        grandchild (db-test/find-block-by-content @conn "grandchild")]
+    (with-transact-pipeline
+      (fn []
+        (is (= (:db/id page1) (:db/id (:block/page child))))
+        (is (= (:db/id page1) (:db/id (:block/page grandchild))))
+        (convert-block-to-page! conn parent)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))]
+          (is (ldb/page? parent)
+              "Parent becomes a page")
+          (is (nil? (:block/page parent))
+              "Converted page no longer points at the original page")
+          (is (= (:db/id parent) (:db/id (:block/page child)))
+              "Direct child :block/page follows the new page")
+          (is (= (:db/id parent) (:db/id (:block/page grandchild)))
+              "Depth-2 descendant :block/page follows the new page")
+          (is (not (ldb/page? child)))
+          (is (not (ldb/page? grandchild)))
+          (convert-page-to-block! conn parent)
+          (let [parent (d/entity @conn (:db/id parent))
+                child (d/entity @conn (:db/id child))
+                grandchild (d/entity @conn (:db/id grandchild))
+                nearest-page (or (db-test/find-page-by-title @conn "page1") page1)]
+            (is (not (ldb/page? parent))
+                "Parent converts back to a block")
+            (is (= (:db/id nearest-page) (:db/id (:block/page parent)))
+                "Converted block points at the remaining page ancestor")
+            (is (= (:db/id nearest-page) (:db/id (:block/page child)))
+                "Direct child is re-pointed to the remaining page ancestor")
+            (is (= (:db/id nearest-page) (:db/id (:block/page grandchild)))
+                "Depth-2 descendant is re-pointed to the remaining page ancestor")))))))
+
+(deftest toggle-page-and-block-converts-title-only-block-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "title only parent"
+                          :build/children [{:block/title "title only child"
+                                            :build/children [{:block/title "title only grandchild"}]}]}]}])
+        parent (db-test/find-block-by-content @conn "title only parent")
+        child (db-test/find-block-by-content @conn "title only child")
+        grandchild (db-test/find-block-by-content @conn "title only grandchild")
+        page-tag (d/entity @conn :logseq.class/Page)
+        raw-title-datoms (fn [eid]
+                           (seq (d/datoms @conn :eavt eid :block/raw-title)))]
+    (with-transact-pipeline
+      (fn []
+        (is (nil? (raw-title-datoms (:db/id parent)))
+            "Fixture stores :block/title only, not :block/raw-title")
+        (convert-block-to-page! conn parent)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))]
+          (is (ldb/page? parent)
+              "Title-only block converts without NPE on missing :block/raw-title")
+          (is (= "title only parent" (:block/title parent)))
+          (is (= (:db/id parent) (:db/id (:block/page child))))
+          (is (= (:db/id parent) (:db/id (:block/page grandchild))))
+          (is (or (nil? (:block/raw-title parent))
+                  (= "title only parent" (:block/raw-title parent))))
+          (is (some? page-tag)))))))
+
+(deftest toggle-page-and-block-validates-library-move-title-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "ok library"
+                          :build/children [{:block/title "library child"
+                                            :build/children [{:block/title "library grandchild"}]}]}
+                         {:block/title "has/slash"}
+                         {:block/title "has#hash"}
+                         {:block/title "   "}
+                         {:block/title "ok library sibling"}]}])
+        library (ldb/get-library-page @conn)
+        ok (db-test/find-block-by-content @conn "ok library")
+        child (db-test/find-block-by-content @conn "library child")
+        grandchild (db-test/find-block-by-content @conn "library grandchild")
+        slash (db-test/find-block-by-content @conn "has/slash")
+        hash (db-test/find-block-by-content @conn "has#hash")
+        blank (db-test/find-block-by-content @conn "   ")
+        sibling (db-test/find-block-by-content @conn "ok library sibling")]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/move-blocks! conn [ok] library {:sibling? false})
+        (let [ok (d/entity @conn (:db/id ok))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))]
+          (is (ldb/page? ok)
+              "Valid Library move converts the block to a page")
+          (is (= (:db/id library) (:db/id (:block/parent ok))))
+          (is (= (:db/id ok) (:db/id (:block/page child)))
+              "Library conversion rewrites child :block/page to the new page")
+          (is (= (:db/id ok) (:db/id (:block/page grandchild)))
+              "Library conversion rewrites depth-2 descendant :block/page to the new page")
+          (is (not= (:db/id library) (:db/id (:block/page child)))))
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't.*/"
+             (outliner-core/move-blocks! conn [slash] library {:sibling? false}))
+            "Library move rejects / in the title")
+        (is (not (ldb/page? (d/entity @conn (:db/id slash))))
+            "Failed Library move does not convert the block")
+        (is (= (:db/id (db-test/find-page-by-title @conn "page1"))
+               (:db/id (:block/page (d/entity @conn (:db/id slash)))))
+            "Failed Library move rolls back the parent change")
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't.*#"
+             (outliner-core/move-blocks! conn [hash] library {:sibling? false})))
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't be blank"
+             (outliner-core/move-blocks! conn [blank] library {:sibling? false})))
+        (ldb/transact! conn [{:db/id (:db/id sibling)
+                              :block/title "ok library"}])
+        (is (thrown-with-msg?
+             js/Error
+             #"Duplicate page"
+             (outliner-core/move-blocks! conn [sibling] library {:sibling? false}))
+            "Library move rejects a title that already exists under Library")))))
+
+(deftest toggle-page-and-block-validates-auto-page-tag-title-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "ok auto"}
+                         {:block/title "has/slash"}
+                         {:block/title "has#hash"}
+                         {:block/title "   "}
+                         {:block/title "dup" :build/tags [:logseq.class/Page]}
+                         {:block/title "dup"}]}])
+        ok (db-test/find-block-by-content @conn "ok auto")
+        slash (db-test/find-block-by-content @conn "has/slash")
+        hash (db-test/find-block-by-content @conn "has#hash")
+        blank (db-test/find-block-by-content @conn "   ")
+        dup (->> (d/q '[:find [?b ...]
+                        :where
+                        [?b :block/title "dup"]
+                        [?b :block/page]]
+                      @conn)
+                 (map #(d/entity @conn %))
+                 (remove ldb/page?)
+                 first)]
+    (with-transact-pipeline
+      (fn []
+        (convert-block-to-page! conn ok)
+        (is (ldb/page? (d/entity @conn (:db/id ok))))
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't.*/"
+             (convert-block-to-page! conn slash)))
+        (is (not (ldb/page? (d/entity @conn (:db/id slash)))))
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't.*#"
+             (convert-block-to-page! conn hash)))
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't be blank"
+             (convert-block-to-page! conn blank)))
+        (is (thrown-with-msg?
+             js/Error
+             #"Duplicate page"
+             (convert-block-to-page! conn dup)))))))
+
+(deftest set-page-tag-validates-title-before-conversion-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "ok tag"}
+                         {:block/title "has/slash"}]}])
+        ok (db-test/find-block-by-content @conn "ok tag")
+        slash (db-test/find-block-by-content @conn "has/slash")]
+    (with-transact-pipeline
+      (fn []
+        (outliner-property/set-block-property! conn (:db/id ok) :block/tags :logseq.class/Page)
+        (is (ldb/page? (d/entity @conn (:db/id ok)))
+            "Intentional #Page tag still converts a valid block")
+        (is (thrown-with-msg?
+             js/Error
+             #"Page name can't.*/"
+             (outliner-property/set-block-property! conn (:db/id slash) :block/tags :logseq.class/Page)))))))
