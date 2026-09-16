@@ -737,39 +737,6 @@ let graph_backup_remove_result mode config graph src =
     Cli_result.error ~command:Command_id.Graph_backup_remove mode
       (Error.make Error.Backup_not_found ("backup not found: " ^ src))
 
-let unlink_graph_dir config graph repo =
-  let graphs_root = graphs_dir config in
-  let repo_name = Cli_primitive.string_of_repo repo in
-  let graph_name = Cli_primitive.string_of_graph graph in
-  let repo_path = Filename.concat graphs_root repo_name in
-  let graph_dir_name = Graph_dir.encode_graph_dir_name graph_name in
-  let graph_path = Filename.concat graphs_root graph_dir_name in
-  let source =
-    if Cli_unix.file_exists repo_path && Cli_unix.is_directory repo_path then
-      Some (repo_name, repo_path)
-    else if Cli_unix.file_exists graph_path && Cli_unix.is_directory graph_path
-    then Some (graph_dir_name, graph_path)
-    else None
-  in
-  match source with
-  | None -> None
-  | Some (dir_name, source_path) ->
-      let unlinked_root = Filename.concat graphs_root "Unlinked graphs" in
-      ensure_dir unlinked_root;
-      let target suffix =
-        let name =
-          if suffix = 0 then dir_name else dir_name ^ "-" ^ string_of_int suffix
-        in
-        Filename.concat unlinked_root name
-      in
-      let rec reserve suffix =
-        let path = target suffix in
-        if Cli_unix.file_exists path then reserve (suffix + 1) else path
-      in
-      let destination = reserve 0 in
-      Cli_unix.rename source_path destination;
-      Some destination
-
 let reserve_backup_target config graph base_name =
   let root = backup_root_path config graph in
   ensure_dir root;
@@ -925,15 +892,25 @@ let execute_graph_create_enable_sync mode graph repo opts config =
 let execute_graph_create mode graph repo opts config =
   let open Cli_effect in
   if opts.enable_sync then
-    execute_graph_create_enable_sync mode graph repo opts config
+    bind (Server_runtime.create_graph config repo) (function
+      | Error err ->
+          pure (Cli_result.error ~command:Command_id.Graph_create mode err)
+      | Ok generation ->
+          execute_graph_create_enable_sync mode graph repo opts
+            { config with graph_generation = Some generation })
   else
     match config.Cli_config.base_url with
     | None ->
-        ensure_dir (graph_path config graph);
-        pure
-          (Cli_result.ok ~command:Command_id.Graph_create mode
-             (Message
-                ("Created graph \"" ^ Cli_primitive.string_of_graph graph ^ "\"")))
+        bind (Server_runtime.create_graph config repo) (function
+          | Error err ->
+              pure (Cli_result.error ~command:Command_id.Graph_create mode err)
+          | Ok _ ->
+              pure
+                (Cli_result.ok ~command:Command_id.Graph_create mode
+                   (Message
+                      ("Created graph \""
+                      ^ Cli_primitive.string_of_graph graph
+                      ^ "\""))))
     | Some _ -> execute_graph_create_invoke mode graph repo config
 
 let execute_graph_export mode _graph repo opts config =
@@ -989,31 +966,41 @@ let execute_graph_import mode graph repo opts config =
           pure (Cli_result.error ~command:Command_id.Graph_import mode err)
       | Ok input_data ->
           let import_after_stop () =
-            bind
-              (Server_runtime.ensure_server config repo ~create_empty_db:false)
-              (function
+            bind (Server_runtime.create_graph config repo) (function
               | Error err ->
                   pure
                     (Cli_result.error ~command:Command_id.Graph_import mode err)
-              | Ok invoke_config ->
+              | Ok generation ->
+                  let config =
+                    { config with graph_generation = Some generation }
+                  in
                   bind
-                    (match opts.import_type with
-                    | Import_edn ->
-                        Transport.thread_api_import_edn invoke_config ~repo
-                          ~data:input_data
-                    | Import_sqlite ->
-                        Transport.thread_api_import_db_binary invoke_config
-                          ~repo ~data:input_data)
-                    (fun _ ->
-                      bind (Server_runtime.restart_server config repo) (function
-                        | Error err ->
-                            pure
-                              (Cli_result.error ~command:Command_id.Graph_import
-                                 mode err)
-                        | Ok _ ->
-                            pure
-                              (graph_import_message mode config graph opts
-                                 new_graph))))
+                    (Server_runtime.ensure_server config repo
+                       ~create_empty_db:false) (function
+                    | Error err ->
+                        pure
+                          (Cli_result.error ~command:Command_id.Graph_import
+                             mode err)
+                    | Ok invoke_config ->
+                        bind
+                          (match opts.import_type with
+                          | Import_edn ->
+                              Transport.thread_api_import_edn invoke_config
+                                ~repo ~data:input_data
+                          | Import_sqlite ->
+                              Transport.thread_api_import_db_binary
+                                invoke_config ~repo ~data:input_data)
+                          (fun _ ->
+                            bind (Server_runtime.restart_server config repo)
+                              (function
+                              | Error err ->
+                                  pure
+                                    (Cli_result.error
+                                       ~command:Command_id.Graph_import mode err)
+                              | Ok _ ->
+                                  pure
+                                    (graph_import_message mode config graph opts
+                                       new_graph)))))
           in
           bind (Server_runtime.stop_server config repo) (function
             | Error err when err.Error.code = Error.Server_not_found ->
@@ -1097,35 +1084,33 @@ let execute_graph_switch mode graph repo config =
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in
-  let graph_name = Cli_primitive.string_of_graph graph in
-  let removed_graph_result =
-    Cli_result.ok ~command:Command_id.Graph_remove mode
-      (Message ("Removed graph \"" ^ graph_name ^ "\""))
+  let on_removed () =
+    match Cli_config.read_config_file config.Cli_config.config_path with
+    | Error err -> pure (Error err)
+    | Ok raw_file_config ->
+        let selected =
+          Option.bind raw_file_config (fun value ->
+              Edn_util.get_string value "graph")
+        in
+        if selected = Some (Cli_primitive.string_of_graph graph) then
+          Cli_config.update_config
+            { config with raw_file_config }
+            (Edn_util.map_vec (Vec.singleton (kw "graph", Edn_util.nil)))
+          |> map (Result.map (fun _ -> ()))
+        else pure (Ok ())
   in
-  if not (graph_exists config graph) then
-    pure
-      (Cli_result.error ~command:Command_id.Graph_remove mode
-         (Error.make Error.Graph_not_exists "graph not exists"))
-  else
-    bind (Server_runtime.stop_server config repo) (function
-      | Error err when err.Error.code = Error.Server_not_found -> (
-          match unlink_graph_dir config graph repo with
-          | Some _ -> pure removed_graph_result
-          | None ->
-              pure
-                (Cli_result.error ~command:Command_id.Graph_remove mode
-                   (Error.make Error.Graph_not_removed "unable to remove graph"))
-          )
-      | Error err ->
-          pure (Cli_result.error ~command:Command_id.Graph_remove mode err)
-      | Ok _ -> (
-          match unlink_graph_dir config graph repo with
-          | Some _ -> pure removed_graph_result
-          | None ->
-              pure
-                (Cli_result.error ~command:Command_id.Graph_remove mode
-                   (Error.make Error.Graph_not_removed "unable to remove graph"))
-          ))
+  bind (Server_runtime.delete_graph config repo ~on_removed) (function
+    | Error err ->
+        pure (Cli_result.error ~command:Command_id.Graph_remove mode err)
+    | Ok false ->
+        pure
+          (Cli_result.error ~command:Command_id.Graph_remove mode
+             (Error.make Error.Graph_not_exists "graph not exists"))
+    | Ok true ->
+        pure
+          (Cli_result.ok ~command:Command_id.Graph_remove mode
+             (Message
+                ("Removed graph \"" ^ Cli_primitive.string_of_graph graph ^ "\""))))
 
 let execute_with_mode action config mode =
   let pure = Cli_effect.pure in

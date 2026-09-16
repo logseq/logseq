@@ -55,10 +55,6 @@ let cli_entrypoint_path () =
   let argv = Cli_platform.argv () in
   if Array.length argv > 1 then Some argv.(1) else None
 
-let parent_executable_path () =
-  let argv = Cli_platform.argv () in
-  if Array.length argv > 0 then argv.(0) else "node"
-
 let cli_dir_db_worker_script_paths () =
   match cli_entrypoint_path () with
   | Some entrypoint ->
@@ -87,9 +83,6 @@ let starts_with ~prefix value =
 let server_list_path config =
   Filename.concat (resolve_root_dir config) "server-list"
 
-let repo_identity repo = Cli_config.repo_to_graph repo
-let same_repo a b = repo_identity a = repo_identity b
-
 let process_alive pid =
   try
     Cli_unix.kill pid 0;
@@ -110,9 +103,6 @@ let http_success response =
 let http_health_response response =
   let status = Fetch.Response.status response in
   status = 200 || status = 503
-
-let server_publish_timeout_span = Time.span_of_ms 30_000L
-let server_ready_timeout_span = Time.span_of_ms 30_000L
 
 let parse_server_list_line line =
   match Vec.split_on_char ' ' (String.trim line) |> Vec.filter (( <> ) "") with
@@ -202,30 +192,6 @@ let list_servers config =
   Cli_effect.map (Vec.filter_map Fun.id)
     (Cli_effect.all (Vec.map discover_server entries))
 
-let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
-    ()
-  else (
-    mkdir_p (Filename.dirname path);
-    Cli_unix.mkdir path 0o755)
-
-let ensure_repo_dir config repo =
-  let path =
-    Filename.concat (graphs_dir config) (Graph_dir.graph_dir_name_of_repo repo)
-  in
-  try
-    mkdir_p path;
-    if not (Cli_unix.is_directory path) then
-      Stdlib.Error
-        (Error.make Error.Root_dir_permission
-           ("graph-dir is not a directory: " ^ path))
-    else Stdlib.Ok path
-  with exn ->
-    Stdlib.Error
-      (Error.make Error.Root_dir_permission
-         ("graph-dir is not readable/writable: " ^ path ^ " ("
-        ^ Printexc.to_string exn ^ ")"))
-
 let script_candidates config =
   let project_dir = config.Cli_config.project_dir in
   let project_candidates =
@@ -261,76 +227,17 @@ let resolve_script_path config =
            ("db-worker script is missing. Checked paths: "
            ^ Vec.string_concat ", " candidates))
 
-let env_with_node_runtime () =
-  let without_key key =
-    Cli_unix.environment () |> Vec.of_array
-    |> Vec.filter (fun entry ->
-        let prefix = key ^ "=" in
-        not (starts_with ~prefix entry))
+let lifecycle_error (err : Cli_unix.lifecycle_error) =
+  let code =
+    match err.code with
+    | "graph-not-exists" -> Error.Graph_not_exists
+    | "server-not-found" -> Error.Server_not_found
+    | "server-owned-by-other" -> Error.Server_owned_by_other
+    | "server-start-failed" -> Error.Server_start_failed
+    | "server-stop-timeout" -> Error.Server_stop_timeout
+    | _ -> Error.Server_cleanup_failed
   in
-  Vec.push_front (without_key "ELECTRON_RUN_AS_NODE") "ELECTRON_RUN_AS_NODE=1"
-  |> Vec.to_array
-
-let db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
-    ~create_empty_db =
-  let repo = Cli_primitive.string_of_repo repo in
-  let args =
-    Vec.of_array
-      [|
-        executable;
-        script;
-        "--repo";
-        repo;
-        "--root-dir";
-        root_dir;
-        "--owner-source";
-        owner_source;
-      |]
-  in
-  if create_empty_db then Vec.push_back args "--create-empty-db" else args
-
-let shell_quote value =
-  let rec needs_quote i =
-    i < String.length value
-    &&
-    match value.[i] with
-    | ' ' | '\t' | '\n' | '\'' | '"' | '\\' -> true
-    | _ -> needs_quote (i + 1)
-  in
-  if value <> "" && not (needs_quote 0) then value
-  else "'" ^ Vec.string_concat "'\\''" (Vec.split_on_char '\'' value) ^ "'"
-
-let db_worker_command_line ~script ~root_dir ~repo ~owner_source
-    ~create_empty_db =
-  let executable = parent_executable_path () in
-  Vec.push_front
-    (db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
-       ~create_empty_db)
-    "ELECTRON_RUN_AS_NODE=1"
-  |> Vec.map shell_quote |> Vec.string_concat " "
-
-let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
-    =
-  let devnull =
-    Cli_unix.openfile "/dev/null" (Vec.singleton Cli_unix.O_RDWR) 0
-  in
-  Fun.protect
-    ~finally:(fun () -> Cli_unix.close devnull)
-    (fun () ->
-      let executable = parent_executable_path () in
-      let argv =
-        db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
-          ~create_empty_db
-        |> Vec.to_array
-      in
-      ignore
-        (Cli_unix.create_process_env executable argv (env_with_node_runtime ())
-           devnull devnull devnull))
-
-let find_repo_server config repo =
-  Cli_effect.map
-    (Vec.find_opt (fun (server : server) -> same_repo server.repo repo))
-    (list_servers config)
+  Error.make code err.message
 
 let invoke_config_of_server config server =
   {
@@ -339,133 +246,33 @@ let invoke_config_of_server config server =
     profile_session = config.profile_session;
   }
 
-let wait_until_effect ?(timeout_span = Time.span_of_ms 8_000L)
-    ?(interval_span = Time.span_of_ms 50L) predicate =
-  let open Cli_effect in
-  let deadline =
-    Option.value
-      (Time.add_span (Time.now ()) timeout_span)
-      ~default:Time.max_time
-  in
-  let rec loop () =
-    bind (predicate ()) (function
-      | Some _ as result -> pure result
-      | None ->
-          if Time.compare_time (Time.now ()) deadline >= 0 then pure None
-          else bind (sleep interval_span) (fun () -> loop ()))
-  in
-  loop ()
-
-let wait_for_lock path =
-  wait_until_effect (fun () ->
-      Cli_effect.pure (if Cli_unix.file_exists path then Some () else None))
-
-let wait_for_ready config repo =
-  wait_until_effect ~timeout_span:server_ready_timeout_span (fun () ->
-      Cli_effect.map
-        (function
-          | Some ({ status = Ready; _ } as server) -> Some server | _ -> None)
-        (find_repo_server config repo))
-
-let read_lock_pid path =
-  if not (Cli_unix.file_exists path) then None
-  else
-    try
-      Cli_unix.read_text_file path |> Json_util.value_of_json_string
-      |> fun raw -> Edn_util.get_int raw "pid"
-    with _ -> None
-
-let live_lock path =
-  match read_lock_pid path with Some pid -> process_alive pid | None -> false
-
-let owner_manageable = function
-  | Cli_primitive.Cli | Cli_primitive.Unknown -> true
-  | _ -> false
-
-let start_result_of_server repo (server : server) =
-  { repo; owner_source = server.owner_source; owned = server.owned }
-
-let wait_for_published_ready time config repo =
-  let open Cli_effect in
-  bind
-    (time "server.wait-publish" (fun () ->
-         wait_until_effect ~timeout_span:server_publish_timeout_span (fun () ->
-             find_repo_server config repo)))
-    (function
-      | None ->
-          pure
-            (Stdlib.Error
-               (Error.make Error.Server_start_failed
-                  "db-worker-node failed to publish health"))
-      | Some _ ->
-          bind
-            (time "server.wait-ready" (fun () -> wait_for_ready config repo))
-            (function
-              | Some server ->
-                  pure (Stdlib.Ok (start_result_of_server repo server))
-              | None ->
-                  pure
-                    (Stdlib.Error
-                       (Error.make Error.Server_start_failed
-                          "db-worker-node failed to start"))))
-
-let start_server_unprofiled config repo ~create_empty_db =
-  let open Cli_effect in
-  let time stage f =
-    Profile_types.time config.Cli_config.profile_session stage f
-  in
-  bind (find_repo_server config repo) (function
-    | Some ({ status = Ready; _ } as server) ->
-        pure (Stdlib.Ok (start_result_of_server repo server))
-    | Some _ -> wait_for_published_ready time config repo
-    | None when Option.is_some config.Cli_config.base_url ->
-        pure
-          (Stdlib.Ok { repo; owner_source = config.owner_source; owned = false })
-    | None -> (
-        match ensure_repo_dir config repo with
-        | Stdlib.Error err -> pure (Stdlib.Error err)
-        | Stdlib.Ok _ -> (
-            let lock = lock_path ~root_dir:(resolve_root_dir config) repo in
-            if live_lock lock then wait_for_published_ready time config repo
-            else
-              match resolve_script_path config with
-              | Stdlib.Error err -> pure (Stdlib.Error err)
-              | Stdlib.Ok script -> (
-                  try
-                    bind
-                      (time "server.spawn-daemon" (fun () ->
-                           spawn_server_process ~script
-                             ~root_dir:(resolve_root_dir config) ~repo
-                             ~owner_source:"cli" ~create_empty_db;
-                           pure ()))
-                      (fun () ->
-                        bind
-                          (time "server.wait-lock" (fun () ->
-                               wait_for_lock lock))
-                          (function
-                            | None ->
-                                pure
-                                  (Stdlib.Error
-                                     (Error.make
-                                        Error.Server_start_timeout_orphan
-                                        ("db-worker-node failed to start. \
-                                          Command: "
-                                        ^ db_worker_command_line ~script
-                                            ~root_dir:(resolve_root_dir config)
-                                            ~repo ~owner_source:"cli"
-                                            ~create_empty_db)))
-                            | Some () ->
-                                wait_for_published_ready time config repo))
-                  with exn ->
-                    pure
-                      (Stdlib.Error
-                         (Error.make Error.Server_start_failed
-                            ("failed to spawn db-worker-node: "
-                           ^ Printexc.to_string exn)))))))
+let ensure_runtime config repo ~create_empty_db =
+  match resolve_script_path config with
+  | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
+  | Ok script ->
+      Cli_unix.start_graph_runtime ~root_dir:(resolve_root_dir config)
+        ~repo:(Cli_primitive.string_of_repo repo)
+        ~script ~owner_source:"cli" ~create_empty_db
+        ~generation:config.Cli_config.graph_generation
+      |> Cli_effect.map (function
+        | Stdlib.Error err -> Stdlib.Error (lifecycle_error err)
+        | Ok body -> Ok (server_of_health ~fallback_port:0 body))
 
 let start_server config repo ~create_empty_db =
-  Profile_types.time config.Cli_config.profile_session "server.ensure-started"
-    (fun () -> start_server_unprofiled config repo ~create_empty_db)
+  if Option.is_some config.Cli_config.base_url then
+    Cli_effect.pure
+      (Ok { repo; owner_source = config.owner_source; owned = false })
+  else
+    Profile_types.time config.Cli_config.profile_session "server.ensure-started"
+      (fun () ->
+        ensure_runtime config repo ~create_empty_db
+        |> Cli_effect.map
+             (Result.map (fun (server : server) ->
+                  {
+                    repo;
+                    owner_source = server.owner_source;
+                    owned = server.owned;
+                  })))
 
 let ensure_server config repo ~create_empty_db =
   match config.Cli_config.base_url with
@@ -478,30 +285,43 @@ let ensure_server config repo ~create_empty_db =
              profile_session = config.profile_session;
            })
   | None ->
-      let open Cli_effect in
-      bind (find_repo_server config repo) (function
-        | Some ({ status = Ready; _ } as server) ->
-            pure (Ok (invoke_config_of_server config server))
-        | Some _ ->
-            bind (wait_for_ready config repo) (function
-              | Some server -> pure (Ok (invoke_config_of_server config server))
-              | None ->
-                  pure
-                    (Stdlib.Error
-                       (Error.make Error.Server_start_failed
-                          "db-worker-node failed to start")))
-        | None ->
-            bind (start_server config repo ~create_empty_db) (function
-              | Stdlib.Error err -> pure (Stdlib.Error err)
-              | Stdlib.Ok _ ->
-                  bind (wait_for_ready config repo) (function
-                    | Some server ->
-                        pure (Ok (invoke_config_of_server config server))
-                    | None ->
-                        pure
-                          (Stdlib.Error
-                             (Error.make Error.Server_start_failed
-                                "db-worker-node failed to publish health")))))
+      ensure_runtime config repo ~create_empty_db
+      |> Cli_effect.map (Result.map (invoke_config_of_server config))
+
+let stop_server config repo =
+  if Option.is_some config.Cli_config.base_url then
+    Cli_effect.pure (Ok { repo })
+  else
+    Cli_unix.stop_graph_runtime ~root_dir:(resolve_root_dir config)
+      ~repo:(Cli_primitive.string_of_repo repo)
+      ~owner_source:"cli"
+    |> Cli_effect.map (function
+      | Stdlib.Error err -> Stdlib.Error (lifecycle_error err)
+      | Ok () -> Ok { repo })
+
+let delete_graph config repo ~on_removed =
+  Cli_unix.delete_graph ~root_dir:(resolve_root_dir config)
+    ~repo:(Cli_primitive.string_of_repo repo) ~on_removed:(fun () ->
+      on_removed ()
+      |> Cli_effect.map
+           (Result.map_error (fun (err : Error.t) ->
+                {
+                  Cli_unix.code = Error.code_to_string err.code;
+                  message = err.message;
+                })))
+  |> Cli_effect.map (Result.map_error lifecycle_error)
+
+let create_graph config repo =
+  Cli_unix.create_graph ~root_dir:(resolve_root_dir config)
+    ~repo:(Cli_primitive.string_of_repo repo)
+  |> Cli_effect.map (Result.map_error lifecycle_error)
+
+let restart_server config repo =
+  stop_server config repo >>= function
+  | Ok _ -> start_server config repo ~create_empty_db:false
+  | Stdlib.Error err when err.code = Error.Server_not_found ->
+      start_server config repo ~create_empty_db:false
+  | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
 let shutdown_server server =
   Cli_effect.catch
@@ -513,61 +333,6 @@ let shutdown_server server =
           ~body:"{}"
           ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure false)
-
-let stop_server config repo =
-  let open Cli_effect in
-  bind (find_repo_server config repo) (function
-    | None when Option.is_some config.Cli_config.base_url ->
-        pure (Stdlib.Ok { repo })
-    | None ->
-        pure
-          (Stdlib.Error
-             (Error.make Error.Server_not_found "server is not running"))
-    | Some server ->
-        if not (owner_manageable server.owner_source) then
-          pure
-            (Stdlib.Error
-               (Error.make Error.Server_owned_by_other
-                  "server is owned by another process"))
-        else
-          let shutdown_timeout_span = Time.span_of_ms 5_000L in
-          let shutdown_interval_span = Time.span_of_ms 200L in
-          let kill_timeout_span = Time.span_of_ms 1_000L in
-          let kill_interval_span = Time.span_of_ms 100L in
-          bind (shutdown_server server) (fun _ ->
-              bind
-                (wait_until_effect ~timeout_span:shutdown_timeout_span
-                   ~interval_span:shutdown_interval_span (fun () ->
-                     map
-                       (function None -> Some () | Some _ -> None)
-                       (find_repo_server config repo)))
-                (function
-                  | Some () -> pure (Stdlib.Ok { repo })
-                  | None ->
-                      (try
-                         if process_alive server.pid then
-                           Cli_unix.kill server.pid Sys.sigterm
-                       with _ -> ());
-                      bind
-                        (wait_until_effect ~timeout_span:kill_timeout_span
-                           ~interval_span:kill_interval_span (fun () ->
-                             map
-                               (function None -> Some () | Some _ -> None)
-                               (find_repo_server config repo)))
-                        (function
-                          | Some () -> pure (Stdlib.Ok { repo })
-                          | None ->
-                              pure
-                                (Stdlib.Error
-                                   (Error.make Error.Server_stop_timeout
-                                      "timed out stopping server"))))))
-
-let restart_server config repo =
-  stop_server config repo >>= function
-  | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
-  | Stdlib.Error err when err.code = Error.Server_not_found ->
-      start_server config repo ~create_empty_db:false
-  | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"

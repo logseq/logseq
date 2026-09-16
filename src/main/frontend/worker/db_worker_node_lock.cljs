@@ -1,6 +1,7 @@
 (ns frontend.worker.db-worker-node-lock
   "Lock file helpers for db-worker-node."
-  (:require ["fs" :as fs]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
@@ -90,12 +91,13 @@
     (fs/unlinkSync path)))
 
 (defn create-lock!
-  [{:keys [root-dir repo owner-source]}]
+  [{:keys [root-dir storage repo owner-source ticket generation]}]
   (p/create
    (fn [resolve reject]
      (try
        (let [root-dir (resolve-root-dir root-dir)
-             path (lock-path root-dir repo)
+             storage (or storage (lifecycle/resolveStorage root-dir (graphs-dir root-dir)))
+             path (node-path/join (repo-dir (.-graphsDir ^js storage) repo) "db-worker.lock")
              existing (read-lock path)]
          (when (and existing (contains? #{:alive :no-permission} (pid-status (:pid existing))))
            (throw (ex-info "graph already locked" {:code :repo-locked :lock existing})))
@@ -104,6 +106,10 @@
          (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
          (let [fd (fs/openSync path "wx")
                lock {:repo repo
+                     :root-dir root-dir
+                     :storage (js->clj storage :keywordize-keys true)
+                     :ticket ticket
+                     :generation generation
                      :pid (.-pid js/process)
                      :lock-id (str (random-uuid))
                      :owner-source (normalize-owner-source owner-source)}]
@@ -114,28 +120,6 @@
            (resolve lock)))
        (catch :default e
          (log/error :db-worker-node-lock-create-failed e)
-         (reject e))))))
-
-(defn update-lock!
-  [path lock]
-  (p/create
-   (fn [resolve reject]
-     (try
-       (let [existing (read-lock path)
-             lock' (if existing
-                     {:repo (:repo existing)
-                      :pid (:pid existing)
-                      :lock-id (or (:lock-id existing) (:lock-id lock))
-                      :owner-source (normalize-owner-source (:owner-source existing))}
-                     {:repo (:repo lock)
-                      :pid (:pid lock)
-                      :lock-id (:lock-id lock)
-                      :owner-source (normalize-owner-source (:owner-source lock))})]
-         (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
-         (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
-         (resolve lock'))
-       (catch :default e
-         (log/error :db-worker-node-lock-update-failed e)
          (reject e))))))
 
 (defn assert-lock-owner!
@@ -183,11 +167,14 @@
       lock)))
 
 (defn ensure-lock!
-  [{:keys [root-dir repo owner-source]}]
+  [{:keys [root-dir storage repo owner-source ticket generation]}]
   (let [root-dir (resolve-root-dir root-dir)
-        path (lock-path root-dir repo)]
-    (p/let [lock (create-lock! {:root-dir root-dir
-                                :repo repo
-                                :owner-source owner-source})]
+        storage (or storage (lifecycle/resolveStorage root-dir (graphs-dir root-dir)))
+        path (node-path/join (repo-dir (.-graphsDir ^js storage) repo) "db-worker.lock")]
+    (p/let [lock (create-lock! {:root-dir root-dir :storage storage
+                              :repo repo
+                              :ticket ticket
+                              :generation generation
+                              :owner-source owner-source})]
       {:path path
        :lock lock})))
