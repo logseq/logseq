@@ -125,7 +125,7 @@
   (or (not= attr :block/refs)
       replace-id-refs?))
 
-(declare block-refs-count)
+(declare block-refs-count block-positioned-properties-map)
 
 (defn renderer-display-title
   "Return the renderer-facing block title with id refs resolved."
@@ -201,7 +201,13 @@
            (d/datoms db :eavt entity-id))]
       (cond-> (assoc block
                      :block.temp/refs-count
-                     (block-refs-count db entity-id))
+                     (block-refs-count db entity-id)
+                     :block.temp/positioned-properties
+                     (block-positioned-properties-map db {:db/id entity-id}))
+        (property-entity? db entity-id)
+        (assoc :property/closed-values
+               (:property/closed-values
+                (property-handler/display-property-map db entity-id)))
         (string? raw-title)
         (assoc :block/raw-title raw-title)
 
@@ -219,15 +225,18 @@
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
   (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
-            *attr-schema-cache* (volatile! {})]
+            *attr-schema-cache* (volatile! {})
+            property-handler/*display-property-cache* (volatile! {})
+            property-handler/*block-class-properties-cache* (volatile! {})
+            property-handler/*positioned-property-meta-cache* (volatile! {})]
     (let [requested
           (keep (fn [block-uuid]
                   (when-let [eid (:e (first (d/datoms db :avet :block/uuid block-uuid)))]
                     {:db/id eid :block/uuid block-uuid}))
                 block-uuids)
-        ;; Only the requested rows. Property definitions and :block/refs
-        ;; stay as inlined identities on the row; expanding them into
-        ;; sibling snapshots made a 25-row table window take seconds.
+        ;; Only requested rows become canonical snapshots. Positioned definitions
+        ;; are shared within this batch; references remain shallow identities.
+        ;; Expanding references into sibling snapshots made table windows slow.
         ;; Do not d/entity here: entity-plus ILookup on a Movie walks title/refs.
         groups (into {}
                      (map (fn [{:keys [block/uuid]}]
@@ -366,12 +375,10 @@
 
 (defn- block-positioned-properties-map
   [db block]
-  (->> property-handler/render-property-positions
-       (keep (fn [position]
-               (let [properties (property-handler/block-positioned-properties db (:db/id block) position)]
-                 (when (seq properties)
-                   [position properties]))))
-       (into {})))
+  (into {}
+        (map (fn [[position idents]]
+               [position (mapv #(property-handler/display-property-map db %) idents)]))
+        (property-handler/block-positioned-property-idents-by-position db (:db/id block))))
 
 (defn block-reactions
   [db block-id]
