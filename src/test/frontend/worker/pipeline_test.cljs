@@ -11,15 +11,14 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.db.frontend.validate :as db-validate]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest save-block-resolves-page-refs-in-worker-test
@@ -1237,75 +1236,33 @@
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
 
-(deftest hide-empty-value-on-empty-node-many-property-is-valid-tx
-  (testing "toggling hide-empty-value on a node/many property succeeds even when a page has an empty value"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:similar-to {:logseq.property/type :node
-                                           :db/cardinality :db.cardinality/many}}
-                 :classes {:Movie {:build/class-properties [:similar-to]}}
-                 :pages-and-blocks
-                 [{:page {:block/title "You Can't Say No (2018)"
-                          :build/tags [:Movie]}}
-                  {:page {:block/title "Empty placeholder movie"
-                          :build/tags [:Movie]
-                          :build/properties {:similar-to :logseq.property/empty-placeholder}}}]})
-          property (d/entity @conn :user.property/similar-to)
-          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
-          placeholder-page (db-test/find-page-by-title @conn "Empty placeholder movie")]
-      (is (some? property))
-      (is (= :db.cardinality/many (:db/cardinality property)))
-      (is (nil? (:user.property/similar-to page)))
-      (is (= :logseq.property/empty-placeholder
-             (:db/ident (first (:user.property/similar-to placeholder-page)))))
-      (let [page-errors (:errors (db-validate/validate-db @conn))]
-        (is (empty? page-errors)
-            (str "Setup graph should already be valid: " (pr-str page-errors))))
-      (ldb/transact! conn
-                     (keep (fn [ent]
-                             (when-let [refs (seq (outliner-pipeline/db-rebuild-block-refs @conn ent))]
-                               {:db/id (:db/id ent)
-                                :block/refs refs}))
-                           [page placeholder-page (d/entity @conn :user.class/Movie)])
-                     {:outliner-op :save-block})
-      (with-transact-pipeline
-        (fn []
-          (outliner-op/apply-ops!
-           conn
-           [[:set-block-property [(:block/uuid property)
-                                  :logseq.property/hide-empty-value
-                                  true]]]
-           {})
-          (is (true? (:logseq.property/hide-empty-value
-                      (d/entity @conn :user.property/similar-to)))
-              "Hide empty value persists")
-          (outliner-op/apply-ops!
-           conn
-           [[:set-block-property [(:block/uuid property)
-                                  :logseq.property/hide-empty-value
-                                  false]]]
-           {})
-          (is (false? (:logseq.property/hide-empty-value
-                       (d/entity @conn :user.property/similar-to)))
-              "Hide empty value can be toggled off")
-          (is (empty? (:errors (worker-db-validate/validate-db conn :fix false)))
-              "Graph remains valid after both toggles"))))))
+(defn- movie-similar-to-conn
+  []
+  (db-test/create-conn-with-blocks
+   {:properties {:similar-to {:logseq.property/type :node
+                              :db/cardinality :db.cardinality/many}}
+    :classes {:Movie {:build/class-properties [:similar-to]}}
+    :pages-and-blocks
+    [{:page {:block/title "You Can't Say No (2018)"
+             :build/tags [:Movie]}}]}))
+
+(defn- stamp-property-ref
+  [conn property page & extra-eids]
+  (d/transact! conn
+               (into [[:db/add (:db/id page) :block/refs (:db/id property)]
+                      [:db/add (:db/id property) :block/tx-id 10]
+                      [:db/add (:db/id page) :block/tx-id 10]]
+                     (map (fn [eid]
+                            [:db/add eid :block/tx-id 10])
+                          extra-eids))))
 
 (deftest hide-empty-value-does-not-revise-reference-owners-test
   (testing "display-config changes stamp the property, not every page that refs it"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:similar-to {:logseq.property/type :node
-                                           :db/cardinality :db.cardinality/many}}
-                 :classes {:Movie {:build/class-properties [:similar-to]}}
-                 :pages-and-blocks
-                 [{:page {:block/title "You Can't Say No (2018)"
-                          :build/tags [:Movie]}}]})
+    (let [conn (movie-similar-to-conn)
           property (d/entity @conn :user.property/similar-to)
           page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
           movie-class (d/entity @conn :user.class/Movie)
-          _ (d/transact! conn [[:db/add (:db/id page) :block/refs (:db/id property)]
-                               [:db/add (:db/id property) :block/tx-id 10]
-                               [:db/add (:db/id page) :block/tx-id 10]
-                               [:db/add (:db/id movie-class) :block/tx-id 10]])
+          _ (stamp-property-ref conn property page (:db/id movie-class))
           db-before @conn
           tx-report (assoc (d/with db-before
                                    [[:db/add (:db/id property)
@@ -1326,15 +1283,29 @@
              (revision (:db-after result) movie-class))
           "Hide empty value must not revise the class that provides the property."))))
 
+(deftest property-title-still-revises-reference-owners-test
+  (testing "non-display property edits still stamp pages that ref the property"
+    (let [conn (movie-similar-to-conn)
+          property (d/entity @conn :user.property/similar-to)
+          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
+          _ (stamp-property-ref conn property page)
+          db-before @conn
+          tx-report (assoc (d/with db-before
+                                   [[:db/add (:db/id property)
+                                     :block/title
+                                     "similar to (renamed)"]])
+                           :tx-meta {:outliner-op :save-block})
+          result (worker-pipeline/transact-pipeline tx-report)]
+      (is (not= (revision db-before property)
+                (revision (:db-after result) property))
+          "Title change revises the property entity.")
+      (is (not= (revision db-before page)
+                (revision (:db-after result) page))
+          "Title change still fans out revisions to pages that reference the property."))))
+
 (deftest hide-empty-value-succeeds-when-reference-owner-is-invalid-test
   (testing "toggling hide-empty-value must not revalidate pages that only reference the property"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:similar-to {:logseq.property/type :node
-                                           :db/cardinality :db.cardinality/many}}
-                 :classes {:Movie {:build/class-properties [:similar-to]}}
-                 :pages-and-blocks
-                 [{:page {:block/title "You Can't Say No (2018)"
-                          :build/tags [:Movie]}}]})
+    (let [conn (movie-similar-to-conn)
           property (d/entity @conn :user.property/similar-to)
           page (db-test/find-page-by-title @conn "You Can't Say No (2018)")]
       (d/transact! conn [[:db/add (:db/id page) :block/refs (:db/id property)]

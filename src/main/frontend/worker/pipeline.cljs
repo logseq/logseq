@@ -568,27 +568,19 @@
     :logseq.property/view-context
     :logseq.property/public?})
 
-(defn- timestamp-only-datom?
+(defn- local-revision-datom?
+  "Datoms that should stamp :block/tx-id on the changed entity itself."
   [datom]
-  (contains? timestamp-only-attrs (:a datom)))
-
-(defn- property-display-config-datom?
-  [db datom]
-  (and (contains? property-display-config-attrs (:a datom))
-       (ldb/property? (d/entity db (:e datom)))))
+  (not (contains? timestamp-only-attrs (:a datom))))
 
 (defn- projected-reference-content-datom?
   "Datoms whose change should revise reference owners (pages/blocks that ref
   this entity). Timestamp-only and property-entity display-config changes must not.
   Page :logseq.property/hide? remains content because it is also the hidden-page flag."
   [db datom]
-  (not (or (timestamp-only-datom? datom)
-           (property-display-config-datom? db datom))))
-
-(defn- local-revision-datom?
-  "Datoms that should stamp :block/tx-id on the changed entity itself."
-  [datom]
-  (not (timestamp-only-datom? datom)))
+  (and (local-revision-datom? datom)
+       (not (and (contains? property-display-config-attrs (:a datom))
+                 (ldb/property? (d/entity db (:e datom)))))))
 
 (defn- reference-attrs
   [db]
