@@ -18,36 +18,36 @@
               :viewport-height 240
               :item-top 150
               :item-height 30}
-             (ui-handler/auto-complete-scroll-geometry container element)))))
+             (#'ui-handler/auto-complete-scroll-geometry container element)))))
   (testing "returns nil when container or element is missing"
-    (is (nil? (ui-handler/auto-complete-scroll-geometry nil #js {})))
-    (is (nil? (ui-handler/auto-complete-scroll-geometry #js {} nil)))))
+    (is (nil? (#'ui-handler/auto-complete-scroll-geometry nil #js {})))
+    (is (nil? (#'ui-handler/auto-complete-scroll-geometry #js {} nil)))))
 
 (deftest auto-complete-keep-visible-scroll-top-test
   (testing "scrolls down when the focused item is below the viewport"
     (is (= 170
-           (ui-handler/auto-complete-keep-visible-scroll-top
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 0
              :viewport-height 200
              :item-top 350
              :item-height 20}))))
   (testing "scrolls up when the focused item is above the viewport"
     (is (= 40
-           (ui-handler/auto-complete-keep-visible-scroll-top
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 200
              :viewport-height 200
              :item-top 40
              :item-height 20}))))
   (testing "keeps scroll-top when the focused item is already visible"
     (is (= 100
-           (ui-handler/auto-complete-keep-visible-scroll-top
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 100
              :viewport-height 200
              :item-top 140
              :item-height 20}))))
   (testing "keeps a partially clipped item fully visible at the bottom edge"
     (is (= 20
-           (ui-handler/auto-complete-keep-visible-scroll-top
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 0
              :viewport-height 200
              :item-top 190

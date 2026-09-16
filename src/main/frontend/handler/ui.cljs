@@ -184,7 +184,7 @@
          (apply concat)))
       matched)))
 
-(defn auto-complete-scroll-geometry
+(defn- auto-complete-scroll-geometry
   "Builds focused-item geometry from `container` and `element` DOM nodes.
 
   `item-top` is in container scroll coordinates so callers can compute a
@@ -199,16 +199,12 @@
        :item-top (+ scroll-top (- (.-top element-rect) (.-top container-rect)))
        :item-height (.-height element-rect)})))
 
-(defn auto-complete-keep-visible-scroll-top
+(defn- auto-complete-keep-visible-scroll-top
   "Returns a `scrollTop` that keeps the focused item inside the viewport."
-  [{:keys [scroll-top viewport-height item-top item-height]
-    :or {scroll-top 0}}]
+  [{:keys [scroll-top viewport-height item-top item-height]}]
   (let [item-bottom (+ item-top item-height)
         viewport-bottom (+ scroll-top viewport-height)]
     (cond
-      (or (nil? item-top) (nil? viewport-height) (nil? item-height))
-      scroll-top
-
       (< item-top scroll-top)
       (max 0 item-top)
 
