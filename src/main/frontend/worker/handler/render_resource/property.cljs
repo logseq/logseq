@@ -62,9 +62,11 @@
         [normalized-value value-uuids] (normalize-entity-value value)]
     (when-not (keyword? property-ident)
       (common/fail! "Renderer property has no ident" {:property-uuid property-uuid}))
-    [{:property-uuid property-uuid
-      :property-ident property-ident
-      :value normalized-value}
+    [(cond-> {:property-uuid property-uuid
+              :property-ident property-ident
+              :value normalized-value}
+       (seq closed-value-uuids)
+       (assoc :closed-value-uuids closed-value-uuids))
      (into #{[:entity property-uuid]}
            (map (fn [block-uuid] [:entity block-uuid]))
            (concat value-uuids closed-value-uuids))]))

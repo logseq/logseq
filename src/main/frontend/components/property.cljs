@@ -638,6 +638,27 @@
               :else item))]
     (restore value)))
 
+(defn- restore-closed-values
+  "Page property rows load the definition through use-block. Canonical
+  snapshots omit :property/closed-values, so select-type? fell through to
+  property-normal-block-value and mounted a 0-width nested ls-block."
+  [property closed-value-uuids closed-value-entities]
+  (cond
+    (seq (:property/closed-values property))
+    property
+
+    (seq closed-value-entities)
+    (assoc property :property/closed-values (vec closed-value-entities))
+
+    (seq closed-value-uuids)
+    (assoc property :property/closed-values
+           (mapv (fn [block-uuid]
+                   {:block/uuid block-uuid})
+                 closed-value-uuids))
+
+    :else
+    property))
+
 (hsx/defc class-schema-property-value
   [property description-property-uuid opts]
   (let [description-property (db-hooks/use-block description-property-uuid)]
@@ -645,12 +666,15 @@
       (pv/property-value property description-property opts))))
 
 (hsx/defc property-cp
-  [block {:keys [property-uuid property-ident value]} {:keys [sortable-opts description-property-uuid] :as opts}]
+  [block {:keys [property-uuid property-ident value closed-value-uuids]} {:keys [sortable-opts description-property-uuid] :as opts}]
   (let [property (db-hooks/use-block property-uuid)
+        closed-value-uuids (vec closed-value-uuids)
         value-uuids (->> (entity-value-uuids value) distinct (sort-by str) vec)
+        closed-value-entities (db-hooks/use-blocks closed-value-uuids)
         value-entities (db-hooks/use-blocks value-uuids)
         value-ready? (or (empty? value-uuids) (some? value-entities))
-        entities-by-uuid (zipmap value-uuids value-entities)]
+        entities-by-uuid (zipmap value-uuids value-entities)
+        property (restore-closed-values property closed-value-uuids closed-value-entities)]
     (when (and (keyword? property-ident) property)
       (let [value (when value-ready?
                     (restore-resource-entity-values value entities-by-uuid))

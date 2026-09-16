@@ -492,10 +492,40 @@
           (= tag-ident (:db/ident (d/entity db (:v datom)))))
         (d/datoms db :eavt (:db/id entity) :block/tags)))
 
+(def ^:dynamic *block-class-properties-cache* nil)
+(def ^:dynamic *positioned-property-meta-cache* nil)
+
+(declare render-property-position)
+
+(defn- positioned-property-meta
+  [db property-id]
+  (let [cache *positioned-property-meta-cache*]
+    (if-let [hit (and cache (get @cache property-id))]
+      hit
+      (let [property (d/entity db property-id)
+            meta (when property
+                   {:property property
+                    :position (render-property-position db property)
+                    :public? (not (false? (:logseq.property/public? property)))
+                    :hide? (boolean (:logseq.property/hide? property))
+                    :hide-empty? (boolean (:logseq.property/hide-empty-value property))
+                    :default? (or (some? (:logseq.property/default-value property))
+                                  (some? (:logseq.property/scalar-default-value property)))})]
+        (when (and cache meta)
+          (vswap! cache assoc property-id meta))
+        meta))))
+
 (defn- block-class-properties
   [db block]
   (if-let [block-id (:db/id block)]
-    (outliner-property/get-block-classes-properties db block-id)
+    (let [tag-ids (mapv :v (d/datoms db :eavt block-id :block/tags))
+          cache *block-class-properties-cache*]
+      (if-let [hit (and cache (get @cache tag-ids))]
+        hit
+        (let [result (outliner-property/get-block-classes-properties db block-id)]
+          (when cache
+            (vswap! cache assoc tag-ids result))
+          result)))
     (let [classes (->> (:block/tags block)
                        (keep (fn [tag]
                                (d/entity db (if (map? tag)
@@ -783,33 +813,28 @@
   [db block-id property-id]
   (entity-direct-value db block-id property-id))
 
-(defn- positioned-property-empty?
-  "True when the block has no written value and the property has no default.
-  Class defaults such as Task status are not empty."
-  [db block-id property]
-  (and (nil? (block-direct-property-value db block-id (:db/ident property)))
-       (nil? (:logseq.property/default-value property))
-       (nil? (:logseq.property/scalar-default-value property))))
-
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
-  (when-let [property (d/entity db property-id)]
-    (let [property-position (render-property-position db property)
-          property-value (block-direct-property-value db block-id property-id)]
+  (when-let [{:keys [public? hide? hide-empty? default?]
+              property-position :position}
+             (positioned-property-meta db property-id)]
+    (let [property-value (block-direct-property-value db block-id property-id)
+          empty-value? (and (nil? property-value) (not default?))]
       (and
-       (not (false? (:logseq.property/public? property)))
+       public?
        (= property-position position)
-       (not (and (:logseq.property/hide-empty-value property)
-                 (positioned-property-empty? db block-id property)))
-       (not (:logseq.property/hide? property))
+       (not (and hide-empty? empty-value?))
+       (not hide?)
        (not (and
              (= property-position :block-below)
              (nil? property-value)
              (not allow-empty-block-below?)
              (not (render-tag-class-page? db (d/entity db block-id)))))))))
 
-(defn- block-positioned-property-ids
-  [db block-id position]
+(defn block-positioned-property-idents-by-position
+  "All visible positioned property idents for a block, grouped once.
+  Callers that need one position should use block-positioned-property-idents."
+  [db block-id]
   (let [block (d/entity db block-id)
         class-page? (render-tag-class-page? db block)
         own-property-ids (direct-block-property-ids db block-id)
@@ -821,19 +846,38 @@
                        (->> classes-properties
                             (map :db/ident)
                             (concat own-property-ids)
-                            distinct))]
-    (->> property-ids
-         (filter (fn [property-id]
-                   (render-positioned-property? db block-id property-id position
-                                                {:allow-empty-block-below?
-                                                 (contains? classes-property-ids-set property-id)})))
-         (keep #(d/entity db %))
-         db-property/sort-properties
-         (map :db/ident))))
+                            distinct))
+        grouped (group-by
+                 (fn [property-id]
+                   (some (fn [position]
+                           (when (render-positioned-property?
+                                  db block-id property-id position
+                                  {:allow-empty-block-below?
+                                   (contains? classes-property-ids-set property-id)})
+                             position))
+                         render-property-positions))
+                 property-ids)]
+    (into {}
+          (keep (fn [[position idents]]
+                  (when (and position (seq idents))
+                    [position
+                     (->> idents
+                          (keep #(d/entity db %))
+                          db-property/sort-properties
+                          (mapv :db/ident))])))
+          grouped)))
+
+(defn block-positioned-property-idents
+  "Property idents visible at a render position. Table snapshots only need
+  these idents plus UUIDs; they must not build display-property maps."
+  [db block-id position]
+  (vec (get (block-positioned-property-idents-by-position db block-id)
+            position
+            [])))
 
 (defn block-positioned-properties
   [db block-id position]
-  (->> (block-positioned-property-ids db block-id position)
+  (->> (block-positioned-property-idents db block-id position)
        (keep #(display-property-map* db %))
        vec))
 

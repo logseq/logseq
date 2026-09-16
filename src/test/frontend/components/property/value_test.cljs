@@ -68,6 +68,50 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
+(deftest empty-placeholder-identity-maps-as-empty-test
+  (is (true? (#'property-value/empty-placeholder-value?
+              :logseq.property/empty-placeholder)))
+  (is (true? (#'property-value/empty-placeholder-value?
+              {:db/id 9
+               :db/ident :logseq.property/empty-placeholder}))
+      "Canonical rows inline empty-placeholder as a shallow identity, not the keyword.")
+  (is (false? (#'property-value/empty-placeholder-value?
+               {:db/id 10
+                :db/ident :logseq.property/priority.low}))))
+
+(deftest canonical-property-without-closed-values-still-selects-priority-test
+  (let [property {:db/ident :logseq.property/priority
+                  :logseq.property/type :default}
+        empty-value {:db/id 9
+                     :db/ident :logseq.property/empty-placeholder}
+        high-value {:db/id 10
+                    :db/ident :logseq.property/priority.high
+                    :logseq.property/icon {:type :tabler-icon :id "priorityLvlHigh"}}]
+    (is (false? (property-value/select-type? {} property))
+        "use-block property snapshots omit :property/closed-values.")
+    (is (true? (#'property-value/property-value-select-type? {} property empty-value))
+        "No priority must still take the select/dashed-icon path.")
+    (is (false? (#'property-value/closed-choice-value? high-value))
+        "An icon alone is display metadata; the property decides whether it is a closed choice.")
+    (is (true? (#'property-value/property-value-select-type? {} property high-value))
+        "Closed choices keep their icon on the value ref.")
+    (is (false? (#'property-value/closed-choice-value? empty-value)))
+    (is (false? (#'property-value/property-value-select-type?
+                 {}
+                 {:db/ident :user.property/reactive-priority
+                  :logseq.property/type :default}
+                 empty-value))
+        "Empty text properties must not become 0-width nested select blocks.")))
+
+(deftest icon-bearing-page-values-are-not-closed-choices-test
+  (let [page-value {:db/id 11
+                    :block/uuid (random-uuid)
+                    :block/title "Icon page"
+                    :block/name "icon page"
+                    :logseq.property/icon {:type :tabler-icon :id "star"}}]
+    (is (false? (#'property-value/closed-choice-value? page-value))
+        "A page/node icon is display metadata, not closed-choice identity.")))
+
 (deftest closed-values-need-worker-load-even-when-snapshot-has-ids-test
   (is (#'property-value/closed-values-need-worker-load?
        {:property/closed-values
