@@ -519,7 +519,8 @@
   (is (not (contains? block :block/children)))
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
-  (is (every? #{:block.temp/refs-count
+  (is (every? #{:block.temp/positioned-properties
+                :block.temp/refs-count
                 :block.temp/order-list-index}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
@@ -1099,9 +1100,10 @@
         response (block-handler/canonical-blocks @conn [resource-block])
         target (get-in response [:blocks resource-block])]
     (is (not (contains? (:blocks response) positioned-property))
-        "Property definitions stay off the row snapshot. The row inlines their UUIDs.")
-    (is (not (contains? target :block.temp/positioned-properties))
-        "Positioned chips load through :block-positioned-properties, not the row snapshot.")
+        "Inlined property definitions do not become sibling canonical snapshots.")
+    (is (= [positioned-property]
+           (mapv :block/uuid (get-in target [:block.temp/positioned-properties :block-right])))
+        "Positioned chips arrive in the same snapshot as the row.")
     (is (= "right" (:user.property/positioned target))
         "The written property value stays on the row.")
     (is (not (contains? target :block.temp/breadcrumb))
@@ -1198,23 +1200,6 @@
                          [:value :full-properties])]
         (is (some #(= property-uuid (:property-uuid %)) rows)
             "A class-configured property is rendered even when the block has no own value.")))))
-
-(deftest block-positioned-properties-resource-watches-every-candidate-definition-test
-  (when-let [api (render-resource-api)]
-    (let [{:keys [conn resource-block display-property positioned-property hidden-property]}
-          (render-resource-fixture)
-          resource-key [:block-positioned-properties resource-block :block-right]
-          response (call-resource api conn resource-key)]
-      (assert-resource-envelope
-       @conn
-       resource-key
-       #{[:entity resource-block]
-         [:property-config]
-         [:entity display-property]
-         [:entity positioned-property]
-         [:entity hidden-property]}
-       [positioned-property]
-       response))))
 
 (deftest block-bidirectional-properties-resource-returns-uuid-groups-test
   (when-let [api (render-resource-api)]
