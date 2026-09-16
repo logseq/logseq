@@ -1,6 +1,7 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -239,9 +240,21 @@
                        first)
         blank (db-test/find-block-by-content @conn "   ")
         slash (db-test/find-block-by-content @conn "has/slash")
-        hash-title-block (db-test/find-block-by-content @conn "has#hash")]
-    (is (nil? (outliner-validate/validate-page-conversion-title @conn ok (:block/title ok)))
+        hash-title-block (db-test/find-block-by-content @conn "has#hash")
+        page-tag (d/entity @conn :logseq.class/Page)
+        inline-page-title (str "ok " "#" (page-ref/->page-ref (:block/uuid page-tag)))]
+    (is (= "ok" (outliner-validate/validate-page-conversion-title @conn ok (:block/title ok)))
         "Valid title can convert to a page")
+
+    (ldb/transact! conn [{:db/id (:db/id ok)
+                          :block/title inline-page-title}])
+    (is (= "ok" (outliner-validate/validate-page-conversion-title
+                 @conn (d/entity @conn (:db/id ok)) inline-page-title))
+        "Inline #Page is stripped before blank / # / uniqueness checks")
+    (is (nil? (outliner-validate/validate-tags-property @conn [(:db/id ok)] :logseq.class/Page))
+        "Intentional #Page tag path accepts a title whose only # is the Page tag")
+    (ldb/transact! conn [{:db/id (:db/id ok)
+                          :block/title "ok"}])
 
     (is (thrown-with-msg?
          js/Error
@@ -266,6 +279,13 @@
          #"Duplicate page"
          (outliner-validate/validate-page-conversion-title @conn dup-block (:block/title dup-block)))
         "Sibling page with the same title is rejected")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-page-conversion-title
+          @conn dup-block (str "dup #" (page-ref/->page-ref (:block/uuid page-tag)))))
+        "Uniqueness uses the title after stripping inline #Page")
 
     (is (thrown-with-msg?
          js/Error

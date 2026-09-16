@@ -215,27 +215,33 @@
 (defn- remove-inline-page-class-from-title
   "Remove inline page tag from title"
   [block page-tag]
-  (-> (string/replace (or (block-title block) "") (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
-      string/trim))
+  (let [title (block-title block)]
+    (if (string? title)
+      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+          string/trim)
+      title)))
+
+(defn- page-between-parent-and-root?
+  [child root-id]
+  (loop [parent (:block/parent child)]
+    (cond
+      (or (nil? parent) (= (:db/id parent) root-id)) false
+      (ldb/page? parent) true
+      :else (recur (:block/parent parent)))))
 
 (defn- descendant-block-page-tx
   "Rewrite :block/page for non-page descendants after a parent type flip.
   Skips descendants under an intermediate page so nested pages keep their own children."
   [db root-id page-id]
   (when page-id
-    (keep (fn [id]
-            (let [child (d/entity db id)]
-              (when-not (ldb/page? child)
-                (let [intermediate-page?
-                      (loop [parent (:block/parent child)]
-                        (cond
-                          (or (nil? parent) (= (:db/id parent) root-id)) false
-                          (ldb/page? parent) true
-                          :else (recur (:block/parent parent))))]
-                  (when (and (not intermediate-page?)
-                             (not= (:db/id (:block/page child)) page-id))
-                    {:db/id id
-                     :block/page page-id})))))
+    (into []
+          (keep (fn [id]
+                  (let [child (d/entity db id)]
+                    (when (and (not (ldb/page? child))
+                               (not (page-between-parent-and-root? child root-id))
+                               (not= (:db/id (:block/page child)) page-id))
+                      {:db/id id
+                       :block/page page-id}))))
           (ldb/get-block-full-children-ids db root-id))))
 
 (defn- fix-inline-built-in-page-classes
@@ -252,7 +258,7 @@
                      (contains? class-ids (:v datom)))
             (let [id (:e datom)
                   entity (d/entity db-after id)
-                  title (or (:block/raw-title entity) (:block/title entity))
+                  title (block-title entity)
                   page-tag (d/entity db-after (:v datom))]
               (when (and title
                          (string/includes? title "#[[")
@@ -285,11 +291,12 @@
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
-                   (let [page-title (or (block-title block-after) "")]
-                     (outliner-validate/validate-page-conversion-title db-after block-after page-title)
+                   (let [page-title (outliner-validate/validate-page-conversion-title
+                                     db-after block-after (block-title block-after))]
                      (concat
                       [{:db/id id
                         :block/name (common-util/page-name-sanity-lc page-title)
+                        :block/title page-title
                         :block/tags :logseq.class/Page}
                        [:db/retract id :block/page]]
                       (descendant-block-page-tx db-after id id)))
@@ -298,9 +305,8 @@
                    (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
-                         ;; remove inline #Page from title
-                         page-title (remove-inline-page-class-from-title block page-tag)
-                         _ (outliner-validate/validate-page-conversion-title db-after block page-title)
+                         page-title (outliner-validate/validate-page-conversion-title
+                                     db-after block (block-title block))
                          ->page-tx (concat
                                     [{:db/id id
                                       :block/name (common-util/page-name-sanity-lc page-title)
