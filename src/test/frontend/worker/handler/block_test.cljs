@@ -446,8 +446,8 @@
   (when-let [canonical-block (canonical-block-api)]
     (let [{:keys [conn]} (canonical-block-fixture)
           property-id (:db/id (d/entity @conn :logseq.property/priority))
-          _ (d/transact! conn [[:db/add property-id :block/tx-id 10]])
-          property (d/entity @conn property-id)
+        _ (d/transact! conn [[:db/add property-id :block/tx-id 10]])
+        property (d/entity @conn property-id)
           canonical-property (canonical-block @conn property)
           display-property (property-handler/display-property-map @conn property-id)]
       (is (zero? (:block.temp/refs-count canonical-property))
@@ -455,7 +455,10 @@
       (is (not (contains? canonical-property :property/closed-values))
           "Closed values stay off the row snapshot. Table columns only need ident/type.")
       (is (seq (:property/closed-values display-property)))
-      (is (every? :block/uuid (:property/closed-values display-property))))))
+      (is (every? :block/uuid (:property/closed-values display-property)))
+      (is (= #{"Low" "Medium" "High" "Urgent"}
+             (set (map :block/title (:property/closed-values display-property))))
+          "Display property maps keep every closed value, not only the current one"))))
 
 (deftest canonical-class-skips-refs-count-test
   (when-let [canonical-block (canonical-block-api)]

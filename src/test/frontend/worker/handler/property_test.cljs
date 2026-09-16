@@ -2,9 +2,11 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (deftest property-node-selector-data-prepares-class-options-and-initial-choices
@@ -165,3 +167,49 @@
       (is (some? note))
       (is (not (contains? note :property/closed-values))
           "Plain properties keep their existing map shape"))))
+
+(def ^:private status-choice-titles
+  #{"Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"})
+
+(deftest property-closed-values-include-every-status-choice
+  (let [conn (db-test/create-conn)
+        db @conn
+        reverse-titles (set (map :block/title
+                                 (db-property/get-closed-property-values db :logseq.property/status)))
+        display (worker-property/display-property-map db :logseq.property/status)
+        class-props (worker-property/get-class-properties db (d/entity db :logseq.class/Task))
+        task-status (some #(when (= :logseq.property/status (:db/ident %)) %) class-props)]
+    (testing "reverse lookup is the complete set"
+      (is (= status-choice-titles reverse-titles)))
+    (testing "display-property-map used by use-block snapshots is complete"
+      (is (= status-choice-titles
+             (set (map :block/title (:property/closed-values display)))))
+      (is (every? :db/ident (:property/closed-values display)))
+      (is (every? #(get-in % [:logseq.property/icon :id])
+                  (:property/closed-values display))
+          "Icons must survive so tag tables do not regress #1173"))
+    (testing "Task class properties used by tag tables are complete"
+      (is (= status-choice-titles
+             (set (map :block/title (:property/closed-values task-status)))))
+      (is (every? #(get-in % [:logseq.property/icon :id])
+                  (:property/closed-values task-status))))))
+
+(deftest property-closed-values-keep-choice-classes-for-scoped-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:t1 {:build/class-properties [:priority]}
+                         :t2 {}}
+               :properties {:priority {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "b1" :build/tags [:t1]}
+                          {:block/title "b2" :build/tags [:t2]}]}]})
+        t1 (:db/id (d/entity @conn :user.class/t1))
+        _ (outliner-property/upsert-closed-value! conn :user.property/priority
+                                                  {:value "P1"
+                                                   :scoped-class-id t1})
+        db @conn
+        closed (worker-property/property-closed-values db (d/entity db :user.property/priority))
+        p1 (first closed)]
+    (is (= ["P1"] (map :block/title closed)))
+    (is (= [t1] (map :db/id (:logseq.property/choice-classes p1)))
+        "Scoped tag ids must survive flattening so other tags do not see this choice")))
