@@ -153,8 +153,7 @@ function runtimeFile(ctx, ticket) {
 async function admit({ storage, repo, ticket, generation, owner }) {
   const ctx = context(storage, repo);
   if (!owner) fail('Worker owner is required');
-  const release = await acquireLease(ctx, 'admit');
-  try {
+  return withLease(ctx, 'admit', () => {
     const current = state(ctx);
     requireAvailable(ctx, current, generation);
     let record;
@@ -168,21 +167,30 @@ async function admit({ storage, repo, ticket, generation, owner }) {
       current.workers.push(record);
       writeJSON(ctx.stateFile, current);
     }
-    return { ...ctx, ...record, release };
-  } catch (error) { release(); throw error; }
+    return { ...ctx, ...record };
+  });
 }
-function publish(runtime, lock, port) {
-  checkAdmission(runtime);
-  validateLock(runtime, lock, runtime);
-  writeJSON(runtimeFile(runtime, runtime.ticket), { ...runtimeRecord(runtime), lock, port, phase: 'ready' });
-  runtime.release();
+async function publish(runtime, lock, port, exposeReady) {
+  return withLease(runtime, 'publish', () => {
+    checkAdmission(runtime);
+    validateLock(runtime, lock, runtime);
+    writeJSON(runtimeFile(runtime, runtime.ticket), { ...runtimeRecord(runtime), lock, port, phase: 'ready' });
+    // Publish the endpoint and readiness within the same admission check.
+    exposeReady();
+  });
 }
 function runtimeRecord(runtime) {
   const { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo } = runtime;
   return { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo };
 }
 function checkAdmission(runtime) {
-  requireAvailable(runtime, readJSON(runtime.stateFile), runtime.generation);
+  const current = readJSON(runtime.stateFile);
+  requireAvailable(runtime, current, runtime.generation);
+  if (!registered(current, runtime)) fail('Worker admission registration changed', 'server-start-failed');
+}
+function registered(current, runtime) {
+  return current.workers.some(record => Object.entries(runtimeRecord(runtime))
+    .every(([key, value]) => record[key] === value));
 }
 function recordStop(runtime, error) {
   const file = runtimeFile(runtime, runtime.ticket);
@@ -191,7 +199,7 @@ function recordStop(runtime, error) {
     error: error ? String(error.message || error) : null });
 }
 function abortAdmission(runtime, error) {
-  try { recordStop(runtime, error); } finally { runtime.release(); }
+  if (registered(readJSON(runtime.stateFile), runtime)) recordStop(runtime, error);
 }
 function entries(root) {
   let raw;
@@ -370,9 +378,12 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 
 // Upgrade cleanup validates the running HTTP endpoint against its graph lock.
 // It never admits an older worker into the current lifecycle protocol.
-async function stopOutdatedWorkers(storage, revision) {
-  if (typeof revision !== 'string' || !revision) fail('Desktop revision is required');
-  const results = await Promise.allSettled(entries(storage.root).map(async target => {
+async function stopOutdatedWorkers(storage, revision, repo) {
+  if (typeof revision !== 'string' || !revision) fail('Build revision is required');
+  const scoped = repo === undefined ? null : context(storage, repo);
+  const targetLock = scoped && readJSON(path.join(scoped.graphDir, 'db-worker.lock'));
+  const candidates = entries(storage.root).filter(target => !scoped || target.pid === targetLock?.pid);
+  const results = await Promise.allSettled(candidates.map(async target => {
     if (!pidExists(target.pid)) {
       await removeEntries(storage.root, [target]);
       return;
@@ -389,11 +400,12 @@ async function stopOutdatedWorkers(storage, revision) {
       return value;
     };
     const value = await probe();
+    if (scoped && graphName(value.repo) !== scoped.repo) fail('Outdated worker target graph mismatch');
     if (canonicalRoot(value['root-dir']) !== storage.root
         || (value.storage && !sameStorage(storage, value.storage))) return;
     if (value.revision === revision) return;
     const ctx = context(storage, value.repo);
-    await withLease(ctx, 'upgrade', async () => {
+    return withLease(ctx, 'upgrade', async () => {
       if (!pidExists(target.pid)) return;
       const confirmed = await probe();
       for (const key of ['pid', 'port', 'host', 'repo', 'root-dir', 'lock-id', 'owner-source', 'revision']) {
@@ -416,10 +428,12 @@ async function stopOutdatedWorkers(storage, revision) {
       }
       current.workers = current.workers.filter(record => record.pid !== target.pid);
       writeJSON(ctx.stateFile, current);
+      return target;
     });
   }));
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
+  return results.map(result => result.value).filter(Boolean);
 }
 function removeMatchingLock(file, lock) {
   const actual = readJSON(file);
@@ -551,62 +565,91 @@ async function deleteGraph(storage, repo, commit) {
     }
   });
 }
+async function cancelStartup(ctx, record) {
+  return withLease(ctx, 'cancel-start', async () => {
+    const current = state(ctx);
+    if (current.generation !== record.generation || !registered(current, record)) {
+      if (pidExists(record.pid)) fail('Startup registration changed while its worker remains alive');
+      return;
+    }
+    const { targets, lock } = await discover(ctx, current);
+    const target = targets.find(candidate => candidate.ticket === record.ticket);
+    if (lock && lock.pid !== record.pid) fail('Startup lock belongs to another worker');
+    await terminate(ctx, target, false);
+    await cleanup(ctx, current, [target], lock);
+    current.workers = current.workers.filter(candidate => candidate.ticket !== record.ticket);
+    writeJSON(ctx.stateFile, current);
+  });
+}
 async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
   const ctx = context(storage, repo);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
-  const record = await withLease(ctx, 'start', async () => {
-    const current = state(ctx);
-    requireAvailable(ctx, current, generation || observed);
-    const { targets, lock } = await discover(ctx, current);
-    const live = targets.filter(target => pidExists(target.pid));
-    if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
-    if (live.length) {
-      const target = live[0];
-      if (!lock && target.port) fail('Ready worker has no canonical graph lock', 'server-start-failed');
-      if (lock) validateLock(ctx, lock, target);
-      return target;
+  let created;
+  try {
+    const record = await withLease(ctx, 'start', async () => {
+      const current = state(ctx);
+      requireAvailable(ctx, current, generation || observed);
+      const { targets, lock } = await discover(ctx, current);
+      const live = targets.filter(target => pidExists(target.pid));
+      if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
+      if (live.length) {
+        const target = live[0];
+        if (!lock && target.port) fail('Ready worker has no canonical graph lock', 'server-start-failed');
+        if (lock) validateLock(ctx, lock, target);
+        return target;
+      }
+      await cleanup(ctx, current, targets, lock);
+      const ticket = id();
+      const args = [script, '--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
+        '--admission-ticket', ticket, '--graph-generation', current.generation];
+      if (createEmpty) args.push('--create-empty-db');
+      args.push(...extraArgs);
+      const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+      if (owner === 'electron' && !extraArgs.includes('--embedding-endpoint')) delete env.LOGSEQ_EMBEDDINGS_URL;
+      const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
+        stdio: 'ignore', env });
+      child.on('error', () => {}); // Readiness or the missing PID reports spawn failure.
+      const pid = child.pid;
+      if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');
+      child.unref();
+      const spawned = runtimeRecord({ ...ctx, ticket, generation: current.generation, pid, owner });
+      current.workers = [spawned];
+      try { writeJSON(ctx.stateFile, current); }
+      catch (error) {
+        // An unregistered child must exit before the parent releases admission exclusion.
+        signalProcess(pid, 'SIGKILL');
+        if (!await waitExit(pid, 2000)) fail('Unregistered worker did not exit');
+        throw error;
+      }
+      created = spawned;
+      return spawned;
+    });
+    const deadline = Date.now() + 30000;
+    for (;;) {
+      checkAdmission({ ...ctx, ...record });
+      if (!pidExists(record.pid)) fail('Worker exited before becoming ready', 'server-start-failed');
+      const runtime = readRuntime(ctx, record);
+      const port = runtime?.port || record.port;
+      if (port) {
+        const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
+        if (!lock) fail('Worker has no canonical graph lock', 'server-start-failed');
+        validateLock(ctx, lock, { ...record, lock: runtime?.lock || record.lock });
+        const value = await health(ctx, { ...record, lock }, port);
+        if (value.status === 'ready') return { ...value, generation: record.generation };
+      }
+      if (Date.now() >= deadline) fail('Worker failed to become ready', 'server-start-failed');
+      await sleep(50);
     }
-    await cleanup(ctx, current, targets, lock);
-    const ticket = id();
-    const args = [script, '--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
-      '--admission-ticket', ticket, '--graph-generation', current.generation];
-    if (createEmpty) args.push('--create-empty-db');
-    args.push(...extraArgs);
-    const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
-    if (owner === 'electron' && !extraArgs.includes('--embedding-endpoint')) delete env.LOGSEQ_EMBEDDINGS_URL;
-    const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
-      stdio: 'ignore', env });
-    child.on('error', () => {}); // Readiness or the missing PID reports spawn failure.
-    const pid = child.pid;
-    if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');
-    child.unref();
-    const spawned = runtimeRecord({ ...ctx, ticket, generation: current.generation, pid, owner });
-    current.workers = [spawned];
-    try { writeJSON(ctx.stateFile, current); }
-    catch (error) {
-      // An unregistered child must exit before the parent releases admission exclusion.
-      signalProcess(pid, 'SIGKILL');
-      if (!await waitExit(pid, 2000)) fail('Unregistered worker did not exit');
-      throw error;
+  } catch (error) {
+    if (created) {
+      try { await cancelStartup(ctx, created); }
+      catch (cleanupError) {
+        throw Object.assign(new AggregateError([error, cleanupError],
+          `${error.message}; startup cleanup failed: ${cleanupError.message}`), { code: 'server-start-failed' });
+      }
     }
-    return spawned;
-  });
-  const deadline = Date.now() + 30000;
-  for (;;) {
-    requireAvailable(ctx, readJSON(ctx.stateFile), record.generation);
-    if (!pidExists(record.pid)) fail('Worker exited before becoming ready', 'server-start-failed');
-    const runtime = readRuntime(ctx, record);
-    const port = runtime?.port || record.port;
-    if (port) {
-      const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
-      if (!lock) fail('Worker has no canonical graph lock', 'server-start-failed');
-      validateLock(ctx, lock, { ...record, lock: runtime?.lock || record.lock });
-      const value = await health(ctx, { ...record, lock }, port);
-      if (value.status === 'ready') return { ...value, generation: record.generation };
-    }
-    if (Date.now() >= deadline) fail('Worker failed to become ready', 'server-start-failed');
-    await sleep(50);
+    throw error;
   }
 }
 

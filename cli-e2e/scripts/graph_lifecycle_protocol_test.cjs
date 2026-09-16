@@ -780,8 +780,7 @@ test('a registered self target is never signaled', async t => {
   const root = fixture(t);
   const store = storage(root);
   await lifecycle.createGraph(store, 'demo');
-  const runtime = await lifecycle.admit({ storage: store, repo: 'demo', owner: 'cli' });
-  runtime.release();
+  await lifecycle.admit({ storage: store, repo: 'demo', owner: 'cli' });
   const kill = process.kill;
   let signals = 0;
   process.kill = (pid, signal) => {
