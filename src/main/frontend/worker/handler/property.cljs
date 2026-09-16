@@ -412,6 +412,8 @@
    :block/tags
    :db/cardinality
    :logseq.property/type
+   :logseq.property/classes
+   :logseq.property/icon
    :logseq.property/public?
    :logseq.property/built-in?
    :logseq.property/hide?
@@ -478,9 +480,17 @@
         (seq closed-values)
         (assoc :property/closed-values closed-values)))))
 
+(def ^:dynamic *display-property-cache* nil)
+
 (defn display-property-map
   [db property-id]
-  (display-property-map* db property-id))
+  (let [cache *display-property-cache*]
+    (if (and cache (contains? @cache property-id))
+      (get @cache property-id)
+      (let [property (display-property-map* db property-id)]
+        (when cache
+          (vswap! cache assoc property-id property))
+        property))))
 
 (defn- display-property-value
   [db property-id value]
