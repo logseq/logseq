@@ -1141,7 +1141,8 @@
           expected {:full-properties
                     [{:property-uuid display-property
                       :property-ident :user.property/display
-                      :value property-value}]
+                      :value property-value
+                      :closed-value-uuids [closed-value]}]
                     :hidden-properties
                     [{:property-uuid hidden-property
                       :property-ident :user.property/hidden
