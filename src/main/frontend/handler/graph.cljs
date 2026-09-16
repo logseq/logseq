@@ -97,16 +97,12 @@
   [repo]
   (state/<invoke-db-worker :thread-api/ensure-local-graph-uuid repo))
 
-(defn- remember-graph-id-in-tab!
-  [repo graph-id]
-  (when graph-id
-    (set-tab-graph! repo (str graph-id))))
-
 (defn remember-current-graph-id-in-tab!
   []
   (when-let [repo (state/get-current-repo)]
     (p/let [graph-id (state/<invoke-db-worker :thread-api/get-graph-uuid repo)]
-      (remember-graph-id-in-tab! repo graph-id))))
+      (when graph-id
+        (set-tab-graph! repo (str graph-id))))))
 
 (defn <upsert-current-graph-registry!
   []

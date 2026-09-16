@@ -626,11 +626,10 @@
      [page])
     (hooks/use-effect!
      (fn []
-       (when ready?
-         (when-let [next-cache (page-model/remember-ready-page-view
-                                @*main-page-view repo option
-                                {:option option :page-uuid page-uuid})]
-           (reset! *main-page-view next-cache)))
+       (reset! *main-page-view
+               (page-model/remember-ready-page-view
+                @*main-page-view repo option
+                (when ready? {:option option :page-uuid page-uuid})))
        nil)
      [ready? repo page-uuid])
     (let [breadcrumb-data (:value
@@ -676,7 +675,8 @@
                      (when page-uuid
                        (:status (subs/block-snapshot page-uuid))))]
     (if cached-uuid
-      (loaded-page option cached-uuid)
+      ^{:key cached-uuid}
+      [loaded-page option cached-uuid]
       (when-let [resource-key (page-resource-key option)]
         (page-resource option resource-key)))))
 

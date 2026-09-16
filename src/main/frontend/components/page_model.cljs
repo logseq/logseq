@@ -24,10 +24,12 @@
                (:mobile-page? option))))
 
 (defn remember-ready-page-view
+  "Keep the last painted main-route view, or drop it when the graph changes."
   [cached repo option view]
   (if (and (main-page-option? option) repo view)
     (assoc view :repo repo)
-    cached))
+    (when (and cached (= repo (:repo cached)))
+      cached)))
 
 (defn remembered-page-view
   [cached repo option]
