@@ -89,7 +89,7 @@
     (fs/writeFileSync path (js/JSON.stringify (clj->js legacy-lock)))
     (is (= :unknown (:owner-source (db-lock/read-lock path))))))
 
-(deftest lock-preserves-process-identity-without-discovery-fields
+(deftest lock-preserves-admission-ticket-and-generation
   (async done
     (let [root-dir (node-helper/create-tmp-dir "db-worker-node-lock-update-owner")
           repo (str "logseq_db_lock_update_owner_" (subs (str (random-uuid)) 0 8))
@@ -97,11 +97,13 @@
       (-> (p/let [_ (db-lock/ensure-lock! {:root-dir root-dir
                                                         :repo repo
                                                         :owner-source :cli
-                                                        :process-start "birth-marker"})
+                                                        :ticket "worker-ticket"
+                                                        :generation "graph-generation"})
                   updated (db-lock/read-lock path)]
             (is (= :cli (:owner-source updated)))
             (is (= root-dir (:root-dir updated)))
-            (is (= "birth-marker" (:process-start updated)))
+            (is (= "worker-ticket" (:ticket updated)))
+            (is (= "graph-generation" (:generation updated)))
             (is (nil? (:host updated)))
             (is (nil? (:port updated)))
             (is (nil? (:revision updated)))
