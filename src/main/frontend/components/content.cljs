@@ -286,29 +286,25 @@
 
          (shui/dropdown-menu-separator)
 
-         (when (and (config/db-based-graph?)
-                    (not property-default-value?)
-                    (not (ldb/built-in? block)))
-           (case (db-page-handler/convert-action block)
-             :to-page
-             (shui/dropdown-menu-item
-              {:key "Convert to page"
-               :on-click (fn [_e]
-                           (db-page-handler/convert-block-to-page! block))}
-              (t :page.convert/to-page-action))
-             :to-block
-             (shui/dropdown-menu-item
-              {:key "Convert to block"
-               :on-click (fn [_e]
-                           (db-page-handler/convert-page-to-block! block))}
-              (t :page.convert/to-block-action))
-             nil))
-
-         (when (and (config/db-based-graph?)
-                    (not property-default-value?)
-                    (not (ldb/built-in? block))
-                    (db-page-handler/convert-action block))
-           (shui/dropdown-menu-separator))
+         (when-let [convert (and (config/db-based-graph?)
+                                 (not property-default-value?)
+                                 (not (ldb/built-in? block))
+                                 (db-page-handler/convert-action block))]
+           [:<>
+            (case convert
+              :to-page
+              (shui/dropdown-menu-item
+               {:key "Convert to page"
+                :on-click (fn [_e]
+                            (db-page-handler/convert-block-to-page! block))}
+               (t :page.convert/to-page-action))
+              :to-block
+              (shui/dropdown-menu-item
+               {:key "Convert to block"
+                :on-click (fn [_e]
+                            (db-page-handler/convert-page-to-block! block))}
+               (t :page.convert/to-block-action)))
+            (shui/dropdown-menu-separator)])
 
          (shui/dropdown-menu-item
           {:key "Copy block ref"

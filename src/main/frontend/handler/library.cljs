@@ -52,6 +52,6 @@
         :cancel-label (t :ui/cancel)
         :ok-label (t :ui/confirm)})
       (p/then (fn [_]
-                (<remove-pages! [page-id])
-                true))
+                (p/then (<remove-pages! [page-id])
+                        (constantly true))))
       (p/catch (fn [_] false))))

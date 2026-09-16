@@ -15,30 +15,25 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defn- block->item
-  [block]
-  {:value (:db/id block)
-   :label (:block/title block)})
-
 (defn merge-library-select-items
   "Show current Library members plus unfiled search hits."
   [member-items search-blocks input]
-  (let [search-items (map block->item search-blocks)
+  (let [search-items (library-handler/member-items search-blocks)
         query (string/trim (or input ""))
         visible-members (if (string/blank? query)
                           member-items
                           (filter (fn [item]
                                     (string/includes? (string/lower-case (or (:label item) ""))
                                                       (string/lower-case query)))
-                                  member-items))
-        seen (atom #{})]
-    (into []
-          (keep (fn [item]
-                  (let [value (:value item)]
-                    (when-not (contains? @seen value)
-                      (swap! seen conj value)
-                      item))))
-          (concat visible-members search-items))))
+                                  member-items))]
+    (second
+     (reduce (fn [[seen acc] item]
+               (let [value (:value item)]
+                 (if (contains? seen value)
+                   [seen acc]
+                   [(conj seen value) (conj acc item)])))
+             [#{} []]
+             (concat visible-members search-items)))))
 
 (hsx/defc select-pages
   [library-page]
