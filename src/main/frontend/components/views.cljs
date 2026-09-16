@@ -2149,16 +2149,6 @@
   (and (contains? windowed-view-feature-types view-feature-type)
        (nil? group-by-property-ident)))
 
-(defn- paint-view-data
-  "Paint the first window. Remaining ids are a lookup list. Replacing
-  26 painted rows with 3883 remounted Movies mid-paint."
-  [full-data window-data]
-  (or window-data full-data))
-
-(defn- view-data-resource-keys
-  [view-uuid window-context full-context]
-  {:primary [:view-data view-uuid (or window-context full-context)]})
-
 (defn- offset-view-row-count
   "One screen is already painted. Fetch the current screen plus the next
   so rapid scroll does not run off the window mid-fetch."
@@ -3692,10 +3682,9 @@
     {:initial-row-count initial-row-count
      :window-context window-context
      :full-context full-context
+     :resource-key [:view-data view-uuid (or window-context full-context)]
      :full-key (when window-context
-                 [:view-data view-uuid full-context])
-     :pending-keys (view-data-resource-keys view-uuid window-context full-context)
-     :ready-keys (view-data-resource-keys view-uuid window-context full-context)}))
+                 [:view-data view-uuid full-context])}))
 
 (defn- loaded-view-paint
   [view-data]
@@ -3733,7 +3722,7 @@
                                         viewport-height)
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
-        window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
+        window-or-full-data (db-hooks/use-resource (:resource-key plan))
         [full-data-active? set-full-data-active!] (hooks/use-state false)
         full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
                                                         (:full-key plan)))
@@ -3760,7 +3749,7 @@
                            :ready (:value full-snapshot)
                            :error (throw (:error full-snapshot))
                            nil))
-        view-data (paint-view-data nil window-or-full-data)
+        view-data window-or-full-data
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
                       (view-data->rows window-or-full-data))

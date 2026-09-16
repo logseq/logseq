@@ -493,31 +493,25 @@
   (is (false? (#'views/windowed-view-feature? :class-objects :block/page))
       "Grouped class tables keep a single full query.")
   (is (false? (#'views/windowed-view-feature? :linked-references nil)))
-  (is (= :window (#'views/paint-view-data :full :window))
-      "Remaining ids must not replace the painted first window.")
-  (is (= :full (#'views/paint-view-data :full nil)))
   (let [view-uuid (random-uuid)
-        window-context {:feature-type :class-objects :initial-row-count 30}
-        full-context {:feature-type :class-objects}
         plan (#'views/loaded-view-resource-plan
               view-uuid :class-objects nil nil "" nil nil 990)
-        pending (#'views/view-data-resource-keys view-uuid window-context full-context)
-        ready (#'views/view-data-resource-keys view-uuid window-context full-context)
-        single (#'views/view-data-resource-keys view-uuid nil full-context)]
-    (is (= [:view-data view-uuid window-context] (:primary pending)))
+        window-context (:window-context plan)
+        full-context (:full-context plan)
+        single (#'views/loaded-view-resource-plan
+                view-uuid :linked-references nil nil "" nil nil 990)]
+    (is (= [:view-data view-uuid window-context] (:resource-key plan)))
     (is (= [:view-data view-uuid (:full-context plan)] (:full-key plan))
         "The full rows resource is available after the first table paint for bulk actions.")
-    (is (nil? (:full pending))
-        "Windowed views never request the leftover 40938-id list.")
     (is (nil? (#'views/offset-view-data-key view-uuid window-context nil))
         "The offset window must not start before the user scrolls.")
     (is (nil? (#'views/offset-view-data-key view-uuid window-context 0)))
     (is (= [:view-data view-uuid (assoc window-context :row-offset 72 :initial-row-count 60)]
            (#'views/offset-view-data-key view-uuid window-context 72))
         "Offset windows fetch two screens so rapid scroll does not run off the current one.")
-    (is (nil? (:full ready)))
-    (is (= [:view-data view-uuid full-context] (:primary single)))
-    (is (nil? (:full single)))))
+    (is (= [:view-data view-uuid full-context] (:full-key plan)))
+    (is (= [:view-data view-uuid (:full-context single)] (:resource-key single)))
+    (is (nil? (:full-key single)))))
 
 (deftest table-virtualization-uses-fixed-row-height
   (is (= {:item-height 33 :overscan-px 66}
@@ -535,16 +529,13 @@
             sorting [{:id :block/title :asc? true}]
             plan (#'views/loaded-view-resource-plan
                   view-uuid feature-type sorting nil "" nil nil 990)
-            paint (#'views/loaded-view-paint
-                   (#'views/paint-view-data nil window-data))]
+            paint (#'views/loaded-view-paint window-data)]
         (is (= 30 (:initial-row-count plan)))
-        (is (= 30 (get-in plan [:pending-keys :primary 2 :initial-row-count])))
-        (is (nil? (get-in plan [:pending-keys :full]))
-            "The remaining-id query does not start before the first window paints.")
-        (is (nil? (get-in plan [:ready-keys :full]))
-            "Do not request the leftover id list after the first window paints.")
+        (is (= 30 (get-in plan [:resource-key 2 :initial-row-count])))
+        (is (= (:full-context plan) (get-in plan [:full-key 2]))
+            "The full rows resource is separate from the first-paint resource.")
         (is (nil? (#'views/offset-view-data-key
-                   view-uuid (get-in plan [:pending-keys :primary 2]) 0))
+                   view-uuid (get-in plan [:resource-key 2]) 0))
             "The follow-up query is a scrolled offset window, not every remaining id.")
         (is (true? (:ready? paint))
             "Tags and All Pages must paint from the first window without the full id list.")
@@ -559,10 +550,10 @@
               view-uuid :class-objects [{:id :block/title :asc? true}]
               nil "" nil nil 6000)]
     (is (= 182 (:initial-row-count plan)))
-    (is (= 182 (get-in plan [:pending-keys :primary 2 :initial-row-count]))
+    (is (= 182 (get-in plan [:resource-key 2 :initial-row-count]))
         "A tall viewport first window is ceil(height / row-height), not a fixed 160.")
-    (is (nil? (get-in plan [:pending-keys :full]))
-        "The remaining-id query still waits until that first window paints.")))
+    (is (= (:full-context plan) (get-in plan [:full-key 2]))
+        "The full rows resource stays separate from the first-paint window.")))
 
 (defn- visible-viewport-row-range
   [scroll-top viewport-height item-height total-count]
