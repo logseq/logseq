@@ -47,7 +47,6 @@
  :asset/align-left "왼쪽 정렬"
  :asset/align-right "오른쪽 정렬"
  :asset/already-exists "자산이 이미 존재합니다. 제목: {1}, 노드 참조: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "자신의 속성으로 부모를 임베드할 수 없습니다"
  :asset/confirm-delete-image "이 이미지를 삭제하시겠습니까?"
  :asset/copy "에셋 복사"
  :asset/copy-image-unsupported-extension "{1} 파일은 이미지 복사를 지원하지 않습니다"

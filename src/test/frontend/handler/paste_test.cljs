@@ -8,6 +8,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.format :as editor-format]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
@@ -262,6 +263,70 @@
                @inserted-opts))
         (is (= [current-block-id linked-block-id] @loaded-blocks))
         (is @clear-edit?)))))
+
+(deftest-async editor-on-paste-embed-block-rejects-self
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        inserted? (atom false)
+        toast (atom nil)]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :embed-block? true
+                                                               :blocks [{:block/uuid block-id}]}))
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      state/get-block-op-type (constantly nil)
+      state/get-edit-block (constantly {:block/uuid block-id})
+      db-async/<get-block-parents (fn [_repo _db-id _depth]
+                                    (p/resolved []))
+      db-async/<get-block (fn [_repo _block-id _opts]
+                            (p/resolved {:db/id 7 :block/uuid block-id}))
+      editor-handler/api-insert-new-block! (fn [_content _opts]
+                                             (reset! inserted? true)
+                                             (p/resolved nil))
+      notification/show! (fn [content status]
+                           (reset! toast {:content content :status status}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "copied")}})]
+        (is (false? @inserted?))
+        (is (= :error (:status @toast)))
+        (is (string? (:content @toast)))))))
+
+(deftest-async editor-on-paste-embed-block-rejects-ancestor
+  (let [parent-id #uuid "11111111-1111-1111-1111-111111111111"
+        current-id #uuid "22222222-2222-2222-2222-222222222222"
+        inserted? (atom false)
+        toast (atom nil)]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :embed-block? true
+                                                               :blocks [{:block/uuid parent-id}]}))
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      state/get-block-op-type (constantly nil)
+      state/get-edit-block (constantly {:block/uuid current-id})
+      db-async/<get-block-parents (fn [_repo db-id _depth]
+                                    (is (= 7 db-id))
+                                    (p/resolved [{:block/uuid parent-id :db/id 42}]))
+      db-async/<get-block (fn [_repo block-id _opts]
+                            (p/resolved
+                             (case block-id
+                               #uuid "22222222-2222-2222-2222-222222222222"
+                               {:db/id 7 :block/uuid current-id}
+
+                               #uuid "11111111-1111-1111-1111-111111111111"
+                               {:db/id 42 :block/uuid parent-id})))
+      editor-handler/api-insert-new-block! (fn [_content _opts]
+                                             (reset! inserted? true)
+                                             (p/resolved nil))
+      notification/show! (fn [content status]
+                           (reset! toast {:content content :status status}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "copied")}})]
+        (is (false? @inserted?))
+        (is (= :error (:status @toast)))
+        (is (string? (:content @toast)))))))
 
 (deftest editing-display-type-block-uses-state-block
   (with-redefs [state/get-edit-block (constantly {:db/id 1

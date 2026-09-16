@@ -79,7 +79,6 @@
  :asset/align-left "Sola"
  :asset/align-right "Sağa"
  :asset/already-exists "Öğe zaten mevcut, başlık: {1}, düğüm referansı: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Üst öğe kendi özelliği olarak gömülemez"
  :asset/confirm-delete-image "Bu görseli silmek istediğinizden emin misiniz?"
  :asset/copy "Resmi kopyala"
  :asset/copy-image-unsupported-extension "Resim kopyalama {1} dosyaları için desteklenmiyor"

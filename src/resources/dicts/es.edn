@@ -47,7 +47,6 @@
  :asset/align-left "Izquierda"
  :asset/align-right "Derecha"
  :asset/already-exists "El activo ya existe, título: {1}, referencia de nodo: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "No se puede incrustar el padre como su propia propiedad"
  :asset/confirm-delete-image "¿Está seguro de que desea eliminar esta imagen?"
  :asset/copy "Copiar imagen"
  :asset/copy-image-unsupported-extension "No se admite copiar imágenes para archivos {1}"

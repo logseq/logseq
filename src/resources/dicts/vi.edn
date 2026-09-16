@@ -47,7 +47,6 @@
  :asset/align-left "Căn trái"
  :asset/align-right "Căn phải"
  :asset/already-exists "Tệp đính kèm đã tồn tại, tiêu đề: {1}, nút tham chiếu: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Không thể nhúng khối gốc làm thuộc tính của chính nó"
  :asset/confirm-delete-image "Bạn có chắc muốn xoá hình ảnh này không?"
  :asset/copy "Sao chép hình ảnh"
  :asset/copy-image-unsupported-extension "Sao chép hình ảnh không được hỗ trợ với tệp {1}"

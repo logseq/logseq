@@ -47,7 +47,6 @@
  :asset/align-left "По левому краю"
  :asset/align-right "По правому краю"
  :asset/already-exists "Об’єкт уже існує, назва: {1}, посилання на вузол: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Неможливо встроить родителя как собственное властивість"
  :asset/confirm-delete-image "Ви впевнені, що хочете видалити це зображення?"
  :asset/copy "Копіювати зображення"
  :asset/copy-image-unsupported-extension "Копіювання зображення не підтримується для файлів {1}"

@@ -47,7 +47,6 @@
  :asset/align-left "左揃え"
  :asset/align-right "右揃え"
  :asset/already-exists "アセットはすでに存在します、タイトル: {1}、ノード参照: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "自身のプロパティとして親を埋め込むことはできません"
  :asset/confirm-delete-image "この画像を削除してもよろしいですか？"
  :asset/copy "アセットをコピー"
  :asset/copy-image-unsupported-extension "{1} ファイルは画像のコピーに対応していません"

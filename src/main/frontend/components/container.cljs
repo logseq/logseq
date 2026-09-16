@@ -398,7 +398,10 @@
                              (p/do!
                               (db-async/<get-block (state/get-current-repo) sel-block-id {:children? false})
                               (show! (cp-content/block-context-menu-content
-                                      target sel-block-id property-default-value?)))))
+                                      target sel-block-id property-default-value?
+                                      (some-> selected-block
+                                              (.getAttribute "originalblockid")
+                                              parse-uuid))))))
                          (show! (cp-content/custom-context-menu-content)
                                 {:id :blocks-selection-context-menu})))
 
@@ -412,7 +415,11 @@
                          (state/conj-selection-block! block :down))
                        (p/do!
                         (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
-                        (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
+                        (show! (cp-content/block-context-menu-content
+                                target (uuid block-id) property-default-value?
+                                (some-> block
+                                        (.getAttribute "originalblockid")
+                                        parse-uuid)))))
 
                      :else
                      false)]

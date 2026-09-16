@@ -380,6 +380,14 @@
       (remove nil?)
       (util/distinct-by-last-wins first)))))
 
+(def ^:private node-embed-search-aliases
+  ["embed" "block embed" "page embed"])
+
+(defn- command-search-aliases
+  [en-cmd]
+  (when (= "Node embed" (first en-cmd))
+    node-embed-search-aliases))
+
 (defn init-commands!
   [get-page-ref-text]
   (let [commands    (commands-map get-page-ref-text)
@@ -388,7 +396,10 @@
         zh-cn?      (= lang :zh-CN)
         commands-with-meta
         (mapv (fn [cmd en-cmd]
-                (let [m (cond-> {:en-text (first en-cmd)}
+                (let [m (cond-> (merge (meta cmd)
+                                       {:en-text (first en-cmd)}
+                                       (when-let [aliases (command-search-aliases en-cmd)]
+                                         {:aliases aliases}))
                           zh-cn? (assoc :pinyin-text (search/hanzi->initials (first cmd))))]
                   (with-meta cmd m)))
               commands en-commands)]
@@ -558,6 +569,14 @@
         (state/set-block-content-and-last-pos! id new-value new-pos)
         (cursor/move-cursor-to input new-pos)))))
 
+(defn- command-alias-extract-fns
+  [commands]
+  (let [n (apply max 0 (map #(count (:aliases (meta %) [])) commands))]
+    (mapv (fn [idx]
+            (fn [command]
+              (get (:aliases (meta command) []) idx)))
+          (range n))))
+
 (defn get-matched-commands
   ([text]
    (get-matched-commands text @*initial-commands))
@@ -565,13 +584,16 @@
    (let [lang        (or (some-> (:preferred-language (state/get-state)) keyword) :en)
          en?         (= lang :en)
          zh-cn?      (= lang :zh-CN)
+         alias-fns   (command-alias-extract-fns commands)
          extract-fns (cond
-                       en?    [first]
-                       zh-cn? [first
-                               #(-> % meta :en-text)
-                               #(-> % meta :pinyin-text)]
-                       :else  [first
-                               #(-> % meta :en-text)])]
+                       en?    (into [first] alias-fns)
+                       zh-cn? (into [first
+                                     #(-> % meta :en-text)
+                                     #(-> % meta :pinyin-text)]
+                                    alias-fns)
+                       :else  (into [first
+                                     #(-> % meta :en-text)]
+                                    alias-fns))]
      (search/fuzzy-search-multi
       commands
       text

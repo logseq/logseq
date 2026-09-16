@@ -47,7 +47,6 @@
  :asset/align-left "چپ"
  :asset/align-right "راست"
  :asset/already-exists "دارایی از قبل وجود دارد، عنوان: {1}، مرجع گره: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "نمی‌توان والد را به عنوان ویژگی خودش جاسازی کرد"
  :asset/confirm-delete-image "آیا مطمئن هستید که می‌خواهید این تصویر را حذف کنید؟"
  :asset/copy "کپی"
  :asset/copy-image-unsupported-extension "کپی تصویر برای فایل‌های {1} پشتیبانی نمی‌شود"

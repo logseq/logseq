@@ -47,7 +47,6 @@
  :asset/align-left "Do lewej"
  :asset/align-right "Do prawej"
  :asset/already-exists "Zasób już istnieje, tytuł: {1}, odnośnik do węzła: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Nie można osadzić rodzica jako własnej właściwości"
  :asset/confirm-delete-image "Czy na pewno chcesz usunąć ten obraz?"
  :asset/copy "Kopiuj obrazek"
  :asset/copy-image-unsupported-extension "Kopiowanie obrazu nie jest obsługiwane dla plików {1}"
