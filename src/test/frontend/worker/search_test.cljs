@@ -469,7 +469,10 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      result)
+                    d/db? (constantly true)
+                    d/datoms (fn [& _]
+                               (throw (js/Error. "direct page scan should not run for exact tag title queries")))]
         (let [result (vec (search/search-blocks (atom :large-db)
                                                 db
                                                 "#Movies"
@@ -481,6 +484,41 @@
           (is (some #(= ["Movies" 10] (:bind %)) @calls))
           (is (not-any? #(string/includes? (:sql %) "title match ?") @calls))
           (is (not-any? #(string/includes? (:sql %) "lower(title) like ?") @calls)))))))
+
+(deftest search-blocks-skips-direct-page-scan-after-exact-title-hit
+  (testing "single-term page searches should not scan every Datascript page after an exact search-db hit"
+    (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (cond
+                              (and (string/includes? sql "title = ? COLLATE NOCASE")
+                                   (= ["Tag" 10] bind))
+                              (clj->js [[page-id page-id "Tag"]])
+
+                              (string/includes? sql "title match ?")
+                              #js []
+
+                              (string/includes? sql "lower(title) like ?")
+                              #js []
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)
+                    d/db? (constantly true)
+                    d/datoms (fn [& _]
+                               (throw (js/Error. "direct page scan should not run after exact title hits")))]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "Tag"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Tag"}]
+                 (mapv #(select-keys % [:id :page :title]) result))))))))
 
 (deftest combine-results-large-result-benchmark
   (testing "large search result sets combine without quadratic scans and keep page boost ranking"

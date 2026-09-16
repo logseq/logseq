@@ -1020,7 +1020,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (common-util/distinct-by :id)
                        (keep #(search-result->block-result conn q code-class option %)))
            result (cond->> result
-                    (not code-only?)
+                    (and (not code-only?)
+                         (not tag-title?)
+                         (not (seq exact-title-result)))
                     (concat (direct-page-results conn q code-class option limit))
                     true
                     (remove nil?)
