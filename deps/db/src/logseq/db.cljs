@@ -446,8 +446,8 @@
                         child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
                     (if (and child-order
                              (eligible? (compare child-order block-order))
-                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
-                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (not (seq (d/datoms db :eavt child-id :logseq.property/created-from-property)))
+                             (not (seq (d/datoms db :eavt child-id :block/closed-value-property)))
                              (or (nil? best-order)
                                  (closer? (compare child-order best-order))))
                       [child-id child-order]
