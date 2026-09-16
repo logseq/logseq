@@ -47,7 +47,6 @@
  :asset/align-left "Links"
  :asset/align-right "Rechts"
  :asset/already-exists "Asset bestaat al, titel: {1}, knooppuntreferentie: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Bovenliggend element kan niet als eigen eigenschap worden ingesloten"
  :asset/confirm-delete-image "Weet u zeker dat u deze afbeelding wilt verwijderen?"
  :asset/copy "Kopiëren"
  :asset/copy-image-unsupported-extension "Afbeelding kopiëren wordt niet ondersteund voor {1}-bestanden"

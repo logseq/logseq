@@ -2,14 +2,12 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.extensions.video :as video]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -220,20 +218,10 @@
              (when-let [block-id (:block/uuid (first blocks))]
                (when-let [current-block (state/get-edit-block)]
                  (p/let [current-block' (<block-with-db-id repo current-block)
-                         parents (db-async/<get-block-parents repo (:db/id current-block') 100)]
-                   (cond
-                     (some #(= block-id (:block/uuid %)) parents)
-                     (notification/show! (t :asset/cannot-embed-parent-as-own-property) :error)
-
-                     :else
-                     (p/let [linked-block (db-async/<get-block repo block-id {:children? false})
-                             _ (editor-handler/api-insert-new-block! ""
-                                                                    {:block-uuid (:block/uuid current-block)
-                                                                     :sibling? true
-                                                                     :outliner-op :paste
-                                                                     :replace-empty-target? true
-                                                                     :other-attrs {:block/link (:db/id linked-block)}})]
-                       (state/clear-edit!))))))
+                         inserted (editor-handler/embed-node! current-block' block-id
+                                                              {:outliner-op :paste})]
+                   (when inserted
+                     (state/clear-edit!)))))
              (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
                                                   :keep-uuid? keep-uuid?})))
          (paste-copied-text input text html)))

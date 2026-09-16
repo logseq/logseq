@@ -47,7 +47,6 @@
  :asset/align-left "Sinistra"
  :asset/align-right "Destra"
  :asset/already-exists "L'asset esiste già, titolo: {1}, riferimento nodo: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Impossibile incorporare il genitore come propria proprietà"
  :asset/confirm-delete-image "Sei sicuro di voler eliminare questa immagine?"
  :asset/copy "Copia immagine"
  :asset/copy-image-unsupported-extension "La copia dell'immagine non è supportata per i file {1}"

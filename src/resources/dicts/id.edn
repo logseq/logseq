@@ -47,7 +47,6 @@
  :asset/align-left "Kiri"
  :asset/align-right "Kanan"
  :asset/already-exists "Aset sudah ada, judul: {1}, referensi simpul: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Tidak dapat menyematkan induk sebagai propertinya sendiri"
  :asset/confirm-delete-image "Apakah Anda yakin ingin menghapus gambar ini?"
  :asset/copy "Salin gambar"
  :asset/copy-image-unsupported-extension "Menyalin gambar tidak didukung untuk file {1}"

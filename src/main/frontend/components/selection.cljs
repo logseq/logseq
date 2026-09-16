@@ -110,7 +110,11 @@
                                      (util/stop e)
                                      (on-cut)
                                      (state/pub-event! [:editor/hide-action-bar])))
-           (ui/icon "trash" {:size 13})))
+           (ui/tooltip (ui/icon "trash" {:size 13})
+                       (if (editor-handler/selection-embeds-only?)
+                         (t :editor.embed/remove-embed)
+                         (t :editor/delete-selection))
+                       {:trigger-props {:class "flex"}})))
         (when-not hide-dots?
           (shui/toolbar-button
            (assoc button-opts

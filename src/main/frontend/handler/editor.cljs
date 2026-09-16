@@ -812,6 +812,102 @@
   []
   (distinct (seq (state/get-selection-blocks))))
 
+(defn embed-uuid-from-node
+  "UUID of the linking (wrapper) block when `node` is a rendered embed."
+  [node]
+  (when-let [id (some-> node (dom/attr "originalblockid"))]
+    (uuid id)))
+
+(defn selection-embeds-only?
+  "True when every selected node is a :block/link embed wrapper."
+  []
+  (let [nodes (seq (get-selected-blocks))]
+    (boolean (and nodes (every? embed-uuid-from-node nodes)))))
+
+(defn- selection-node-delete-uuid
+  "Delete the embed wrapper when one is selected; otherwise delete the node itself."
+  [node]
+  (or (embed-uuid-from-node node)
+      (when-let [id (dom/attr node "blockid")]
+        (uuid id))))
+
+(defn- block-uuid*
+  [block]
+  (or (:block/uuid block)
+      (when (uuid? block) block)))
+
+(defn- block-db-id
+  [block]
+  (or (:db/id block)
+      (when (integer? block) block)))
+
+(defn can-embed?
+  "True when `target` can be embedded at `host`.
+   Rejects embedding a node into itself or one of its ancestors."
+  [host-block target-block parents]
+  (let [host-uuid (block-uuid* host-block)
+        target-uuid (block-uuid* target-block)
+        host-id (block-db-id host-block)
+        target-id (block-db-id target-block)
+        parent-uuids (into #{} (keep block-uuid*) parents)
+        parent-ids (into #{} (keep block-db-id) parents)]
+    (boolean
+     (and (or host-uuid host-id)
+          (or target-uuid target-id)
+          (not (and host-uuid target-uuid (= host-uuid target-uuid)))
+          (not (and host-id target-id (= host-id target-id)))
+          (not (and target-uuid (contains? parent-uuids target-uuid)))
+          (not (and target-id (contains? parent-ids target-id)))))))
+
+(defn- show-cannot-embed-cycle!
+  []
+  (notification/show! (t :editor.embed/cannot-embed-self-or-ancestor) :error))
+
+(defn- <resolve-embed-block
+  [repo block]
+  (cond
+    (nil? block)
+    (p/resolved nil)
+
+    (and (map? block) (:db/id block) (:block/uuid block))
+    (p/resolved block)
+
+    (or (map? block) (uuid? block) (integer? block) (string? block))
+    (db-async/<get-block repo (or (block-uuid* block) (block-db-id block) block)
+                         {:children? false})
+
+    :else
+    (p/resolved nil)))
+
+(defn embed-node!
+  "Insert a :block/link embed of `target` at `host`.
+   Returns the insert result, or nil when the embed would cycle."
+  ([host-block target]
+   (embed-node! host-block target {}))
+  ([host-block target {:keys [sibling? replace-empty-target? outliner-op skip-guard?]
+                       :or {sibling? true
+                            replace-empty-target? true}}]
+   (let [repo (state/get-current-repo)]
+    (p/let [host (<resolve-embed-block repo host-block)
+            target' (<resolve-embed-block repo target)
+            parents (if (and host (:db/id host) (not skip-guard?))
+                      (db-async/<get-block-parents repo (:db/id host) 100)
+                      [])]
+      (cond
+        (or (nil? host) (nil? target'))
+        nil
+
+        (and (not skip-guard?) (not (can-embed? host target' parents)))
+        (do (show-cannot-embed-cycle!) nil)
+
+        :else
+        (api-insert-new-block! ""
+                               {:block-uuid (:block/uuid host)
+                                :sibling? sibling?
+                                :replace-empty-target? replace-empty-target?
+                                :outliner-op outliner-op
+                                :other-attrs {:block/link (:db/id target')}}))))))
+
 (defn- unwrap-block-results
   [results]
   (vec (keep :block results)))
@@ -1361,7 +1457,7 @@
        (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
          (when (seq dom-blocks)
            (let [repo (state/get-current-repo)
-                 block-uuids (distinct (keep #(when-let [id (dom/attr % "blockid")] (uuid id)) dom-blocks))]
+                 block-uuids (distinct (keep selection-node-delete-uuid dom-blocks))]
              (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
                (let [blocks (unwrap-block-results results)
                      top-level-blocks (block-handler/get-top-level-blocks blocks)]
@@ -4347,13 +4443,53 @@
 (defn replace-ref-with-embed!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (ref/->block-ref ref-id)
-          content (string/replace-first (:block/title block) match
-                                        (util/format "{{embed ((%s))}}"
-                                                     (str ref-id)))]
-      (save-block! (state/get-current-repo)
-                   (:block/uuid block)
-                   content))))
+    (let [repo (state/get-current-repo)
+          match (ref/->block-ref ref-id)
+          remaining (-> (or (:block/title block) "")
+                        (string/replace-first match "")
+                        string/trim)]
+      (p/let [host (<resolve-embed-block repo block)
+              target (<resolve-embed-block repo ref-id)
+              parents (if (and host (:db/id host))
+                        (db-async/<get-block-parents repo (:db/id host) 100)
+                        [])]
+        (cond
+          (or (nil? host) (nil? target))
+          nil
+
+          (not (can-embed? host target parents))
+          (show-cannot-embed-cycle!)
+
+          :else
+          (p/do!
+           (save-block! repo (:block/uuid host) remaining)
+           (embed-node! (assoc host :block/title remaining)
+                        target
+                        {:replace-empty-target? (string/blank? remaining)
+                         :skip-guard? true})))))))
+
+(defn remove-embed!
+  "Remove the embed wrapper without deleting the source node."
+  [embed-uuid]
+  (when embed-uuid
+    (p/let [block (db-async/<get-block (state/get-current-repo) embed-uuid {:children? false})]
+      (when block
+        (delete-block-aux! block)))))
+
+(defn delete-source-block!
+  "Delete the source node of an embed after confirmation."
+  [source-uuid]
+  (when source-uuid
+    (-> (shui/dialog-confirm!
+         {:title (t :editor.embed/delete-source-block-confirm-title)
+          :outside-cancel? true
+          :cancel-label (t :ui/cancel)
+          :ok-label (t :ui/confirm)})
+        (p/then (fn []
+                  (p/let [block (db-async/<get-block (state/get-current-repo) source-uuid {:children? false})]
+                    (when block
+                      (delete-block-aux! block)))))
+        (p/catch (fn [_])))))
 
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.

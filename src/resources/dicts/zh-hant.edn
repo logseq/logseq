@@ -47,7 +47,6 @@
  :asset/align-left "靠左對齊"
  :asset/align-right "靠右對齊"
  :asset/already-exists "資源已存在，標題：{1}，節點引用：[[{2}]]"
- :asset/cannot-embed-parent-as-own-property "不能把父區塊嵌入成它自己的屬性"
  :asset/confirm-delete-image "你確定要刪除這張圖片嗎？"
  :asset/copy "複製圖片"
  :asset/copy-image-unsupported-extension "不支援複製 {1} 檔案中的圖片"

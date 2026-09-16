@@ -47,7 +47,6 @@
  :asset/align-left "Linksbündig"
  :asset/align-right "Rechtsbündig"
  :asset/already-exists "Asset existiert bereits, Titel: {1}, Knotenreferenz: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Elternelement kann nicht als eigene Eigenschaft eingebettet werden"
  :asset/confirm-delete-image "Möchten Sie dieses Bild wirklich löschen?"
  :asset/copy "Bild kopieren"
  :asset/copy-image-unsupported-extension "Das Kopieren von Bildern wird für Dateien vom Typ {1} nicht unterstützt"

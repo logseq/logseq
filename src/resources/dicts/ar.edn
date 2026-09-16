@@ -47,7 +47,6 @@
  :asset/align-left "يسار"
  :asset/align-right "يمين"
  :asset/already-exists "الأصل موجود بالفعل، العنوان: {1}، مرجع العقدة: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "لا يمكن تضمين العنصر الأصلي كخاصية"
  :asset/confirm-delete-image "هل أنت متأكد من أنك تريد حذف هذه الصورة؟"
  :asset/copy "نسخ"
  :asset/copy-image-unsupported-extension "نسخ الصورة غير مدعوم لملفات {1}"
