@@ -2563,7 +2563,12 @@
   [table-view? gallery-view?]
   (if gallery-view?
     [:div.ls-card-item {:aria-hidden true}]
-    [:div {:style {:min-height (lazy-item-placeholder-height table-view?)}}]))
+    (let [height (lazy-item-placeholder-height table-view?)]
+      [:div {:style (cond-> {:min-height height}
+                      table-view?
+                      (assoc :height height
+                             :max-height height
+                             :overflow "hidden"))}])))
 
 (hsx/defc lazy-item-subscribed
   [row-uuid preview item-render table-view? gallery-view?]

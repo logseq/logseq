@@ -31,6 +31,11 @@
     > .relative {
       @apply pt-[34px] pb-[38px];
     }
+
+    div[data-index],
+    div[data-item-index] {
+      @apply h-[33px] min-h-[33px] max-h-[33px] overflow-hidden;
+    }
   }
 
   .ls-table-row, .ls-table-cell, .ls-table-cell .jtrigger {
@@ -91,10 +96,10 @@
   }
 
   .ls-table-cell {
-    @apply overflow-hidden;
+    @apply h-full max-h-[33px] overflow-hidden;
 
     > div {
-      @apply min-w-0 overflow-hidden;
+      @apply h-full min-w-0 overflow-hidden;
     }
 
     .property-value-inner,

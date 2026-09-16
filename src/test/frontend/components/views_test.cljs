@@ -633,7 +633,11 @@
     (is (string/includes?
          (render-static (views/lazy-item-placeholder true false))
          "min-height:33px")
-        "Mounted overscan rows stay empty placeholders and skip use-block.")))
+        "Mounted overscan rows stay empty placeholders and skip use-block.")
+    (is (string/includes?
+         (render-static (views/lazy-item-placeholder true false))
+         "height:33px")
+        "Table placeholders must keep the same fixed height as hydrated rows.")))
 
 (deftest remaining-ids-move-prefetch-off-the-first-window-test
   (let [first-window (mapv (fn [_] (random-uuid)) (range 26))
