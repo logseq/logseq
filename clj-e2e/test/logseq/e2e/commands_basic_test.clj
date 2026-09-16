@@ -258,6 +258,23 @@
       (fixtures/create-page)
       (assert-date-picker-keyboard-navigation command))))
 
+(deftest date-picker-month-select-test
+  (testing "date picker month dropdown changes the visible month and closes"
+    (b/new-block "date picker month select test")
+    (util/input-command "date picker")
+    (w/wait-for date-picker-day-selector)
+    (w/wait-for ".ls-date-month-select")
+    (let [current (string/trim (util/get-text ".ls-date-month-select"))
+          target (if (= current "August") "March" "August")]
+      (w/click ".ls-date-month-select")
+      (w/wait-for ".ls-date-month-option")
+      (w/click (format ".ls-date-month-option:has-text('%s')" target))
+      (w/wait-for-not-visible "[role='menu']")
+      (is (= target (string/trim (util/get-text ".ls-date-month-select")))
+          "Month trigger should show the selected month.")
+      (is (string/includes? (util/get-text ".ui__calendar") target)
+          "Calendar caption should switch to the selected month."))))
+
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test
   (testing "date time commands"

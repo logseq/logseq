@@ -81,6 +81,20 @@
     (is (not (string/includes? html "ml-2")))
     (is (not (string/includes? html "5.75rem")))))
 
+(deftest date-month-select-uses-closable-menu-items-test
+  (let [html (.renderToStaticMarkup
+              react-dom-server
+              (ui/date-year-month-select {:name "months"
+                                          :value 8
+                                          :onChange (fn [_])}))]
+    (is (string/includes? html "ls-date-month-select"))
+    (is (string/includes? html "ls-date-month-option"))
+    (is (string/includes? html "September"))
+    (is (string/includes? html "August"))
+    (is (string/includes? html "menuitem"))
+    (is (not (string/includes? html "menuitemcheckbox")))
+    (is (not (string/includes? html "ui__dropdown-menu-checkbox-item")))))
+
 (defn- form-target-event
   [matching-selectors & {:keys [attrs]}]
   (let [hits (set matching-selectors)]

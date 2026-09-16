@@ -1036,14 +1036,15 @@
                 (shui/dropdown-menu-trigger
                  {:as-child true}
                  (shui/button {:variant :ghost
-                               :class "!px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
+                               :class "ls-date-month-select !px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
                                :size :sm}
                               (get-month-label value)))
         (shui/dropdown-menu-content
          (for [[idx _month] (medley/indexed month-values)
                :let [label (get-month-label idx)]]
-           (shui/dropdown-menu-checkbox-item
-            {:checked (= value idx)
+           (shui/dropdown-menu-item
+            {:key idx
+             :class "ls-date-month-option"
              :on-select (fn []
                           (onChange (day-picker-change-event idx)))}
             label)))))]))
