@@ -34,6 +34,24 @@
                 (when valid?
                   (db-property-handler/set-block-property! block-id :block/tags (:db/id tag-entity)))))))
 
+(defn convert-action
+  "Page/block convert affordance for a DB-graph context menu."
+  [block]
+  (cond
+    (ldb/internal-page? block) :to-block
+    (not (ldb/page? block)) :to-page
+    :else nil))
+
+(defn convert-block-to-page!
+  [block]
+  (let [repo (state/get-current-repo)]
+    (p/let [page-class (state/<invoke-db-worker :thread-api/pull repo [:db/id :db/ident] :logseq.class/Page)]
+      (add-tag repo (:block/uuid block) page-class))))
+
+(defn convert-page-to-block!
+  [block]
+  (db-property-handler/delete-property-value! (:block/uuid block) :block/tags :logseq.class/Page))
+
 (defn convert-page-to-tag!
   "Converts a Page to a Tag"
   [page-entity]

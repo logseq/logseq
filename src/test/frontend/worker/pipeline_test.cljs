@@ -1234,3 +1234,23 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest converting-nested-block-to-page-does-not-move-parent-to-library-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "nested"}]}])
+        page (ldb/get-page @conn "page1")
+        block (db-test/find-block-by-content @conn "nested")
+        library (ldb/get-library-page @conn)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id block) :block/tags :logseq.class/Page]])
+      (let [block (d/entity @conn (:db/id block))
+            page (d/entity @conn (:db/id page))]
+        (is (ldb/page? block))
+        (is (= (:db/id page) (:db/id (:block/parent block))))
+        (is (nil? (:block/parent page))
+            "Converting a nested block must not silently file its unfiled parent into Library")
+        (is (not= (:db/id library) (:db/id (:block/parent page)))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))

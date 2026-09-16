@@ -13,7 +13,6 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -278,17 +277,10 @@
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]]))
-                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
-                                                              (nil? (:block/parent block-parent))
-                                                              block-parent
-                                                              (not= (:db/id block-parent) (:db/id library-page))
-                                                              (not (:db/ident block-parent))
-                                                              (not (ldb/built-in? block-parent)))
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                                       [:db/retract id :block/order]]))]
+                     ;; Keep the parent where it is. Filing an unrelated page into
+                     ;; Library is an explicit user action, not a convert side effect.
+                     ->page-tx)
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))

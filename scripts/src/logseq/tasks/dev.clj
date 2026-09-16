@@ -38,6 +38,7 @@
 (def isolated-test-namespaces
   #{"frontend.components.block.drop-boundary-test"
     "frontend.handler.db-based.page-test"
+    "frontend.handler.library-test"
     "frontend.handler.editor-async-test"
     "frontend.handler.editor-lifecycle-test"
     "frontend.handler.editor-test"

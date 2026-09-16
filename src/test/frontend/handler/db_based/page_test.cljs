@@ -213,3 +213,71 @@
                (set! state/<invoke-db-worker original-invoke-db-worker)
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest convert-action-distinguishes-page-and-block
+  (is (= :to-block
+         (db-page-handler/convert-action {:block/tags [{:db/ident :logseq.class/Page}]})))
+  (is (= :to-page
+         (db-page-handler/convert-action {:block/title "plain block"})))
+  (is (nil? (db-page-handler/convert-action {:block/tags [{:db/ident :logseq.class/Journal}]}))))
+
+(deftest convert-block-to-page-adds-page-tag
+  (async done
+    (let [previous-state (state/get-state)
+          original-invoke-db-worker state/<invoke-db-worker
+          original-save-current-block! editor-handler/save-current-block!
+          block-id #uuid "66666666-6666-6666-6666-666666666666"
+          page-class-id 7
+          calls (atom [])]
+      (state/swap-state! assoc :git/current-repo "test")
+      (set! state/<invoke-db-worker
+            (fn [& args]
+              (swap! calls conj (vec args))
+              (case (first args)
+                :thread-api/pull (p/resolved {:db/id page-class-id :db/ident :logseq.class/Page})
+                :thread-api/validate-block-tag (p/resolved {:valid? true})
+                :thread-api/undo-redo-set-pending-editor-info (p/resolved nil)
+                :thread-api/apply-outliner-ops (p/resolved nil)
+                (p/rejected (js/Error. (str "unexpected worker call: " (pr-str args)))))))
+      (set! editor-handler/save-current-block!
+            (fn []
+              (swap! calls conj [:save-current-block])
+              (p/resolved nil)))
+      (-> (db-page-handler/convert-block-to-page! {:block/uuid block-id})
+          (p/then
+           (fn []
+             (let [calls' (vec (remove #(= :thread-api/undo-redo-set-pending-editor-info (first %)) @calls))]
+               (is (= [:thread-api/pull "test" [:db/id :db/ident] :logseq.class/Page]
+                      (first calls')))
+               (is (= [:save-current-block] (second calls')))
+               (is (= [:thread-api/validate-block-tag "test" block-id page-class-id]
+                      (nth calls' 2)))
+               (is (= :set-block-property
+                      (:outliner-op (nth (nth calls' 3) 3)))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor-handler/save-current-block! original-save-current-block!)
+             (set! state/<invoke-db-worker original-invoke-db-worker)
+             (state/replace-state! previous-state)
+             (done))))))))
+
+(deftest convert-page-to-block-removes-page-tag
+  (async done
+    (let [block-id #uuid "77777777-7777-7777-7777-777777777777"
+          calls (atom [])]
+      (p/with-redefs [db-property-handler/delete-property-value!
+                      (fn [& args]
+                        (swap! calls conj (vec args))
+                        (p/resolved nil))]
+        (-> (db-page-handler/convert-page-to-block! {:block/uuid block-id})
+            (p/then
+             (fn []
+               (is (= [[block-id :block/tags :logseq.class/Page]]
+                      @calls))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally done))))))

@@ -382,6 +382,7 @@
  :command.go/home "Go to home"
  :command.go/journals "Go to journals"
  :command.go/keyboard-shortcuts "Go to keyboard shortcuts"
+ :command.go/library "Go to Library"
  :command.go/next-journal "Go to next journal"
  :command.go/prev-journal "Go to previous journal"
  :command.go/search "Search pages and blocks"
@@ -1005,6 +1006,9 @@
 
  :library/add-existing-pages "Add existing pages to Library"
  :library/add-pages "Add pages"
+ :library/file-graph-unavailable "Library is only available in DB graphs."
+ :library/remove-page-confirm-desc "Remove this page from Library? It will stay in the graph as an unfiled page."
+ :library/tip "Organize page hierarchies here. Add existing pages, or convert a block to a page from its menu (or by adding #Page)."
  :library/title "Library"
 
  :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
@@ -1161,6 +1165,8 @@
  :page.convert/tag-to-page-confirm-desc "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
  :page.convert/tag-to-page-duplicate "A page with the name \"{1}\" already exists."
  :page.convert/tag-to-page-has-children "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag."
+ :page.convert/to-block-action "Convert to block"
+ :page.convert/to-page-action "Convert to page"
 
  :page.delete/batch-confirm-title "Are you sure you want to delete these pages? Properties and tags will be permanently deleted and pages will be moved to Recycle."
  :page.delete/confirm-title "Are you sure you want to delete this page?"

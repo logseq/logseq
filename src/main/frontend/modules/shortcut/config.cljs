@@ -393,6 +393,9 @@
    :go/all-pages                            {:binding "g a"
                                              :fn      route-handler/redirect-to-all-pages!}
 
+   :go/library                              {:binding "g l"
+                                             :fn      route-handler/redirect-to-library!}
+
    :go/graph-view                           {:binding "g g"
                                              :fn      route-handler/redirect-to-graph-view!}
 
@@ -705,6 +708,7 @@
          [:go/home
           :go/journals
           :go/all-pages
+          :go/library
           :go/flashcards
           :go/graph-view
           :go/all-graphs
@@ -806,6 +810,7 @@
      :go/home
      :go/journals
      :go/all-pages
+     :go/library
      :go/graph-view
      :go/all-graphs
      :go/flashcards

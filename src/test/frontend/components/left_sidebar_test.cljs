@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.left-sidebar :as left-sidebar]
             [frontend.components.left-sidebar-util :as sidebar-util]
+            [frontend.handler.library :as library-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
 
@@ -39,3 +40,7 @@
         (is (= [[:thread-api/pull "graph" [:block/uuid] :logseq.class/Asset]
                 [:thread-api/pull "graph" [:block/uuid] :logseq.class/Task]]
                @calls))))))
+
+(deftest library-nav-uses-built-in-library-page
+  (is (uuid? (library-handler/page-uuid))
+      "Library left-nav can address the built-in Library page without a hidden route.")))

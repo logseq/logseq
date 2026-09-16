@@ -4,7 +4,10 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.date :as date]
+            [frontend.config :as config]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.library :as library-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
@@ -309,3 +312,23 @@
              (reset! state/*db-worker previous-worker)
              (set! (.-document js/global) previous-document)
              (done)))))))
+
+(deftest redirect-to-library-uses-built-in-library-page
+  (let [calls (atom [])]
+    (with-redefs [config/db-based-graph? (fn [] true)
+                  route-handler/redirect-to-page! (fn [page]
+                                                    (swap! calls conj page))]
+      (route-handler/redirect-to-library!)
+      (is (= [(library-handler/page-uuid)] @calls)))))
+
+(deftest redirect-to-library-is-unavailable-on-file-graphs
+  (let [calls (atom [])]
+    (with-redefs [config/db-based-graph? (fn [] false)
+                  notification/show! (fn [message type]
+                                       (swap! calls conj [message type]))
+                  route-handler/redirect-to-page! (fn [_]
+                                                    (swap! calls conj :redirected))]
+      (route-handler/redirect-to-library!)
+      (is (= 1 (count @calls)))
+      (is (= :warning (second (first @calls))))
+      (is (not (some #{:redirected} @calls))))))
