@@ -812,17 +812,11 @@
   []
   (distinct (seq (state/get-selection-blocks))))
 
-(defn embed-uuid-from-node
+(defn- embed-uuid-from-node
   "UUID of the linking (wrapper) block when `node` is a rendered embed."
   [node]
   (when-let [id (some-> node (dom/attr "originalblockid"))]
     (uuid id)))
-
-(defn selection-embeds-only?
-  "True when every selected node is a :block/link embed wrapper."
-  []
-  (let [nodes (seq (get-selected-blocks))]
-    (boolean (and nodes (every? embed-uuid-from-node nodes)))))
 
 (defn- selection-node-delete-uuid
   "Delete the embed wrapper when one is selected; otherwise delete the node itself."
@@ -4477,21 +4471,6 @@
     (p/let [block (db-async/<get-block (state/get-current-repo) embed-uuid {:children? false})]
       (when block
         (delete-block-aux! block)))))
-
-(defn delete-source-block!
-  "Delete the source node of an embed after confirmation."
-  [source-uuid]
-  (when source-uuid
-    (-> (shui/dialog-confirm!
-         {:title (t :editor.embed/delete-source-block-confirm-title)
-          :outside-cancel? true
-          :cancel-label (t :ui/cancel)
-          :ok-label (t :ui/confirm)})
-        (p/then (fn []
-                  (p/let [block (db-async/<get-block (state/get-current-repo) source-uuid {:children? false})]
-                    (when block
-                      (delete-block-aux! block)))))
-        (p/catch (fn [_])))))
 
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.
