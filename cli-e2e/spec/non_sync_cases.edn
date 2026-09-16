@@ -785,7 +785,7 @@
    :extends :non-sync/graph-json-env}
   {:id "block-upsert-blocks-inline-property-missing-does-not-create-target-page-json",
    :cmds
-   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]' 2>&1)\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]')\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
    :expect
    {:exit 0,
     :stdout-contains ["property-not-found"]},
@@ -1453,4 +1453,13 @@
     :options
     {:global ["--config" "--root-dir" "--output"],
      :doctor ["--dev-script"]}},
-   :tags [:doctor :smoke]}]}
+   :tags [:doctor :smoke]}
+  {:id "graph-deletion-worker-lifecycle"
+   :cmds ["python3 {{repo-root-arg}}/cli-e2e/scripts/graph_deletion_lifecycle_test.py"]
+   :tags [:graph :lifecycle]}
+  {:id "graph-lifecycle-cli-followups"
+   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_cli_test.cjs"]
+   :tags [:graph :lifecycle]}
+  {:id "graph-lifecycle-process-protocol"
+   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_protocol_test.cjs"]
+   :tags [:graph :lifecycle]}]}

@@ -431,7 +431,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest remove-vfs-removes-lock-file
+(deftest remove-vfs-preserves-worker-lock
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-remove-vfs")
           lock-json "{\"repo\":\"logseq_db_demo\",\"pid\":1,\"host\":\"127.0.0.1\",\"port\":9001}"]
@@ -447,7 +447,7 @@
                   _ (fs/writeFileSync db-path "db-bytes" "utf8")
                   _ (fs/writeFileSync nested-path "asset-bytes" "utf8")
                   _ ((:remove-vfs! storage) pool)]
-            (is (not (fs/existsSync lock-path)))
+            (is (= lock-json (.toString (fs/readFileSync lock-path) "utf8")))
             (is (not (fs/existsSync db-path)))
             (is (not (fs/existsSync nested-path))))
           (p/catch (fn [e]
