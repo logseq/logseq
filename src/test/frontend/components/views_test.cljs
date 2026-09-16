@@ -726,6 +726,8 @@
       "An in-flight Movies offset must finish. A new key cancelled the fetch and left 27 empty rows.")
   (is (= 400 (#'views/next-scrolled-row-offset 26 27 400 426 26 false))
       "Continuous fast scroll must replace an obsolete in-flight offset once the visible range leaves it.")
+  (is (= 900 (#'views/next-scrolled-row-offset 920 30 900 929 30 false))
+      "Repeated scroll can leave an in-flight offset below the viewport top; replace it so the table does not paint a blank band above the rows.")
   (is (= [66 92] (#'views/viewport-row-range 2400 196 852 33 40000))
       "Movies chrome is 196px. scrollTop 2400 is rows 66-92, not 72-97."))
 

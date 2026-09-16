@@ -7,6 +7,8 @@
 (def ^:private flush-kind-order [:view-resources :resources :blocks :children])
 (def ^:private limits {:view-resources 25 :resources 25 :blocks 1000 :children 25})
 (def ^:private slot-kind {:block :blocks :children :children :resource :resources})
+(def ^:private cancelled-error
+  (ex-info "Renderer snapshot load cancelled" {::cancelled true}))
 
 (defn- entry-flush-kind
   "view-data/views must leave in their own request. A mixed resource
@@ -21,6 +23,12 @@
       (get {:block :blocks :children :children} slot))))
 
 (defonce ^:private *batch (atom {}))
+(defonce ^:private *flushing? (atom false))
+(defonce ^:private *still-wanted-fn (atom (constantly true)))
+
+(defn set-still-wanted-fn!
+  [f]
+  (reset! *still-wanted-fn f))
 
 (defn- reject!
   [entries error]
@@ -32,6 +40,20 @@
   (let [entries (vals @*batch)]
     (reset! *batch {})
     entries))
+
+(defn- entry-key
+  [{:keys [graph-id slot-key]}]
+  [graph-id slot-key])
+
+(defn- put-back!
+  [entries]
+  (when (seq entries)
+    (swap! *batch
+           (fn [batch]
+             (reduce (fn [batch entry]
+                       (assoc batch (entry-key entry) entry))
+                     batch
+                     entries)))))
 
 (defn- request-groups
   "Flush view-data before other resources, then blocks, then children.
@@ -51,6 +73,23 @@
           {:blocks [] :children [] :resources []}
           entries))
 
+(defn- still-wanted?
+  [{:keys [slot-key]}]
+  (boolean (@*still-wanted-fn slot-key)))
+
+(defn- take-next-request-group!
+  []
+  (let [entries (take-batch!)
+        {wanted true cancelled false} (group-by still-wanted? entries)]
+    (reject! cancelled cancelled-error)
+    (when-let [[graph-id graph-entries] (first (group-by :graph-id wanted))]
+      (let [groups (request-groups graph-entries)
+            group (first groups)
+            remaining-graph-entries (mapcat identity (rest groups))
+            other-graph-entries (remove #(= graph-id (:graph-id %)) wanted)]
+        (put-back! (concat remaining-graph-entries other-graph-entries))
+        group))))
+
 (defn- entry-response
   [response {:keys [slot-key]}]
   (if-let [group (get-in response [:groups slot-key])]
@@ -61,13 +100,16 @@
 
 (defn- flush!
   []
-  (when @state/db-worker-ready?
-    (let [batch (take-batch!)]
-      (doseq [[graph-id graph-entries] (group-by :graph-id batch)
-              entries (request-groups graph-entries)]
-        (-> (state/<invoke-db-worker :thread-api/get-render-snapshots
-                                     graph-id
-                                     (worker-request entries))
+  (when (and @state/db-worker-ready? (not @*flushing?))
+    (when-let [entries (take-next-request-group!)]
+      (reset! *flushing? true)
+      (let [graph-id (:graph-id (first entries))]
+        (-> (try
+              (state/<invoke-db-worker :thread-api/get-render-snapshots
+                                       graph-id
+                                       (worker-request entries))
+              (catch :default error
+                (p/rejected error)))
             (p/then (fn [response]
                       (try
                         (let [values (mapv #(entry-response response %) entries)]
@@ -75,7 +117,10 @@
                             (p/resolve! (:result entry) value)))
                         (catch :default error
                           (reject! entries error)))))
-            (p/catch #(reject! entries %)))))))
+            (p/catch #(reject! entries %))
+            (p/finally (fn []
+                         (reset! *flushing? false)
+                         (flush!))))))))
 
 (defn- flush-when-db-worker-ready!
   [_key _ref _old-value ready?]
@@ -103,4 +148,5 @@
   [error]
   (let [entries (vals @*batch)]
     (reset! *batch {})
+    (reset! *flushing? false)
     (reject! entries error)))

@@ -2389,7 +2389,8 @@
        (and (integer? current-offset) (not (true? offset-ready?)))
        (if (and (integer? visible-start)
                 (integer? window-size)
-                (> visible-start (+ current-offset window-size)))
+                (or (< visible-start current-offset)
+                    (> visible-start (+ current-offset window-size))))
          visible-start
          current-offset)
 
