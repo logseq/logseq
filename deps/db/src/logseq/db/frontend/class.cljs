@@ -283,26 +283,34 @@
     (or (contains? deleted-eids eid)
         (and (contains? built-in-eids eid)
              (not (eid-has-true-attr? db eid :logseq.property/public?))))
-    (hidden-by-ancestor? db eid hide-eids deleted-eids)))
+    (and (or (seq hide-eids) (seq deleted-eids))
+         (hidden-by-ancestor? db eid hide-eids deleted-eids))))
+
+(defn filter-visible-class-object-ids
+  "Filters candidate class-object entity ids with the same hidden/deleted
+  contract used by class-object views."
+  [db eids]
+  (let [hidden-index (class-object-hidden-index db)]
+    (->> eids
+         (reduce (fn [[seen result] eid]
+                   (if (contains? seen eid)
+                     [seen result]
+                     (let [seen' (conj seen eid)]
+                       (if (hidden-class-object-eid? db eid hidden-index)
+                         [seen' result]
+                         [seen' (conj! result eid)]))))
+                 [#{} (transient [])])
+         second
+         persistent!)))
 
 (defn- class-object-eids
   [db class-id]
   (let [class-children (get-structured-children db class-id)
-        class-ids (distinct (conj class-children class-id))
-        hidden-index (class-object-hidden-index db)]
-    (->> class-ids
-         (mapcat (fn [id] (d/datoms db :avet :block/tags id)))
-         (reduce (fn [[seen result] d]
-                   (let [eid (:e d)]
-                     (if (contains? seen eid)
-                       [seen result]
-                       (let [seen' (conj seen eid)]
-                         (if (hidden-class-object-eid? db eid hidden-index)
-                           [seen' result]
-                           [seen' (conj! result eid)])))))
-                 [#{} (transient [])])
-         second
-         persistent!)))
+        class-ids (distinct (conj class-children class-id))]
+    (filter-visible-class-object-ids
+     db
+     (mapcat (fn [id] (map :e (d/datoms db :avet :block/tags id)))
+             class-ids))))
 
 (defn get-class-object-ids
   "Class-object entity ids including children classes', without hidden objects."

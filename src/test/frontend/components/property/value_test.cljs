@@ -75,7 +75,8 @@
         "use-block property snapshots omit :property/closed-values.")
     (is (true? (#'property-value/property-value-select-type? {} property empty-value))
         "No priority must still take the select/dashed-icon path.")
-    (is (true? (#'property-value/closed-choice-value? high-value)))
+    (is (false? (#'property-value/closed-choice-value? high-value))
+        "An icon alone is display metadata; the property decides whether it is a closed choice.")
     (is (true? (#'property-value/property-value-select-type? {} property high-value))
         "Closed choices keep their icon on the value ref.")
     (is (false? (#'property-value/closed-choice-value? empty-value)))
@@ -85,6 +86,15 @@
                   :logseq.property/type :default}
                  empty-value))
         "Empty text properties must not become 0-width nested select blocks.")))
+
+(deftest icon-bearing-page-values-are-not-closed-choices-test
+  (let [page-value {:db/id 11
+                    :block/uuid (random-uuid)
+                    :block/title "Icon page"
+                    :block/name "icon page"
+                    :logseq.property/icon {:type :tabler-icon :id "star"}}]
+    (is (false? (#'property-value/closed-choice-value? page-value))
+        "A page/node icon is display metadata, not closed-choice identity.")))
 
 (deftest compact-closed-values-require-worker-loading-test
   (is (#'property-value/compact-closed-values?

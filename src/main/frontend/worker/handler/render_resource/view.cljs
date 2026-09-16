@@ -31,10 +31,11 @@
 (defn- views
   [db resource-key _runtime]
   (let [[_ owner-lookup feature-type] resource-key
-        owner (view-owner db owner-lookup)]
+        owner (view-owner db owner-lookup)
+        owner-uuid (common/entity-uuid! db (:db/id owner))]
     (when-not (keyword? feature-type)
       (common/fail! "Invalid view feature type" {:feature-type feature-type}))
-    [#{resource-key}
+    [#{[:views owner-uuid feature-type]}
      (->> (d/q view-eids-query db (:db/id owner) feature-type)
           (map #(d/entity db %))
           ldb/sort-by-order

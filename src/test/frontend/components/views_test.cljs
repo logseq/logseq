@@ -4,6 +4,7 @@
             [cljs.test :refer [async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
@@ -145,6 +146,19 @@
           :linked-references)))
   (is (= :logseq.property.view/type.table
          (#'views/view-display-type {} :all-pages))))
+
+(deftest all-pages-passes-resolved-view-parent-uuid-test
+  (let [view-parent-uuid (random-uuid)
+        view-opts (atom nil)]
+    (with-redefs [db-hooks/use-resource (fn [resource-key]
+                                          (when (= [:page-identity "$$$views"] resource-key)
+                                            view-parent-uuid))
+                  views/view (fn [opts]
+                               (reset! view-opts opts)
+                               nil)]
+      (render-static (all-pages/all-pages))
+      (is (= view-parent-uuid (:view-parent-uuid @view-opts)))
+      (is (= :all-pages (:view-feature-type @view-opts))))))
 
 (deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
   (let [rows [(random-uuid)]]
@@ -603,6 +617,20 @@
     (let [short-offset (mapv (fn [_] (random-uuid)) (range 11))]
       (is (= 11 (count (#'views/prefetch-rows-in-bounds short-offset [0 25])))
           "A shorter Tags offset window must not throw on stale first-window bounds."))))
+
+(deftest stale-offset-window-only-applies-to-the-same-resource-context-test
+  (let [ctx {:feature-type :class-objects
+             :sorting [{:id :block/title :asc? true}]
+             :initial-row-count 26}
+        stale {:context ctx
+               :row-offset 72
+               :rows [(random-uuid)]
+               :previews {:a :preview}}]
+    (is (= stale (#'views/matching-stale-offset-window stale ctx)))
+    (is (nil? (#'views/matching-stale-offset-window
+               stale
+               (assoc ctx :sorting [{:id :block/title :asc? false}])))
+        "Stale offset rows from an old sort/filter/input context must not paint in the new view.")))
 
 (deftest scrolled-offset-stays-put-until-the-visible-range-leaves-test
   (is (true? (#'views/offset-window-covers-visible? 26 27 28 51)))

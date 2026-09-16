@@ -1649,6 +1649,8 @@
                                 #{resource-key}
                                 [view-a view-b]
                                 response)
+      (is (= #{resource-key} (:watch-keys by-name))
+          "String owner lookups must watch the canonical UUID key used by invalidation.")
       (is (= [view-a view-b] (:value by-name))
           "All Pages can resolve $$$views by page name and skip page-identity."))))
 

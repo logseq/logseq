@@ -651,14 +651,11 @@
     :class-objects
     (when class-id
       (let [class-ids (cons class-id (db-class/get-structured-children db class-id))
-            ;; Tag datom collect is 8.8ms for 3883 Movies. The 90ms was
-            ;; hidden-by-ancestor parent walks that hid none. 21 Tags must
-            ;; not rseek 79034 updated-at datoms (1407ms).
-            tag-eids (into []
-                           (comp (mapcat (fn [id] (d/datoms db :avet :block/tags id)))
-                                 (map :e)
-                                 (distinct))
-                           class-ids)]
+            tag-eids (db-class/filter-visible-class-object-ids
+                      db
+                      (mapcat (fn [id]
+                                (map :e (d/datoms db :avet :block/tags id)))
+                              class-ids))]
         {:count (count tag-eids)
          :data (take-sorted-eids db tag-eids sorting row-limit row-offset)}))
 

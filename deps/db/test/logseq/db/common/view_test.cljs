@@ -310,6 +310,43 @@
   [conn result]
   (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
 
+(deftest get-view-data-class-objects-first-window-filters-hidden-objects-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Parent {:block/title "Parent"}
+                         :Child {:block/title "Child"
+                                 :build/class-extends [:Parent]}}
+               :pages-and-blocks [{:page {:block/title "Visible"
+                                          :block/updated-at 10
+                                          :build/tags [:Child]}}
+                                  {:page {:block/title "Deleted"
+                                          :block/updated-at 20
+                                          :build/tags [:Child]
+                                          :logseq.property/deleted-at 1}}
+                                  {:page {:block/title "Hidden"
+                                          :block/updated-at 30
+                                          :build/tags [:Child]
+                                          :logseq.property/hide? true}}
+                                  {:page {:block/title "Hidden parent"
+                                          :logseq.property/hide? true}
+                                   :blocks [{:block/title "Nested hidden"
+                                             :block/updated-at 40
+                                             :build/tags [:Child]}]}
+                                  {:page {:block/title "Visible parent"}
+                                   :blocks [{:block/title "Nested visible"
+                                             :block/updated-at 50
+                                             :build/tags [:Child]}]}]})
+        class-id (:db/id (d/entity @conn :user.class/Parent))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/updated-at :asc? false}]}
+        full (db-view/get-view-data @conn view-id option)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 10))]
+    (is (= (:count full) (:count window)))
+    (is (= #{"Visible" "Nested visible"} (set (result-titles conn window))))
+    (is (= (:data full) (:data window))
+        "First-window class objects must use the same hidden/deleted contract as the full path.")))
+
 (defn- topic-conn
   [pages & {:keys [properties]}]
   (db-test/create-conn-with-blocks

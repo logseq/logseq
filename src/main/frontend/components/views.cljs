@@ -2187,6 +2187,11 @@
        (table-row-from-offset offset-rows row-offset idx)
        (table-row-from-offset stale-rows stale-offset idx))))
 
+(defn- matching-stale-offset-window
+  [stale-window window-context]
+  (when (= (:context stale-window) window-context)
+    stale-window))
+
 (defn- scroll-list-offset-top
   "Virtuoso's list sits below page chrome. `#main-content-container`
   scrollTop includes that chrome; the first visible row index does not."
@@ -3712,11 +3717,20 @@
                                         group-by-property-ident
                                         query-row-uuids
                                         viewport-height)
+        window-context (:window-context plan)
+        window-context-key (pr-str window-context)
         window-or-full-data (db-hooks/use-resource (get-in plan [:pending-keys :primary]))
-        [row-offset set-row-offset!] (hooks/use-state nil)
+        [row-offset-state set-row-offset-state!] (hooks/use-state nil)
         [stale-offset-window set-stale-offset-window!] (hooks/use-state nil)
+        row-offset (when (= (:context row-offset-state) window-context)
+                     (:offset row-offset-state))
+        set-current-row-offset! (fn [row-offset]
+                                  (set-row-offset-state! {:offset row-offset
+                                                          :context window-context}))
+        matched-stale-offset-window (matching-stale-offset-window stale-offset-window
+                                                                  window-context)
         offset-key (offset-view-data-key (:block/uuid view-entity)
-                                         (:window-context plan)
+                                         window-context
                                          row-offset)
         offset-snapshot (db-hooks/use-resource-snapshot offset-key)
         offset-data (when offset-key
@@ -3731,7 +3745,7 @@
         offset-rows (when offset-data
                       (view-data->rows offset-data))
         row-previews (merge (:row-previews window-or-full-data)
-                            (:previews stale-offset-window)
+                            (:previews matched-stale-offset-window)
                             (:row-previews offset-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
@@ -3755,9 +3769,16 @@
        (when (and offset-data (integer? row-offset))
          (set-stale-offset-window! {:row-offset row-offset
                                     :rows (view-data->rows offset-data)
-                                    :previews (:row-previews offset-data)}))
+                                    :previews (:row-previews offset-data)
+                                    :context window-context}))
        nil)
-     [row-offset offset-data])
+     [row-offset offset-data window-context-key])
+    (hooks/use-effect!
+     (fn []
+       (set-row-offset-state! nil)
+       (set-stale-offset-window! nil)
+       js/undefined)
+     [window-context-key])
     (if-not (:ready? paint)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
@@ -3766,7 +3787,7 @@
             ignore! (fn [_])]
         [:div.flex.flex-col.gap-2
          (view-container view-entity (assoc option
-                                            :on-viewport-filled! set-row-offset!
+                                            :on-viewport-filled! set-current-row-offset!
                                             :view-data (:view-data paint)
                                             :partition (:partition paint)
                                             :data data
@@ -3775,8 +3796,8 @@
                                                            all-row-ids)
                                             :offset-rows offset-rows
                                             :row-offset row-offset
-                                            :stale-offset-rows (:rows stale-offset-window)
-                                            :stale-row-offset (:row-offset stale-offset-window)
+                                            :stale-offset-rows (:rows matched-stale-offset-window)
+                                            :stale-row-offset (:row-offset matched-stale-offset-window)
                                             :filters (or filters {})
                                             :sorting sorting
                                             :set-filters! ignore!

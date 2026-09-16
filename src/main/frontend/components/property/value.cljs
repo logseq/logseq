@@ -100,14 +100,12 @@
            (= (:db/ident value) :logseq.property/empty-placeholder))))
 
 (defn- closed-choice-value?
-  "Canonical property snapshots omit :property/closed-values. Choice refs still
-  carry their icon (and sometimes :block/closed-value-property) on the value."
+  "True when the value itself carries closed-choice identity."
   [value]
   (boolean
    (and (map? value)
         (not (empty-placeholder-value? value))
-        (or (some? (:logseq.property/icon value))
-            (some? (:block/closed-value-property value))))))
+        (some? (:block/closed-value-property value)))))
 
 (defn- value->db-id
   [value]
@@ -239,6 +237,19 @@
    (seq (:closed-values
          (get db-property/built-in-properties (:db/ident property))))))
 
+(defn- built-in-closed-choice-value?
+  [property value]
+  (boolean
+   (and (built-in-closed-choice-property? property)
+        (map? value)
+        (not (empty-placeholder-value? value))
+        (some? (:logseq.property/icon value)))))
+
+(defn- property-closed-choice-value?
+  [property value]
+  (or (closed-choice-value? value)
+      (built-in-closed-choice-value? property value)))
+
 (defn- property-value-select-type?
   "select-type? only sees :property/closed-values. Positioned chips load the
    property through use-block, which is a canonical snapshot without that key.
@@ -246,7 +257,7 @@
    a 0-width nested ls-block that open-last-block tried to click."
   [block property value]
   (or (select-type? block property)
-      (closed-choice-value? value)
+      (property-closed-choice-value? property value)
       (and (empty-placeholder-value? value)
            (built-in-closed-choice-property? property))))
 
@@ -1534,7 +1545,7 @@
        (empty-placeholder-value? value)
        (property-empty-btn-value property opts)
 
-       (or closed-values? (closed-choice-value? value))
+       (or closed-values? (property-closed-choice-value? property value))
        (closed-value-item value opts)
 
        (or (entity/page? value)
