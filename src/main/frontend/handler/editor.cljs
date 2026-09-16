@@ -835,23 +835,24 @@
   (or (:db/id block)
       (when (integer? block) block)))
 
+(defn- block-identity-set
+  [block]
+  (cond-> #{}
+    (block-uuid* block) (conj (block-uuid* block))
+    (block-db-id block) (conj (block-db-id block))))
+
 (defn can-embed?
   "True when `target` can be embedded at `host`.
    Rejects embedding a node into itself or one of its ancestors."
   [host-block target-block parents]
-  (let [host-uuid (block-uuid* host-block)
-        target-uuid (block-uuid* target-block)
-        host-id (block-db-id host-block)
-        target-id (block-db-id target-block)
-        parent-uuids (into #{} (keep block-uuid*) parents)
-        parent-ids (into #{} (keep block-db-id) parents)]
+  (let [host-ids (block-identity-set host-block)
+        target-ids (block-identity-set target-block)
+        ancestor-ids (into #{} (mapcat block-identity-set) parents)]
     (boolean
-     (and (or host-uuid host-id)
-          (or target-uuid target-id)
-          (not (and host-uuid target-uuid (= host-uuid target-uuid)))
-          (not (and host-id target-id (= host-id target-id)))
-          (not (and target-uuid (contains? parent-uuids target-uuid)))
-          (not (and target-id (contains? parent-ids target-id)))))))
+     (and (seq host-ids)
+          (seq target-ids)
+          (empty? (set/intersection target-ids host-ids))
+          (empty? (set/intersection target-ids ancestor-ids))))))
 
 (defn- show-cannot-embed-cycle!
   []
