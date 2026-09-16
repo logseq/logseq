@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.common :as common]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -264,7 +265,7 @@
     (when-let [entity (d/entity db [:block/uuid block-uuid])]
       {:block/uuid block-uuid
        :db/id (:db/id entity)
-       :block/title (:block/title entity)
+       :block/title (block-handler/renderer-display-title db (:db/id entity))
        :block.temp/first-window-preview? true})))
 
 (defn- first-window-row-previews

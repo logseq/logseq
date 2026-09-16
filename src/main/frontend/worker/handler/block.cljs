@@ -127,6 +127,35 @@
 
 (declare block-refs-count)
 
+(defn renderer-display-title
+  "Return the renderer-facing block title with id refs resolved."
+  [db entity-id]
+  (let [stored-title (eavt-scalar db entity-id :block/title)]
+    (cond
+      (and (string? stored-title)
+           (string/includes? stored-title "[["))
+      (:block/title (d/entity db entity-id))
+
+      (string? stored-title)
+      stored-title
+
+      :else
+      nil)))
+
+(defn renderer-raw-title
+  [db entity-id]
+  (let [stored-title (eavt-scalar db entity-id :block/title)]
+    (cond
+      (and (string? stored-title)
+           (string/includes? stored-title "[["))
+      (:block/raw-title (d/entity db entity-id))
+
+      (string? stored-title)
+      stored-title
+
+      :else
+      nil)))
+
 (defn canonical-block
   [db entity]
   (let [entity-id (:db/id entity)
@@ -139,16 +168,8 @@
         ;; titles; doing that for a screen-sized snapshot is multi-second work.
         replace-id-refs? (and (string? stored-title)
                               (string/includes? stored-title "[["))
-        title-entity (when replace-id-refs?
-                       (d/entity db entity-id))
-        raw-title (cond
-                    replace-id-refs? (:block/raw-title title-entity)
-                    (string? stored-title) stored-title
-                    :else nil)
-        display-title (cond
-                        replace-id-refs? (:block/title title-entity)
-                        (string? stored-title) stored-title
-                        :else nil)
+        raw-title (renderer-raw-title db entity-id)
+        display-title (renderer-display-title db entity-id)
         order-list-type (block-order-list-type db entity-id)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"

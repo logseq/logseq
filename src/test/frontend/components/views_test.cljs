@@ -3,6 +3,7 @@
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is testing use-fixtures]]
             [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
@@ -10,6 +11,8 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [frontend.util :as util]
+            [frontend.worker.handler.block :as worker-block]
+            [frontend.worker.handler.render-resource.view :as worker-view]
             [goog.object :as gobj]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
@@ -175,9 +178,29 @@
     (is (string/includes? (name wrapper-tag) "items-center"))
     (is (string/includes? (name link-tag) "truncate"))
     (is (string/includes? (:href attrs) (str page-uuid)))
-    (is (= "Aligned page" title))
+    (is (= "Aligned page" title)
+        "All Pages title cells render the worker-provided display title directly.")
     (is (not (string/includes? (name link-tag) "page-reference"))
         "All Pages cells use a plain page link, not page-cp preview DOM.")))
+
+(deftest all-pages-first-window-preview-uses-worker-display-title-test
+  (let [page-uuid (random-uuid)
+        entity {:db/id 42 :block/uuid page-uuid}
+        db ::db]
+    (with-redefs [d/entity (fn [db' lookup]
+                             (is (= db db'))
+                             (is (= [:block/uuid page-uuid] lookup))
+                             entity)
+                  worker-block/renderer-display-title
+                  (fn [db' entity-id]
+                    (is (= db db'))
+                    (is (= 42 entity-id))
+                    "Page with Reference")]
+      (is (= {:db/id 42
+              :block/uuid page-uuid
+              :block/title "Page with Reference"
+              :block.temp/first-window-preview? true}
+             (#'worker-view/first-window-row-preview db page-uuid))))))
 
 (deftest list-and-gallery-heads-do-not-wait-for-table-paint-test
   (let [rows [(random-uuid)]]
