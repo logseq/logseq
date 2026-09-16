@@ -226,6 +226,7 @@
     (let [previous-state (state/get-state)
           original-invoke-db-worker state/<invoke-db-worker
           original-save-current-block! editor-handler/save-current-block!
+          original-set-block-property! db-property-handler/set-block-property!
           block-id #uuid "66666666-6666-6666-6666-666666666666"
           page-class-id 7
           calls (atom [])]
@@ -236,29 +237,29 @@
               (case (first args)
                 :thread-api/pull (p/resolved {:db/id page-class-id :db/ident :logseq.class/Page})
                 :thread-api/validate-block-tag (p/resolved {:valid? true})
-                :thread-api/undo-redo-set-pending-editor-info (p/resolved nil)
-                :thread-api/apply-outliner-ops (p/resolved nil)
                 (p/rejected (js/Error. (str "unexpected worker call: " (pr-str args)))))))
       (set! editor-handler/save-current-block!
             (fn []
               (swap! calls conj [:save-current-block])
               (p/resolved nil)))
+      (set! db-property-handler/set-block-property!
+            (fn [& args]
+              (swap! calls conj (into [:set-block-property] args))
+              (p/resolved nil)))
       (-> (db-page-handler/convert-block-to-page! {:block/uuid block-id})
           (p/then
            (fn []
-             (let [calls' (vec (remove #(= :thread-api/undo-redo-set-pending-editor-info (first %)) @calls))]
-               (is (= [:thread-api/pull "test" [:db/id :db/ident] :logseq.class/Page]
-                      (first calls')))
-               (is (= [:save-current-block] (second calls')))
-               (is (= [:thread-api/validate-block-tag "test" block-id page-class-id]
-                      (nth calls' 2)))
-               (is (= :set-block-property
-                      (:outliner-op (nth (nth calls' 3) 3)))))))
+             (is (= [[:thread-api/pull "test" [:db/id :db/ident] :logseq.class/Page]
+                     [:save-current-block]
+                     [:thread-api/validate-block-tag "test" block-id page-class-id]
+                     [:set-block-property block-id :block/tags page-class-id]]
+                    @calls))))
           (p/catch
            (fn [error]
              (is false (str error))))
           (p/finally
            (fn []
+             (set! db-property-handler/set-block-property! original-set-block-property!)
              (set! editor-handler/save-current-block! original-save-current-block!)
              (set! state/<invoke-db-worker original-invoke-db-worker)
              (state/replace-state! previous-state)

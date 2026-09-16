@@ -89,6 +89,11 @@
    ".ls-page-blocks .ls-block:not(.block-add-button) .bullet-container")
   (w/wait-for ".ls-context-menu-content"))
 
+(deftest block-context-menu-includes-convert-to-page-test
+  (open-block-context-menu!)
+  (assert/assert-is-visible
+   (loc/filter "[role='menuitem']" :has-text "Convert to page")))
+
 (deftest block-context-menu-clickable-controls-use-pointer-test
   (open-block-context-menu!)
   (let [heading-button (w/-query "button[title='Auto heading']")

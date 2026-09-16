@@ -28,16 +28,26 @@
 
 (deftest merge-library-select-items-seeds-members-and-keeps-search-hits
   (let [members (library-handler/member-items
-                 [{:db/id 1 :block/title "In Library"}])
-        search-blocks [{:db/id 2 :block/title "Unfiled"}
-                       {:db/id 1 :block/title "In Library"}]]
+                 [{:db/id 1 :block/title "In Library"}])]
     (is (= [{:value 1 :label "In Library"}
             {:value 2 :label "Unfiled"}]
-           (library-component/merge-library-select-items members search-blocks "")))
+           (library-component/merge-library-select-items
+            members
+            [{:db/id 2 :block/title "Unfiled"}
+             {:db/id 1 :block/title "In Library"}]
+            "")))
     (is (= [{:value 1 :label "In Library"}]
-           (library-component/merge-library-select-items members search-blocks "lib")))
+           (library-component/merge-library-select-items
+            members
+            [{:db/id 1 :block/title "In Library"}]
+            "lib"))
+        "Search hits are already query-filtered; members matching the query stay selected.")
     (is (= [{:value 2 :label "Unfiled"}]
-           (library-component/merge-library-select-items members search-blocks "unf")))))
+           (library-component/merge-library-select-items
+            members
+            [{:db/id 2 :block/title "Unfiled"}]
+            "unf"))
+        "Members that do not match the query are hidden; search hits still appear.")))
 
 (deftest confirm-remove-page-uses-named-unfile-op
   (async done

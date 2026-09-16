@@ -35,6 +35,16 @@
       (w/click selector)
       (is (= title (page/get-page-name))))))
 
+(deftest library-nav-is-visible-and-opens-library-page
+  (testing "DB graphs always show Library in the left nav"
+    (when-not (w/visible? "#left-sidebar.is-open")
+      (w/click "#left-menu"))
+    (assert/assert-is-visible ".sidebar-navigations .library-nav")
+    (w/click ".sidebar-navigations .library-nav")
+    (is (= "Library" (page/get-page-name)))
+    (assert/assert-is-visible ".ls-add-pages")
+    (is (true? (w/visible? ".ls-add-pages:has-text(\"Organize page hierarchies here\")")))))
+
 (deftest selected-class-navigations-survive-graph-lifecycle-test
   (testing "selected Tasks and Assets appear after toggling, reload, and graph changes"
     (set-navigation! "Tasks" true)
