@@ -2287,13 +2287,6 @@
   [height-px item-height]
   (max 1 (js/Math.ceil (/ (max 0 height-px) item-height))))
 
-(defn- viewport-hydrate-ready?
-  "Paint viewport rows together. A single ready row plus placeholders
-  is not an open table."
-  [initial-rows-ready? hydrate-row-uuids row-uuid]
-  (and initial-rows-ready?
-       (contains? hydrate-row-uuids row-uuid)))
-
 (defn- viewport-filled?
   "Virtuoso mounts after the first screen has hydrated rows. An empty
   prefetch is `every?` true and must not count."
@@ -2354,10 +2347,6 @@
   [preview mount-unpinned-cells?]
   (or (nil? preview)
       (true? mount-unpinned-cells?)))
-
-(defn- row-has-first-window-title?
-  [row-previews row-uuid]
-  (contains? row-previews row-uuid))
 
 (defn- table-total-count
   "First-window view-data already has the full count. Use it for the

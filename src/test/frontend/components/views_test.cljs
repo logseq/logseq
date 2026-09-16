@@ -558,9 +558,6 @@
              33))
       "Opening a table must request one screen, not 1 row.")
   (let [row-uuid (random-uuid)]
-    (is (false? (#'views/viewport-hydrate-ready? false #{row-uuid} row-uuid))
-        "Visible rows stay empty until the whole viewport hydrate set is ready.")
-    (is (true? (#'views/viewport-hydrate-ready? true #{row-uuid} row-uuid)))
     (is (false? (#'views/viewport-filled? true #{}))
         "An empty prefetch is every? true. Do not mount placeholder rows or remaining ids.")
     (is (false? (#'views/viewport-filled? false #{row-uuid})))
@@ -570,8 +567,6 @@
         "First-window titles skip the hydrate gate.")
     (is (false? (#'views/table-body-can-paint? false #{} {}))
         "Without titles, an empty table still waits for hydrate.")
-    (is (true? (#'views/row-has-first-window-title?
-                {row-uuid {:block/title "Movie"}} row-uuid)))
     (is (= 3883 (#'views/table-total-count (range 26) 3883))
         "The first window already has the full count. Do not wait for remaining ids.")
     (is (= 26 (#'views/table-total-count (range 26) nil)))))

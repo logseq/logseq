@@ -133,12 +133,12 @@
 
 (defn load!
   [graph-id slot-key schedule!]
-  (let [entry-key [graph-id slot-key]]
-    (if-let [result (get-in @*batch [entry-key :result])]
+  (let [batch-key [graph-id slot-key]]
+    (if-let [result (get-in @*batch [batch-key :result])]
       result
       (let [result (p/deferred)
             schedule? (empty? @*batch)]
-        (swap! *batch assoc entry-key
+        (swap! *batch assoc batch-key
                {:graph-id graph-id :slot-key slot-key :result result})
         (when schedule?
           (schedule! flush!))
