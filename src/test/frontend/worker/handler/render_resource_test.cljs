@@ -1718,6 +1718,30 @@
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
 
+(deftest query-view-data-resource-returns-property-maps-for-columns-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row]} (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          _ (d/transact! conn
+                         [[:db/add (entity-id @conn view-row)
+                           :logseq.property/status
+                           :logseq.property/status.doing]])
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids [view-row]}]
+          properties (get-in (call-resource api conn resource-key)
+                             [:value :properties])
+          status (some #(when (= :logseq.property/status (:db/ident %)) %)
+                       properties)]
+      (is (seq properties))
+      (is (every? #(keyword? (:db/ident %)) properties)
+          "Query columns are built from property maps, not bare idents.")
+      (is (= "Status" (:block/title status)))
+      (is (= :default (:logseq.property/type status)))
+      (is (= #{"Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"}
+             (set (map :block/title (:property/closed-values status))))))))
+
 (deftest view-data-resource-returns-empty-rows-after-the-view-is-deleted-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-owner view-a view-b]}
