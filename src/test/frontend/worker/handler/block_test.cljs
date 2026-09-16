@@ -293,7 +293,10 @@
           property (d/entity @conn property-id)
           canonical-property (canonical-block @conn property)]
       (is (seq (:property/closed-values canonical-property)))
-      (is (every? :block/uuid (:property/closed-values canonical-property))))))
+      (is (every? :block/uuid (:property/closed-values canonical-property)))
+      (is (= #{"Low" "Medium" "High" "Urgent"}
+             (set (map :block/title (:property/closed-values canonical-property))))
+          "Canonical property snapshots must keep every closed value, not only the current one"))))
 
 (deftest canonical-block-allows-db-id-only-reference-identities-test
   (when-let [canonical-block (canonical-block-api)]
