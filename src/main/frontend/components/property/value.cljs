@@ -10,6 +10,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -390,11 +391,253 @@
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
+(def ^:private datetime-only-recur-units
+  #{:logseq.property.repeat/recur-unit.minute
+    :logseq.property.repeat/recur-unit.hour})
+
+(defn- choice-db-ident
+  [choice]
+  (or (:db/ident choice) (:db-ident choice)))
+
+(defn- property-ref-id
+  [value]
+  (cond
+    (map? value) (:db/id value)
+    (number? value) value
+    :else nil))
+
+(defn- parse-positive-int
+  [raw]
+  (let [s (some-> raw str string/trim)]
+    (when (and (string? s) (re-matches #"\d+" s))
+      (let [n (js/parseInt s 10)]
+        (when (pos? n)
+          n)))))
+
+(defn- select-ref-id
+  [value]
+  (cond
+    (nil? value) nil
+    (number? value) (when (pos? value) value)
+    (string? value) (parse-positive-int value)
+    (map? value) (or (:db/id value)
+                     (select-ref-id (:value value)))
+    (boolean? value) nil
+    (keyword? value) nil
+    :else (select-ref-id (aget value "value"))))
+
+(defn- property-select-label
+  [property]
+  (or (db-property/built-in-display-title property t)
+      (:block/title property)))
+
+(defn- repeat-closed-select
+  [{:keys [selected-id options disabled? labelledby on-select placeholder]}]
+  (let [selected (or (some (fn [option]
+                             (when (= selected-id (:id option))
+                               option))
+                           options)
+                     (first options))
+        selected-label (:label selected)
+        selected-value (when selected-id (str selected-id))]
+    (shui/select
+     (cond-> {:on-value-change (fn [v]
+                                 (when-let [id (select-ref-id v)]
+                                   (on-select id)))}
+       selected-value (assoc :value selected-value)
+       disabled? (assoc :disabled true))
+     (shui/select-trigger
+      (cond-> {:class "h-8 w-full"}
+        labelledby (assoc :aria-labelledby labelledby))
+      (if selected-label
+        (shui/select-value {} selected-label)
+        (shui/select-value {:placeholder (or placeholder "")})))
+     (shui/select-content
+      (map (fn [{:keys [id label]}]
+             (shui/select-item {:key (str id)
+                                 :value (str id)}
+                                label))
+           options)))))
+
+(defn- repeat-frequency-value
+  [block]
+  (let [v (get block :logseq.property.repeat/recur-frequency)]
+    (or (when (number? v) v)
+        (db-property/property-value-content v)
+        1)))
+
+(defn- repeat-unit-value-id
+  [block recur-unit-property]
+  (or (property-ref-id (get block :logseq.property.repeat/recur-unit))
+      (property-ref-id (:logseq.property/default-value recur-unit-property))
+      (some (fn [choice]
+              (when (= :logseq.property.repeat/recur-unit.day (choice-db-ident choice))
+                (:db/id choice)))
+            (:property/closed-values recur-unit-property))))
+
+(defn- repeat-unit-choices
+  [block property recur-unit-property]
+  (let [date? (= :date (:logseq.property/type property))
+        current-id (property-ref-id (get block :logseq.property.repeat/recur-unit))]
+    (cond->> (db-property/scoped-closed-values
+              recur-unit-property block
+              {:values (:property/closed-values recur-unit-property)})
+      date?
+      (remove (fn [choice]
+                (and (contains? datetime-only-recur-units (choice-db-ident choice))
+                     (not= (:db/id choice) current-id)))))))
+
+(defn- repeat-unit-label
+  [choice]
+  (or (db-property/built-in-display-title choice t)
+      (db-property/closed-value-content choice)))
+
+(hsx/defc repeat-every-controls
+  [block property recur-frequency-property recur-unit-property]
+  (let [frequency (repeat-frequency-value block)
+        [frequency-str set-frequency-str!] (hooks/use-state (str frequency))
+        label-id (hooks/use-memo #(str "ls-repeat-every-label-" (random-uuid)) [])
+        frequency-id (hooks/use-memo #(str "ls-repeat-frequency-" (random-uuid)) [])
+        unit-choices (repeat-unit-choices block property recur-unit-property)
+        persisted-unit-id (repeat-unit-value-id block recur-unit-property)
+        [unit-id set-unit-id!] (hooks/use-state persisted-unit-id)
+        selected-choice (or (some (fn [choice]
+                                     (when (= unit-id (:db/id choice))
+                                       choice))
+                                  unit-choices)
+                            (some (fn [choice]
+                                    (when (= :logseq.property.repeat/recur-unit.day (choice-db-ident choice))
+                                      choice))
+                                  unit-choices)
+                            (first unit-choices))
+        selected-id (:db/id selected-choice)
+        save-frequency! (fn [raw]
+                           (if-let [n (parse-positive-int raw)]
+                             (do
+                               (set-frequency-str! (str n))
+                               (when (and (:db/id block) (not config/publishing?))
+                                 (db-property-handler/set-block-property!
+                                  (:db/id block)
+                                  (:db/ident recur-frequency-property)
+                                  n)))
+                             (set-frequency-str! (str frequency))))
+        persist-unit! (fn [v]
+                          (when-let [id (select-ref-id v)]
+                            (set-unit-id! id)
+                            (when (and (:db/id block) (not config/publishing?))
+                              (db-property-handler/set-block-property!
+                               (:db/id block)
+                               (:db/ident recur-unit-property)
+                               id))))]
+    (hooks/use-effect!
+     (fn []
+       (set-frequency-str! (str frequency))
+       nil)
+     [frequency])
+    (hooks/use-effect!
+     (fn []
+       (set-unit-id! persisted-unit-id)
+       nil)
+     [persisted-unit-id])
+    [:div.flex.flex-row.items-center.gap-2.ls-repeat-task-frequency.text-sm
+     [:label.flex-none.text-muted-foreground
+      {:id label-id
+       :for frequency-id}
+      (t :property.repeat/every)]
+     (shui/input
+      {:id frequency-id
+       :type "number"
+       :min 1
+       :step 1
+       :class "ls-repeat-frequency-input !h-8 !w-14 !px-2 !py-0"
+       :value frequency-str
+       :aria-labelledby label-id
+       :disabled config/publishing?
+       :on-mouse-down util/stop-propagation
+       :on-change (fn [e]
+                     (set-frequency-str! (util/evalue e)))
+       :on-blur (fn [e]
+                  (save-frequency! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (.blur (.-target e))
+                        (util/stop e)))})
+     [:div.flex-1.min-w-0
+      (repeat-closed-select
+       {:selected-id selected-id
+        :options (mapv (fn [choice]
+                           {:id (:db/id choice)
+                            :label (repeat-unit-label choice)})
+                         unit-choices)
+        :labelledby label-id
+        :disabled? config/publishing?
+        :on-select persist-unit!})]]))
+
+(hsx/defc repeat-when-controls
+  [block status-property status-done full-properties when-id set-when-id!]
+  (let [properties (->> full-properties
+                        (filter (fn [property']
+                                  (and (not (ldb/built-in? property'))
+                                       (>= (count (:property/closed-values property')) 2))))
+                        (concat [status-property])
+                        (util/distinct-by :db/id)
+                        (remove nil?))
+        property-options (mapv (fn [property']
+                                 {:id (:db/id property')
+                                  :label (property-select-label property')})
+                               properties)
+        selected-when-id (or when-id (:db/id status-property))
+        when-property (or (some (fn [property']
+                                  (when (= selected-when-id (:db/id property'))
+                                    property'))
+                                properties)
+                          status-property)
+        done-choice (or (some (fn [choice]
+                                (when (true? (:logseq.property/choice-checkbox-state choice))
+                                  choice))
+                              (:property/closed-values when-property))
+                        status-done)]
+    [:div.flex.flex-col.gap-2.text-sm
+     [:div.text-muted-foreground
+      (t :property.repeat/when)]
+     (repeat-closed-select
+      {:selected-id selected-when-id
+       :options property-options
+       :placeholder (t :property/select-property-placeholder)
+       :on-select (fn [id]
+                    (set-when-id! id)
+                    (when (:db/id block)
+                      (db-property-handler/set-block-property!
+                       (:db/id block)
+                       :logseq.property.repeat/checked-property
+                       id)))})
+     [:div.flex.flex-row.gap-1.text-sm
+      [:div.text-muted-foreground
+       (t :property.repeat/is-label)]
+      (when done-choice
+        (or (db-property/built-in-display-title done-choice t)
+            (:block/title done-choice)))]]))
+
 (hsx/defc repeat-setting
-  [block property]
-  (let [opts {:exit-edit? false}
+  [block* property]
+  (let [block (or (db-hooks/use-block (:block/uuid block*)) block*)
+        opts {:exit-edit? false}
         repo (state/get-current-repo)
+        db-repeated? (boolean (:logseq.property.repeat/repeated? block))
+        [checked? set-checked!] (hooks/use-state db-repeated?)
+        persisted-when-id (property-ref-id (:logseq.property.repeat/checked-property block))
+        [when-id set-when-id!] (hooks/use-state persisted-when-id)
         [repeat-properties set-repeat-properties!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-checked! db-repeated?)
+       nil)
+     [db-repeated?])
+    (hooks/use-effect!
+     (fn []
+       (set-when-id! persisted-when-id)
+       nil)
+     [persisted-when-id])
     (hooks/use-effect!
      (fn []
        (p/let [repeated-property (<property-with-closed-values repo :logseq.property.repeat/repeated?)
@@ -402,91 +645,54 @@
                recur-unit-property (<property-with-closed-values repo :logseq.property.repeat/recur-unit)
                repeat-type-property (<property-with-closed-values repo :logseq.property.repeat/repeat-type)
                status-property (<property-with-closed-values repo :logseq.property/status)
-	               status-done (state/<invoke-db-worker :thread-api/pull repo '[*] :logseq.property/status.done)
-	               {:keys [full-properties]} (db-async/<get-display-properties repo block
-	                                                                            {:publishing? config/publishing?
-	                                                                             :state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))}
-	                                                                            true)]
-	         (set-repeat-properties!
-	          {:repeated-property repeated-property
-	           :recur-frequency-property recur-frequency-property
-	           :recur-unit-property recur-unit-property
-	           :repeat-type-property repeat-type-property
-	           :status-property status-property
-	           :status-done status-done
-	           :full-properties full-properties}))
+               status-done (state/<invoke-db-worker :thread-api/pull repo '[*] :logseq.property/status.done)
+               {:keys [full-properties]} (db-async/<get-display-properties repo block
+                                                                            {:publishing? config/publishing?
+                                                                             :state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))}
+                                                                            true)]
+         (set-repeat-properties!
+          {:repeated-property repeated-property
+           :recur-frequency-property recur-frequency-property
+           :recur-unit-property recur-unit-property
+           :repeat-type-property repeat-type-property
+           :status-property status-property
+           :status-done status-done
+           :full-properties full-properties}))
        nil)
-     [repo])
-	    (when-let [{:keys [repeated-property recur-frequency-property recur-unit-property repeat-type-property status-property status-done full-properties]} repeat-properties]
+     [repo (:db/id block)])
+    (when-let [{:keys [recur-frequency-property recur-unit-property repeat-type-property status-property status-done full-properties]} repeat-properties]
       [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64.text-sm
        [:div.mb-4
         [:div.flex.flex-row.items-center.gap-1
          [:div.w-4
-          (property-value block repeated-property
-                          (assoc opts
-                                 :on-checked-change (fn [value]
-                                                      (if value
-                                                        (db-property-handler/set-block-property! (:db/id block)
-                                                                                                 :logseq.property.repeat/temporal-property
-                                                                                                 (:db/id property))
-                                                        (db-property-handler/remove-block-property! (:db/id block)
-                                                                                                    :logseq.property.repeat/temporal-property)))))]
+          (shui/checkbox
+           {:class "jtrigger flex flex-row items-center"
+            :style {:width 16
+                    :min-width 16}
+            :disabled config/publishing?
+            :checked (boolean checked?)
+            :on-checked-change (fn [value]
+                                   (let [on? (boolean value)]
+                                     (set-checked! on?)
+                                     (when (and (:db/id block) (not config/publishing?))
+                                       (<add-property! block :logseq.property.repeat/repeated? on? {:exit-edit? false})
+                                       (if on?
+                                         (db-property-handler/set-block-property! (:db/id block)
+                                                                                  :logseq.property.repeat/temporal-property
+                                                                                  (:db/id property))
+                                         (db-property-handler/remove-block-property! (:db/id block)
+                                                                                        :logseq.property.repeat/temporal-property)))))})]
          (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
            [:div (t :property.repeat/task)]
            [:div (t (if (= :date (:logseq.property/type property))
                       :property.repeat/date
                       :property.repeat/datetime))])]]
-       [:div.flex.flex-row.gap-2.ls-repeat-task-frequency.text-sm
-        [:div.flex.text-muted-foreground
-         (t :property.repeat/every)]
-        [:div.w-10.mr-2
-         (property-value block recur-frequency-property opts)]
-        [:div.w-20
-         (property-value block recur-unit-property (assoc opts :property property))]]
+       (repeat-every-controls block property recur-frequency-property recur-unit-property)
        [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting.text-sm
         [:div.text-muted-foreground
          (t :property.repeat/next-date)]
         (property-value block repeat-type-property opts)]
-	       (let [properties (->> full-properties
-	                         (filter (fn [property']
-	                                   (and (not (ldb/built-in? property'))
-	                                        (>= (count (:property/closed-values property')) 2))))
-                         (concat [status-property])
-                         (util/distinct-by :db/id))
-             property-options (mapv (fn [property']
-                                      {:label (db-property/built-in-display-title property' t)
-                                       :value (:db/id property')})
-                                    properties)
-             status-property (or (:logseq.property.repeat/checked-property block)
-                                 status-property)
-             property-id (:db/id status-property)
-             done-choice (or
-                          (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
-                          status-done)]
-         [:div.flex.flex-col.gap-2.text-sm
-          [:div.text-muted-foreground
-           (t :property.repeat/when)]
-          (shui/select
-            (cond->
-              {:items property-options
-               :on-value-change (fn [v]
-                                  (db-property-handler/set-block-property! (:db/id block)
-                                                                           :logseq.property.repeat/checked-property
-                                                                           v))}
-              property-id
-              (assoc :default-value property-id))
-            (shui/select-trigger
-             (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
-            (shui/select-content
-             (map (fn [choice]
-                    (shui/select-item {:key (str (:db/id choice))
-                                       :value (:db/id choice)}
-                                      (db-property/built-in-display-title choice t))) properties)))
-          [:div.flex.flex-row.gap-1.text-sm
-           [:div.text-muted-foreground
-            (t :property.repeat/is-label)]
-           (when done-choice
-             (db-property/built-in-display-title done-choice t))]])])))
+       (repeat-when-controls block status-property status-done full-properties when-id set-when-id!)])))
 
 (defn- <resolve-journal-page-for-date
   ([^js d]
@@ -554,8 +760,7 @@
     (hooks/use-window-keydown
      (fn [^js e]
        (when (and (= "Enter" (util/ekey e))
-                  (not (some-> (.-target e)
-                               (.closest ".ls-nlp-calendar input"))))
+                  (not (ui/date-picker-form-target? e)))
          (select-handler! initial-day)
          (util/stop e)))
      [initial-day select-handler!])

@@ -1,13 +1,29 @@
 (ns frontend.components.property.value-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
+            [cljs.test :refer [async deftest is]]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest alias-node-selection-preserves-entity-id-semantics-test
   (async done
@@ -405,3 +421,167 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest parse-positive-int-test
+  (is (= 1 (#'property-value/parse-positive-int "1")))
+  (is (= 12 (#'property-value/parse-positive-int " 12 ")))
+  (is (nil? (#'property-value/parse-positive-int "0")))
+  (is (nil? (#'property-value/parse-positive-int "-2")))
+  (is (nil? (#'property-value/parse-positive-int "1.5")))
+  (is (nil? (#'property-value/parse-positive-int "")))
+  (is (nil? (#'property-value/parse-positive-int nil))))
+
+(deftest select-ref-id-test
+  (is (= 83 (#'property-value/select-ref-id 83)))
+  (is (= 83 (#'property-value/select-ref-id {:db/id 83})))
+  (is (= 83 (#'property-value/select-ref-id {:value 83})))
+  (is (= 83 (#'property-value/select-ref-id "83")))
+  (is (= 83 (#'property-value/select-ref-id #js {:value 83})))
+  (is (= 83 (#'property-value/select-ref-id #js {:value "83"})))
+  (is (= 83 (#'property-value/select-ref-id #js {:label "Status" :value 83})))
+  (is (nil? (#'property-value/select-ref-id "83abc")))
+  (is (nil? (#'property-value/select-ref-id "Status")))
+  (is (nil? (#'property-value/select-ref-id nil))))
+
+(deftest property-select-label-test
+  (is (= "Priority" (#'property-value/property-select-label {:block/title "Priority"})))
+  (is (nil? (#'property-value/property-select-label {:db/id 83}))))
+
+(deftest repeat-frequency-value-test
+  (is (= 1 (#'property-value/repeat-frequency-value {})))
+  (is (= 3 (#'property-value/repeat-frequency-value
+            {:logseq.property.repeat/recur-frequency 3})))
+  (is (= 4 (#'property-value/repeat-frequency-value
+            {:logseq.property.repeat/recur-frequency {:logseq.property/value 4}}))))
+
+(deftest repeat-unit-value-id-test
+  (let [day {:db/id 21 :db/ident :logseq.property.repeat/recur-unit.day}
+        week {:db/id 22 :db/ident :logseq.property.repeat/recur-unit.week}
+        property {:property/closed-values [day week]
+                  :logseq.property/default-value day}]
+    (is (= 22 (#'property-value/repeat-unit-value-id
+               {:logseq.property.repeat/recur-unit week}
+               property)))
+    (is (= 21 (#'property-value/repeat-unit-value-id {} property)))
+    (is (= 21 (#'property-value/repeat-unit-value-id
+               {}
+               (dissoc property :logseq.property/default-value))))))
+
+(deftest repeat-unit-choices-hide-time-units-for-date-properties-test
+  (let [minute {:db/id 1 :db/ident :logseq.property.repeat/recur-unit.minute}
+        hour {:db/id 2 :db/ident :logseq.property.repeat/recur-unit.hour}
+        day {:db/id 3 :db/ident :logseq.property.repeat/recur-unit.day}
+        week {:db/id 4 :db/ident :logseq.property.repeat/recur-unit.week}
+        property {:property/closed-values [minute hour day week]}
+        idents (fn [block property-type]
+                 (map :db/ident
+                      (#'property-value/repeat-unit-choices
+                       block
+                       {:logseq.property/type property-type}
+                       property)))]
+    (is (= [:logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents {} :date)))
+    (is (= [:logseq.property.repeat/recur-unit.minute
+            :logseq.property.repeat/recur-unit.hour
+            :logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents {} :datetime)))
+    (is (= [:logseq.property.repeat/recur-unit.minute
+            :logseq.property.repeat/recur-unit.day
+            :logseq.property.repeat/recur-unit.week]
+           (idents {:logseq.property.repeat/recur-unit minute} :date))
+        "Keep a persisted minute/hour unit visible until the user changes it")))
+
+(deftest repeat-unit-choices-use-compact-or-worker-idents-test
+  (let [minute {:db/id 1 :db-ident :logseq.property.repeat/recur-unit.minute}
+        hour {:db/id 2 :db/ident :logseq.property.repeat/recur-unit.hour}
+        day {:db/id 3 :db/ident :logseq.property.repeat/recur-unit.day}
+        property {:property/closed-values [minute hour day]}]
+    (is (= [day]
+           (#'property-value/repeat-unit-choices
+            {}
+            {:logseq.property/type :date}
+            property)))))
+
+(deftest repeat-setting-clears-stale-when-selection-test
+  (let [stale-when-id 90
+        calls* (atom [])
+        hook-index* (atom 0)
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :logseq.property.repeat/repeated? true}
+        status-property {:db/id 10
+                         :db/ident :logseq.property/status
+                         :property/closed-values
+                         [{:db/id 11
+                           :block/title "Done"
+                           :logseq.property/choice-checkbox-state true}]}
+        repeat-properties {:recur-frequency-property {:db/id 20
+                                                      :db/ident :logseq.property.repeat/recur-frequency}
+                           :recur-unit-property {:db/id 21
+                                                 :db/ident :logseq.property.repeat/recur-unit
+                                                 :property/closed-values
+                                                 [{:db/id 22
+                                                   :db/ident :logseq.property.repeat/recur-unit.day
+                                                   :block/title "Day"}]}
+                           :repeat-type-property {:db/id 30
+                                                  :db/ident :logseq.property.repeat/repeat-type
+                                                  :logseq.property/type :default}
+                           :status-property status-property
+                           :status-done {:db/id 11
+                                         :block/title "Done"}
+                           :full-properties [status-property]}]
+    (with-redefs [state/get-current-repo (constantly "test")
+                  db-hooks/use-block (constantly block)
+                  property-value/property-value (fn [& _args] [:span])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [f deps]
+                                      (when (= deps [nil])
+                                        (f)))
+                  hooks/use-state (fn [init]
+                                    (case (swap! hook-index* inc)
+                                      1 [init (fn [_])]
+                                      2 [stale-when-id #(swap! calls* conj [:when-id %])]
+                                      3 [repeat-properties (fn [_])]
+                                      [init (fn [_])]))]
+      (render-static
+       (property-value/repeat-setting block {:db/id 40
+                                             :db/ident :logseq.property/scheduled
+                                             :logseq.property/type :date}))
+      (is (some #{[:when-id nil]} @calls*)
+          "When the block no longer has a checked-property, stale local selection is cleared."))))
+
+(deftest repeat-every-controls-clears-stale-unit-selection-test
+  (let [stale-unit-id 90
+        calls* (atom [])
+        hook-index* (atom 0)
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        week {:db/id 22
+              :db/ident :logseq.property.repeat/recur-unit.week
+              :block/title "Week"}
+        recur-frequency-property {:db/id 20
+                                  :db/ident :logseq.property.repeat/recur-frequency}
+        recur-unit-property {:db/id 21
+                             :db/ident :logseq.property.repeat/recur-unit
+                             :property/closed-values [week]}]
+    (with-redefs [hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [f deps]
+                                      (when (= deps [nil])
+                                        (f)))
+                  hooks/use-state (fn [init]
+                                    (case (swap! hook-index* inc)
+                                      1 [init (fn [_])]
+                                      2 [stale-unit-id #(swap! calls* conj [:unit-id %])]
+                                      [init (fn [_])]))]
+      (render-static
+       (property-value/repeat-every-controls
+        block
+        {:db/id 40
+         :db/ident :logseq.property/scheduled
+         :logseq.property/type :date}
+        recur-frequency-property
+        recur-unit-property))
+      (is (some #{[:unit-id nil]} @calls*)
+          "When the block no longer has a recur unit, stale local selection is cleared."))))
