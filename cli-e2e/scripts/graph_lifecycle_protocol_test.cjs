@@ -9,15 +9,28 @@ const lifecycle = require('../../deps/graph-lifecycle');
 
 function storage(root) { return lifecycle.resolveStorage(root, path.join(root, 'graphs')); }
 
+async function rejectsWithoutSignals(pid, action, expected) {
+  const kill = process.kill;
+  const signals = [];
+  process.kill = (target, signal) => {
+    if (target === pid && signal !== 0) signals.push(signal);
+    return kill(target, signal);
+  };
+  try {
+    await assert.rejects(action, expected);
+    assert.deepEqual(signals, []);
+  } finally { process.kill = kill; }
+}
+
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'logseq-lifecycle-protocol-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
 
-async function child(t, root, mode) {
+async function child(t, root, mode, extraArgs = []) {
   const process = fork(path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
-    ['--root-dir', root, '--repo', 'logseq_db_demo', '--mode', mode],
+    ['--root-dir', root, '--repo', 'logseq_db_demo', '--mode', mode, ...extraArgs],
     { stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
   t.after(async () => {
     if (process.exitCode === null && process.signalCode === null) {
@@ -35,7 +48,7 @@ test('shutdown acknowledgement and removed metadata do not prove exit', async t 
   await lifecycle.createGraph(storage(root), 'demo');
   const worker = await child(t, root, 'stubborn');
   const result = await lifecycle.deleteGraph(storage(root), 'demo');
-  assert.equal(lifecycle.processIdentity(worker.pid), null);
+  assert.equal(lifecycle.pidExists(worker.pid), false);
   assert.equal(result.existed, true);
   assert.equal(fs.existsSync(path.join(result.destination, 'db-worker.lock')), false);
   assert.equal(fs.readFileSync(path.join(result.destination, 'db.sqlite-wal'), 'utf8'), 'preserved');
@@ -46,9 +59,9 @@ test('a shutdown error fails deletion with the graph stopped and supports retry'
   await lifecycle.createGraph(storage(root), 'demo');
   const worker = await child(t, root, 'close-error');
   await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /close failed/);
-  assert.equal(lifecycle.processIdentity(worker.pid), null);
+  assert.equal(lifecycle.pidExists(worker.pid), false);
   const closing = JSON.parse(fs.readFileSync(path.join(root, 'close-under-lease.json')));
-  assert.equal(closing.owner?.identity.pid, process.pid);
+  assert.equal(closing.owner?.pid, process.pid);
   assert.equal(closing.owner.operation, 'delete');
   assert.equal(closing.phase, 'deleting');
   assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
@@ -63,7 +76,7 @@ test('rename failure leaves the stopped graph and allows a deliberate retry', as
   const destination = path.join(root, 'graphs', 'Unlinked graphs');
   fs.writeFileSync(destination, 'not a directory');
   await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'));
-  assert.equal(lifecycle.processIdentity(worker.pid), null);
+  assert.equal(lifecycle.pidExists(worker.pid), false);
   assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
   fs.unlinkSync(destination);
   assert.equal((await lifecycle.deleteGraph(storage(root), 'demo')).existed, true);
@@ -78,7 +91,7 @@ test('restart retains close-error publication until cleanup succeeds', async t =
   const previous = lifecycle.snapshot(store, 'demo').workers[0];
   const previousFile = path.join(ctx.dir, `runtime-${previous.ticket}.json`);
   await assert.rejects(lifecycle.stopGraph(store, 'demo', 'cli'), /close failed/);
-  assert.equal(lifecycle.processIdentity(worker.pid), null);
+  assert.equal(lifecycle.pidExists(worker.pid), false);
   assert.equal(JSON.parse(fs.readFileSync(previousFile)).error, 'close failed');
   await lifecycle.startGraph({ storage: store, repo: 'demo',
     script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'), extraArgs: ['--mode', 'normal'] });
@@ -147,7 +160,7 @@ test('lease owner is visible in state and release preserves the latest operation
   const generation = lifecycle.snapshot(store, 'demo').generation;
   await assert.rejects(lifecycle.withLease(ctx, 'test-failure', () => {
     const current = lifecycle.snapshot(store, 'demo');
-    assert.equal(current.owner?.identity.pid, process.pid);
+    assert.equal(current.owner?.pid, process.pid);
     assert.equal(current.owner.operation, 'test-failure');
     assert.equal(fs.existsSync(path.join(ctx.dir, 'owner.json')), false);
     current.phase = 'deletion-failed';
@@ -183,28 +196,23 @@ test('creation preserves its lease owner when replacing a deleted generation', a
   assert.notEqual(generation, previous);
   const created = states.find(state => state.generation === generation);
   assert.equal(created.owner?.operation, 'create');
-  assert.equal(created.owner.identity.pid, process.pid);
+  assert.equal(created.owner.pid, process.pid);
   assert.equal(lifecycle.snapshot(store, 'demo').owner, undefined);
 });
 
-for (const changedBirth of [false, true]) {
-  test(`lease refuses an existing ${changedBirth ? 'changed process identity' : 'live owner'}`, async t => {
-    const root = fixture(t);
-    const store = storage(root);
-    const ctx = lifecycle.context(store, 'demo');
-    await lifecycle.createGraph(store, 'demo');
-    const current = lifecycle.snapshot(store, 'demo');
-    const identity = lifecycle.processIdentity(process.pid);
-    if (changedBirth) identity.birth = 'different birth';
-    current.owner = { id: 'other-operation', operation: 'test', identity };
-    fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
-    let entered = false;
-    await assert.rejects(lifecycle.withLease(ctx, 'test', () => { entered = true; }),
-      changedBirth ? /identity changed/ : /owner remains alive/);
-    assert.equal(entered, false);
-    assert.deepEqual(lifecycle.snapshot(store, 'demo'), current);
-  });
-}
+test('lease refuses an existing live owner', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  const ctx = lifecycle.context(store, 'demo');
+  await lifecycle.createGraph(store, 'demo');
+  const current = lifecycle.snapshot(store, 'demo');
+  current.owner = { id: 'other-operation', operation: 'test', pid: process.pid };
+  fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
+  let entered = false;
+  await assert.rejects(lifecycle.withLease(ctx, 'test', () => { entered = true; }), /owner remains alive/);
+  assert.equal(entered, false);
+  assert.deepEqual(lifecycle.snapshot(store, 'demo'), current);
+});
 
 test('lease release refuses to clear a different owner or overwrite its state', async t => {
   const root = fixture(t);
@@ -214,7 +222,7 @@ test('lease release refuses to clear a different owner or overwrite its state', 
   let replacement;
   await assert.rejects(lifecycle.withLease(ctx, 'test', () => {
     replacement = lifecycle.snapshot(store, 'demo');
-    replacement.owner = { id: 'replacement', identity: lifecycle.processIdentity(process.pid), operation: 'replacement' };
+    replacement.owner = { id: 'replacement', pid: process.pid, operation: 'replacement' };
     replacement.phase = 'deletion-failed';
     fs.writeFileSync(ctx.stateFile, JSON.stringify(replacement));
   }), /ownership changed/);
@@ -254,7 +262,7 @@ for (const boundary of ['acquired', 'owner', 'state-write', 'release', 'released
     const pending = lifecycle.snapshot(store, 'demo');
     assert.equal(pending.generation, generation);
     if (['owner', 'state-write', 'release'].includes(boundary)) {
-      assert.equal(pending.owner?.identity.pid, crashed.pid);
+      assert.equal(pending.owner?.pid, crashed.pid);
     }
     assert.equal(fs.existsSync(path.join(ctx.dir, 'owner.json')), false);
     await lifecycle.deleteGraph(store, 'demo');
@@ -292,8 +300,8 @@ test('termination logs retain every escalation stage without accumulating diagno
     for (const record of records) {
       assert.equal(record.repo, 'demo');
       assert.equal(record.ticket, ticket);
-      assert.equal(record.identity.pid, worker.pid);
-      assert.ok(record.identity.birth);
+      assert.equal(record.pid, worker.pid);
+      assert.ok(record.generation);
     }
     assert.deepEqual(fs.readdirSync(ctx.dir).filter(name => name.endsWith('.json')), ['state.json']);
     assert.equal(lifecycle.snapshot(store, 'demo').owner, undefined);
@@ -310,16 +318,16 @@ test('a crashed lease owner is reclaimed using process exit, without an age dela
   assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
 });
 
-test('a changed process identity never receives a signal or loses its lock', async t => {
+test('a changed lock ticket never receives a signal or loses its lock', async t => {
   const root = fixture(t);
   await lifecycle.createGraph(storage(root), 'demo');
   const worker = await child(t, root, 'normal');
   const lockPath = path.join(root, 'graphs', 'demo', 'db-worker.lock');
   const lock = JSON.parse(fs.readFileSync(lockPath));
-  lock['process-start'] = 'different process';
+  lock.ticket = 'different-ticket';
   fs.writeFileSync(lockPath, JSON.stringify(lock));
-  await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /identity/);
-  assert.notEqual(lifecycle.processIdentity(worker.pid), null);
+  await rejectsWithoutSignals(worker.pid, () => lifecycle.deleteGraph(storage(root), 'demo'), /identity/);
+  assert.equal(lifecycle.pidExists(worker.pid), true);
   assert.equal(fs.existsSync(lockPath), true);
 });
 
@@ -331,7 +339,7 @@ test('concurrent deletions have only one directory move', async t => {
   assert.equal(fs.readdirSync(path.join(root, 'graphs', 'Unlinked graphs')).length, 1);
 });
 
-test('an unregistered published orphan loses only its matching moved lock', async t => {
+test('an unregistered published orphan is not adopted or signaled', async t => {
   const root = fixture(t);
   await lifecycle.createGraph(storage(root), 'demo');
   const worker = await child(t, root, 'normal');
@@ -342,9 +350,9 @@ test('an unregistered published orphan loses only its matching moved lock', asyn
   const moved = path.join(root, 'graphs', 'Unlinked graphs', 'demo');
   fs.mkdirSync(path.dirname(moved));
   fs.renameSync(ctx.graphDir, moved);
-  assert.equal((await lifecycle.deleteGraph(storage(root), 'demo')).existed, false);
-  assert.equal(lifecycle.processIdentity(worker.pid), null);
-  assert.equal(fs.existsSync(path.join(moved, 'db-worker.lock')), false);
+  await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /unregistered/);
+  assert.equal(lifecycle.pidExists(worker.pid), true);
+  assert.equal(fs.existsSync(path.join(moved, 'db-worker.lock')), true);
   assert.equal(fs.readFileSync(path.join(moved, 'db.sqlite-wal'), 'utf8'), 'preserved');
 });
 
@@ -359,8 +367,8 @@ test('permission denial retains the live worker record and canonical data', asyn
   };
   try {
     await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), { code: 'EPERM' });
-    assert.notEqual(lifecycle.processIdentity(worker.pid), null);
-    assert.equal(lifecycle.snapshot(storage(root), 'demo').workers[0].identity.pid, worker.pid);
+    assert.equal(lifecycle.pidExists(worker.pid), true);
+    assert.equal(lifecycle.snapshot(storage(root), 'demo').workers[0].pid, worker.pid);
     assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
   } finally { process.kill = kill; }
 });
@@ -376,10 +384,10 @@ test('deletion includes a spawned child that has not entered admission', async t
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   const pid = Number(fs.readFileSync(path.join(root, 'before-admission')));
-  t.after(() => { if (lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL'); });
+  t.after(() => { if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL'); });
   await lifecycle.deleteGraph(storage(root), 'demo');
   await rejected;
-  assert.equal(lifecycle.processIdentity(pid), null);
+  assert.equal(lifecycle.pidExists(pid), false);
   assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), false);
 });
 
@@ -420,98 +428,11 @@ test('cleanup never removes a successor lock installed after the worker exits', 
   };
   try {
     await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /lock identity changed/);
-    assert.equal(lifecycle.processIdentity(worker.pid), null);
+    assert.equal(lifecycle.pidExists(worker.pid), false);
     assert.deepEqual(JSON.parse(fs.readFileSync(lockPath)), replacement);
     assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
   } finally { process.kill = kill; }
 });
-
-test('macOS exiting process retains its identity until OS exit is confirmed',
-  { skip: process.platform !== 'darwin' }, async t => {
-    const cp = require('node:child_process');
-    const root = fixture(t);
-    await lifecycle.createGraph(storage(root), 'demo');
-    const worker = await child(t, root, 'stubborn');
-    const identity = lifecycle.processIdentity(worker.pid);
-    const kill = process.kill;
-    const spawnSync = cp.spawnSync;
-    let transitionReads = 0;
-    let remaining = 0;
-    process.kill = (pid, signal) => {
-      if (pid === worker.pid && signal === 0 && remaining > 0) return true;
-      const result = kill(pid, signal);
-      if (pid === worker.pid && signal === 'SIGKILL') remaining = 2;
-      return result;
-    };
-    cp.spawnSync = (command, args, options) => {
-      if (command === 'ps' && args[1] === String(worker.pid) && remaining > 0) {
-        remaining--;
-        transitionReads++;
-        return { status: 0, stdout: `${identity.birth} ?Es (node)\n` };
-      }
-      return spawnSync(command, args, options);
-    };
-    try {
-      const result = await lifecycle.deleteGraph(storage(root), 'demo');
-      assert.equal(transitionReads, 2);
-      assert.equal(lifecycle.processIdentity(worker.pid), null);
-      assert.equal(fs.existsSync(path.join(result.destination, 'db-worker.lock')), false);
-      assert.equal(fs.readFileSync(path.join(root, 'server-list'), 'utf8'), '');
-    } finally { process.kill = kill; cp.spawnSync = spawnSync; }
-  });
-
-test('macOS changed birth is rejected even when the PID reports exiting',
-  { skip: process.platform !== 'darwin' }, async t => {
-    const cp = require('node:child_process');
-    const root = fixture(t);
-    await lifecycle.createGraph(storage(root), 'demo');
-    const worker = await child(t, root, 'normal');
-    const spawnSync = cp.spawnSync;
-    cp.spawnSync = (command, args, options) => {
-      if (command === 'ps' && args[1] === String(worker.pid))
-        return { status: 0, stdout: 'Mon Jan  1 00:00:00 2001 ?Es (node)\n' };
-      return spawnSync(command, args, options);
-    };
-    try {
-      await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), /identity changed/);
-      assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo', 'db-worker.lock')), true);
-    } finally { cp.spawnSync = spawnSync; }
-  });
-
-test('macOS exiting state times out without signaling or removing live resources',
-  { skip: process.platform !== 'darwin' }, async t => {
-    const cp = require('node:child_process');
-    const root = fixture(t);
-    await lifecycle.createGraph(storage(root), 'demo');
-    const worker = await child(t, root, 'normal');
-    const identity = lifecycle.processIdentity(worker.pid);
-    const spawnSync = cp.spawnSync;
-    const kill = process.kill;
-    let signals = 0;
-    cp.spawnSync = (command, args, options) => {
-      if (command === 'ps' && args[1] === String(worker.pid))
-        return { status: 0, stdout: `${identity.birth} ?Es (node)\n` };
-      return spawnSync(command, args, options);
-    };
-    process.kill = (pid, signal) => {
-      if (pid === worker.pid && signal) signals++;
-      return kill(pid, signal);
-    };
-    // Withhold shutdown by removing the endpoint from discovery, retaining identity.
-    const ctx = lifecycle.context(storage(root), 'demo');
-    const state = lifecycle.snapshot(storage(root), 'demo');
-    const runtime = path.join(ctx.dir, `runtime-${state.workers[0].ticket}.json`);
-    const record = JSON.parse(fs.readFileSync(runtime));
-    delete record.port;
-    fs.writeFileSync(runtime, JSON.stringify(record));
-    fs.writeFileSync(path.join(root, 'server-list'), '');
-    try {
-      await assert.rejects(lifecycle.deleteGraph(storage(root), 'demo'), { code: 'server-stop-timeout' });
-      assert.equal(signals, 0);
-      assert.equal(fs.existsSync(path.join(ctx.graphDir, 'db-worker.lock')), true);
-      assert.equal(lifecycle.snapshot(storage(root), 'demo').workers.length, 1);
-    } finally { cp.spawnSync = spawnSync; process.kill = kill; }
-  });
 
 test('client commit failure retains the moved directory and retries exactly once', async t => {
   const root = fixture(t);
@@ -574,16 +495,16 @@ for (const owner of ['cli', 'electron']) {
     while (!fs.existsSync(path.join(root, 'before-admission'))) await new Promise(resolve => setTimeout(resolve, 10));
     const pid = Number(fs.readFileSync(path.join(root, 'before-admission')));
     t.after(async () => {
-      if (lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL');
+      if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
       await rejected;
     });
     if (owner === 'electron') {
       await assert.rejects(lifecycle.stopGraph(storage(root), 'demo', 'cli'), { code: 'server-owned-by-other' });
-      assert.notEqual(lifecycle.processIdentity(pid), null);
+      assert.equal(lifecycle.pidExists(pid), true);
     }
     await lifecycle.stopGraph(storage(root), 'demo', owner);
     await rejected;
-    assert.equal(lifecycle.processIdentity(pid), null);
+    assert.equal(lifecycle.pidExists(pid), false);
     assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
     assert.deepEqual(lifecycle.snapshot(storage(root), 'demo').workers, []);
   });
@@ -637,7 +558,7 @@ test('a conflicting lock owner cannot override registered ownership', async t =>
   lock['owner-source'] = 'electron';
   fs.writeFileSync(lockPath, JSON.stringify(lock));
   await assert.rejects(lifecycle.stopGraph(storage(root), 'demo', 'electron'), /owner|identity/);
-  assert.notEqual(lifecycle.processIdentity(worker.pid), null);
+  assert.equal(lifecycle.pidExists(worker.pid), true);
 });
 
 test('custom storage and physical aliases share exclusion and preserve sibling workers', async t => {
@@ -654,14 +575,14 @@ test('custom storage and physical aliases share exclusion and preserve sibling w
   const a = await lifecycle.startGraph({ ...options, storage: standard });
   const b = await lifecycle.startGraph({ ...options, storage: custom });
   t.after(async () => {
-    for (const pid of [a.pid, b.pid]) if (lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL');
+    for (const pid of [a.pid, b.pid]) if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
   });
   const reopened = await lifecycle.startGraph({ ...options, storage: alias });
   assert.equal(reopened.pid, b.pid);
   const deleted = await lifecycle.deleteGraph(alias, 'demo');
   assert.ok(deleted.destination.startsWith(custom.graphsDir));
-  assert.equal(lifecycle.processIdentity(b.pid), null);
-  assert.notEqual(lifecycle.processIdentity(a.pid), null);
+  assert.equal(lifecycle.pidExists(b.pid), false);
+  assert.equal(lifecycle.pidExists(a.pid), true);
   assert.equal(fs.existsSync(path.join(standard.graphsDir, 'demo', 'db.sqlite-wal')), true);
   assert.equal(lifecycle.snapshot(custom, 'demo').phase, 'deleted');
 });
@@ -689,7 +610,7 @@ test('an endpoint claiming the graph without matching process identity fails exp
   await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); server.close(); });
   fs.writeFileSync(path.join(root, 'server-list'), `${process.pid} ${server.address().port}\n`);
-  await assert.rejects(lifecycle.deleteGraph(store, 'demo'), /unresolved process identity/);
+  await assert.rejects(lifecycle.deleteGraph(store, 'demo'), /unregistered/);
   assert.equal(fs.existsSync(path.join(root, 'graphs', 'demo')), true);
 });
 
@@ -711,13 +632,165 @@ for (const [owner, explicit, expected] of [
     const worker = await lifecycle.startGraph({ storage: storage(root), repo: 'demo', owner,
       script: path.resolve(__dirname, '../../static/db-worker-node.js'),
       extraArgs: explicit ? ['--embedding-endpoint', 'http://127.0.0.1:9/explicit'] : [] });
-    t.after(() => { if (lifecycle.processIdentity(worker.pid)) process.kill(worker.pid, 'SIGKILL'); });
+    t.after(() => { if (lifecycle.pidExists(worker.pid)) process.kill(worker.pid, 'SIGKILL'); });
     const directory = path.join(root, 'graphs', 'demo');
     const log = fs.readdirSync(directory).filter(name => /^db-worker-node-.*\.log$/.test(name))
       .map(name => fs.readFileSync(path.join(directory, name), 'utf8')).join('\n');
     await lifecycle.deleteGraph(storage(root), 'demo');
-    assert.match(log, new RegExp(`:vector-embedding-enabled\\? ${expected ? 'true' : 'false'}`));
+    const vectorEnabled = !!expected && process.platform === 'darwin' && process.arch === 'arm64';
+    assert.match(log, new RegExp(`:vector-embedding-enabled\\? ${vectorEnabled}`));
     if (expected) assert.ok(log.includes(`:embedding-endpoint "${expected}"`), log);
     else assert.ok(!log.includes('http://127.0.0.1:9/inherited'), log);
   });
 }
+
+// Fault injection is limited to disposable fixture PIDs and restored before cleanup.
+test('PID probes distinguish missing processes from permission and input errors', t => {
+  const kill = process.kill;
+  t.after(() => { process.kill = kill; });
+  assert.equal(lifecycle.pidExists(process.pid), true);
+  for (const pid of [0, -1, 1.5, NaN, undefined, '123']) {
+    assert.throws(() => lifecycle.pidExists(pid), /Invalid PID/);
+  }
+  process.kill = () => { throw Object.assign(Error('gone'), { code: 'ESRCH' }); };
+  assert.equal(lifecycle.pidExists(process.pid), false);
+  for (const code of ['EPERM', 'EIO']) {
+    process.kill = () => { throw Object.assign(Error(code), { code }); };
+    assert.throws(() => lifecycle.pidExists(process.pid), { code });
+  }
+});
+
+for (const [field, value] of [
+  ['ticket', 'another-worker'], ['generation', 'another-generation'], ['pid', 1],
+  ['repo', 'another-graph'], ['owner-source', 'electron'], ['lock-id', 'another-lock'],
+  ['storage', { root: '/', graphsDir: '/', lifecycleDir: '/' }],
+]) {
+  test(`endpoint ${field} mismatch fails before shutdown or signals`, async t => {
+    const root = fixture(t);
+    await lifecycle.createGraph(storage(root), 'demo');
+    const worker = await child(t, root, 'normal', ['--health-field', field, '--health-value', JSON.stringify(value)]);
+    await rejectsWithoutSignals(worker.pid, () => lifecycle.deleteGraph(storage(root), 'demo'), /identity mismatch/);
+    assert.equal(lifecycle.pidExists(worker.pid), true);
+    assert.equal(fs.existsSync(path.join(root, 'graphs/demo/db-worker.lock')), true);
+    assert.equal(fs.existsSync(path.join(root, 'close-under-lease.json')), false);
+  });
+}
+
+for (const field of ['pid', 'ticket', 'generation', 'owner', 'repo', 'graphsDir', 'lifecycleDir']) {
+  test(`conflicting runtime ${field} cannot replace the registered worker`, async t => {
+    const root = fixture(t);
+    const store = storage(root);
+    await lifecycle.createGraph(store, 'demo');
+    const worker = await child(t, root, 'normal');
+    const ctx = lifecycle.context(store, 'demo');
+    const registration = lifecycle.snapshot(store, 'demo').workers[0];
+    const file = path.join(ctx.dir, `runtime-${registration.ticket}.json`);
+    const runtime = JSON.parse(fs.readFileSync(file));
+    runtime[field] = field === 'pid' ? process.pid : 'conflicting-value';
+    fs.writeFileSync(file, JSON.stringify(runtime));
+    await rejectsWithoutSignals(worker.pid, () => lifecycle.deleteGraph(store, 'demo'), /registration|identity/);
+    assert.equal(lifecycle.pidExists(worker.pid), true);
+    assert.equal(fs.existsSync(path.join(ctx.graphDir, 'db-worker.lock')), true);
+  });
+}
+
+test('an unregistered canonical lock owner is not adopted', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  await lifecycle.createGraph(store, 'demo');
+  const worker = await child(t, root, 'normal');
+  const state = lifecycle.snapshot(store, 'demo');
+  state.workers = [];
+  fs.writeFileSync(lifecycle.context(store, 'demo').stateFile, JSON.stringify(state));
+  await assert.rejects(lifecycle.deleteGraph(store, 'demo'), /unregistered/);
+  assert.equal(lifecycle.pidExists(worker.pid), true);
+});
+
+function hideEndpoint(root, store) {
+  const record = lifecycle.snapshot(store, 'demo').workers[0];
+  const file = path.join(lifecycle.context(store, 'demo').dir, `runtime-${record.ticket}.json`);
+  const runtime = JSON.parse(fs.readFileSync(file));
+  delete runtime.port;
+  fs.writeFileSync(file, JSON.stringify(runtime));
+  fs.writeFileSync(path.join(root, 'server-list'), '');
+}
+
+test('persistent PID existence times out and retains locks and data', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  await lifecycle.createGraph(store, 'demo');
+  const worker = await child(t, root, 'normal');
+  hideEndpoint(root, store);
+  const kill = process.kill;
+  const signals = [];
+  process.kill = (pid, signal) => {
+    if (pid === worker.pid && signal !== 0) { signals.push(signal); return true; }
+    return kill(pid, signal);
+  };
+  try {
+    await assert.rejects(lifecycle.deleteGraph(store, 'demo'), { code: 'server-stop-timeout' });
+    assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+    assert.equal(fs.existsSync(path.join(root, 'graphs/demo/db-worker.lock')), true);
+    assert.equal(lifecycle.snapshot(store, 'demo').workers.length, 1);
+  } finally { process.kill = kill; }
+});
+
+test('worker disappearance at signal delivery completes cleanup', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  await lifecycle.createGraph(store, 'demo');
+  const worker = await child(t, root, 'normal');
+  hideEndpoint(root, store);
+  const kill = process.kill;
+  let disappeared = false;
+  process.kill = (pid, signal) => {
+    if (pid === worker.pid && signal === 'SIGTERM') {
+      kill(pid, 'SIGKILL');
+      disappeared = true;
+      throw Object.assign(Error('gone at signal delivery'), { code: 'ESRCH' });
+    }
+    return kill(pid, signal);
+  };
+  try {
+    const result = await lifecycle.deleteGraph(store, 'demo');
+    assert.equal(disappeared, true);
+    assert.equal(lifecycle.pidExists(worker.pid), false);
+    assert.equal(fs.existsSync(path.join(result.destination, 'db-worker.lock')), false);
+  } finally { process.kill = kill; }
+});
+
+test('probe permission failure preserves the registered worker and graph', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  await lifecycle.createGraph(store, 'demo');
+  const worker = await child(t, root, 'normal');
+  const kill = process.kill;
+  process.kill = (pid, signal) => {
+    if (pid === worker.pid) throw Object.assign(Error('denied'), { code: 'EPERM' });
+    return kill(pid, signal);
+  };
+  try {
+    await assert.rejects(lifecycle.deleteGraph(store, 'demo'), { code: 'EPERM' });
+    assert.equal(fs.existsSync(path.join(root, 'graphs/demo/db-worker.lock')), true);
+    assert.equal(lifecycle.snapshot(store, 'demo').workers.length, 1);
+  } finally { process.kill = kill; }
+});
+
+test('a registered self target is never signaled', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  await lifecycle.createGraph(store, 'demo');
+  const runtime = await lifecycle.admit({ storage: store, repo: 'demo', owner: 'cli' });
+  runtime.release();
+  const kill = process.kill;
+  let signals = 0;
+  process.kill = (pid, signal) => {
+    if (signal !== 0) { signals++; throw Error('unexpected signal'); }
+    return kill(pid, signal);
+  };
+  try {
+    await assert.rejects(lifecycle.deleteGraph(store, 'demo'), /calling process/);
+    assert.equal(signals, 0);
+    assert.equal(fs.existsSync(path.join(root, 'graphs/demo')), true);
+  } finally { process.kill = kill; }
+});

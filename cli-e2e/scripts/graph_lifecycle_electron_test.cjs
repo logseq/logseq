@@ -80,7 +80,7 @@ async function runtimeRegressions() {
       for (let iteration = 0; iteration < 2; iteration++) {
         const { pid } = await health(runtime);
         process.kill(pid, 'SIGKILL');
-        await waitFor(() => !lifecycle.processIdentity(pid));
+        await waitFor(() => !lifecycle.pidExists(pid));
         runtime = await open('recover', 102, generation);
         pids.add((await health(runtime)).pid);
         await new Promise(resolve => setImmediate(resolve));
@@ -149,16 +149,16 @@ async function runtimeRegressions() {
   assert.equal((await health(await open())).pid, first.pid);
   const storage = logseq.cli.server.resolve_storage.call(null, options);
   await lifecycle.stopGraph(storage, 'demo', 'electron');
-  assert.equal(lifecycle.processIdentity(first.pid), null);
+  assert.equal(lifecycle.pidExists(first.pid), false);
   const reopened = await health(await open());
   pids.add(reopened.pid);
   assert.notEqual(reopened.pid, first.pid);
   const destination = await logseq.cli.common._LT_unlink_graph_BANG_.call(null, alias, 'logseq_db_demo');
   assert.equal(fs.readFileSync(path.join(destination, 'marker'), 'utf8'), 'custom');
-  assert.equal(lifecycle.processIdentity(reopened.pid), null);
+  assert.equal(lifecycle.pidExists(reopened.pid), false);
   assert.equal(fs.existsSync(path.join(graphs, 'demo')), false);
   assert.equal(fs.readFileSync(path.join(standard.graphsDir, 'demo', 'marker'), 'utf8'), 'standard');
-  assert.notEqual(lifecycle.processIdentity(sibling.pid), null);
+  assert.equal(lifecycle.pidExists(sibling.pid), true);
   const response = await fetch(`http://127.0.0.1:${sibling.port}/healthz`);
   assert.equal(response.status, 200);
   console.log(JSON.stringify({ electron: process.versions.electron, customStorage: true, aliasReuse: true,
@@ -166,7 +166,7 @@ async function runtimeRegressions() {
   await lifecycle.deleteGraph(standard, 'demo');
   await runtimeRegressions();
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
-  for (const pid of pids) if (lifecycle.processIdentity(pid)) process.kill(pid, 'SIGKILL');
+  for (const pid of pids) if (lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
   fs.rmSync(root, { recursive: true, force: true });
   require('electron').app.exit(process.exitCode || 0);
 });
