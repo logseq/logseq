@@ -1458,7 +1458,7 @@
    :cmds ["python3 {{repo-root-arg}}/cli-e2e/scripts/graph_deletion_lifecycle_test.py"]
    :tags [:graph :lifecycle]}
   {:id "graph-lifecycle-cli-followups"
-   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_cli_test.cjs"]
+   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/cli_build_revision_test.mjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_cli_test.cjs"]
    :tags [:graph :lifecycle]}
   {:id "graph-lifecycle-process-protocol"
    :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_protocol_test.cjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_upgrade_test.cjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_startup_test.cjs"]
