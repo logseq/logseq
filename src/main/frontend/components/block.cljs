@@ -227,10 +227,15 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
-        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        [load-failed? set-load-failed!] (hooks/use-state false)
+        *prev-src (hooks/use-ref src)]
+    (when (not= (hooks/deref *prev-src) src)
+      (hooks/set-ref! *prev-src src)
+      (set-load-failed! false))
     (hooks/use-effect!
      (fn []
-       (when (and (seq src) (:block/uuid asset-block))
+       (when (and (seq src) (:block/uuid asset-block) (not load-failed?))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -240,7 +245,7 @@
                                                         {:logseq.property.asset/width width
                                                          :logseq.property.asset/height height}))))))
        (fn []))
-     [])
+     [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
           image-src (when (seq src)
                       (fs/asset-path-normalize src))
@@ -252,21 +257,26 @@
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
-        :on-pointer-down util/stop
+        :on-pointer-down (fn [e]
+                           (when-not (block-image/asset-fallback-link-event? e)
+                             (util/stop e)))
         :on-click (fn [e]
-                    (util/stop e)
-                    (when (= "IMG" (some-> (.-target e) (.-nodeName)))
-                      (open-lightbox! e)))
+                    (when-not (block-image/asset-fallback-link-event? e)
+                      (util/stop e)
+                      (when (= "IMG" (some-> (.-target e) (.-nodeName)))
+                        (open-lightbox! e))))
         :ref *el-ref}
-       [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         (cond-> {:loading "lazy"
-                  :referrerPolicy "no-referrer"
-                  :src src'}
-           (not gallery-view?)
-           (assoc :title title))
-         metadata)]
-       (when (and (not breadcrumb?)
+       (block-image/image-or-fallback
+        {:src src'
+         :title title
+         :gallery-view? gallery-view?
+         :metadata metadata
+         :load-failed? load-failed?
+         :on-error (fn [_]
+                     (when (block-image/remote-image-url? src')
+                       (set-load-failed! true)))})
+       (when (and (not load-failed?)
+                  (not breadcrumb?)
                   (not positioned?))
          [:<>
           (let [handle-copy!
@@ -1059,9 +1069,15 @@
   (let [page-uuid (if (uuid? page) page (:block/uuid page))
         page-name (:block/name page)]
     ^{:key (str (or page-uuid page-name))}
-    (if page-uuid
+    (if (and page-uuid
+             (not (and (:skip-async-load? config)
+                       (or (:block/title page)
+                           (true? (:block.temp/first-window-preview? page))))))
       [subscribed-page-cp config page-uuid]
-      [page-cp-inner config page])))
+      [page-cp-inner config (if (map? page)
+                              page
+                              {:block/uuid page-uuid
+                               :block/name page-name})])))
 
 (hsx/defc asset-reference
   [config title path]
@@ -3248,9 +3264,13 @@
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (when-let [property-uuids
-             (seq (get (:block.temp/positioned-properties block) position))]
-    [positioned-properties-content config block position property-uuids]))
+  (let [block-uuid (:block/uuid block)
+        {:keys [status value]}
+        (db-hooks/use-resource-snapshot
+         (when (uuid? block-uuid)
+           [:block-positioned-properties block-uuid position]))]
+    (when (and (= :ready status) (seq value))
+      [positioned-properties-content config block position value])))
 
 (hsx/defc loaded-block-reactions
   [block]

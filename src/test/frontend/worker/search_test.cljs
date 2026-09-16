@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
@@ -443,6 +444,82 @@
           (is (not-any? #(string/includes? % "title match ?") @calls))
           (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
 
+(deftest search-blocks-normalizes-tag-title-query-before-sql
+  (testing "cmd-k tag queries should search the tag page title without paying FTS or broad LIKE scans"
+    (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (swap! calls conj {:sql sql :bind bind})
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              (if (= ["Movies" 10] bind)
+                                (clj->js [[page-id page-id "Movies"]])
+                                #js [])
+
+                              (string/includes? sql "title match ?")
+                              (throw (js/Error. "FTS should not run for exact tag title queries"))
+
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run for exact tag title queries"))
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)
+                    d/db? (constantly true)
+                    d/datoms (fn [& _]
+                               (throw (js/Error. "direct page scan should not run for exact tag title queries")))]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "#Movies"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Movies"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (some #(= ["Movies" 10] (:bind %)) @calls))
+          (is (not-any? #(string/includes? (:sql %) "title match ?") @calls))
+          (is (not-any? #(string/includes? (:sql %) "lower(title) like ?") @calls)))))))
+
+(deftest search-blocks-skips-direct-page-scan-after-exact-title-hit
+  (testing "single-term page searches should not scan every Datascript page after an exact search-db hit"
+    (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (cond
+                              (and (string/includes? sql "title = ? COLLATE NOCASE")
+                                   (= ["Tag" 10] bind))
+                              (clj->js [[page-id page-id "Tag"]])
+
+                              (string/includes? sql "title match ?")
+                              #js []
+
+                              (string/includes? sql "lower(title) like ?")
+                              #js []
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)
+                    d/db? (constantly true)
+                    d/datoms (fn [& _]
+                               (throw (js/Error. "direct page scan should not run after exact title hits")))]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "Tag"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Tag"}]
+                 (mapv #(select-keys % [:id :page :title]) result))))))))
+
 (deftest combine-results-large-result-benchmark
   (testing "large search result sets combine without quadratic scans and keep page boost ranking"
     (let [ids (mapv test-uuid-string (range 1 2501))
@@ -575,6 +652,65 @@
                  :title "Search target"})]
     (is (= ["Teams" "Parent"]
            (mapv :block/title (:block.temp/breadcrumb result))))))
+
+(deftest search-breadcrumb-resolves-page-uuid-and-ident-refs-test
+  (let [conn (db-test/create-conn)
+        page (d/entity @conn :logseq.class/Page)
+        page-uuid (:block/uuid page)]
+    (is (uuid? page-uuid))
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity @conn page-uuid)))
+        "CMDK page maps often carry only :block/uuid.")
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity
+                    @conn {:block/uuid page-uuid :block/title "Page"})))
+        "Pulled :block/page can omit :db/id.")
+    (is (= (:db/id page)
+           (:db/id (block-breadcrumb/shallow-ref-identity
+                    @conn :logseq.class/Page))))
+    (is (vector? (block-breadcrumb/block-breadcrumb @conn page))
+        "Built-in Page is a CMDK hit for queries like page 1.")
+    (let [child-conn (db-test/create-conn-with-blocks
+                      {:pages-and-blocks
+                       [{:page {:block/title "page 1"}
+                         :blocks [{:block/title "child"}]}]})
+          child (db-test/find-block-by-content @child-conn "child")
+          page-uuid (:block/uuid (:block/page child))]
+      (is (uuid? page-uuid))
+      (is (= ["page 1"]
+             (mapv :block/title
+                   (block-breadcrumb/block-breadcrumb
+                    @child-conn
+                    (assoc child :block/page page-uuid))))
+          "search-result page fields are often a raw uuid."))
+    (let [result (#'search/search-result->block-result
+                  conn
+                  "page"
+                  nil
+                  {:enable-snippet? false
+                   :include-breadcrumb? true
+                   :built-in? true}
+                  {:id (str page-uuid)
+                   :page (str page-uuid)
+                   :title "Page"})]
+      (is (= page-uuid (:block/uuid result)))
+      (is (vector? (:block.temp/breadcrumb result))))))
+
+(deftest search-breadcrumb-survives-every-named-page-test
+  (let [conn (db-test/create-conn)
+        failures (into []
+                       (keep (fn [datom]
+                               (let [block (d/entity @conn (:e datom))]
+                                 (try
+                                   (block-breadcrumb/block-breadcrumb @conn block)
+                                   nil
+                                   (catch :default e
+                                     {:title (:block/title block)
+                                      :ident (:db/ident block)
+                                      :message (ex-message e)
+                                      :data (ex-data e)})))))
+                       (d/datoms @conn :avet :block/uuid))]
+    (is (empty? failures) (pr-str failures))))
 
 (deftest search-result-keeps-tag-identities-for-ui-entity-predicates
   (let [page-id #uuid "00000000-0000-0000-0000-000000000124"

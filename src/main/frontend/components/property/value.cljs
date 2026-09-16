@@ -92,6 +92,22 @@
   [m]
   (and (map? m) (:db/id m)))
 
+(defn- empty-placeholder-value?
+  "Canonical rows inline empty-placeholder as a shallow identity map.
+  select-item only painted the dashed icon for the bare keyword."
+  [value]
+  (or (= value :logseq.property/empty-placeholder)
+      (and (map? value)
+           (= (:db/ident value) :logseq.property/empty-placeholder))))
+
+(defn- closed-choice-value?
+  "True when the value itself carries closed-choice identity."
+  [value]
+  (boolean
+   (and (map? value)
+        (not (empty-placeholder-value? value))
+        (some? (:block/closed-value-property value)))))
+
 (defn- value->db-id
   [value]
   (cond
@@ -215,6 +231,36 @@
         (seq (:property/closed-values property))
         (and (= (:db/ident property) :logseq.property/default-value)
              (= (:logseq.property/type block) :number)))))
+
+(defn- built-in-closed-choice-property?
+  [property]
+  (boolean
+   (seq (:closed-values
+         (get db-property/built-in-properties (:db/ident property))))))
+
+(defn- built-in-closed-choice-value?
+  [property value]
+  (boolean
+   (and (built-in-closed-choice-property? property)
+        (map? value)
+        (not (empty-placeholder-value? value))
+        (some? (:logseq.property/icon value)))))
+
+(defn- property-closed-choice-value?
+  [property value]
+  (or (closed-choice-value? value)
+      (built-in-closed-choice-value? property value)))
+
+(defn- property-value-select-type?
+  "select-type? only sees :property/closed-values. Positioned chips load the
+   property through use-block, which is a canonical snapshot without that key.
+   Empty-placeholder alone is not enough: unused text properties then rendered
+   a 0-width nested ls-block that open-last-block tried to click."
+  [block property value]
+  (or (select-type? block property)
+      (property-closed-choice-value? property value)
+      (and (empty-placeholder-value? value)
+           (built-in-closed-choice-property? property))))
 
 (defn direct-value-picker-type?
   [type]
@@ -1701,10 +1747,10 @@
     [:div.select-item.cursor-pointer
      {:class (multiple-value-item-class opts)}
      (cond
-       (= value :logseq.property/empty-placeholder)
+       (empty-placeholder-value? value)
        (property-empty-btn-value property opts)
 
-       closed-values?
+       (or closed-values? (property-closed-choice-value? property value))
        (closed-value-item value opts)
 
        (or (entity/page? value)
@@ -2293,12 +2339,14 @@
   (let [type (:logseq.property/type property)
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
-        select-type?' (or (select-type? block property)
+        select-type?' (or (property-value-select-type? block property value*)
                           (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
-        value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
-                nil
-                value*)]
+        empty-placeholder? (empty-placeholder-value? value*)
+        value (if empty-placeholder? nil value*)
+        select-value (if empty-placeholder?
+                       :logseq.property/empty-placeholder
+                       value)]
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
@@ -2333,11 +2381,11 @@
                                                                                      choice)) choices)]
                                                      (when choice
                                                        (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
-            (single-value-select block property value
+            (single-value-select block property select-value
                                  select-opts
                                  (assoc opts
                                         :editing? editing?
-                                        :value-render (fn [] (select-item property type value opts))))))
+                                        :value-render (fn [] (select-item property type select-value opts))))))
         (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))

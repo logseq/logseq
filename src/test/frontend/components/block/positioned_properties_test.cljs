@@ -30,6 +30,11 @@
                   [:button.bottom-property-hidden-toggle-btn
                    {:data-bottom-pill (boolean (:bottom-pill? opts))}
                    "Show hidden properties"])
+                db-hooks/use-resource-snapshot
+                (fn [resource-key]
+                  (is (= [:block-positioned-properties (:block/uuid block) :block-below]
+                         resource-key))
+                  {:status :ready :value properties})
                 db-hooks/use-blocks (fn [property-uuids]
                                       (mapv property-by-uuid property-uuids))
                 db-hooks/use-block (fn [property-uuid]
@@ -46,7 +51,7 @@
     (render-static
      (block/block-positioned-properties
       config
-      (assoc block :block.temp/positioned-properties {:block-below properties})
+      block
       :block-below))))
 
 (deftest icon-only-block-does-not-emit-bottom-properties-row
