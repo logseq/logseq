@@ -235,8 +235,8 @@
           "Property references retain the scalar content required to render their value.")
       (is (= 1 (:block.temp/order-list-index block))
           "Canonical blocks retain worker-derived ordered-list indexes.")
-      (is (not (contains? block :block.temp/positioned-properties))
-          "Positioned property chips load through their own resource.")
+      (is (map? (:block.temp/positioned-properties block))
+          "Positioned properties arrive with the canonical row.")
       (is (not (contains? block :block.temp/breadcrumb)))
       (is (integer? (:block.temp/refs-count block)))
       (is (not (contains? block :block.temp/property-keys))
@@ -245,7 +245,8 @@
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
-                    (remove #{:block.temp/order-list-index
+                    (remove #{:block.temp/positioned-properties
+                              :block.temp/order-list-index
                               :block.temp/refs-count}
                             (keys block)))))))
 
@@ -376,7 +377,7 @@
         (is (= #{:db/id :block/uuid :block/title :block/name :block/tags}
                (set (keys (first (:user.property/actors block)))))
             "Page-valued cells are one eavt scan: uuid/title/name/tags. No property extras.")
-        (is (not (contains? block :block.temp/positioned-properties)))
+        (is (map? (:block.temp/positioned-properties block)))
         (is (not (contains? block :block.temp/property-keys)))))))
 
 (deftest canonical-block-uses-stored-journal-title-test
@@ -452,8 +453,9 @@
           display-property (property-handler/display-property-map @conn property-id)]
       (is (zero? (:block.temp/refs-count canonical-property))
           "Property column headers skip refs-count. Incoming refs are every user of the property.")
-      (is (not (contains? canonical-property :property/closed-values))
-          "Closed values stay off the row snapshot. Table columns only need ident/type.")
+      (is (= (:property/closed-values display-property)
+             (:property/closed-values canonical-property))
+          "Canonical property definitions carry every choice for pickers.")
       (is (seq (:property/closed-values display-property)))
       (is (every? :block/uuid (:property/closed-values display-property)))
       (is (= #{"Low" "Medium" "High" "Urgent"}
@@ -562,7 +564,7 @@
                  (canonical-block db
                                   (d/entity db [:block/uuid block-uuid])))))))))
 
-(deftest canonical-blocks-does-not-hydrate-positioned-property-definitions-test
+(deftest canonical-blocks-inlines-positioned-property-definitions-test
   (when-let [canonical-blocks (canonical-blocks-api)]
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "Page"}
@@ -575,10 +577,11 @@
       (let [response (canonical-blocks @conn [(:block/uuid task)])
             block (get-in response [:blocks (:block/uuid task)])]
         (is (= #{(:block/uuid task)} (set (keys (:blocks response))))
-            "Property definitions stay off the snapshot. The row inlines their UUIDs.")
+            "Definitions are inlined on the row, without loading extra canonical blocks.")
         (is (not (contains? (set (keys (:blocks response))) status-uuid)))
-        (is (not (contains? block :block.temp/positioned-properties))
-            "Positioned chips are not part of the row snapshot.")
+        (is (= [status-uuid]
+               (mapv :block/uuid (get-in block [:block.temp/positioned-properties :block-left])))
+            "Positioned chips can render without another request.")
         (is (some? (:logseq.property/status block))
             "The written status value stays on the row for table cells.")))))
 
@@ -864,9 +867,10 @@
                             @conn (:db/id task-only) :block-left))
             doing-left (set (property-handler/block-positioned-property-idents
                              @conn (:db/id task-doing) :block-left))]
-        (is (not (contains? only-block :block.temp/positioned-properties)))
+        (is (= [status-uuid]
+               (mapv :block/uuid (get-in only-block [:block.temp/positioned-properties :block-left]))))
         (is (contains? only-left :logseq.property/status)
-            "Tag-only #Task still exposes the default status icon via the property resource.")
+            "Tag-only #Task exposes the default status on its first render.")
         (is (not (contains? only-block :logseq.property/status))
             "Canonical row maps omit unset status so table/query cells stay empty.")
         (is (contains? doing-left :logseq.property/status)
@@ -1012,3 +1016,76 @@
       (is (= "https://example.com/poster.webp"
              (:logseq.property.asset/external-url cover)))
       (assert-shallow-identity-ref cover))))
+
+(deftest canonical-task-snapshot-includes-complete-positioned-choices-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Tasks"}
+                :blocks [{:block/title "Task with status" :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                         {:block/title "Task with default" :build/tags [:logseq.class/Task]}
+                         {:block/title "Plain block"}]}])
+        tasks (mapv #(db-test/find-block-by-content @conn %)
+                    ["Task with status" "Task with default" "Plain block"])]
+    (d/transact! conn (conj (mapv #(hash-map :db/id (:db/id %) :block/tx-id 1) tasks)
+                            {:db/ident :logseq.property/status :block/tx-id 1}))
+    (let [blocks (:blocks (block-handler/canonical-blocks @conn (mapv :block/uuid tasks)))
+          status (d/entity @conn :logseq.property/status)
+          expected (property-handler/property-closed-values @conn status)]
+      (is (= 6 (count expected)))
+      (doseq [task (take 2 tasks)]
+        (let [properties (get-in blocks [(:block/uuid task) :block.temp/positioned-properties :block-left])
+              status-property (some #(when (= :logseq.property/status (:db/ident %)) %) properties)]
+          (is (= (set (map :db/ident expected))
+                 (set (map :db/ident (:property/closed-values status-property)))))
+          (is (every? :logseq.property/icon (:property/closed-values status-property)))))
+      (is (= {} (get-in blocks [(:block/uuid (last tasks)) :block.temp/positioned-properties])))
+      (is (= expected (:property/closed-values (block-handler/canonical-block @conn status)))
+          "Property pickers outside positioned chips also receive the complete choice set."))))
+
+(deftest canonical-block-batch-shares-positioned-property-work-test
+  (let [conn (db-test/create-conn)
+        ids (vec (repeatedly 50 random-uuid))
+        calls (atom [])
+        closed-values property-handler/property-closed-values]
+    (d/transact! conn
+                 (mapv (fn [id] {:block/uuid id :block/title "Task" :block/tx-id 1
+                                  :block/tags :logseq.class/Task}) ids))
+    (with-redefs [property-handler/property-closed-values
+                  (fn [db property]
+                    (swap! calls conj (:db/ident property))
+                    (closed-values db property))]
+      (let [result (block-handler/canonical-blocks @conn ids)]
+        (is (= 50 (count (:blocks result))))
+        (is (= 1 (count (filter #{:logseq.property/status} @calls)))
+            "A batch reads the shared status choices once, without retaining the database globally.")))))
+
+(deftest positioned-node-property-preserves-selector-and-icon-contract-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:owner {:logseq.property/type :node
+                                    :logseq.property/ui-position :block-left}}
+               :classes {:Work {:build/class-properties [:owner]}
+                         :Person {}}
+               :pages-and-blocks
+               [{:page {:block/title "Assignments"}
+                 :blocks [{:block/title "Assignment" :build/tags [:Work]}
+                          {:block/title "Alice" :build/tags [:Person]}
+                          {:block/title "Unrelated"}]}]})
+        icon {:type :tabler-icon :id "user"}
+        assignment (db-test/find-block-by-content @conn "Assignment")
+        person (d/entity @conn :user.class/Person)]
+    (d/transact! conn [{:db/ident :user.property/owner
+                       :logseq.property/classes [(:db/id person)]
+                       :logseq.property/icon icon}
+                      {:db/id (:db/id assignment) :block/tx-id 1}])
+    (let [block (block-handler/canonical-block @conn (d/entity @conn (:db/id assignment)))
+          property (first (get-in block [:block.temp/positioned-properties :block-left]))
+          selector (property-handler/property-node-selector-data
+                    @conn {:property property :block block})]
+      (is (= :user.property/owner (:db/ident property)))
+      (is (= [:user.class/Person] (mapv :db/ident (:logseq.property/classes property)))
+          "The picker retains class filtering and the tag for newly created values.")
+      (is (= [(:block/uuid person)] (mapv :block/uuid (:logseq.property/classes property))))
+      (is (= ["Alice"] (mapv :block/title (:initial-choices selector)))
+          "An unused positioned property offers existing nodes of its allowed class.")
+      (is (= icon (:logseq.property/icon property))
+          "Empty left/right values can render their configured icon immediately."))))
