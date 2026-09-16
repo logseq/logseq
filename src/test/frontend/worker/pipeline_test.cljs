@@ -1331,7 +1331,7 @@
         child (db-test/find-block-by-content @conn "library child")
         grandchild (db-test/find-block-by-content @conn "library grandchild")
         slash (db-test/find-block-by-content @conn "has/slash")
-        hash (db-test/find-block-by-content @conn "has#hash")
+        hash-title-block (db-test/find-block-by-content @conn "has#hash")
         blank (db-test/find-block-by-content @conn "   ")
         sibling (db-test/find-block-by-content @conn "ok library sibling")]
     (with-transact-pipeline
@@ -1361,7 +1361,7 @@
         (is (thrown-with-msg?
              js/Error
              #"Page name can't.*#"
-             (outliner-core/move-blocks! conn [hash] library {:sibling? false})))
+             (outliner-core/move-blocks! conn [hash-title-block] library {:sibling? false})))
         (is (thrown-with-msg?
              js/Error
              #"Page name can't be blank"
@@ -1385,7 +1385,7 @@
                          {:block/title "dup"}]}])
         ok (db-test/find-block-by-content @conn "ok auto")
         slash (db-test/find-block-by-content @conn "has/slash")
-        hash (db-test/find-block-by-content @conn "has#hash")
+        hash-title-block (db-test/find-block-by-content @conn "has#hash")
         blank (db-test/find-block-by-content @conn "   ")
         dup (->> (d/q '[:find [?b ...]
                         :where
@@ -1407,7 +1407,7 @@
         (is (thrown-with-msg?
              js/Error
              #"Page name can't.*#"
-             (convert-block-to-page! conn hash)))
+             (convert-block-to-page! conn hash-title-block)))
         (is (thrown-with-msg?
              js/Error
              #"Page name can't be blank"

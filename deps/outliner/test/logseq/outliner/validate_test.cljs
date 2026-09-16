@@ -239,7 +239,7 @@
                        first)
         blank (db-test/find-block-by-content @conn "   ")
         slash (db-test/find-block-by-content @conn "has/slash")
-        hash (db-test/find-block-by-content @conn "has#hash")]
+        hash-title-block (db-test/find-block-by-content @conn "has#hash")]
     (is (nil? (outliner-validate/validate-page-conversion-title @conn ok (:block/title ok)))
         "Valid title can convert to a page")
 
@@ -258,7 +258,7 @@
     (is (thrown-with-msg?
          js/Error
          #"Page name can't.*#"
-         (outliner-validate/validate-page-conversion-title @conn hash (:block/title hash)))
+         (outliner-validate/validate-page-conversion-title @conn hash-title-block (:block/title hash-title-block)))
         "Titles with # are rejected")
 
     (is (thrown-with-msg?
