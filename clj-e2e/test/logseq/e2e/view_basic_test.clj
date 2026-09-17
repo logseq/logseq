@@ -1,6 +1,7 @@
 (ns logseq.e2e.view-basic-test
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is use-fixtures]]
+            [jsonista.core :as json]
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
@@ -8,7 +9,9 @@
             [logseq.e2e.locator :as loc]
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import [com.microsoft.playwright Locator$ScreenshotOptions Page$ScreenshotOptions]
+           [java.nio.file Paths]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -238,6 +241,121 @@
   (w/click (loc/filter "[role='menuitem']" :has-text direction))
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
+
+(defn- js-json
+  [script]
+  (json/read-value (w/eval-js script) json/keyword-keys-object-mapper))
+
+(defn- table-page-ref-metrics
+  []
+  (js-json
+   "(() => {
+      const ref = document.querySelector('.ls-table-cell .table-block-title .page-reference');
+      if (!ref) return JSON.stringify({error: 'missing page-reference'});
+      const brackets = [...ref.querySelectorAll('.bracket')];
+      const link = ref.querySelector('.page-ref');
+      if (brackets.length < 2 || !link) return JSON.stringify({error: 'missing parts'});
+      const left = brackets[0].getBoundingClientRect();
+      const right = brackets[1].getBoundingClientRect();
+      const mid = link.getBoundingClientRect();
+      const linkStyle = getComputedStyle(link);
+      return JSON.stringify({
+        leftTop: left.top,
+        linkTop: mid.top,
+        rightTop: right.top,
+        leftBottom: left.bottom,
+        linkBottom: mid.bottom,
+        rightBottom: right.bottom,
+        display: linkStyle.display,
+        overflow: linkStyle.overflow
+      });
+    })()"))
+
+(defn- screenshot-page!
+  [path]
+  (.screenshot (w/get-page)
+               (.setPath (Page$ScreenshotOptions.)
+                         (Paths/get path (into-array String [])))))
+
+(defn- screenshot-locator!
+  [selector path]
+  (.screenshot (.first (.locator (w/get-page) selector))
+               (.setPath (Locator$ScreenshotOptions.)
+                         (Paths/get path (into-array String [])))))
+
+(defn- maybe-artifact-dir
+  []
+  (let [dir (or (System/getenv "CURSOR_ARTIFACTS_DIR")
+                "/opt/cursor/artifacts")]
+    (when (.isDirectory (java.io.File. dir))
+      dir)))
+
+(defn- apply-clipped-anchor-regression!
+  []
+  (w/eval-js
+   "(() => {
+      const id = 'e2e-table-page-ref-regression';
+      document.getElementById(id)?.remove();
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = `
+        .ls-table .ls-table-cell .table-block-title a,
+        .ls-table .ls-table-cell .page-reference a {
+          display: inline-block !important;
+          overflow: hidden !important;
+          max-width: 100% !important;
+          text-overflow: ellipsis !important;
+          vertical-align: baseline !important;
+        }
+      `;
+      document.head.appendChild(style);
+      return true;
+    })()"))
+
+(defn- clear-clipped-anchor-regression!
+  []
+  (w/eval-js
+   "(() => {
+      document.getElementById('e2e-table-page-ref-regression')?.remove();
+      return true;
+    })()"))
+
+(deftest table-name-page-ref-shares-bracket-baseline-test
+  (let [tag-name "page-ref-align"
+        container-page (page/get-page-name)
+        titles ["What is the [[AI]]?"
+                "What is an [[LLM]]?"
+                "Plain row without refs"]]
+    (ls-api-call! :editor.createTag tag-name)
+    (doseq [title titles]
+      (ls-api-call! :editor.insertBlock
+                    container-page
+                    (str title " #" tag-name)))
+    (page/goto-page tag-name)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "What is the"))
+    (assert/assert-is-visible
+     ".ls-table-cell .table-block-title .page-reference .page-ref")
+    (when-let [dir (maybe-artifact-dir)]
+      (apply-clipped-anchor-regression!)
+      (screenshot-page! (str dir "/table_page_ref_before.png"))
+      (screenshot-locator! ".ls-table-cell .table-block-title .page-reference"
+                           (str dir "/table_page_ref_before_closeup.png"))
+      (clear-clipped-anchor-regression!))
+    (let [metrics (table-page-ref-metrics)
+          top-delta (abs (- (:linkTop metrics) (:leftTop metrics)))
+          bottom-delta (abs (- (:linkBottom metrics) (:leftBottom metrics)))]
+      (is (nil? (:error metrics)) metrics)
+      (is (= "inline" (:display metrics))
+          "Title page refs must stay inline so they share the line baseline.")
+      (is (< top-delta 1.25)
+          (str "page-ref top should match [[ bracket top: " metrics))
+      (is (< bottom-delta 1.25)
+          (str "page-ref bottom should match [[ bracket bottom: " metrics)))
+    (when-let [dir (maybe-artifact-dir)]
+      (screenshot-page! (str dir "/table_page_ref_after.png"))
+      (screenshot-locator! ".ls-table-cell .table-block-title .page-reference"
+                           (str dir "/table_page_ref_after_closeup.png")))))
 
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
