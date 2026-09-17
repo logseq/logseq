@@ -318,28 +318,31 @@
                         (:added datom)
                         (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
-                         block-parent (:block/parent block)
-                         page-title (outliner-validate/validate-page-conversion-title
-                                     db-after block (block-title block))
-                         ->page-tx (concat
-                                    [{:db/id id
-                                      :block/name (common-util/page-name-sanity-lc page-title)
-                                      :block/title page-title}
-                                     [:db/retract id :block/page]]
-                                    (when (or (ldb/class? block-parent) (ldb/property? block-parent))
-                                      [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]])
-                                    (descendant-block-page-tx db-after id id))
-                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
-                                                              (nil? (:block/parent block-parent))
-                                                              block-parent
-                                                              (not= (:db/id block-parent) (:db/id library-page))
-                                                              (not (:db/ident block-parent))
-                                                              (not (ldb/built-in? block-parent)))
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                         block-parent (:block/parent block)]
+                     ;; Library Enter inserts an empty #Page draft; validate once it has a title.
+                     (when-not (and (string/blank? (block-title block))
+                                    (= (:db/id block-parent) (:db/id library-page)))
+                       (let [page-title (outliner-validate/validate-page-conversion-title
+                                         db-after block (block-title block))
+                             ->page-tx (concat
+                                        [{:db/id id
+                                          :block/name (common-util/page-name-sanity-lc page-title)
+                                          :block/title page-title}
+                                         [:db/retract id :block/page]]
+                                        (when (or (ldb/class? block-parent) (ldb/property? block-parent))
+                                          [[:db/retract id :block/parent]
+                                           [:db/retract id :block/order]])
+                                        (descendant-block-page-tx db-after id id))
+                             move-parent-to-library-tx (when (and (ldb/page? block-parent)
+                                                                  (nil? (:block/parent block-parent))
+                                                                  block-parent
+                                                                  (not= (:db/id block-parent) (:db/id library-page))
+                                                                  (not (:db/ident block-parent))
+                                                                  (not (ldb/built-in? block-parent)))
+                                                         [{:db/id (:db/id block-parent)
+                                                           :block/parent (:db/id (ldb/get-library-page db-after))
+                                                           :block/order (db-order/gen-key)}])]
+                         (concat ->page-tx move-parent-to-library-tx))))
 
                    ;; page->block
                    (and page-tag-update?

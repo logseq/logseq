@@ -364,7 +364,12 @@
     (doseq [eid eids]
       (let [block (d/entity db eid)]
         (when (:block/parent block)
-          (validate-page-conversion-title db block nil)
+          (let [library-page (ldb/get-library-page db)
+                title (or (:block/raw-title block) (:block/title block))]
+            ;; Empty Library children are #Page drafts created by Enter; validate when titled.
+            (when-not (and (string/blank? title)
+                           (= (:db/id library-page) (:db/id (:block/parent block))))
+              (validate-page-conversion-title db block nil)))
 
           ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents

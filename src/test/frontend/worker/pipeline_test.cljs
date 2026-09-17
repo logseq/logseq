@@ -1440,24 +1440,24 @@
          conn
          [{:block/uuid draft-uuid
            :block/title ""
+           :block/name ""
+           :block/tags #{:logseq.class/Page}
            :block/page (:db/id library)}]
          library
          {:sibling? false
           :keep-uuid? true})
         (let [draft (d/entity @conn [:block/uuid draft-uuid])]
           (is (some? draft)
-              "Empty Library children are inserted instead of rolling back")
-          (is (not (ldb/page? draft))
-              "Blank newly inserted Library children stay drafts")
+              "Empty Library #Page drafts are inserted instead of rolling back")
+          (is (ldb/page? draft)
+              "Library Enter inserts an empty page draft")
           (is (= (:db/id library) (:db/id (:block/parent draft))))
           (ldb/transact! conn [{:db/id (:db/id draft)
                                 :block/title "library draft"}])
           (let [draft (d/entity @conn (:db/id draft))]
             (is (ldb/page? draft)
-                "Filling the draft title converts it to a page")
-            (is (= "library draft" (:block/title draft)))
-            (is (= (common-util/page-name-sanity-lc "library draft")
-                   (:block/name draft)))))))))
+                "Filling the draft title keeps it a page")
+            (is (= "library draft" (:block/title draft)))))))))
 
 (deftest toggle-page-and-block-validates-auto-page-tag-title-test
   (let [conn (db-test/create-conn-with-blocks
