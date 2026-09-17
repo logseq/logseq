@@ -2000,7 +2000,7 @@
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         (if (common-util/uuid-string? s)
-          (page-cp (assoc config :tag? true) {:block/name s})
+          (page-cp (assoc config :tag? true) {:block/uuid (uuid s)})
           [:span (str "#" s)])))
 
     ["Emphasis" [[kind] data]]
