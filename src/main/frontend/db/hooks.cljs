@@ -44,7 +44,7 @@
       :error (throw error)
       (throw (ex-info "Invalid renderer subscription snapshot" result)))))
 
-(defn- use-external-store-projection
+(defn- use-external-store-projection-snapshot
   [subscribe! snapshot key project]
   (let [key (use-graph-key key)
         projection-ref (react/useRef nil)
@@ -67,14 +67,21 @@
                                     {:source source :snapshot projected})
                               projected))))
                       #js [snapshot key project])
-        {:keys [status value error] :as result}
+        {:keys [status] :as result}
         (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
+    (when-not (contains? #{:ready :loading :missing :error} status)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))
+    result))
+
+(defn- use-external-store-projection
+  [subscribe! snapshot key project]
+  (let [{:keys [status value error]}
+        (use-external-store-projection-snapshot subscribe! snapshot key project)]
     (case status
       :ready value
       (:loading :missing) nil
-      :error (throw error)
-      (throw (ex-info "Invalid renderer subscription snapshot"
-                      {:key key :snapshot result})))))
+      :error (throw error))))
 
 (defn use-block
   [block-uuid]
@@ -129,12 +136,20 @@
   [_key _listener]
   (fn []))
 
-(def ^:private nil-resource-snapshot-value
+(def ^:private nil-snapshot-value
   {:status :ready :value nil})
 
-(defn- nil-resource-snapshot
+(defn- nil-snapshot
   [_key]
-  nil-resource-snapshot-value)
+  nil-snapshot-value)
+
+(defn use-block-projection-snapshot
+  "Status-aware `use-block-projection`. A nil uuid reads as a ready nil value
+   so a caller can wait on an upstream lookup without conditional hooks."
+  [block-uuid project]
+  (let [subscribe! (if block-uuid subs/subscribe-block! subscribe-nothing!)
+        snapshot (if block-uuid subs/block-snapshot nil-snapshot)]
+    (use-external-store-projection-snapshot subscribe! snapshot block-uuid project)))
 
 (defn use-resource-snapshot
   [resource-key]
@@ -143,5 +158,5 @@
                      subscribe-nothing!)
         snapshot (if resource-key
                    subs/resource-snapshot
-                   nil-resource-snapshot)]
+                   nil-snapshot)]
     (use-external-store-snapshot subscribe! snapshot resource-key)))
