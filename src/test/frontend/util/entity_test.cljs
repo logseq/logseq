@@ -2,6 +2,16 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.util.entity :as entity]))
 
+(deftest as-block-map-wraps-view-row-uuids-test
+  (let [page-uuid #uuid "22222222-2222-2222-2222-222222222222"]
+    (is (= {:block/uuid page-uuid}
+           (entity/as-block-map page-uuid)))
+    (is (= {:uuid page-uuid :block/uuid page-uuid}
+           (entity/as-block-map {:uuid page-uuid})))
+    (is (= {:block/uuid page-uuid :block/title "gooxox"}
+           (entity/as-block-map {:block/uuid page-uuid :block/title "gooxox"})))
+    (is (= 42 (entity/as-block-map 42)))))
+
 (deftest predicates-read-plain-worker-payload-tags
   (testing "page predicates use plain map tags"
     (is (entity/internal-page? {:block/tags [{:db/ident :logseq.class/Page}]}))

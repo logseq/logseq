@@ -2000,6 +2000,69 @@
            (set (keys block))))
     (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
 
+(deftest selection-copy-ids-use-view-row-uuids-test
+  (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        editor-ids [#uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]]
+    (with-redefs [state/get-selection-block-ids (constantly editor-ids)]
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [page-a page-b] nil))
+          "All pages rows are UUIDs; copy must use those instead of editor selection.")
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [{:block/uuid page-a} {:uuid page-b}] nil))
+          "Toolbar rows wrapped as block maps still copy their UUIDs.")
+      (is (= [page-a]
+             (#'editor/selection-copy-ids nil [page-a]))
+          ":selected-ids still work for cut and other callers.")
+      (is (= editor-ids
+             (#'editor/selection-copy-ids nil nil))
+          "Editor selection is used when the toolbar has no selected-blocks."))))
+
+(deftest top-level-blocks-include-pages-without-parent-test
+  (let [page-a (random-uuid)
+        page-b (random-uuid)
+        summaries [{:db/id 1
+                    :block/uuid page-a
+                    :block/title "Sep 15th, 2026"}
+                   {:db/id 2
+                    :block/uuid page-b
+                    :block/title "Apr 15th, 2027"}]]
+    (is (= [page-a page-b]
+           (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
+        "Pages and journals have no :block/parent; copy still treats them as top-level.")))
+
+(deftest compose-copied-blocks-contents-skips-empty-summaries-test
+  (async done
+         (-> (p/with-redefs [db-async/<get-block-summaries
+                             (fn [_repo _ids]
+                               (p/resolved []))]
+               (#'editor/compose-copied-blocks-contents "repo" [(random-uuid)]))
+             (p/then (fn [result]
+                       (is (= [[] "" []] result))))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
+
+(deftest copy-selection-blocks-loads-summaries-for-view-uuids-test
+  (async done
+         (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+               seen-ids (atom nil)]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [(random-uuid)])
+                               db-subs/block-snapshot (constantly {:status :missing})
+                               db-async/<get-block-summaries
+                               (fn [_repo ids]
+                                 (reset! seen-ids ids)
+                                 (p/resolved []))]
+                 (editor/copy-selection-blocks true :selected-blocks [page-a page-b]))
+               (p/then (fn [_]
+                         (is (= [page-a page-b] @seen-ids)
+                             "Copy from All pages must load the selected page UUIDs.")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
     (let [asset-block {:db/id 1
