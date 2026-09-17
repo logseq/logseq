@@ -14,6 +14,7 @@
     ("svg") "image/svg+xml"
     ("bmp") "image/bmp"
     ("avif") "image/avif"
+    ("jxl") "image/jxl"
     ("mp4") "video/mp4"
     ("webm") "video/webm"
     ("mov") "video/quicktime"

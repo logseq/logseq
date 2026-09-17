@@ -293,7 +293,8 @@
                                      "webp" "image/webp"
                                      "bmp" "image/bmp"
                                      "svg" "image/svg+xml"
-                                     "ico" "image/x-icon"}
+                                     "ico" "image/x-icon"
+                                     "jxl" "image/jxl"}
                           mime (get ext->mime ext)]
                       (if-not mime
                         (notification/show! (t :asset/copy-image-unsupported-extension (str "." ext)) :warning)
