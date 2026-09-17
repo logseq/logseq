@@ -18,7 +18,7 @@ let replace_all ~needle ~replacement text =
   loop 0
 
 let encode_graph_dir_name graph_name =
-  graph_name |> Js.Global.encodeURIComponent
+  graph_name |> Js.String.trim |> Js.Global.encodeURIComponent
   |> replace_all ~needle:"%20" ~replacement:" "
   |> replace_all ~needle:"~" ~replacement:"%7E"
   |> replace_all ~needle:"%" ~replacement:"~"
@@ -32,7 +32,7 @@ let canonical_graph_name_of_dir dir_name =
     let graph_name =
       dir_name
       |> replace_all ~needle:"~" ~replacement:"%"
-      |> Js.Global.decodeURIComponent
+      |> Js.Global.decodeURIComponent |> Js.String.trim
     in
     if graph_name <> "" && encode_graph_dir_name graph_name = dir_name then
       Some graph_name

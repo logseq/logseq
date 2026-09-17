@@ -539,6 +539,19 @@ let () =
         (Id_parse.parse_id_string "abc"));
 
   test "CLI parity graph directory names use only standard encoding" (fun () ->
+      let padded =
+        unicode_text [| 0x00a0 |] ^ "space name" ^ unicode_text [| 0x3000 |]
+      in
+      expect_equal "encoding trims graph names" "space name~2Fchild"
+        (Graph_dir.encode_graph_dir_name " \tspace name/child\n ");
+      expect_equal "encoding trims Unicode whitespace" "space name"
+        (Graph_dir.encode_graph_dir_name padded);
+      expect_equal "graph identity trims Unicode whitespace" "space name"
+        (Cli_primitive.create_graph padded |> Cli_primitive.string_of_graph);
+      expect_equal "repo identity trims prefixed graph name"
+        "logseq_db_space name"
+        (Cli_primitive.create_repo (" logseq_db_ " ^ padded)
+        |> Cli_primitive.string_of_repo);
       Vec.iter
         (fun (graph, dir) ->
           expect_equal "standard encoding" dir
@@ -573,6 +586,12 @@ let () =
              "bad%ZZname";
              "foo~2G";
              "trailing~";
+             " alpha ";
+             "   ";
+             "~20alpha";
+             "alpha~20";
+             "~C2~A0alpha";
+             "alpha~E3~80~80";
              "invalid~FF";
            |]));
 
@@ -7496,6 +7515,11 @@ let () =
                "tilde~7Ename";
                "~E4~B8~AD~E6~96~87";
                "alpha";
+               " alpha ";
+               " padded-only ";
+               "   ";
+               "~20encoded-leading";
+               "encoded-trailing~20";
                "old++name";
                "c+3A+name";
                "yy y";
@@ -7530,22 +7554,58 @@ let () =
                   {:kind :canonical :graph-name "中文" :graph-dir "~E4~B8~AD~E6~96~87"}]}|}))
         in
         expect_graph_list_output root expected;
-        let cfg = config ~root_dir:root () in
-        expect_int "runtime discovers only standard directories" 9
-          (Vec.length (Server_runtime.list_graph_items cfg));
-        expect_string_vec "only standard graphs satisfy existence checks"
-          [|
-            "alpha";
-            "colon:name";
-            "logseq_local_1";
-            "old/name";
-            "percent%name";
-            "plus+name";
-            "tilde~name";
-            "yy y";
-            unicode_text [| 0x4e2d; 0x6587 |];
-          |]
-          (Server_runtime.list_graphs cfg |> Vec.map graph_text);
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "CLI parity padded graph arguments use the canonical directory"
+    (fun () ->
+      let root = temp_dir "logseq-cli-trim-graph-" in
+      let graphs = Node.Path.join [| root; "graphs" |] in
+      let padded = Node.Path.join [| graphs; " alpha " |] in
+      let run args =
+        run_cli_lifecycle
+          (Array.append [| "--root-dir"; root; "--output"; "json" |] args)
+      in
+      try
+        mkdir_p padded;
+        write_file (Node.Path.join [| padded; "sentinel" |]) "untouched";
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        let created = run [| "graph"; "create"; "--graph"; " \talpha\n " |] in
+        expect_int "create trimmed graph" 0 created.exit_code;
+        expect_graph_list_output root
+          (edn_of_string
+             {|{:graphs ["alpha"] :graph-items [{:kind :canonical :graph-name "alpha" :graph-dir "alpha"}]}|});
+        let input = Node.Path.join [| root; "unused.sqlite" |] in
+        write_file input "";
+        let imported =
+          run
+            [|
+              "graph";
+              "import";
+              "--graph";
+              " alpha ";
+              "--type";
+              "sqlite";
+              "--input";
+              input;
+            |]
+        in
+        expect_int "import rejects existing trimmed graph" 1 imported.exit_code;
+        expect_named_contains "existing graph error"
+          (stdout_text "import" imported)
+          "graph-exists";
+        let padded_argument =
+          unicode_text [| 0x00a0 |] ^ "alpha" ^ unicode_text [| 0x3000 |]
+        in
+        let removed = run [| "graph"; "remove"; "--graph"; padded_argument |] in
+        expect_int "remove trimmed graph" 0 removed.exit_code;
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        expect_equal "padded directory remains untouched" "untouched"
+          (read_file (Node.Path.join [| padded; "sentinel" |]));
         remove_tree root
       with exn ->
         remove_tree root;
