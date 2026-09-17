@@ -156,28 +156,56 @@
          blocks)]
     (concat tx-data recycle-tx)))
 
+(defn- alias-pages
+  [db page]
+  (when-let [page-id (:db/id page)]
+    (->> (d/datoms db :eavt page-id :block/alias)
+         (keep (fn [d] (d/entity db (:v d))))
+         (filter ldb/page?)
+         (remove #(= (:db/id %) page-id))
+         vec)))
+
+(defn- recyclable-alias-page?
+  [alias-page]
+  (and alias-page
+       (not (recycled? alias-page))
+       (not (ldb/built-in? alias-page))
+       (not (ldb/hidden? alias-page))
+       (not (ldb/class? alias-page))
+       (not (ldb/property? alias-page))))
+
+(defn- page-recycle-entity-tx
+  [db page recycle-page-id order deleted-by-db-id now-ms]
+  (cond-> {:db/id (:db/id page)
+           :block/parent recycle-page-id
+           :block/order order
+           :logseq.property/deleted-at now-ms}
+    true
+    (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-db-id))
+    true
+    (maybe-assoc-ref :logseq.property.recycle/original-parent (:block/parent page))
+    true
+    (maybe-assoc-ref :logseq.property.recycle/original-page page)
+    true
+    (maybe-assoc :logseq.property.recycle/original-order (:block/order page))))
+
 (defn recycle-page-tx-data
   [db page {:keys [deleted-by-uuid now-ms]}]
   (let [{recycle-page-id :page-id
          recycle-page-init-tx-data :tx-data
          recycle-page-existing :page} (ensure-recycle-page db)
         deleted-by-db-id (deleted-by-id db deleted-by-uuid)
-        now-ms (or now-ms (common-util/time-ms))]
-    (concat recycle-page-init-tx-data
-            [(cond-> {:db/id (:db/id page)
-                      :block/parent recycle-page-id
-                      :block/order (if recycle-page-existing
-                                     (next-child-order recycle-page-existing)
-                                     (db-order/gen-key nil nil))
-                      :logseq.property/deleted-at now-ms}
-               true
-               (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-db-id))
-               true
-               (maybe-assoc-ref :logseq.property.recycle/original-parent (:block/parent page))
-               true
-               (maybe-assoc-ref :logseq.property.recycle/original-page page)
-               true
-               (maybe-assoc :logseq.property.recycle/original-order (:block/order page)))])))
+        now-ms (or now-ms (common-util/time-ms))
+        pages (cons page (filter recyclable-alias-page? (alias-pages db page)))
+        [recycle-tx]
+        (reduce
+         (fn [[txs previous-order] page']
+           (let [order (db-order/gen-key previous-order nil)]
+             [(conj txs (page-recycle-entity-tx db page' recycle-page-id order deleted-by-db-id now-ms))
+              order]))
+         [[] (some->> recycle-page-existing :block/_parent ldb/sort-by-order last :block/order)]
+         pages)]
+    (concat recycle-page-init-tx-data recycle-tx)))
 
 (defn- restore-order
   [target-parent]
@@ -213,7 +241,7 @@
       :else
       nil)))
 
-(defn ^:api restore-tx-data
+(defn- restore-entity-tx-data
   [db root]
   (when-let [{:keys [parent page order]} (restore-target db root)]
     (let [subtree (when-not (ldb/page? root)
@@ -241,6 +269,15 @@
                                  subtree))]
       (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta)))))
 
+(defn ^:api restore-tx-data
+  [db root]
+  (when-let [root-tx (seq (restore-entity-tx-data db root))]
+    (concat root-tx
+            (mapcat (fn [alias-page]
+                      (when (recycled? alias-page)
+                        (restore-entity-tx-data db alias-page)))
+                    (alias-pages db root)))))
+
 (defn ^:api restore!
   [conn root-uuid]
   (when-let [root (d/entity @conn [:block/uuid root-uuid])]
@@ -248,13 +285,20 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
+(defn- recycled-alias-page-tree-ids
+  [db page]
+  (->> (alias-pages db page)
+       (filter recycled?)
+       (mapcat #(page-tree-ids db %))))
+
 (defn ^:api permanently-delete-tx-data
   [db root]
   (when (and root (recycled? root))
     (some->> (if (ldb/page? root)
                (keep (fn [id]
                        (some-> (d/entity db id) :block/uuid))
-                     (page-tree-ids db root))
+                     (distinct (concat (page-tree-ids db root)
+                                       (recycled-alias-page-tree-ids db root))))
                (keep :block/uuid (block-subtree db root)))
              (map (fn [block-uuid]
                     [:db/retractEntity [:block/uuid block-uuid]]))

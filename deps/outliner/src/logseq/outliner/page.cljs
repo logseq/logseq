@@ -106,7 +106,8 @@
   Rules:
   1. today page content is truncated but the page itself can't be deleted
   2. properties and tags will be hard retracted
-  3. other pages will be moved to Recycle"
+  3. other pages will be moved to Recycle
+  4. alias pages of a recycled page are recycled with it"
   [conn page-uuid & {:keys [persist-op? rename? error-handler deleted-by-uuid now-ms]
                      :or {persist-op? true
                           error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]

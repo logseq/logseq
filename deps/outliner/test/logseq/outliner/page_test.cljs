@@ -12,7 +12,8 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.outliner.page :as outliner-page]))
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
@@ -212,6 +213,53 @@
       (is (contains? (set (map :db/id (:block/refs b1')))
                      (:db/id d1)))
       (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
+
+(deftest delete-page-recycles-alias-pages
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Original"}}
+               {:page {:block/title "Alias page"}}
+               {:page {:block/title "Unrelated"}}])
+        original (ldb/get-page @conn "Original")
+        alias-page (ldb/get-page @conn "Alias page")
+        unrelated (ldb/get-page @conn "Unrelated")]
+    (d/transact! conn [[:db/add (:db/id original) :block/alias (:db/id alias-page)]])
+    (outliner-page/delete! conn (:block/uuid original))
+    (let [original' (d/entity @conn (:db/id original))
+          alias' (d/entity @conn (:db/id alias-page))
+          unrelated' (d/entity @conn (:db/id unrelated))
+          recycle-page (ldb/get-built-in-page @conn "Recycle")]
+      (is (true? (ldb/recycled? original')))
+      (is (true? (ldb/recycled? alias'))
+          "Alias page is recycled with the original page")
+      (is (false? (ldb/recycled? unrelated')))
+      (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent original'))))
+      (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent alias'))))
+      (is (integer? (:logseq.property/deleted-at alias')))
+      (is (= #{(:db/id alias-page)}
+             (set (map :db/id (:block/alias original'))))))))
+
+(deftest delete-page-restore-restores-alias-pages
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Original"}}
+               {:page {:block/title "Alias page"}}])
+        original (ldb/get-page @conn "Original")
+        alias-page (ldb/get-page @conn "Alias page")]
+    (d/transact! conn [[:db/add (:db/id original) :block/alias (:db/id alias-page)]])
+    (outliner-page/delete! conn (:block/uuid original))
+    (is (true? (ldb/recycled? (d/entity @conn (:db/id original)))))
+    (is (true? (ldb/recycled? (d/entity @conn (:db/id alias-page)))))
+    (outliner-recycle/restore! conn (:block/uuid original))
+    (let [original' (d/entity @conn (:db/id original))
+          alias' (d/entity @conn (:db/id alias-page))]
+      (is (false? (ldb/recycled? original')))
+      (is (false? (ldb/recycled? alias'))
+          "Restoring the original page also restores its alias pages")
+      (is (nil? (:block/parent original')))
+      (is (nil? (:block/parent alias')))
+      (is (nil? (:logseq.property/deleted-at original')))
+      (is (nil? (:logseq.property/deleted-at alias')))
+      (is (= #{(:db/id alias-page)}
+             (set (map :db/id (:block/alias original'))))))))
 
 (deftest delete-page-succeeds-when-recycle-missing
   (let [conn (db-test/create-conn-with-blocks
