@@ -112,11 +112,9 @@
     (open-choices-pane property-name)
     (doseq [choice choices]
       (add-choice choice))
-    (let [overflow? (w/eval-js
-                     "() => { const el = document.querySelector('.ls-property-choices-sub-pane .choices-list'); return !!(el && el.scrollHeight > el.clientHeight); }")]
-      (is (true? overflow?)
-          "A long available-choices list must overflow so it can scroll"))
-    (.scrollIntoViewIfNeeded
-     (w/-query ".choices-list li:has-text('Choice 15')"))
+    (let [scrolled? (w/eval-js
+                     "() => { const el = document.querySelector('.ls-property-choices-sub-pane .choices-list'); if (!el || el.scrollHeight <= el.clientHeight) return false; el.scrollTop = el.scrollHeight; return el.scrollTop > 0; }")]
+      (is (true? scrolled?)
+          "A long available-choices list must overflow and accept scrollTop"))
     (assert/assert-is-visible
      (loc/filter ".choices-list li" :has-text "Choice 15"))))
