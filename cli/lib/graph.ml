@@ -336,132 +336,34 @@ let graph_exists config graph =
   Cli_unix.file_exists (graph_path config graph)
   && Cli_unix.is_directory (graph_path config graph)
 
-let starts_with ~prefix value =
-  let prefix_len = String.length prefix in
-  String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
-
-let contains_substring ~needle text =
-  let needle_len = String.length needle in
-  let text_len = String.length text in
-  let rec loop index =
-    index + needle_len <= text_len
-    && (String.sub text index needle_len = needle || loop (index + 1))
-  in
-  loop 0
-
-let decode_graph_dir_name = Graph_dir.decode_graph_dir_name
-
-let legacy_derivation_signal dir_name =
-  contains_substring ~needle:"++" dir_name
-  || contains_substring ~needle:"+3A+" dir_name
-  || contains_substring ~needle:"%" dir_name
-
-let decode_legacy_graph_dir_name dir_name =
-  if not (legacy_derivation_signal dir_name) then None
-  else Graph_dir.decode_legacy_graph_dir_name dir_name
-
-let ignored_graph_dir name =
-  name = "Unlinked graphs" || name = "backup"
-  || starts_with ~prefix:"file-version-" name
-
-let canonical_dir_name dir_name graph_name =
-  dir_name = Graph_dir.encode_graph_dir_name graph_name
-
-let canonical_graph_name graph =
-  if graph <> "" && not (starts_with ~prefix:"logseq_db_" graph) then Some graph
-  else None
-
-let classify_graph_dir graphs_root dir_name =
-  if ignored_graph_dir dir_name then None
-  else
-    let decoded_canonical =
-      Option.bind (decode_graph_dir_name dir_name) canonical_graph_name
-    in
-    match decoded_canonical with
-    | Some graph_name when canonical_dir_name dir_name graph_name ->
-        Some
-          (Edn_util.map_vec
-             (Vec.of_array
-                [|
-                  (Edn_util.keyword "kind", Edn_util.keyword "canonical");
-                  (Edn_util.keyword "graph-name", Edn_util.string graph_name);
-                  (Edn_util.keyword "graph-dir", Edn_util.string dir_name);
-                |]))
-    | _ -> (
-        let legacy_graph_name =
-          match decoded_canonical with
-          | Some graph_name -> Some graph_name
-          | None ->
-              Option.bind
-                (decode_legacy_graph_dir_name dir_name)
-                canonical_graph_name
-        in
-        match legacy_graph_name with
-        | Some graph_name ->
-            let target_graph_dir = Graph_dir.encode_graph_dir_name graph_name in
-            Some
-              (Edn_util.map_vec
-                 (Vec.of_array
-                    [|
-                      (Edn_util.keyword "kind", Edn_util.keyword "legacy");
-                      (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
-                      (Edn_util.keyword "graph-name", Edn_util.string graph_name);
-                      ( Edn_util.keyword "target-graph-dir",
-                        Edn_util.string target_graph_dir );
-                      ( Edn_util.keyword "conflict",
-                        Edn_util.bool
-                          (target_graph_dir <> dir_name
-                          && Cli_unix.file_exists
-                               (Filename.concat graphs_root target_graph_dir))
-                      );
-                    |]))
-        | None ->
-            if legacy_derivation_signal dir_name then
-              Some
-                (Edn_util.map_vec
-                   (Vec.of_array
-                      [|
-                        ( Edn_util.keyword "kind",
-                          Edn_util.keyword "legacy-undecodable" );
-                        (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
-                        ( Edn_util.keyword "reason",
-                          Edn_util.keyword "graph-name-not-derivable" );
-                      |]))
-            else None)
-
-let graph_name_of_canonical_item value =
-  match Edn_util.as_map value with
-  | Some fields -> (
-      match
-        ( Vec.assoc_opt (Edn_util.keyword "kind") fields,
-          Vec.assoc_opt (Edn_util.keyword "graph-name") fields )
-      with
-      | Some kind, Some graph -> (
-          match (Edn_util.as_keyword kind, Edn_util.as_string graph) with
-          | Some "canonical", Some graph -> Some graph
-          | _ -> None)
-      | _ -> None)
-  | None -> None
-
-let graph_list_value graph_items =
-  let graphs = Vec.filter_map graph_name_of_canonical_item graph_items in
+let graph_item_value (item : Graph_types.graph_item) =
   Edn_util.map_vec
     (Vec.of_array
        [|
-         ( Edn_util.keyword "graphs",
-           Edn_util.vector_vec
-             (graphs |> Vec.map (fun graph -> Edn_util.string graph)) );
-         (Edn_util.keyword "graph-items", Edn_util.vector_vec graph_items);
+         (Edn_util.keyword "kind", Edn_util.keyword "canonical");
+         ( Edn_util.keyword "graph-name",
+           Edn_util.string
+             (Cli_primitive.string_of_graph (Option.get item.graph_name)) );
+         ( Edn_util.keyword "graph-dir",
+           Edn_util.string (Option.get item.graph_dir) );
        |])
 
-let list_graph_items config =
-  let dir = graphs_dir config in
-  if Cli_unix.file_exists dir then
-    Cli_unix.readdir dir |> Vec.of_array
-    |> Vec.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
-    |> Vec.sort_uniq String.compare
-    |> Vec.filter_map (classify_graph_dir dir)
-  else Vec.empty
+let graph_list_value graph_items =
+  let graphs =
+    Vec.map
+      (fun item ->
+        Edn_util.string
+          (Cli_primitive.string_of_graph
+             (Option.get item.Graph_types.graph_name)))
+      graph_items
+  in
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         (Edn_util.keyword "graphs", Edn_util.vector_vec graphs);
+         ( Edn_util.keyword "graph-items",
+           Edn_util.vector_vec (Vec.map graph_item_value graph_items) );
+       |])
 
 let backup_root_path config graph =
   Filename.concat (graph_path config graph) "backup"
@@ -1116,7 +1018,7 @@ let execute_with_mode action config mode =
   let pure = Cli_effect.pure in
   match action with
   | Graph_list ->
-      let graph_items = list_graph_items config in
+      let graph_items = Server_runtime.list_graph_items config in
       pure
         (Cli_result.ok ~command:Command_id.Graph_list mode
            (Raw (graph_list_value graph_items)))

@@ -43,3 +43,10 @@
             (fs/mkdirSync (node-path/join graphs-dir dir) #js {:recursive true}))]
     (with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)]
       (is (= [] (common-graph/get-db-based-graphs))))))
+
+(deftest get-db-based-graphs-ignores-padded-directory-names
+  (let [graphs-dir (node-helper/create-tmp-dir "common-graph-whitespace")]
+    (doseq [dir ["alpha" " alpha " " padded-only " "   " "~20encoded-leading" "encoded-trailing~20"]]
+      (fs/mkdirSync (node-path/join graphs-dir dir) #js {:recursive true}))
+    (with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)]
+      (is (= ["logseq_db_alpha"] (vec (common-graph/get-db-based-graphs)))))))

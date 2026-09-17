@@ -113,3 +113,9 @@
           (p/finally (fn []
                        (db-lock/remove-lock! path)
                        (done)))))))
+
+(deftest repo-paths-trim-graph-names-without-changing-storage-roots
+  (let [graphs-dir "/tmp/ storage root /graphs"]
+    (doseq [repo ["  space name  " "  logseq_db_space name  " "logseq_db_ space name "]]
+      (is (= (node-path/join graphs-dir "space name")
+             (db-lock/repo-dir graphs-dir repo))))))
