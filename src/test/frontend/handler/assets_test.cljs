@@ -133,65 +133,25 @@
       (is (= url
              (assets/asset-protocol-url->media-url url))))))
 
-(deftest local-file-iframe-src->assets-url-electron-test
-  (testing "file:// and graph-relative assets rewrite to assets://; remote srcs stay unchanged"
-    (with-redefs [util/electron? (constantly true)
-                  state/get-current-repo (constantly "some-repo")
-                  config/get-repo-dir (constantly "/Users/charlie/graph")]
-      (is (= "assets:///Users/charlie/graph/assets/foo.html"
-             (assets/local-file-iframe-src->assets-url
-              "file:///Users/charlie/graph/assets/foo.html")))
-      (is (= "assets:///Users/charlie/graph/assets/foo.html"
-             (assets/local-file-iframe-src->assets-url "./assets/foo.html")))
-      (is (= "assets:///Users/charlie/graph/assets/foo.html"
-             (assets/local-file-iframe-src->assets-url "assets/foo.html")))
-      (is (nil? (assets/local-file-iframe-src->assets-url "//example.com/foo.html")))
-      (is (nil? (assets/local-file-iframe-src->assets-url "https://example.com/foo.html")))
-      (is (nil? (assets/local-file-iframe-src->assets-url "http://localhost:8080/foo.html")))
-      (is (nil? (assets/local-file-iframe-src->assets-url "javascript:alert(1)")))
-      (is (nil? (assets/local-file-iframe-src->assets-url "assets:///Users/charlie/graph/assets/foo.html"))))))
-
-(deftest local-file-iframe-src->assets-url-electron-windows-test
-  (with-redefs [util/electron? (constantly true)]
-    (is (= "assets:///C/logseq__colon/dev/work/notes/assets/foo.html"
-           (assets/local-file-iframe-src->assets-url
-            "file:///C:/dev/work/notes/assets/foo.html")))))
-
-(deftest local-file-iframe-src->assets-url-non-electron-test
-  (with-redefs [util/electron? (constantly false)]
-    (is (nil? (assets/local-file-iframe-src->assets-url
-               "file:///Users/charlie/graph/assets/foo.html")))))
-
-(deftest rewrite-local-file-iframe-srcs-electron-test
-  (testing "rewrites only iframe file:// srcs and leaves other tags/urls intact"
-    (with-redefs [util/electron? (constantly true)]
-      (is (= "<iframe src=\"assets:///Users/charlie/graph/assets/foo.html\" width=\"100%\"></iframe>"
-             (assets/rewrite-local-file-iframe-srcs
-              "<iframe src=\"file:///Users/charlie/graph/assets/foo.html\" width=\"100%\"></iframe>")))
-      (is (= (str "<iframe src=\"assets:///C/logseq__colon/dev/work/notes/radian-arc-length.html\" "
-                  "width=\"100%\" height=\"720\" style=\"border: 0;\" "
-                  "title=\"Interactive explanation of radians using arc length and radius\"></iframe>")
-             (assets/rewrite-local-file-iframe-srcs
-              (str "<iframe src=\"file:///C:/dev/work/notes/radian-arc-length.html\" "
-                   "width=\"100%\" height=\"720\" style=\"border: 0;\" "
-                   "title=\"Interactive explanation of radians using arc length and radius\"></iframe>"))))
-      (is (= "<iframe src='assets:///Users/charlie/graph/assets/foo.html'></iframe>"
-             (assets/rewrite-local-file-iframe-srcs
-              "<iframe src='file:///Users/charlie/graph/assets/foo.html'></iframe>")))
-      (is (= (str "<iframe src=\"https://example.com/a.html\"></iframe>"
-                  "<iframe src=\"assets:///Users/charlie/graph/assets/foo.html\"></iframe>")
-             (assets/rewrite-local-file-iframe-srcs
-              (str "<iframe src=\"https://example.com/a.html\"></iframe>"
-                   "<iframe src=\"file:///Users/charlie/graph/assets/foo.html\"></iframe>"))))
-      (is (= "<img src=\"file:///Users/charlie/graph/assets/foo.png\">"
-             (assets/rewrite-local-file-iframe-srcs
-              "<img src=\"file:///Users/charlie/graph/assets/foo.png\">")))
-      (is (= "<iframe srcdoc=\"<p>hi</p>\"></iframe>"
-             (assets/rewrite-local-file-iframe-srcs
-              "<iframe srcdoc=\"<p>hi</p>\"></iframe>"))))))
-
-(deftest rewrite-local-file-iframe-srcs-non-electron-test
-  (with-redefs [util/electron? (constantly false)]
-    (is (= "<iframe src=\"file:///Users/charlie/graph/assets/foo.html\"></iframe>"
-           (assets/rewrite-local-file-iframe-srcs
-            "<iframe src=\"file:///Users/charlie/graph/assets/foo.html\"></iframe>")))))
+(deftest local-file-iframe-src->assets-url-test
+  (with-redefs [state/get-current-repo (constantly "example")
+                config/get-repo-dir (constantly "C:/graph")]
+    (doseq [[src expected]
+            [["file:///C:/docs/example.html?mode=dark#section"
+              "assets:///C/logseq__colon/docs/example.html?mode=dark#section"]
+             ["FILE:///tmp/a%23b%3Fc.html" "assets:///tmp/a%23b%3Fc.html"]
+             ["file:///tmp/a&b.html" "assets:///tmp/a%26b.html"]
+             ["file:///tmp/a%2523b.html" "assets:///tmp/a%2523b.html"]
+             ["file://server/share/example.html" "assets://server/share/example.html"]
+             ["../assets/100%20done%.html?mode=dark#section"
+              "assets:///C/logseq__colon/graph/assets/100%20done%25.html?mode=dark#section"]
+             ["assets/%FF.html" "assets:///C/logseq__colon/graph/assets/%25FF.html"]
+             ["./assets/example.html" "assets:///C/logseq__colon/graph/assets/example.html"]
+             ["https://example.com/example.html" nil]
+             ["//example.com/example.html" nil]
+             ["javascript:alert(1)" nil]
+             ["assets:///tmp/example.html" nil]
+             ["assets-other/example.html" nil]
+             ["file://[invalid" nil]]]
+      (testing src
+        (is (= expected (assets/local-file-iframe-src->assets-url src)))))))
