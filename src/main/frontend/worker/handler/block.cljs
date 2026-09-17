@@ -13,6 +13,7 @@
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.client-op :as client-op]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.db :as ldb]
    [logseq.db.common.initial-data :as common-initial-data]
    [logseq.db.common.reference :as db-reference]))
@@ -127,6 +128,17 @@
 
 (declare block-refs-count block-positioned-properties-map)
 
+(defn- journal-title-format
+  [db]
+  (or (when-let [journal-class-id (d/entid db :logseq.class/Journal)]
+        (eavt-scalar db journal-class-id :logseq.property.journal/title-format))
+      date-time-util/default-journal-title-formatter))
+
+(defn- journal-day-title
+  [db entity-id]
+  (when-let [journal-day (eavt-scalar db entity-id :block/journal-day)]
+    (date-time-util/int->journal-title journal-day (journal-title-format db))))
+
 (defn renderer-display-title
   "Return the renderer-facing block title with id refs resolved."
   [db entity-id]
@@ -136,11 +148,11 @@
            (string/includes? stored-title "[["))
       (:block/title (d/entity db entity-id))
 
-      (string? stored-title)
+      (not (string/blank? stored-title))
       stored-title
 
       :else
-      nil)))
+      (journal-day-title db entity-id))))
 
 (defn renderer-raw-title
   [db entity-id]
@@ -150,11 +162,11 @@
            (string/includes? stored-title "[["))
       (:block/raw-title (d/entity db entity-id))
 
-      (string? stored-title)
+      (not (string/blank? stored-title))
       stored-title
 
       :else
-      nil)))
+      (journal-day-title db entity-id))))
 
 (defn canonical-block
   [db entity]
@@ -208,10 +220,10 @@
         (assoc :property/closed-values
                (:property/closed-values
                 (property-handler/display-property-map db entity-id)))
-        (string? raw-title)
+        (not (string/blank? raw-title))
         (assoc :block/raw-title raw-title)
 
-        (string? display-title)
+        (not (string/blank? display-title))
         (assoc :block/title display-title)
 
         order-list-type

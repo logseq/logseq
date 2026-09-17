@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.entity-util :as entity-util]))
 
@@ -48,6 +49,12 @@
    >
    refs))
 
+(defn- ref-display-title
+  [ref]
+  (date-time-util/journal-page-display-title
+   ref
+   date-time-util/default-journal-title-formatter))
+
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
   [content* refs* & {:keys [db replace-block-id? replace-pages-with-same-name?]
@@ -61,20 +68,21 @@
                  (cond->> (filter entity-util/page? refs*)
                    (and db (false? replace-pages-with-same-name?))
                    (remove (fn [e]
-                             (> (count (entity-util/get-pages-by-name db (:block/title e))) 1)))))
+                             (> (count (entity-util/get-pages-by-name db (ref-display-title e))) 1)))))
           content (str content*)]
       (if (re-find id-ref-pattern content)
         (reduce
          (fn [content ref]
-           (if (:block/title ref)
-             (let [content' (if (not (string/includes? (:block/title ref) " "))
-                              (string/replace content
-                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                              (str "#" (:block/title ref)))
-                              content)]
-               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                               (page-ref/->page-ref (:block/title ref))))
-             content))
+           (let [title (ref-display-title ref)]
+             (if (not (string/blank? title))
+               (let [content' (if (not (string/includes? title " "))
+                                (string/replace content
+                                                (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                                (str "#" title))
+                                content)]
+                 (string/replace content' (page-ref/->page-ref (:block/uuid ref))
+                                 (page-ref/->page-ref title)))
+               content)))
          content
          (sort-refs refs))
         content))))

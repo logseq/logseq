@@ -32,6 +32,7 @@
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
@@ -750,6 +751,11 @@
 (def ^:private selected-day-selector
   "[role='gridcell'][aria-selected='true'] button, [role='gridcell'] button[tabindex='0']")
 
+(defn- journal-day->picker-date
+  "Local calendar date for a journal-day integer, matching date-picker encoding."
+  [day]
+  (date-time-util/int->local-date day))
+
 (defn- calendar-default-month
   [^js d]
   (js/Date. (.getFullYear d) (.getMonth d) 1))
@@ -769,8 +775,7 @@
         value (cond
                 (map? value)
                 (when-let [day (:block/journal-day value)]
-                  (let [t (date/journal-day->utc-ms day)]
-                    (js/Date. t)))
+                  (journal-day->picker-date day))
 
                 (number? value)
                 (js/Date. value)
@@ -845,18 +850,32 @@
   (doto (js/Date. d)
     (.setHours 0 0 0 0)))
 
-(defn- human-date-label [utc-ms]
-  ;; utc-ms is stored deadline/scheduled time
-  (let [given-date (start-of-local-day (js/Date. utc-ms))
-        today      (start-of-local-day (js/Date.))
-        ms-in-day  (* 24 60 60 1000)
-        tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
-        yesterday  (js/Date. (- (.getTime today) ms-in-day))]
-    (cond
-      (= (.getTime given-date) (.getTime yesterday)) (t :date.nlp/yesterday)
-      (= (.getTime given-date) (.getTime today))     (t :date.nlp/today)
-      (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
-      :else nil)))
+(defn- value->local-ms
+  [value]
+  (cond
+    (number? value)
+    value
+
+    (map? value)
+    (some-> (:block/journal-day value)
+            journal-day->picker-date
+            (.getTime))
+
+    :else
+    nil))
+
+(defn- human-date-label [value]
+  (when-let [local-ms (value->local-ms value)]
+    (let [given-date (start-of-local-day (js/Date. local-ms))
+          today      (start-of-local-day (js/Date.))
+          ms-in-day  (* 24 60 60 1000)
+          tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
+          yesterday  (js/Date. (- (.getTime today) ms-in-day))]
+      (cond
+        (= (.getTime given-date) (.getTime yesterday)) (t :date.nlp/yesterday)
+        (= (.getTime given-date) (.getTime today))     (t :date.nlp/today)
+        (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
+        :else nil))))
 
 (defn- date-page-link-props
   [other-position?]
@@ -961,10 +980,15 @@
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
           (cond
             (map? value)
-            (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
-                  compare-value (some-> date
+            (let [value (date-time-util/with-journal-display-title
+                          value
+                          (state/get-date-formatter))
+                  picker-date (some-> (:block/journal-day value) journal-day->picker-date)
+                  compare-value (when picker-date
+                                  (let [date (tc/to-date-time (.getTime picker-date))]
+                                    (-> date
                                         (t/plus (t/days 1))
-                                        (t/minus (t/seconds 1)))
+                                        (t/minus (t/seconds 1)))))
                   content (when-let [page-cp (state/get-component :block/page-cp)]
                             ^{:key (:db/id value)}
                             [:span.inline-flex (date-page-link-props other-position?)

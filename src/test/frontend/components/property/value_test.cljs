@@ -68,6 +68,23 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
+(deftest journal-day->picker-date-keeps-local-calendar-day-test
+  (let [date (#'property-value/journal-day->picker-date 20260405)]
+    (is (= 2026 (.getFullYear date)))
+    (is (= 3 (.getMonth date)))
+    (is (= 5 (.getDate date))
+        "Date picker selection must use local Y/M/D, not UTC midnight")))
+
+(deftest human-date-label-accepts-journal-page-maps-test
+  (let [today (js/Date.)
+        day (+ (* (.getFullYear today) 10000)
+               (* (inc (.getMonth today)) 100)
+               (.getDate today))]
+    (is (string? (#'property-value/human-date-label
+                  {:block/journal-day day
+                   :block/title ""}))
+        "Journal page values must not be treated as Invalid Date utc-ms")))
+
 (deftest property-write-id-prefers-ident-test
   (is (= :logseq.property/default-value
          (#'property-value/property-write-id

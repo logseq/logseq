@@ -407,6 +407,24 @@
         (is (nil? (:block/refs block))
             "Journal table rows keep the stored date title and skip Entity ref walks.")))))
 
+(deftest canonical-block-derives-journal-title-when-stored-title-blank-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          journal-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:block/uuid journal-uuid
+                     :block/tx-id 1
+                     :block/title ""
+                     :block/name ""
+                     :block/journal-day 20260405
+                     :block/tags :logseq.class/Journal}])
+      (let [block (canonical-block @conn
+                                   (d/entity @conn [:block/uuid journal-uuid]))]
+        (is (= "Apr 5th, 2026" (:block/title block))
+            "Canonical journal snapshots must keep referenced dates visible")
+        (is (= "Apr 5th, 2026" (:block/raw-title block)))))))
+
+
 (deftest canonical-block-full-replacement-drops-retracted-attributes-test
   (when-let [canonical-block (canonical-block-api)]
     (let [{:keys [conn target-uuid]} (canonical-block-fixture)

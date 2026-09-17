@@ -85,8 +85,10 @@
 
 (defn- get-journal-title
   [db e]
-  (date-time-util/int->journal-title (:block/journal-day e)
-                                     (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))))
+  (date-time-util/int->journal-title
+   (:block/journal-day e)
+   (or (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))
+       date-time-util/default-journal-title-formatter)))
 
 (defn- get-block-title
   [^Entity e k default-value]
@@ -184,7 +186,9 @@
 
            (lookup-kv-with-default-value db e k default-value))))
      (catch :default e
-       (js/console.error e)))))
+       (js/console.error e)
+       (when (= :invalid-journal-day (:type (ex-data e)))
+         (throw e))))))
 
 (defn- cache-with-kv
   [^js this]

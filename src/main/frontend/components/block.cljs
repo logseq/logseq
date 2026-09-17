@@ -79,6 +79,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -1027,10 +1028,14 @@
                             Keys for `config`:
                             - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [label children preview? disable-preview? show-non-exists-page? tag?] :as config} page]
-  (let [config (assoc config :block page)]
+  (let [page (date-time-util/with-journal-display-title
+               page
+               (state/get-date-formatter))
+        config (assoc config :block page)
+        title (:block/title page)]
     (cond
-      (:block/title page)
-      (let [page-name (some-> (:block/title page) util/page-name-sanity-lc)
+      (not (string/blank? title))
+      (let [page-name (some-> title util/page-name-sanity-lc)
             inner (page-inner config page children label)
             dialog? (shui-dialog/has-dialog?)]
         (if (and (not (util/mobile?))
@@ -1047,12 +1052,12 @@
                            :block/name (:block/name page)}
                           page) children label)
 
-      (:block/name page)
+      (not (string/blank? (:block/name page)))
       [:span
        (when tag? "#")
        (when-not tag?
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (or label (:block/name page))
+       (or (not-empty label) (:block/name page))
        (when-not tag?
          [:span.text-gray-500.bracket page-ref/right-brackets])]
 
@@ -1259,7 +1264,10 @@
 (defn- page-reference-content
   [{:keys [html-export? nested-link? show-brackets? id] :as config*}
    uuid-or-title label block]
-  (let [config (update config* :ref-set (fn [refs]
+  (let [block (date-time-util/with-journal-display-title
+                block
+                (state/get-date-formatter))
+        config (update config* :ref-set (fn [refs]
                                           (let [block-uuid (:block/uuid (:block config*))]
                                             (if (nil? refs)
                                               #{block-uuid}

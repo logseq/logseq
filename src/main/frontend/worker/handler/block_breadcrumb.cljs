@@ -1,7 +1,9 @@
 (ns frontend.worker.handler.block-breadcrumb
   "Canonical breadcrumb payloads shared by block loads and search results."
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]))
 
 (def ^:private load-depth 16)
@@ -66,6 +68,7 @@
 
 (def ^:private scalar-identity-attrs
   #{:block/uuid :block/title :block/name :db/ident
+    :block/journal-day
     :logseq.property/type :db/cardinality :logseq.property/value
     :logseq.property/icon :logseq.property.class/hide-from-node
     :logseq.property.asset/type :logseq.property.asset/width
@@ -135,6 +138,18 @@
       (assoc :logseq.property.asset/external-url asset-external-url)
       (some? property-value-title) (assoc :block/title property-value-title))))
 
+(defn- ref-display-title
+  [db collected]
+  (let [stored (:block/title collected)]
+    (if (not (string/blank? stored))
+      stored
+      (when-let [day (:block/journal-day collected)]
+        (date-time-util/int->journal-title
+         day
+         (or (when-let [journal-class-id (d/entid db :logseq.class/Journal)]
+               (eavt-scalar db journal-class-id :logseq.property.journal/title-format))
+             date-time-util/default-journal-title-formatter))))))
+
 (defn- compute-shallow-ref-identity
   [db ref-id]
   (when-not ref-id
@@ -142,8 +157,7 @@
   (let [collected (scan-ref-attrs db ref-id)
         ref-uuid (:block/uuid collected)
         ref-ident (:db/ident collected)
-        ref-title (when (string? (:block/title collected))
-                    (:block/title collected))
+        ref-title (ref-display-title db collected)
         ref-name (when (string? (:block/name collected))
                    (:block/name collected))
         tag-ids (:block/tags collected)
@@ -158,8 +172,8 @@
     (cond-> {:db/id ref-id}
       ref-uuid (assoc :block/uuid ref-uuid)
       (keyword? ref-ident) (assoc :db/ident ref-ident)
-      (string? ref-title) (assoc :block/title ref-title)
-      (string? ref-name) (assoc :block/name ref-name)
+      (not (string/blank? ref-title)) (assoc :block/title ref-title)
+      (and (string? ref-name) (not (string/blank? ref-name))) (assoc :block/name ref-name)
       (seq tags) (assoc :block/tags tags)
       (not (page-ref-identity? collected))
       (merge (property-or-asset-extras db collected)))))
