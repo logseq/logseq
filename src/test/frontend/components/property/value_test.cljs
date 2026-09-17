@@ -82,7 +82,7 @@
   (is (true? (#'property-value/default-value-property-ident?
               {:db/ident :logseq.property/default-value})))
   (is (false? (#'property-value/default-value-property-ident?
-               {:db/ident :user.property/p1})))
+               {:db/ident :user.property/p1}))))
 
 (deftest empty-placeholder-identity-maps-as-empty-test
   (is (true? (#'property-value/empty-placeholder-value?
