@@ -9,6 +9,8 @@ const cp = require('node:child_process');
 const http = require('node:http');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// One readiness poll is a 50ms sleep plus a health request capped at 1s; anything longer is a clock jump.
+const READY_POLL_MAX_ELAPSED = 2000;
 const id = () => crypto.randomUUID();
 function fail(message, code = 'server-stop-failed') {
   throw Object.assign(new Error(message), { code });
@@ -625,7 +627,9 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       created = spawned;
       return spawned;
     });
-    const deadline = Date.now() + 30000;
+    // The wall clock jumps across system sleep, so budget only the time each poll observed.
+    let budget = 30000;
+    let last = Date.now();
     for (;;) {
       checkAdmission({ ...ctx, ...record });
       if (!pidExists(record.pid)) fail('Worker exited before becoming ready', 'server-start-failed');
@@ -638,8 +642,11 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
         const value = await health(ctx, { ...record, lock }, port);
         if (value.status === 'ready') return { ...value, generation: record.generation };
       }
-      if (Date.now() >= deadline) fail('Worker failed to become ready', 'server-start-failed');
+      if (budget <= 0) fail('Worker failed to become ready', 'server-start-failed');
       await sleep(50);
+      const now = Date.now();
+      budget -= Math.min(Math.max(now - last, 0), READY_POLL_MAX_ELAPSED);
+      last = now;
     }
   } catch (error) {
     if (created) {
