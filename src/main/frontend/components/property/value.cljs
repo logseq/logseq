@@ -266,13 +266,21 @@
   [type]
   (contains? #{:date :datetime :asset} type))
 
+(defn- property-write-id
+  "Prefer :db/ident so worker writes skip an extra id->ident lookup.
+  Built-in editors such as :logseq.property/default-value can be loaded as
+  ident-only maps before :db/id arrives."
+  [property]
+  (or (:db/ident property) (:db/id property)))
+
 (defn <create-new-block!
   [block property value & {:keys [edit-block? batch-op?]
                            :or {edit-block? true}}]
   (when-not (or (:logseq.property/hide? property)
                 (= (:db/ident property) :logseq.property/default-value))
     (ui/hide-popups-until-preview-popup!))
-  (let [<create-block (fn [block]
+  (let [property-id (property-write-id property)
+        <create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
                                  (not (db-property/many? property)))
                           (p/let [default-value (:logseq.property/default-value property)
@@ -282,14 +290,14 @@
                                                    value)]
                                       (db-property-handler/create-property-text-block!
                                        (:db/id block)
-                                       (:db/id property)
+                                       property-id
                                        value'
                                        {:new-block-id new-block-id}))]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))
                           (p/let [new-block-id (ldb/new-block-id)
                                   _ (db-property-handler/create-property-text-block!
                                      (:db/id block)
-                                     (:db/id property)
+                                     property-id
                                      value
                                      {:new-block-id new-block-id})]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))))]

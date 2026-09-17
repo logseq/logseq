@@ -118,3 +118,19 @@
           "A long available-choices list must overflow and accept scrollTop"))
     (assert/assert-is-visible
      (loc/filter ".choices-list li" :has-text "Choice 15"))))
+
+(deftest text-property-default-value-can-be-set-from-config-menu-test
+  (let [property-name "ui-default-value"
+        default-text "shipped default"]
+    (add-text-property property-name)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (w/click (loc/filter "div[role='menuitem']" :has-text "Default value"))
+    (assert/assert-is-visible
+     (loc/filter ".ui__dropdown-menu-sub-content" :has-text "Set default value"))
+    (w/click (loc/filter ".ui__dropdown-menu-sub-content" :has-text "Set default value"))
+    (assert/assert-is-visible util/editor-q)
+    (util/input default-text)
+    (util/double-esc)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (assert/assert-is-visible
+     (loc/filter "div[role='menuitem']" :has-text default-text))))

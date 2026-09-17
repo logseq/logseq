@@ -68,6 +68,16 @@
     (open-selector! event)
     (is (= event @popup-event*))))
 
+(deftest property-write-id-prefers-ident-test
+  (is (= :logseq.property/default-value
+         (#'property-value/property-write-id
+          {:db/ident :logseq.property/default-value
+           :db/id 42}))
+      "Ident-backed built-in editors should write with ident, not a transient db/id.")
+  (is (= 7
+         (#'property-value/property-write-id {:db/id 7}))
+      "Properties without ident still write with db/id."))
+
 (deftest empty-placeholder-identity-maps-as-empty-test
   (is (true? (#'property-value/empty-placeholder-value?
               :logseq.property/empty-placeholder)))

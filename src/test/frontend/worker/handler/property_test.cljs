@@ -1,5 +1,5 @@
 (ns frontend.worker.handler.property-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing thrown-with-msg?]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
             [logseq.db.frontend.property :as db-property]
@@ -213,3 +213,17 @@
     (is (= ["P1"] (map :block/title closed)))
     (is (= [t1] (map :db/id (:logseq.property/choice-classes p1)))
         "Scoped tag ids must survive flattening so other tags do not see this choice")))
+
+(deftest pull-default-value-property-rejects-virtual-closed-values-attr
+  (let [conn (d/create-conn db-schema/schema)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+        db @conn]
+    (is (some? (d/entity db :logseq.property/default-value)))
+    (is (thrown-with-msg?
+         js/Error
+         #"db\.type/ref"
+         (d/pull db '[* {:property/closed-values [*]}] :logseq.property/default-value))
+        "The default-value config used to pull this virtual attr and the submenu never rendered.")
+    (is (= :logseq.property/default-value
+           (:db/ident (d/pull db '[*] :logseq.property/default-value)))
+        "A wildcard pull still loads the built-in default-value property.")))
