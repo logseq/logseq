@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -39,7 +40,7 @@
                              (keep #(when (number? %) %) selected-blocks)
                              (state/get-selection-block-ids))
         direct-selected-blocks (when (seq selected-blocks)
-                                 (remove number? selected-blocks))
+                                 (mapv entity/as-block-map (remove number? selected-blocks)))
         [loaded-selected-blocks set-loaded-selected-blocks!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
