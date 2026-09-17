@@ -128,7 +128,10 @@
     (assert/assert-is-visible
      (loc/filter ".ui__dropdown-menu-sub-content" :has-text "Set default value"))
     (w/click (loc/filter ".ui__dropdown-menu-sub-content" :has-text "Set default value"))
-    (assert/assert-is-visible util/editor-q)
+    (assert/assert-is-visible ".ui__dropdown-menu-sub-content .ls-block")
+    (when-not (w/visible? ".ui__dropdown-menu-sub-content .editor-wrapper textarea")
+      (w/click ".ui__dropdown-menu-sub-content .ls-block"))
+    (assert/assert-is-visible ".ui__dropdown-menu-sub-content .editor-wrapper textarea")
     (util/input default-text)
     (k/enter)
     (assert/assert-have-count ".ui__dropdown-menu-sub-content .ls-block" 1)
