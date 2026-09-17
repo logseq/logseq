@@ -1122,7 +1122,61 @@ abc
       (is (= 2
              (count (set/difference preserve-empty-properties-uuids
                                     #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid})))
-          "in-place template content blocks are marked to preserve empty properties"))))
+          "in-place template content blocks are marked to preserve empty properties"))
+
+    (testing "template roots with extra properties are marked for Apply template to tags"
+      (is (= {"trimmed template" [:name]
+              "nested child" [:name]}
+             (->> blocks
+                  (filter :block.temp/template-applied-to-class)
+                  (map (juxt :block/title :block.temp/template-class-properties))
+                  (into {}))))
+      (is (nil? (->> blocks
+                     (filter #(= "children only" (:block/title %)))
+                     first
+                     :block.temp/template-applied-to-class))
+          "templates without extra properties are not marked for Apply template to tags"))))
+
+(deftest-async import-file-template-with-properties-maps-to-applied-to-tag
+  (p/let [file (write-temp-graph-file
+                "pages/templates.md"
+                (str "- Project Task\n"
+                     "  template:: project-task\n"
+                     "  status-note:: ready\n"
+                     "  owner:: Alice\n"
+                     "- Simple Title\n"
+                     "  template:: simple-title\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          template-with-props (find-template-by-title @conn "project-task")
+          template-without-props (find-template-by-title @conn "simple-title")
+          applied-to-tag (first (:logseq.property/template-applied-to template-with-props))]
+    (is (some? template-with-props)
+        "Template with extra properties is imported as a Template")
+    (is (some? template-without-props)
+        "Template without extra properties is imported as a Template")
+    (is (nil? (:logseq.property/template-applied-to template-without-props))
+        "Templates without extra properties do not get Apply template to tags")
+    (is (some? applied-to-tag)
+        "Imported template with extra properties has Apply template to tags set")
+    (is (ldb/class? applied-to-tag)
+        "Apply template to tags points at a tag")
+    (is (= "project-task" (:block/title applied-to-tag))
+        "The generated tag is named after the template")
+    (is (= #{:user.property/status-note :user.property/owner}
+           (->> (:logseq.property.class/properties applied-to-tag)
+                (map :db/ident)
+                set))
+        "The generated tag owns the template's extra properties")
+    (is (= [{:title "Project Task"
+             :properties {:user.property/status-note "ready"
+                          :user.property/owner "Alice"}
+             :children []}]
+           (template-content-trees @conn "project-task"))
+        "Template content and property values remain usable")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
@@ -1484,7 +1538,7 @@ abc
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 16 (->> @conn
+      (is (= 20 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -1706,6 +1760,18 @@ abc
                                      set)]
         (is (= #{journal-uuid} template-page-uuids)
             "All template blocks are created on their source journal page"))
+      (let [meeting (find-template-by-title @conn "meeting")
+            meeting-tag (first (:logseq.property/template-applied-to meeting))
+            title-only (find-template-by-title @conn "title-only-no-children")]
+        (is (ldb/class? meeting-tag)
+            "Imported template with extra properties has Apply template to tags set to a tag")
+        (is (= "meeting" (:block/name meeting-tag))
+            "The generated tag is named after the template")
+        (is (contains? (set (map :db/ident (:logseq.property.class/properties meeting-tag)))
+                       :user.property/participants)
+            "The generated tag owns the template's extra properties")
+        (is (nil? (:logseq.property/template-applied-to title-only))
+            "Templates without extra properties do not get Apply template to tags"))
       (is (= [{:title "MEETING TITLE"
                :properties {:user.property/participants #{"TODO"}}
                :children []}]
@@ -1735,14 +1801,14 @@ abc
       (is (= [{:title "it's a template with nested templates"
                :properties {:user.property/name "you named it"}
                :children [{:title "nested-child-1"
-                           :properties {}
+                           :properties {:logseq.property/template-applied-to #{"nested-child-1"}}
                            :children [{:title "child-1"
                                        :properties {:user.property/name ""}
                                        :children [{:title "child-1-1"
                                                    :properties {:user.property/name ""}
                                                    :children []}]}]}
                           {:title "nested-child-2"
-                           :properties {}
+                           :properties {:logseq.property/template-applied-to #{"nested-child-2"}}
                            :children [{:title "child-2-1"
                                        :properties {:user.property/name ""}
                                        :children []}]}
@@ -2192,7 +2258,7 @@ abc
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
-    (is (= 0 (->> @conn
+    (is (= 5 (->> @conn
                   (d/q '[:find [?ident ...]
                          :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                   count))

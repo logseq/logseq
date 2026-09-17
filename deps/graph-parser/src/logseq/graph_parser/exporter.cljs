@@ -138,6 +138,12 @@
     :else
     nil))
 
+(defn- extra-template-property-keys
+  "File-graph properties on a template block besides template metadata."
+  [block]
+  (not-empty
+   (vec (keys (apply dissoc (:block/properties block) template-file-property-names)))))
+
 (defn- handle-template-blocks
   "Handles creating #Template blocks and their children and calculates
   :preserve-empty-properties-uuids for use later"
@@ -163,10 +169,14 @@
                                 (assoc block :block/parent [:block/uuid content-uuid])
                                 block)
                source-preserve-empty-properties-uuids (set (get-block-subtree-uuids block-children (:block/uuid block)))
+               extra-property-keys (extra-template-property-keys block)
                template-root-block (-> cleaned-block'
                                        (assoc :block/title template-name)
                                        (update :block/tags (fnil conj []) :logseq.class/Template)
-                                       (dissoc :block/properties))
+                                       (dissoc :block/properties)
+                                       (cond-> extra-property-keys
+                                         (assoc :block.temp/template-applied-to-class template-name
+                                                :block.temp/template-class-properties extra-property-keys)))
                template-content-block (when (template-including-parent? block)
                                         (-> (cond-> block
                                               (seq (:block/properties block))
@@ -2972,6 +2982,49 @@
           :current-journal-created-at (journal-file-created-at file)
           :preserve-empty-property-block-uuids preserve-empty-properties-uuids}))
 
+(defn- resolve-template-class-property-idents
+  [prop-keys all-idents]
+  (into []
+        (keep (fn [k]
+                (when-not (contains? file-built-in-property-names k)
+                  (get all-idents k))))
+        prop-keys))
+
+(defn- template-applied-to-class-ref
+  [db class-name prop-idents {:keys [page-names-to-uuids classes-tx]} all-idents]
+  (let [page-name (common-util/page-name-sanity-lc class-name)
+        existing-uuid (find-existing-class db {:block/name page-name})
+        class-m (when-not existing-uuid
+                  (find-or-create-class db class-name all-idents))
+        class-uuid (or existing-uuid
+                       (find-or-gen-class-uuid page-names-to-uuids page-name (:db/ident class-m)))
+        class-tx (cond-> {:block/uuid class-uuid
+                          :logseq.property.class/properties prop-idents}
+                   (:new-class? (meta class-m))
+                   (merge class-m))]
+    (swap! classes-tx conj class-tx)
+    [:block/uuid class-uuid]))
+
+(defn- apply-imported-template-classes
+  "Map file-graph template properties onto a tag via :logseq.property/template-applied-to."
+  [db blocks-tx per-file-state {:keys [import-state]}]
+  (let [all-idents (:all-idents import-state)]
+    (mapv
+     (fn [block]
+       (if-let [class-name (:block.temp/template-applied-to-class block)]
+         (let [prop-idents (resolve-template-class-property-idents
+                            (:block.temp/template-class-properties block)
+                            @all-idents)
+               block' (dissoc block
+                              :block.temp/template-applied-to-class
+                              :block.temp/template-class-properties)]
+           (cond-> block'
+             (seq prop-idents)
+             (assoc :logseq.property/template-applied-to
+                    (template-applied-to-class-ref db class-name prop-idents per-file-state all-idents))))
+         block))
+     blocks-tx)))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph.
 
@@ -3003,7 +3056,8 @@
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
           _ (import-progress! options {:phase :blocks-tx :file file})
           blocks-start (when log-fn (import-profile/now-ms))
-          blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
+          parsed-blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
+          blocks-tx (apply-imported-template-classes @conn parsed-blocks-tx per-file-state tx-options)
           _ (log-phase-ms! log-fn :blocks-tx blocks-start {:file file
                                                            :blocks (count blocks)})
           _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
