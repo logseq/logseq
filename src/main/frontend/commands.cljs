@@ -709,13 +709,35 @@
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
 
+(defn- <number-list-command-target
+  "Resolve the slash Number list target from the captured edit block.
+  Prefer the current list siblings so converting a bullet list numbers the
+  whole list, not only the block being edited."
+  [block]
+  (let [repo (state/get-current-repo)
+        known-parent-uuid (or (:block/uuid (:block/parent block))
+                              (:block/parent-uuid block))]
+    (p/let [parent (if known-parent-uuid
+                     {:block/uuid known-parent-uuid}
+                     (when-let [uuid (:block/uuid block)]
+                       (db-async/<get-block-parent repo uuid)))
+            parent-uuid (:block/uuid parent)
+            siblings (when parent-uuid
+                       (db-async/<get-block-immediate-children repo parent-uuid))]
+      (if (seq siblings)
+        (mapv :block/uuid siblings)
+        block))))
+
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
   (when-let [block (state/get-edit-block)]
     (state/pub-event! [:editor/toggle-children-number-list block])))
 
 (defmethod handle-step :editor/toggle-own-number-list [[_]]
   (when-let [block (state/get-edit-block)]
-    (state/pub-event! [:editor/toggle-own-number-list block])))
+    (-> (<number-list-command-target block)
+        (p/catch (fn [_] block))
+        (p/then (fn [target]
+                  (state/pub-event! [:editor/toggle-own-number-list target]))))))
 
 (defmethod handle-step :editor/remove-own-number-list [[_]]
   (when-let [block (state/get-edit-block)]
