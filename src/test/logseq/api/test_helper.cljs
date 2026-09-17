@@ -167,195 +167,212 @@
   [_conn ops opts]
   (apply-ops! ops opts))
 
+(defn- handle-block-worker
+  [db api args]
+  (case api
+    :thread-api/get-blocks
+    (let [[_repo requests] args]
+      (get-blocks-response db requests))
+
+    :thread-api/pull
+    (let [[_repo selector id] args]
+      (pull-entity db selector id))
+
+    :thread-api/q
+    (let [[_repo inputs] args]
+      (apply d/q (first inputs) db (rest inputs)))
+
+    :thread-api/datoms
+    (let [[_repo index & components] args]
+      (apply d/datoms db index components))
+
+    :thread-api/transact
+    (let [[_repo tx-data tx-meta] args]
+      (ldb/transact! (current-conn) tx-data tx-meta)
+      nil)
+
+    :thread-api/apply-outliner-ops
+    (let [[_repo ops opts] args]
+      (apply-ops! ops opts))
+
+    :thread-api/get-block-immediate-children
+    (let [[_repo block-uuid] args]
+      (when-let [entity (resolve-block-entity db block-uuid)]
+        (children-maps db entity)))
+
+    :thread-api/get-block-sibling
+    (let [[_repo block-id direction] args]
+      (when-let [block (d/entity db block-id)]
+        (let [sibling (case direction
+                        :left (ldb/get-left-sibling block)
+                        :right (ldb/get-right-sibling block)
+                        :last-child (some->> (:db/id block)
+                                             (ldb/get-block-last-direct-child-id db)
+                                             (d/entity db))
+                        nil)]
+          (entity->api-map db sibling))))
+
+    :thread-api/get-block-parent
+    (let [[_repo block-uuid] args]
+      (some->> (resolve-block-entity db block-uuid)
+               :block/parent
+               (entity->api-map db)))
+
+    :thread-api/get-block-parents
+    (let [[_repo id depth] args]
+      (when-let [block-uuid (:block/uuid (d/entity db id))]
+        (mapv #(into {} %) (ldb/get-block-parents db block-uuid {:depth (or depth 3)}))))
+
+    :thread-api/get-block-page-info
+    (let [[_repo block-ref] args]
+      (when-let [page (:block/page (resolve-block-entity db block-ref))]
+        {:db/id (:db/id page)
+         :block/uuid (:block/uuid page)
+         :block/title (:block/title page)
+         :block/name (:block/name page)}))
+    ::unhandled))
+
+(defn- handle-page-worker
+  [db api args]
+  (case api
+    :thread-api/get-page-blocks-tree
+    (let [[_repo page-id-name-or-uuid] args]
+      (when-let [page (or (resolve-block-entity db page-id-name-or-uuid)
+                          (ldb/get-page db page-id-name-or-uuid))]
+        (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))
+
+    :thread-api/get-tags-by-name
+    (let [[_repo name] args]
+      (->> (entity-util/get-pages-by-name db name)
+           (keep (fn [datom] (d/entity db (:e datom))))
+           (filter ldb/class?)
+           (mapv #(entity->api-map db %))))
+
+    :thread-api/get-case-page
+    (let [[_repo page-name-or-uuid] args]
+      (entity->api-map db (or (resolve-block-entity db page-name-or-uuid)
+                              (ldb/get-case-page db page-name-or-uuid))))
+
+    :thread-api/get-all-classes
+    (let [[_repo opts] args
+          except-root-class? (:except-root-class? opts true)]
+      (cond->> (d/datoms db :avet :block/tags :logseq.class/Tag)
+        true (map (fn [datom] (d/entity db (:e datom))))
+        true (remove ldb/recycled?)
+        except-root-class? (remove #(= :logseq.class/Root (:db/ident %)))
+        true (mapv #(entity->api-map db %))))
+
+    :thread-api/get-all-properties
+    (mapv #(entity->api-map db %) (ldb/get-all-properties db))
+
+    :thread-api/get-class-objects
+    (let [[_repo class-id] args]
+      (mapv #(entity->api-map db %) (db-class/get-class-objects db class-id)))
+
+    :thread-api/get-file-content
+    (let [[_repo path] args]
+      (:file/content (d/entity db [:file/path path])))
+
+    :thread-api/resolve-query-inputs
+    (let [[_repo inputs {:keys [current-page current-page-title today-title]}] args
+          current-page-title (or current-page-title
+                                 (some-> (when current-page
+                                           (ldb/get-page db current-page))
+                                         :block/title))]
+      (mapv (fn [input]
+              (db-inputs/resolve-input db
+                                       (query-input-value input)
+                                       {:current-page-fn (fn []
+                                                           (or current-page-title
+                                                               today-title))}))
+            inputs))
+
+    :thread-api/get-journal-page-by-day
+    (let [[_repo journal-day] args]
+      (entity->api-map db (ldb/get-journal-page-by-day db journal-day)))
+
+    :thread-api/get-block-refs
+    (let [[_repo eid] args]
+      (->> (d/q '[:find [?e ...]
+                  :in $ ?id
+                  :where
+                  [?e :block/refs ?id]]
+                db eid)
+           (mapv #(entity->api-map db (d/entity db %)))))
+
+    :thread-api/get-recent-pages
+    (let [[_repo ids] args]
+      (mapv #(entity->api-map db (d/entity db %)) ids))
+    ::unhandled))
+
+(defn- handle-cli-worker
+  [db api args]
+  (case api
+    :thread-api/get-block-class-default-properties
+    {}
+
+    :thread-api/get-structured-children
+    []
+
+    :thread-api/validate-block-tag
+    {:valid? true}
+
+    :thread-api/page-exists?
+    (let [[_repo page-name tags] args]
+      (boolean
+       (when-let [page (ldb/get-page db page-name)]
+         (or (empty? tags)
+             (some (fn [tag]
+                     (some #(= tag (:db/ident %)) (:block/tags page)))
+                   tags)))))
+
+    :thread-api/get-favorite-pages
+    []
+
+    :thread-api/favorited-page?
+    false
+
+    :thread-api/api-list-tags
+    (let [[_repo options] args]
+      (api-tools/list-tags db options))
+
+    :thread-api/api-list-properties
+    (let [[_repo options] args]
+      (api-tools/list-properties db options))
+
+    :thread-api/api-list-pages
+    (let [[_repo options] args]
+      (api-tools/list-pages db options))
+
+    :thread-api/api-get-page-data
+    (let [[_repo page-title] args]
+      (api-tools/get-page-data db page-title))
+
+    :thread-api/api-build-upsert-nodes-edn
+    (let [[_repo ops] args]
+      (api-tools/build-upsert-nodes-edn db ops))
+
+    :thread-api/export-edn
+    {:export-edn-error "Export EDN is not available in plugin API unit tests"}
+
+    (:thread-api/update-thread-atom
+     :thread-api/undo-redo-set-pending-editor-info
+     :thread-api/undo-redo-record-editor-info
+     :thread-api/undo-redo-record-ui-state)
+    nil
+    ::unhandled))
+
 (defn- handle-worker
   [api args]
   (let [db (current-db)]
-    (case api
-      :thread-api/get-blocks
-      (let [[_repo requests] args]
-        (get-blocks-response db requests))
-
-      :thread-api/pull
-      (let [[_repo selector id] args]
-        (pull-entity db selector id))
-
-      :thread-api/q
-      (let [[_repo inputs] args]
-        (apply d/q (first inputs) db (rest inputs)))
-
-      :thread-api/datoms
-      (let [[_repo index & components] args]
-        (apply d/datoms db index components))
-
-      :thread-api/transact
-      (let [[_repo tx-data tx-meta] args]
-        (ldb/transact! (current-conn) tx-data tx-meta)
-        nil)
-
-      :thread-api/apply-outliner-ops
-      (let [[_repo ops opts] args]
-        (apply-ops! ops opts))
-
-      :thread-api/get-block-immediate-children
-      (let [[_repo block-uuid] args]
-        (when-let [entity (resolve-block-entity db block-uuid)]
-          (children-maps db entity)))
-
-      :thread-api/get-block-sibling
-      (let [[_repo block-id direction] args]
-        (when-let [block (d/entity db block-id)]
-          (let [sibling (case direction
-                          :left (ldb/get-left-sibling block)
-                          :right (ldb/get-right-sibling block)
-                          :last-child (some->> (:db/id block)
-                                               (ldb/get-block-last-direct-child-id db)
-                                               (d/entity db))
-                          nil)]
-            (entity->api-map db sibling))))
-
-      :thread-api/get-block-parent
-      (let [[_repo block-uuid] args]
-        (some->> (resolve-block-entity db block-uuid)
-                 :block/parent
-                 (entity->api-map db)))
-
-      :thread-api/get-block-parents
-      (let [[_repo id depth] args]
-        (when-let [block-uuid (:block/uuid (d/entity db id))]
-          (mapv #(into {} %) (ldb/get-block-parents db block-uuid {:depth (or depth 3)}))))
-
-      :thread-api/get-block-page-info
-      (let [[_repo block-ref] args]
-        (when-let [page (:block/page (resolve-block-entity db block-ref))]
-          {:db/id (:db/id page)
-           :block/uuid (:block/uuid page)
-           :block/title (:block/title page)
-           :block/name (:block/name page)}))
-
-      :thread-api/get-page-blocks-tree
-      (let [[_repo page-id-name-or-uuid] args]
-        (when-let [page (or (resolve-block-entity db page-id-name-or-uuid)
-                            (ldb/get-page db page-id-name-or-uuid))]
-          (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))
-
-      :thread-api/get-tags-by-name
-      (let [[_repo name] args]
-        (->> (entity-util/get-pages-by-name db name)
-             (keep (fn [datom] (d/entity db (:e datom))))
-             (filter ldb/class?)
-             (mapv #(entity->api-map db %))))
-
-      :thread-api/get-case-page
-      (let [[_repo page-name-or-uuid] args]
-        (entity->api-map db (or (resolve-block-entity db page-name-or-uuid)
-                                (ldb/get-case-page db page-name-or-uuid))))
-
-      :thread-api/get-all-classes
-      (let [[_repo opts] args
-            except-root-class? (:except-root-class? opts true)]
-        (cond->> (d/datoms db :avet :block/tags :logseq.class/Tag)
-          true (map (fn [datom] (d/entity db (:e datom))))
-          true (remove ldb/recycled?)
-          except-root-class? (remove #(= :logseq.class/Root (:db/ident %)))
-          true (mapv #(entity->api-map db %))))
-
-      :thread-api/get-all-properties
-      (mapv #(entity->api-map db %) (ldb/get-all-properties db))
-
-      :thread-api/get-class-objects
-      (let [[_repo class-id] args]
-        (mapv #(entity->api-map db %) (db-class/get-class-objects db class-id)))
-
-      :thread-api/get-file-content
-      (let [[_repo path] args]
-        (:file/content (d/entity db [:file/path path])))
-
-      :thread-api/resolve-query-inputs
-      (let [[_repo inputs {:keys [current-page current-page-title today-title]}] args
-            current-page-title (or current-page-title
-                                   (some-> (when current-page
-                                             (ldb/get-page db current-page))
-                                           :block/title))]
-        (mapv (fn [input]
-                (db-inputs/resolve-input db
-                                         (query-input-value input)
-                                         {:current-page-fn (fn []
-                                                             (or current-page-title
-                                                                 today-title))}))
-              inputs))
-
-      :thread-api/get-journal-page-by-day
-      (let [[_repo journal-day] args]
-        (entity->api-map db (ldb/get-journal-page-by-day db journal-day)))
-
-      :thread-api/get-block-refs
-      (let [[_repo eid] args]
-        (->> (d/q '[:find [?e ...]
-                    :in $ ?id
-                    :where
-                    [?e :block/refs ?id]]
-                  db eid)
-             (mapv #(entity->api-map db (d/entity db %)))))
-
-      :thread-api/get-recent-pages
-      (let [[_repo ids] args]
-        (mapv #(entity->api-map db (d/entity db %)) ids))
-
-      :thread-api/get-block-class-default-properties
-      {}
-
-      :thread-api/get-structured-children
-      []
-
-      :thread-api/validate-block-tag
-      {:valid? true}
-
-      :thread-api/page-exists?
-      (let [[_repo page-name tags] args]
-        (boolean
-         (when-let [page (ldb/get-page db page-name)]
-           (or (empty? tags)
-               (some (fn [tag]
-                       (some #(= tag (:db/ident %)) (:block/tags page)))
-                     tags)))))
-
-      :thread-api/get-favorite-pages
-      []
-
-      :thread-api/favorited-page?
-      false
-
-      :thread-api/api-list-tags
-      (let [[_repo options] args]
-        (api-tools/list-tags db options))
-
-      :thread-api/api-list-properties
-      (let [[_repo options] args]
-        (api-tools/list-properties db options))
-
-      :thread-api/api-list-pages
-      (let [[_repo options] args]
-        (api-tools/list-pages db options))
-
-      :thread-api/api-get-page-data
-      (let [[_repo page-title] args]
-        (api-tools/get-page-data db page-title))
-
-      :thread-api/api-build-upsert-nodes-edn
-      (let [[_repo ops] args]
-        (api-tools/build-upsert-nodes-edn db ops))
-
-      :thread-api/export-edn
-      {:export-edn-error "Export EDN is not available in plugin API unit tests"}
-
-      (:thread-api/update-thread-atom
-       :thread-api/undo-redo-set-pending-editor-info
-       :thread-api/undo-redo-record-editor-info
-       :thread-api/undo-redo-record-ui-state)
-      nil
-
-      (throw (ex-info (str "Unhandled test worker api: " api)
-                      {:api api :args args})))))
+    (loop [handlers [handle-block-worker handle-page-worker handle-cli-worker]]
+      (if-let [handler (first handlers)]
+        (let [value (handler db api args)]
+          (if (= ::unhandled value)
+            (recur (rest handlers))
+            value))
+        (throw (ex-info (str "Unhandled test worker api: " api)
+                        {:api api :args args}))))))
 
 (defn <invoke-test-worker
   [api & args]
