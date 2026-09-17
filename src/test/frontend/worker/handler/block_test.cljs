@@ -5,6 +5,7 @@
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.property :as property-handler]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.test.helper :as db-test]))
 
 (defn- canonical-block-api
@@ -1111,3 +1112,84 @@
         "Default children omit property-value blocks")
     (is (= #{"child" "value"} (titles included))
         "include-property-block? true returns property-value children used by cut/copy")))
+
+(defn- library-nested-pages-without-order
+  []
+  (let [conn (db-test/create-conn)
+        library (ldb/get-built-in-page @conn "Library")
+        parent-uuid (random-uuid)
+        child-a-uuid (random-uuid)
+        child-b-uuid (random-uuid)]
+    (d/transact! conn
+                 [{:db/id (:db/id library)
+                   :block/tx-id 10}
+                  {:db/id -1
+                   :block/uuid parent-uuid
+                   :block/tx-id 11
+                   :block/title "Country"
+                   :block/name "country"
+                   :block/tags :logseq.class/Page
+                   :block/parent (:db/id library)
+                   :block/order "a0"}
+                  {:db/id -2
+                   :block/uuid child-a-uuid
+                   :block/tx-id 12
+                   :block/title "Australia"
+                   :block/name "australia"
+                   :block/tags :logseq.class/Page
+                   :block/parent -1}
+                  {:db/id -3
+                   :block/uuid child-b-uuid
+                   :block/tx-id 12
+                   :block/title "Canada"
+                   :block/name "canada"
+                   :block/tags :logseq.class/Page
+                   :block/parent -1}
+                  {:block/uuid (random-uuid)
+                   :block/tx-id 12
+                   :block/title "Overview"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"}])
+    {:conn conn
+     :library-uuid (:block/uuid library)
+     :parent-uuid parent-uuid
+     :child-a-uuid child-a-uuid
+     :child-b-uuid child-b-uuid}))
+
+(deftest library-open-block-tree-fails-when-nested-pages-lack-order-test
+  (when-let [direct-children-membership (direct-children-membership-api)]
+    (when-let [open-block-tree (open-block-tree-api)]
+      (let [{:keys [conn library-uuid parent-uuid]}
+            (library-nested-pages-without-order)
+            library-items (:items (direct-children-membership @conn library-uuid))]
+        (is (= 1 (count library-items))
+            "Library itself has an ordered child page.")
+        (is (thrown-with-msg? js/Error
+                              #"Invalid direct-child order"
+                              (direct-children-membership @conn parent-uuid)))
+        (is (thrown-with-msg? js/Error
+                              #"Invalid direct-child order"
+                              (open-block-tree @conn library-uuid))
+            "Opening Library walks nested pages and fails without string order.")))))
+
+(deftest repairing-nested-page-orders-lets-library-tree-render-test
+  (when-let [open-block-tree (open-block-tree-api)]
+    (let [{:keys [conn library-uuid parent-uuid child-a-uuid child-b-uuid]}
+          (library-nested-pages-without-order)
+          overview-order (:block/order (db-test/find-block-by-content @conn "Overview"))]
+      (d/transact! conn (db-order/missing-internal-page-parent-order-tx @conn))
+      (let [tree (open-block-tree @conn library-uuid)
+            nested-items (get-in tree [:children parent-uuid :items])
+            nested-uuids (set (map first nested-items))
+            page-orders (->> nested-items
+                             (filter (fn [[block-uuid]]
+                                       (contains? #{child-a-uuid child-b-uuid} block-uuid)))
+                             (mapv second))]
+        (is (contains? nested-uuids child-a-uuid))
+        (is (contains? nested-uuids child-b-uuid))
+        (is (every? string? page-orders))
+        (is (apply distinct? page-orders))
+        (is (every? #(pos? (compare % overview-order)) page-orders)
+            "Repaired nested pages sort after existing content siblings.")))))
+

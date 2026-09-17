@@ -1,8 +1,9 @@
 (ns logseq.db.common.order
   "Use fractional-indexing order for blocks/properties/closed values/etc.
    Used by DB and file graphs"
-  (:require [logseq.clj-fractional-indexing :as index]
-            [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [logseq.clj-fractional-indexing :as index]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defonce *max-key (atom nil))
 
@@ -35,6 +36,33 @@
   (let [ks (index/generate-n-keys-between start end n)]
     (reset-max-key! max-key-atom (last ks))
     ks))
+
+(defn missing-internal-page-parent-order-tx
+  "Namespace import and older graphs can set :block/parent without :block/order.
+  Only repair internal pages so class pages that share the same rewrite stay unordered.
+  Insertion boundary uses every direct child so repaired page orders do not
+  collide with content-block siblings."
+  [db]
+  (->> (d/datoms db :avet :block/parent)
+       (map (fn [d] (d/entity db (:e d))))
+       (group-by :block/parent)
+       (mapcat
+        (fn [[_parent children]]
+          (let [missing (->> children
+                             (filter entity-util/internal-page?)
+                             (remove #(string? (:block/order %)))
+                             vec)
+                max-order (->> children
+                               (keep :block/order)
+                               (filter string?)
+                               sort
+                               last)]
+            (when (seq missing)
+              (map (fn [child order]
+                     {:db/id (:db/id child)
+                      :block/order order})
+                   missing
+                   (gen-n-keys (count missing) max-order nil))))))))
 
 (defn validate-order-key?
   [key]
