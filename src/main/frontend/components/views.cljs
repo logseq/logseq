@@ -357,7 +357,7 @@
                                               [:div.flex.flex-row.items-center.gap-1
                                                (ui/icon "arrow-down" {:size 15})
                                                [:div (t :view.table/sort-descending)]]))
-                                           (when property
+                                           (when (:db/id property)
                                              (shui/dropdown-menu-item
                                               {:on-click (fn [_e]
                                                            (if pinned?

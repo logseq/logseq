@@ -628,10 +628,12 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] px-0 py-0 overflow-y-scroll max-h-screen;
+  @apply w-[220px] px-0 py-0 flex flex-col overflow-hidden;
+  max-height: min(var(--available-height, 24rem), 24rem);
 
   > ul.choices-list {
-    @apply m-0 px-1.5 pt-1 pb-[1px];
+    @apply m-0 px-1.5 pt-1 pb-[1px] min-h-0 flex-1 overflow-y-auto overscroll-contain;
+    max-height: min(16rem, var(--available-height, 16rem));
 
     li {
       @apply flex items-center gap-1 relative;

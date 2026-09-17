@@ -227,3 +227,30 @@
   (let [content (w/eval-js "navigator.clipboard.readText()")]
     (is (string/includes? content "Alpha table object"))
     (is (string/includes? content "Beta table object"))))
+
+(defn- table-body-text
+  []
+  (.innerText (.locator (w/get-page) ".ls-view-body")))
+
+(defn- sort-table-column!
+  [column-name direction]
+  (w/click (loc/filter ".ls-view-body .ls-table-header-cell" :has-text column-name))
+  (w/click (loc/filter "[role='menuitem']" :has-text direction))
+  (assert/assert-is-visible
+   (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
+
+(deftest table-view-column-sort-does-not-crash-test
+  (seed-table-view! "table-column-sort")
+  (sort-table-column! "Name" "Sort ascending")
+  (let [body-text (table-body-text)]
+    (is (< (string/index-of body-text "Alpha table object")
+           (string/index-of body-text "Beta table object"))))
+  (sort-table-column! "Priority" "Sort ascending")
+  (let [body-text (table-body-text)]
+    (is (< (string/index-of body-text "Beta table object")
+           (string/index-of body-text "Alpha table object"))))
+  (sort-table-column! "Created At" "Sort descending")
+  (assert/assert-is-visible
+   (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
+  (assert/assert-is-visible
+   (loc/filter ".ls-view-body .ls-table-row" :has-text "Beta table object")))
