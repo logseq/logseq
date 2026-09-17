@@ -2437,7 +2437,7 @@
 
 (defn- page-ref-math-cp
   [formula]
-  (latex/latex formula false false))
+  (latex/latex formula false true))
 
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]

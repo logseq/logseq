@@ -94,14 +94,19 @@ html.is-mobile .ls-block-content-indent {
     @apply inline text-[length:inherit];
   }
 
-  .math-block {
-    display: inline-block;
-    width: auto;
+  .katex-display {
+    display: inline;
+    margin: 0;
   }
 
-  .latex,
-  .latex-inline {
-    display: inline;
+  .katex-display > .katex {
+    display: inline-block;
+    text-align: initial;
+  }
+
+  .katex-display > .katex > .katex-html > .tag {
+    position: static;
+    margin-left: 0.5em;
   }
 
   .katex svg {
