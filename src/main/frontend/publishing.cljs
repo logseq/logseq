@@ -62,11 +62,17 @@
         (state/set-db-restoring! false)
         (ui-handler/re-render-root!)))))
 
+(defn- apply-published-state!
+  [data]
+  (state/swap-state! merge data)
+  (when-let [repo (or (:git/current-repo data)
+                      (first (keys (:config data))))]
+    (state/set-current-repo! repo)))
+
 (defn restore-state!
   []
   (when-let [data js/window.logseq_state]
-    (let [data (reader/read-string data)]
-      (state/swap-state! merge data))))
+    (apply-published-state! (reader/read-string data))))
 
 (defn set-router!
   []
