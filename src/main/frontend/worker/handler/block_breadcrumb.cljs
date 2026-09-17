@@ -200,8 +200,11 @@
                         db (:block/uuid block) {:depth depth}))
          page (:block/page block)
          page-id (resolve-ref-id db page)
+         ;; get-block-parents is root-first and already includes nested pages.
+         ;; Only prepend :block/page when depth truncated it out of that walk;
+         ;; comparing only the first ancestor put the leaf page first.
          breadcrumb-ancestors (if (and page-id
-                                         (not= page-id (:db/id (first parents))))
+                                         (not (some #(= page-id (:db/id %)) parents)))
                                  (into [page] parents)
                                  parents)]
      (cond-> (mapv #(breadcrumb-entity db %) breadcrumb-ancestors)
