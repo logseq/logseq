@@ -9,9 +9,7 @@
             [logseq.e2e.locator :as loc]
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
-            [wally.main :as w])
-  (:import [com.microsoft.playwright Locator$ScreenshotOptions Page$ScreenshotOptions]
-           [java.nio.file Paths]))
+            [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -276,55 +274,6 @@
       });
     })()"))
 
-(defn- screenshot-page!
-  [path]
-  (.screenshot (w/get-page)
-               (.setPath (Page$ScreenshotOptions.)
-                         (Paths/get path (into-array String [])))))
-
-(defn- screenshot-locator!
-  [selector path]
-  (.screenshot (.first (.locator (w/get-page) selector))
-               (.setPath (Locator$ScreenshotOptions.)
-                         (Paths/get path (into-array String [])))))
-
-(defn- maybe-artifact-dir
-  []
-  (let [dir (or (System/getenv "CURSOR_ARTIFACTS_DIR")
-                "/opt/cursor/artifacts")]
-    (when (.isDirectory (java.io.File. dir))
-      dir)))
-
-(defn- apply-clipped-anchor-regression!
-  []
-  (w/eval-js
-   "(() => {
-      const id = 'e2e-table-page-ref-regression';
-      document.getElementById(id)?.remove();
-      const style = document.createElement('style');
-      style.id = id;
-      style.textContent = `
-        .ls-table .ls-table-cell .table-block-title a,
-        .ls-table .ls-table-cell .page-reference a {
-          display: inline-block !important;
-          overflow: hidden !important;
-          max-width: 100% !important;
-          text-overflow: ellipsis !important;
-          vertical-align: baseline !important;
-        }
-      `;
-      document.head.appendChild(style);
-      return true;
-    })()"))
-
-(defn- clear-clipped-anchor-regression!
-  []
-  (w/eval-js
-   "(() => {
-      document.getElementById('e2e-table-page-ref-regression')?.remove();
-      return true;
-    })()"))
-
 (deftest table-name-page-ref-shares-bracket-baseline-test
   (let [tag-name "page-ref-align"
         container-page (page/get-page-name)
@@ -340,12 +289,6 @@
      (loc/filter ".ls-view-body .ls-table-row" :has-text "What is the"))
     (assert/assert-is-visible
      ".ls-table-cell .table-block-title .page-reference .page-ref")
-    (when-let [dir (maybe-artifact-dir)]
-      (apply-clipped-anchor-regression!)
-      (screenshot-page! (str dir "/table_page_ref_before.png"))
-      (screenshot-locator! ".ls-table-row:has(.page-reference) .table-block-title"
-                           (str dir "/table_page_ref_before_closeup.png"))
-      (clear-clipped-anchor-regression!))
     (let [metrics (table-page-ref-metrics)
           top-delta (abs (- (:linkTop metrics) (:leftTop metrics)))
           bottom-delta (abs (- (:linkBottom metrics) (:leftBottom metrics)))]
@@ -355,11 +298,7 @@
       (is (< top-delta 1.25)
           (str "page-ref top should match [[ bracket top: " metrics))
       (is (< bottom-delta 1.25)
-          (str "page-ref bottom should match [[ bracket bottom: " metrics)))
-    (when-let [dir (maybe-artifact-dir)]
-      (screenshot-page! (str dir "/table_page_ref_after.png"))
-      (screenshot-locator! ".ls-table-row:has(.page-reference) .table-block-title"
-                           (str dir "/table_page_ref_after_closeup.png")))))
+          (str "page-ref bottom should match [[ bracket bottom: " metrics)))))
 
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
