@@ -139,21 +139,6 @@
        (map #(d/entity db (:db/id %)))
        (map ldb/get-title-with-parents)))
 
-(defn- imported-pages-missing-parent-order
-  "Pages that have a parent but no string :block/order. Opening Library or any
-  non-leaf hierarchy page crashes when this is non-empty."
-  [db]
-  (->> (d/datoms db :avet :block/parent)
-       (keep (fn [d]
-               (let [child (d/entity db (:e d))]
-                 (when (and (ldb/page? child)
-                            (not (string? (:block/order child))))
-                   {:title (:block/title child)
-                    :parent (:block/title (:block/parent child))
-                    :order (:block/order child)}))))
-       vec))
-
-
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
    on ::rpath since paths are absolute by default and exporter needs relative paths for
@@ -2433,55 +2418,38 @@ abc
         "Imported favorites resolve to the original pages including flattened namespaces")))
 
 (deftest-async import-namespaced-pages-assign-block-order
-  (p/let [dir (write-temp-file-graph
-               {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
-                "pages/Country___Australia.md" "- Sydney\n"
-                "pages/Country___Canada.md" "- Ottawa\n"
-                "pages/Continent___Asia___Japan.md" "- Tokyo\n"})
-          conn (db-test/create-conn)
-          _ (import-file-graph-to-db dir conn {})
-          library (ldb/get-built-in-page @conn common-config/library-page-name)
-          country (db-test/find-page-by-title @conn "Country")
-          australia (db-test/find-page-by-title @conn "Australia")
-          canada (db-test/find-page-by-title @conn "Canada")
-          continent (db-test/find-page-by-title @conn "Continent")
-          asia (db-test/find-page-by-title @conn "Asia")
-          japan (db-test/find-page-by-title @conn "Japan")]
-    (is (empty? (imported-pages-missing-parent-order @conn))
-        "Every imported page with a parent has a string :block/order")
-    (is (= (:db/id library) (:db/id (:block/parent country)))
-        "Top-level hierarchy parent is moved under Library")
-    (is (string? (:block/order country))
-        "Library child Country has string order")
-    (is (= (:db/id country) (:db/id (:block/parent australia)))
-        "Australia is nested under Country")
-    (is (string? (:block/order australia))
-        "Imported child page Australia has string order")
-    (is (= (:db/id country) (:db/id (:block/parent canada)))
-        "Canada is nested under Country")
-    (is (string? (:block/order canada))
-        "Imported sibling page Canada has string order")
-    (is (not= (:block/order australia) (:block/order canada))
-        "Sibling imported pages get distinct orders")
-    (is (= (:db/id continent) (:db/id (:block/parent asia)))
-        "Deeper hierarchy parent Asia is nested under Continent")
-    (is (string? (:block/order asia))
-        "Intermediate imported page Asia has string order")
-    (is (= (:db/id asia) (:db/id (:block/parent japan)))
-        "Japan is nested under Asia")
-    (is (string? (:block/order japan))
-        "Leaf imported page Japan has string order")))
-
-(deftest-async import-doc-files-namespaced-pages-assign-block-order
-  (p/let [file (write-temp-graph-file "pages/Country___Australia.md" "- Sydney\n")
-          conn (db-test/create-conn)
-          _ (import-files-to-db [file] conn {})
-          country (db-test/find-page-by-title @conn "Country")
-          australia (db-test/find-page-by-title @conn "Australia")]
-    (is (= (:db/id country) (:db/id (:block/parent australia)))
-        "Doc-file import still sets parent from the namespace")
-    (is (string? (:block/order australia))
-        "Doc-file import assigns string :block/order when setting :block/parent")))
+  (let [files {"pages/Country___Australia.md" "- Sydney\n"
+               "pages/Country___Canada.md" "- Ottawa\n"
+               "pages/Continent___Asia___Japan.md" "- Tokyo\n"}
+        dir (write-temp-file-graph
+             (assoc files "logseq/config.edn" "{:file/name-format :triple-lowbar}\n"))]
+    (p/doseq [import-mode [:file-graph :doc-files]]
+      (p/let [conn (db-test/create-conn)
+              _ (case import-mode
+                  :file-graph (import-file-graph-to-db dir conn {})
+                  :doc-files (import-files-to-db (mapv #(path/path-normalize (node-path/join dir %)) (keys files)) conn {}))
+              library (ldb/get-built-in-page @conn common-config/library-page-name)
+              country (db-test/find-page-by-title @conn "Country")
+              australia (db-test/find-page-by-title @conn "Australia")
+              canada (db-test/find-page-by-title @conn "Canada")
+              continent (db-test/find-page-by-title @conn "Continent")
+              asia (db-test/find-page-by-title @conn "Asia")
+              japan (db-test/find-page-by-title @conn "Japan")
+              nested-pages [australia canada asia japan]
+              ordered-pages (cond-> nested-pages
+                              (= :file-graph import-mode) (into [country continent]))]
+        (testing (name import-mode)
+          (is (= ["Country" "Country" "Continent" "Asia"]
+                 (mapv #(-> % :block/parent :block/title) nested-pages))
+              "Imported pages preserve their namespace parents")
+          (is (every? #(string? (:block/order %)) ordered-pages)
+              "Every imported hierarchy child has a string order")
+          (is (not= (:block/order australia) (:block/order canada))
+              "Sibling imported pages get distinct orders")
+          (when (= :file-graph import-mode)
+            (is (= [(:db/id library) (:db/id library)]
+                   (mapv #(-> % :block/parent :db/id) [country continent]))
+                "Top-level hierarchy parents are moved under Library")))))))
 
 (deftest-async import-namespaced-pages-order-after-parent-content-blocks
   (p/let [dir (write-temp-file-graph
@@ -2493,20 +2461,16 @@ abc
           country (db-test/find-page-by-title @conn "Country")
           australia (db-test/find-page-by-title @conn "Australia")
           overview (db-test/find-block-by-content @conn "Overview")
-          child-orders (->> (:block/_parent country)
-                            (keep :block/order)
-                            (filter string?)
-                            vec)]
-    (is (= (:db/id country) (:db/id (:block/parent overview)))
-        "Parent page content is a direct child of Country")
-    (is (string? (:block/order overview))
-        "Parent page content block already has string order")
-    (is (string? (:block/order australia))
-        "Imported child page Australia has string order")
-    (is (not= (:block/order australia) (:block/order overview))
-        "Repaired page order does not collide with a content-block sibling")
-    (is (= (count child-orders) (count (distinct child-orders)))
-        "All direct children of Country have unique orders")))
+          page-order (:block/order australia)
+          content-order (:block/order overview)]
+    (is (= (:db/id country)
+           (:db/id (:block/parent australia))
+           (:db/id (:block/parent overview)))
+        "The imported page and existing content share a parent")
+    (is (and (string? page-order)
+             (string? content-order)
+             (pos? (compare page-order content-order)))
+        "The imported page is ordered after existing parent content")))
 
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)

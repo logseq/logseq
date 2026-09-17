@@ -3337,7 +3337,8 @@
                           _ (import-progress! options {:phase :cleanup-missing-block-refs})
                           cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
                           _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))
-                          _ (ensure-imported-page-parent-orders! conn)
+                          page-order-tx-report (ensure-imported-page-parent-orders! conn)
+                          _ (when page-order-tx-report (on-tx-report page-order-tx-report))
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
@@ -3597,8 +3598,7 @@
                     :block/parent [:block/uuid library-id]
                     :block/order (db-order/gen-key)})
                  top-parent-pages)]
-    (ldb/transact! repo-or-conn tx-data {::imported-data? true})
-    (ensure-imported-page-parent-orders! conn)))
+    (ldb/transact! repo-or-conn tx-data {::imported-data? true})))
 
 (defn- partition-graph-files
   [*files config rpath-key]
