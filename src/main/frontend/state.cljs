@@ -27,6 +27,16 @@
 
 (defonce *profile-state (volatile! {}))
 
+(defn default-system-theme?
+  "Fresh installs follow system appearance on macOS, Windows, and iOS."
+  []
+  (boolean (or util/mac? util/win32? (util/ios?))))
+
+(defn system-theme-preference
+  "Stored system-theme setting, or the platform default when unset."
+  []
+  ((fnil identity (default-system-theme?)) (storage/get :ui/system-theme?)))
+
 (defonce *db-worker (atom nil))
 (defonce *db-worker-thread (atom nil))
 (defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
@@ -151,7 +161,7 @@
       :ui/sidebar-width                      "40%"
       :ui/left-sidebar-open?                 (boolean (storage/get :ls-left-sidebar-open?))
       :ui/theme                              (or (storage/get :ui/theme) "light")
-      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+      :ui/system-theme?                      (system-theme-preference)
       :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
       :ui/wide-mode?                         (storage/get :ui/wide-mode)
       :ui/radix-color                        (storage/get :ui/radix-color)
@@ -1385,7 +1395,7 @@ should be done through this fn in order to get global config and config defaults
   "Restore mobile theme setting from local storage"
   []
   (let [mode (or (storage/get :ui/theme) "light")
-        system-theme? (storage/get :ui/system-theme?)]
+        system-theme? (system-theme-preference)]
     (when (mobile-util/native-platform?)
       (mobile-util/set-native-interface-style! mode system-theme?))
     (when (and (not system-theme?)

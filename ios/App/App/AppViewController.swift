@@ -71,5 +71,15 @@ import UIKit
 
         // Re-apply dynamic colors when light/dark changes
         applyLogseqTheme()
+        dispatchSystemThemeToWeb()
+    }
+
+    // Keep in sync with frontend.mobile.theme/native-system-theme-changed-js.
+    // WKWebView matchMedia often does not fire when native interface style is locked.
+    private func dispatchSystemThemeToWeb() {
+        guard let webView else { return }
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        let js = "window.dispatchEvent(new CustomEvent('logseq:native-system-theme-changed', { detail: { isDark: \(isDark ? "true" : "false") } }));"
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 }

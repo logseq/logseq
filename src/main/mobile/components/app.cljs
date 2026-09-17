@@ -11,6 +11,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.mobile.theme :as mobile-theme]
             [frontend.mobile.util :as mobile-util]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
@@ -57,12 +58,9 @@
    (fn []
      (state/sync-system-theme!)
      (ui/setup-system-theme-effect!)
-     (let [handler (fn [^js e]
-                     (when (:ui/system-theme? (state/get-state))
-                       (let [is-dark? (boolean (some-> e .-detail .-isDark))]
-                         (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
-       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
-       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
+     (let [handler mobile-theme/handle-native-system-theme-changed!]
+       (.addEventListener js/window mobile-theme/native-system-theme-changed-event handler)
+       #(.removeEventListener js/window mobile-theme/native-system-theme-changed-event handler)))
    [])
   (hooks/use-effect!
    #(let [^js doc js/document.documentElement
