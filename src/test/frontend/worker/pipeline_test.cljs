@@ -1459,6 +1459,37 @@
                 "Filling the draft title keeps it a page")
             (is (= "library draft" (:block/title draft)))))))))
 
+(deftest toggle-page-and-block-keeps-blank-nested-page-insert-as-draft-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "keep"}]}])
+        page1 (db-test/find-page-by-title @conn "page1")
+        keep (db-test/find-block-by-content @conn "keep")
+        draft-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/insert-blocks!
+         conn
+         [{:block/uuid draft-uuid
+           :block/title ""
+           :block/name ""
+           :block/tags #{:logseq.class/Page}}]
+         keep
+         {:sibling? true
+          :keep-uuid? true})
+        (let [draft (d/entity @conn [:block/uuid draft-uuid])]
+          (is (some? draft)
+              "Empty #Page drafts under an existing page are inserted instead of rolling back")
+          (is (ldb/page? draft)
+              "Library Enter inserts an empty page draft under the current page")
+          (is (= (:db/id page1) (:db/id (:block/parent draft))))
+          (ldb/transact! conn [{:db/id (:db/id draft)
+                                :block/title "nested draft"}])
+          (let [draft (d/entity @conn (:db/id draft))]
+            (is (ldb/page? draft)
+                "Filling the draft title keeps it a page")
+            (is (= "nested draft" (:block/title draft)))))))))
+
 (deftest toggle-page-and-block-validates-auto-page-tag-title-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

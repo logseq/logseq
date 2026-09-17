@@ -319,9 +319,10 @@
                         (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)]
-                     ;; Library Enter inserts an empty #Page draft; validate once it has a title.
+                     ;; Enter inserts an empty #Page draft (Library or under an
+                     ;; existing page). Validate once the draft has a title.
                      (when-not (and (string/blank? (block-title block))
-                                    (= (:db/id block-parent) (:db/id library-page)))
+                                    (nil? block-before))
                        (let [page-title (outliner-validate/validate-page-conversion-title
                                          db-after block (block-title block))
                              ->page-tx (concat
