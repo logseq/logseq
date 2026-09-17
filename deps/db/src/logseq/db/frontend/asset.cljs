@@ -18,43 +18,12 @@
         (.then (fn [dig] (js/Uint8Array. dig)))
         (.then decode-digest))))
 
-(defn- http-url?
-  [s]
-  (and (string? s)
-       (or (string/starts-with? s "http://")
-           (string/starts-with? s "https://"))))
-
-(defn- strip-url-suffix
-  "Drop query/hash from HTTP(S) URLs so pathnames can be parsed like file names.
-  Local filenames that contain `#` or `?` are left unchanged."
-  [s]
-  (when (string? s)
-    (if (http-url? s)
-      (first (string/split s #"[?#]" 2))
-      s)))
-
-(defn- path-basename
-  "Last path segment of a file path or URL."
-  [s]
-  (when-let [s (strip-url-suffix s)]
-    (node-path/basename (string/replace s #"\\+" "/"))))
-
 (defn asset-path->type
   "Create asset type given asset path"
   [path]
-  (let [path (or (strip-url-suffix path) path)]
-    (string/lower-case (.substr (node-path/extname path) 1))))
+  (string/lower-case (.substr (node-path/extname path) 1)))
 
 (defn asset-name->title
-  "Create asset title given a basename, file path, or URL.
-
-  Remote poster URLs (Amazon/IMDb/TMDB) must not become the visible title —
-  callers display the file stem (`MV5B…`) instead of the full URL."
-  [name-or-url]
-  (let [base (or (path-basename name-or-url) "")]
-    (if (string/blank? base)
-      ""
-      (let [parsed-name (.-name (node-path/parse base))]
-        (if (string/blank? parsed-name)
-          base
-          parsed-name)))))
+  "Create asset title given asset path's basename"
+  [path-basename]
+  (.-name (node-path/parse path-basename)))

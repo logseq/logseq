@@ -628,10 +628,12 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] px-0 py-0 overflow-y-scroll max-h-screen;
+  @apply w-[220px] px-0 py-0 flex flex-col overflow-hidden;
+  max-height: min(var(--available-height, 24rem), 24rem);
 
   > ul.choices-list {
-    @apply m-0 px-1.5 pt-1 pb-[1px];
+    @apply m-0 px-1.5 pt-1 pb-[1px] min-h-0 flex-1 overflow-y-auto overscroll-contain;
+    max-height: min(16rem, var(--available-height, 16rem));
 
     li {
       @apply flex items-center gap-1 relative;
@@ -660,32 +662,20 @@ a.control-link {
   @apply w-[240px] p-0;
 }
 
+.ls-property-default-value-pane {
+  @apply min-w-[300px] p-1;
+
+  .property-block-container {
+    @apply ml-0;
+  }
+}
+
 .ls-property-key {
   .cp__select-results {
     .menu-link {
       @apply py-1;
     }
   }
-}
-
-.ls-properties-area .external-link,
-.ls-properties-area .asset-ref,
-.ls-properties-area .asset-title-slot,
-.ls-properties-area .asset-image-fallback {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
-.ls-properties-area .property-url-image .asset-container,
-.ls-properties-area .property-url-image .asset-container img {
-  max-width: 160px;
-  max-height: 240px;
-  object-fit: contain;
 }
 
 .property-select .item-results-wrap #ui__ac-inner {

@@ -24,6 +24,7 @@
             [logseq.e2e.property-basic-test]
             [logseq.e2e.property-config-basic-test]
             [logseq.e2e.property-scoped-choices-test]
+            [logseq.e2e.query-builder-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.right-sidebar-basic-test]
             [logseq.e2e.rtc-basic-test]
@@ -144,6 +145,7 @@
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.property-basic-test
              'logseq.e2e.property-config-basic-test
+             'logseq.e2e.query-builder-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.right-sidebar-basic-test
              'logseq.e2e.rtc-basic-test

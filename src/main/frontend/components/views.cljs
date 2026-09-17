@@ -7,6 +7,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [dommy.core :as dom]
+            [frontend.components.block.image :as block-image]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
@@ -355,7 +356,7 @@
                                               [:div.flex.flex-row.items-center.gap-1
                                                (ui/icon "arrow-down" {:size 15})
                                                [:div (t :view.table/sort-descending)]]))
-                                           (when property
+                                           (when (:db/id property)
                                              (shui/dropdown-menu-item
                                               {:on-click (fn [_e]
                                                            (if pinned?
@@ -761,11 +762,8 @@
   (p/let [property (state/<invoke-db-worker :thread-api/pull (state/get-current-repo) [:db/id] property-ident)]
     (:db/id property)))
 
-(defn- gallery-asset-columns
-  [columns]
-  (filter (fn [column]
-            (= :asset (:logseq.property/type (column-property column))))
-          columns))
+(def ^:private gallery-cover-property-types
+  #{:asset :url})
 
 (def ^:private gallery-default-card-dimensions
   {:width 220
@@ -796,14 +794,20 @@
     (:logseq.property/type column) column
     (gallery-column-ident column) (column-property column)))
 
-(defn- gallery-asset-property-column?
+(defn gallery-cover-property-column?
+  "Asset and URL properties can supply a gallery card cover."
   [column]
-  (= :asset (:logseq.property/type (gallery-column-property column))))
+  (contains? gallery-cover-property-types
+             (:logseq.property/type (gallery-column-property column))))
+
+(defn- gallery-asset-columns
+  [columns]
+  (filter gallery-cover-property-column? columns))
 
 (defn- gallery-asset-property-idents
   [columns]
   (->> columns
-       (filter gallery-asset-property-column?)
+       (filter gallery-cover-property-column?)
        (keep gallery-column-ident)
        vec))
 
@@ -893,7 +897,7 @@
       (let [asset-property-ident (gallery-asset-property-ident view-entity columns)]
         (shui/dropdown-menu-sub
          (shui/dropdown-menu-sub-trigger
-          (t :view.gallery/asset-property))
+          (t :view.gallery/cover-property))
          (shui/dropdown-menu-sub-content
           (for [column asset-columns]
             (shui/dropdown-menu-checkbox-item
@@ -2889,16 +2893,67 @@
       :else
       (->entity asset-value))))
 
+(defn- gallery-cover-url-string
+  [value]
+  (let [s (cond
+            (string? value) value
+            (map? value) (db-property/property-value-content value)
+            :else nil)]
+    (when (string? s)
+      (let [url (string/trim s)]
+        (when (and (not (string/blank? url))
+                   (block-image/remote-image-url? url))
+          url)))))
+
+(defn gallery-card-cover-url
+  "Return a remote http(s) URL from a URL-type cover property, or nil."
+  [block property-ident]
+  (let [value (when (and block property-ident (not= :block/uuid property-ident))
+                (get block property-ident))]
+    (cond
+      (set? value)
+      (some gallery-cover-url-string value)
+
+      (sequential? value)
+      (some gallery-cover-url-string value)
+
+      :else
+      (gallery-cover-url-string value))))
+
+(defn- gallery-cover-url-property?
+  [columns property-ident]
+  (and property-ident
+       (not= :block/uuid property-ident)
+       (= :url (:logseq.property/type
+                (gallery-column-property
+                 (some (fn [column]
+                         (when (= (gallery-column-ident column) property-ident)
+                           column))
+                       columns))))))
+
 (hsx/defc gallery-card-item
   [table view-entity block config {:keys [asset-property-ident display-property-idents]}]
-  (let [asset-block (gallery-card-asset-block block asset-property-ident)
+  (let [columns (:columns table)
+        url-property? (gallery-cover-url-property? columns asset-property-ident)
+        url-cover (when url-property?
+                    (gallery-card-cover-url block asset-property-ident))
+        asset-block (when-not url-property?
+                      (gallery-card-asset-block block asset-property-ident))
         asset-cp (state/get-component :block/asset-cp)
+        [url-failed? set-url-failed!] (hooks/use-state false)
+        _ (hooks/use-effect!
+           (fn []
+             (set-url-failed! false)
+             (fn []))
+           [url-cover])
+        render-url? (and url-cover (not url-failed?))
         render-asset? (and asset-block (fn? asset-cp))
+        render-cover? (or render-url? render-asset?)
         selected? (use-table-row-selected? table block)]
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
       :data-state (when selected? "selected")
-      :class (str (when render-asset? "has-gallery-asset")
+      :class (str (when render-cover? "has-gallery-asset")
                   (when selected? " is-selected"))
       :on-click (fn [e]
                   (when-not (some-> (.-target e) (.closest (str "button, a, input, textarea, select, [role='menuitem'], "
@@ -2907,6 +2962,13 @@
      [:div.ls-gallery-card-content
       [:div.ls-gallery-card-media
        (gallery-card-checkbox table block)
+       (when render-url?
+         [:div.asset-container
+          (block-image/image-or-fallback
+           {:src url-cover
+            :gallery-view? true
+            :on-error (fn [_]
+                        (set-url-failed! true))})])
        (when render-asset?
          (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))]
       [:div.ls-gallery-card-meta
@@ -2914,7 +2976,7 @@
              :let [property (some (fn [column]
                                     (when (= (:id column) property-ident)
                                       (column-property column)))
-                                  (:columns table))
+                                  columns)
                    property-value (gallery-property-value block property-ident property config)]
              :when property-value]
          ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}

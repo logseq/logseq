@@ -1609,6 +1609,7 @@
  :query/results-for "Results for {1}"
 
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/all-values-label "ALL"
  :query.builder/between-end-label "End date"
  :query.builder/between-journal-label "between: {1} ~ {2}"
  :query.builder/between-start-label "Start date"
@@ -1953,9 +1954,9 @@
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 
- :view.gallery/asset-property "Asset property"
  :view.gallery/card-size "Card size"
  :view.gallery/compact-size "Compact"
+ :view.gallery/cover-property "Cover property"
  :view.gallery/custom-size "Custom"
  :view.gallery/default-size "Default"
  :view.gallery/display-properties "Display properties"

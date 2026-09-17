@@ -519,7 +519,8 @@
   (is (not (contains? block :block/children)))
   (is (not (contains? block :block/properties)))
   (is (not (contains? block :block/properties-text-values)))
-  (is (every? #{:block.temp/refs-count
+  (is (every? #{:block.temp/positioned-properties
+                :block.temp/refs-count
                 :block.temp/order-list-index}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
@@ -1039,6 +1040,82 @@
                                    :ref-titles {}}
                                   response))))
 
+(deftest block-breadcrumb-keeps-root-first-order-when-zoomed-into-nested-page-block-test
+  (let [conn (db-test/create-conn)
+        library (ldb/get-built-in-page @conn common-config/library-page-name)
+        some-page (random-uuid)
+        test-a (random-uuid)
+        test-b (random-uuid)
+        test-c (random-uuid)
+        inner (random-uuid)]
+    (is (some? library) "Built-in Library page is required for nested page breadcrumbs.")
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid some-page
+                   :block/tx-id 21
+                   :block/title "some page"
+                   :block/name "some page"
+                   :block/tags :logseq.class/Page
+                   :block/parent (:db/id library)}
+                  {:db/id -2
+                   :block/uuid test-a
+                   :block/tx-id 21
+                   :block/title "test a"
+                   :block/name "test a"
+                   :block/tags :logseq.class/Page
+                   :block/parent -1}
+                  {:db/id -3
+                   :block/uuid test-b
+                   :block/tx-id 21
+                   :block/title "test b"
+                   :block/name "test b"
+                   :block/tags :logseq.class/Page
+                   :block/parent -2}
+                  {:db/id -4
+                   :block/uuid test-c
+                   :block/tx-id 21
+                   :block/title "test c"
+                   :block/page -3
+                   :block/parent -3
+                   :block/order "a0"}
+                  {:db/id -5
+                   :block/uuid inner
+                   :block/tx-id 21
+                   :block/title "inner"
+                   :block/page -3
+                   :block/parent -4
+                   :block/order "a1"}])
+    (let [page-block (d/entity @conn [:block/uuid test-b])
+          zoomed-block (d/entity @conn [:block/uuid test-c])
+          inner-block (d/entity @conn [:block/uuid inner])
+          page-ancestors (block-breadcrumb/block-breadcrumb @conn page-block)
+          zoomed-ancestors (block-breadcrumb/block-breadcrumb @conn zoomed-block)
+          depth-limited-ancestors (block-breadcrumb/block-breadcrumb @conn inner-block 1)]
+      (is (= ["Library" "some page" "test a"]
+             (mapv :block/title page-ancestors))
+          "Page breadcrumb stays root-first and omits the current page.")
+      (is (= ["Library" "some page" "test a" "test b"]
+             (mapv :block/title zoomed-ancestors))
+          "Zoomed block breadcrumb stays root-first and includes the parent page.")
+      (is (= ["test b" "test c"]
+             (mapv :block/title depth-limited-ancestors))
+          "Truncated walks still prepend :block/page when it is not already an ancestor.")
+      (when-let [api (render-resource-api)]
+        (let [resource-key [:block-breadcrumb test-c 16]
+              response (call-resource api conn resource-key)]
+          (assert-resource-envelope @conn
+                                    resource-key
+                                    #{[:entity test-c]
+                                      [:entity (:block/uuid library)]
+                                      [:entity some-page]
+                                      [:entity test-a]
+                                      [:entity test-b]}
+                                    {:target-uuid test-c
+                                     :ancestor-uuids [(:block/uuid library) some-page test-a test-b]
+                                     :ancestors zoomed-ancestors
+                                     :ref-titles {}}
+                                    response))))))
+
 (deftest journals-resource-returns-only-ordered-uuids-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-a journal-b journal-child-a journal-grandchild]}
@@ -1099,9 +1176,10 @@
         response (block-handler/canonical-blocks @conn [resource-block])
         target (get-in response [:blocks resource-block])]
     (is (not (contains? (:blocks response) positioned-property))
-        "Property definitions stay off the row snapshot. The row inlines their UUIDs.")
-    (is (not (contains? target :block.temp/positioned-properties))
-        "Positioned chips load through :block-positioned-properties, not the row snapshot.")
+        "Inlined property definitions do not become sibling canonical snapshots.")
+    (is (= [positioned-property]
+           (mapv :block/uuid (get-in target [:block.temp/positioned-properties :block-right])))
+        "Positioned chips arrive in the same snapshot as the row.")
     (is (= "right" (:user.property/positioned target))
         "The written property value stays on the row.")
     (is (not (contains? target :block.temp/breadcrumb))
@@ -1198,23 +1276,6 @@
                          [:value :full-properties])]
         (is (some #(= property-uuid (:property-uuid %)) rows)
             "A class-configured property is rendered even when the block has no own value.")))))
-
-(deftest block-positioned-properties-resource-watches-every-candidate-definition-test
-  (when-let [api (render-resource-api)]
-    (let [{:keys [conn resource-block display-property positioned-property hidden-property]}
-          (render-resource-fixture)
-          resource-key [:block-positioned-properties resource-block :block-right]
-          response (call-resource api conn resource-key)]
-      (assert-resource-envelope
-       @conn
-       resource-key
-       #{[:entity resource-block]
-         [:property-config]
-         [:entity display-property]
-         [:entity positioned-property]
-         [:entity hidden-property]}
-       [positioned-property]
-       response))))
 
 (deftest block-bidirectional-properties-resource-returns-uuid-groups-test
   (when-let [api (render-resource-api)]
@@ -1732,6 +1793,30 @@
           (is (uuid? row))
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
+
+(deftest query-view-data-resource-returns-property-maps-for-columns-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row]} (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          _ (d/transact! conn
+                         [[:db/add (entity-id @conn view-row)
+                           :logseq.property/status
+                           :logseq.property/status.doing]])
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids [view-row]}]
+          properties (get-in (call-resource api conn resource-key)
+                             [:value :properties])
+          status (some #(when (= :logseq.property/status (:db/ident %)) %)
+                       properties)]
+      (is (seq properties))
+      (is (every? #(keyword? (:db/ident %)) properties)
+          "Query columns are built from property maps, not bare idents.")
+      (is (= "Status" (:block/title status)))
+      (is (= :default (:logseq.property/type status)))
+      (is (= #{"Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"}
+             (set (map :block/title (:property/closed-values status))))))))
 
 (deftest view-data-resource-returns-empty-rows-after-the-view-is-deleted-test
   (when-let [api (render-resource-api)]

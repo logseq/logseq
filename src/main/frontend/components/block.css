@@ -2198,12 +2198,6 @@ html.is-mac {
     }
 }
 
-.asset-image-fallback {
-  @apply inline-block max-w-full truncate text-sm opacity-70;
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
 .asset-transfer-shell {
   @apply relative inline-block w-full;
 }

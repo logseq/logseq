@@ -92,6 +92,51 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
+(defn- chosen-slash-command-visibility
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const container = document.getElementById('ui__ac-inner');
+       const chosen = document.querySelector('a.menu-link.chosen');
+       if (!container || !chosen) {
+         return JSON.stringify({visible: false, chosenText: null, scrollTop: 0});
+       }
+       const c = container.getBoundingClientRect();
+       const e = chosen.getBoundingClientRect();
+       return JSON.stringify({
+         visible: e.top >= c.top - 1 && e.bottom <= c.bottom + 1,
+         chosenText: (chosen.textContent || '').trim(),
+         scrollTop: container.scrollTop
+       });
+     })()")
+   json/keyword-keys-object-mapper))
+
+(deftest slash-command-arrow-scroll-test
+  (testing "arrow down/up keeps the chosen slash command in view"
+    (b/new-block "slash-scroll")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (dotimes [_ 20]
+      (k/arrow-down))
+    (let [after-down (chosen-slash-command-visibility)]
+      (is (seq (:chosenText after-down))
+          "arrow down should keep a slash command chosen")
+      (is (not= "Node reference" (:chosenText after-down))
+          "arrow down should move slash-command focus past the first item")
+      (is (true? (:visible after-down))
+          "chosen slash command should stay visible after arrow down")
+      (is (pos? (:scrollTop after-down))
+          "slash-command list should auto-scroll when focus moves out of view"))
+    (dotimes [_ 20]
+      (k/arrow-up))
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (let [after-up (chosen-slash-command-visibility)]
+      (is (true? (:visible after-up))
+          "chosen slash command should stay visible after arrow up")
+      (is (zero? (:scrollTop after-up))
+          "slash-command list should scroll back when focus returns to the top"))))
+
 (deftest page-reference-test
   (testing "Page reference"
     (b/new-blocks ["b1" ""])

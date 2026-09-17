@@ -31,14 +31,11 @@
                    {:data-bottom-pill (boolean (:bottom-pill? opts))}
                    "Show hidden properties"])
                 db-hooks/use-resource-snapshot
-                (fn [resource-key]
-                  (is (= [:block-positioned-properties (:block/uuid block) :block-below]
-                         resource-key))
-                  {:status :ready :value properties})
-                db-hooks/use-blocks (fn [property-uuids]
-                                      (mapv property-by-uuid property-uuids))
-                db-hooks/use-block (fn [property-uuid]
-                                     (property-by-uuid property-uuid))
+                (fn [key]
+                  (is false (str "Positioned properties must not load another resource: " key))
+                  {:status :loading})
+                db-hooks/use-blocks (fn [_] (is false "Property definitions must arrive with the block") nil)
+                db-hooks/use-block (fn [_] (is false "First paint must not load another block") nil)
                 property-component/property-key-cp (fn [_block property _opts]
                                                      [:span.property-key (:block/title property)])
                 property-value/property-value (fn [_block property _opts]
@@ -51,7 +48,8 @@
     (render-static
      (block/block-positioned-properties
       config
-      block
+      (assoc block :block.temp/positioned-properties
+             {:block-below (mapv property-by-uuid properties)})
       :block-below))))
 
 (deftest icon-only-block-does-not-emit-bottom-properties-row
@@ -148,3 +146,17 @@
         "Nested outliner blocks do not render Show hidden properties")
     (is (string/includes? root-markup "bottom-property-hidden-toggle-btn")
         "Zoom-in root still renders Show hidden properties")))
+
+(deftest tags-render-on-first-paint-without-loading-tag-blocks-test
+  (let [tag {:db/id 1 :block/uuid (random-uuid) :db/ident :user.class/Visible
+             :block/title "Visible tag" :block/name "visible tag"}
+        hidden (assoc tag :db/id 2 :block/uuid (random-uuid)
+                      :block/title "Hidden tag" :logseq.property.class/hide-from-node true)]
+    (with-redefs [db-hooks/use-block (fn [_] nil)
+                  block/page-inner (fn [_ page _children _label] [:span (:block/title page)])
+                  hooks/use-memo (fn [f _] (f))
+                  hooks/use-atom (fn [a] [@a (fn [_])])]
+      (let [markup (render-static (block/tags-cp {} {:block/raw-title "Block"
+                                                    :block/tags [tag hidden]}))]
+        (is (string/includes? markup "Visible tag"))
+        (is (not (string/includes? markup "Hidden tag")))))))

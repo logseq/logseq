@@ -343,6 +343,7 @@
         cover-column (some #(when (= :user.property/cover (:id %)) %) columns)]
     (is (= :asset (get-in cover-column [:property :logseq.property/type]))
         "Cover columns keep the :asset type used by Gallery/Table.")
+    (is (true? (views/gallery-cover-property-column? cover-column)))
     (is (= :user.property/cover
            (#'views/gallery-asset-property-ident
             {:logseq.property/view-for {:db/ident :user.class/Movie
@@ -356,6 +357,101 @@
            (:logseq.property.asset/type
             (views/gallery-card-asset-block row :user.property/cover)))
         "Hydrated Cover must keep the type/filename fields asset-cp needs.")))
+
+(defn- test-gallery-columns
+  [properties]
+  (views/build-columns
+   {:view-parent {:db/ident :user.class/Book}}
+   properties
+   {:with-object-name? false
+    :add-tags-column? false}))
+
+(defn- test-class-view
+  []
+  {:logseq.property/view-for {:db/ident :user.class/Book
+                              :block/tags [{:db/ident :logseq.class/Tag}]}
+   :logseq.property.view/feature-type :class-objects})
+
+(deftest gallery-cover-picker-includes-url-properties-test
+  (let [url-property {:db/ident :user.property/cover
+                      :block/title "Cover"
+                      :logseq.property/type :url}
+        website-property {:db/ident :user.property/website
+                          :block/title "Website"
+                          :logseq.property/type :url}
+        title-property {:db/ident :user.property/subtitle
+                        :block/title "Subtitle"
+                        :logseq.property/type :default}
+        asset-property {:db/ident :user.property/poster
+                        :block/title "Poster"
+                        :logseq.property/type :asset}
+        url-columns (test-gallery-columns [url-property title-property])
+        mixed-columns (test-gallery-columns [url-property asset-property])
+        url-column (some #(when (= :user.property/cover (:id %)) %) url-columns)
+        website-column (some #(when (= :user.property/website (:id %)) %)
+                             (test-gallery-columns [website-property]))
+        title-column (some #(when (= :user.property/subtitle (:id %)) %) url-columns)
+        asset-column (some #(when (= :user.property/poster (:id %)) %) mixed-columns)]
+    (is (true? (views/gallery-cover-property-column? url-column))
+        "URL properties are eligible gallery covers.")
+    (is (true? (views/gallery-cover-property-column? website-column)))
+    (is (true? (views/gallery-cover-property-column? asset-column))
+        "Asset properties stay eligible.")
+    (is (false? (views/gallery-cover-property-column? title-column))
+        "Text properties are not cover sources.")
+    (is (= :user.property/cover
+           (#'views/gallery-asset-property-ident (test-class-view) url-columns))
+        "A lone URL cover property is auto-selected.")
+    (is (nil? (#'views/gallery-asset-property-ident (test-class-view) mixed-columns))
+        "Asset and URL covers are not auto-selected when both exist.")
+    (is (= :user.property/website
+           (#'views/gallery-asset-property-ident
+            (assoc (test-class-view)
+                   :logseq.property.view/gallery-asset-property-ident :user.property/website)
+            (test-gallery-columns [website-property title-property])))
+        "A configured URL property is used as the cover source.")))
+
+(deftest gallery-card-cover-url-extracts-remote-image-urls-test
+  (let [image-url "https://picsum.photos/400/300.jpg"]
+    (is (= image-url
+           (views/gallery-card-cover-url
+            {:user.property/cover image-url}
+            :user.property/cover))
+        "Plain URL strings can supply the card image.")
+    (is (= image-url
+           (views/gallery-card-cover-url
+            {:user.property/cover {:logseq.property/value image-url}}
+            :user.property/cover))
+        "Ref URL values use :logseq.property/value.")
+    (is (= image-url
+           (views/gallery-card-cover-url
+            {:user.property/cover {:block/title image-url}}
+            :user.property/cover)))
+    (is (= image-url
+           (views/gallery-card-cover-url
+            {:user.property/cover #{{:logseq.property/value image-url}
+                                    {:logseq.property/value ""}}}
+            :user.property/cover))
+        "Many-valued URL properties use the first remote image URL.")
+    (is (nil? (views/gallery-card-cover-url
+               {:user.property/cover "  "}
+               :user.property/cover)))
+    (is (nil? (views/gallery-card-cover-url
+               {:user.property/cover nil}
+               :user.property/cover)))
+    (is (nil? (views/gallery-card-cover-url
+               {:user.property/cover "javascript:alert(1)"}
+               :user.property/cover)))
+    (is (nil? (views/gallery-card-cover-url
+               {:user.property/cover "file:///tmp/poster.jpg"}
+               :user.property/cover)))
+    (is (nil? (views/gallery-card-cover-url
+               {:user.property/cover {:logseq.property/value "not-a-url"}}
+               :user.property/cover)))
+    (is (nil? (views/gallery-card-cover-url
+               {:block/title "Sample Book"}
+               :block/uuid))
+        "Asset-class :block/uuid covers are not treated as URL covers.")))
 
 (deftest view-row-ids-flatten-only-typed-uuid-payloads-test
   (let [row-a (random-uuid)

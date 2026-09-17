@@ -229,8 +229,7 @@
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
         [load-failed? set-load-failed!] (hooks/use-state false)
-        *prev-src (hooks/use-ref src)
-        display-title (block-asset/display-asset-title asset-block)]
+        *prev-src (hooks/use-ref src)]
     (when (not= (hooks/deref *prev-src) src)
       (hooks/set-ref! *prev-src src)
       (set-load-failed! false))
@@ -255,9 +254,6 @@
                             (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
-          fallback-label (if (string/blank? display-title)
-                           (block-asset/display-url-title (or title src))
-                           display-title)
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
@@ -272,7 +268,7 @@
         :ref *el-ref}
        (block-image/image-or-fallback
         {:src src'
-         :title (or (not-empty fallback-label) title)
+         :title title
          :gallery-view? gallery-view?
          :metadata metadata
          :load-failed? load-failed?
@@ -600,9 +596,7 @@
           (contains? config/video-formats ext)
           (asset-video config src metadata)
 
-          (or (contains? (common-config/img-formats) ext)
-              (text-util/image-url? href)
-              (text-util/image-url? src))
+          (contains? (common-config/img-formats) ext)
           (resizable-image config title src metadata full_text true)
 
           (= ext :pdf)
@@ -1443,11 +1437,10 @@
      ;; markdown
      (string/starts-with? (string/triml full-text) "!")
 
-     ;; image http link, including extension-less Amazon/IMDb/TMDB posters
+     ;; image http link
      (and (or (string/starts-with? full-text "http://")
               (string/starts-with? full-text "https://"))
-          (or (text-util/media-link? media-formats s)
-              (text-util/image-url? s))))))
+          (text-util/media-link? media-formats s)))))
 
 (defn- relative-assets-path->absolute-path
   [path]
@@ -1540,12 +1533,10 @@
     (page-reference config s label)
 
     (path/protocol-url? s)
-    (if (show-link? s (or full_text s))
-      (media-link config url s label metadata full_text)
-      (->elem :a {:href s
-                  :data-href s
-                  :target "_blank"}
-              (map-inline config label)))
+    (->elem :a {:href s
+                :data-href s
+                :target "_blank"}
+            (map-inline config label))
 
     (show-link? s full_text)
     (media-link config url s label metadata full_text)
@@ -2009,7 +2000,7 @@
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         (if (common-util/uuid-string? s)
-          (page-cp (assoc config :tag? true) {:block/name s})
+          (page-cp (assoc config :tag? true) {:block/uuid (uuid s)})
           [:span (str "#" s)])))
 
     ["Emphasis" [[kind] data]]
@@ -2283,7 +2274,7 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (and (not (entity/url-property-value? block))
+        collapsable? (and (not (entity/leaf-property-value? block))
                           (editor-handler/collapsable? uuid {:semantic? true
                                                             :block block
                                                             :ignore-children? page-title?
@@ -2406,7 +2397,7 @@
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (and (not (entity/url-property-value? block))
+        has-children? (and (not (entity/leaf-property-value? block))
                            (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
@@ -2438,16 +2429,11 @@
 
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
-  (if (and (entity/url-property-value? block)
-           (text-util/image-url? (:block/title block)))
-    (let [url (:block/title block)]
-      [:span.block-title-wrap.property-url-image
-       (image-link config nil url nil nil url)])
-    (let [format :markdown
-          block (if-not (:block.temp/ast-title block)
-                  (merge block (block/parse-title-and-body uuid format (:block/title block)))
-                  block)
-          block-ast-title (:block.temp/ast-title block)
+  (let [format :markdown
+        block (if-not (:block.temp/ast-title block)
+                (merge block (block/parse-title-and-body uuid format (:block/title block)))
+                block)
+        block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         block-ref? (:block-ref? config)
@@ -2511,7 +2497,7 @@
                          (assoc :parent-heading heading))]
            (if video-title?
              (video-inline-segments-cp config' block-ast-title)
-             (map-inline config' block-ast-title))))))))))
+             (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
@@ -2857,7 +2843,8 @@
      (if (util/mobile?)
        (page-cp (assoc config
                        :disable-preview? true
-                       :tag? true)
+                       :tag? true
+                       :skip-async-load? true)
                 tag)
        [:div.flex.items-center
         {:on-mouse-over #(reset! *hover? true)
@@ -2900,6 +2887,7 @@
         (page-cp (assoc config
                         :disable-preview? true
                         :tag? true
+                        :skip-async-load? true
                         :hide-tag-symbol? true)
                  tag)])]))
 
@@ -2943,6 +2931,7 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
+                                                                      :skip-async-load? true
                                                                       :disable-preview? true) tag)]))
                                                  popup-opts))}
           (for [tag (take 2 block-tags)]
@@ -2950,6 +2939,7 @@
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
                               :tag? true
+                              :skip-async-load? true
                               :disable-preview? true
                               :disable-click? true) tag)])
           [:div.text-sm.opacity-50.ml-1
@@ -3122,20 +3112,18 @@
        show-add-property-button?)))
 
 (hsx/defc positioned-property-row
-  [block property-uuid opts]
-  (let [property (db-hooks/use-block property-uuid)]
-    (when (and property
-               (not (and (= :block-below (:property-position opts))
-                         (hidden-block-below-property? property))))
-      (if (= :block-below (:property-position opts))
-        (bottom-property-pill-cp block property opts)
-        (pv/property-value block property (assoc opts :show-tooltip? true))))))
+  [block property opts]
+  (when-not (and (= :block-below (:property-position opts))
+                 (hidden-block-below-property? property))
+    (if (= :block-below (:property-position opts))
+      (bottom-property-pill-cp block property opts)
+      (pv/property-value block property (assoc opts :show-tooltip? true)))))
 
 (defn- bottom-property-pill-items
-  [block property-uuids opts]
-  (mapv (fn [property-uuid]
-          (positioned-property-row block property-uuid opts))
-        property-uuids))
+  [block properties opts]
+  (mapv (fn [property]
+          (positioned-property-row block property opts))
+        properties))
 
 (defn- measure-bottom-pills-overflow!
   [^js el *overflow?]
@@ -3165,9 +3153,9 @@
      label)))
 
 (hsx/defc block-below-positioned-properties-cp
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count property-uuids)])
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
@@ -3184,7 +3172,7 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) property-uuids show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3201,7 +3189,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block property-uuids (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
@@ -3220,26 +3208,22 @@
                                                      :tab-index 0)))]]))
 
 (hsx/defc block-below-positioned-properties-gate
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
-  (when-let [properties (db-hooks/use-blocks property-uuids)]
-    (let [visible-property-uuids (into []
-                                       (comp (remove hidden-block-below-property?)
-                                             (keep :block/uuid))
-                                       properties)]
-      (when (show-block-below-properties-row?
-             visible-property-uuids
-             {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
-              :show-hidden-properties-control? show-hidden-properties-control?
-              :show-add-property-button? show-add-property-button?})
-        [block-below-positioned-properties-cp block
-         visible-property-uuids
-         opts
-         show-hidden-properties-pill-toggle?
-         show-hidden-properties-control?
-         show-add-property-button?]))))
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [visible-properties (into [] (remove hidden-block-below-property?) properties)]
+    (when (show-block-below-properties-row?
+           visible-properties
+           {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+            :show-hidden-properties-control? show-hidden-properties-control?
+            :show-add-property-button? show-add-property-button?})
+      [block-below-positioned-properties-cp block
+       visible-properties
+       opts
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?])))
 
 (hsx/defc positioned-properties-content
-  [config block position property-uuids]
+  [config block position properties]
   (let [opts (merge config
                     {:icon? true
                      :page-cp page-cp
@@ -3264,7 +3248,7 @@
         :block-below
         [block-below-positioned-properties-gate
          block
-         property-uuids
+         properties
          opts
          show-hidden-properties-pill-toggle?
          show-hidden-properties-control?
@@ -3272,19 +3256,14 @@
 
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
-         (for [property-uuid property-uuids]
-           ^{:key (str (:block/uuid block) "-" property-uuid)}
-           (positioned-property-row block property-uuid opts))])))
+         (for [property properties]
+           ^{:key (str (:block/uuid block) "-" (:block/uuid property))}
+           (positioned-property-row block property opts))])))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (let [block-uuid (:block/uuid block)
-        {:keys [status value]}
-        (db-hooks/use-resource-snapshot
-         (when (uuid? block-uuid)
-           [:block-positioned-properties block-uuid position]))]
-    (when (and (= :ready status) (seq value))
-      [positioned-properties-content config block position value])))
+  (when-let [properties (seq (get-in block [:block.temp/positioned-properties position]))]
+    [positioned-properties-content config block position properties]))
 
 (hsx/defc loaded-block-reactions
   [block]
@@ -4661,7 +4640,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
-                   (entity/url-property-value? block)
+                   (entity/leaf-property-value? block)
                    table?
                    property?
                    comments-area?
