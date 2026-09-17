@@ -210,7 +210,8 @@
                (conj [:tasks]))]
     (if (or opaque? (empty? watch-keys))
       common/watch-all
-      watch-keys)))
+      ;; Recycle changes deleted-at without touching query attrs.
+      (conj watch-keys [:attr :logseq.property/deleted-at]))))
 
 (defn- query-watch-keys
   [db query-spec]

@@ -26,7 +26,9 @@
         keys (cond-> (into #{} (map (fn [attr] [:attr attr])) attrs)
                (seq task-attrs) (into (map (fn [attr] [:task-attr attr])) task-attrs)
                tasks? (conj [:tasks]))]
-    (if (or opaque? (empty? keys)) #{[:graph]} keys)))
+    (if (or opaque? (empty? keys))
+      #{[:graph]}
+      (conj keys [:attr :logseq.property/deleted-at]))))
 
 (deftest task-query-uses-semantic-watch-key-test
   (let [query-spec {:kind :datalog
