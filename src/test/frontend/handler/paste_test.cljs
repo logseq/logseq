@@ -417,6 +417,47 @@
                                                        :else ""))}})]
         (is (= expected-blocks @actual-blocks))))))
 
+(deftest-async editor-on-paste-does-not-insert-renderer-origin-url
+  (testing "Paste of the privileged renderer origin must not become a block title"
+    (let [inserted (atom [])
+          clipboard "lsp://logseq.com/index.html#/graph"]
+      (p/with-redefs
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text]
+                                  (swap! inserted conj text)
+                                  (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        html-parser/convert (constantly nil)
+        paste-handler/get-copied-blocks (constantly (p/resolved nil))
+        utils/getCopiedBlocksFromMemory (constantly nil)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (fn [kind]
+                                                            (when (= kind "text")
+                                                              clipboard))
+                                                 :files #js []}})]
+          (is (nil? result))
+          (is (empty? @inserted)))))))
+
+(deftest-async editor-on-paste-still-inserts-https-url
+  (testing "A normal https URL still pastes"
+    (let [clipboard "https://example.com/article"
+          expected-paste "https://example.com/article"]
+      (p/with-redefs
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        html-parser/convert (constantly nil)
+        paste-handler/get-copied-blocks (constantly (p/resolved nil))
+        utils/getCopiedBlocksFromMemory (constantly nil)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (fn [kind]
+                                                            (when (= kind "text")
+                                                              clipboard))
+                                                 :files #js []}})]
+          (is (= expected-paste result)))))))
+
 (deftest-async editor-on-paste-with-selection-in-property
   (let [clipboard "after"
         expected-paste "after"

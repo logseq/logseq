@@ -61,3 +61,26 @@
         (block-drop/handle-data-transfer-drop! event (:block/uuid target-block) target-block nil)
         (is (= 1 @asset-calls))
         (is (zero? @text-calls))))))
+
+(deftest handle-data-transfer-drop-skips-renderer-origin-url-test
+  (testing "dropping the privileged renderer origin does not insert a block title"
+    (let [inserted (atom [])
+          target-block {:block/uuid #uuid "00000000-0000-0000-0000-000000000003"
+                        :block/title "Drop target"}
+          {:keys [event]}
+          (drop-event ["text/plain"] [] "lsp://logseq.com/index.html#/graph")]
+      (with-redefs [editor-handler/api-insert-new-block! (fn [content & _]
+                                                           (swap! inserted conj content))]
+        (block-drop/handle-data-transfer-drop! event (:block/uuid target-block) target-block :sibling)
+        (is (empty? @inserted)))))
+
+  (testing "dropping a normal https URL still inserts a block"
+    (let [inserted (atom [])
+          target-block {:block/uuid #uuid "00000000-0000-0000-0000-000000000004"
+                        :block/title "Drop target"}
+          {:keys [event]}
+          (drop-event ["text/plain"] [] "https://example.com/article")]
+      (with-redefs [editor-handler/api-insert-new-block! (fn [content & _]
+                                                           (swap! inserted conj content))]
+        (block-drop/handle-data-transfer-drop! event (:block/uuid target-block) target-block :sibling)
+        (is (= ["https://example.com/article"] @inserted))))))

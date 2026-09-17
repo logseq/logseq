@@ -20,11 +20,12 @@
             [electron.release-warning :as release-warning]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.url :refer [logseq-url-handler]]
+            [electron.url :refer [handle-renderer-origin-url! logseq-url-handler]]
             [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
+            [frontend.util.app-url :as app-url]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]))
 
@@ -61,8 +62,12 @@
   (when-let [parsed-url (try (js/URL. url)
                              (catch :default e
                                (logger/info "upon opening non-url" {:error e})))]
-    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-      (logseq-url-handler win parsed-url))))
+    (cond
+      (= (str LSP_SCHEME ":") (.-protocol parsed-url))
+      (logseq-url-handler win parsed-url)
+
+      (app-url/privileged-renderer-url? url)
+      (handle-renderer-origin-url! win url))))
 
 (defn- register-default-protocol-client!
   "Register Logseq as the default handler for the custom protocol.
@@ -280,7 +285,7 @@
 (defn- find-deeplink-url
   "Extract a deeplink URL from a sequence of command-line argument strings."
   [args]
-  (some #(when (string/starts-with? % (str LSP_SCHEME ":")) %) args))
+  (some #(when (app-url/protocol-open-url? %) %) args))
 
 (defn- setup-deeplink! []
   ;; macOS: app fires open-url for custom-protocol links when the app is already running
