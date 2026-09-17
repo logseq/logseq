@@ -23,7 +23,13 @@
   (util/set-tag (str title-prefix 2)))
 
 (deftest new-tag-test
-  (add-new-tags "tag-test-"))
+  (add-new-tags "tag-test-")
+  (util/exit-edit)
+  (assert/assert-is-visible ".ls-block .block-title-wrap a.tag:has-text('#tag-test-1')")
+  (assert/assert-have-count
+   (loc/filter ".ls-block .block-title-wrap"
+               :has-text #"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+   0))
 
 (deftest page-title-tag-autocomplete-test
   (let [tag-name "page-title-autocomplete-tag"]
