@@ -2427,6 +2427,18 @@
 
 (declare src-cp)
 
+(defn- ast-displayed-math-formula
+  [ast]
+  (some (fn [form]
+          (when (and (vector? form)
+                     (= "Displayed_Math" (first form)))
+            (not-empty (string/trim (second form)))))
+        (tree-seq coll? seq ast)))
+
+(defn- page-ref-math-cp
+  [formula]
+  (latex/latex formula false true))
+
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
   (let [format :markdown
@@ -2495,8 +2507,16 @@
                          (assoc :node-ref-link-only? true)
                          (integer? heading)
                          (assoc :parent-heading heading))]
-           (if video-title?
+           (cond
+             video-title?
              (video-inline-segments-cp config' block-ast-title)
+
+             (and (:page-ref? config) (empty? block-ast-title))
+             (if-let [formula (ast-displayed-math-formula (:block.temp/ast-body block))]
+               [(page-ref-math-cp formula)]
+               (map-inline config' block-ast-title))
+
+             :else
              (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
@@ -2600,8 +2620,10 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      [:div.math-block
-       (latex/latex (:block/title block) true true)]
+      (if (:page-ref? config)
+        (page-ref-math-cp (:block/title block))
+        [:div.math-block
+         (latex/latex (:block/title block) true true)])
 
       (:logseq.property/query-block? block)
       (query-builder-component/builder block {})
