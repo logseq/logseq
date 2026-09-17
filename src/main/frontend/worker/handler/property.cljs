@@ -128,7 +128,8 @@
         class-options (get-all-classes db {:except-root-class? true
                                            :except-private-tags? (not (contains? #{:logseq.property/template-applied-to}
                                                                                  (:db/ident property)))})
-        extends-class-options (get-all-classes db {:except-extends-hidden-tags? true})
+        extends-class-options (get-all-classes db {:except-root-class? true
+                                                   :except-extends-hidden-tags? true})
         classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))
         tag-class (some (fn [class]
