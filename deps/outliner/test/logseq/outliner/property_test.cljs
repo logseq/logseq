@@ -724,3 +724,25 @@
     (is (= [:logseq.class/Root]
            (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
         "Extends property is restored back to Root")))
+
+(deftest extends-picker-ignores-root-tag
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Parent {}
+                         :Child {}}})
+        child-id (:db/id (d/entity @conn :user.class/Child))
+        parent-id (:db/id (d/entity @conn :user.class/Parent))
+        root-id (:db/id (d/entity @conn :logseq.class/Root))
+        extends-idents (fn []
+                         (:logseq.property.class/extends
+                          (db-test/readable-properties (d/entity @conn :user.class/Child))))]
+    (testing "A class with no other parent still extends Root internally"
+      (is (= [:logseq.class/Root] (extends-idents))))
+
+    (testing "Setting Extends to another class retracts Root"
+      (outliner-property/batch-set-property! conn [child-id] :logseq.property.class/extends parent-id)
+      (is (= [:user.class/Parent] (extends-idents))))
+
+    (testing "Adding Root via the picker path is ignored"
+      (outliner-property/batch-set-property! conn [child-id] :logseq.property.class/extends root-id)
+      (is (= [:user.class/Parent] (extends-idents))
+          "Root Tag is not added alongside another parent"))))
