@@ -101,14 +101,37 @@
                           :render-data? true
                           :root-render-data? true
                           :include-collapsed-children? true
+                          :include-property-block? true
                           :skip-refresh? true}}]]
     (is (= [{:id id
              :opts {:all? true
                     :children? true
                     :render-data? true
                     :root-render-data? true
-                    :include-collapsed-children? true}}]
+                    :include-collapsed-children? true
+                    :include-property-block? true}}]
            (#'db-async/worker-get-blocks-requests requests)))))
+
+(deftest get-block-with-children-forwards-include-property-block-to-worker-test
+  (async done
+         (let [seen (atom nil)]
+           (p/with-redefs [state/<invoke-db-worker
+                           (fn [api _graph requests]
+                             (is (= :thread-api/get-blocks api))
+                             (reset! seen requests)
+                             (p/resolved [{:id 1
+                                           :block {:db/id 1}
+                                           :children []}]))]
+             (-> (p/let [_ (db-async/<get-block-with-children
+                            "logseq_db_async_copy_blocks"
+                            1
+                            {:include-property-block? true})]
+                   (is (true? (get-in @seen [0 :opts :include-property-block?]))
+                       "Cut/copy must keep include-property-block? on the worker get-blocks RPC."))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))
 
 (deftest complete-trees-return-independently-while-ordinary-blocks-stay-batched-test
   (async done
