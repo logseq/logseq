@@ -77,3 +77,7 @@
     (is (not (config/valid-sync-server-url? "not a url")))
     (is (not (config/valid-sync-server-url? "")))
     (is (not (config/valid-sync-server-url? nil)))))
+
+(deftest jpeg-xl-is-an-image-format
+  (is (contains? (common-config/img-formats) :jxl))
+  (is (contains? config/image-formats :jxl)))
