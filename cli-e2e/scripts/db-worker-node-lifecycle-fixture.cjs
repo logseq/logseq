@@ -83,6 +83,9 @@ const mode = args[args.indexOf('--mode') + 1];
   await barrier('before-publication');
   const server = http.createServer((request, response) => {
     if (request.url === '/healthz') {
+      // Simulate a published worker that is still alive after sleep/resume but
+      // never answers health checks, matching a frozen or reset localhost socket.
+      if (mode === 'ready-then-hang' && fs.existsSync(path.join(root, 'hang-health'))) return;
       response.end(JSON.stringify({ ...lock, 'root-dir': runtime.root, host: '127.0.0.1',
         port: server.address().port, status: 'ready',
         ...(option('--health-field') ? { [option('--health-field')]: JSON.parse(option('--health-value')) } : {}) }));

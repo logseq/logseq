@@ -225,6 +225,10 @@ function request(port, endpoint, method = 'GET', headers = {}) {
     req.end();
   });
 }
+function transientRequestError(error) {
+  return !!error && (['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
+    || error.message === 'Worker request timeout');
+}
 function validateRegistration(ctx, current, record) {
   if (!Number.isSafeInteger(record.pid) || record.pid <= 0 || !record.ticket || !record.owner
       || !record.root || record.generation !== current.generation || record.repo !== ctx.repo
@@ -290,8 +294,7 @@ async function discover(ctx, current) {
         let value;
         try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
         catch (error) {
-          if (!(error instanceof SyntaxError) && !['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
-              && error.message !== 'Worker request timeout') throw error;
+          if (!(error instanceof SyntaxError) && !transientRequestError(error)) throw error;
         }
         if (value?.repo && graphName(value.repo) === ctx.repo
             && (!value.storage || sameStorage(ctx, value.storage)))
@@ -349,7 +352,7 @@ async function terminate(ctx, target, deleting) {
       await health(ctx, target, target.port);
       responsive = true;
     } catch (error) {
-      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
+      if (!transientRequestError(error)) throw error;
     }
   }
   await shutdownAndWait(ctx, target, deleting, responsive);
@@ -363,7 +366,7 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
         deleting ? { 'x-logseq-graph-deleting': 'true' } : {});
       if (response.status !== 200) fail('Worker rejected shutdown');
     } catch (error) {
-      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
+      if (!transientRequestError(error)) throw error;
     }
   }
   for (const [stage, milliseconds] of [['graceful', 5000], ['SIGTERM', 1000], ['SIGKILL', 2000]]) {
@@ -581,7 +584,10 @@ async function cancelStartup(ctx, record) {
     writeJSON(ctx.stateFile, current);
   });
 }
-async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
+async function startGraph(options) {
+  return startGraphAttempt(options, false);
+}
+async function startGraphAttempt({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }, replaced) {
   const ctx = context(storage, repo);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
@@ -626,6 +632,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       return spawned;
     });
     const deadline = Date.now() + 30000;
+    let transients = 0;
     for (;;) {
       checkAdmission({ ...ctx, ...record });
       if (!pidExists(record.pid)) fail('Worker exited before becoming ready', 'server-start-failed');
@@ -635,8 +642,20 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
         const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
         if (!lock) fail('Worker has no canonical graph lock', 'server-start-failed');
         validateLock(ctx, lock, { ...record, lock: runtime?.lock || record.lock });
-        const value = await health(ctx, { ...record, lock }, port);
-        if (value.status === 'ready') return { ...value, generation: record.generation };
+        try {
+          const value = await health(ctx, { ...record, lock }, port);
+          transients = 0;
+          if (value.status === 'ready') return { ...value, generation: record.generation };
+        } catch (error) {
+          if (!transientRequestError(error)) throw error;
+          // A published worker that no longer answers is unresponsive, not still
+          // starting. Replace it instead of failing recovery after sleep/resume.
+          if (!created && !replaced && ++transients >= 2) {
+            try { await stopGraph(storage, repo, owner); }
+            catch (stopError) { if (stopError.code !== 'server-not-found') throw stopError; }
+            return startGraphAttempt({ storage, repo, script, owner, createEmpty, generation, extraArgs }, true);
+          }
+        }
       }
       if (Date.now() >= deadline) fail('Worker failed to become ready', 'server-start-failed');
       await sleep(50);

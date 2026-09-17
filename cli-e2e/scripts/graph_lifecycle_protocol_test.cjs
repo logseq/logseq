@@ -510,6 +510,26 @@ for (const owner of ['cli', 'electron']) {
   });
 }
 
+test('startGraph replaces a published worker whose health endpoint is unresponsive', async t => {
+  const root = fixture(t);
+  const store = storage(root);
+  const script = path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs');
+  await lifecycle.createGraph(store, 'demo');
+  const first = await lifecycle.startGraph({ storage: store, repo: 'demo', script,
+    extraArgs: ['--mode', 'ready-then-hang'] });
+  t.after(() => { if (lifecycle.pidExists(first.pid)) process.kill(first.pid, 'SIGKILL'); });
+  fs.writeFileSync(path.join(root, 'hang-health'), '1');
+  const started = performance.now();
+  const second = await lifecycle.startGraph({ storage: store, repo: 'demo', script,
+    extraArgs: ['--mode', 'normal'] });
+  t.after(() => { if (lifecycle.pidExists(second.pid)) process.kill(second.pid, 'SIGKILL'); });
+  assert.notEqual(second.pid, first.pid);
+  assert.equal(lifecycle.pidExists(first.pid), false);
+  assert.equal(second.status, 'ready');
+  assert.ok(performance.now() - started < 15000, 'unresponsive reuse must not wait out the full ready deadline');
+  await lifecycle.stopGraph(store, 'demo', 'cli');
+});
+
 test('independent unresolved publications are probed concurrently', async t => {
   const http = require('node:http');
   const root = fixture(t);
