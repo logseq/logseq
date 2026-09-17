@@ -1053,7 +1053,7 @@
                             (restore-electron-failover-test-env! originals)
                             (done)))))))
 
-(deftest electron-sse-error-triggers-runtime-recovery
+(deftest electron-sse-error-probes-runtime-and-keeps-healthy-worker-client
   (async done
     (let [results (atom [])
           events (atom [])
@@ -1071,7 +1071,7 @@
                       :notifications notifications
                       :sse sse
                       :ipc-calls ipc-calls})]
-      (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")
+      (-> (p/let [client (ensure-remote! "logseq_db_graph_a")
                   on-error @(:on-error sse)
                   _ (is (fn? on-error))
                   _ (on-error (js/Error. "connect ECONNREFUSED"))
@@ -1081,8 +1081,14 @@
             (is (= [] @events))
             (is (= [] @notifications))
             (is (= 1 @(:close-count sse)))
+            (is (= 1 @(:open-count sse)))
+            (is (= 1 (count @(:scheduled sse)))
+                "The existing client keeps its own SSE reconnect")
+            (is (identical? client @persist-db/remote-db))
+            (is (= {:request-failures 0 :recovery-triggered? false}
+                   (select-keys @persist-db/remote-runtime-state
+                                [:request-failures :recovery-triggered?])))
             (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                    ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                     ["db-worker-runtime" "logseq_db_graph_a"]]
                    @ipc-calls)))
           (p/catch (fn [e]
@@ -1116,7 +1122,6 @@
                  (is (= [] @current-repo-updates))
                  (is (= [] @notifications))
                  (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls)))
                (p/catch (fn [e]
@@ -1154,7 +1159,6 @@
                  (is (= [] @current-repo-updates))
                  (is (= [] @notifications))
                  (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls)))
                (p/catch (fn [e]
@@ -1186,7 +1190,6 @@
                  (is (= [] @notifications))
                  (is (= "logseq_db_graph_a" (state/get-current-repo)))
                  (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls)))
                (p/catch (fn [e]
@@ -1246,10 +1249,11 @@
                  (is (= [] @current-repo-updates))
                  (is (= [] @events))
                  (is (= "logseq_db_graph_a" (state/get-current-repo)))
-                 (is (= [["releaseDbWorkerRuntime" "logseq_db_graph_a"]
-                         ["db-worker-runtime" "logseq_db_graph_a"]]
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls))
                  (is (= ["logseq_db_graph_a"] @stop-calls))
+                 (is (nil? @persist-db/remote-db))
+                 (is (nil? @persist-db/remote-runtime-state))
                  (is (= 1 (count @notifications)))
                  (is (= :error (second (first @notifications)))))
                (p/catch (fn [e]
@@ -1264,7 +1268,79 @@
                             (reset-runtime-state!)
                             (done)))))))
 
-(deftest electron-list-db-runtime-recovery-restarts-current-repo
+(deftest electron-runtime-recovery-keeps-client-for-healthy-worker
+  (async done
+         (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
+               ipc-calls (atom [])
+               start-calls (atom [])
+               stop-calls (atom [])
+               notifications (atom [])
+               session-id "session-a"
+               wrapped-worker (fn [& _] nil)
+               client (assoc (->FakeRemote "logseq_db_graph_a" wrapped-worker)
+                             :client {:base-url "http://127.0.0.1:9101" :auth-token nil})
+               original-state (state/get-state)
+               original-ipc ipc/ipc
+               original-start! remote/start!
+               original-stop! remote/stop!
+               original-notification-show! notification/show!]
+           (reset-runtime-state!)
+           (state/replace-state! (assoc original-state :git/current-repo "logseq_db_graph_a"))
+           (reset! persist-db/remote-db client)
+           (reset! persist-db/remote-repo "logseq_db_graph_a")
+           (reset! state/*db-worker wrapped-worker)
+           (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                    :client client
+                                                    :session-id session-id
+                                                    :request-failures 1
+                                                    :recovery-triggered? true})
+           (set! ipc/ipc (fn [channel repo opts]
+                           (swap! ipc-calls conj [channel repo opts])
+                           (case channel
+                             "db-worker-runtime"
+                             (p/resolved {:base-url "http://127.0.0.1:9101"
+                                          :auth-token nil
+                                          :repo repo
+                                          :generation "gen-a"})
+
+                             (p/resolved nil))))
+           (set! remote/start! (fn [{:keys [repo]}]
+                                 (swap! start-calls conj repo)
+                                 (->FakeRemote repo (fn [& _] nil))))
+           (set! remote/stop! (fn [client]
+                                (swap! stop-calls conj (:repo client))
+                                (p/resolved true)))
+           (set! notification/show! (fn [content status]
+                                      (swap! notifications conj [content status])
+                                      nil))
+           (-> (p/let [_ (recovery! "logseq_db_graph_a" client session-id)
+                       _ (p/delay 0)]
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a" {:generation nil}]]
+                        @ipc-calls)
+                     "Recovery asks the main process to probe the worker instead of releasing it")
+                 (is (= [] @start-calls))
+                 (is (= [] @stop-calls))
+                 (is (= [] @notifications))
+                 (is (identical? client @persist-db/remote-db))
+                 (is (= wrapped-worker @state/*db-worker))
+                 (is (= {:repo "logseq_db_graph_a"
+                         :client client
+                         :session-id session-id
+                         :request-failures 0
+                         :recovery-triggered? false}
+                        @persist-db/remote-runtime-state)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (state/replace-state! original-state)
+                            (set! ipc/ipc original-ipc)
+                            (set! remote/start! original-start!)
+                            (set! remote/stop! original-stop!)
+                            (set! notification/show! original-notification-show!)
+                            (reset-runtime-state!)
+                            (done)))))))
+
+(deftest electron-runtime-recovery-replaces-client-when-worker-endpoint-changes
   (async done
          (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
                ipc-calls (atom [])
@@ -1275,7 +1351,8 @@
                notifications (atom [])
                session-id "session-a"
                wrapped-worker (fn [& _] nil)
-               old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+               old-client (assoc (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+                                 :client {:base-url "http://127.0.0.1:9100" :auth-token nil})
                new-client (->FakeRemote "logseq_db_graph_a" wrapped-worker)
                original-state (state/get-state)
                original-ipc ipc/ipc
@@ -1320,7 +1397,7 @@
                                       nil))
            (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client session-id)
                        _ (p/delay 0)]
-                 (is (= [["releaseDbWorkerRuntime" "logseq_db_graph_a"]
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls))
                  (is (= ["logseq_db_graph_a"] @start-calls))
@@ -1345,7 +1422,7 @@
                             (reset-runtime-state!)
                             (done)))))))
 
-(deftest electron-list-db-runtime-recovery-does-not-release-fresh-same-repo-runtime
+(deftest electron-list-db-runtime-recovery-does-not-replace-fresh-same-repo-runtime
   (async done
          (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
                ipc-calls (atom [])
@@ -1356,7 +1433,8 @@
                old-session-id "session-a"
                fresh-session-id "session-b"
                fresh-worker (fn [& _] nil)
-               old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+               old-client (assoc (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+                                 :client {:base-url "http://127.0.0.1:9100" :auth-token nil})
                fresh-client (->FakeRemote "logseq_db_graph_a" fresh-worker)
                original-state (state/get-state)
                original-ipc ipc/ipc
@@ -1375,7 +1453,13 @@
                                                     :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
-                           (p/resolved nil)))
+                           (case channel
+                             "db-worker-runtime"
+                             (p/resolved {:base-url "http://127.0.0.1:9101"
+                                          :auth-token nil
+                                          :repo repo})
+
+                             (p/resolved nil))))
            (set! remote/stop! (fn [client]
                                 (swap! stop-calls conj (:repo client))
                                 (reset! persist-db/remote-db fresh-client)
@@ -1399,7 +1483,8 @@
                                       nil))
            (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client old-session-id)
                        _ (p/delay 0)]
-                 (is (= [] @ipc-calls))
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]] @ipc-calls)
+                     "The fresh runtime installed during stop must not be replaced")
                  (is (= ["logseq_db_graph_a"] @stop-calls))
                  (is (= [] @current-repo-updates))
                  (is (= [] @events))
@@ -1429,7 +1514,8 @@
                start-calls (atom [])
                stop-calls (atom [])
                wrapped-worker (fn [& _] nil)
-               old-client (->FakeRemote repo (fn [& _] nil))
+               old-client (assoc (->FakeRemote repo (fn [& _] nil))
+                                 :client {:base-url "http://127.0.0.1:9100" :auth-token nil})
                new-client (->FakeRemote repo wrapped-worker)
                app-error (ex-info "repo locked" {:status 409
                                                  :code :repo-locked})
@@ -1471,7 +1557,7 @@
                        _ (is (= [] @ipc-calls))
                        _ (record-failure! repo session-id transport-error)
                        _ (p/delay 0)]
-                 (is (= [["releaseDbWorkerRuntime" repo]
+                 (is (= [["db-worker-runtime" repo]
                          ["db-worker-runtime" repo]]
                         @ipc-calls))
                  (is (= [repo] @start-calls))
