@@ -255,9 +255,14 @@
       const brackets = [...ref.querySelectorAll('.bracket')];
       const link = ref.querySelector('.page-ref');
       if (brackets.length < 2 || !link) return JSON.stringify({error: 'missing parts'});
-      const left = brackets[0].getBoundingClientRect();
-      const right = brackets[1].getBoundingClientRect();
-      const mid = link.getBoundingClientRect();
+      const textRect = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return range.getBoundingClientRect();
+      };
+      const left = textRect(brackets[0]);
+      const right = textRect(brackets[1]);
+      const mid = textRect(link);
       const linkStyle = getComputedStyle(link);
       return JSON.stringify({
         leftTop: left.top,
@@ -326,9 +331,8 @@
         titles ["What is the [[AI]]?"
                 "What is an [[LLM]]?"
                 "Plain row without refs"]]
-    (ls-api-call! :editor.createTag tag-name)
     (doseq [title titles]
-      (ls-api-call! :editor.insertBlock
+      (ls-api-call! :editor.appendBlockInPage
                     container-page
                     (str title " #" tag-name)))
     (page/goto-page tag-name)
@@ -339,7 +343,7 @@
     (when-let [dir (maybe-artifact-dir)]
       (apply-clipped-anchor-regression!)
       (screenshot-page! (str dir "/table_page_ref_before.png"))
-      (screenshot-locator! ".ls-table-cell .table-block-title .page-reference"
+      (screenshot-locator! ".ls-table-row:has(.page-reference) .table-block-title"
                            (str dir "/table_page_ref_before_closeup.png"))
       (clear-clipped-anchor-regression!))
     (let [metrics (table-page-ref-metrics)
@@ -354,7 +358,7 @@
           (str "page-ref bottom should match [[ bracket bottom: " metrics)))
     (when-let [dir (maybe-artifact-dir)]
       (screenshot-page! (str dir "/table_page_ref_after.png"))
-      (screenshot-locator! ".ls-table-cell .table-block-title .page-reference"
+      (screenshot-locator! ".ls-table-row:has(.page-reference) .table-block-title"
                            (str dir "/table_page_ref_after_closeup.png")))))
 
 (deftest table-view-column-sort-does-not-crash-test
