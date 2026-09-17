@@ -26,7 +26,7 @@
         (keep (fn [[attr spec]]
                 (when (= :db.type/ref (:db/valueType spec))
                   attr)))
-        (d/schema db)))
+        (:schema db)))
 
 (defn without-recycled
   "Return a DB in which recycled entities (and refs to them) are invisible.
@@ -38,9 +38,9 @@
   (let [recycled (recycled-eids db)]
     (if (empty? recycled)
       db
-      (let [ref-idents (ref-idents db)]
+      (let [ref-attr-idents (ref-idents db)]
         (d/filter db
                   (fn [_db datom]
                     (not (or (contains? recycled (:e datom))
-                             (and (contains? ref-idents (:a datom))
+                             (and (contains? ref-attr-idents (:a datom))
                                   (contains? recycled (:v datom)))))))))))

@@ -97,4 +97,4 @@
     (is (= #{"child"} (set (d/q stream-of-titles-query @conn)))
         "Raw d/q still joins through a recycled target")
     (is (= #{} (set (d/q stream-of-titles-query query-db)))
-        "Filtered evaluation matches permanent-delete semantics for incoming refs"))))
+        "Filtered evaluation matches permanent-delete semantics for incoming refs")))
