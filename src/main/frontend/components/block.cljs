@@ -2274,7 +2274,7 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (and (not (entity/url-property-value? block))
+        collapsable? (and (not (entity/leaf-property-value? block))
                           (editor-handler/collapsable? uuid {:semantic? true
                                                             :block block
                                                             :ignore-children? page-title?
@@ -2397,7 +2397,7 @@
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (and (not (entity/url-property-value? block))
+        has-children? (and (not (entity/leaf-property-value? block))
                            (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
@@ -4640,7 +4640,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
-                   (entity/url-property-value? block)
+                   (entity/leaf-property-value? block)
                    table?
                    property?
                    comments-area?

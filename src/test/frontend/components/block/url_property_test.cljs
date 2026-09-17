@@ -23,8 +23,14 @@
     (let [url-value {:block/title "https://logseq.com"
                      :logseq.property/created-from-property {:logseq.property/type :url}}
           text-value {:block/title "text value"
-                      :logseq.property/created-from-property {:logseq.property/type :default}}]
+                      :logseq.property/created-from-property {:logseq.property/type :default}}
+          default-value {:db/id 10
+                         :block/title "hello world"
+                         :block/parent {:db/id 5
+                                        :block/tags [:logseq.class/Property]
+                                        :logseq.property/default-value {:db/id 10}}}]
       (is (entity/url-property-value? url-value))
       (is (true? (#'page/hide-block-route-add-button? url-value false)))
+      (is (true? (#'page/hide-block-route-add-button? default-value false)))
       (is (false? (#'page/hide-block-route-add-button? text-value false)))
       (is (true? (#'page/hide-block-route-add-button? text-value true))))))
