@@ -43,9 +43,19 @@
       :else
       nil)))
 
+(defn- outline-child?
+  [db eid]
+  (let [child (d/entity db eid)]
+    (not (or (ldb/recycled? child)
+             (ldb/closed-value? child)
+             (:logseq.property/created-from-property child)))))
+
 (defn- block-has-children?
   [db block-id]
-  (some? (first (d/datoms db :avet :block/parent block-id))))
+  (boolean
+   (some (fn [datom]
+           (outline-child? db (:e datom)))
+         (d/datoms db :avet :block/parent block-id))))
 
 (def ^:private canonical-block-excluded-attrs
   #{:block/children

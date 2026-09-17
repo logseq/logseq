@@ -2815,4 +2815,20 @@
                :block.temp/property-keys [:logseq.property/created-from-property]})))
     (is (not (editor/db-collapsable?
               {:block/title "hello"
-               :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
+               :logseq.property/created-from-property {:db/ident :user.property/p1}}))))
+
+  (testing "Hidden empty properties do not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "o1"
+               :block.temp/property-keys [:user.property/p1]
+               :block.temp/display-properties
+               {:full-properties []
+                :hidden-properties [[:user.property/p1 nil]]}}))))
+
+  (testing "Visible properties still make a node collapsable when display-properties is present"
+    (is (editor/db-collapsable?
+         {:block/title "o1"
+          :block.temp/property-keys [:user.property/p1]
+          :block.temp/display-properties
+          {:full-properties [[:user.property/p1 nil]]
+           :hidden-properties []}}))))

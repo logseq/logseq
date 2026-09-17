@@ -1089,3 +1089,46 @@
           "An unused positioned property offers existing nodes of its allowed class.")
       (is (= icon (:logseq.property/icon property))
           "Empty left/right values can render their configured icon immediately."))))
+
+(deftest property-value-children-do-not-count-as-outline-children-test
+  (let [conn (db-test/create-conn)
+        page-uuid (random-uuid)
+        parent-uuid (random-uuid)
+        value-uuid (random-uuid)
+        child-uuid (random-uuid)]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid page-uuid
+                   :block/tx-id 1
+                   :block/title "Page"
+                   :block/name "page"
+                   :block/tags :logseq.class/Page}
+                  {:db/id -2
+                   :block/uuid parent-uuid
+                   :block/tx-id 1
+                   :block/title "Parent"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"}
+                  {:db/id -3
+                   :block/uuid value-uuid
+                   :block/tx-id 1
+                   :block/title ""
+                   :block/page -1
+                   :block/parent -2
+                   :block/order "a1"
+                   :logseq.property/created-from-property :logseq.property/status}])
+    (is (false? (get-in (block-handler/get-block-and-children @conn parent-uuid {})
+                        [:block :block.temp/has-children?]))
+        "A property value child is not an outline child")
+    (let [page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          parent-id (:db/id (d/entity @conn [:block/uuid parent-uuid]))]
+      (d/transact! conn [{:block/uuid child-uuid
+                          :block/tx-id 1
+                          :block/title "Real child"
+                          :block/page page-id
+                          :block/parent parent-id
+                          :block/order "a2"}]))
+    (is (true? (get-in (block-handler/get-block-and-children @conn parent-uuid {})
+                       [:block :block.temp/has-children?]))
+        "A real outline child still counts")))

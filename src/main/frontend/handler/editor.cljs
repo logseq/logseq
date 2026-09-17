@@ -3879,8 +3879,11 @@
 
 (defn db-collapsable?
   [block & _opts]
-  (let [property-keys (or (seq (:block.temp/property-keys block))
-                          (filter db-property/property? (keys block)))
+  (let [display-full (get-in block [:block.temp/display-properties :full-properties])
+        property-keys (if (some? display-full)
+                        (keep first display-full)
+                        (or (seq (:block.temp/property-keys block))
+                            (filter db-property/property? (keys block))))
         properties (->> property-keys
                         (remove db-property/db-attribute-properties)
                         (remove #{:logseq.property/created-by-ref
