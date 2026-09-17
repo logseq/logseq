@@ -52,7 +52,7 @@
     (let [selected-blocks (seq (concat direct-selected-blocks loaded-selected-blocks))
           comment-targets (comments-model/comment-target-blocks selected-blocks)
           on-copy (if (and selected-blocks (nil? on-copy))
-                    #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
+                    #(editor-handler/copy-selection-blocks true :selected-blocks selected-blocks)
                     (or on-copy #(editor-handler/copy-selection-blocks true)))
           button-opts {:variant :outline
                        :size :sm

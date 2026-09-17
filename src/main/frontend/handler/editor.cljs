@@ -1186,15 +1186,17 @@
 (defn- compose-copied-blocks-contents
   [repo block-ids & {:as opts}]
   (p/let [blocks (db-async/<get-block-summaries repo block-ids)]
-    (let [top-level-blocks (block-handler/get-top-level-blocks blocks)
-          top-level-block-uuids (map :block/uuid top-level-blocks)]
-      (p/let [content (export-text/export-blocks-as-markdown
-                       repo
-                       top-level-block-uuids
-                       (merge (dissoc opts :quick-copy?)
-                              {:indent-style (state/get-export-block-text-indent-style)
-                               :remove-options (set (state/get-export-block-text-remove-options))}))]
-        [top-level-block-uuids content blocks]))))
+    (if-not (seq blocks)
+      [[] "" []]
+      (let [top-level-blocks (block-handler/get-top-level-blocks blocks)
+            top-level-block-uuids (map :block/uuid top-level-blocks)]
+        (p/let [content (export-text/export-blocks-as-markdown
+                         repo
+                         top-level-block-uuids
+                         (merge (dissoc opts :quick-copy?)
+                                {:indent-style (state/get-export-block-text-indent-style)
+                                 :remove-options (set (state/get-export-block-text-remove-options))}))]
+          [top-level-block-uuids content blocks])))))
 
 (defn- copy-cached-selection-text!
   [block-uuids]
@@ -1266,14 +1268,18 @@
                       (= "block.temp" (namespace attr)))))
         block))
 
+(defn- selection-copy-ids
+  [selected-blocks selected-ids]
+  (or (seq (keep (comp :block/uuid entity/as-block-map) selected-blocks))
+      (seq selected-ids)
+      (seq (state/get-selection-block-ids))))
+
 (defn copy-selection-blocks
   [html? & {:keys [selected-blocks selected-ids] :as opts}]
   (let [repo (state/get-current-repo)
-        selected-ids (or (seq selected-ids)
-                         (state/get-selection-block-ids))
-        ids (or (seq selected-ids) (map :block/uuid selected-blocks))]
-    (when (seq selected-ids)
-      (copy-cached-selection-text! selected-ids))
+        ids (selection-copy-ids selected-blocks selected-ids)]
+    (when (seq ids)
+      (copy-cached-selection-text! ids))
     (p/let [[top-level-block-uuids content blocks]
             (compose-copied-blocks-contents
              repo ids (assoc (dissoc opts :selected-blocks :selected-ids)
