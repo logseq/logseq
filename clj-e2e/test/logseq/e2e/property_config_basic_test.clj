@@ -1,5 +1,5 @@
 (ns logseq.e2e.property-config-basic-test
-  (:require [clojure.test :refer [deftest use-fixtures]]
+  (:require [clojure.test :refer [deftest is use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -104,3 +104,19 @@
     (page/goto-page property-name)
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
     (assert/assert-have-count ".ls-view-body .ls-table-header-cell:text('#')" 0)))
+
+(deftest available-choices-list-is-scrollable-test
+  (let [property-name "many-choices-scroll"
+        choices (mapv #(str "Choice " %) (range 1 16))]
+    (add-text-property property-name)
+    (open-choices-pane property-name)
+    (doseq [choice choices]
+      (add-choice choice))
+    (let [overflow? (w/eval-js
+                     "() => { const el = document.querySelector('.ls-property-choices-sub-pane .choices-list'); return !!(el && el.scrollHeight > el.clientHeight); }")]
+      (is (true? overflow?)
+          "A long available-choices list must overflow so it can scroll"))
+    (.scrollIntoViewIfNeeded
+     (w/-query ".choices-list li:has-text('Choice 15')"))
+    (assert/assert-is-visible
+     (loc/filter ".choices-list li" :has-text "Choice 15"))))
