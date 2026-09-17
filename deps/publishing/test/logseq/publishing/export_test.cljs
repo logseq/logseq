@@ -1,7 +1,10 @@
 (ns logseq.publishing.export-test
   (:require [cljs.test :as t :refer [is use-fixtures async]]
+            [clojure.string :as string]
             [logseq.publishing.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.publishing.export :as publish-export]
+            [logseq.publishing.page :as publish-page]
+            [logseq.publishing.runtime :as publish-runtime]
             [promesa.core :as p]
             [clojure.set :as set]
             ["fs" :as fs]
@@ -53,18 +56,40 @@
                          (throw (ex-info (:payload msg) {}))
                          (js/console.log (:payload msg))))}))
 
-(defn- create-static-dir [dir]
-  (fs/mkdirSync (path/join dir) #js {:recursive true})
-  (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
-  (fs/mkdirSync (path/join dir "css" "fonts") #js {:recursive true})
-  (fs/writeFileSync (path/join dir "css" "style.css") "style")
-  (fs/writeFileSync (path/join dir "css" "fonts" "font.woff2") "font")
-  (fs/mkdirSync (path/join dir "js" "publishing"))
-  (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
-        (conj publish-export/js-files "manifest.edn"))
-  (doseq [file (conj (vec (js-map-files)) "db-worker.js.map")]
-    (fs/writeFileSync (path/join dir "js" file) file))
-  (fs/writeFileSync (path/join dir "404.html") ""))
+(defn- attr-values
+  [html attr]
+  (->> (re-seq (re-pattern (str attr "=\"([^\"]+)\"")) html)
+       (mapv second)))
+
+(defn- published-html
+  []
+  (publish-page/index-html "{}" "{}" {:title "t" :name "n"}))
+
+(defn- create-static-dir
+  ([dir] (create-static-dir dir {:runtime-files publish-export/required-js-runtime-files}))
+  ([dir {:keys [runtime-files]}]
+   (fs/mkdirSync (path/join dir) #js {:recursive true})
+   (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
+   (fs/mkdirSync (path/join dir "css" "fonts") #js {:recursive true})
+   (fs/writeFileSync (path/join dir "css" "style.css") "style")
+   (fs/writeFileSync (path/join dir "css" "fonts" "font.woff2") "font")
+   (fs/mkdirSync (path/join dir "js" "publishing"))
+   (fs/mkdirSync (path/join dir "js" "pdfjs") #js {:recursive true})
+   (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
+         (conj publish-export/js-files "manifest.edn"))
+   (doseq [file (conj (vec (js-map-files)) "db-worker.js.map")]
+     (fs/writeFileSync (path/join dir "js" file) file))
+   (doseq [file runtime-files]
+     (let [file-path (path/join dir "js" file)]
+       (fs/mkdirSync (path/dirname file-path) #js {:recursive true})
+       (fs/writeFileSync file-path file)))
+   (doseq [src (map :src publish-runtime/page-js-scripts)]
+     (let [file-path (path/join dir (string/replace-first src #"^static/" ""))]
+       (fs/mkdirSync (path/dirname file-path) #js {:recursive true})
+       (when-not (or (fs/existsSync file-path)
+                     (= "custom.js" (path/basename file-path)))
+         (fs/writeFileSync file-path (path/basename file-path)))))
+   (fs/writeFileSync (path/join dir "404.html") "")))
 
 (defn- create-logseq-graph
   "Creates a minimal graph to test publishing"
@@ -140,3 +165,34 @@
          (is (= "bar"
                 (str (fs/readFileSync "tmp/published-graph/assets/bar.png")))
              "second asset is copied correctly")))
+
+(deftest-async create-export-copies-hosted-runtime-files-and-html-script-srcs
+  (create-static-dir "tmp/static")
+  (create-logseq-graph "tmp/test-graph")
+  (let [html (published-html)
+        script-srcs (attr-values html "src")]
+    (p/let [_ (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {:html html})]
+           (is (seq script-srcs))
+           (doseq [src script-srcs]
+             (is (string/starts-with? src "static/")
+                 (str "script src is relative: " src))
+             (is (fs/existsSync (path/join "tmp/published-graph" src))
+                 (str "exported index.html script exists on disk: " src)))
+           (doseq [file publish-export/required-js-runtime-files]
+             (is (fs/existsSync (path/join "tmp/published-graph" "static" "js" file))
+                 (str "required hosted runtime file is copied: " file)))
+           (is (fs/existsSync "tmp/published-graph/static/js/main.js"))
+           (is (fs/existsSync "tmp/published-graph/static/js/db-worker.js"))
+           (is (fs/existsSync "tmp/published-graph/static/js/db-worker-bundle.js"))
+           (is (fs/existsSync "tmp/published-graph/static/js/sqlite3.wasm")))))
+
+(deftest-async create-export-fails-when-sqlite-wasm-is-missing
+  (create-static-dir "tmp/static" {:runtime-files (remove #{"sqlite3.wasm"} publish-export/required-js-runtime-files)})
+  (fs/rmSync "tmp/static/js/sqlite3.wasm" #js {:force true})
+  (create-logseq-graph "tmp/test-graph")
+  (-> (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {:html (published-html)})
+      (p/then (fn [_]
+                (is false "export must fail-fast when sqlite3.wasm is missing")))
+      (p/catch (fn [err]
+                 (is (string/includes? (str (.-message err) " " err) "sqlite3.wasm")
+                     "missing wasm is reported instead of producing a broken export")))))

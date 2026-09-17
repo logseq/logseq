@@ -171,10 +171,18 @@
   [url]
   (js/WebSocket. url))
 
+(defn- sqlite-wasm-url
+  [filename]
+  (let [name (or (some-> filename (string/split "/") last) filename)]
+    (if (exists? js/location)
+      (str (js/URL. name (.-href js/location)))
+      name)))
+
 (defn- init-sqlite!
   []
   (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
-                               :printErr #(log/error :init-sqlite-module! %)})))
+                               :printErr #(log/error :init-sqlite-module! %)
+                               :locateFile sqlite-wasm-url})))
 
 (defn- open-sqlite-db
   [{:keys [sqlite pool path mode]}]
