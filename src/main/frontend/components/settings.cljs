@@ -313,6 +313,20 @@
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
+(defn language-select-content-props
+  "Keep the language popup clickable over Electron's custom title-bar drag region."
+  ([]
+   (language-select-content-props nil))
+  ([container]
+   (let [no-drag-style {:app-region "no-drag"
+                        :-webkit-app-region "no-drag"}]
+     (cond-> {:class "z-[99999] ls-app-no-drag"
+              :style no-drag-style
+              :positioner-props {:className "ls-app-no-drag"
+                                 :style (assoc no-drag-style :z-index 99999)}}
+       (some? container)
+       (assoc :container container)))))
+
 (defn language-row [t preferred-language]
   (let [selected-language (some-> preferred-language name)
         language-items (mapv (fn [language]
@@ -335,9 +349,7 @@
                   (fn [value]
                     (get language-labels value value))))
                 (shui/select-content
-                 {:container (.-body js/document)
-                  :class "z-[99999]"
-                  :positioner-props {:style {:z-index 99999}}}
+                 (language-select-content-props (.-body js/document))
                  (shui/select-group
                   (for [{:keys [value label]} language-items]
                     (shui/select-item {:key value :value value} label)))))]
