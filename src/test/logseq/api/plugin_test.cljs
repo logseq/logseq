@@ -9,6 +9,7 @@
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.api.plugin :as api-plugin]
             [logseq.api.test-helper :as api-test]
@@ -196,22 +197,23 @@
       (-> (with-plugin-fs
             files
             (fn []
-              (p/let [pkg (api-plugin/load_plugin_config "/tmp/plugins/demo")
-                      readme (api-plugin/load_plugin_readme "/tmp/plugins/demo")
-                      _ (api-plugin/save_plugin_package_json "/tmp/plugins/demo" #js {:name "demo" :version "2.0.0"})
-                      saved (get @files "/tmp/plugins/demo/package.json")
-                      tmp-path (api-plugin/write_user_tmp_file "scratch.txt" "tmp-content")
-                      dotdir-path (api-plugin/write_dotdir_file "notes.txt" "dot" "docs")
-                      assets-path (api-plugin/write_assetsdir_file "logo.txt" "asset" "brand")]
-                (is (= "{\"name\":\"demo\"}" pkg))
-                (is (= "# Demo" readme))
-                (is (re-find #"2.0.0" saved))
-                (is (= "/tmp/plugins/tmp/scratch.txt" tmp-path))
-                (is (= "/tmp/plugins/docs/notes.txt" dotdir-path))
-                (is (= "/tmp/graph/assets/brand/logo.txt" assets-path))
-                (is (= "tmp-content" (get @files tmp-path)))
-                (is (= "dot" (get @files dotdir-path)))
-                (is (= "asset" (get @files assets-path))))))
+              (p/with-redefs [util/electron? (constantly true)]
+                (p/let [pkg (api-plugin/load_plugin_config "/tmp/plugins/demo")
+                        readme (api-plugin/load_plugin_readme "/tmp/plugins/demo")
+                        _ (api-plugin/save_plugin_package_json "/tmp/plugins/demo" #js {:name "demo" :version "2.0.0"})
+                        saved (get @files "/tmp/plugins/demo/package.json")
+                        tmp-path (api-plugin/write_user_tmp_file "scratch.txt" "tmp-content")
+                        dotdir-path (api-plugin/write_dotdir_file "notes.txt" "dot" "docs")
+                        assets-path (api-plugin/write_assetsdir_file "logo.txt" "asset" "brand")]
+                  (is (= "{\"name\":\"demo\"}" pkg))
+                  (is (= "# Demo" readme))
+                  (is (re-find #"2.0.0" saved))
+                  (is (= "/tmp/plugins/tmp/scratch.txt" tmp-path))
+                  (is (= "/tmp/plugins/docs/notes.txt" dotdir-path))
+                  (is (= "/tmp/graph/assets/brand/logo.txt" assets-path))
+                  (is (= "tmp-content" (get @files tmp-path)))
+                  (is (= "dot" (get @files dotdir-path)))
+                  (is (= "asset" (get @files assets-path)))))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
@@ -271,18 +273,27 @@
 
 (deftest installed-web-plugins-round-trip
   (async done
-    (let [store (atom {})]
-      (-> (p/with-redefs [plugin-handler/get-ls-dotdir-root (constantly "/tmp/plugins")
-                          idb/get-item (fn [key] (p/resolved (get @store key)))
-                          idb/set-item! (fn [key value]
-                                          (swap! store assoc key value)
-                                          (p/resolved true))]
-            (p/let [_ (api-plugin/save_installed_web_plugin #js {:key "web-plugin" :name "Web"})
-                    loaded (api-plugin/load_installed_web_plugins)
-                    _ (api-plugin/unlink_installed_web_plugin "web-plugin")
-                    after (api-plugin/load_installed_web_plugins)]
-              (is (= "Web" (aget loaded "web-plugin" "name")))
-              (is (nil? (aget after "web-plugin")))))
+    (let [data (atom #js {})
+          saved (atom 0)]
+      (-> (p/with-redefs [plugin-handler/make-fn-to-load-dotdir-json
+                          (fn [_dirname default]
+                            (fn [_key]
+                              (p/resolved ["/tmp/plugins/installed-plugins-for-web/all.json"
+                                           (or @data default)])))
+                          plugin-handler/make-fn-to-save-dotdir-json
+                          (fn [_dirname]
+                            (fn [_key value]
+                              (swap! saved inc)
+                              (reset! data value)
+                              (p/resolved true)))]
+            (p/let [plugin (js-obj "key" "web-plugin" "name" "Web")
+                    _ (api-plugin/save_installed_web_plugin plugin)
+                    _ (api-plugin/load_installed_web_plugins)
+                    saved-plugin (aget @data "web-plugin")
+                    _ (api-plugin/unlink_installed_web_plugin "web-plugin")]
+              (is (pos? @saved))
+              (is (= "Web" (some-> saved-plugin (aget "name"))))
+              (is (nil? (aget @data "web-plugin")))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))

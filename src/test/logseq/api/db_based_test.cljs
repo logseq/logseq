@@ -1,5 +1,6 @@
 (ns logseq.api.db-based-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.test.helper :as test-helper]
             [logseq.api.db-based :as db-based-api]
             [logseq.api.test-helper :as api-test]
@@ -191,9 +192,11 @@
        :blocks [{:block/title "plain"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [error (p/catch (db-based-api/get-tag-objects "Not A Tag")
-                                   identity)]
-              (is (re-find #"Not a tag|Tag not exists" (str error))))))
+            (-> (db-based-api/get-tag-objects "Not A Tag")
+                (p/then (fn [_]
+                          (is false "non-tag should throw")))
+                (p/catch (fn [error]
+                           (is (re-find #"Not a tag|Tag not exists" (str error))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -205,10 +208,12 @@
        :blocks [{:block/title "needs tag"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [block (test-helper/find-block-by-content "needs tag")
-                    error (p/catch (db-based-api/add-block-tag (:block/uuid block) "MissingTag")
-                                   identity)]
-              (is (re-find #"Not a tag" (str error))))))
+            (p/let [block (test-helper/find-block-by-content "needs tag")]
+              (-> (db-based-api/add-block-tag (:block/uuid block) "MissingTag")
+                  (p/then (fn [_]
+                            (is false "missing tag should throw")))
+                  (p/catch (fn [error]
+                             (is (re-find #"Not a tag" (str error)))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -218,9 +223,13 @@
     (-> (api-test/with-plugin-api
           (fn []
             (p/let [property (db-based-api/upsert-property "status" #js {:type "default" :cardinality "many"} nil)
-                    property-id (or (aget property "id") (:id (api-test/js->clj-kw property)))
-                    result (db-based-api/add-property-value-choices property-id #js ["todo" "doing"])]
-              (is (some? result)))))
+                    property-id (or (aget property "id") (:id (api-test/js->clj-kw property)))]
+              (p/with-redefs [db-property-handler/add-existing-values-to-closed-values!
+                              (fn [id values]
+                                (p/resolved {:property-id id :values values}))]
+                (p/let [result (db-based-api/add-property-value-choices property-id #js ["todo" "doing"])]
+                  (is (= property-id (:property-id result)))
+                  (is (= ["todo" "doing"] (:values result))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
