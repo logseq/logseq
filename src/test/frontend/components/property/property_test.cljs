@@ -89,6 +89,10 @@
       (is (= [property-uuid] @calls)
           "The default-value editor must own a live property subscription."))))
 
+(deftest default-value-property-pull-pattern-avoids-virtual-closed-values-test
+  (is (= '[*] property-default-value/default-value-property-pull-pattern)
+      "Datascript pull rejects :property/closed-values; the submenu must use a wildcard pull."))
+
 (deftest removing-status-from-task-view-preserves-task-tag-test
   (async done
          (let [block-id (random-uuid)
