@@ -1,6 +1,8 @@
 (ns frontend.security
   "Provide security focused fns like preventing XSS attacks"
-  (:require ["dompurify" :as dompurify]))
+  (:require ["dompurify" :as dompurify]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.util :as util]))
 
 (defn- sanitizer-instance?
   [value]
@@ -38,4 +40,13 @@
 
 (defn sanitize-html
   [html]
-  (js-invoke (get-dompurify) "sanitize" html sanitization-options))
+  (let [purify (get-dompurify)]
+    (if (util/electron?)
+      (let [root (js-invoke purify "sanitize" html
+                            (js/Object.assign #js {} sanitization-options #js {:RETURN_DOM true}))]
+        (doseq [iframe (array-seq (.querySelectorAll root "iframe[src]"))]
+          (when-let [src (assets-handler/local-file-iframe-src->assets-url
+                         (.getAttribute iframe "src"))]
+            (.setAttribute iframe "src" src)))
+        (.-innerHTML root))
+      (js-invoke purify "sanitize" html sanitization-options))))
