@@ -450,16 +450,15 @@
                (property-title (second clause))
                (some-> (second clause) name))
        ": "
-       (page-title
-        (cond
-          (and (vector? (last clause)) (= :page-ref (first (last clause))))
-          (second (last clause))
+       (cond
+         (and (vector? (last clause)) (= :page-ref (first (last clause))))
+         (page-title (second (last clause)))
 
-          (= 2 (count clause))
-          "ALL"
+         (= 2 (count clause))
+         (t :query.builder/all-values-label)
 
-          :else
-          (last clause)))]
+         :else
+         (page-title (last clause)))]
 
       ;; between timestamp start (optional end)
       (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
