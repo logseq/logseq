@@ -117,6 +117,19 @@ for (const mode of ['after-admission', 'before-publication']) {
   }
 }
 
+test('readiness wait survives a wall-clock jump across system sleep', async t => {
+  const { root, storage, start, barrier } = await fixture(t);
+  const starting = start('before-publication');
+  const pid = await barrier('before-publication');
+  const now = Date.now;
+  t.after(() => { Date.now = now; });
+  Date.now = () => now() + 3600000;
+  await sleep(500);
+  fs.writeFileSync(path.join(root, 'release-before-publication'), 'resume');
+  assert.equal((await starting).pid, pid);
+  await lifecycle.stopGraph(storage, 'demo', 'cli');
+});
+
 test('a timed out observer cannot cancel a worker admitted by another caller', async t => {
   const { root, storage, start, barrier } = await fixture(t);
   const child = fork(script, ['--root-dir', root, '--repo', 'logseq_db_demo', '--mode', 'after-admission'],
