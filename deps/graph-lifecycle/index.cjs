@@ -28,7 +28,9 @@ function writeJSON(file, value) {
 }
 function graphName(repo) {
   if (typeof repo !== 'string' || !repo) fail('repo is required', 'missing-repo');
-  return repo.replace(/^logseq_db_/, '');
+  const name = repo.trim().replace(/^logseq_db_/, '').trim();
+  if (!name) fail('repo is required', 'missing-repo');
+  return name;
 }
 function encodeGraph(repo) {
   return encodeURIComponent(graphName(repo)).replace(/%20/g, ' ').replace(/~/g, '%7E').replace(/%/g, '~');
