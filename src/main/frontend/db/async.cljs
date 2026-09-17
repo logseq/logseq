@@ -222,7 +222,8 @@
           {:id id
            :opts (select-keys opts [:all? :children? :properties :render-data? :root-render-data?
                                     :block-metadata?
-                                    :include-collapsed-children?])})
+                                    :include-collapsed-children?
+                                    :include-property-block?])})
         requests))
 
 (defn- <invoke-worker-get-blocks
