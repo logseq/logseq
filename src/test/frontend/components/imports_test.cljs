@@ -1,6 +1,6 @@
 (ns frontend.components.imports-test
-  (:require [cljs.test :refer [async deftest is]]
-            [frontend.components.imports]
+  (:require [cljs.test :refer [async deftest is testing]]
+            [frontend.components.imports :as imports]
             [frontend.config :as config]
             [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
@@ -13,6 +13,46 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- submit-file-graph-name!
+  [graph-name existing-graph-name]
+  (let [submit (atom nil)
+        imported (atom [])
+        checked (atom [])
+        notifications (atom [])]
+    (with-redefs [shui/dialog-open! (fn [render & _] (render))
+                  imports/import-file-graph-dialog (fn [_ on-submit]
+                                                    (reset! submit on-submit))
+                  repo-handler/graph-already-exists? (fn [name]
+                                                      (swap! checked conj name)
+                                                      (= name existing-graph-name))
+                  notification/show! (fn [content status & _]
+                                       (swap! notifications conj [content status]))]
+      (imports/import-file-to-db-handler nil {:import-graph-fn #(swap! imported conj %)})
+      (@submit {:graph-name graph-name :convert-all-tags? true}))
+    {:imported @imported :checked @checked :notifications @notifications}))
+
+(deftest file-graph-import-submit-normalizes-name-test
+  (doseq [graph-name ["My graph" "  My graph  " "\tMy graph\n" "\u00a0My graph\u3000"]]
+    (testing (pr-str graph-name)
+      (let [{:keys [imported checked notifications]} (submit-file-graph-name! graph-name nil)]
+        (is (= [{:graph-name "My graph" :convert-all-tags? true}] imported))
+        (is (= ["My graph"] checked))
+        (is (empty? notifications))))))
+
+(deftest file-graph-import-submit-rejects-blank-name-test
+  (doseq [graph-name ["" "   " "\t\n" "\u00a0\u3000"]]
+    (testing (pr-str graph-name)
+      (let [{:keys [imported checked notifications]} (submit-file-graph-name! graph-name nil)]
+        (is (empty? imported))
+        (is (empty? checked))
+        (is (= [:error] (mapv second notifications)))))))
+
+(deftest file-graph-import-submit-checks-trimmed-name-conflict-test
+  (let [{:keys [imported checked notifications]} (submit-file-graph-name! "  My graph  " "My graph")]
+    (is (empty? imported))
+    (is (= ["My graph"] checked))
+    (is (= [:error] (mapv second notifications)))))
 
 (deftest file-graph-import-options-cross-the-transit-boundary-test
   (let [build-options (some-> (resolve 'frontend.components.imports/build-file-graph-worker-options)

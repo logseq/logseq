@@ -1275,14 +1275,15 @@
       (seq (state/get-selection-block-ids))))
 
 (defn copy-selection-blocks
-  [html? & {:keys [selected-blocks selected-ids] :as opts}]
+  [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
-        ids (selection-copy-ids selected-blocks selected-ids)]
+        ids (selection-copy-ids selected-blocks selected-ids)
+        block-op (or op :copy)]
     (when (seq ids)
       (copy-cached-selection-text! ids))
     (p/let [[top-level-block-uuids content blocks]
             (compose-copied-blocks-contents
-             repo ids (assoc (dissoc opts :selected-blocks :selected-ids)
+             repo ids (assoc (dissoc opts :selected-blocks :selected-ids :op)
                              :quick-copy? true))]
       (when (seq blocks)
         (util/copy-to-clipboard! content)
@@ -1305,8 +1306,8 @@
                                        (into {}))
                                   (assoc :db/id (:db/id b)))))))]
                     (common-handler/copy-to-clipboard-without-id-property!
-                     repo content (when html? html) copied-blocks))]
-          (state/set-block-op-type! :copy))
+                     repo content (when html? html) copied-blocks :op block-op))]
+          (state/set-block-op-type! block-op))
         ;; (notification/show! "Copied!" :success)
         ))))
 
@@ -1366,7 +1367,7 @@
                              seq)]
     (p/do!
      (when copy?
-       (copy-selection-blocks true :selected-ids selected-ids))
+       (copy-selection-blocks true :selected-ids selected-ids :op :cut))
      (state/set-block-op-type! :cut)
      (when-let [blocks selected-blocks]
        ;; remove queries
@@ -1528,7 +1529,7 @@
         (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])]
           (p/let [html (export-html/export-blocks-as-html repo [block-id] nil)
                   sorted-blocks (<sorted-block-and-children repo block)]
-            (common-handler/copy-to-clipboard-without-id-property! repo md-content html sorted-blocks)
+            (common-handler/copy-to-clipboard-without-id-property! repo md-content html sorted-blocks :op :cut)
             (state/set-block-op-type! :cut)
             (delete-block-aux! block)))))))
 
