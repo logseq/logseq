@@ -18,6 +18,7 @@
    "bmp" "image/bmp"
    "svg" "image/svg+xml"
    "ico" "image/x-icon"
+   "jxl" "image/jxl"
    "pdf" "application/pdf"})
 
 (defn- response-content-type [stored-content-type asset-type]
