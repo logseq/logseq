@@ -1,5 +1,5 @@
 (ns frontend.worker.handler.property-test
-  (:require [cljs.test :refer [async deftest is testing thrown-with-msg?]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
             [logseq.db.frontend.property :as db-property]
