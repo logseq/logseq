@@ -1,5 +1,6 @@
 (ns logseq.api.block-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
@@ -38,7 +39,30 @@
        js/Error
        #"Plugins can only upsert its own properties"
        (api-block/ensure-property-upsert-control
-        nil :plugin.property.other/title "title"))))
+        nil :plugin.property.other/title "title")))
+  (is (thrown-with-msg?
+       js/Error
+       #"Plugins can only upsert its own properties"
+       (api-block/ensure-property-upsert-control
+        nil :user.property/Status "Status"))))
+
+(deftest resolve-property-ident-prefers-existing-user-property
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [created (db-property-handler/upsert-property!
+                             nil
+                             {:logseq.property/type :number}
+                             {:property-name "Status"})
+                    user-ident (:db/ident created)
+                    resolved (api-block/<get-db-ident-from-property-name "Status" nil)
+                    missing (api-block/<get-db-ident-from-property-name "due-date" nil)]
+              (is (= "user.property" (namespace user-ident)))
+              (is (= user-ident resolved))
+              (is (= :plugin.property._test_plugin/due-date missing)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
 
 (deftest infer-property-type-test
   (is (= :checkbox (#'api-block/infer-property-type true)))

@@ -41,20 +41,63 @@
                       {:plugin plugin})))
     (str plugin-property-prefix plugin-id)))
 
+(defn- property-name->title
+  [property-name]
+  (-> (if-not (string? property-name)
+        (str property-name)
+        property-name)
+      (string/replace #"^:+" "")))
+
 (defn get-db-ident-from-property-name
   "Finds a property :db/ident for a given property name"
   [property-name plugin]
-  (let [property-name' (->
-                        (if-not (string? property-name)
-                          (str property-name)
-                          property-name)
-                        (string/replace #"^:+" ""))
+  (let [property-name' (property-name->title property-name)
         property-key (keyword property-name')]
     (if (qualified-keyword? property-key)
       property-key
       ;; plugin property
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
         (keyword plugin-ns (db-ident/normalize-ident-name-part property-name'))))))
+
+(defn- select-existing-property-ident
+  [idents]
+  (or (some (fn [ident]
+              (when (and (qualified-keyword? ident)
+                         (= "user.property" (namespace ident)))
+                ident))
+            idents)
+      (first idents)))
+
+(defn- <find-property-idents-by-title
+  [title]
+  (if-let [repo (and (string? title)
+                     (not (string/blank? title))
+                     (state/get-current-repo))]
+    (p/let [idents (db-async/<q repo
+                                {:transact-db? false}
+                                '[:find [?ident ...]
+                                  :in $ ?title
+                                  :where
+                                  [?p :block/title ?title]
+                                  [?p :block/tags ?tag]
+                                  [?tag :db/ident :logseq.class/Property]
+                                  [?p :db/ident ?ident]
+                                  [(missing? $ ?p :logseq.property/deleted-at)]]
+                                title)]
+      (or idents []))
+    (p/resolved [])))
+
+(defn <get-db-ident-from-property-name
+  "Like `get-db-ident-from-property-name`, but resolves an existing property by
+  title before synthesizing a plugin-namespaced ident."
+  [property-name plugin]
+  (let [title (property-name->title property-name)
+        property-key (keyword title)]
+    (if (qualified-keyword? property-key)
+      (p/resolved property-key)
+      (p/let [idents (<find-property-idents-by-title title)]
+        (or (select-existing-property-ident idents)
+            (get-db-ident-from-property-name property-name plugin))))))
 
 (defn resolve-class-prefix-for-db
   [^js plugin]
@@ -183,24 +226,23 @@
 (defn db-based-save-block-properties!
   [block properties & {:keys [page-id plugin schema reset-property-values]}]
   (when-let [block-id (and (seq properties) (:block/uuid block))]
-    (let [properties (mapv (fn [[k v]]
-                             (let [ident (get-db-ident-from-property-name k plugin)
-                                   property-schema (get schema k)]
-                               [k ident v property-schema]))
-                           properties)
-          property-idents (mapv second properties)]
-      (p/let [property-results (db-async/<get-blocks (state/get-current-repo)
-                                                     property-idents
-                                                     {:children? false})
-              property-by-ident (into {}
-                                      (keep (fn [{:keys [id block]}]
-                                              (when block [id block])))
-                                      property-results)
-              properties (mapv (fn [[property-id ident value property-schema]]
-                                 [property-id ident value property-schema (get property-by-ident ident)])
-                               properties)]
-        (set-block-properties! plugin block-id properties {:page-id page-id
-                                                           :reset-property-values reset-property-values})))))
+    (p/let [properties (p/all (mapv (fn [[k v]]
+                                      (p/let [ident (<get-db-ident-from-property-name k plugin)]
+                                        [k ident v (get schema k)]))
+                                    properties))
+            property-idents (mapv second properties)
+            property-results (db-async/<get-blocks (state/get-current-repo)
+                                                   property-idents
+                                                   {:children? false})
+            property-by-ident (into {}
+                                    (keep (fn [[ident {:keys [id block]}]]
+                                            (when block [(or id ident) block]))
+                                          (map vector property-idents property-results)))
+            properties (mapv (fn [[property-id ident value property-schema]]
+                               [property-id ident value property-schema (get property-by-ident ident)])
+                             properties)]
+      (set-block-properties! plugin block-id properties {:page-id page-id
+                                                         :reset-property-values reset-property-values}))))
 
 (defn <sync-children-blocks!
   [block]

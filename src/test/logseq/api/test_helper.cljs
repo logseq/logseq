@@ -140,11 +140,10 @@
   (mapv (fn [{:keys [id opts]}]
           (if-let [entity (resolve-block-entity db id)]
             (let [block (entity->api-map db entity)]
-              (if (:children? opts)
-                {:block block
-                 :children (descendant-maps db entity)}
-                {:block block}))
-            nil))
+              (cond-> {:id id :block block}
+                (:children? opts)
+                (assoc :children (descendant-maps db entity))))
+            {:id id}))
         requests))
 
 (defn- pull-entity
