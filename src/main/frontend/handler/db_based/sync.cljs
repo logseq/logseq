@@ -206,18 +206,19 @@
 
 (defn- sync-app-state-payload
   []
-  (let [payload (select-keys (state/get-state) [:git/current-repo :config
+  (let [cfg (config/effective-cognito-config)
+        payload (select-keys (state/get-state) [:git/current-repo :config
                                                  :auth/id-token :auth/access-token :auth/refresh-token
                                                  :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
                                                  :user/info])]
     (cond-> (if (nil? (:git/current-repo payload))
               (dissoc payload :git/current-repo)
               payload)
-      (seq config/OAUTH-DOMAIN)
-      (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+      (seq (:oauth-domain cfg))
+      (assoc :auth/oauth-domain (:oauth-domain cfg))
 
-      (seq config/COGNITO-CLIENT-ID)
-      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
+      (seq (:client-id cfg))
+      (assoc :auth/oauth-client-id (:client-id cfg)))))
 
 (defn- <sync-auth-state-to-db-worker!
   []

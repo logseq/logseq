@@ -82,12 +82,13 @@
         <init-sync-done? (p/deferred)
         last-state (atom ::not-set)
         app-state (fn []
-                    (cond-> (update-vals state-atoms deref)
-                      (seq config/OAUTH-DOMAIN)
-                      (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+                    (let [cfg (config/effective-cognito-config)]
+                      (cond-> (update-vals state-atoms deref)
+                        (seq (:oauth-domain cfg))
+                        (assoc :auth/oauth-domain (:oauth-domain cfg))
 
-                      (seq config/COGNITO-CLIENT-ID)
-                      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+                        (seq (:client-id cfg))
+                        (assoc :auth/oauth-client-id (:client-id cfg)))))
         sync! (fn []
                 (let [m (app-state)]
                   (when-not (= @last-state m)

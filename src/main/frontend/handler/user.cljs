@@ -184,10 +184,15 @@
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
   [refresh-token]
-  (http/post (str "https://" config/OAUTH-DOMAIN "/oauth2/token")
-             {:form-params {:grant_type "refresh_token"
-                            :client_id config/COGNITO-CLIENT-ID
-                            :refresh_token refresh-token}}))
+  (let [cfg (config/effective-cognito-config)
+        domain (:oauth-domain cfg)
+        scheme (if (or (string/starts-with? domain "localhost")
+                       (string/starts-with? domain "127."))
+                 "http" "https")]
+    (http/post (str scheme "://" domain "/oauth2/token")
+               {:form-params {:grant_type "refresh_token"
+                              :client_id (:client-id cfg)
+                              :refresh_token refresh-token}})))
 
 (defn <refresh-id-token&access-token
   "Refresh id-token and access-token"

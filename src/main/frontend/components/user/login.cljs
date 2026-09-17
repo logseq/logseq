@@ -14,6 +14,34 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]))
 
+(defn- custom-auth?
+  []
+  (some? (config/get-custom-auth-config)))
+
+(defn- cognito-endpoint
+  []
+  (let [cfg (config/effective-cognito-config)
+        domain (:oauth-domain cfg)
+        scheme (if (or (string/starts-with? domain "localhost")
+                       (string/starts-with? domain "127."))
+                 "http" "https")]
+    (str scheme "://" domain)))
+
+(defn- <cognito-request!
+  [target body]
+  (-> (js/fetch (cognito-endpoint)
+                #js {:method "POST"
+                     :headers #js {"Content-Type" "application/x-amz-json-1.1"
+                                   "X-Amz-Target" (str "AWSCognitoIdentityProviderService." target)}
+                     :body (js/JSON.stringify (clj->js body))})
+      (.then (fn [^js resp]
+               (if (.-ok resp)
+                 (.json resp)
+                 (-> (.json resp)
+                     (.then (fn [^js err]
+                              (throw (js/Error. (or (.-message err) (aget err "__type") "Unknown error")))))))))
+      (.then #(bean/->clj % :keywordize-keys true))))
+
 (defn sign-out!
   []
   (try (Auth/signOut)
@@ -21,14 +49,15 @@
 
 (defn setup-configure!
   []
-  (.configure Amplify
-              (bean/->js
-               {:Auth {:Cognito {:region config/REGION
-                                  :userPoolId config/USER-POOL-ID
-                                  :userPoolClientId config/COGNITO-CLIENT-ID
-                                  :identityPoolId config/IDENTITY-POOL-ID
-                                  :oauthDomain config/OAUTH-DOMAIN
-                                  :loginWith {:email true}}}})))
+  (let [cfg (config/effective-cognito-config)]
+    (.configure Amplify
+                (bean/->js
+                 {:Auth {:Cognito {:region (:region cfg)
+                                    :userPoolId (:user-pool-id cfg)
+                                    :userPoolClientId (:client-id cfg)
+                                    :identityPoolId (:identity-pool-id cfg)
+                                    :oauthDomain (:oauth-domain cfg)
+                                    :loginWith {:email true}}}}))))
 
 (defn- auth-error-message
   [error]
@@ -47,6 +76,48 @@
     "UserAlreadyAuthenticatedException" (t :account/auth-error-already-authenticated)
     "InvalidParameterException" (t :account/auth-error-invalid-parameter)
     (t :account/auth-error-generic)))
+
+(defn- <custom-sign-in!
+  [username password on-session-callback set-session-user! set-error! set-loading!]
+  (let [cfg (config/effective-cognito-config)]
+    (-> (<cognito-request! "InitiateAuth"
+                           {:AuthFlow "USER_PASSWORD_AUTH"
+                            :ClientId (:client-id cfg)
+                            :AuthParameters {:USERNAME username :PASSWORD password}})
+        (.then (fn [result]
+                 (let [auth-result (:AuthenticationResult result)
+                       challenge-name (:ChallengeName result)]
+                   (cond
+                     auth-result
+                     (let [session-user {:username username
+                                         :signInUserSession {:idToken {:jwtToken (:IdToken auth-result)}
+                                                             :accessToken {:jwtToken (:AccessToken auth-result)}
+                                                             :refreshToken {:token (:RefreshToken auth-result)}}}]
+                       (on-session-callback session-user)
+                       (set-session-user! session-user))
+
+                     challenge-name
+                     (set-error! (str "Challenge required: " challenge-name))
+
+                     :else
+                     (set-error! (t :account/auth-error-generic))))))
+        (.catch #(set-error! (auth-error-message %)))
+        (.finally #(set-loading! false)))))
+
+(defn- <custom-sign-up!
+  [username password email set-current-tab! set-error! set-loading!]
+  (let [cfg (config/effective-cognito-config)]
+    (-> (<cognito-request! "SignUp"
+                           {:ClientId (:client-id cfg)
+                            :Username username
+                            :Password password
+                            :UserAttributes [{:Name "email" :Value email}]})
+        (.then (fn [_result]
+                 (set-current-tab! {:type :confirm-code
+                                    :user {:username username}
+                                    :next-step "CONFIRM_SIGN_UP"})))
+        (.catch #(set-error! (auth-error-message %)))
+        (.finally #(set-loading! false)))))
 
 (defn- form-data
   [^js event]
@@ -98,6 +169,60 @@
   [loading? label]
   [shui/button {:type "submit" :disabled loading? :class "w-full"} label])
 
+(hsx/defc custom-auth-form
+  [{:keys [set-current-tab! set-error!]}]
+  (let [existing (config/get-custom-auth-config)
+        [loading? set-loading!] (hooks/use-state false)]
+    [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
+     {:on-submit
+      (fn [event]
+        (.preventDefault event)
+        (set-error! nil)
+        (let [{:keys [oauth-domain region user-pool-id identity-pool-id client-id]} (form-data event)]
+          (if (and (string/blank? oauth-domain) (string/blank? region)
+                   (string/blank? user-pool-id) (string/blank? identity-pool-id)
+                   (string/blank? client-id))
+            (do (config/clear-custom-auth-config!)
+                (setup-configure!)
+                (set-current-tab! :login))
+            (do (config/set-custom-auth-config!
+                 {:oauth-domain (string/trim (or oauth-domain ""))
+                  :region (string/trim (or region ""))
+                  :user-pool-id (string/trim (or user-pool-id ""))
+                  :identity-pool-id (string/trim (or identity-pool-id ""))
+                  :client-id (string/trim (or client-id ""))})
+                (setup-configure!)
+                (set-current-tab! :login)))))}
+     (input-row {:id "oauth-domain" :type "text" :name "oauth-domain"
+                 :default-value (:oauth-domain existing)
+                 :placeholder config/OAUTH-DOMAIN
+                 :label (t :account/custom-auth-oauth-domain)})
+     (input-row {:id "region" :type "text" :name "region"
+                 :default-value (:region existing)
+                 :placeholder config/REGION
+                 :label (t :account/custom-auth-region)})
+     (input-row {:id "user-pool-id" :type "text" :name "user-pool-id"
+                 :default-value (:user-pool-id existing)
+                 :placeholder config/USER-POOL-ID
+                 :label (t :account/custom-auth-user-pool-id)})
+     (input-row {:id "identity-pool-id" :type "text" :name "identity-pool-id"
+                 :default-value (:identity-pool-id existing)
+                 :placeholder config/IDENTITY-POOL-ID
+                 :label (t :account/custom-auth-identity-pool-id)})
+     (input-row {:id "client-id" :type "text" :name "client-id"
+                 :default-value (:client-id existing)
+                 :placeholder config/COGNITO-CLIENT-ID
+                 :label (t :account/custom-auth-client-id)})
+     [:div.w-full (submit-button loading? (t :account/confirm))]
+     [:p.pt-1.text-center
+      [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(do (config/clear-custom-auth-config!)
+                                                                        (setup-configure!)
+                                                                        (set-current-tab! :login))}
+       (t :account/use-default-auth)]
+      [:br]
+      [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :login)}
+       (t :account/back-to-login)]]]))
+
 (hsx/defc login-form
   [{:keys [set-current-tab! set-session-user! set-error! on-session-callback]}]
   (let [[loading? set-loading!] (hooks/use-state false)
@@ -107,30 +232,32 @@
        (let [timeout (js/setTimeout #(some-> (hooks/deref email-ref) (.focus)) 16)]
          #(js/clearTimeout timeout)))
      [])
-    [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
-     {:on-submit
-      (fn [event]
-        (.preventDefault event)
-        (set-error! nil)
-        (let [{:keys [email password]} (form-data event)
-              username (string/trim (or email ""))]
-          (set-loading! true)
-          (-> (Auth/signIn (bean/->js {:username username :password password}))
-              (.then (fn [^js ret]
-                       (let [next-step (some-> ret .-nextStep .-signInStep)]
-                         (case next-step
-                           ("CONFIRM_SIGN_UP" "CONFIRM_SIGN_IN_WITH_EMAIL_CODE" "CONFIRM_SIGN_IN_WITH_TOTP_CODE")
-                           (set-current-tab! {:type :confirm-code :user (merge (bean/->clj ret :keywordize-keys true) {:username username}) :next-step next-step})
+     [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
+      {:on-submit
+       (fn [event]
+         (.preventDefault event)
+         (set-error! nil)
+         (let [{:keys [email password]} (form-data event)
+               username (string/trim (or email ""))]
+           (set-loading! true)
+           (if (custom-auth?)
+             (<custom-sign-in! username password on-session-callback set-session-user! set-error! set-loading!)
+             (-> (Auth/signIn (bean/->js {:username username :password password}))
+                 (.then (fn [^js ret]
+                          (let [next-step (some-> ret .-nextStep .-signInStep)]
+                            (case next-step
+                              ("CONFIRM_SIGN_UP" "CONFIRM_SIGN_IN_WITH_EMAIL_CODE" "CONFIRM_SIGN_IN_WITH_TOTP_CODE")
+                              (set-current-tab! {:type :confirm-code :user (merge (bean/->clj ret :keywordize-keys true) {:username username}) :next-step next-step})
 
-                           "RESET_PASSWORD"
-                           (set-current-tab! {:type :reset-password :username username})
+                              "RESET_PASSWORD"
+                              (set-current-tab! {:type :reset-password :username username})
 
-                           "DONE"
-                           (<load-session! set-session-user! on-session-callback)
+                              "DONE"
+                              (<load-session! set-session-user! on-session-callback)
 
-                           (throw (js/Error. (str "Unsupported sign-in step: " next-step)))))))
-              (.catch #(set-error! (auth-error-message %)))
-              (.finally #(set-loading! false)))))}
+                              (throw (js/Error. (str "Unsupported sign-in step: " next-step)))))))
+                 (.catch #(set-error! (auth-error-message %)))
+                 (.finally #(set-loading! false))))))}
      (input-row {:id "email" :type "text" :name "email" :required true :auto-focus true
                  :ref email-ref
                  :auto-complete "username" :label (t :account/email)})
@@ -146,35 +273,40 @@
         [:br]
         [:span.opacity-50 (str (t :account/or) " ")]]
        [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :reset-password)}
-        (t :encryption/forgot-password-question)]]]]))
+        (t :encryption/forgot-password-question)]
+       [:br]
+       [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :custom-auth)}
+        (t :account/use-custom-auth)]]]]))
 
 (hsx/defc signup-form
   [{:keys [set-current-tab! set-error!]}]
   (let [[loading? set-loading!] (hooks/use-state false)]
-    [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
-     {:on-submit
-      (fn [event]
-        (.preventDefault event)
-        (set-error! nil)
-        (let [{:keys [email username password confirm-password]} (form-data event)]
-          (try
-            (validate-password! password)
-            (when (not= password confirm-password)
-              (throw (js/Error. (t :account/passwords-do-not-match))))
-            (set-loading! true)
-            (-> (Auth/signUp (bean/->js {:username username
-                                          :password password
-                                          :options {:userAttributes {:email email}}}))
-                (.then (fn [^js ret]
-                         (if (= "CONFIRM_SIGN_UP" (some-> ret .-nextStep .-signUpStep))
-                           (set-current-tab! {:type :confirm-code
-                                              :user (merge (bean/->clj ret :keywordize-keys true) {:username username})
-                                              :next-step "CONFIRM_SIGN_UP"})
-                           (set-current-tab! :login))))
-                (.catch #(set-error! (auth-error-message %)))
-                (.finally #(set-loading! false)))
-            (catch :default e
-              (set-error! (.-message e))))))}
+     [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
+      {:on-submit
+       (fn [event]
+         (.preventDefault event)
+         (set-error! nil)
+         (let [{:keys [email username password confirm-password]} (form-data event)]
+           (try
+             (validate-password! password)
+             (when (not= password confirm-password)
+               (throw (js/Error. (t :account/passwords-do-not-match))))
+             (set-loading! true)
+             (if (custom-auth?)
+               (<custom-sign-up! username password email set-current-tab! set-error! set-loading!)
+               (-> (Auth/signUp (bean/->js {:username username
+                                             :password password
+                                             :options {:userAttributes {:email email}}}))
+                   (.then (fn [^js ret]
+                            (if (= "CONFIRM_SIGN_UP" (some-> ret .-nextStep .-signUpStep))
+                              (set-current-tab! {:type :confirm-code
+                                                 :user (merge (bean/->clj ret :keywordize-keys true) {:username username})
+                                                 :next-step "CONFIRM_SIGN_UP"})
+                              (set-current-tab! :login))))
+                   (.catch #(set-error! (auth-error-message %)))
+                   (.finally #(set-loading! false))))
+             (catch :default e
+               (set-error! (.-message e))))))}
      (input-row {:id "email" :type "email" :name "email" :required true :auto-focus true
                  :auto-complete "email" :label (t :account/email)})
      (input-row {:id "username" :type "text" :name "username" :required true
@@ -184,9 +316,12 @@
      (input-row {:id "confirm-password" :type "password" :name "confirm-password" :required true
                  :auto-complete "new-password" :label (t :account/confirm-password)})
      [:div.w-full (submit-button loading? (t :account/create-account))]
-     [:p.pt-1.text-center
-      [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :login)}
-       (t :account/back-to-login)]]]))
+      [:p.pt-1.text-center
+       [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :login)}
+        (t :account/back-to-login)]
+       [:br]
+       [:a.text-sm.opacity-60.hover:opacity-80.underline {:on-click #(set-current-tab! :custom-auth)}
+        (t :account/use-custom-auth)]]]))
 
 (hsx/defc reset-password-form
   [{:keys [set-current-tab! set-error!] :as _props}]
@@ -286,6 +421,7 @@
                   :signup (t :account/sign-up)
                   :reset-password (t :account/reset-password)
                   :confirm-code (t :account/confirm)
+                  :custom-auth (t :account/custom-auth-server)
                   (t :ui/login))]
       [:<>
        (when-let [title-render (:titleRender opts)]
@@ -320,6 +456,8 @@
              :confirm-code [confirm-code-form {:current-tab current-tab
                                                :set-current-tab! set-current-tab!
                                                :set-error! set-error!}]
+             :custom-auth [custom-auth-form {:set-current-tab! set-current-tab!
+                                             :set-error! set-error!}]
              [login-form {:set-current-tab! set-current-tab!
                           :set-session-user! set-session-user!
                           :set-error! set-error!

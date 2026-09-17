@@ -48,6 +48,48 @@
     "http://127.0.0.1:8787"
     "https://api.logseq.io"))
 
+(defn- get-ls-json
+  [key]
+  (when-not util/node-test?
+    (when-let [v (.getItem js/localStorage key)]
+      (when (and (string? v) (not (string/blank? v)))
+        (try (js->clj (js/JSON.parse v) :keywordize-keys true)
+             (catch :default _ nil))))))
+
+(defn- set-ls-json!
+  [key val]
+  (when-not util/node-test?
+    (if (nil? val)
+      (.removeItem js/localStorage key)
+      (.setItem js/localStorage key (js/JSON.stringify (clj->js val))))))
+
+(defn get-custom-auth-config
+  []
+  (get-ls-json "custom-auth-config"))
+
+(defn set-custom-auth-config!
+  [m]
+  (set-ls-json! "custom-auth-config" m))
+
+(defn clear-custom-auth-config!
+  []
+  (when-not util/node-test?
+    (.removeItem js/localStorage "custom-auth-config")))
+
+(defn effective-cognito-config
+  []
+  (if-let [custom (get-custom-auth-config)]
+    {:region (or (:region custom) REGION)
+     :user-pool-id (or (:user-pool-id custom) USER-POOL-ID)
+     :client-id (or (:client-id custom) COGNITO-CLIENT-ID)
+     :identity-pool-id (or (:identity-pool-id custom) IDENTITY-POOL-ID)
+     :oauth-domain (or (:oauth-domain custom) OAUTH-DOMAIN)}
+    {:region REGION
+     :user-pool-id USER-POOL-ID
+     :client-id COGNITO-CLIENT-ID
+     :identity-pool-id IDENTITY-POOL-ID
+     :oauth-domain OAUTH-DOMAIN}))
+
 (defn get-custom-sync-server-url
   "Read the user-configured custom sync server URL from localStorage.
    Returns nil when not set or empty."
