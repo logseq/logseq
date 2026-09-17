@@ -85,7 +85,7 @@
         "Child block is recycled via its page, without its own deleted-at")
     (is (some? (:user.property/streamOf (d/entity @conn (:db/id child)))))
     (is (= #{"parent"} (custom-titles @conn leaf-query))
-        "A recycled page's descendants must not keep the parent from becoming a leaf"))))
+        "A recycled page's descendants must not keep the parent from becoming a leaf")))
 
 (deftest dsl-query-excludes-recycled-pages
   (let [conn (stream-graph)
