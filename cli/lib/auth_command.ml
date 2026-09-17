@@ -1,16 +1,33 @@
 open Cli_effect.Infix
 
-type parsed = Parsed_login | Parsed_logout
-type action = Login | Logout
+type parsed =
+  | Parsed_login of { username : string option; password : string option }
+  | Parsed_logout
+
+type action = Login of Auth_state.login_mode | Logout
 
 let command_id = function
-  | Parsed_login -> Command_id.Login
+  | Parsed_login _ -> Command_id.Login
   | Parsed_logout -> Logout
 
-let validate_parsed _ = Ok ()
+let login_mode username password =
+  match (username, password) with
+  | None, None -> Ok Auth_state.Browser_login
+  | Some username, Some password when username <> "" && password <> "" ->
+      Ok (Auth_state.Password_login { username; password })
+  | _ ->
+      Error
+        (Error.invalid_options
+           "login requires both --username and --password with non-empty values")
+
+let validate_parsed = function
+  | Parsed_login { username; password } ->
+      Error.map (fun _ -> ()) (login_mode username password)
+  | Parsed_logout -> Ok ()
 
 let build ?registry:_ _ _ = function
-  | Parsed_login -> Ok Login
+  | Parsed_login { username; password } ->
+      Error.map (fun mode -> Login mode) (login_mode username password)
   | Parsed_logout -> Ok Logout
 
 let login_value (result : Auth_state.login_result) =
@@ -18,11 +35,19 @@ let login_value (result : Auth_state.login_result) =
     Vec.of_array
       [|
         (Edn_util.keyword "auth-path", Edn_util.string result.auth_path);
-        (Edn_util.keyword "authorize-url", Edn_util.string result.authorize_url);
-        (Edn_util.keyword "opened", Edn_util.bool result.opened);
         ( Edn_util.keyword "updated-at",
           Edn_util.int64 (Time.time_to_epoch_ms result.updated_at) );
       |]
+  in
+  let fields =
+    match result.details with
+    | Auth_state.Password_login_result -> fields
+    | Auth_state.Browser_login_result { authorize_url; opened } ->
+        Vec.append_array fields
+          [|
+            (Edn_util.keyword "authorize-url", Edn_util.string authorize_url);
+            (Edn_util.keyword "opened", Edn_util.bool opened);
+          |]
   in
   let fields =
     match result.email with
@@ -52,8 +77,8 @@ let logout_value (result : Auth_state.logout_result) =
 
 let execute_with_mode action config mode =
   match action with
-  | Login -> (
-      Auth_state.login config >>= function
+  | Login login_mode -> (
+      Auth_state.login config login_mode >>= function
       | Ok result ->
           Cli_effect.pure
             (Cli_result.ok ~command:Command_id.Login mode
