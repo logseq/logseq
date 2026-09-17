@@ -19,10 +19,11 @@
   (let [blocks-by-uuid (into {}
                              (map (fn [[db-id block-uuid title parent-id]]
                                     [block-uuid
-                                     {:db/id db-id
-                                      :block/uuid block-uuid
-                                      :block/title title
-                                      :block/parent {:db/id parent-id}}]))
+                                     (cond-> {:db/id db-id
+                                              :block/uuid block-uuid
+                                              :block/title title}
+                                       (integer? parent-id)
+                                       (assoc :block/parent {:db/id parent-id}))]))
                              rows)]
     (vec (keep blocks-by-uuid ids))))
 
@@ -36,7 +37,7 @@
                        :where
                        [?e :block/uuid ?uuid]
                        [?e :block/title ?title]
-                       [?e :block/parent ?parent]]
+                       [(get-else $ ?e :block/parent :none) ?parent]]
                      ids)]
       (order-block-summaries ids rows))))
 
