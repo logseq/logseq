@@ -10,6 +10,10 @@
   "js files from publishing release build"
   ["main.js" "code-editor.js"])
 
+(def db-transit-file-path
+  "Relative path of the published graph transit file."
+  "static/js/db.transit")
+
 (def ^:api static-dirs
   "dirs under static dir to copy over"
   ["css" "icons" "img" "js"])
@@ -100,7 +104,7 @@
   "Given a graph's directory, the generated html and the directory containing
   html/static assets, creates the export at the specified output-dir and
   includes the index.html with supporting assets"
-  [html static-dir repo-path output-dir {:keys [notification-fn]
+  [html static-dir repo-path output-dir {:keys [notification-fn db-transit]
                                          :or {notification-fn default-notification}
                                          :as options}]
   (let [custom-css-path (node-path/join repo-path "logseq" "custom.css")
@@ -117,7 +121,11 @@
                 _ (fs/writeFileSync (node-path/join output-static-dir "css" "custom.css") custom-css)
                 custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
-                _ (cleanup-js-dir output-static-dir static-dir options)]
+                _ (cleanup-js-dir output-static-dir static-dir options)
+                _ (when db-transit
+                    (let [db-path (node-path/join output-dir db-transit-file-path)]
+                      (fs/mkdirSync (node-path/dirname db-path) #js {:recursive true})
+                      (fs/writeFileSync db-path db-transit)))]
           (notification-fn {:type "success"
                             :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
         (p/catch (fn [error]
