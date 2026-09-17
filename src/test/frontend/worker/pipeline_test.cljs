@@ -1428,6 +1428,37 @@
              (outliner-core/move-blocks! conn [sibling] library {:sibling? false}))
             "Library move rejects a title that already exists under Library")))))
 
+(deftest toggle-page-and-block-keeps-blank-library-insert-as-draft-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "keep"}]}])
+        library (ldb/get-library-page @conn)
+        draft-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/insert-blocks!
+         conn
+         [{:block/uuid draft-uuid
+           :block/title ""
+           :block/page (:db/id library)}]
+         library
+         {:sibling? false
+          :keep-uuid? true})
+        (let [draft (d/entity @conn [:block/uuid draft-uuid])]
+          (is (some? draft)
+              "Empty Library children are inserted instead of rolling back")
+          (is (not (ldb/page? draft))
+              "Blank newly inserted Library children stay drafts")
+          (is (= (:db/id library) (:db/id (:block/parent draft))))
+          (ldb/transact! conn [{:db/id (:db/id draft)
+                                :block/title "library draft"}])
+          (let [draft (d/entity @conn (:db/id draft))]
+            (is (ldb/page? draft)
+                "Filling the draft title converts it to a page")
+            (is (= "library draft" (:block/title draft)))
+            (is (= (common-util/page-name-sanity-lc "library draft")
+                   (:block/name draft)))))))))
+
 (deftest toggle-page-and-block-validates-auto-page-tag-title-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

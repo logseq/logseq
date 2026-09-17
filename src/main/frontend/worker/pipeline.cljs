@@ -271,6 +271,19 @@
         tx-data)
        (apply concat)))))
 
+(defn- convert-non-page-under-library-tx
+  "Convert a non-page Library child to a page after title validation."
+  [db-after id block]
+  (let [page-title (outliner-validate/validate-page-conversion-title
+                    db-after block (block-title block))]
+    (concat
+     [{:db/id id
+       :block/name (common-util/page-name-sanity-lc page-title)
+       :block/title page-title
+       :block/tags :logseq.class/Page}
+      [:db/retract id :block/page]]
+     (descendant-block-page-tx db-after id id))))
+
 (defn- toggle-page-and-block
   [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
@@ -283,26 +296,27 @@
                                      (= (:db/id page-tag) (:v datom)))
                move-to-library? (and (= :block/parent (:a datom))
                                      (= (:db/id library-page) (:v datom))
-                                     (:added datom))]
-           (when (or page-tag-update? move-to-library?)
+                                     (:added datom))
+               library-title-update? (and (contains? #{:block/title :block/raw-title} (:a datom))
+                                          (:added datom))]
+           (when (or page-tag-update? move-to-library? library-title-update?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)]
                (when block-after
                  (cond
-                   ;; move non-page block to Library
-                   (and move-to-library? (not (ldb/page? block-after)))
-                   (let [page-title (outliner-validate/validate-page-conversion-title
-                                     db-after block-after (block-title block-after))]
-                     (concat
-                      [{:db/id id
-                        :block/name (common-util/page-name-sanity-lc page-title)
-                        :block/title page-title
-                        :block/tags :logseq.class/Page}
-                       [:db/retract id :block/page]]
-                      (descendant-block-page-tx db-after id id)))
+                   ;; Library child: convert titled blocks. Empty newly inserted
+                   ;; children stay drafts so Enter can create an editor first.
+                   (and (not (ldb/page? block-after))
+                        (= (:db/id (:block/parent block-after)) (:db/id library-page))
+                        (or move-to-library? library-title-update?))
+                   (when-not (and (string/blank? (block-title block-after))
+                                  (nil? block-before))
+                     (convert-non-page-under-library-tx db-after id block-after))
 
                    ;; block->page
-                   (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
+                   (and page-tag-update?
+                        (:added datom)
+                        (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
                          page-title (outliner-validate/validate-page-conversion-title
@@ -328,7 +342,10 @@
                      (concat ->page-tx move-parent-to-library-tx))
 
                    ;; page->block
-                   (and block-before (not (:added datom)) (ldb/internal-page? block-before))
+                   (and page-tag-update?
+                        block-before
+                        (not (:added datom))
+                        (ldb/internal-page? block-before))
                    (let [parent (:block/parent block-before)
                          parent-page (when parent
                                        (loop [parent parent]
