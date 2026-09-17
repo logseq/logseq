@@ -1971,14 +1971,14 @@
               (p/let [_ (p/delay 0)
                       _ (is (= [:selection-captured
                                 [:copy-started
-                                 [true :selected-ids selected-ids]]]
+                                 [true :selected-ids selected-ids :op :cut]]]
                                @calls)
                             "Cut must not delete blocks while the structured copy is pending.")
                       _ (p/resolve! copy-finished nil)
                       _ cut-request]
                 (is (= [:selection-captured
                         [:copy-started
-                         [true :selected-ids selected-ids]]
+                         [true :selected-ids selected-ids :op :cut]]
                         :cut]
                        @calls)))))
           (p/finally done)))))

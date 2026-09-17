@@ -730,7 +730,7 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     [text & {:keys [graph html blocks embed-block? owner-window]}]
+     [text & {:keys [graph html blocks embed-block? owner-window op]}]
      (let [blocks (map identity blocks)
            data (clj->js
                  (common-util/remove-nils-non-nested
@@ -740,6 +740,7 @@
                              (pr-str
                                {:graph graph
                                :embed-block? embed-block?
+                               :op op
                                :blocks (vec blocks)}))}))]
        (if owner-window
          (write-clipboard data owner-window)
