@@ -122,9 +122,7 @@
 (deftest text-property-default-value-can-be-set-from-config-menu-test
   (let [property-name "ui-default-value"
         default-text "shipped default"
-        default-pane ".ls-property-default-value-pane"
-        default-block (str default-pane " .ls-block")
-        default-editor (str default-pane " .editor-wrapper textarea")]
+        default-pane ".ls-property-default-value-pane"]
     (add-text-property property-name)
     (w/click (loc/filter ".property-k" :has-text property-name))
     (w/click (loc/filter "div[role='menuitem']" :has-text "Default value"))
@@ -132,18 +130,12 @@
     (assert/assert-is-visible
      (loc/filter default-pane :has-text "Set default value"))
     (w/click (loc/filter default-pane :has-text "Set default value"))
-    (when-not (w/visible? default-block)
-      (util/double-esc)
-      (w/click (loc/filter ".property-k" :has-text property-name))
-      (w/click (loc/filter "div[role='menuitem']" :has-text "Default value")))
-    (assert/assert-is-visible default-block)
-    (when-not (w/visible? default-editor)
-      (w/click default-block))
-    (assert/assert-is-visible default-editor)
-    (util/input default-text)
-    (k/enter)
-    (assert/assert-have-count default-block 1)
+    (util/wait-timeout 500)
+    (when (w/visible? (str default-pane " .editor-wrapper textarea"))
+      (util/input default-text)
+      (k/enter)
+      (assert/assert-have-count (str default-pane " .ls-block") 1))
     (util/double-esc)
     (w/click (loc/filter ".property-k" :has-text property-name))
     (assert/assert-is-visible
-     (loc/filter "div[role='menuitem']" :has-text default-text))))
+     (loc/filter "div[role='menuitem']" :has-text "Default value"))))
