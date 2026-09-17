@@ -191,11 +191,9 @@
        :blocks [{:block/title "plain"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (-> (db-based-api/get-tag-objects "Not A Tag")
-                (p/then (fn [_]
-                          (is false "non-tag should throw")))
-                (p/catch (fn [error]
-                           (is (re-find #"Not a tag|Tag not exists" (str error))))))))
+            (p/let [error (p/catch (db-based-api/get-tag-objects "Not A Tag")
+                                   identity)]
+              (is (re-find #"Not a tag|Tag not exists" (str error))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -207,12 +205,10 @@
        :blocks [{:block/title "needs tag"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [block (test-helper/find-block-by-content "needs tag")]
-              (-> (db-based-api/add-block-tag (:block/uuid block) "MissingTag")
-                  (p/then (fn [_]
-                            (is false "missing tag should throw")))
-                  (p/catch (fn [error]
-                             (is (re-find #"Not a tag" (str error)))))))))
+            (p/let [block (test-helper/find-block-by-content "needs tag")
+                    error (p/catch (db-based-api/add-block-tag (:block/uuid block) "MissingTag")
+                                   identity)]
+              (is (re-find #"Not a tag" (str error))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

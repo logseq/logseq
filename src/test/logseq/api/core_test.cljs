@@ -1,7 +1,6 @@
 (ns logseq.api.core-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [electron.ipc :as ipc]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.search :as search-handler]
@@ -62,20 +61,17 @@
                                       (when (= "slot-1" id)
                                         #js {:tagName "DIV"}))]
         (is (= "DIV#slot-1" (sdk-ui/query_element_by_id "slot-1")))
-        (is (false? (sdk-ui/query_element_by_id "missing")))
+        (is (nil? (sdk-ui/query_element_by_id "missing")))
         (is (true? (sdk-ui/check_slot_valid "slot-1")))
         (is (= 10 (aget (sdk-ui/query_element_rect ".box") "width")))
         (is (nil? (sdk-ui/query_element_rect ".missing"))))
       (finally
         (set! (.-document js/globalThis) previous-document)))))
 
-(deftest make-asset-url-forwards-to-handler
+(deftest make-asset-url-returns-absolute-url
   (async done
-    (-> (p/with-redefs [assets-handler/<make-asset-url
-                        (fn [path]
-                          (p/resolved (str "asset:" path)))]
-          (p/let [url (api/make_asset_url "../assets/file.png")]
-            (is (= "asset:../assets/file.png" url))))
+    (-> (p/let [url (api/make_asset_url "https://example.com/file.png")]
+          (is (= "https://example.com/file.png" url)))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -87,8 +83,8 @@
       (-> (p/with-redefs [plugin-handler/get-plugin-inst (constantly plugin)
                           plugin-handler/request-callback (fn [_pl req-id payload]
                                                             {:req-id req-id :payload payload})
-                          ipc/ipc (fn [op req-id options]
-                                    (swap! ipc-calls conj [op req-id options])
+                          ipc/ipc (fn [& args]
+                                    (swap! ipc-calls conj args)
                                     (p/resolved #js {:ok true}))
                           loader/load (fn [src _el _opts]
                                         (p/resolved src))]

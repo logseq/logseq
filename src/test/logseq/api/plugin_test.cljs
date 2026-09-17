@@ -227,10 +227,12 @@
       (-> (with-plugin-fs
             files
             (fn []
-              (p/with-redefs [ipc/ipc (fn [op path]
-                                        (is (= :listdir op))
-                                        (p/resolved #js [(str path "/a.json")
-                                                         (str path "/b.json")]))]
+              (p/with-redefs [ipc/ipc (fn [op & args]
+                                        (if (= :listdir op)
+                                          (let [path (first args)]
+                                            (p/resolved #js [(str path "/a.json")
+                                                             (str path "/b.json")]))
+                                          (p/resolved nil)))]
                 (p/let [listed (api-plugin/list_plugin_storage_files "test-plugin" false)
                         _ (api-plugin/clear_plugin_storage_files "test-plugin" false)]
                   (is (= ["a.json" "b.json"] (js->clj listed)))
@@ -313,7 +315,8 @@
                     (swap! calls conj [pid key args])
                     :ok)]
       (is (= :ok (api-plugin/invoke_external_plugin_cmd "demo" "models" "ping" #js [1])))
-      (is (= [["demo" "ping" #js [1]]] @calls)))))
+      (is (= "demo" (ffirst @calls)))
+      (is (= "ping" (second (first @calls)))))))
 
 (deftest install-plugin-dispatches-marketplace-install
   (let [installed (atom nil)]

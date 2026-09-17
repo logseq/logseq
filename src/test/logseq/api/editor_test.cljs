@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [frontend.commands :as commands]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
@@ -481,8 +480,7 @@
   (async done
     (-> (api-test/with-plugin-api
           (fn []
-            (p/with-redefs [assets-handler/<make-asset-url (fn [href] (p/resolved href))
-                            pdf-assets/inflate-asset (fn [href opts]
+            (p/with-redefs [pdf-assets/inflate-asset (fn [href opts]
                                                        {:href href :opts opts})]
               (p/do!
                (api-editor/open_pdf_viewer "https://example.com/doc.pdf")
@@ -493,14 +491,16 @@
         (p/finally done))))
 
 (deftest open-in-right-sidebar-accepts-plugin-slot
-  (let [previous (gobj/get js/window "$$callerPluginID")]
+  (let [previous (gobj/get js/window "$$callerPluginID")
+        added (atom [])]
     (try
       (gobj/set js/window "$$callerPluginID" "test-plugin")
-      (api-editor/open_in_right_sidebar "custom-slot")
-      (is (some (fn [[_ id type]]
-                  (and (= :plugin type)
-                       (= :test-plugin/custom-slot id)))
-                (:sidebar/blocks (state/get-state))))
+      (with-redefs [state/sidebar-add-block!
+                    (fn [repo id type]
+                      (swap! added conj [repo id type]))]
+        (api-editor/open_in_right_sidebar "custom-slot")
+        (is (= [[(state/get-current-repo) :test-plugin/custom-slot :plugin]]
+               @added)))
       (finally
         (if (nil? previous)
           (js-delete js/window "$$callerPluginID")
