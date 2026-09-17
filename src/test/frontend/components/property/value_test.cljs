@@ -84,6 +84,20 @@
   (is (false? (#'property-value/default-value-property-ident?
                {:db/ident :user.property/p1}))))
 
+(deftest unset-default-value-opens-block-editor-when-entity-exists-test
+  (let [property {:db/ident :logseq.property/default-value}]
+    (is (true? (#'property-value/unset-default-value? property nil)))
+    (is (true? (#'property-value/unset-default-value?
+                property
+                {:db/ident :logseq.property/empty-placeholder})))
+    (is (false? (#'property-value/unset-default-value?
+                 property
+                 {:db/id 10}))
+        "A created default-value entity must use the block editor even without :block/title.")
+    (is (false? (#'property-value/unset-default-value?
+                 {:db/ident :user.property/p1}
+                 nil)))))
+
 (deftest empty-placeholder-identity-maps-as-empty-test
   (is (true? (#'property-value/empty-placeholder-value?
               :logseq.property/empty-placeholder)))

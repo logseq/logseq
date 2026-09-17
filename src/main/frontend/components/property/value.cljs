@@ -104,6 +104,17 @@
       (and (map? value)
            (= (:db/ident value) :logseq.property/empty-placeholder))))
 
+(defn- unset-default-value?
+  "Show the Set default value trigger only when no value entity exists.
+
+  Canonical snapshots can omit :block/title on a just-created default-value
+  block. Treating a missing title as unset kept the trigger instead of the
+  existing block editor."
+  [property value]
+  (and (default-value-property-ident? property)
+       (or (nil? value)
+           (empty-placeholder-value? value))))
+
 (defn- closed-choice-value?
   "True when the value itself carries closed-choice identity."
   [value]
@@ -1884,7 +1895,7 @@
                          (delete-block-property! block property opts))))
       :style {:min-height 24}}
      (cond
-       (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
+       (unset-default-value? property value)
        [:div.jtrigger.cursor-pointer.text-sm.px-2
         {:on-click #(<create-new-block! block property "")}
         (t :property/set-default-value)]
