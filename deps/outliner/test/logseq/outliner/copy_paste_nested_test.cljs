@@ -137,3 +137,30 @@
       (is (some? moved) "Cut paste restores the original uuid")
       (is (= ["child-1a" "child-1b"] (outline-child-titles moved)))
       (is (= "dest" (:block/title (:block/page moved)))))))
+
+(deftest non-paste-keep-uuid-reuses-live-child-identities
+  (testing "Undo restore inserts with keep-uuid? and no :paste op must not remint live children."
+    (let [conn (nested-copy-conn)
+          parent (source-parent @conn)
+          parent-uuid (:block/uuid parent)
+          child-uuids (set (map :block/uuid (ldb/sort-by-order (:block/_parent parent))))
+          copied (copied-blocks-for @conn parent)
+          target (db-test/find-block-by-content @conn "dest-anchor")]
+      (outliner-core/insert-blocks! conn copied target
+                                    {:sibling? true
+                                     :keep-uuid? true
+                                     :keep-block-order? true})
+      (let [moved (d/entity @conn [:block/uuid parent-uuid])
+            dest-page (ldb/get-page @conn "dest")
+            dest-parents (filter #(= "parent-1" (:block/title %))
+                                 (ldb/sort-by-order (:block/_parent dest-page)))
+            dest-child-uuids (set (map :block/uuid
+                                       (mapcat #(ldb/sort-by-order (:block/_parent %))
+                                               dest-parents)))]
+        (is (= 1 (count dest-parents)))
+        (is (= parent-uuid (:block/uuid (first dest-parents))))
+        (is (= ["child-1a" "child-1b"] (outline-child-titles moved)))
+        (is (= child-uuids (set (map :block/uuid (ldb/sort-by-order (:block/_parent moved))))))
+        (is (= child-uuids dest-child-uuids)
+            "Live child identities are reused, not duplicated")
+        (is (= "dest" (:block/title (:block/page moved))))))))
