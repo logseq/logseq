@@ -73,7 +73,22 @@
 
 (defn get-block-own-order-list-type
   [block]
-  (pu/lookup block :logseq.property/order-list-type))
+  (let [val (get block :logseq.property/order-list-type)
+        label (cond
+                (string? val)
+                val
+
+                (keyword? val)
+                (name val)
+
+                (map? val)
+                (or (:block/title val)
+                    (:logseq.property/value val)
+                    (some-> (:db/ident val) name))
+
+                :else
+                (pu/lookup block :logseq.property/order-list-type))]
+    (some-> label str string/lower-case)))
 
 (defn set-block-own-order-list-type!
   [block type]
@@ -102,6 +117,51 @@
       (if has-ordered?
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
         (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))
+
+(defn- number-list-items
+  [block-or-blocks]
+  (cond
+    (nil? block-or-blocks)
+    []
+
+    (or (uuid? block-or-blocks)
+        (string? block-or-blocks)
+        (map? block-or-blocks))
+    [block-or-blocks]
+
+    (sequential? block-or-blocks)
+    (vec block-or-blocks)
+
+    :else
+    [block-or-blocks]))
+
+(defn toggle-own-number-list!
+  "Toggle numbered-list type on one block or a sequence of blocks/ids.
+  Slash commands pass the current edit block; the t n shortcut passes selected ids."
+  [block-or-blocks]
+  (let [items (number-list-items block-or-blocks)
+        repo (state/get-current-repo)]
+    (p/let [resolved (p/all
+                      (map (fn [item]
+                             (if (or (uuid? item) (string? item))
+                               (db-async/<get-block repo item {:children? false})
+                               item))
+                           items))
+            blocks (remove nil? resolved)]
+      (when (seq blocks)
+        (if (> (count blocks) 1)
+          (toggle-blocks-as-own-order-list! blocks)
+          (let [block (first blocks)]
+            (if (own-order-number-list? block)
+              (remove-block-own-order-list-type! block)
+              (make-block-as-own-order-list! block))))))))
+
+(defn toggle-children-number-list!
+  [block]
+  (when-let [block-uuid (:block/uuid block)]
+    (p/let [blocks (db-async/<get-block-immediate-children (state/get-current-repo) block-uuid)]
+      (when (seq blocks)
+        (toggle-blocks-as-own-order-list! blocks)))))
 
 (defn wrap-parse-block
   [block]
