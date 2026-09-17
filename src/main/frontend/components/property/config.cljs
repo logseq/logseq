@@ -1032,27 +1032,23 @@
         (map-indexed (partial with-react-key "property-dropdown"))
         (remove nil? items)))
 
-(hsx/defc property-dropdown-loaded
-  [property* owner-block opts]
-  (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
-        [values] (hooks/use-atom *values)
-        property (db-hooks/use-block (:block/uuid property*))
-        owner-uuid (:block/uuid owner-block)
-        owner-or-property (db-hooks/use-block (or owner-uuid (:block/uuid property*)))
-        owner-block (when owner-uuid owner-or-property)]
-    (hooks/use-effect!
-     (fn []
-       (reset! *values :loading)
-       (p/let [result (db-async/<get-property-values (:db/ident property*))]
-         (reset! *values result)))
-     [(:db/ident property*)])
-    (when (and property (not= :loading values))
-      (property-dropdown-items
-       (property-dropdown-options property owner-block values opts)))))
-
 (hsx/defc property-dropdown
   [property* owner-block opts]
-  (if (uuid? (:block/uuid property*))
-    [property-dropdown-loaded property* owner-block opts]
+  (if-not (uuid? (:block/uuid property*))
     ;; Built-in table columns may lack :block/uuid; still show :more-options.
-    (property-dropdown-items (:more-options opts))))
+    (property-dropdown-items (:more-options opts))
+    (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
+          [values] (hooks/use-atom *values)
+          property (db-hooks/use-block (:block/uuid property*))
+          owner-uuid (:block/uuid owner-block)
+          owner-or-property (db-hooks/use-block (or owner-uuid (:block/uuid property*)))
+          owner-block (when owner-uuid owner-or-property)]
+      (hooks/use-effect!
+       (fn []
+         (reset! *values :loading)
+         (p/let [result (db-async/<get-property-values (:db/ident property*))]
+           (reset! *values result)))
+       [(:db/ident property*)])
+      (when (and property (not= :loading values))
+        (property-dropdown-items
+         (property-dropdown-options property owner-block values opts))))))

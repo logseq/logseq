@@ -149,4 +149,6 @@
                     :more-options [[:div.ls-table-sort-asc "Sort ascending"]
                                    [:div.ls-table-sort-desc "Sort descending"]]}))]
       (is (string/includes? markup "Sort ascending"))
-      (is (string/includes? markup "Sort descending")))))
+      (is (string/includes? markup "Sort descending"))
+      (is (nil? (:db/id property))
+          "Stub columns have no db/id, so table headers omit pin"))))
