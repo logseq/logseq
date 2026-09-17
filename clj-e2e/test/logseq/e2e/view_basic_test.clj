@@ -8,7 +8,8 @@
             [logseq.e2e.locator :as loc]
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import (com.microsoft.playwright Locator$ClickOptions)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -80,6 +81,23 @@
   (assert/assert-is-visible ".ls-table-actions")
   (assert/assert-is-visible
    (loc/filter ".ls-table-actions .selection-count" :has-text "2")))
+
+(deftest all-pages-delete-confirm-stays-open-on-pointer-release-test
+  (let [page-name (page/get-page-name)
+        click-opts (doto (Locator$ClickOptions.)
+                     (.setDelay 120))]
+    (util/search-and-click "Go to all pages")
+    (assert/assert-is-visible ".ls-all-pages")
+    (let [row (loc/filter ".ls-view-body .ls-table-row" :has-text page-name)]
+      (w/click (.locator row "[data-table-row-select]")))
+    (assert/assert-is-visible ".ls-table-actions")
+    (let [trash (.first (.locator (w/get-page)
+                                  ".ls-table-actions button:has(.ls-icon-trash)"))]
+      (.click trash click-opts))
+    (assert/assert-is-visible ".ui__dialog-content")
+    (assert/assert-is-visible "#modal-headline")
+    (w/click (loc/filter ".ui__dialog-content button" :has-text "Cancel"))
+    (assert/assert-is-hidden ".ui__dialog-content")))
 
 (deftest view-lifecycle-and-display-type-persistence-test
   (let [tag-name "view-lifecycle"
