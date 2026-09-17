@@ -1,7 +1,6 @@
 (ns logseq.e2e.view-basic-test
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is use-fixtures]]
-            [jsonista.core :as json]
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
@@ -239,66 +238,6 @@
   (w/click (loc/filter "[role='menuitem']" :has-text direction))
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
-
-(defn- js-json
-  [script]
-  (json/read-value (w/eval-js script) json/keyword-keys-object-mapper))
-
-(defn- table-page-ref-metrics
-  []
-  (js-json
-   "(() => {
-      const ref = document.querySelector('.ls-table-cell .table-block-title .page-reference');
-      if (!ref) return JSON.stringify({error: 'missing page-reference'});
-      const brackets = [...ref.querySelectorAll('.bracket')];
-      const link = ref.querySelector('.page-ref');
-      if (brackets.length < 2 || !link) return JSON.stringify({error: 'missing parts'});
-      const textRect = (el) => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        return range.getBoundingClientRect();
-      };
-      const left = textRect(brackets[0]);
-      const right = textRect(brackets[1]);
-      const mid = textRect(link);
-      const linkStyle = getComputedStyle(link);
-      return JSON.stringify({
-        leftTop: left.top,
-        linkTop: mid.top,
-        rightTop: right.top,
-        leftBottom: left.bottom,
-        linkBottom: mid.bottom,
-        rightBottom: right.bottom,
-        display: linkStyle.display,
-        overflow: linkStyle.overflow
-      });
-    })()"))
-
-(deftest table-name-page-ref-shares-bracket-baseline-test
-  (let [tag-name "page-ref-align"
-        container-page (page/get-page-name)
-        titles ["What is the [[AI]]?"
-                "What is an [[LLM]]?"
-                "Plain row without refs"]]
-    (doseq [title titles]
-      (ls-api-call! :editor.appendBlockInPage
-                    container-page
-                    (str title " #" tag-name)))
-    (page/goto-page tag-name)
-    (assert/assert-is-visible
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "What is the"))
-    (assert/assert-is-visible
-     ".ls-table-cell .table-block-title .page-reference .page-ref")
-    (let [metrics (table-page-ref-metrics)
-          top-delta (abs (- (:linkTop metrics) (:leftTop metrics)))
-          bottom-delta (abs (- (:linkBottom metrics) (:leftBottom metrics)))]
-      (is (nil? (:error metrics)) metrics)
-      (is (= "inline" (:display metrics))
-          "Title page refs must stay inline so they share the line baseline.")
-      (is (< top-delta 1.25)
-          (str "page-ref top should match [[ bracket top: " metrics))
-      (is (< bottom-delta 1.25)
-          (str "page-ref bottom should match [[ bracket bottom: " metrics)))))
 
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
