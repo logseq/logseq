@@ -728,6 +728,100 @@ abc
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(deftest-async import-converts-markdown-headings-to-db-heading-metadata
+  (p/let [file (write-temp-graph-file
+                "pages/headings.md"
+                (str "# Top H1\n"
+                     "## Top H2\n"
+                     "### Top H3\n"
+                     "#### Top H4\n"
+                     "##### Top H5\n"
+                     "###### Top H6\n"
+                     "- # List H1\n"
+                     "- ## List H2\n"
+                     "- ### List H3\n"
+                     "- #### List H4\n"
+                     "- ##### List H5\n"
+                     "- ###### List H6\n"
+                     "- ####### Too many hashes\n"
+                     "- #hashtag-not-heading remains text\n"
+                     "- regular block\n"
+                     "- Auto heading\n"
+                     "  heading:: true\n"
+                     "- Numbered heading property\n"
+                     "  heading:: 3\n"
+                     "- ## TODO task heading\n"
+                     "- ## Parent heading\n"
+                     "  - child of heading\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (doseq [[pattern title level]
+            [[#"Top H1$" "Top H1" 1]
+             [#"Top H2$" "Top H2" 2]
+             [#"Top H3$" "Top H3" 3]
+             [#"Top H4$" "Top H4" 4]
+             [#"Top H5$" "Top H5" 5]
+             [#"Top H6$" "Top H6" 6]
+             [#"List H1$" "List H1" 1]
+             [#"List H2$" "List H2" 2]
+             [#"List H3$" "List H3" 3]
+             [#"List H4$" "List H4" 4]
+             [#"List H5$" "List H5" 5]
+             [#"List H6$" "List H6" 6]]]
+      (let [block (db-test/find-block-by-content @conn pattern)]
+        (is (some? block)
+            (str "imported markdown heading " title))
+        (is (= title (:block/title block))
+            (str title " is stored without markdown heading markers"))
+        (is (not (string/starts-with? (or (:block/title block) "") "#"))
+            (str title " does not start with #"))
+        (is (= level (:logseq.property/heading block))
+            (str title " heading level is " level))))
+    (let [too-many (db-test/find-block-by-content @conn #"Too many hashes")
+          hashtag (db-test/find-block-by-content @conn #"remains text")
+          regular (db-test/find-block-by-content @conn "regular block")
+          auto (db-test/find-block-by-content @conn "Auto heading")
+          numbered (db-test/find-block-by-content @conn "Numbered heading property")
+          task (db-test/find-block-by-content @conn #"task heading$")
+          parent (db-test/find-block-by-content @conn #"Parent heading$")
+          child (db-test/find-block-by-content @conn "child of heading")]
+      (is (= "Too many hashes" (:block/title too-many))
+          "Seven-hash titles still drop literal heading markers")
+      (is (some? (:logseq.property/heading too-many))
+          "Parser-assigned heading metadata is kept for seven-hash titles")
+      (is (string/includes? (or (:block/title hashtag) "") "remains text")
+          "Hashtags without a space are not treated as headings")
+      (is (nil? (:logseq.property/heading hashtag))
+          "Hashtag blocks do not get heading metadata")
+      (is (nil? (:logseq.property/heading regular))
+          "Regular blocks are not headings")
+      (is (true? (:logseq.property/heading auto))
+          "heading:: true imports as auto heading metadata")
+      (is (= "Auto heading" (:block/title auto))
+          "heading:: true keeps the title without markdown markers")
+      (is (= 3 (:logseq.property/heading numbered))
+          "heading:: 3 imports as heading level 3")
+      (is (= "Numbered heading property" (:block/title numbered))
+          "heading:: 3 keeps the title without markdown markers")
+      (is (= "task heading" (:block/title task))
+          "Task heading titles are stored without markdown heading markers")
+      (is (= 2 (:logseq.property/heading task))
+          "Task heading keeps heading level from markdown syntax")
+      (is (= :logseq.property/status.todo
+             (:logseq.property/status (db-test/readable-properties task)))
+          "Task heading still imports as a TODO task")
+      (is (= "Parent heading" (:block/title parent))
+          "Parent heading title is stored without markdown heading markers")
+      (is (= 2 (:logseq.property/heading parent))
+          "Parent heading level is imported")
+      (is (= ["child of heading"] (mapv :block/title (ordered-children parent)))
+          "Heading parent keeps its children")
+      (is (nil? (:logseq.property/heading child))
+          "Child of a heading is not itself a heading"))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-generated-markdown-file-graph
   (assert-generated-md-file-graphs-import generated-file-graph-test-seeds))
 
