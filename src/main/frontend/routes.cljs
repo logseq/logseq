@@ -25,6 +25,16 @@
   [route-match]
   (page/page-cp (assoc route-match :current-page? true)))
 
+(def ^:private page-route-names #{:page :page-block})
+
+(defn use-route-paint-ready?
+  "Page routes resolve their first-paint snapshots inside the view tree; every
+   other route paints synchronously."
+  [route-match]
+  (let [option (when (contains? page-route-names (get-in route-match [:data :name]))
+                 route-match)]
+    (not= :loading (:status (page/use-page-paint option)))))
+
 (def routes
   [["/"
     {:name :home
