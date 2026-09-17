@@ -88,11 +88,11 @@
                     :graph-uuid (:graph-uuid parsed)
                     :page-uuid (:page-uuid parsed)
                     :url (publish-page-endpoint (:graph-uuid parsed) (:page-uuid parsed))})
-        short (when-let [short-id (:short-id parsed)]
-                {:kind :short
-                 :short-id short-id
-                 :url (publish-short-endpoint short-id)})]
-    (->> [current from-url short]
+        short-target (when-let [short-id (:short-id parsed)]
+                       {:kind :short
+                        :short-id short-id
+                        :url (publish-short-endpoint short-id)})]
+    (->> [current from-url short-target]
          (remove nil?)
          distinct
          vec)))
