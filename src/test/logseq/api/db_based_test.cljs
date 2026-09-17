@@ -1,9 +1,15 @@
 (ns logseq.api.db-based-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [clojure.string :as string]
+            [frontend.db.conn :as conn]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
+            [logseq.db :as ldb]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -236,3 +242,121 @@
 
 (deftest upsert-property-blank-name-is-nil
   (is (nil? (db-based-api/upsert-property "  " nil nil))))
+
+(defn- property-ident-by-title
+  [title ns-prefix]
+  (some (fn [property]
+          (when (and (= title (:block/title property))
+                     (string/starts-with? (namespace (:db/ident property)) ns-prefix))
+            (:db/ident property)))
+        (ldb/get-all-properties (conn/get-db))))
+
+(defn- property-written-value
+  [value]
+  (or (when (map? value)
+        (or (:logseq.property/value value)
+            (:block/title value)
+            (:value value)))
+      (when (and (object? value) (not (coll? value)))
+        (or (aget value "value")
+            (aget value ":logseq.property/value")))
+      (:logseq.property/value value)
+      value))
+
+(defn- create-ui-property!
+  [title schema]
+  (let [created (outliner-property/upsert-property!
+                 (conn/get-db (state/get-current-repo) false)
+                 nil
+                 schema
+                 {:property-name title})
+        ident (or (:db/ident created)
+                  (property-ident-by-title title "user.property"))]
+    (is (some? ident) (str "UI property should exist: " title))
+    (is (= "user.property" (namespace ident)))
+    ident))
+
+(deftest api-writes-values-on-ui-created-properties
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "UI Property Page"}
+       :blocks [{:block/title "property owner"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})
+                    block (test-helper/find-block-by-content "property owner")
+                    uuid' (str (:block/uuid block))
+                    _ (api-editor/upsert_block_property uuid' "Status" 42 nil)
+                    fetched-property (db-based-api/get-property "Status")
+                    fetched-map (api-test/js->clj-kw fetched-property)
+                    read-value (api-editor/get_block_property uuid' "Status")
+                    updated (test-helper/find-block-by-content "property owner")
+                    plugin-ident (property-ident-by-title "Status" "plugin.property.")
+                    _ (api-editor/remove_block_property uuid' "Status")
+                    after-remove (test-helper/find-block-by-content "property owner")]
+              (is (= (str user-ident) (:ident fetched-map)))
+              (is (= 42 (property-written-value (get updated user-ident))))
+              (is (= 42 (property-written-value read-value)))
+              (is (nil? plugin-ident)
+                  "Writing a UI property name must not create a plugin-namespaced property")
+              (is (nil? (get updated :plugin.property._test_plugin/Status)))
+              (is (nil? (get after-remove user-ident))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest api-writes-values-on-ui-property-by-ident
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "UI Ident Page"}
+       :blocks [{:block/title "ident owner"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [user-ident (create-ui-property! "Priority" {:logseq.property/type :number})
+                    block (test-helper/find-block-by-content "ident owner")
+                    uuid' (str (:block/uuid block))
+                    _ (api-editor/upsert_block_property uuid' (str user-ident) 7 nil)
+                    updated (test-helper/find-block-by-content "ident owner")]
+              (is (= 7 (property-written-value (get updated user-ident)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest plugin-schema-upsert-of-ui-property-is-rejected
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})]
+              (let [original-property (some #(when (= user-ident (:db/ident %)) %)
+                                            (ldb/get-all-properties (conn/get-db)))]
+                (-> (db-based-api/upsert-property "Status" #js {:type "string" :cardinality "many"} nil)
+                    (p/then (fn [_]
+                              (is false "schema upsert of a UI property should throw")))
+                    (p/catch (fn [error]
+                               (is (re-find #"Plugins can only upsert its own properties" (str error)))
+                               (let [after (some #(when (= user-ident (:db/ident %)) %)
+                                                 (ldb/get-all-properties (conn/get-db)))]
+                                 (is (= (:logseq.property/type original-property)
+                                        (:logseq.property/type after)))
+                                 (is (= (:db/cardinality original-property)
+                                        (:db/cardinality after)))))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest plugin-cannot-remove-ui-property-definition
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})]
+              (-> (db-based-api/remove-property "Status")
+                  (p/then (fn [_]
+                            (is false "removing a UI property should throw")))
+                  (p/catch (fn [error]
+                             (is (re-find #"Plugins can only remove their own properties"
+                                          (str error)))
+                             (is (some? (property-ident-by-title "Status" "user.property")))
+                             (is (= user-ident (property-ident-by-title "Status" "user.property")))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))

@@ -1,9 +1,12 @@
 (ns logseq.api.block-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.db.conn :as conn]
+            [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.api.test-helper :as api-test]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -38,7 +41,40 @@
        js/Error
        #"Plugins can only upsert its own properties"
        (api-block/ensure-property-upsert-control
-        nil :plugin.property.other/title "title"))))
+        nil :plugin.property.other/title "title")))
+  (is (thrown-with-msg?
+       js/Error
+       #"Plugins can only upsert its own properties"
+       (api-block/ensure-property-upsert-control
+        nil :user.property/Status "Status"))))
+
+(deftest resolve-property-ident-prefers-existing-user-property
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [created (outliner-property/upsert-property!
+                             (conn/get-db (state/get-current-repo) false)
+                             nil
+                             {:logseq.property/type :number}
+                             {:property-name "Status"})
+                    user-ident (:db/ident created)
+                    resolved (api-block/<get-db-ident-from-property-name "Status" nil)
+                    spaced (outliner-property/upsert-property!
+                            (conn/get-db (state/get-current-repo) false)
+                            nil
+                            {:logseq.property/type :default}
+                            {:property-name "Last Updated"})
+                    spaced-ident (:db/ident spaced)
+                    resolved-spaced (api-block/<get-db-ident-from-property-name "Last Updated" nil)
+                    missing (api-block/<get-db-ident-from-property-name "due-date" nil)]
+              (is (= "user.property" (namespace user-ident)))
+              (is (= user-ident resolved))
+              (is (= "user.property" (namespace spaced-ident)))
+              (is (= spaced-ident resolved-spaced))
+              (is (= :plugin.property._test_plugin/due-date missing)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
 
 (deftest infer-property-type-test
   (is (= :checkbox (#'api-block/infer-property-type true)))
