@@ -139,7 +139,6 @@
        (map #(d/entity db (:db/id %)))
        (map ldb/get-title-with-parents)))
 
-
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
    on ::rpath since paths are absolute by default and exporter needs relative paths for
@@ -2417,6 +2416,61 @@ abc
     (is (= #{"Projects" "foo/bar"}
            (set favorite-titles))
         "Imported favorites resolve to the original pages including flattened namespaces")))
+
+(deftest-async import-namespaced-pages-assign-block-order
+  (let [files {"pages/Country___Australia.md" "- Sydney\n"
+               "pages/Country___Canada.md" "- Ottawa\n"
+               "pages/Continent___Asia___Japan.md" "- Tokyo\n"}
+        dir (write-temp-file-graph
+             (assoc files "logseq/config.edn" "{:file/name-format :triple-lowbar}\n"))]
+    (p/doseq [import-mode [:file-graph :doc-files]]
+      (p/let [conn (db-test/create-conn)
+              _ (case import-mode
+                  :file-graph (import-file-graph-to-db dir conn {})
+                  :doc-files (import-files-to-db (mapv #(path/path-normalize (node-path/join dir %)) (keys files)) conn {}))
+              library (ldb/get-built-in-page @conn common-config/library-page-name)
+              country (db-test/find-page-by-title @conn "Country")
+              australia (db-test/find-page-by-title @conn "Australia")
+              canada (db-test/find-page-by-title @conn "Canada")
+              continent (db-test/find-page-by-title @conn "Continent")
+              asia (db-test/find-page-by-title @conn "Asia")
+              japan (db-test/find-page-by-title @conn "Japan")
+              nested-pages [australia canada asia japan]
+              ordered-pages (cond-> nested-pages
+                              (= :file-graph import-mode) (into [country continent]))]
+        (testing (name import-mode)
+          (is (= ["Country" "Country" "Continent" "Asia"]
+                 (mapv #(-> % :block/parent :block/title) nested-pages))
+              "Imported pages preserve their namespace parents")
+          (is (every? #(string? (:block/order %)) ordered-pages)
+              "Every imported hierarchy child has a string order")
+          (is (not= (:block/order australia) (:block/order canada))
+              "Sibling imported pages get distinct orders")
+          (when (= :file-graph import-mode)
+            (is (= [(:db/id library) (:db/id library)]
+                   (mapv #(-> % :block/parent :db/id) [country continent]))
+                "Top-level hierarchy parents are moved under Library")))))))
+
+(deftest-async import-namespaced-pages-order-after-parent-content-blocks
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
+                "pages/Country.md" "- Overview\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})
+          country (db-test/find-page-by-title @conn "Country")
+          australia (db-test/find-page-by-title @conn "Australia")
+          overview (db-test/find-block-by-content @conn "Overview")
+          page-order (:block/order australia)
+          content-order (:block/order overview)]
+    (is (= (:db/id country)
+           (:db/id (:block/parent australia))
+           (:db/id (:block/parent overview)))
+        "The imported page and existing content share a parent")
+    (is (and (string? page-order)
+             (string? content-order)
+             (pos? (compare page-order content-order)))
+        "The imported page is ordered after existing parent content")))
 
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)
