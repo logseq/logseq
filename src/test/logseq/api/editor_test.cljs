@@ -565,4 +565,4 @@
                    (is (= [(:block/uuid alpha)] @expanded)))))))
           (p/catch (fn [error]
                      (is false (str error))))
-          (p/finally done))))))
+          (p/finally done)))))

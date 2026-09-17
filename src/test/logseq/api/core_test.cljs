@@ -93,11 +93,12 @@
                           loader/load (fn [src _el _opts]
                                         (p/resolved src))]
             (p/let [req-id (api/exper_request "test-plugin" #js {:url "https://example.com"})
-                    _ (api/exper_load_scripts "test-plugin" "https://example.com/a.js")]
+                    _ (api/exper_load_scripts "test-plugin" "https://example.com/a.js")
+                    resource (get-in (state/get-state)
+                                     [:plugin/installed-resources :test-plugin :scripts "https://example.com/a.js"])]
               (is (number? req-id))
               (is (= :httpRequest (ffirst @ipc-calls)))
-              (is (some? (get-in (state/get-state)
-                                 [:plugin/installed-resources :test-plugin :scripts "https://example.com/a.js"]))))))
+              (is (some? resource))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
