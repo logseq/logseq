@@ -184,20 +184,40 @@
          (apply concat)))
       matched)))
 
+(defn- auto-complete-group-heading
+  "Returns the `.ui__ac-group-name` immediately above `element`, if any.
+
+  Slash-command groups render that heading as the previous sibling of the
+  focused item's `.menu-link-wrap`."
+  [element]
+  (when-let [heading (some-> element .-parentElement .-previousElementSibling)]
+    (when (some-> heading .-classList (.contains "ui__ac-group-name"))
+      heading)))
+
 (defn- auto-complete-scroll-geometry
   "Builds focused-item geometry from `container` and `element` DOM nodes.
 
   `item-top` is in container scroll coordinates so callers can compute a
-  corrected `scrollTop` without depending on `offsetParent`."
+  corrected `scrollTop` without depending on `offsetParent`.
+
+  When the focused item starts a group, `item-top` includes the group heading
+  so arrowing back to the first command also reveals the label above it."
   [container element]
   (when (and container element)
     (let [container-rect (.getBoundingClientRect container)
           element-rect (.getBoundingClientRect element)
-          scroll-top (.-scrollTop container)]
+          heading (auto-complete-group-heading element)
+          heading-rect (when heading (.getBoundingClientRect heading))
+          scroll-top (.-scrollTop container)
+          container-top (.-top container-rect)
+          element-top (+ scroll-top (- (.-top element-rect) container-top))
+          cluster-top (if heading-rect
+                        (+ scroll-top (- (.-top heading-rect) container-top))
+                        element-top)]
       {:scroll-top scroll-top
        :viewport-height (.-clientHeight container)
-       :item-top (+ scroll-top (- (.-top element-rect) (.-top container-rect)))
-       :item-height (.-height element-rect)})))
+       :item-top cluster-top
+       :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
 
 (defn- auto-complete-keep-visible-scroll-top
   "Returns a `scrollTop` that keeps the focused item inside the viewport."
