@@ -5,7 +5,8 @@
             [clojure.string :as string]
             [frontend.components.property.config :as property-config]
             [frontend.components.views :as views]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- render-static
   [element]
@@ -142,12 +143,13 @@
   (testing "Opening a table column menu must not subscribe to a missing property uuid"
     (let [property (#'views/column-property {:id :block/title})
           markup (render-static
-                  (property-config/property-dropdown
-                   property
-                   nil
-                   {:with-title? false
-                    :more-options [[:div.ls-table-sort-asc "Sort ascending"]
-                                   [:div.ls-table-sort-desc "Sort descending"]]}))]
+                  (hsx/create-element
+                   (property-config/property-dropdown
+                    property
+                    nil
+                    {:with-title? false
+                     :more-options [[:div.ls-table-sort-asc "Sort ascending"]
+                                    [:div.ls-table-sort-desc "Sort descending"]]})))]
       (is (string/includes? markup "Sort ascending"))
       (is (string/includes? markup "Sort descending"))
       (is (nil? (:db/id property))
