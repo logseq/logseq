@@ -411,10 +411,17 @@ let options_for_command =
           optional_value "ref-id-footer" "bool" "Show reference id footer";
           value "level" "n" "Tree depth";
         |]
+  | Login ->
+      Vec.of_array
+        [|
+          value "username" "username"
+            "Cognito sign-in identifier (requires --password)";
+          value "password" "password" "Account password (requires --username)";
+        |]
   | Server_list | Server_cleanup | Server_start | Server_stop | Server_restart
   | Sync_status | Sync_stop | Sync_remote_graphs | Sync_config_get
-  | Sync_config_unset | Sync_config_set | Login | Logout | Agent_bridge
-  | Example | Skill_show ->
+  | Sync_config_unset | Sync_config_set | Logout | Agent_bridge | Example
+  | Skill_show ->
       empty
   | Sync_start | Sync_upload -> Vec.singleton e2ee_password_option
   | Sync_download ->

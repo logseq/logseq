@@ -965,7 +965,9 @@ let () =
     (fun () ->
       let login_request = expect_parse_ok "login parse" [| "login" |] in
       (match login_request.command with
-      | Cli_request.Auth Auth_command.Parsed_login -> pass
+      | Cli_request.Auth
+          (Auth_command.Parsed_login { username = None; password = None }) ->
+          pass
       | _ -> fail_test "login parse: expected auth login");
       let logout_request = expect_parse_ok "logout parse" [| "logout" |] in
       (match logout_request.command with
@@ -973,9 +975,9 @@ let () =
       | _ -> fail_test "logout parse: expected auth logout");
       (match
          Auth_command.build (config ()) (Global_opts.create ())
-           Auth_command.Parsed_login
+           (Auth_command.Parsed_login { username = None; password = None })
        with
-      | Ok Auth_command.Login -> pass
+      | Ok (Auth_command.Login Auth_state.Browser_login) -> pass
       | Ok _ -> fail_test "login build: expected Login"
       | Error err -> fail_test ("login build: " ^ err.Error.message));
       match
