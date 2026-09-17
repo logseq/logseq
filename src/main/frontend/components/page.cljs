@@ -177,9 +177,9 @@
          (add-button page child-uuids config))])))
 
 (defn- hide-block-route-add-button?
-  "URL property values are not containers; do not offer a create-sub-block control."
+  "Leaf property values are not containers; do not offer a create-sub-block control."
   [block hide-add-button?]
-  (or hide-add-button? (entity/url-property-value? block)))
+  (or hide-add-button? (entity/leaf-property-value? block)))
 
 (hsx/defc block-route-root
   [block-uuid block config hide-add-button?]

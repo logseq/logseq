@@ -436,10 +436,16 @@
                  (:db/cardinality (:logseq.property/created-from-property block)))
            (block-self-alone-when-insert? config (:block/uuid block)))))
 
+(defn- leaf-property-value-insert-blocked?
+  "Default-value blocks and single URL values keep the editor but reject children."
+  [config block]
+  (or (entity/default-value-block? block)
+      (url-property-value-insert-blocked? config block)))
+
 (defn- skip-insert-for-url-property-value!
   "Save and exit when insertion would create a URL child or a single-value sibling."
   [config block]
-  (when (url-property-value-insert-blocked? config block)
+  (when (leaf-property-value-insert-blocked? config block)
     (escape-editing)
     (p/resolved [nil nil nil])))
 
@@ -684,7 +690,7 @@
   ([state block-value _right-sibling]
    (when (not config/publishing?)
      (when state
-       (if (url-property-value-insert-blocked? (:config state) (:block state))
+       (if (leaf-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
          (do
            (start-pending-new-block!)
@@ -2638,7 +2644,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
-                (url-property-value-insert-blocked? (:config state) (:block state)))
+                (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
               (escape-editing))

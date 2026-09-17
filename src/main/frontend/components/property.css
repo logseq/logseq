@@ -662,6 +662,14 @@ a.control-link {
   @apply w-[240px] p-0;
 }
 
+.ls-property-default-value-pane {
+  @apply min-w-[300px] p-1;
+
+  .property-block-container {
+    @apply ml-0;
+  }
+}
+
 .ls-property-key {
   .cp__select-results {
     .menu-link {
