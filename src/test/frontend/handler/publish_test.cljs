@@ -312,7 +312,7 @@
   (async done
     (-> (with-unpublish-fakes
           {:graph-uuid current-graph-uuid
-           :fetch-fn (fn [url opts]
+           :fetch-fn (fn [_url opts]
                        (if (= "GET" (fetch-method opts))
                          (p/resolved #js {:ok true :status 200})
                          (p/resolved #js {:ok false :status 404})))}
