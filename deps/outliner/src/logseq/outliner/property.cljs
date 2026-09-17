@@ -163,10 +163,19 @@
               [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)]))
           (:logseq.property.class/extends class))))
 
+(defn- root-class-eid
+  [db]
+  (:db/id (d/entity db :logseq.class/Root)))
+
 (defn- canonical-extends-ids
   [db value]
-  (let [parent-ids (vec (->entity-ids db value))]
-    (remove (class-ancestor-ids db parent-ids) parent-ids)))
+  (let [parent-ids (vec (->entity-ids db value))
+        parent-ids' (remove (class-ancestor-ids db parent-ids) parent-ids)
+        without-root (remove #(= % (root-class-eid db)) parent-ids')]
+    ;; Root is the implicit default parent, never a co-parent of another class.
+    (if (seq without-root)
+      without-root
+      parent-ids')))
 
 (defn- normalize-extends-value
   [db value]
@@ -174,6 +183,24 @@
     (if (single-entity-ref? value)
       (first ids)
       ids)))
+
+(defn- root-extends-ref?
+  "True when value is a single Extends parent that is Root Tag."
+  [db value]
+  (and (single-entity-ref? value)
+       (= (first (->entity-ids db value)) (root-class-eid db))))
+
+(defn- other-extends-parents
+  [block]
+  (remove #(= :logseq.class/Root (:db/ident %))
+          (or (:logseq.property.class/extends block) [])))
+
+(defn- ignore-root-extends-add?
+  "Root Tag is implicit. Ignore adding it once another parent is already set."
+  [db block property-id value]
+  (and (= property-id :logseq.property.class/extends)
+       (root-extends-ref? db value)
+       (seq (other-extends-parents block))))
 
 (defn- redundant-extends-retraction-tx-data
   [db class value]
@@ -187,7 +214,8 @@
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
-  (when (some? value)
+  (when (and (some? value)
+             (not (ignore-root-extends-add? @conn block property-id value)))
     (let [old-value (get block property-id)
           property (d/entity @conn property-id)
           multiple-values? (= :db.cardinality/many (:db/cardinality property))
@@ -213,6 +241,8 @@
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
         (into (redundant-extends-retraction-tx-data @conn block value))
+        extends?
+        (conj [:db/retract (:db/id update-block-tx) :logseq.property.class/extends :logseq.class/Root])
         true
         (conj update-block-tx)))))
 
