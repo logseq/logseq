@@ -99,7 +99,7 @@
    * :extract-fn - Fn applied to each item during fuzzy search. Default is :value
    * :extract-chosen-fn - Fn applied to each item when choosing an item. Default is identity
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
-   * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
+   * :exact-match-exclude-items - An IFn that returns truthy for strings that can't be added as new items. Default is an empty set
    * :transform-fn - Optional fn to transform search results given results and current input
    * :new-case-sensitive? - Boolean to allow new values to be case sensitive
    * :loading? - whether it's loading the items

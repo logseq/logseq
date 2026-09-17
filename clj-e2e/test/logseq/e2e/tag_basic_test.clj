@@ -74,3 +74,36 @@
     (assert/assert-have-count
      (format ".block-tag :text('%s')" tag-name)
      0)))
+
+(deftest tag-extends-picker-hides-root-tag-test
+  (let [parent-tag "extends-picker-parent"
+        child-tag "extends-picker-child"
+        option-selector #(format ".ui__dropdown-menu-content a.menu-link:has-text('%s')" %)
+        new-option-selector (util/get-by-text "New option:" false)]
+    (page/new-page parent-tag)
+    (k/esc)
+    (page/convert-to-tag parent-tag)
+
+    (page/new-page child-tag)
+    (k/esc)
+    (page/convert-to-tag child-tag)
+    (w/click (loc/filter ".property-value" :has-text "root tag"))
+    (assert/assert-is-visible ".ui__dropdown-menu-content")
+    (assert/assert-is-visible (option-selector parent-tag))
+    (assert/assert-have-count (option-selector "Root Tag") 0)
+    (doseq [[root-input new-input] [["Root Tag" "extends-picker-new-option-exact"]
+                                   ["root tag" "extends-picker-new-option-lower"]
+                                   ["  ROOT TAG  " "extends-picker-new-option-padded"]]]
+      (w/fill ".cp__select-input" new-input)
+      (assert/assert-is-visible new-option-selector)
+      (w/fill ".cp__select-input" root-input)
+      (assert/assert-have-count new-option-selector 0))
+    (w/fill ".cp__select-input" "")
+
+    (w/click (option-selector parent-tag))
+    (k/esc)
+    (assert/assert-is-visible
+     (loc/filter ".property-value" :has-text parent-tag))
+    (assert/assert-have-count
+     (loc/filter ".property-value" :has-text "Root Tag")
+     0)))

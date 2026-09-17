@@ -36,7 +36,12 @@
                      {:property property
                       :block {:db/id (:db/id (d/entity @conn [:block/uuid page-uuid]))}})]
          (is (some #(= :user.class/Topic (:db/ident %)) (:all-classes data)))
+         (is (some #(= :logseq.class/Root (:db/ident %)) (:all-classes data)))
          (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:class-options data)))
+         (is (not-any? #(= :logseq.class/Root (:db/ident %))
+                       (:extends-class-options data)))
+         (is (some #(= :user.class/Topic (:db/ident %))
+                   (:extends-class-options data)))
          (is (contains? (:structured-children-by-class-id data) topic-class-id))
          (is (some #(= :logseq.class/Tag (:db/ident %))
                    (get (:extends-by-class-id data) topic-class-id)))

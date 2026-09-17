@@ -1154,8 +1154,7 @@
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
   result]
-  (let [[*input set-input!] (hooks/use-state nil)
-        {:keys [all-classes class-options extends-class-options structured-children-by-class-id
+  (let [{:keys [all-classes class-options extends-class-options structured-children-by-class-id
                 extends-by-class-id]} (:class-data opts)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
@@ -1163,6 +1162,14 @@
                            (when (= :logseq.class/Page (:db/ident class))
                              class))
                          all-classes)
+        extends-hidden-class-titles
+        (into #{}
+              (keep (fn [class]
+                      (when (contains? ldb/extends-hidden-tags (:db/ident class))
+                        (:block/title class))))
+              all-classes)
+        extends-hidden-class-normalized-titles
+        (set (map #(string/lower-case (string/trim %)) extends-hidden-class-titles))
         page-class-id (:db/id page-class)
         page-class-title (or (:block/title page-class)
                              (block-handler/block-unique-title page-class))
@@ -1299,18 +1306,13 @@
                (merge
                 opts
                 {:multiple-choices? multiple-choices?
-                 :tap-*input-val set-input!
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
                  :input-default-placeholder (t :property/set-placeholder (db-property/built-in-display-title property t))
                  :show-new-when-not-exact-match? (not
                                                   (or (and extends-property?
-                                                  (or (contains? (set children-pages) (:db/id block))
-                                                      (when-let [input (when *input @*input)]
-                                                        (when-not (string/blank? input)
-                                                          (some (fn [ident]
-                                                                  (= input (name ident))) ldb/extends-hidden-tags)))))
+                                                           (contains? (set children-pages) (:db/id block)))
                                                       ;; Don't allow creating private tags
                                                       (and (= :block/tags (:db/ident property))
                                                            (seq (set/intersection (set (map :db/ident classes'))
@@ -1356,6 +1358,12 @@
                                                     (string/lower-case (or input ""))))
                            (cons page-option (remove #(= (:value %) page-class-id) results))
                            results)))
+
+                extends-property?
+                (assoc :exact-match-exclude-items
+                       (fn [input]
+                         (contains? extends-hidden-class-normalized-titles
+                                    (string/lower-case (string/trim input)))))
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
