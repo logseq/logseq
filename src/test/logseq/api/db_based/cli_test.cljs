@@ -81,3 +81,26 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest upsert-nodes-imports-page
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [summary (cli-api/upsert-nodes
+                             #js [#js {:operation "add"
+                                       :entityType "page"
+                                       :id "p1"
+                                       :data #js {:title "Imported Cli Page"}}
+                                  #js {:operation "add"
+                                       :entityType "block"
+                                       :data #js {:title "Imported Cli Block"
+                                                  :page-id "p1"}}]
+                             #js {})
+                    page-data (cli-api/get-page-data "Imported Cli Page")
+                    titles (set (keep :title (js->clj (aget page-data "blocks") :keywordize-keys true)))]
+              (is (re-find #"Added" summary))
+              (is (= "Imported Cli Page" (api-test/api-title (aget page-data "entity"))))
+              (is (contains? titles "Imported Cli Block")))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))

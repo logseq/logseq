@@ -3,8 +3,10 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.command-palette :as palette-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.recent :as recent-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.version :as fv]
             [logseq.api :as api]
@@ -132,3 +134,28 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest set-current-graph-configs-writes-keys
+  (async done
+    (let [written (atom [])]
+      (-> (p/with-redefs [config-handler/set-config!
+                          (fn [k v]
+                            (swap! written conj [k v])
+                            (p/resolved true))]
+            (p/do!
+             (api-app/set_current_graph_configs #js {:preferred-workflow "now"})
+             (is (= [[:preferred-workflow "now"]] @written))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest push-and-replace-page-state-redirect
+  (let [redirects (atom [])]
+    (with-redefs [route-handler/redirect-to-page!
+                  (fn [name opts]
+                    (swap! redirects conj [name opts]))]
+      (api-app/push_state "page" #js {:name "Demo"} #js {:anchor "a"})
+      (api-app/replace_state "page" #js {:name "Other"} #js {:anchor "b"})
+      (is (= [["Demo" {:anchor "a" :push true}]
+              ["Other" {:anchor "b" :push false}]]
+             @redirects)))))

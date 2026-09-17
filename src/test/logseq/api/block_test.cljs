@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]
+            [logseq.api.db-based :as db-based-api]
             [logseq.api.test-helper :as api-test]
             [promesa.core :as p]))
 
@@ -51,6 +52,23 @@
   (is (= "{\"a\":1}" (#'api-block/convert-json-and-string :json {:a 1})))
   (is (= "12" (#'api-block/convert-json-and-string :string 12)))
   (is (= "keep" (#'api-block/convert-json-and-string :default "keep"))))
+
+(deftest parse-property-json-value-if-need-test
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [_created (db-based-api/upsert-property "payload" #js {:type "json"} nil)
+                    parsed (api-block/parse-property-json-value-if-need
+                            :plugin.property._test_plugin/payload
+                            "{\"a\":1}")
+                    unparsed (api-block/parse-property-json-value-if-need
+                              :plugin.property._test_plugin/score
+                              "{\"a\":1}")]
+              (is (= 1 (aget parsed "a")))
+              (is (= "{\"a\":1}" unparsed)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
 
 (deftest get-block-returns-title-and-children
   (async done

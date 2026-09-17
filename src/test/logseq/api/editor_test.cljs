@@ -1,8 +1,18 @@
 (ns logseq.api.editor-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.commands :as commands]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [logseq.api.db-based :as db-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
             [promesa.core :as p]))
@@ -327,3 +337,232 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest delete-recycled-page-permanently-removes-page
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [created (api-editor/create_page "Permanent Delete Page" nil #js {:redirect false})
+                    uuid' (:uuid (api-test/js->clj-kw created))
+                    _ (api-editor/delete_page "Permanent Delete Page")
+                    recycled (api-editor/get_page uuid')
+                    _ (api-editor/delete_recycled_page_permanently uuid')
+                    gone (api-editor/get_page uuid')]
+              (is (or (true? (aget recycled "recycled"))
+                      (some? (aget recycled ":logseq.property/deleted-at"))
+                      (some? (aget recycled "deletedAt"))))
+              (is (nil? gone)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest create-page-with-properties-and-existing-lookup
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [created (api-editor/create_page
+                             "Property Page"
+                             #js {:score 3}
+                             #js {:redirect false})
+                    again (api-editor/create_page "Property Page" nil #js {:redirect false})
+                    missing (api-editor/get_page "Missing Page")
+                    by-uuid (api-editor/get_page (:uuid (api-test/js->clj-kw created)))
+                    properties (api-editor/get_page_properties "Property Page")]
+              (is (= (:uuid (api-test/js->clj-kw created))
+                     (:uuid (api-test/js->clj-kw again))))
+              (is (nil? missing))
+              (is (= "Property Page" (api-test/api-title by-uuid)))
+              (is (some? properties)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest create-journal-page-rejects-invalid-date
+  (is (nil? (api-editor/create_journal_page (js/Date. "not-a-date")))))
+
+(deftest edit-exit-and-code-editor-helpers
+  (let [edited (atom nil)
+        escaped (atom nil)
+        saved (atom false)]
+    (with-redefs [editor-handler/edit-block!
+                  (fn [block pos opts]
+                    (reset! edited [(:block/uuid block) pos opts]))
+                  editor-handler/escape-editing
+                  (fn [opts]
+                    (reset! escaped opts))
+                  code-handler/save-code-editor!
+                  (fn []
+                    (reset! saved true)
+                    :saved)]
+      (is (nil? (api-editor/exit_editing_mode true)))
+      (is (= {:select? true} @escaped))
+      (is (= :saved (api-editor/save_focused_code_editor_content)))
+      (is (true? @saved))))
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    result (p/with-redefs [editor-handler/edit-block!
+                                           (fn [block pos _opts]
+                                             {:uuid (:block/uuid block)
+                                              :pos pos})]
+                             (api-editor/edit_block (str (:block/uuid alpha)) #js {:pos 2}))]
+              (is (= (:block/uuid alpha) (:uuid result)))
+              (is (= 2 (:pos result))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest editing-cursor-helpers-use-input
+  (let [inserted (atom nil)
+        focused (atom 0)
+        input #js {:focus (fn [] (swap! focused inc))}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block")
+                  commands/simple-insert! (fn [input-id content _opts]
+                                            (reset! inserted [input-id content]))
+                  gdom/getElement (fn [_] input)
+                  cursor/get-caret-pos (fn [_] {:pos 4 :line 1})
+                  util/el-visible-in-viewport? (fn [_] true)]
+      (api-editor/insert_at_editing_cursor "xyz")
+      (api-editor/restore_editing_cursor)
+      (is (= ["edit-block" "xyz"] @inserted))
+      (is (= 2 @focused))
+      (is (= 4 (aget (api-editor/get_editing_cursor_position) "pos"))))))
+
+(deftest selected-blocks-and-current-block-from-selection
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    el #js {:getAttribute (fn [_] (str (:block/uuid alpha)))}
+                    selected (p/with-redefs [state/selection? (constantly [el])]
+                               (api-editor/get_selected_blocks))
+                    current (p/with-redefs [state/get-edit-block (constantly nil)
+                                            state/get-selection-blocks (constantly [el])
+                                            state/get-editor-block-container (constantly nil)]
+                              (api-editor/get_current_block nil))]
+              (is (= "alpha" (api-test/api-title (aget selected 0))))
+              (is (= "alpha" (api-test/api-title current))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest append-to-current-page-overload
+  (async done
+    (load-editor-page!)
+    (let [page (test-helper/find-page-by-title "Editor API Page")]
+      (-> (api-test/with-plugin-api
+            (fn []
+              (p/with-redefs [state/get-current-page (constantly (str (:block/uuid page)))]
+                (p/let [appended (api-editor/append_block_in_page "current-page-block")
+                        block (api-editor/get_block (aget appended "uuid") #js {})]
+                  (is (= "current-page-block" (api-test/api-title appended)))
+                  (is (= (:db/id page)
+                         (get-in (api-test/js->clj-kw block) [:parent :id])))))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest download-graph-exports-current-repo
+  (let [zip-repos (atom [])
+        sqlite-repos (atom [])]
+    (with-redefs [export-handler/export-repo-as-zip!
+                  (fn [repo] (swap! zip-repos conj repo) :zip)
+                  export-handler/export-repo-as-sqlite-db!
+                  (fn [repo] (swap! sqlite-repos conj repo) :sqlite)]
+      (is (= :sqlite (api-editor/download_graph_db)))
+      (is (= :zip (api-editor/download_graph_pages)))
+      (is (= ["logseq_db_test-db"] @sqlite-repos))
+      (is (= ["logseq_db_test-db"] @zip-repos)))))
+
+(deftest open-pdf-viewer-sets-current-pdf
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/with-redefs [assets-handler/<make-asset-url (fn [href] (p/resolved href))
+                            pdf-assets/inflate-asset (fn [href opts]
+                                                       {:href href :opts opts})]
+              (p/do!
+               (api-editor/open_pdf_viewer "https://example.com/doc.pdf")
+               (is (= "https://example.com/doc.pdf"
+                      (:href (:pdf/current (state/get-state)))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest open-in-right-sidebar-accepts-plugin-slot
+  (let [previous (gobj/get js/window "$$callerPluginID")]
+    (try
+      (gobj/set js/window "$$callerPluginID" "test-plugin")
+      (api-editor/open_in_right_sidebar "custom-slot")
+      (is (some (fn [[_ id type]]
+                  (and (= :plugin type)
+                       (= :test-plugin/custom-slot id)))
+                (:sidebar/blocks (state/get-state))))
+      (finally
+        (if (nil? previous)
+          (js-delete js/window "$$callerPluginID")
+          (gobj/set js/window "$$callerPluginID" previous))))))
+
+(deftest editor-get-block-includes-page-by-default
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [page (test-helper/find-page-by-title "Editor API Page")
+                    via-editor (api-editor/get_block (str (:block/uuid page)) nil)
+                    alpha (test-helper/find-block-by-content "alpha")
+                    block (api-editor/get_block (str (:block/uuid alpha)) #js {:includeChildren true})]
+              (is (= "Editor API Page" (api-test/api-title via-editor)))
+              (is (= "alpha" (api-test/api-title block)))
+              (is (some #{"alpha-child"}
+                        (map api-test/api-title (:children (api-test/js->clj-kw block))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest json-block-property-parses-on-read
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [_ (db-based-api/upsert-property "payload" #js {:type "json"} nil)
+                    alpha (test-helper/find-block-by-content "alpha")
+                    uuid' (str (:block/uuid alpha))
+                    _ (api-editor/upsert_block_property uuid' "payload" #js {:ok true} nil)
+                    value (api-editor/get_block_property uuid' "payload")]
+              (is (or (true? (aget value "ok"))
+                      (true? (aget value "value" "ok"))
+                      (true? (get-in (api-test/js->clj-kw value) [:value :ok])))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest collapse-toggle-flag-calls-editor-helpers
+  (async done
+    (load-editor-page!)
+    (let [collapsed (atom [])
+          expanded (atom [])]
+      (-> (api-test/with-plugin-api
+            (fn []
+              (p/let [alpha (test-helper/find-block-by-content "alpha")
+                      uuid' (str (:block/uuid alpha))]
+                (p/with-redefs [editor-handler/collapse-block!
+                                (fn [block-uuid]
+                                  (swap! collapsed conj block-uuid)
+                                  (p/resolved nil))
+                                editor-handler/expand-block!
+                                (fn [block-uuid]
+                                  (swap! expanded conj block-uuid)
+                                  (p/resolved nil))
+                                util/collapsed? (constantly false)]
+                  (p/do!
+                   (api-editor/set_block_collapsed uuid' "toggle")
+                   (api-editor/set_block_collapsed uuid' #js {:flag false})
+                   (is (= [(:block/uuid alpha)] @collapsed))
+                   (is (= [(:block/uuid alpha)] @expanded)))))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done))))))

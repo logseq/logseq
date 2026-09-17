@@ -160,3 +160,74 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest create-tag-accepts-custom-uuid
+  (async done
+    (let [custom-uuid "11111111-1111-4111-8111-111111111111"]
+      (-> (api-test/with-plugin-api
+            (fn []
+              (p/let [tag (db-based-api/create-tag "UuidTag" #js {:uuid custom-uuid})
+                      missing (db-based-api/get-property "missing-prop")]
+                (is (= custom-uuid (:uuid (api-test/js->clj-kw tag))))
+                (is (nil? missing)))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest create-tag-ignores-non-string-uuid
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [tag (db-based-api/create-tag "NilUuidTag" #js {:uuid nil})]
+              (is (string? (:uuid (api-test/js->clj-kw tag)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-tag-objects-rejects-non-tag
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Not A Tag"}
+       :blocks [{:block/title "plain"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (-> (db-based-api/get-tag-objects "Not A Tag")
+                (p/then (fn [_]
+                          (is false "non-tag should throw")))
+                (p/catch (fn [error]
+                           (is (re-find #"Not a tag|Tag not exists" (str error))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest add-block-tag-rejects-missing-tag
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Need Tag"}
+       :blocks [{:block/title "needs tag"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [block (test-helper/find-block-by-content "needs tag")]
+              (-> (db-based-api/add-block-tag (:block/uuid block) "MissingTag")
+                  (p/then (fn [_]
+                            (is false "missing tag should throw")))
+                  (p/catch (fn [error]
+                             (is (re-find #"Not a tag" (str error)))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest add-property-value-choices
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [property (db-based-api/upsert-property "status" #js {:type "default" :cardinality "many"} nil)
+                    property-id (or (aget property "id") (:id (api-test/js->clj-kw property)))
+                    result (db-based-api/add-property-value-choices property-id #js ["todo" "doing"])]
+              (is (some? result)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest upsert-property-blank-name-is-nil
+  (is (nil? (db-based-api/upsert-property "  " nil nil))))

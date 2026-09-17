@@ -73,8 +73,27 @@
     (-> (api-test/with-plugin-api
           (fn []
             (p/let [_ (api-db/set_file_content "logseq/custom.css" "body { color: red; }")
-                    content (api-db/get_file_content "logseq/custom.css")]
-              (is (= "body { color: red; }" content)))))
+                    content (api-db/get_file_content "logseq/custom.css")
+                    missing (api-db/get_file_content "logseq/missing.css")]
+              (is (= "body { color: red; }" content))
+              (is (nil? missing)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest datascript-query-accepts-extra-inputs
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Input Page"}
+       :blocks [{:block/title "keep-me"}
+                {:block/title "drop-me"}]}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [result (api-db/datascript_query
+                            "[:find ?title :in $ ?wanted :where [?b :block/title ?title] [(= ?title ?wanted)]]"
+                            "keep-me")
+                    titles (set (map first (js->clj result)))]
+              (is (= #{"keep-me"} titles)))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
