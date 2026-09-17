@@ -5,9 +5,11 @@
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.page :as outliner-page]))
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.recycle :as recycle]))
 
 (defn- process-cpu-time-ms
   []
@@ -228,6 +230,29 @@
     (is (not (contains? indexed-titles "Property type")))
     (is (not (contains? indexed-titles "Hidden page")))
     (is (some #(= (str (:block/uuid keywords)) (:id %)) combined))))
+
+(deftest recycle-bin-hide-still-hides-recycle-page
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}}
+               :pages-and-blocks [{:page {:block/title "Work"}}]})
+        recycle (ldb/get-built-in-page @conn common-config/recycle-page-name)
+        work (db-test/find-page-by-title @conn "Work")
+        keywords (d/entity @conn :user.property/keywords)
+        _ (ldb/transact! conn (recycle/recycle-page-tx-data @conn work {}) {:outliner-op :delete-page})
+        recycled-work (d/entity @conn (:db/id work))]
+    (testing "The Recycle page stays hidden via :logseq.property/hide?"
+      (is (some? recycle))
+      (is (true? (:logseq.property/hide? recycle)))
+      (is (true? (ldb/hidden? recycle)))
+      (is (true? (search/hidden-entity? recycle))))
+    (testing "Recycled pages stay hidden"
+      (is (true? (ldb/recycled? recycled-work)))
+      (is (true? (ldb/hidden? recycled-work)))
+      (is (true? (search/hidden-entity? recycled-work))))
+    (testing "Hide-by-default on a user property does not hide the property page"
+      (is (true? (:logseq.property/hide? keywords)))
+      (is (false? (search/hidden-entity? keywords))))))
 
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
