@@ -287,3 +287,49 @@
       (is (some? (state/<invoke-db-worker-when-ready :thread-api/pull "repo" [:db/id] 1)))
       (finally
         (reset! state/*db-worker previous)))))
+
+(defn- with-editor-block-action
+  [block action f]
+  (let [prev-block (state/get-edit-block)
+        prev-action (state/get-editor-action)]
+    (try
+      (state/set-state! :editor/block block)
+      (state/set-editor-action! action)
+      (f)
+      (finally
+        (state/set-state! :editor/block prev-block)
+        (state/set-editor-action! prev-action)))))
+
+(deftest set-editing-clears-slash-commands-when-switching-blocks
+  (let [block-a {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title "A"}
+        block-b {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "B"}]
+    (with-editor-block-action block-a :commands
+      (fn []
+        (state/set-editing! (str "edit-block-" (:block/uuid block-b))
+                            "B"
+                            block-b
+                            "B"
+                            {:container-id :test-container
+                             :move-cursor? false})
+        (is (nil? (state/get-editor-action))
+            "Slash commands should close when the edit target changes to another block")))))
+
+(deftest set-editing-keeps-slash-commands-in-the-same-block
+  (let [block-a {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title "A"}]
+    (with-editor-block-action block-a :commands
+      (fn []
+        (state/set-editing! (str "edit-block-" (:block/uuid block-a))
+                            "A"
+                            block-a
+                            "A"
+                            {:container-id :test-container
+                             :move-cursor? false})
+        (is (= :commands (state/get-editor-action))
+            "Slash commands should stay open while remaining in the same block")
+        (state/clear-editor-action!)
+        (state/set-editor-show-commands!)
+        (is (= :commands (state/get-editor-action))
+            "Slash commands can still be started in the current block")))))

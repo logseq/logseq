@@ -2264,6 +2264,81 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest switching-edit-block-clears-slash-commands-test
+  (let [block-a {:db/id 1
+                 :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                 :block/title "A"}
+        block-b {:db/id 2
+                 :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                 :block/title "B"}
+        prev-block (state/get-edit-block)
+        prev-action (state/get-editor-action)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (state/set-editor-action! :commands)
+      (with-redefs [state/get-current-repo (constantly "test")
+                    state/clear-selection! (constantly nil)
+                    state/get-current-editor-container-id (constantly :test-container)
+                    state/set-editing! (constantly nil)
+                    state/set-editor-last-input-time! (constantly nil)
+                    state/clear-edit! (constantly nil)]
+        (editor/edit-block! block-b 0 {:save-code-editor? false
+                                       :skip-load? true})
+        (is (nil? (state/get-editor-action))
+            "Slash commands should close when starting to edit a different block"))
+      (finally
+        (state/set-state! :editor/block prev-block)
+        (state/set-editor-action! prev-action)))))
+
+(deftest same-block-slash-commands-still-work-test
+  (let [block-a {:db/id 1
+                 :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                 :block/title "A"}
+        prev-block (state/get-edit-block)
+        prev-action (state/get-editor-action)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (state/set-editor-action! :commands)
+      (with-redefs [state/get-current-repo (constantly "test")
+                    state/clear-selection! (constantly nil)
+                    state/get-current-editor-container-id (constantly :test-container)
+                    state/set-editing! (constantly nil)
+                    state/set-editor-last-input-time! (constantly nil)]
+        (editor/edit-block! block-a 0 {:save-code-editor? false
+                                       :skip-load? true})
+        (is (= :commands (state/get-editor-action))
+            "Slash commands should stay open while remaining in the same block")
+        (handle-last-input-handler {:value "/"})
+        (is (= :commands (state/get-editor-action))
+            "Typing / in the current block should still open slash commands"))
+      (finally
+        (state/set-state! :editor/block prev-block)
+        (state/set-editor-action! prev-action)))))
+
+(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event true)
+      (is (nil? (state/get-editor-action))
+          "Slash commands should close when leaving the original block to edit another")
+      (finally
+        (state/set-editor-action! prev-action)))))
+
+(deftest editor-on-hide-keeps-slash-commands-when-staying-in-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event false)
+      (is (= :commands (state/get-editor-action))
+          "Slash commands should stay open when the editor hide is not a block switch")
+      (finally
+        (state/set-editor-action! prev-action)))))
+
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
                    :value ">"}
