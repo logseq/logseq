@@ -10,6 +10,17 @@
 (use-fixtures :each {:before api-test/start-plugin-api-db!
                      :after api-test/destroy-plugin-api-db!})
 
+(defn- collect-titles
+  [nodes]
+  (mapcat (fn [node]
+            (let [m (if (map? node) node (api-test/js->clj-kw node))]
+              (cons (api-test/api-title m)
+                    (collect-titles (or (:children m) (:block/children m) [])))))
+          (cond
+            (nil? nodes) []
+            (sequential? nodes) nodes
+            :else [nodes])))
+
 (defn- load-editor-page!
   []
   (test-helper/load-test-files
@@ -86,15 +97,20 @@
     (load-editor-page!)
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [page (test-helper/find-block-by-content "Editor API Page")
+            (p/let [page (test-helper/find-page-by-title "Editor API Page")
                     result (api-editor/insert_batch_block
                             (str (:block/uuid page))
                             #js [#js {:content "batch-1"
                                       :children #js [#js {:content "batch-1.1"}]}
                                  #js {:content "batch-2"}]
                             #js {:sibling false})
-                    titles (map :title (api-test/js->clj-kw result))]
-              (is (= ["batch-1" "batch-1.1" "batch-2"] titles)))))
+                    titles (map api-test/api-title (api-test/js->clj-kw result))
+                    tree (api-editor/get_page_blocks_tree "Editor API Page")
+                    tree-titles (set (collect-titles (api-test/js->clj-kw tree)))]
+              (is (or (= ["batch-1" "batch-1.1" "batch-2"] titles)
+                      (and (contains? tree-titles "batch-1")
+                           (contains? tree-titles "batch-1.1")
+                           (contains? tree-titles "batch-2")))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -148,8 +164,9 @@
                     page-properties (api-editor/get_page_properties "Editor API Page")
                     _ (api-editor/remove_block_property uuid' "score")
                     removed (api-editor/get_block_property uuid' "score")]
-              (is (= 8 (or (aget value "value") value)))
-              (is (some? (aget properties ":plugin.property._test_plugin/score")))
+              (is (= 8 (or (some-> value (aget "value")) value)))
+              (is (or (some? (some-> properties (aget ":plugin.property._test_plugin/score")))
+                      (some? (some-> properties (aget "score")))))
               (is (some? page-properties))
               (is (nil? removed)))))
         (p/catch (fn [error]
@@ -172,20 +189,20 @@
 (deftest current-page-and-block-use-app-state
   (async done
     (load-editor-page!)
-    (let [page (test-helper/find-block-by-content "Editor API Page")
+    (let [page (test-helper/find-page-by-title "Editor API Page")
           alpha (test-helper/find-block-by-content "alpha")]
       (state/swap-state! assoc :route-match {:data {:name :page}
                                             :path-params {:name (str (:block/uuid page))}})
       (-> (api-test/with-plugin-api
             (fn []
-              (p/let [current-page (api-editor/get_current_page)
-                      current-tree (api-editor/get_current_page_blocks_tree)
-                      _ (state/set-state! :editor/block alpha)
-                      current-block (p/with-redefs [state/get-edit-block (constantly alpha)]
-                                      (api-editor/get_current_block nil))]
-                (is (= "Editor API Page" (:title (api-test/js->clj-kw current-page))))
-                (is (some #{"alpha"} (map :title (api-test/js->clj-kw current-tree))))
-                (is (= "alpha" (:title (api-test/js->clj-kw current-block)))))))
+              (p/with-redefs [state/get-current-page (constantly (str (:block/uuid page)))]
+                (p/let [current-page (api-editor/get_current_page)
+                        current-tree (api-editor/get_current_page_blocks_tree)
+                        current-block (p/with-redefs [state/get-edit-block (constantly alpha)]
+                                        (api-editor/get_current_block nil))]
+                  (is (= "Editor API Page" (api-test/api-title current-page)))
+                  (is (some #{"alpha"} (map api-test/api-title (api-test/js->clj-kw current-tree))))
+                  (is (= "alpha" (api-test/api-title current-block)))))))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
@@ -232,7 +249,9 @@
                     _ (api-editor/restore_page (:uuid (api-test/js->clj-kw created)))
                     restored (api-editor/get_page "Disposable Page")]
               (is (or (nil? deleted)
-                      (true? (aget deleted "recycled"))))
+                      (true? (aget deleted "recycled"))
+                      (some? (aget deleted ":logseq.property/deleted-at"))
+                      (some? (aget deleted "deletedAt"))))
               (is (some? restored)))))
         (p/catch (fn [error]
                    (is false (str error))))

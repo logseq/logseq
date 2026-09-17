@@ -25,13 +25,13 @@
                     pages (cli-api/list-pages #js {})
                     page-data (cli-api/get-page-data "Cli Page")
                     missing (cli-api/get-page-data "Missing Page")
-                    tag-titles (set (map :block/title (js->clj tags :keywordize-keys true)))
-                    property-titles (set (map :block/title (js->clj properties :keywordize-keys true)))
-                    page-titles (set (map :block/title (js->clj pages :keywordize-keys true)))]
+                    tag-titles (set (keep :title (js->clj tags :keywordize-keys true)))
+                    property-titles (set (keep :title (js->clj properties :keywordize-keys true)))
+                    page-titles (set (keep :title (js->clj pages :keywordize-keys true)))]
               (is (contains? tag-titles "CliTag"))
               (is (contains? property-titles "cli-prop"))
               (is (contains? page-titles "Cli Page"))
-              (is (= "Cli Page" (aget page-data "entity" "block/title")))
+              (is (= "Cli Page" (api-test/api-title (aget page-data "entity"))))
               (is (pos? (count (aget page-data "blocks"))))
               (is (some? (aget missing "error"))))))
         (p/catch (fn [error]

@@ -31,7 +31,7 @@
     (test-helper/load-test-files
      [{:page {:block/title "Current Query Page"}
        :blocks [{:block/title "on current page"}]}])
-    (let [page (test-helper/find-block-by-content "Current Query Page")]
+    (let [page (test-helper/find-page-by-title "Current Query Page")]
       (-> (api-test/with-plugin-api
             (fn []
               (p/with-redefs [state/get-current-page (constantly (str (:block/uuid page)))]

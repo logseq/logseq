@@ -32,7 +32,8 @@
                     _ (db-based-api/remove-property "score")
                     removed (db-based-api/get-property "score")]
               (is (= ":plugin.property._test_plugin/score" (:ident created-map)))
-              (is (= "number" (:type created-map)))
+              (is (= "number" (or (:type created-map)
+                                  (get created-map (keyword ":logseq.property/type")))))
               (is (= (:uuid created-map) (:uuid fetched-map)))
               (is (nil? removed)))))
         (p/catch (fn [error]

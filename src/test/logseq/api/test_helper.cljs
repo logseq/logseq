@@ -2,7 +2,9 @@
   "Local-db worker stubs so plugin API tests can run without a db worker."
   (:require [cljs.reader]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.transact :as db-transact]
@@ -10,7 +12,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -23,6 +24,7 @@
             [logseq.db.frontend.inputs :as db-inputs]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.tree :as otree]
             [promesa.core :as p]))
 
 (def test-plugin-id :test-plugin)
@@ -85,13 +87,43 @@
     :else
     nil))
 
+(defn- entity->plain-summary
+  [entity]
+  (when entity
+    (cond-> {:db/id (:db/id entity)}
+      (:db/ident entity) (assoc :db/ident (:db/ident entity))
+      (:block/uuid entity) (assoc :block/uuid (:block/uuid entity))
+      (:block/title entity) (assoc :block/title (:block/title entity))
+      (:block/name entity) (assoc :block/name (:block/name entity))
+      (contains? entity :logseq.property/value)
+      (assoc :logseq.property/value (:logseq.property/value entity))
+      (:logseq.property/type entity)
+      (assoc :logseq.property/type (:logseq.property/type entity)))))
+
+(defn- sanitize-api-value
+  "Plugin host APIs walk maps with clojure.walk. Live Datascript entities
+  include reverse refs, so converting them as maps overflows the stack."
+  [value]
+  (walk/prewalk
+   (fn [item]
+     (if (de/entity? item)
+       (entity->plain-summary item)
+       item))
+   value))
+
+(defn- properties-map
+  [entity]
+  (->> (db-property/properties entity)
+       (map (fn [[k v]] [k (sanitize-api-value v)]))
+       (into {})))
+
 (defn- entity->api-map
   [db entity]
   (when entity
     (let [pulled (d/pull db block-pull-selector (:db/id entity))]
       (assoc pulled
-             :block/properties (db-property/properties entity)
-             :block.temp/has-children? (boolean (seq (:block/_parent entity)))))))
+             :block/properties (properties-map entity)
+             :block.temp/has-children? (boolean (first (d/datoms db :avet :block/parent (:db/id entity))))))))
 
 (defn- children-maps
   [db parent]
@@ -204,9 +236,7 @@
       (let [[_repo page-id-name-or-uuid] args]
         (when-let [page (or (resolve-block-entity db page-id-name-or-uuid)
                             (ldb/get-page db page-id-name-or-uuid))]
-          (tree/blocks->vec-tree
-           (ldb/get-page-blocks db (:db/id page))
-           (:db/id page))))
+          (otree/blocks->vec-tree db (ldb/get-page-blocks db (:db/id page)) (:db/id page))))
 
       :thread-api/get-tags-by-name
       (let [[_repo name] args]
@@ -221,13 +251,13 @@
                                 (ldb/get-case-page db page-name-or-uuid))))
 
       :thread-api/get-all-classes
-      (let [[_repo opts] args]
-        (let [except-root-class? (:except-root-class? opts true)]
-          (cond->> (d/datoms db :avet :block/tags :logseq.class/Tag)
-            true (map (fn [datom] (d/entity db (:e datom))))
-            true (remove ldb/recycled?)
-            except-root-class? (remove #(= :logseq.class/Root (:db/ident %)))
-            true (mapv #(entity->api-map db %)))))
+      (let [[_repo opts] args
+            except-root-class? (:except-root-class? opts true)]
+        (cond->> (d/datoms db :avet :block/tags :logseq.class/Tag)
+          true (map (fn [datom] (d/entity db (:e datom))))
+          true (remove ldb/recycled?)
+          except-root-class? (remove #(= :logseq.class/Root (:db/ident %)))
+          true (mapv #(entity->api-map db %))))
 
       :thread-api/get-all-properties
       (mapv #(entity->api-map db %) (ldb/get-all-properties db))
@@ -329,7 +359,7 @@
 
 (defn <invoke-test-worker
   [api & args]
-  (p/resolved (handle-worker api args)))
+  (p/resolved (sanitize-api-value (handle-worker api args))))
 
 (defn install-test-plugin!
   ([]
@@ -382,3 +412,13 @@
 (defn js->clj-kw
   [value]
   (js->clj value :keywordize-keys true))
+
+(defn api-title
+  [value]
+  (let [m (js->clj-kw value)]
+    (or (:title m)
+        (:block/title m)
+        (get m "title")
+        (when (and (object? value) (not (map? value)))
+          (or (aget value "title")
+              (aget value "block/title"))))))

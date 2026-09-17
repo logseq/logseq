@@ -82,11 +82,11 @@
        :blocks [{:block/title "page child"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [page (test-helper/find-block-by-content "Hidden Page")
+            (p/let [page (test-helper/find-page-by-title "Hidden Page")
                     without-page (api-block/get_block (:db/id page) #js {})
                     with-page (api-block/get_block (:db/id page) #js {:includePage true})]
               (is (nil? without-page))
-              (is (= "Hidden Page" (:title (api-test/js->clj-kw with-page)))))))
+              (is (= "Hidden Page" (api-test/api-title with-page))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
