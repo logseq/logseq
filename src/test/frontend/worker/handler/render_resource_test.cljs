@@ -1040,6 +1040,82 @@
                                    :ref-titles {}}
                                   response))))
 
+(deftest block-breadcrumb-keeps-root-first-order-when-zoomed-into-nested-page-block-test
+  (let [conn (db-test/create-conn)
+        library (ldb/get-built-in-page @conn common-config/library-page-name)
+        some-page (random-uuid)
+        test-a (random-uuid)
+        test-b (random-uuid)
+        test-c (random-uuid)
+        inner (random-uuid)]
+    (is (some? library) "Built-in Library page is required for nested page breadcrumbs.")
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid some-page
+                   :block/tx-id 21
+                   :block/title "some page"
+                   :block/name "some page"
+                   :block/tags :logseq.class/Page
+                   :block/parent (:db/id library)}
+                  {:db/id -2
+                   :block/uuid test-a
+                   :block/tx-id 21
+                   :block/title "test a"
+                   :block/name "test a"
+                   :block/tags :logseq.class/Page
+                   :block/parent -1}
+                  {:db/id -3
+                   :block/uuid test-b
+                   :block/tx-id 21
+                   :block/title "test b"
+                   :block/name "test b"
+                   :block/tags :logseq.class/Page
+                   :block/parent -2}
+                  {:db/id -4
+                   :block/uuid test-c
+                   :block/tx-id 21
+                   :block/title "test c"
+                   :block/page -3
+                   :block/parent -3
+                   :block/order "a0"}
+                  {:db/id -5
+                   :block/uuid inner
+                   :block/tx-id 21
+                   :block/title "inner"
+                   :block/page -3
+                   :block/parent -4
+                   :block/order "a1"}])
+    (let [page-block (d/entity @conn [:block/uuid test-b])
+          zoomed-block (d/entity @conn [:block/uuid test-c])
+          inner-block (d/entity @conn [:block/uuid inner])
+          page-ancestors (block-breadcrumb/block-breadcrumb @conn page-block)
+          zoomed-ancestors (block-breadcrumb/block-breadcrumb @conn zoomed-block)
+          depth-limited-ancestors (block-breadcrumb/block-breadcrumb @conn inner-block 1)]
+      (is (= ["Library" "some page" "test a"]
+             (mapv :block/title page-ancestors))
+          "Page breadcrumb stays root-first and omits the current page.")
+      (is (= ["Library" "some page" "test a" "test b"]
+             (mapv :block/title zoomed-ancestors))
+          "Zoomed block breadcrumb stays root-first and includes the parent page.")
+      (is (= ["test b" "test c"]
+             (mapv :block/title depth-limited-ancestors))
+          "Truncated walks still prepend :block/page when it is not already an ancestor.")
+      (when-let [api (render-resource-api)]
+        (let [resource-key [:block-breadcrumb test-c 16]
+              response (call-resource api conn resource-key)]
+          (assert-resource-envelope @conn
+                                    resource-key
+                                    #{[:entity test-c]
+                                      [:entity (:block/uuid library)]
+                                      [:entity some-page]
+                                      [:entity test-a]
+                                      [:entity test-b]}
+                                    {:target-uuid test-c
+                                     :ancestor-uuids [(:block/uuid library) some-page test-a test-b]
+                                     :ancestors zoomed-ancestors
+                                     :ref-titles {}}
+                                    response))))))
+
 (deftest journals-resource-returns-only-ordered-uuids-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-a journal-b journal-child-a journal-grandchild]}
