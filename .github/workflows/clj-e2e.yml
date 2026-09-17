@@ -116,6 +116,7 @@ jobs:
           - shard: commands
             namespaces: >-
               logseq.e2e.commands-basic-test
+              logseq.e2e.query-builder-basic-test
               logseq.e2e.multi-tabs-basic-test
               logseq.e2e.reference-basic-test
           - shard: outliner-rtc
