@@ -1089,3 +1089,25 @@
           "An unused positioned property offers existing nodes of its allowed class.")
       (is (= icon (:logseq.property/icon property))
           "Empty left/right values can render their configured icon immediately."))))
+
+(deftest get-block-and-children-respects-include-property-block
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:p1 {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "b1"
+                           :build/properties {:p1 "value"}
+                           :build/children [{:block/title "child"}]}]}]})
+        b1 (db-test/find-block-by-content @conn "b1")
+        excluded (:children (block-handler/get-block-and-children
+                             @conn (:block/uuid b1)
+                             {:children? true}))
+        included (:children (block-handler/get-block-and-children
+                             @conn (:block/uuid b1)
+                             {:children? true
+                              :include-property-block? true}))
+        titles (fn [children] (set (keep :block/title children)))]
+    (is (= #{"child"} (titles excluded))
+        "Default children omit property-value blocks")
+    (is (= #{"child" "value"} (titles included))
+        "include-property-block? true returns property-value children used by cut/copy")))

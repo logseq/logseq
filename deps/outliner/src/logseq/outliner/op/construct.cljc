@@ -696,7 +696,8 @@
   (let [root-id (:db/id root)
         root-uuid (:block/uuid root)
         blocks (when root-uuid
-                 (->> (ldb/get-block-and-children db-before root-uuid)
+                 (->> (ldb/get-block-and-children db-before root-uuid
+                                                  {:include-property-block? true})
                       (keep #(build-insert-block-payload db-before %))
                       vec))
         [target-id sibling?] (block-restore-target root)
