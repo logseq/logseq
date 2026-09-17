@@ -321,8 +321,10 @@
 
 (defn- direct-child-blocks
   ([db block-id]
-   (direct-child-blocks db block-id false))
+   (direct-child-blocks db block-id false false))
   ([db block-id reverse?]
+   (direct-child-blocks db block-id reverse? false))
+  ([db block-id reverse? include-property-block?]
    (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
                         (map :e)
                         set)
@@ -335,12 +337,14 @@
                     true (keep #(d/entity db %))
                     true ldb/sort-by-order
                     reverse? reverse))]
-     (remove #(or (:block/closed-value-property %)
-                  (:logseq.property/created-from-property %))
-             blocks))))
+     (cond->> blocks
+       (not include-property-block?)
+       (remove :logseq.property/created-from-property)
+       true
+       (remove :block/closed-value-property)))))
 
 (defn- get-block-children
-  [db block {:keys [all? include-collapsed-children?]}]
+  [db block {:keys [all? include-collapsed-children? include-property-block?]}]
   (let [[large-page? children-blocks]
         (loop [pending [block]
                seen #{(:db/id block)}
@@ -354,7 +358,7 @@
                                 (some? (property-handler/entity-direct-value db parent :block/name)))
                     children (if expand?
                                (remove #(contains? seen (:db/id %))
-                                       (direct-child-blocks db (:db/id parent)))
+                                       (direct-child-blocks db (:db/id parent) false include-property-block?))
                                [])]
                 (recur (into pending children)
                        (into seen (map :db/id) children)
@@ -362,11 +366,10 @@
               [false result])))
         children-blocks (remove ldb/recycled? children-blocks)
         children (if large-page?
-                   (remove ldb/recycled? (direct-child-blocks db (:db/id block)))
+                   (remove ldb/recycled? (direct-child-blocks db (:db/id block) false include-property-block?))
                    children-blocks)]
     {:large-page? large-page?
-     :children (->> children
-                    (remove :block/closed-value-property))}))
+     :children children}))
 
 (defn- plain-render-block?
   [db block]
@@ -448,13 +451,14 @@
 
 (defn get-block-and-children
   [db id-or-page-name {:keys [all? children? properties render-data? root-render-data?
-                              include-collapsed-children?]
+                              include-collapsed-children? include-property-block?]
                        :or {include-collapsed-children? false}}]
   (when-let [block (resolve-block-entity db id-or-page-name)]
     (let [block-refs-count? (some #{:block.temp/refs-count} properties)
           {:keys [children]} (when children?
                                (get-block-children db block {:all? all?
-                                                             :include-collapsed-children? include-collapsed-children?}))
+                                                             :include-collapsed-children? include-collapsed-children?
+                                                             :include-property-block? include-property-block?}))
           children' (when children?
                       (map (fn [child]
                              (let [child-map-base (worker-plain/entity-forward-map db child {})
