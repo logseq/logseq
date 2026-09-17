@@ -1,8 +1,10 @@
 let is_option token = String.length token > 0 && token.[0] = '-'
+
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
     options
+
 let option_present key options = Vec.mem_assoc key options
 
 let normalize_key = function
@@ -32,11 +34,10 @@ let split_equals_option token =
 
 let boolean_option = function
   | "version" | "help" | "verbose" | "profile" | "enable-sync" | "expand"
-  | "fix"
-  | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
-  | "with-properties" | "with-extends" | "with-classes" | "with-type"
-  | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" | "pretty-print" ->
+  | "fix" | "include-built-in" | "include-journal" | "journal-only"
+  | "include-hidden" | "with-properties" | "with-extends" | "with-classes"
+  | "with-type" | "page-hierarchy" | "linked-references" | "ref-id-footer"
+  | "progress" | "upload-keys" | "pretty-print" ->
       true
   | _ -> false
 
@@ -110,7 +111,6 @@ let bool_option_value key options =
   match option_value key options with
   | Some value -> Some (String.lowercase_ascii (String.trim value) = "true")
   | None -> if option_present key options then Some true else None
-
 
 let common_list_opts options =
   {
@@ -321,9 +321,9 @@ let allowed_options_for_path path =
   else if path2 path "debug" "pull" then
     option_names [| "id"; "uuid"; "ident" |]
   else if path1 path "doctor" then option_names [| "dev-script" |]
+  else if path1 path "login" then option_names [| "username"; "password" |]
   else if
-    path1 path "login" || path1 path "logout" || path2 path "skill" "show"
-    || path1 path "example"
+    path1 path "logout" || path2 path "skill" "show" || path1 path "example"
   then Vec.empty
   else if path1 path "completion" then option_names [| "shell" |]
   else if path2 path "skill" "install" then option_names [| "global" |]
@@ -765,7 +765,7 @@ let parsed_list_command options = function
 let path_alias_overrides = function
   | [| "graph"; "validate" |] -> [ ("-f", "--fix") ]
   | [| "graph"; "export" |] -> [ ("-f", "--file") ]
-  | [| "list"; ("page" | "tag" | "property") |] -> [ ("-e", "--expand") ]
+  | [| "list"; "page" | "tag" | "property" |] -> [ ("-e", "--expand") ]
   | _ -> []
 
 (* rewrite a bare alias token, or its -x=value form *)
@@ -778,8 +778,7 @@ let apply_alias_override overrides token =
       | Some index -> (
           match List.assoc_opt (String.sub token 0 index) overrides with
           | Some replacement ->
-              replacement
-              ^ String.sub token index (String.length token - index)
+              replacement ^ String.sub token index (String.length token - index)
           | None -> token))
 
 let parse ?stdin argv =
@@ -789,9 +788,7 @@ let parse ?stdin argv =
     match path_alias_overrides positional_array with
     | [] -> options
     | overrides ->
-        argv
-        |> Vec.map (apply_alias_override overrides)
-        |> parse_tokens |> fst
+        argv |> Vec.map (apply_alias_override overrides) |> parse_tokens |> fst
   in
   let positional_tail start =
     Vec.init
@@ -837,8 +834,7 @@ let parse ?stdin argv =
         make [| "graph"; "remove" |] (Graph Parsed_remove)
     | [| "graph"; "validate" |] ->
         make [| "graph"; "validate" |]
-          (Graph
-             (Parsed_validate { fix = option_present "fix" options }))
+          (Graph (Parsed_validate { fix = option_present "fix" options }))
     | [| "graph"; "info" |] -> make [| "graph"; "info" |] (Graph Parsed_info)
     | [| "graph"; "backup"; "list" |] ->
         make [| "graph"; "backup"; "list" |] (Graph Parsed_backup_list)
@@ -1107,7 +1103,27 @@ let parse ?stdin argv =
           (Doctor
              (Doctor.Parsed_doctor
                 { dev_script = option_present "dev-script" options }))
-    | [| "login" |] -> make [| "login" |] (Auth Auth_command.Parsed_login)
+    | [| "login" |] ->
+        if
+          Vec.exists
+            (fun (key, value) ->
+              (key = "username" || key = "password")
+              && (value = None || value = Some ""))
+            options
+        then
+          Error
+            (Error.invalid_options
+               "--username and --password require non-empty values")
+        else
+          let parsed =
+            Auth_command.Parsed_login
+              {
+                username = option_value "username" options;
+                password = option_value "password" options;
+              }
+          in
+          Error.bind (Auth_command.validate_parsed parsed) (fun () ->
+              make [| "login" |] (Auth parsed))
     | [| "logout" |] -> make [| "logout" |] (Auth Auth_command.Parsed_logout)
     | [| "skill"; "show" |] ->
         make [| "skill"; "show" |] (Skill Skill.Parsed_show)
@@ -1144,6 +1160,9 @@ let parse ?stdin argv =
             make [| "completion" |]
               (Completion (Completion.Parsed_completion { shell })))
     | [||] -> Error (Error.unknown_command "")
+    | _ when Vec.peek_front_opt positional = Some "login" ->
+        Error
+          (Error.invalid_options "login does not accept positional arguments")
     | _ ->
         Error
           (Error.unknown_command

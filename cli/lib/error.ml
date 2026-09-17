@@ -47,6 +47,7 @@ type code =
   | Graph_not_removed
   | Graph_validation_failed
   | Invalid_auth_file
+  | Invalid_auth_response
   | Invalid_auth_token
   | Invalid_blocks
   | Invalid_callback_request
@@ -85,6 +86,9 @@ type code =
   | Not_implemented
   | Page_hierarchy_parent_cycle
   | Page_not_found
+  | Password_auth_disabled
+  | Password_auth_failed
+  | Password_auth_rejected
   | Property_built_in
   | Property_hidden
   | Property_not_found
@@ -120,6 +124,7 @@ type code =
   | Task_tag_not_found
   | Unknown_command
   | Unknown_query
+  | Unsupported_auth_challenge
   | Unsupported_input_format
   | Unsupported_output_format
   | Upsert_id_not_found
@@ -198,6 +203,7 @@ let code_to_string = function
   | Graph_not_removed -> "graph-not-removed"
   | Graph_validation_failed -> "graph-validation-failed"
   | Invalid_auth_file -> "invalid-auth-file"
+  | Invalid_auth_response -> "invalid-auth-response"
   | Invalid_auth_token -> "invalid-auth-token"
   | Invalid_blocks -> "invalid-blocks"
   | Invalid_callback_request -> "invalid-callback-request"
@@ -236,6 +242,9 @@ let code_to_string = function
   | Not_implemented -> "not-implemented"
   | Page_hierarchy_parent_cycle -> "page-hierarchy-parent-cycle"
   | Page_not_found -> "page-not-found"
+  | Password_auth_disabled -> "password-auth-disabled"
+  | Password_auth_failed -> "password-auth-failed"
+  | Password_auth_rejected -> "password-auth-rejected"
   | Property_built_in -> "property-built-in"
   | Property_hidden -> "property-hidden"
   | Property_not_found -> "property-not-found"
@@ -272,6 +281,7 @@ let code_to_string = function
   | Task_tag_not_found -> "task-tag-not-found"
   | Unknown_command -> "unknown-command"
   | Unknown_query -> "unknown-query"
+  | Unsupported_auth_challenge -> "unsupported-auth-challenge"
   | Unsupported_input_format -> "unsupported-input-format"
   | Unsupported_output_format -> "unsupported-output-format"
   | Upsert_id_not_found -> "upsert-id-not-found"
