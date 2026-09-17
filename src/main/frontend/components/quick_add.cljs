@@ -61,7 +61,10 @@
                             :size :sm
                             :on-click (fn [_e]
                                         (editor-handler/quick-add-blocks!))}
-                           (when-not mobile? (shui/shortcut ["mod" "e"]))
+                           (when-not mobile?
+                             (if util/mac?
+                               (shui/shortcut ["mod" "e"])
+                               (shui/shortcut ["mod" "alt" "e"])))
                            (t :editor.quick-add/add-to-today))]]
           [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
            (when-not mobile?
