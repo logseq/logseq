@@ -11,10 +11,17 @@ type auth_data = {
   updated_at : Js.Date.t;
 }
 
+type login_mode =
+  | Browser_login
+  | Password_login of { username : string; password : string }
+
+type login_details =
+  | Browser_login_result of { authorize_url : Cli_primitive.url; opened : bool }
+  | Password_login_result
+
 type login_result = {
   auth_path : Cli_primitive.path;
-  authorize_url : Cli_primitive.url;
-  opened : bool;
+  details : login_details;
   email : Cli_primitive.email option;
   sub : string option;
   updated_at : Js.Date.t;
@@ -595,7 +602,7 @@ let resolve_auth config =
             | Ok refreshed -> write_auth_file config refreshed
           else Cli_effect.pure (Ok auth))
 
-let login config =
+let browser_login config =
   match authorize_endpoint config with
   | None ->
       Cli_effect.pure
@@ -653,8 +660,8 @@ let login config =
                       (Ok
                          {
                            auth_path = auth_path config;
-                           authorize_url;
-                           opened;
+                           details =
+                             Browser_login_result { authorize_url; opened };
                            email = data.email;
                            sub = data.sub;
                            updated_at = data.updated_at;
@@ -713,6 +720,171 @@ let login config =
                               |]))
                       Error.Login_callback_server_start_failed
                       "failed to start login callback server"))))
+
+let invalid_password_response () =
+  Error.make Error.Invalid_auth_response
+    "invalid password authentication response"
+
+let nonempty_string_field object_ key =
+  match Json_util.string_field object_ key with
+  | Some value when String.trim value <> "" -> Some value
+  | _ -> None
+
+let password_auth_of_result object_ =
+  match
+    ( nonempty_string_field object_ "IdToken",
+      nonempty_string_field object_ "AccessToken",
+      nonempty_string_field object_ "RefreshToken" )
+  with
+  | Some id_token, Some access_token, Some refresh_token -> (
+      match jwt_payload id_token with
+      | Error _ -> Error (invalid_password_response ())
+      | Ok payload -> (
+          match Json_util.object_of_json_string payload with
+          | None -> Error (invalid_password_response ())
+          | Some claims -> (
+              match
+                ( nonempty_string_field claims "sub",
+                  Json_util.number_field claims "exp" )
+              with
+              | Some sub, Some exp
+                when Json_util.is_integral_float exp
+                     && exp <= Time.time_to_epoch_seconds_float Time.max_time
+                     && exp > Time.time_to_epoch_seconds_float (Time.now ()) ->
+                  Ok
+                    {
+                      provider = "cognito";
+                      id_token = Some id_token;
+                      access_token = Some access_token;
+                      refresh_token = Some refresh_token;
+                      expires_at =
+                        Some
+                          (Time.time_of_epoch_ms
+                             (Int64.of_float (exp *. 1000.)));
+                      sub = Some sub;
+                      email = Json_util.string_field claims "email";
+                      updated_at = Time.now ();
+                    }
+              | _ -> Error (invalid_password_response ()))))
+  | _ -> Error (invalid_password_response ())
+
+let password_auth_of_body body =
+  try
+    match Json_util.object_of_json_string body with
+    | None -> Error (invalid_password_response ())
+    | Some object_ -> (
+        match Json_util.field object_ "ChallengeName" with
+        | Some challenge -> (
+            (* Only documented challenge names are safe to include in output. *)
+            match Js.Json.decodeString challenge with
+            | Some
+                (( "SMS_MFA" | "EMAIL_OTP" | "SOFTWARE_TOKEN_MFA" | "SMS_OTP"
+                 | "SELECT_MFA_TYPE" | "MFA_SETUP" | "PASSWORD_VERIFIER"
+                 | "CUSTOM_CHALLENGE" | "SELECT_CHALLENGE" | "DEVICE_SRP_AUTH"
+                 | "DEVICE_PASSWORD_VERIFIER" | "ADMIN_NO_SRP_AUTH"
+                 | "NEW_PASSWORD_REQUIRED" | "PASSWORD" | "WEB_AUTHN"
+                 | "PASSWORD_SRP" ) as name) ->
+                Error
+                  (Error.make Error.Unsupported_auth_challenge
+                     ("unsupported authentication challenge: " ^ name))
+            | _ -> Error (invalid_password_response ()))
+        | None -> (
+            match Json_util.object_field object_ "AuthenticationResult" with
+            | Some result -> password_auth_of_result result
+            | None -> Error (invalid_password_response ())))
+  with _ -> Error (invalid_password_response ())
+
+let password_http_error body =
+  let failed () =
+    Error.make Error.Password_auth_failed
+      "password authentication request failed"
+  in
+  try
+    match Json_util.object_of_json_string body with
+    | None -> failed ()
+    | Some object_ -> (
+        match Json_util.string_field object_ "__type" with
+        | Some
+            ( "NotAuthorizedException" | "UserNotFoundException"
+            | "UserNotConfirmedException" | "PasswordResetRequiredException" )
+          ->
+            Error.make Error.Password_auth_rejected
+              "password authentication was rejected"
+        | Some "InvalidParameterException" -> (
+            match Json_util.string_field object_ "message" with
+            | Some message
+              when String.starts_with
+                     ~prefix:
+                       "USER_PASSWORD_AUTH flow not enabled for this client"
+                     message ->
+                Error.make Error.Password_auth_disabled
+                  "password authentication is not enabled for this client"
+            | _ -> failed ())
+        | _ -> failed ())
+  with _ -> failed ()
+
+let password_login config ~username ~password =
+  let body =
+    Js.Dict.fromArray
+      [|
+        ("ClientId", Js.Json.string (Option.get (oauth_client_id config)));
+        ("AuthFlow", Js.Json.string "USER_PASSWORD_AUTH");
+        ( "AuthParameters",
+          Json_util.json_of_string_fields
+            (Vec.of_array [| ("USERNAME", username); ("PASSWORD", password) |])
+        );
+      |]
+    |> Js.Json.object_ |> Js.Json.stringify
+  in
+  let request =
+    try
+      Cli_platform.HTTP.request ~timeout_span:config.timeout_span Fetch.Post
+        "https://cognito-idp.us-east-1.amazonaws.com/"
+        ~headers:
+          (Vec.of_array
+             [|
+               ("Content-Type", "application/x-amz-json-1.1");
+               ("X-Amz-Target", "AWSCognitoIdentityProviderService.InitiateAuth");
+             |])
+        ~body
+    with exn -> Cli_effect.error exn
+  in
+  Cli_effect.catch
+    ( request >>= fun (response, body) ->
+      let status = Fetch.Response.status response in
+      Cli_effect.pure
+        (if status < 200 || status > 299 then Error (password_http_error body)
+         else password_auth_of_body body) )
+    (fun exn ->
+      let error =
+        match exn with
+        | Failure message when message = "request timeout" ->
+            Error.make Error.Login_timeout "password authentication timed out"
+        | _ ->
+            Error.make Error.Password_auth_failed
+              "password authentication transport failed"
+      in
+      Cli_effect.pure (Error error))
+  >>= function
+  | Error error -> Cli_effect.pure (Error error)
+  | Ok auth -> (
+      write_auth_file config auth >>= function
+      | Error error -> Cli_effect.pure (Error error)
+      | Ok data ->
+          Cli_effect.pure
+            (Ok
+               {
+                 auth_path = auth_path config;
+                 details = Password_login_result;
+                 email = data.email;
+                 sub = data.sub;
+                 updated_at = data.updated_at;
+               }))
+
+let login config = function
+  | Browser_login -> browser_login config
+  | Password_login { username; password } ->
+      password_login config ~username ~password
 
 let logout config =
   let path = auth_path config in
