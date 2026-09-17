@@ -1648,6 +1648,38 @@
       (is (= [:escape-editing] @calls)
           "insert-new-block! must not create a next block from a URL value."))))
 
+(deftest enter-on-default-value-block-saves-and-exits-instead-of-inserting-test
+  (let [default-block {:db/id 10
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "hello world"
+                       :block/parent {:db/id 5
+                                      :block/tags [:logseq.class/Property]
+                                      :logseq.property/default-value {:db/id 10}}}
+        target #js {:value "hello world"
+                    :selectionStart 11}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block default-block
+                                                :config {:id (str (:block/uuid default-block))}
+                                                :node target
+                                                :value "hello world"
+                                                :pos 11})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))
+                  editor/insert-new-block! (fn [& _args]
+                                             (swap! calls conj :insert-new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a default-value block must save and exit without creating a child."))))
+
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"

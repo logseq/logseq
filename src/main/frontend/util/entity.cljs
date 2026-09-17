@@ -44,6 +44,36 @@
   [entity]
   (= :url (:logseq.property/type (:logseq.property/created-from-property entity))))
 
+(defn- ref-db-id
+  [value]
+  (cond
+    (number? value) value
+    (map? value) (:db/id value)
+    :else nil))
+
+(defn default-value-block?
+  "A property's :logseq.property/default-value block is a leaf. It must not
+  have child blocks or expose sub-block UX."
+  [entity]
+  (when (map? entity)
+    (let [parent (:block/parent entity)
+          parent-default-id (ref-db-id (:logseq.property/default-value parent))
+          entity-id (:db/id entity)]
+      (boolean
+       (or (and entity-id parent-default-id (= entity-id parent-default-id))
+           (and (nil? (:block/closed-value-property entity))
+                (let [parent-id (ref-db-id parent)
+                      from-id (ref-db-id (:logseq.property/created-from-property entity))]
+                  (and parent-id from-id (= parent-id from-id)
+                       (property? (or parent
+                                      (:logseq.property/created-from-property entity)))))))))))
+
+(defn leaf-property-value?
+  "Property values that keep the block editor but must not have children."
+  [entity]
+  (or (url-property-value? entity)
+      (default-value-block? entity)))
+
 (defn get-entity-types
   [entity]
   (cond-> #{}

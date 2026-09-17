@@ -65,6 +65,10 @@
     (editor-handler/move-cross-boundary-up-down direction {:input nil})
     (editor-handler/move-property-focus-up-down direction)))
 
+(defn- default-value-property-ident?
+  [property]
+  (= :logseq.property/default-value (:db/ident property)))
+
 (defn- property-value-block-container-props
   [property]
   {:class (property-value-block-container-class)
@@ -79,7 +83,7 @@
                       (move-property-value-boundary! e :down)
 
                       nil)))
-   :style (if (= (:db/ident property) :logseq.property/default-value)
+   :style (if (default-value-property-ident? property)
             {:min-width 300}
             {})})
 
@@ -99,6 +103,17 @@
   (or (= value :logseq.property/empty-placeholder)
       (and (map? value)
            (= (:db/ident value) :logseq.property/empty-placeholder))))
+
+(defn- unset-default-value?
+  "Show the Set default value trigger only when no value entity exists.
+
+  Canonical snapshots can omit :block/title on a just-created default-value
+  block. Treating a missing title as unset kept the trigger instead of the
+  existing block editor."
+  [property value]
+  (and (default-value-property-ident? property)
+       (or (nil? value)
+           (empty-placeholder-value? value))))
 
 (defn- closed-choice-value?
   "True when the value itself carries closed-choice identity."
@@ -266,13 +281,21 @@
   [type]
   (contains? #{:date :datetime :asset} type))
 
+(defn- property-write-id
+  "Prefer :db/ident so worker writes skip an extra id->ident lookup.
+  Built-in editors such as :logseq.property/default-value can be loaded as
+  ident-only maps before :db/id arrives."
+  [property]
+  (or (:db/ident property) (:db/id property)))
+
 (defn <create-new-block!
   [block property value & {:keys [edit-block? batch-op?]
                            :or {edit-block? true}}]
   (when-not (or (:logseq.property/hide? property)
                 (= (:db/ident property) :logseq.property/default-value))
     (ui/hide-popups-until-preview-popup!))
-  (let [<create-block (fn [block]
+  (let [property-id (property-write-id property)
+        <create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
                                  (not (db-property/many? property)))
                           (p/let [default-value (:logseq.property/default-value property)
@@ -282,14 +305,14 @@
                                                    value)]
                                       (db-property-handler/create-property-text-block!
                                        (:db/id block)
-                                       (:db/id property)
+                                       property-id
                                        value'
                                        {:new-block-id new-block-id}))]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))
                           (p/let [new-block-id (ldb/new-block-id)
                                   _ (db-property-handler/create-property-text-block!
                                      (:db/id block)
-                                     (:db/id property)
+                                     property-id
                                      value
                                      {:new-block-id new-block-id})]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))))]
@@ -1593,6 +1616,7 @@
                        :container-id container-id
                        :editor-box (state/get-component :editor/box)
                        :property-block? true
+                       :hide-children? (default-value-property-ident? property)
                        :on-block-content-pointer-down (when default-value?
                                                         (fn [_e]
                                                           (<create-new-block! block property (or (:block/title default-value) ""))))
@@ -1871,7 +1895,7 @@
                          (delete-block-property! block property opts))))
       :style {:min-height 24}}
      (cond
-       (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
+       (unset-default-value? property value)
        [:div.jtrigger.cursor-pointer.text-sm.px-2
         {:on-click #(<create-new-block! block property "")}
         (t :property/set-default-value)]
