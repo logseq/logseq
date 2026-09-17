@@ -688,22 +688,26 @@
         entries))))
 
 (defn- uuid-for-insert
-  "Keep a uuid only when insert is restoring a missing or recycled block.
-  Live uuids must be reminted so paste cannot reparent existing children."
-  [db keep-uuid? block-uuid]
+  "Keep a uuid when insert is restoring identity.
+  Paste remints live (non-recycled) uuids so copied trees cannot reparent
+  existing children. Non-paste keep-uuid inserts, including undo restore,
+  must reuse live identities."
+  [db keep-uuid? outliner-op block-uuid]
   (if (and keep-uuid? block-uuid)
     (let [entity (d/entity db [:block/uuid block-uuid])]
-      (if (and entity (not (ldb/recycled? entity)))
+      (if (and (= :paste outliner-op)
+               entity
+               (not (ldb/recycled? entity)))
         (common-uuid/gen-uuid)
         block-uuid))
     (common-uuid/gen-uuid)))
 
 (defn- insert-blocks-aux
-  [db blocks target-block {:keys [replace-empty-target? keep-uuid?]
+  [db blocks target-block {:keys [replace-empty-target? keep-uuid? outliner-op]
                            :as opts}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
-                      (map #(uuid-for-insert db keep-uuid? %) block-uuids))
+                      (map #(uuid-for-insert db keep-uuid? outliner-op %) block-uuids))
         uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
@@ -853,8 +857,8 @@
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
-                    Live (non-recycled) uuids are still reminted so paste cannot
-                    move existing blocks.
+                    On paste, live (non-recycled) uuids are still reminted so
+                    copied trees cannot move existing blocks.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
