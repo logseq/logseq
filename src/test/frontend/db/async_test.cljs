@@ -458,6 +458,41 @@
              :block/parent {:db/id parent-b}}]
            (#'db-async/order-block-summaries [block-a block-b] rows)))))
 
+(deftest get-block-summaries-keeps-pages-without-parent-test
+  (let [page-a (random-uuid)
+        page-b (random-uuid)]
+    (is (= [{:db/id 1
+             :block/uuid page-a
+             :block/title "Sep 15th, 2026"}
+            {:db/id 2
+             :block/uuid page-b
+             :block/title "Apr 15th, 2027"}]
+           (#'db-async/order-block-summaries
+            [page-a page-b]
+            [[2 page-b "Apr 15th, 2027" :none]
+             [1 page-a "Sep 15th, 2026" :none]])))))
+
+(deftest get-block-summaries-query-includes-pages-without-parent-test
+  (async done
+         (let [seen (atom nil)
+               page-a (random-uuid)]
+           (p/with-redefs [db-async/<q
+                           (fn [graph opts query & inputs]
+                             (reset! seen {:graph graph :opts opts :query query :inputs inputs})
+                             (p/resolved [[1 page-a "Sep 15th, 2026" :none]]))]
+             (-> (p/let [result (db-async/<get-block-summaries "graph" [page-a])]
+                   (is (= [page-a] (first (:inputs @seen))))
+                   (is (= '[(get-else $ ?e :block/parent :none) ?parent]
+                          (last (:query @seen)))
+                       "Pages have no :block/parent; copy must still load their titles.")
+                   (is (= [{:db/id 1
+                            :block/uuid page-a
+                            :block/title "Sep 15th, 2026"}]
+                          result)))
+                 (p/catch (fn [error]
+                            (is false (str error))))
+                 (p/finally done))))))
+
 (deftest get-all-properties-uses-worker-without-renderer-db-model-test
   (async done
          (let [repo "logseq_db_async_properties_worker"

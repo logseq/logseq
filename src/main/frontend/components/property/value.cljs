@@ -191,14 +191,30 @@
            block-handler/get-top-level-blocks
            (remove entity/property?)))
 
+(defn- operating-block-id
+  [block-or-id]
+  (let [id (cond
+             (uuid? block-or-id) block-or-id
+             (integer? block-or-id) block-or-id
+             (map? block-or-id) (or (:block/uuid block-or-id)
+                                    (:uuid block-or-id)
+                                    (:db/id block-or-id)))]
+    (assert (or (uuid? id) (integer? id))
+            (str "operating block is missing an id: " (pr-str block-or-id)))
+    id))
+
+(defn- operating-block-ids
+  [blocks]
+  (mapv operating-block-id blocks))
+
 (defn get-operating-blocks
   [block]
   (let [selected-blocks (get-selected-blocks)
-        view-selected-blocks (state/get-state :view/selected-blocks)]
+        view-selected-blocks (mapv entity/as-block-map (state/get-state :view/selected-blocks))]
     (or (seq view-selected-blocks)
         (when (> (count selected-blocks) 1)
           (seq selected-blocks))
-        [block])))
+        [(entity/as-block-map block)])))
 
 (defn batch-operation?
   []
@@ -220,7 +236,7 @@
         on-chosen! (fn [_e icon]
                      (let [blocks (get-operating-blocks block)]
                        (property-handler/batch-set-block-property!
-                        (map :db/id blocks)
+                        (operating-block-ids blocks)
                         :logseq.property/icon
                         (when icon (select-keys icon [:type :id :color]))))
                      (clear-overlay!)
@@ -304,14 +320,14 @@
                                                    (db-property/property-value-content default-value)
                                                    value)]
                                       (db-property-handler/create-property-text-block!
-                                       (:db/id block)
+                                       (operating-block-id block)
                                        property-id
                                        value'
                                        {:new-block-id new-block-id}))]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))
                           (p/let [new-block-id (ldb/new-block-id)
                                   _ (db-property-handler/create-property-text-block!
-                                     (:db/id block)
+                                     (operating-block-id block)
                                      property-id
                                      value
                                      {:new-block-id new-block-id})]
@@ -344,7 +360,7 @@
        (p/do!
         (if (and class? class-schema?)
           (db-property-handler/class-add-property! (:db/id block) property-id)
-          (let [block-ids (map :block/uuid blocks)
+          (let [block-ids (operating-block-ids blocks)
                 set-query-list-view? (and (:logseq.property/query block)
                                           (= property-id :logseq.property.view/type)
                                           (= property-value (:db/id list-view-type)))]
@@ -378,9 +394,7 @@
                        (and (= :db.type/ref (:db/valueType property))
                             (integer? value)))
         blocks (get-operating-blocks block)
-        current-block-ref (or (:block/uuid (first blocks))
-                              (:db/id (first blocks))
-                              (:db/id block))
+        current-block-ref (operating-block-id (or (first blocks) block))
         repo (state/get-current-repo)]
     (p/let [current-block (db-async/<get-block repo current-block-ref {:children? false})
             selected? (if many?
@@ -388,7 +402,7 @@
                         selected?)]
      (if selected?
        (if many?
-         (db-property-handler/batch-set-property! (map :block/uuid blocks)
+         (db-property-handler/batch-set-property! (operating-block-ids blocks)
                                                   (:db/ident property)
                                                   value
                                                   {:entity-id? entity-id?})
@@ -397,7 +411,7 @@
                           :entity-id? entity-id?
                           :exit-edit? (if (some? (:exit-edit? opts)) (:exit-edit? opts) (not many?))}))
        (p/do!
-        (db-property-handler/batch-delete-property-value! (map :block/uuid blocks) (:db/ident property) value)
+        (db-property-handler/batch-delete-property-value! (operating-block-ids blocks) (:db/ident property) value)
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
@@ -983,7 +997,7 @@
 	                         :multiple-values? multiple-values?
 	                         :on-change (fn [value]
 	                                      (let [blocks (get-operating-blocks block)]
-	                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
+	                                        (property-handler/batch-set-block-property! (operating-block-ids blocks)
 	                                                                                    (:db/ident property)
                                                                                     (if datetime?
                                                                                       value
@@ -992,7 +1006,7 @@
                          :on-delete (fn [e]
                                       (util/stop-propagation e)
                                       (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
+                                        (property-handler/batch-set-block-property! (operating-block-ids blocks)
                                                                                     (:db/ident property)
                                                                                     nil))
                                       (shui/popup-hide!))}))))
@@ -1098,7 +1112,7 @@
                      (and multiple-choices? (= chosen [clear-value])))
                (p/do!
                 (let [blocks (get-operating-blocks block)
-                      block-ids (map :block/uuid blocks)]
+                      block-ids (operating-block-ids blocks)]
                   (property-handler/batch-remove-block-property!
                    block-ids
                    (:db/ident property)))
