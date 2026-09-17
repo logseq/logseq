@@ -19,7 +19,9 @@
                       {:entry entry})))
     (-> entry
         (assoc :graph-id graph-id)
-        (dissoc :rtc-graph-id))))
+        (dissoc :rtc-graph-id)
+        (cond-> (string? (:repo entry)) (update :repo string/trim)
+                (string? (:graph-name entry)) (update :graph-name string/trim)))))
 
 (defn ^:api upsert-entry
   [registry entry]
@@ -35,15 +37,15 @@
 
 (defn- normalize-comparable
   [s]
-  (some-> s str string/lower-case))
+  (some-> s str string/trim string/lower-case))
 
 (defn- canonical-repo
   [s]
   (when (seq s)
-    (let [s (str s)
-          stripped (loop [name' s]
+    (let [trimmed (string/trim (str s))
+          stripped (loop [name' trimmed]
                      (if (string/starts-with? name' db-version-prefix)
-                       (recur (subs name' (count db-version-prefix)))
+                       (recur (string/trim (subs name' (count db-version-prefix))))
                        name'))]
       (str db-version-prefix stripped))))
 

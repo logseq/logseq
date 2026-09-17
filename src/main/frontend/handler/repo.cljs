@@ -152,7 +152,7 @@
 (defn graph-already-exists?
   "Checks to see if given db graph name already exists"
   [graph-name]
-  (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
+  (let [full-graph-name (string/lower-case (str config/db-version-prefix (string/trim graph-name)))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
@@ -187,10 +187,11 @@
   "Handler for creating a new database graph"
   ([graph] (new-db! graph {}))
   ([graph opts]
-   (let [full-graph-name (str config/db-version-prefix graph)]
-     (if (graph-already-exists? graph)
+   (let [trimmed-graph (string/trim graph)
+         full-graph-name (str config/db-version-prefix trimmed-graph)]
+     (if (graph-already-exists? trimmed-graph)
        (state/pub-event! [:notification/show
-                          {:content (t :graph/already-exists-error graph)
+                          {:content (t :graph/already-exists-error trimmed-graph)
                            :status :error}])
        (create-db full-graph-name opts)))))
 

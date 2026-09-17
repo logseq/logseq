@@ -20,3 +20,9 @@
     (is (= "space name" (worker-util/decode-graph-dir-name "space~20name")))
     (is (= "space name" (worker-util/decode-graph-dir-name "space%20name"))))
   (is (nil? (worker-util/decode-graph-dir-name nil))))
+
+(deftest graph-storage-names-trim-surrounding-whitespace
+  (is (= "space name" (worker-util/encode-graph-dir-name "  space name  ")))
+  (is (= "logseq-pool-space name"
+         (worker-util/get-pool-name "  logseq_db_ space name  ")))
+  (is (nil? (worker-util/decode-graph-dir-name " space name "))))
