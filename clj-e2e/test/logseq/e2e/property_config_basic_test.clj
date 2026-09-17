@@ -130,6 +130,8 @@
     (w/click (loc/filter ".ui__dropdown-menu-sub-content" :has-text "Set default value"))
     (assert/assert-is-visible util/editor-q)
     (util/input default-text)
+    (k/enter)
+    (assert/assert-have-count ".ui__dropdown-menu-sub-content .ls-block" 1)
     (util/double-esc)
     (w/click (loc/filter ".property-k" :has-text property-name))
     (assert/assert-is-visible
