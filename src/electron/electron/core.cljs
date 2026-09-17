@@ -83,8 +83,10 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url (decode-protected-assets-schema-path url)
-           path (string/replace url "assets://" "")
-           path (js/decodeURIComponent path)]
+           ;; Query and fragment belong to the document URL, not the filename.
+           path (-> (first (string/split url #"[?#]" 2))
+                    (string/replace "assets://" "")
+                    (js/decodeURIComponent))]
        (cond (or (string/starts-with? path "/")
                  (re-find #"(?i)^/[a-zA-Z]:" path))
              (callback #js {:path path})
