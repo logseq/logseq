@@ -1026,7 +1026,7 @@
      (concat more-options)
      vec)))
 
-(hsx/defc property-dropdown
+(hsx/defc property-dropdown-from-entity
   [property* owner-block opts]
   (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
         [values] (hooks/use-atom *values)
@@ -1044,3 +1044,12 @@
       (into [:<>]
             (map-indexed (partial with-react-key "property-dropdown"))
             (property-dropdown-options property owner-block values opts)))))
+
+(defn property-dropdown
+  [property* owner-block opts]
+  (if (uuid? (:block/uuid property*))
+    (property-dropdown-from-entity property* owner-block opts)
+    ;; Built-in table columns may lack :block/uuid; still show :more-options.
+    (into [:<>]
+          (map-indexed (partial with-react-key "property-dropdown"))
+          (remove nil? (:more-options opts)))))
