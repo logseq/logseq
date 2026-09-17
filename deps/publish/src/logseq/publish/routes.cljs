@@ -448,6 +448,34 @@
         graph-uuid (nth parts 2 nil)]
     (handle-list-graph-pages-by-uuid graph-uuid env)))
 
+(defn- delete-page-by-ids
+  [request env graph-uuid page-uuid]
+  (p/let [{:keys [claims]} (auth-claims request env)]
+    (if (nil? claims)
+      (publish-common/unauthorized)
+      (let [^js do-ns (aget env "PUBLISH_META_DO")
+            page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
+            page-stub (.get do-ns page-id)
+            index-id (.idFromName do-ns "index")
+            index-stub (.get do-ns index-id)]
+        (p/let [meta-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                  #js {:method "GET"})]
+          (if-not (.-ok meta-resp)
+            (publish-common/not-found)
+            (p/let [meta (.json meta-resp)
+                    owner-sub (aget meta "owner_sub")
+                    subject (aget claims "sub")]
+              (if (or (string/blank? owner-sub)
+                      (not= owner-sub subject))
+                (publish-common/forbidden)
+                (p/let [page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                          #js {:method "DELETE"})
+                        index-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                           #js {:method "DELETE"})]
+                  (if (or (not (.-ok page-resp)) (not (.-ok index-resp)))
+                    (publish-common/not-found)
+                    (publish-common/json-response {:ok true} 200)))))))))))
+
 (defn handle-delete-page [request env]
   (let [url (js/URL. (.-url request))
         parts (string/split (.-pathname url) #"/")
@@ -455,31 +483,33 @@
         page-uuid (nth parts 3 nil)]
     (if (or (nil? graph-uuid) (nil? page-uuid))
       (publish-common/bad-request "missing graph uuid or page uuid")
+      (delete-page-by-ids request env graph-uuid page-uuid))))
+
+(defn handle-delete-page-by-short-id [request env]
+  (let [url (js/URL. (.-url request))
+        parts (string/split (.-pathname url) #"/")
+        short-id (nth parts 2 nil)]
+    (if (string/blank? short-id)
+      (publish-common/bad-request "missing short id")
       (p/let [{:keys [claims]} (auth-claims request env)]
         (if (nil? claims)
           (publish-common/unauthorized)
           (let [^js do-ns (aget env "PUBLISH_META_DO")
-                page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
-                page-stub (.get do-ns page-id)
                 index-id (.idFromName do-ns "index")
                 index-stub (.get do-ns index-id)]
-            (p/let [meta-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                      #js {:method "GET"})]
-              (if-not (.-ok meta-resp)
+            (p/let [resp (.fetch index-stub (str "https://publish/short/" short-id)
+                                 #js {:method "GET"})]
+              (if-not (.-ok resp)
                 (publish-common/not-found)
-                (p/let [meta (.json meta-resp)
-                        owner-sub (aget meta "owner_sub")
-                        subject (aget claims "sub")]
-                  (if (or (string/blank? owner-sub)
-                          (not= owner-sub subject))
-                    (publish-common/forbidden)
-                    (p/let [page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                              #js {:method "DELETE"})
-                            index-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                               #js {:method "DELETE"})]
-                      (if (or (not (.-ok page-resp)) (not (.-ok index-resp)))
+                (p/let [data (.json resp)
+                        row (aget data "page")]
+                  (if-not row
+                    (publish-common/not-found)
+                    (let [graph-uuid (aget row "graph_uuid")
+                          page-uuid (aget row "page_uuid")]
+                      (if (or (string/blank? graph-uuid) (string/blank? page-uuid))
                         (publish-common/not-found)
-                        (publish-common/json-response {:ok true} 200)))))))))))))
+                        (delete-page-by-ids request env graph-uuid page-uuid)))))))))))))
 
 (defn handle-delete-graph [request env]
   (let [url (js/URL. (.-url request))
@@ -715,6 +745,11 @@
                                  (publish-common/cors-headers))]
                     (js/Response. (.-body object)
                                   #js {:headers headers}))))))))
+
+      (and (or (string/starts-with? path "/p/")
+               (string/starts-with? path "/s/"))
+           (= method "DELETE"))
+      (handle-delete-page-by-short-id request env)
 
       (and (or (string/starts-with? path "/p/")
                (string/starts-with? path "/s/"))
