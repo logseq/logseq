@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.render-resource.common :as common]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -347,6 +348,17 @@
                   partitions)})
          (:data result))})
 
+(defn- query-property-maps
+  "Resolves the attribute idents of query results to property maps so the
+  renderer can build table columns from them."
+  [db idents]
+  (into []
+        (keep (fn [ident]
+                (when (keyword? ident)
+                  (when-let [property (d/entity db ident)]
+                    (property-handler/property-plain-map db property)))))
+        idents))
+
 (defn- normalize-view-data
   [db result grouped?]
   (when-not (map? result)
@@ -370,7 +382,7 @@
              (into #{} (map #(common/entity-uuid! db %)) ids)))
 
       (contains? result :properties)
-      (assoc :properties (mapv identity (:properties result))))))
+      (assoc :properties (query-property-maps db (:properties result))))))
 
 (defn- missing-view-data
   "Delete still has an in-flight :view-data snapshot. Fail-fast here

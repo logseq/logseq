@@ -1617,6 +1617,7 @@
  :query/results-for "{1} 的结果"
 
  :query.builder/add-filter-or-operator-placeholder "添加过滤器/运算符"
+ :query.builder/all-values-label "全部"
  :query.builder/between-end-label "结束日期"
  :query.builder/between-journal-label "介于：{1} ~ {2}"
  :query.builder/between-start-label "开始日期"
