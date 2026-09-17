@@ -3,6 +3,7 @@
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
             [wally.main :as w]))
@@ -87,6 +88,8 @@
     (let [tag-a "fc-tag-a"
           card-a "Card A"
           query-a (str "[[" tag-a "]]")]
+      (k/esc)
+      (assert/assert-is-hidden "#cards-modal")
       (util/goto-journals)
       (let [page (ls-api-call! :editor.getCurrentPage)
             page-name (get page "name")
