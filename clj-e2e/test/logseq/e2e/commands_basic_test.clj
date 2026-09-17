@@ -130,6 +130,7 @@
           "slash-command list should auto-scroll when focus moves out of view"))
     (dotimes [_ 20]
       (k/arrow-up))
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
     (let [after-up (chosen-slash-command-visibility)]
       (is (true? (:visible after-up))
           "chosen slash command should stay visible after arrow up")
