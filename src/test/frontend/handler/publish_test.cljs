@@ -221,7 +221,7 @@
               (is (= 2 (count @fetch-calls)))
               (is (string/includes? (ffirst @fetch-calls)
                                     (str "/pages/" current-graph-uuid "/" current-page-uuid)))
-              (is (string/includes? (ffirst (second @fetch-calls))
+              (is (string/includes? (first (second @fetch-calls))
                                     (str "/pages/" stored-graph-uuid "/" current-page-uuid)))
               (is (= [[42 :logseq.property.publish/published-url]]
                      @removed-properties))
@@ -249,7 +249,7 @@
               (is (= 2 (count @fetch-calls)))
               (is (string/includes? (ffirst @fetch-calls)
                                     (str "/pages/" current-graph-uuid "/" current-page-uuid)))
-              (is (string/includes? (ffirst (second @fetch-calls)) "/p/abc123"))
+              (is (string/includes? (first (second @fetch-calls)) "/p/abc123"))
               (is (= "DELETE" (fetch-method (second (second @fetch-calls)))))
               (is (= [[42 :logseq.property.publish/published-url]]
                      @removed-properties))
@@ -275,7 +275,7 @@
               (is (= [[42 :logseq.property.publish/published-url]]
                      @removed-properties))
               (is (= :success (second (first @notifications))))
-              (is (string/includes? (str (ffirst @notifications))
+              (is (string/includes? (str (first (first @notifications)))
                                     "no longer published")))))
         (p/catch
          (fn [error]
@@ -297,7 +297,7 @@
                        {:published-url "https://logseq.io/p/abc123"})]
               (is (= 3 (count @fetch-calls)))
               (is (= "GET" (fetch-method (second (last @fetch-calls)))))
-              (is (string/includes? (ffirst (last @fetch-calls)) "/p/abc123"))
+              (is (string/includes? (first (last @fetch-calls)) "/p/abc123"))
               (is (= [[42 :logseq.property.publish/published-url]]
                      @removed-properties))
               (is (= :success (second (first @notifications)))))))
