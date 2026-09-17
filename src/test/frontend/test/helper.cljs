@@ -102,3 +102,6 @@
 
 (defn find-block-by-content [block-title]
   (db-test/find-block-by-content (conn/get-db) block-title))
+
+(defn find-page-by-title [title]
+  (db-test/find-page-by-title (conn/get-db) title))
