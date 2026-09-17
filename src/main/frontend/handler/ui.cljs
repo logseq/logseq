@@ -184,6 +184,49 @@
          (apply concat)))
       matched)))
 
+(defn- auto-complete-scroll-geometry
+  "Builds focused-item geometry from `container` and `element` DOM nodes.
+
+  `item-top` is in container scroll coordinates so callers can compute a
+  corrected `scrollTop` without depending on `offsetParent`."
+  [container element]
+  (when (and container element)
+    (let [container-rect (.getBoundingClientRect container)
+          element-rect (.getBoundingClientRect element)
+          scroll-top (.-scrollTop container)]
+      {:scroll-top scroll-top
+       :viewport-height (.-clientHeight container)
+       :item-top (+ scroll-top (- (.-top element-rect) (.-top container-rect)))
+       :item-height (.-height element-rect)})))
+
+(defn- auto-complete-keep-visible-scroll-top
+  "Returns a `scrollTop` that keeps the focused item inside the viewport."
+  [{:keys [scroll-top viewport-height item-top item-height]}]
+  (let [item-bottom (+ item-top item-height)
+        viewport-bottom (+ scroll-top viewport-height)]
+    (cond
+      (< item-top scroll-top)
+      (max 0 item-top)
+
+      (> item-bottom viewport-bottom)
+      (max 0 (- item-bottom viewport-height))
+
+      :else
+      scroll-top)))
+
+(defn- auto-complete-scroll-into-view!
+  "Keeps the highlighted auto-complete item visible in `#ui__ac-inner`.
+
+  Slash-command and search popups scroll that inner list, not the popover
+  wrapper. Arrow up/down used to set `scrollTop` on `#ui__ac`'s parent, so
+  the chosen row could move out of view."
+  [idx]
+  (when-let [element (gdom/getElement (str "ac-" idx))]
+    (when-let [container (gdom/getElement "ui__ac-inner")]
+      (when-let [geometry (auto-complete-scroll-geometry container element)]
+        (set! (.-scrollTop container)
+              (auto-complete-keep-visible-scroll-top geometry))))))
+
 (defn auto-complete-prev
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
@@ -195,11 +238,7 @@
       (= @current-idx 0)
       (reset! current-idx (dec (count matched)))
       :else nil)
-    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
-            height (or (gobj/get modal "offsetHeight") 300)
-            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
-        (set! (.-scrollTop modal) scroll-top)))))
+    (auto-complete-scroll-into-view! @current-idx)))
 
 (defn auto-complete-next
   [state e]
@@ -210,11 +249,7 @@
       (if (>= @current-idx (dec total))
         (reset! current-idx 0)
         (swap! current-idx inc)))
-    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
-            height (or (gobj/get modal "offsetHeight") 300)
-            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
-        (set! (.-scrollTop modal) scroll-top)))))
+    (auto-complete-scroll-into-view! @current-idx)))
 
 (defn auto-complete-complete
   [state e]
