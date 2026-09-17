@@ -4,6 +4,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is use-fixtures]]
+            [electron.db-worker :as db-worker]
             [electron.ipc :as ipc]
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
@@ -1938,3 +1939,71 @@
           (p/then (fn [_] (fs/rmSync root #js {:recursive true :force true})))
           (p/catch (fn [error] (is false (str "Cleanup failed: " error))))
           (p/finally done)))))
+
+(deftest ^:long electron-transport-failure-keeps-healthy-real-worker-and-replaces-dead-one
+  (async done
+    (let [root (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-desktop-recovery-test-"))
+          storage (lifecycle/resolveStorage root (node-path/join root "graphs"))
+          repo "logseq_db_demo"
+          worker-pid #(some-> ^js (lifecycle/snapshot storage repo) .-workers ^js (first) .-pid)
+          mgr (db-worker/create-manager
+               {:start-daemon! (fn [repo' opts]
+                                 (p/let [^js result (lifecycle/startGraph
+                                                    #js {:storage storage :repo repo' :owner "electron"
+                                                         :generation (:generation opts)
+                                                         :script (node-path/resolve "static/db-worker-node.js")})]
+                                   {:repo repo' :root-dir root :storage storage :generation (.-generation result)
+                                    :owned? true :base-url (str "http://127.0.0.1:" (.-port result))}))
+                :stop-daemon! (fn [{:keys [repo]}]
+                                (p/let [_ (lifecycle/stopGraph storage repo "electron")] true))
+                :runtime-ready? #'db-worker/runtime-ready-default?})
+          record-failure! #'persist-db/record-active-request-failure!
+          <recover! (fn []
+                      (record-failure! repo
+                                       (:session-id @persist-db/remote-runtime-state)
+                                       (js/Error. "Failed to fetch"))
+                      @persist-db/*ensure-remote-chain)
+          ipc! (fn [channel repo' & [opts]]
+                 (case channel
+                   "db-worker-runtime" (p/let [runtime (db-worker/ensure-started! mgr repo' :window-1 opts)]
+                                         (select-keys runtime [:repo :root-dir :generation :base-url :auth-token :owned?]))))
+          original-state (state/get-state)]
+      (reset-runtime-state!)
+      (state/swap-state! assoc :git/current-repo repo)
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          ipc/ipc ipc!]
+            (p/let [_ (lifecycle/createGraph storage repo)
+                    _ (persist-db/<open-and-fetch-schema repo)
+                    client @persist-db/remote-db
+                    pid (worker-pid)
+                    _ (is (lifecycle/pidExists pid))
+                    _ (<recover!)
+                    dbs (persist-db/<list-db)]
+              (is (identical? client @persist-db/remote-db)
+                  "A transport failure keeps the client of a healthy worker")
+              (is (= pid (worker-pid)) "A healthy worker is not restarted")
+              (is (= {:request-failures 0 :recovery-triggered? false}
+                     (select-keys @persist-db/remote-runtime-state [:request-failures :recovery-triggered?])))
+              (is (= [{:name repo}] dbs))
+              (js/process.kill pid "SIGKILL")
+              (p/let [_ (p/loop []
+                          (when (lifecycle/pidExists pid)
+                            (p/let [_ (p/delay 20)] (p/recur))))
+                      _ (<recover!)
+                      dbs (persist-db/<list-db)]
+                (is (not (identical? client @persist-db/remote-db))
+                    "A dead worker is replaced together with its client")
+                (is (not= pid (worker-pid)))
+                (is (lifecycle/pidExists (worker-pid)))
+                (is (= [{:name repo}] dbs)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/then (fn [_]
+                    (when @persist-db/remote-db (remote/stop! @persist-db/remote-db))
+                    (db-worker/ensure-repo-stopped! mgr repo)))
+          (p/then (fn [_] (lifecycle/deleteGraph storage repo)))
+          (p/then (fn [_] (fs/rmSync root #js {:recursive true :force true})))
+          (p/catch (fn [error] (is false (str "Cleanup failed: " error))))
+          (p/finally (fn []
+                       (state/replace-state! original-state)
+                       (reset-runtime-state!)
+                       (done)))))))
