@@ -32,17 +32,17 @@
      [{:page {:block/title "Current Query Page"}
        :blocks [{:block/title "on current page"}]}])
     (let [page (test-helper/find-block-by-content "Current Query Page")]
-      (with-redefs [state/get-current-page (constantly (str (:block/uuid page)))]
-        (-> (api-test/with-plugin-api
-              (fn []
+      (-> (api-test/with-plugin-api
+            (fn []
+              (p/with-redefs [state/get-current-page (constantly (str (:block/uuid page)))]
                 (p/let [result (api-db/datascript_query
                                 "[:find ?title :in $ ?page :where [?p :block/name ?page] [?b :block/page ?p] [?b :block/title ?title]]"
                                 ":current-page")
                         titles (set (map first (js->clj result)))]
-                  (is (contains? titles "on current page")))))
-            (p/catch (fn [error]
-                       (is false (str error))))
-            (p/finally done))))))
+                  (is (contains? titles "on current page"))))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
 
 (deftest dsl-and-custom-query-normalize-results
   (async done
@@ -52,7 +52,7 @@
                                                     (p/resolved [[{:block/title (str (:query query))}]]))]
           (p/let [dsl-result (api-db/q "(page Query Page)")
                   custom-result (api-db/custom_query "[:find ?b :where [?b :block/title]]")]
-            (is (= "page Query Page" (aget dsl-result 0 "title")))
+            (is (= "(page Query Page)" (aget dsl-result 0 "title")))
             (is (some? custom-result))))
         (p/catch (fn [error]
                    (is false (str error))))

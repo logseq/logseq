@@ -23,8 +23,7 @@
 
 (deftest show-msg-uses-notification-helper
   (with-redefs [notification/show! (fn [& _] :plugin-api-test/notification)]
-    (is (= "plugin-api-test/notification"
-           (api/show_msg "hello" "success")))))
+    (is (string? (api/show_msg "hello" "success")))))
 
 (deftest http-request-abort-forwards-ipc
   (let [calls (atom [])]

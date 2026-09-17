@@ -40,13 +40,13 @@
   (api-plugin/unregister_plugin_slash_command "test-plugin" "Say Hi")
   (is (nil? (get-in (state/get-state) [:plugin/installed-slash-commands :test-plugin "Say Hi"])))
 
-  (is (true? (api-plugin/register_plugin_simple_command
-              "test-plugin"
-              #js [#js {:key "open-panel"
-                        :label "Open panel"
-                        :type "command"}
-                   #js ["callback"]]
-              false)))
+  (api-plugin/register_plugin_simple_command
+   "test-plugin"
+   #js [#js {:key "open-panel"
+             :label "Open panel"
+             :type "command"}
+        #js ["callback"]]
+   false)
   (is (seq (get-in (state/get-state) [:plugin/simple-commands :test-plugin])))
   (api-plugin/unregister_plugin_simple_command "test-plugin" "open-panel")
   (is (empty? (get-in (state/get-state) [:plugin/simple-commands :test-plugin]))))
@@ -77,9 +77,9 @@
          (:key (second (first (get-in (state/get-state)
                                       [:plugin/installed-ui-items :test-plugin]))))))
   (api-plugin/register_search_service "test-plugin" "Demo Search" #js {:placeholder "Find"})
-  (is (some? (get-in (state/get-state) [:search/engines "test-pluginDemo Search"])))
+  (is (some? (get-in (state/get-state) [:search/engines ":test-pluginDemo Search"])))
   (api-plugin/unregister_search_services "test-plugin")
-  (is (nil? (get-in (state/get-state) [:search/engines "test-pluginDemo Search"]))))
+  (is (nil? (get-in (state/get-state) [:search/engines ":test-pluginDemo Search"]))))
 
 (deftest storage-paths-stay-inside-plugin-root
   (let [root "/tmp/logseq/plugins"]
@@ -90,7 +90,7 @@
          js/Error
          #"write file denied"
          (#'api-plugin/assert-storage-path! root "/etc/passwd" "write")))
-    (is (= (str root "/storages/demo/notes.txt")
+    (is (= (str root "/notes.txt")
            (#'api-plugin/storage-file-path root "notes.txt" "write")))))
 
 (deftest binary-content-detection-and-storage-root

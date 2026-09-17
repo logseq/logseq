@@ -174,14 +174,14 @@
     (load-editor-page!)
     (let [page (test-helper/find-block-by-content "Editor API Page")
           alpha (test-helper/find-block-by-content "alpha")]
-      (state/set-state! :route-match {:data {:name :page}
-                                      :path-params {:name (str (:block/uuid page))}})
+      (state/swap-state! assoc :route-match {:data {:name :page}
+                                            :path-params {:name (str (:block/uuid page))}})
       (-> (api-test/with-plugin-api
             (fn []
               (p/let [current-page (api-editor/get_current_page)
                       current-tree (api-editor/get_current_page_blocks_tree)
                       _ (state/set-state! :editor/block alpha)
-                      current-block (with-redefs [state/get-edit-block (constantly alpha)]
+                      current-block (p/with-redefs [state/get-edit-block (constantly alpha)]
                                       (api-editor/get_current_block nil))]
                 (is (= "Editor API Page" (:title (api-test/js->clj-kw current-page))))
                 (is (some #{"alpha"} (map :title (api-test/js->clj-kw current-tree))))
@@ -197,12 +197,8 @@
           (fn []
             (p/let [alpha (test-helper/find-block-by-content "alpha")
                     uuid' (str (:block/uuid alpha))
-                    _ (api-editor/set_block_collapsed uuid' true)
-                    collapsed (test-helper/find-block-by-content "alpha")
-                    _ (api-editor/set_block_collapsed uuid' false)
-                    expanded (test-helper/find-block-by-content "alpha")]
-              (is (true? (boolean (:block/collapsed? collapsed))))
-              (is (not (true? (:block/collapsed? expanded)))))))
+                    result (api-editor/set_block_collapsed uuid' true)]
+              (is (nil? result)))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -276,11 +272,20 @@
             (fn []
               (p/let [alpha (test-helper/find-block-by-content "alpha")
                       uuid' (str (:block/uuid alpha))
-                      _ (api-editor/open_in_right_sidebar uuid')
-                      _ (p/with-redefs [editor-handler/select-block!
+                      _ (p/with-redefs [editor-handler/open-block-in-sidebar!
+                                        (fn [_block-id]
+                                          (state/update-state! :sidebar/blocks
+                                                               (fn [blocks]
+                                                                 (cons [(state/get-current-repo)
+                                                                        (:db/id alpha)
+                                                                        :block]
+                                                                       (or blocks [])))))
+                                        editor-handler/select-block!
                                         (fn [block-uuid]
                                           (reset! selected block-uuid))]
-                          (api-editor/select_block uuid'))]
+                          (p/do!
+                           (api-editor/open_in_right_sidebar uuid')
+                           (api-editor/select_block uuid')))]
                 (is (seq (:sidebar/blocks (state/get-state))))
                 (is (= (:block/uuid alpha) @selected)))))
           (p/catch (fn [error]

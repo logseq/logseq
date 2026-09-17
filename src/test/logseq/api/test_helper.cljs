@@ -318,7 +318,8 @@
       :thread-api/export-edn
       {:export-edn-error "Export EDN is not available in plugin API unit tests"}
 
-      (:thread-api/undo-redo-set-pending-editor-info
+      (:thread-api/update-thread-atom
+       :thread-api/undo-redo-set-pending-editor-info
        :thread-api/undo-redo-record-editor-info
        :thread-api/undo-redo-record-ui-state)
       nil

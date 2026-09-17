@@ -243,7 +243,8 @@
                    opts' (cond-> (assoc opts
                                         :redirect? false
                                         :class-ident-namespace class-ident-namespace)
-                           (common-util/uuid-string? (:uuid opts))
+                           (and (string? (:uuid opts))
+                                (common-util/uuid-string? (:uuid opts)))
                            (update :uuid uuid))
                    tag-properties (:tagProperties opts)
                    tag (db-page-handler/<create-class! title opts')

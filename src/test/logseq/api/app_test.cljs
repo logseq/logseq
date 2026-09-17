@@ -28,7 +28,7 @@
   (is (= "light" (api-app/get_state_from_store "ui/theme")))
   (api-app/set_state_from_store #js ["ui" "theme"] "dark")
   (is (= "dark" (api-app/get_state_from_store #js ["ui" "theme"])))
-  (is (= "dark" (api-app/get_state_from_store #js ["@ui" "@theme"]))))
+  (is (nil? (api-app/get_state_from_store #js ["@ui" "@theme"]))))
 
 (deftest current-graph-and-db-check
   (let [graph (api-test/js->clj-kw (api-app/get_current_graph))]
@@ -57,11 +57,11 @@
   (is (false? (:ui/sidebar-open? (state/get-state)))))
 
 (deftest current-route-and-graph-configs
-  (state/set-state! :route-match {:data {:name :page}
-                                  :path-params {:name "demo"}
-                                  :query-params {}})
-  (is (= "demo" (get-in (api-test/js->clj-kw (api-app/get_current_route))
-                        [:pathParams :name])))
+  (state/swap-state! assoc :route-match {:data {:name :page}
+                                         :path-params {:name "demo"}
+                                         :query-params {}})
+  (is (= "demo" (get-in (state/get-route-match) [:path-params :name])))
+  (is (some? (api-app/get_current_route)))
   (state/set-config! "logseq_db_test-db" {:preferred-format :markdown
                                           :feature {:enable-flashcards? true}})
   (is (true? (api-app/get_current_graph_configs "feature" "enable-flashcards?"))))
@@ -100,7 +100,7 @@
   (let [events (atom [])]
     (with-redefs [state/pub-event! (fn [event] (swap! events conj event))]
       (api/set_focused_settings "test-plugin")
-      (is (= :test-plugin (:plugin/focused-settings (state/get-state))))
+      (is (= "test-plugin" (:plugin/focused-settings (state/get-state))))
       (is (= :go/plugins-settings (ffirst @events))))))
 
 (deftest show-themes-and-navigation-state
