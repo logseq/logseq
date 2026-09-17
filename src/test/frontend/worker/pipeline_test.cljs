@@ -1462,9 +1462,9 @@
 (deftest toggle-page-and-block-keeps-blank-nested-page-insert-as-draft-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/title "keep"}]}])
+                :blocks [{:block/title "existing"}]}])
         page1 (db-test/find-page-by-title @conn "page1")
-        keep (db-test/find-block-by-content @conn "keep")
+        existing (db-test/find-block-by-content @conn "existing")
         draft-uuid (random-uuid)]
     (with-transact-pipeline
       (fn []
@@ -1474,7 +1474,7 @@
            :block/title ""
            :block/name ""
            :block/tags #{:logseq.class/Page}}]
-         keep
+         existing
          {:sibling? true
           :keep-uuid? true})
         (let [draft (d/entity @conn [:block/uuid draft-uuid])]
