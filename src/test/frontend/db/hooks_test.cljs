@@ -228,6 +228,54 @@
       (is (identical? equal-key-a (second @snapshot-calls))
           "The stable callbacks retain the first equal key instance."))))
 
+(deftest use-block-projection-snapshot-keeps-status-and-projects-ready-values-test
+  (let [block-uuid (random-uuid)
+        project #(dissoc % :block/tx-id)
+        subscription-calls (atom [])]
+    (with-redefs [subs/subscribe-block!
+                  (fn [& args]
+                    (swap! subscription-calls conj args)
+                    (fn []))
+                  subs/<load-block fail-loader]
+      (with-use-sync-external-store
+        (fn [subscribe get-snapshot _get-server-snapshot]
+          (subscribe (fn []))
+          (get-snapshot))
+        (fn []
+          (with-redefs [subs/block-snapshot
+                        (constantly {:status :ready
+                                     :value {:block/uuid block-uuid
+                                             :block/tx-id 7
+                                             :block/title "Block"}})]
+            (is (= {:status :ready
+                    :value {:block/uuid block-uuid :block/title "Block"}}
+                   (db-hooks/use-block-projection-snapshot block-uuid project))
+                "Ready snapshots project their value."))
+          (with-redefs [subs/block-snapshot (constantly {:status :loading})]
+            (is (= {:status :loading}
+                   (db-hooks/use-block-projection-snapshot block-uuid project))))
+          (with-redefs [subs/block-snapshot (constantly {:status :missing})]
+            (is (= {:status :missing}
+                   (db-hooks/use-block-projection-snapshot block-uuid project))
+                "Missing blocks stay distinguishable from loading ones."))
+          (is (= [[block-uuid] [block-uuid] [block-uuid]]
+                 (mapv #(vec (butlast %)) @subscription-calls))
+              "A uuid subscribes to its block slot."))))))
+
+(deftest use-block-projection-snapshot-reads-nil-uuid-as-ready-nil-test
+  (with-redefs [subs/subscribe-block!
+                (fn [& _] (throw (js/Error. "A nil uuid must not subscribe")))
+                subs/block-snapshot
+                (fn [& _] (throw (js/Error. "A nil uuid must not read a block slot")))]
+    (with-use-sync-external-store
+      (fn [subscribe get-snapshot _get-server-snapshot]
+        (is (fn? (subscribe (fn []))))
+        (get-snapshot))
+      (fn []
+        (is (= {:status :ready :value nil}
+               (db-hooks/use-block-projection-snapshot nil #(dissoc % :block/tx-id)))
+            "Callers waiting on an upstream lookup keep an unconditional hook.")))))
+
 (deftest exact-hooks-hide-loading-state-and-surface-errors-test
   (let [block-uuid (random-uuid)
         error (js/Error. "worker load failed")]

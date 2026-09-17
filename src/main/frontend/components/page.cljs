@@ -593,61 +593,80 @@
       :else nil)))
 
 (hsx/defc loaded-page
-  [option page-uuid]
-  (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
-        [extras? set-extras!] (hooks/use-state false)]
+  [option page]
+  (let [class-page? (entity/class? page)
+        [refs-count-key set-refs-count-key!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (if-not page
-         js/undefined
-         (let [delay-ms (if (entity/class? page)
-                          class-page-below-fold-delay-ms
-                          0)
-               timeout-id (js/setTimeout #(set-extras! true) delay-ms)]
-           #(js/clearTimeout timeout-id))))
-     [page])
-    (let [breadcrumb-data (:value
-                           (db-hooks/use-resource-snapshot
-                            (when extras?
-                              [:block-breadcrumb page-uuid 16])))
-          refs-count (:value
-                      (db-hooks/use-resource-snapshot
-                       (when extras?
-                         [:block-ref-count page-uuid])))]
-      (when page
-        (page-inner (assoc option
-                           :page (cond-> page
-                                   breadcrumb-data
-                                   (assoc :block.temp/breadcrumb
-                                          (breadcrumb-model/resource-ancestors breadcrumb-data)))
-                           :refs-count refs-count))))))
+       (let [delay-ms (if class-page? class-page-below-fold-delay-ms 0)
+             timeout-id (js/setTimeout
+                         #(set-refs-count-key! [:block-ref-count (:block/uuid page)])
+                         delay-ms)]
+         #(js/clearTimeout timeout-id)))
+     [class-page?])
+    (let [refs-count (:value (db-hooks/use-resource-snapshot refs-count-key))]
+      (page-inner (assoc option :page page :refs-count refs-count)))))
 
-(hsx/defc page-resource
-  [option resource-key]
-  (let [{:keys [status value error]}
-        (db-hooks/use-resource-snapshot resource-key)]
-    (case status
-      :loading nil
-      :ready (if value
-               (loaded-page option value)
-               [:div.opacity-75 (t :page/not-found)])
-      :error (throw error)
-      nil)))
+(defn- ready-value
+  [{:keys [status value error]}]
+  (case status
+    :ready value
+    (:loading :missing) nil
+    :error (throw error)))
+
+(defn- page-cp-option
+  [option]
+  (assoc option :page-name (or (:page-name option)
+                               (get-page-name option))))
+
+(defn use-page-paint
+  "Everything a page needs before its first paint: the resolved page uuid,
+   the page itself and, for a zoomed block, its breadcrumb ancestors.
+   Loading them inside the page tree painted the body first and remounted
+   the breadcrumb once its data arrived. A nil option reads as :empty so the
+   router can gate every route through the same hooks."
+  [option]
+  (let [resource-key (some-> option page-cp-option page-resource-key)
+        identity-snapshot (db-hooks/use-resource-snapshot resource-key)
+        page-uuid (ready-value identity-snapshot)
+        page-snapshot (db-hooks/use-block-projection-snapshot page-uuid render-stable-page)
+        page (ready-value page-snapshot)
+        breadcrumb-key (when (:block/page page)
+                         [:block-breadcrumb page-uuid 16])
+        breadcrumb-snapshot (db-hooks/use-resource-snapshot breadcrumb-key)
+        breadcrumb-data (ready-value breadcrumb-snapshot)]
+    (cond
+      (nil? resource-key)
+      {:status :empty}
+
+      (some #(= :loading (:status %))
+            [identity-snapshot page-snapshot breadcrumb-snapshot])
+      {:status :loading}
+
+      :else
+      {:status :ready
+       :page (cond-> page
+               breadcrumb-key
+               (assoc :block.temp/breadcrumb
+                      (breadcrumb-model/resource-ancestors breadcrumb-data)))})))
 
 (hsx/defc page-aux
-  [option]
-  (when-let [resource-key (page-resource-key option)]
-    (page-resource option resource-key)))
+  [option {:keys [status page]}]
+  (case status
+    (:empty :loading) nil
+    :ready (if page
+             (loaded-page option page)
+             [:div.opacity-75 (t :page/not-found)])))
 
 (hsx/defc page-cp
   [option]
-  (let [page-name (or (:page-name option)
-                      (get-page-name option))]
+  (let [option (page-cp-option option)
+        paint (use-page-paint option)]
     ^{:key (str
             (state/get-current-repo)
             "-"
-            (or (:block/uuid option) (:db/id option) page-name))}
-    [page-aux (assoc option :page-name page-name)]))
+            (or (:block/uuid option) (:db/id option) (:page-name option)))}
+    [page-aux option paint]))
 
 (hsx/defc page-container
   [page-m option]
