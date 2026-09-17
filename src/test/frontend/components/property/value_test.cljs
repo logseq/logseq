@@ -78,6 +78,12 @@
          (#'property-value/property-write-id {:db/id 7}))
       "Properties without ident still write with db/id."))
 
+(deftest default-value-property-hides-nested-block-children-test
+  (is (true? (#'property-value/default-value-property-ident?
+              {:db/ident :logseq.property/default-value})))
+  (is (false? (#'property-value/default-value-property-ident?
+               {:db/ident :user.property/p1})))
+
 (deftest empty-placeholder-identity-maps-as-empty-test
   (is (true? (#'property-value/empty-placeholder-value?
               :logseq.property/empty-placeholder)))

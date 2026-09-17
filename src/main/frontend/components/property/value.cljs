@@ -65,6 +65,10 @@
     (editor-handler/move-cross-boundary-up-down direction {:input nil})
     (editor-handler/move-property-focus-up-down direction)))
 
+(defn- default-value-property-ident?
+  [property]
+  (= :logseq.property/default-value (:db/ident property)))
+
 (defn- property-value-block-container-props
   [property]
   {:class (property-value-block-container-class)
@@ -79,7 +83,7 @@
                       (move-property-value-boundary! e :down)
 
                       nil)))
-   :style (if (= (:db/ident property) :logseq.property/default-value)
+   :style (if (default-value-property-ident? property)
             {:min-width 300}
             {})})
 
@@ -1601,6 +1605,7 @@
                        :container-id container-id
                        :editor-box (state/get-component :editor/box)
                        :property-block? true
+                       :hide-children? (default-value-property-ident? property)
                        :on-block-content-pointer-down (when default-value?
                                                         (fn [_e]
                                                           (<create-new-block! block property (or (:block/title default-value) ""))))

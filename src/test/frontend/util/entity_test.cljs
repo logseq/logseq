@@ -27,3 +27,35 @@
                :logseq.property/created-from-property {:logseq.property/type :default}})))
     (is (not (entity/url-property-value? {:block/title "ordinary block"})))
     (is (not (entity/url-property-value? nil)))))
+
+(deftest default-value-block-predicate-test
+  (testing "A property default-value block is identified from its parent"
+    (let [property {:db/id 5
+                    :block/tags [:logseq.class/Property]
+                    :logseq.property/default-value {:db/id 10}}
+          default-value {:db/id 10
+                         :block/title "hello world"
+                         :block/parent property
+                         :logseq.property/created-from-property property}]
+      (is (entity/default-value-block? default-value))
+      (is (entity/leaf-property-value? default-value))))
+  (testing "Closed values and ordinary text property values are not default-value blocks"
+    (is (not (entity/default-value-block?
+              {:db/id 11
+               :block/closed-value-property {:db/id 5}
+               :block/parent {:db/id 5
+                              :block/tags [:logseq.class/Property]
+                              :logseq.property/default-value {:db/id 10}}
+               :logseq.property/created-from-property {:db/id 5
+                                                       :block/tags [:logseq.class/Property]}})))
+    (is (not (entity/default-value-block?
+              {:db/id 12
+               :block/title "text value"
+               :block/parent {:db/id 1 :block/tags [:logseq.class/Page]}
+               :logseq.property/created-from-property {:db/id 5
+                                                       :block/tags [:logseq.class/Property]
+                                                       :logseq.property/type :default}})))
+    (is (not (entity/default-value-block? nil)))
+    (is (not (entity/leaf-property-value?
+              {:block/title "text value"
+               :logseq.property/created-from-property {:logseq.property/type :default}})))))
