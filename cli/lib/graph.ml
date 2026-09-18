@@ -110,6 +110,270 @@ let command_id = function
   | Parsed_export _ -> Graph_export
   | Parsed_import _ -> Graph_import
 
+(* CLI option contract for logseq.db.sqlite.export/build-export. Entity
+   existence, attribute uniqueness and lookup values belong to Datascript. *)
+let edn_export_types =
+  [
+    "graph";
+    "graph-human";
+    "graph-ontology";
+    "block";
+    "page";
+    "selected-nodes";
+    "view-nodes";
+  ]
+
+let edn_graph_content_keys =
+  [
+    "include-timestamps?";
+    "exclude-namespaces";
+    "exclude-built-in-pages?";
+    "exclude-files?";
+  ]
+
+let edn_export_selector_keys =
+  [
+    ("block-id", "block");
+    ("page-id", "page");
+    ("node-ids", "selected-nodes");
+    ("rows", "view-nodes");
+    ("group-by?", "view-nodes");
+  ]
+
+let edn_option_get fields name =
+  Vec.find_map
+    (fun (key, value) ->
+      if Edn_util.as_keyword key = Some name then Some value else None)
+    fields
+
+let edn_option_path = function
+  | [ key ] -> key
+  | path -> "[" ^ String.concat " " path ^ "]"
+
+let edn_option_type_error path expected =
+  [ "--edn-options " ^ edn_option_path path ^ " must be " ^ expected ^ "." ]
+
+let edn_sequential value =
+  match Edn_util.as_vector value with
+  | Some values -> Some values
+  | None -> Edn_util.as_list value
+
+let edn_entity_selector ~allow_uuid value =
+  Option.is_some (Edn_util.as_int64 value)
+  || Option.is_some (Edn_util.as_keyword value)
+  || (allow_uuid && Option.is_some (Edn_util.as_uuid value))
+  ||
+  match edn_sequential value with
+  | Some values when Vec.length values = 2 ->
+      let attr = Vec.nth values 0 in
+      Option.is_some (Edn_util.as_keyword attr)
+      || Option.is_some (Edn_util.as_string attr)
+  | _ -> false
+
+let validate_edn_selector ~allow_uuid path value =
+  if edn_entity_selector ~allow_uuid value then []
+  else
+    edn_option_type_error path
+      ("an entity ID, keyword ident or two-element lookup ref"
+      ^ if allow_uuid then ", or a UUID" else "")
+
+let validate_edn_nodes ~allow_uuid path value =
+  match Edn_util.as_seq value with
+  | None -> edn_option_type_error path "a collection of entity selectors"
+  | Some nodes ->
+      Vec.to_list nodes
+      |> List.mapi (fun index node ->
+          validate_edn_selector ~allow_uuid
+            (path @ [ string_of_int index ])
+            node)
+      |> List.concat
+
+let validate_edn_rows ~grouped path value =
+  if not grouped then validate_edn_nodes ~allow_uuid:true path value
+  else
+    let validate_group group_path nodes =
+      validate_edn_nodes ~allow_uuid:true group_path nodes
+    in
+    match Edn_util.as_map value with
+    | Some groups ->
+        Vec.to_list groups
+        |> List.map (fun (label, nodes) ->
+            validate_group
+              (path @ [ Melange_edn_melange.to_edn_string label ])
+              nodes)
+        |> List.concat
+    | None -> (
+        match Edn_util.as_seq value with
+        | None ->
+            edn_option_type_error path
+              "a map or collection of [group-label node-collection] pairs"
+        | Some groups ->
+            Vec.to_list groups
+            |> List.mapi (fun index group ->
+                let group_path = path @ [ string_of_int index ] in
+                match edn_sequential group with
+                | Some pair when Vec.length pair = 2 ->
+                    validate_group (group_path @ [ "1" ]) (Vec.nth pair 1)
+                | _ ->
+                    edn_option_type_error group_path
+                      "a [group-label node-collection] pair")
+            |> List.concat)
+
+let validate_edn_export_options value =
+  match Edn_util.as_map value with
+  | None ->
+      Error
+        (Error.invalid_options "graph export --edn-options must be an EDN map")
+  | Some fields -> (
+      let export_type =
+        match edn_option_get fields "export-type" with
+        | None -> Some "graph"
+        | Some value -> Edn_util.as_keyword value
+      in
+      let keywords names =
+        names |> List.map (fun name -> ":" ^ name) |> String.concat ", "
+      in
+      match export_type with
+      | Some kind when List.mem kind edn_export_types -> (
+          let graph_keys =
+            "catch-validation-errors?"
+            :: (if kind = "graph-human" then edn_graph_content_keys else [])
+          in
+          let top_keys =
+            "export-type" :: "graph-options"
+            :: List.filter_map
+                 (fun (key, owner) -> if owner = kind then Some key else None)
+                 edn_export_selector_keys
+          in
+          let wrong_export_type path owner =
+            [
+              "--edn-options " ^ edn_option_path path
+              ^ " requires :export-type :" ^ owner
+              ^ "; the selected export type is :" ^ kind ^ ".";
+            ]
+          in
+          let unknown_key path allowed =
+            [
+              "Unknown --edn-options key " ^ edn_option_path path
+              ^ ". Allowed keys for :" ^ kind ^ ": " ^ keywords allowed ^ ".";
+            ]
+          in
+          let boolean path value =
+            if Option.is_some (Edn_util.as_bool value) then []
+            else edn_option_type_error path "an EDN boolean"
+          in
+          let validate_graph_option path key value =
+            match key with
+            | "exclude-namespaces" -> (
+                match Edn_util.as_set value with
+                | Some names
+                  when Vec.for_all
+                         (fun name ->
+                           Option.is_some (Edn_util.as_keyword name)
+                           || Option.is_some (Edn_util.as_string name))
+                         names ->
+                    []
+                | _ -> edn_option_type_error path "a set of keywords or strings"
+                )
+            | _ -> boolean path value
+          in
+          let validate_fields path allowed validate entries =
+            Vec.to_list entries
+            |> List.concat_map (fun (key, value) ->
+                let key_path =
+                  path @ [ Melange_edn_melange.to_edn_string key ]
+                in
+                match Edn_util.as_keyword key with
+                | Some name -> validate key_path name value
+                | None -> unknown_key key_path allowed)
+          in
+          let graph_options path value =
+            match Edn_util.as_map value with
+            | None -> edn_option_type_error path "an EDN map"
+            | Some entries ->
+                validate_fields path graph_keys
+                  (fun key_path key value ->
+                    if List.mem key graph_keys then
+                      validate_graph_option key_path key value
+                    else if List.mem key edn_graph_content_keys then
+                      wrong_export_type key_path "graph-human"
+                    else if
+                      key = "export-type" || key = "graph-options"
+                      || List.mem_assoc key edn_export_selector_keys
+                    then
+                      [
+                        ("Invalid --edn-options key " ^ edn_option_path key_path
+                       ^ "; use :" ^ key ^ " at the top level."
+                        ^
+                        match List.assoc_opt key edn_export_selector_keys with
+                        | Some owner -> " Requires :export-type :" ^ owner ^ "."
+                        | None -> "");
+                      ]
+                    else unknown_key key_path graph_keys)
+                  entries
+          in
+          let validate_top path key value =
+            if
+              List.mem key ("catch-validation-errors?" :: edn_graph_content_keys)
+            then
+              let owner =
+                if key = "catch-validation-errors?" then kind else "graph-human"
+              in
+              [
+                "Invalid --edn-options key " ^ edn_option_path path
+                ^ ". Use :graph-options: {:export-type :" ^ owner
+                ^ " :graph-options {:" ^ key ^ " "
+                ^ Melange_edn_melange.to_edn_string value
+                ^ "}}.";
+              ]
+            else if not (List.mem key top_keys) then
+              match List.assoc_opt key edn_export_selector_keys with
+              | Some owner -> wrong_export_type path owner
+              | None -> unknown_key path top_keys
+            else
+              match key with
+              | "export-type" -> []
+              | "graph-options" -> graph_options path value
+              | "group-by?" -> boolean path value
+              | "block-id" | "page-id" ->
+                  validate_edn_selector ~allow_uuid:false path value
+              | "node-ids" -> validate_edn_nodes ~allow_uuid:false path value
+              | "rows" ->
+                  let grouped =
+                    Option.bind
+                      (edn_option_get fields "group-by?")
+                      Edn_util.as_bool
+                    = Some true
+                  in
+                  validate_edn_rows ~grouped path value
+              | _ -> assert false
+          in
+          let missing =
+            List.filter_map
+              (fun (key, owner) ->
+                if
+                  owner = kind && key <> "group-by?"
+                  && Option.is_none (edn_option_get fields key)
+                then
+                  Some
+                    ("--edn-options :" ^ key ^ " is required for :export-type :"
+                   ^ kind ^ ".")
+                else None)
+              edn_export_selector_keys
+          in
+          let errors =
+            missing @ validate_fields [] top_keys validate_top fields
+            |> List.sort String.compare
+          in
+          match errors with
+          | [] -> Ok ()
+          | _ -> Error (Error.invalid_options (String.concat "\n" errors)))
+      | _ ->
+          Error
+            (Error.invalid_options
+               ("--edn-options :export-type must be one of "
+              ^ keywords edn_export_types ^ ".")))
+
 let validate_parsed = function
   | Parsed_create opts
     when Option.is_some opts.e2ee_password && not opts.enable_sync ->
@@ -121,11 +385,8 @@ let validate_parsed = function
         (Error.invalid_options
            "graph export --type sqlite does not accept --edn-options or \
             --pretty-print")
-  | Parsed_export opts
-    when Option.is_some opts.edn_options
-         && Option.is_none (Option.bind opts.edn_options Edn_util.as_map) ->
-      Error
-        (Error.invalid_options "graph export --edn-options must be an EDN map")
+  | Parsed_export { edn_options = Some value; _ } ->
+      validate_edn_export_options value
   | _ -> Ok ()
 
 let utc_timestamp () =
