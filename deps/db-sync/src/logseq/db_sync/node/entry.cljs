@@ -15,4 +15,5 @@
                   (reset! *server result)
                   (js/console.log (str "Logseq sync listening on port " (:port result)))))
         (p/catch (fn [error]
-                   (js/console.error "Logseq sync failed to start" error))))))
+                   (js/console.error "Logseq sync failed to start" error)
+                   (set! (.-exitCode js/process) 1))))))

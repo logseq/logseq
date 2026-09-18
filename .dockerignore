@@ -1,0 +1,11 @@
+.git
+.shadow-cljs
+**/.shadow-cljs
+node_modules
+**/node_modules
+dist
+**/dist
+static
+tmp
+**/tmp
+cli/dist
