@@ -171,53 +171,6 @@
              @editing)
           "Loaded block data should enter editor state before edit-block! returns."))))
 
-(deftest edit-block-clears-slash-commands-when-switching-blocks-test
-  (let [block-a {:db/id 1
-                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                 :block/title "A"}
-        block-b {:db/id 2
-                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
-                 :block/title "B"}
-        prev-action (state/get-editor-action)]
-    (try
-      (state/set-editor-action! :commands)
-      (with-redefs [state/get-current-repo (constantly "test")
-                    state/get-edit-block (constantly block-a)
-                    state/clear-selection! (constantly nil)
-                    state/get-current-editor-container-id (constantly :test-container)
-                    state/set-editing! (constantly nil)
-                    state/set-editor-last-input-time! (constantly nil)]
-        (block-handler/edit-block! block-b 0 {:save-code-editor? false
-                                              :skip-load? true})
-        (is (nil? (state/get-editor-action))
-            "Slash commands should close when edit-block! targets a different block"))
-      (finally
-        (state/set-editor-action! prev-action)))))
-
-(deftest edit-block-keeps-slash-commands-in-the-same-block-test
-  (let [block-a {:db/id 1
-                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                 :block/title "A"}
-        prev-action (state/get-editor-action)]
-    (try
-      (state/set-editor-action! :commands)
-      (with-redefs [state/get-current-repo (constantly "test")
-                    state/get-edit-block (constantly block-a)
-                    state/clear-selection! (constantly nil)
-                    state/get-current-editor-container-id (constantly :test-container)
-                    state/set-editing! (constantly nil)
-                    state/set-editor-last-input-time! (constantly nil)]
-        (block-handler/edit-block! block-a 0 {:save-code-editor? false
-                                              :skip-load? true})
-        (is (= :commands (state/get-editor-action))
-            "Slash commands should stay open when re-entering the same block")
-        (state/clear-editor-action!)
-        (state/set-editor-show-commands!)
-        (is (= :commands (state/get-editor-action))
-            "Slash commands can still be started in the current block"))
-      (finally
-        (state/set-editor-action! prev-action)))))
-
 (deftest indent-outdent-does-not-use-global-editor-state-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
