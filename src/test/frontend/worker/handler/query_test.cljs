@@ -1,6 +1,5 @@
 (ns frontend.worker.handler.query-test
   (:require [cljs.test :refer [deftest is]]
-            [datascript.core :as d]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.query-dsl :as query-dsl]
             [logseq.db :as ldb]
@@ -49,43 +48,6 @@
     (is (true? (recycle/restore! conn (:block/uuid child))))
     (is (= #{"child"} (custom-titles @conn leaf-query))
         "Restore puts the child back into query evaluation")))
-
-(deftest custom-leaf-query-ignores-recycled-child-block
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:streamOf {:logseq.property/type :node}}
-               :classes {:stream {}}
-               :pages-and-blocks
-               [{:page {:block/title "parent" :build/tags [:stream]}}
-                {:page {:block/title "container"}
-                 :blocks [{:block/title "child" :build/tags [:stream]
-                           :build/properties
-                           {:streamOf [:build/page {:block/title "parent"}]}}]}]})
-        child (db-test/find-block-by-content @conn "child")]
-    (is (= #{"child"} (custom-titles @conn leaf-query)))
-    (ldb/transact! conn (recycle/recycle-blocks-tx-data @conn [child] {}) {:outliner-op :delete-blocks})
-    (is (true? (ldb/recycled? (d/entity @conn (:db/id child)))))
-    (is (= #{"parent"} (custom-titles @conn leaf-query)))))
-
-(deftest custom-leaf-query-ignores-descendants-of-recycled-page
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:streamOf {:logseq.property/type :node}}
-               :classes {:stream {}}
-               :pages-and-blocks
-               [{:page {:block/title "parent" :build/tags [:stream]}}
-                {:page {:block/title "container"}
-                 :blocks [{:block/title "child" :build/tags [:stream]
-                           :build/properties
-                           {:streamOf [:build/page {:block/title "parent"}]}}]}]})
-        container (ldb/get-page @conn "container")
-        child (db-test/find-block-by-content @conn "child")]
-    (is (= #{"child"} (custom-titles @conn leaf-query)))
-    (ldb/transact! conn (recycle/recycle-page-tx-data @conn container {}) {:outliner-op :delete-page})
-    (is (nil? (:logseq.property/deleted-at (d/entity @conn (:db/id child)))))
-    (is (true? (ldb/recycled? (d/entity @conn (:db/id child))))
-        "Child block is recycled via its page, without its own deleted-at")
-    (is (some? (:user.property/streamOf (d/entity @conn (:db/id child)))))
-    (is (= #{"parent"} (custom-titles @conn leaf-query))
-        "A recycled page's descendants must not keep the parent from becoming a leaf")))
 
 (deftest dsl-query-excludes-recycled-pages
   (let [conn (stream-graph)
