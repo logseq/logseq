@@ -249,7 +249,9 @@ let options_for_command =
           option_of_array
             [| "-e"; "--edn-options" |]
             (Required_value "edn")
-            "EDN map of worker export options; :export-type defaults to :graph";
+            "EDN export options; :export-type defaults to :graph. Nest graph \
+             content controls under :graph-options with :export-type \
+             :graph-human. Unknown or inapplicable keys are rejected";
           option_of_array
             [| "-p"; "--pretty-print" |]
             Flag "Pretty-print the exported EDN file";
