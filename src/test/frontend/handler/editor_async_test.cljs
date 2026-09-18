@@ -1195,15 +1195,12 @@
           (is (some #(= "Grandchild" (:block/title %)) blocks)))))))
 
 (deftest-async cut-collapsed-parent-includes-nested-children-and-removes-source
-  (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!)
-        parent-uuid (:block/uuid parent)]
-    (p/let [clipboard (<cut-collapsed-parent! parent)
-            source (d/entity (conn/get-db test-helper/test-db) [:block/uuid parent-uuid])]
+  (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!)]
+    (p/let [clipboard (<cut-collapsed-parent! parent)]
       (is (= expected-titles (mapv :block/title clipboard)))
-      (is (true? (ldb/recycled? source))
-          "Cut must recycle the collapsed parent")
-      (is (nil? (page-block-by-title "source" "Parent"))
-          "The source page must no longer show the cut parent"))))
+      (is (nil? (page-block-by-title "source" "Parent")))
+      (is (nil? (page-block-by-title "source" "Child")))
+      (is (nil? (page-block-by-title "source" "Grandchild"))))))
 
 (deftest-async paste-after-copy-of-collapsed-parent-restores-full-tree
   (let [{:keys [parent target expected-titles]} (load-collapsed-clipboard-fixture!)]
