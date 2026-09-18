@@ -63,6 +63,31 @@
       (is (contains? full-ids :user.property/author))
       (is (not (contains? hidden-ids :user.property/author))))))
 
+(deftest block-positioned-properties-show-default-value-when-hiding-empty-values
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "task"
+                          :build/tags [:logseq.class/Task]}
+                         {:block/title "high priority task"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}])
+        block-left-ids (fn [title]
+                         (->> (worker-property/block-positioned-properties
+                               @conn
+                               (:db/id (db-test/find-block-by-content @conn title))
+                               :block-left)
+                              (map :db/ident)
+                              set))]
+    (testing "a hide-empty-value property without a value or default value stays hidden"
+      (is (not (contains? (block-left-ids "task") :logseq.property/priority))))
+    (testing "a hide-empty-value property without a value shows its default value"
+      (is (contains? (block-left-ids "task") :logseq.property/status))
+      (d/transact! conn [[:db/add :logseq.property/priority
+                          :logseq.property/default-value :logseq.property/priority.medium]])
+      (is (contains? (block-left-ids "task") :logseq.property/priority)))
+    (testing "an explicit value is still shown"
+      (is (contains? (block-left-ids "high priority task") :logseq.property/priority)))))
+
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))

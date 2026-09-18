@@ -624,3 +624,23 @@
       (is (= "https://example.com/poster.webp"
              (:logseq.property.asset/external-url cover)))
       (assert-shallow-identity-ref cover))))
+
+(deftest render-data-includes-tag-properties-for-tag-only-blocks-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "task"
+                          :build/tags [:logseq.class/Task]}
+                         {:block/title "plain block"}]}])
+        _ (d/transact! conn [[:db/add :logseq.property/priority
+                              :logseq.property/default-value :logseq.property/priority.medium]])
+        positioned-properties (fn [title]
+                                (let [block (db-test/find-block-by-content @conn title)]
+                                  (-> (frontend.worker.handler.block/get-block-and-children
+                                       @conn (:block/uuid block) {:render-data? true})
+                                      (get-in [:block :block.temp/positioned-properties])
+                                      (update-vals #(set (map :db/ident %))))))]
+    (testing "a block with only tags renders its tag properties"
+      (is (= #{:logseq.property/status :logseq.property/priority}
+             (:block-left (positioned-properties "task")))))
+    (testing "a block without properties or tags stays plain"
+      (is (= {} (positioned-properties "plain block"))))))

@@ -440,6 +440,15 @@
   [db entity-or-id attr]
   (first (entity-direct-values db entity-or-id attr)))
 
+(defn- property-value-empty?
+  "A missing value isn't empty when the property falls back to a default value."
+  [db property value]
+  (and (nil? value)
+       (nil? (entity-direct-value db property
+                                  (if (= :checkbox (:logseq.property/type property))
+                                    :logseq.property/scalar-default-value
+                                    :logseq.property/default-value)))))
+
 (defn entity-direct-map
   [db entity keys]
   (if (de/entity? entity)
@@ -763,24 +772,21 @@
       :else
       :properties)))
 
-(defn- block-direct-property-value
-  [db block-id property-id]
-  (entity-direct-value db block-id property-id))
-
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
   (when-let [property (d/entity db property-id)]
     (let [property-position (render-property-position db property)
-          property-value (block-direct-property-value db block-id property-id)]
+          empty-value? (property-value-empty?
+                        db property (entity-direct-value db block-id property-id))]
       (and
        (not (false? (:logseq.property/public? property)))
        (= property-position position)
        (not (and (:logseq.property/hide-empty-value property)
-                 (nil? property-value)))
+                 empty-value?))
        (not (:logseq.property/hide? property))
        (not (and
              (= property-position :block-below)
-             (nil? property-value)
+             empty-value?
              (not allow-empty-block-below?)
              (not (render-tag-class-page? db (d/entity db block-id)))))))))
 

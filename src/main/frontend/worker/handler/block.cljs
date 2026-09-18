@@ -15,7 +15,8 @@
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
    [logseq.db.common.initial-data :as common-initial-data]
-   [logseq.db.common.reference :as db-reference]))
+   [logseq.db.common.reference :as db-reference]
+   [logseq.outliner.property :as outliner-property]))
 
 (defn- resolve-block-entity
   [db id-or-page-name]
@@ -303,9 +304,13 @@
                     (remove :block/closed-value-property))}))
 
 (defn- plain-render-block?
+  "A block is plain when neither the block nor its tags have properties to render."
   [db block]
-  (empty? (remove #{:block/tags}
-                  (property-handler/direct-block-property-ids db (:db/id block)))))
+  (let [property-ids (property-handler/direct-block-property-ids db (:db/id block))]
+    (and (every? #{:block/tags} property-ids)
+         (or (empty? property-ids)
+             (empty? (:classes-properties
+                      (outliner-property/get-block-classes-properties db (:db/id block))))))))
 
 (defn- block-positioned-properties-map
   [db block]
