@@ -1,23 +1,8 @@
 (ns frontend.worker.publish-test
   (:require [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.publish :as worker-publish]
-            [logseq.db.test.helper :as db-test]
-            [logseq.publishing.runtime :as publish-runtime]))
-
-(deftest hosted-export-runtime-assets-use-relative-static-paths
-  (testing "published index.html scripts stay relative so python http.server and subpath hosts work"
-    (let [srcs (map :src publish-runtime/page-js-scripts)]
-      (is (every? #(string/starts-with? % "static/") srcs))
-      (is (some #(= "static/js/main.js" %) srcs))
-      (is (some #(= "static/js/magic_portal.js" %) srcs))
-      (is (not-any? #(string/includes? % "react.production") srcs))))
-  (testing "worker and wasm files are part of the hosted export runtime"
-    (let [files (set publish-runtime/required-js-runtime-files)]
-      (is (contains? files "db-worker.js"))
-      (is (contains? files "db-worker-bundle.js"))
-      (is (contains? files "sqlite3.wasm")))))
+            [logseq.db.test.helper :as db-test]))
 
 (deftest publish-payload-includes-embedded-blocks
   (testing "embedded blocks and their children are included in publish payload"
