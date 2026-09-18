@@ -1066,7 +1066,7 @@
                       (p/resolved [ids (:block/title parent) [parent]]))
                     export-html/export-blocks-as-html (fn [& _] (p/resolved ""))
                     common-handler/copy-to-clipboard-without-id-property!
-                    (fn [_repo _text _html blocks]
+                    (fn [_repo _text _html blocks & _opts]
                       (reset! clipboard blocks))
                     db-transact/apply-outliner-ops apply-test-outliner-ops!]
       (p/let [_ (editor/cut-block! (:block/uuid parent))]

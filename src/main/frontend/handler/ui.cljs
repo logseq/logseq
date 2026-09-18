@@ -184,6 +184,69 @@
          (apply concat)))
       matched)))
 
+(defn- auto-complete-group-heading
+  "Returns the `.ui__ac-group-name` immediately above `element`, if any.
+
+  Slash-command groups render that heading as the previous sibling of the
+  focused item's `.menu-link-wrap`."
+  [element]
+  (when-let [heading (some-> element .-parentElement .-previousElementSibling)]
+    (when (some-> heading .-classList (.contains "ui__ac-group-name"))
+      heading)))
+
+(defn- auto-complete-scroll-geometry
+  "Builds focused-item geometry from `container` and `element` DOM nodes.
+
+  `item-top` is in container scroll coordinates so callers can compute a
+  corrected `scrollTop` without depending on `offsetParent`.
+
+  When the focused item starts a group, `item-top` includes the group heading
+  so arrowing back to the first command also reveals the label above it."
+  [container element]
+  (when (and container element)
+    (let [container-rect (.getBoundingClientRect container)
+          element-rect (.getBoundingClientRect element)
+          heading (auto-complete-group-heading element)
+          heading-rect (when heading (.getBoundingClientRect heading))
+          scroll-top (.-scrollTop container)
+          container-top (.-top container-rect)
+          element-top (+ scroll-top (- (.-top element-rect) container-top))
+          cluster-top (if heading-rect
+                        (+ scroll-top (- (.-top heading-rect) container-top))
+                        element-top)]
+      {:scroll-top scroll-top
+       :viewport-height (.-clientHeight container)
+       :item-top cluster-top
+       :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
+
+(defn- auto-complete-keep-visible-scroll-top
+  "Returns a `scrollTop` that keeps the focused item inside the viewport."
+  [{:keys [scroll-top viewport-height item-top item-height]}]
+  (let [item-bottom (+ item-top item-height)
+        viewport-bottom (+ scroll-top viewport-height)]
+    (cond
+      (< item-top scroll-top)
+      (max 0 item-top)
+
+      (> item-bottom viewport-bottom)
+      (max 0 (- item-bottom viewport-height))
+
+      :else
+      scroll-top)))
+
+(defn- auto-complete-scroll-into-view!
+  "Keeps the highlighted auto-complete item visible in `#ui__ac-inner`.
+
+  Slash-command and search popups scroll that inner list, not the popover
+  wrapper. Arrow up/down used to set `scrollTop` on `#ui__ac`'s parent, so
+  the chosen row could move out of view."
+  [idx]
+  (when-let [element (gdom/getElement (str "ac-" idx))]
+    (when-let [container (gdom/getElement "ui__ac-inner")]
+      (when-let [geometry (auto-complete-scroll-geometry container element)]
+        (set! (.-scrollTop container)
+              (auto-complete-keep-visible-scroll-top geometry))))))
+
 (defn auto-complete-prev
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
@@ -195,11 +258,7 @@
       (= @current-idx 0)
       (reset! current-idx (dec (count matched)))
       :else nil)
-    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
-            height (or (gobj/get modal "offsetHeight") 300)
-            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
-        (set! (.-scrollTop modal) scroll-top)))))
+    (auto-complete-scroll-into-view! @current-idx)))
 
 (defn auto-complete-next
   [state e]
@@ -210,11 +269,7 @@
       (if (>= @current-idx (dec total))
         (reset! current-idx 0)
         (swap! current-idx inc)))
-    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
-            height (or (gobj/get modal "offsetHeight") 300)
-            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
-        (set! (.-scrollTop modal) scroll-top)))))
+    (auto-complete-scroll-into-view! @current-idx)))
 
 (defn auto-complete-complete
   [state e]

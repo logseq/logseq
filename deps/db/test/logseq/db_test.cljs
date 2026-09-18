@@ -81,6 +81,59 @@
     (is (= "Apr 11th, 2026"
            (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
 
+(defn- create-sibling-conn
+  [middle-attrs]
+  (let [conn (db-test/create-conn)]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/title "page"
+                   :block/name "page"}
+                  {:db/id -2
+                   :db/ident :user.property/p}
+                  {:db/id -3
+                   :block/title "ordinary before"
+                   :block/parent -1
+                   :block/order "a0"}
+                  (merge
+                   {:db/id -4
+                    :block/title "property value"
+                    :block/parent -1
+                    :block/order "a1"}
+                   middle-attrs)
+                  {:db/id -5
+                   :block/title "ordinary after"
+                   :block/parent -1
+                   :block/order "a2"}])
+    conn))
+
+(defn- block-by-title
+  [db title]
+  (d/entity db
+            (d/q '[:find ?b .
+                   :in $ ?title
+                   :where [?b :block/title ?title]]
+                 db title)))
+
+(deftest ordinary-sibling-skips-created-from-property-children
+  (let [conn (create-sibling-conn
+              {:logseq.property/created-from-property -2})
+        before (block-by-title @conn "ordinary before")
+        after (block-by-title @conn "ordinary after")]
+    (is (some? before))
+    (is (some? after))
+    (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
+    (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
+
+(deftest ordinary-sibling-skips-closed-value-property-children
+  (let [conn (create-sibling-conn
+              {:block/closed-value-property -2})
+        before (block-by-title @conn "ordinary before")
+        after (block-by-title @conn "ordinary after")]
+    (is (some? before))
+    (is (some? after))
+    (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
+    (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties

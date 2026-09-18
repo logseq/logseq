@@ -43,6 +43,6 @@
   [graph]
   (if (util/electron?)
     (p/do
-      (persist-db/<close-db graph)
+      (persist-db/<invalidate-remote-repo! graph "deleting")
       (ipc/ipc "deleteGraph" graph))
     (persist-db/<unsafe-delete graph)))

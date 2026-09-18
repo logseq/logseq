@@ -366,6 +366,8 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def private-tag-titles db-class/private-tag-titles)
+(def private-create-page-tag? db-class/private-create-page-tag?)
 (def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
@@ -444,8 +446,8 @@
                         child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
                     (if (and child-order
                              (eligible? (compare child-order block-order))
-                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
-                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (not (seq (d/datoms db :eavt child-id :logseq.property/created-from-property)))
+                             (not (seq (d/datoms db :eavt child-id :block/closed-value-property)))
                              (or (nil? best-order)
                                  (closer? (compare child-order best-order))))
                       [child-id child-order]

@@ -227,10 +227,15 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
-        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        [load-failed? set-load-failed!] (hooks/use-state false)
+        *prev-src (hooks/use-ref src)]
+    (when (not= (hooks/deref *prev-src) src)
+      (hooks/set-ref! *prev-src src)
+      (set-load-failed! false))
     (hooks/use-effect!
      (fn []
-       (when (and (seq src) (:block/uuid asset-block))
+       (when (and (seq src) (:block/uuid asset-block) (not load-failed?))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -240,7 +245,7 @@
                                                         {:logseq.property.asset/width width
                                                          :logseq.property.asset/height height}))))))
        (fn []))
-     [])
+     [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
           image-src (when (seq src)
                       (fs/asset-path-normalize src))
@@ -252,21 +257,26 @@
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
-        :on-pointer-down util/stop
+        :on-pointer-down (fn [e]
+                           (when-not (block-image/asset-fallback-link-event? e)
+                             (util/stop e)))
         :on-click (fn [e]
-                    (util/stop e)
-                    (when (= "IMG" (some-> (.-target e) (.-nodeName)))
-                      (open-lightbox! e)))
+                    (when-not (block-image/asset-fallback-link-event? e)
+                      (util/stop e)
+                      (when (= "IMG" (some-> (.-target e) (.-nodeName)))
+                        (open-lightbox! e))))
         :ref *el-ref}
-       [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         (cond-> {:loading "lazy"
-                  :referrerPolicy "no-referrer"
-                  :src src'}
-           (not gallery-view?)
-           (assoc :title title))
-         metadata)]
-       (when (and (not breadcrumb?)
+       (block-image/image-or-fallback
+        {:src src'
+         :title title
+         :gallery-view? gallery-view?
+         :metadata metadata
+         :load-failed? load-failed?
+         :on-error (fn [_]
+                     (when (block-image/remote-image-url? src')
+                       (set-load-failed! true)))})
+       (when (and (not load-failed?)
+                  (not breadcrumb?)
                   (not positioned?))
          [:<>
           (let [handle-copy!
@@ -1059,9 +1069,15 @@
   (let [page-uuid (if (uuid? page) page (:block/uuid page))
         page-name (:block/name page)]
     ^{:key (str (or page-uuid page-name))}
-    (if page-uuid
+    (if (and page-uuid
+             (not (and (:skip-async-load? config)
+                       (or (:block/title page)
+                           (true? (:block.temp/first-window-preview? page))))))
       [subscribed-page-cp config page-uuid]
-      [page-cp-inner config page])))
+      [page-cp-inner config (if (map? page)
+                              page
+                              {:block/uuid page-uuid
+                               :block/name page-name})])))
 
 (hsx/defc asset-reference
   [config title path]
@@ -1984,7 +2000,7 @@
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         (if (common-util/uuid-string? s)
-          (page-cp (assoc config :tag? true) {:block/name s})
+          (page-cp (assoc config :tag? true) {:block/uuid (uuid s)})
           [:span (str "#" s)])))
 
     ["Emphasis" [[kind] data]]
@@ -2258,7 +2274,7 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (and (not (entity/url-property-value? block))
+        collapsable? (and (not (entity/leaf-property-value? block))
                           (editor-handler/collapsable? uuid {:semantic? true
                                                             :block block
                                                             :ignore-children? page-title?
@@ -2381,7 +2397,7 @@
 (hsx/defc subscribed-block-control
   [config block opts]
   (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (and (not (entity/url-property-value? block))
+        has-children? (and (not (entity/leaf-property-value? block))
                            (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
@@ -2410,6 +2426,18 @@
                    (editor-handler/toggle-list-checkbox block item-content)))}))
 
 (declare src-cp)
+
+(defn- ast-displayed-math-formula
+  [ast]
+  (some (fn [form]
+          (when (and (vector? form)
+                     (= "Displayed_Math" (first form)))
+            (not-empty (string/trim (second form)))))
+        (tree-seq coll? seq ast)))
+
+(defn- page-ref-math-cp
+  [formula]
+  (latex/latex formula false true))
 
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
@@ -2479,8 +2507,16 @@
                          (assoc :node-ref-link-only? true)
                          (integer? heading)
                          (assoc :parent-heading heading))]
-           (if video-title?
+           (cond
+             video-title?
              (video-inline-segments-cp config' block-ast-title)
+
+             (and (:page-ref? config) (empty? block-ast-title))
+             (if-let [formula (ast-displayed-math-formula (:block.temp/ast-body block))]
+               [(page-ref-math-cp formula)]
+               (map-inline config' block-ast-title))
+
+             :else
              (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
@@ -2584,8 +2620,10 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      [:div.math-block
-       (latex/latex (:block/title block) true true)]
+      (if (:page-ref? config)
+        (page-ref-math-cp (:block/title block))
+        [:div.math-block
+         (latex/latex (:block/title block) true true)])
 
       (:logseq.property/query-block? block)
       (query-builder-component/builder block {})
@@ -2827,7 +2865,8 @@
      (if (util/mobile?)
        (page-cp (assoc config
                        :disable-preview? true
-                       :tag? true)
+                       :tag? true
+                       :skip-async-load? true)
                 tag)
        [:div.flex.items-center
         {:on-mouse-over #(reset! *hover? true)
@@ -2870,6 +2909,7 @@
         (page-cp (assoc config
                         :disable-preview? true
                         :tag? true
+                        :skip-async-load? true
                         :hide-tag-symbol? true)
                  tag)])]))
 
@@ -2913,6 +2953,7 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
+                                                                      :skip-async-load? true
                                                                       :disable-preview? true) tag)]))
                                                  popup-opts))}
           (for [tag (take 2 block-tags)]
@@ -2920,6 +2961,7 @@
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
                               :tag? true
+                              :skip-async-load? true
                               :disable-preview? true
                               :disable-click? true) tag)])
           [:div.text-sm.opacity-50.ml-1
@@ -3068,6 +3110,19 @@
   [property]
   (= :logseq.property/icon (:db/ident property)))
 
+(defn- zoom-in-root-block?
+  "True when this block is the focused block-route root (bullet zoom-in)."
+  [config block]
+  (and (:block? config)
+       (= (:id config) (str (:block/uuid block)))))
+
+(defn- show-block-below-hidden-properties-pill-toggle?
+  "Outliner blocks only show this control on the zoom-in root."
+  [config block page? has-hidden-properties?]
+  (and has-hidden-properties?
+       (not page?)
+       (zoom-in-root-block? config block)))
+
 (defn- show-block-below-properties-row?
   [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
                                   show-hidden-properties-control?
@@ -3079,20 +3134,18 @@
        show-add-property-button?)))
 
 (hsx/defc positioned-property-row
-  [block property-uuid opts]
-  (let [property (db-hooks/use-block property-uuid)]
-    (when (and property
-               (not (and (= :block-below (:property-position opts))
-                         (hidden-block-below-property? property))))
-      (if (= :block-below (:property-position opts))
-        (bottom-property-pill-cp block property opts)
-        (pv/property-value block property (assoc opts :show-tooltip? true))))))
+  [block property opts]
+  (when-not (and (= :block-below (:property-position opts))
+                 (hidden-block-below-property? property))
+    (if (= :block-below (:property-position opts))
+      (bottom-property-pill-cp block property opts)
+      (pv/property-value block property (assoc opts :show-tooltip? true)))))
 
 (defn- bottom-property-pill-items
-  [block property-uuids opts]
-  (mapv (fn [property-uuid]
-          (positioned-property-row block property-uuid opts))
-        property-uuids))
+  [block properties opts]
+  (mapv (fn [property]
+          (positioned-property-row block property opts))
+        properties))
 
 (defn- measure-bottom-pills-overflow!
   [^js el *overflow?]
@@ -3122,9 +3175,9 @@
      label)))
 
 (hsx/defc block-below-positioned-properties-cp
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count property-uuids)])
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
@@ -3141,7 +3194,7 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) property-uuids show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3158,7 +3211,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block property-uuids (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
@@ -3177,26 +3230,22 @@
                                                      :tab-index 0)))]]))
 
 (hsx/defc block-below-positioned-properties-gate
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
-  (when-let [properties (db-hooks/use-blocks property-uuids)]
-    (let [visible-property-uuids (into []
-                                       (comp (remove hidden-block-below-property?)
-                                             (keep :block/uuid))
-                                       properties)]
-      (when (show-block-below-properties-row?
-             visible-property-uuids
-             {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
-              :show-hidden-properties-control? show-hidden-properties-control?
-              :show-add-property-button? show-add-property-button?})
-        [block-below-positioned-properties-cp block
-         visible-property-uuids
-         opts
-         show-hidden-properties-pill-toggle?
-         show-hidden-properties-control?
-         show-add-property-button?]))))
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [visible-properties (into [] (remove hidden-block-below-property?) properties)]
+    (when (show-block-below-properties-row?
+           visible-properties
+           {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+            :show-hidden-properties-control? show-hidden-properties-control?
+            :show-add-property-button? show-add-property-button?})
+      [block-below-positioned-properties-cp block
+       visible-properties
+       opts
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?])))
 
 (hsx/defc positioned-properties-content
-  [config block position property-uuids]
+  [config block position properties]
   (let [opts (merge config
                     {:icon? true
                      :page-cp page-cp
@@ -3209,8 +3258,8 @@
                                 config
                                 (not config/publishing?))
         page? (entity/page? block)
-        show-hidden-properties-pill-toggle? (and has-hidden-properties?
-                                                 (not page?))
+        show-hidden-properties-pill-toggle? (show-block-below-hidden-properties-pill-toggle?
+                                             config block page? has-hidden-properties?)
         show-hidden-properties-control? (and has-hidden-properties?
                                              page?)
         show-page-add-property? (and (entity/page? block)
@@ -3221,7 +3270,7 @@
         :block-below
         [block-below-positioned-properties-gate
          block
-         property-uuids
+         properties
          opts
          show-hidden-properties-pill-toggle?
          show-hidden-properties-control?
@@ -3229,15 +3278,14 @@
 
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
-         (for [property-uuid property-uuids]
-           ^{:key (str (:block/uuid block) "-" property-uuid)}
-           (positioned-property-row block property-uuid opts))])))
+         (for [property properties]
+           ^{:key (str (:block/uuid block) "-" (:block/uuid property))}
+           (positioned-property-row block property opts))])))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (when-let [property-uuids
-             (seq (get (:block.temp/positioned-properties block) position))]
-    [positioned-properties-content config block position property-uuids]))
+  (when-let [properties (seq (get-in block [:block.temp/positioned-properties position]))]
+    [positioned-properties-content config block position properties]))
 
 (hsx/defc loaded-block-reactions
   [block]
@@ -3922,11 +3970,11 @@
 (hsx/defc subscribed-breadcrumb
   [config block-id opts]
   (when-let [breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
-    (when (seq (:ancestor-uuids breadcrumb-data))
-      (breadcrumb-aux config block-id
-                      (assoc opts :ref-titles (:ref-titles breadcrumb-data))
-                      (mapv (fn [ancestor-uuid] {:block/uuid ancestor-uuid})
-                            (:ancestor-uuids breadcrumb-data))))))
+    (let [breadcrumb-ancestors (breadcrumb-model/resource-ancestors breadcrumb-data)]
+      (when (seq breadcrumb-ancestors)
+        (breadcrumb-aux config block-id
+                        (assoc opts :ref-titles (:ref-titles breadcrumb-data))
+                        breadcrumb-ancestors)))))
 
 (defn breadcrumb
   [config _repo block-id {:keys [block] :as opts}]
@@ -4614,7 +4662,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
-                   (entity/url-property-value? block)
+                   (entity/leaf-property-value? block)
                    table?
                    property?
                    comments-area?

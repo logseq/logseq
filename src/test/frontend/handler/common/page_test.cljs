@@ -1,16 +1,19 @@
 (ns frontend.handler.common.page-test
-  (:require [clojure.test :refer [is use-fixtures]]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [is use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.db.transact :as db-transact]
             [frontend.handler.config :as config-handler]
             [frontend.handler.common.page :as page-common-handler]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
@@ -218,3 +221,84 @@
                                             :sidebar? true}]
                 [:re-render-root]]
                @calls))))))
+
+(defn- parsed-tagged-page
+  [title tag]
+  (let [tag-uuid (or (:block/uuid tag) (random-uuid))]
+    {:block/title (str title " #" page-ref/left-brackets tag-uuid page-ref/right-brackets)
+     :block/tags [(assoc tag :block/uuid tag-uuid)]}))
+
+(deftest-async create-page-rejects-db-less-tag-named-tag
+  (let [calls (atom [])]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    db-editor-handler/wrap-parse-block
+                    (fn [_]
+                      (parsed-tagged-page "Foo" {:block/title "Tag" :block/name "tag"}))
+                    notification/show!
+                    (fn [message status]
+                      (swap! calls conj [:notification message status])
+                      nil)
+                    db-transact/apply-outliner-ops
+                    (fn [& args]
+                      (swap! calls conj (into [:apply-outliner-ops] args))
+                      (p/resolved ["Foo" (random-uuid)]))]
+      (p/let [result (page-common-handler/<create! "Foo #Tag" {:redirect? false :edit? false})]
+        (is (nil? result))
+        (is (empty? (filter #(= :apply-outliner-ops (first %)) @calls))
+            "db-less #Tag must not reach create-page")
+        (let [[_ message status] (first (filter #(= :notification (first %)) @calls))]
+          (is (= :error status))
+          (is (string/includes? (pr-str message) "built-in tags"))
+          (is (string/includes? (pr-str message) "Tag")))))))
+
+(deftest-async create-page-allows-resolved-user-tag-named-tag
+  (let [calls (atom [])
+        page-uuid (random-uuid)]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    db-editor-handler/wrap-parse-block
+                    (fn [_]
+                      (parsed-tagged-page "Foo" {:db/ident :user.class/MyTag
+                                                 :block/title "Tag"
+                                                 :block/name "tag"}))
+                    notification/show!
+                    (fn [message status]
+                      (swap! calls conj [:notification message status]))
+                    state/<invoke-db-worker
+                    (fn [api & _args]
+                      (case api
+                        :thread-api/pull (p/resolved nil)
+                        (p/rejected (js/Error. (str "unexpected worker API " api)))))
+                    db-transact/apply-outliner-ops
+                    (fn [_conn ops opts]
+                      (swap! calls conj [:apply-outliner-ops ops opts])
+                      (p/resolved ["Foo" page-uuid]))]
+      (p/let [_ (page-common-handler/<create! "Foo #Tag" {:redirect? false :edit? false})]
+        (is (empty? (filter #(= :notification (first %)) @calls))
+            "A resolved user class titled Tag must not be treated as built-in #Tag")
+        (is (seq (filter #(= :apply-outliner-ops (first %)) @calls))
+            "create-page should run for a resolved user tag")))))
+
+(deftest-async create-page-allows-db-less-page-tag
+  (let [calls (atom [])
+        page-uuid (random-uuid)]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    db-editor-handler/wrap-parse-block
+                    (fn [_]
+                      (parsed-tagged-page "Foo" {:block/title "Page" :block/name "page"}))
+                    notification/show!
+                    (fn [message status]
+                      (swap! calls conj [:notification message status]))
+                    state/<invoke-db-worker
+                    (fn [api & _args]
+                      (case api
+                        :thread-api/pull (p/resolved nil)
+                        (p/rejected (js/Error. (str "unexpected worker API " api)))))
+                    db-transact/apply-outliner-ops
+                    (fn [_conn ops opts]
+                      (swap! calls conj [:apply-outliner-ops ops opts])
+                      (p/resolved ["Foo" page-uuid]))]
+      (p/let [_ (page-common-handler/<create! "Foo #Page" {:redirect? false :edit? false})]
+        (is (empty? (filter #(= :notification (first %)) @calls))
+            "db-less #Page must match the worker and not be rejected")
+        (is (seq (filter #(= :apply-outliner-ops (first %)) @calls))
+            "create-page should run for #Page")))))

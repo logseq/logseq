@@ -48,7 +48,7 @@
                           (fn [metadata]
                             (swap! calls conj [:metadata (keys metadata)])
                             (p/resolved nil))]
-            (p/let [created (#'repo-handler/create-db "logseq_db_created" {})
+            (p/let [created (repo-handler/new-db! "  created  " {})
                     _ (do
                         (is (= "logseq_db_created" created))
                         (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
@@ -125,8 +125,7 @@
                  (repo-handler/remove-repo! repo))
                (p/then
                 (fn []
-                  (is (= [[:close (:url repo)]
-                          [:delete-db (:url repo)]
+                  (is (= [[:delete-db (:url repo)]
                           [:remove-search (:url repo)]
                           [:delete-repo repo]
                           [:set-current nil]
@@ -136,3 +135,7 @@
                 (fn [error]
                   (is false (str error))))
                (p/finally done)))))
+
+(deftest graph-already-exists-trims-input-name
+  (with-redefs [state/get-repos (constantly [{:url "logseq_db_space name"}])]
+    (is (repo-handler/graph-already-exists? "  space name  "))))

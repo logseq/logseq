@@ -22,12 +22,20 @@
           (js-delete js/globalThis "React"))))))
 
 (defn- render-block-below
-  [block properties property-by-uuid]
-  (with-redefs [property-component/use-has-hidden-properties (constantly false)
-                db-hooks/use-blocks (fn [property-uuids]
-                                      (mapv property-by-uuid property-uuids))
-                db-hooks/use-block (fn [property-uuid]
-                                     (property-by-uuid property-uuid))
+  [block properties property-by-uuid & {:keys [config has-hidden-properties?]
+                                        :or {config {} has-hidden-properties? false}}]
+  (with-redefs [property-component/use-has-hidden-properties (constantly (boolean has-hidden-properties?))
+                property-component/hidden-properties-toggle-button
+                (fn [_block opts]
+                  [:button.bottom-property-hidden-toggle-btn
+                   {:data-bottom-pill (boolean (:bottom-pill? opts))}
+                   "Show hidden properties"])
+                db-hooks/use-resource-snapshot
+                (fn [key]
+                  (is false (str "Positioned properties must not load another resource: " key))
+                  {:status :loading})
+                db-hooks/use-blocks (fn [_] (is false "Property definitions must arrive with the block") nil)
+                db-hooks/use-block (fn [_] (is false "First paint must not load another block") nil)
                 property-component/property-key-cp (fn [_block property _opts]
                                                      [:span.property-key (:block/title property)])
                 property-value/property-value (fn [_block property _opts]
@@ -39,8 +47,9 @@
                 hooks/use-effect! (fn [_f _deps] nil)]
     (render-static
      (block/block-positioned-properties
-      {}
-      (assoc block :block.temp/positioned-properties {:block-below properties})
+      config
+      (assoc block :block.temp/positioned-properties
+             {:block-below (mapv property-by-uuid properties)})
       :block-below))))
 
 (deftest icon-only-block-does-not-emit-bottom-properties-row
@@ -86,3 +95,68 @@
         "The scheduled pill is visible")
     (is (not (string/includes? markup "Icon"))
         "Icon is not rendered as a bottom pill")))
+
+(deftest hidden-properties-pill-toggle-only-for-zoom-in-root-test
+  (let [root-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        child-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        root {:block/uuid root-uuid :block/title "zoom-in root"}
+        child {:block/uuid child-uuid :block/title "nested block"}
+        zoom-in-config {:block? true :id (str root-uuid)}]
+    (is (true? (#'block/show-block-below-hidden-properties-pill-toggle?
+                zoom-in-config root false true))
+        "Zoom-in root shows the hidden-properties pill")
+    (is (false? (#'block/show-block-below-hidden-properties-pill-toggle?
+                 zoom-in-config child false true))
+        "Nested outliner blocks hide the hidden-properties pill")
+    (is (false? (#'block/show-block-below-hidden-properties-pill-toggle?
+                 {:block? false :id (str root-uuid)}
+                 root false true))
+        "Page outliner does not use the block hidden-properties pill")
+    (is (false? (#'block/show-block-below-hidden-properties-pill-toggle?
+                 zoom-in-config root true true))
+        "Pages keep the icon control instead of the outliner pill")
+    (is (false? (#'block/show-block-below-hidden-properties-pill-toggle?
+                 zoom-in-config root false false))
+        "No pill when there are no hidden properties")))
+
+(deftest nested-outliner-block-omits-hidden-properties-pill-test
+  (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        root-uuid #uuid "88888888-8888-8888-8888-888888888888"
+        child-uuid #uuid "99999999-9999-9999-9999-999999999999"
+        scheduled-property {:block/uuid scheduled-uuid
+                            :db/ident :logseq.property/scheduled
+                            :block/title "Scheduled"
+                            :logseq.property/type :datetime}
+        zoom-in-config {:block? true :id (str root-uuid)}
+        nested-markup (render-block-below
+                       {:block/uuid child-uuid
+                        :block/title "nested block"}
+                       [scheduled-uuid]
+                       {scheduled-uuid scheduled-property}
+                       :config zoom-in-config
+                       :has-hidden-properties? true)
+        root-markup (render-block-below
+                     {:block/uuid root-uuid
+                      :block/title "zoom-in root"}
+                     [scheduled-uuid]
+                     {scheduled-uuid scheduled-property}
+                     :config zoom-in-config
+                     :has-hidden-properties? true)]
+    (is (not (string/includes? nested-markup "bottom-property-hidden-toggle-btn"))
+        "Nested outliner blocks do not render Show hidden properties")
+    (is (string/includes? root-markup "bottom-property-hidden-toggle-btn")
+        "Zoom-in root still renders Show hidden properties")))
+
+(deftest tags-render-on-first-paint-without-loading-tag-blocks-test
+  (let [tag {:db/id 1 :block/uuid (random-uuid) :db/ident :user.class/Visible
+             :block/title "Visible tag" :block/name "visible tag"}
+        hidden (assoc tag :db/id 2 :block/uuid (random-uuid)
+                      :block/title "Hidden tag" :logseq.property.class/hide-from-node true)]
+    (with-redefs [db-hooks/use-block (fn [_] nil)
+                  block/page-inner (fn [_ page _children _label] [:span (:block/title page)])
+                  hooks/use-memo (fn [f _] (f))
+                  hooks/use-atom (fn [a] [@a (fn [_])])]
+      (let [markup (render-static (block/tags-cp {} {:block/raw-title "Block"
+                                                    :block/tags [tag hidden]}))]
+        (is (string/includes? markup "Visible tag"))
+        (is (not (string/includes? markup "Hidden tag")))))))

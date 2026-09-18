@@ -5,7 +5,7 @@
 
 (defn encode-graph-dir-name
   [graph-name]
-  (let [encoded (js/encodeURIComponent (or graph-name ""))]
+  (let [encoded (js/encodeURIComponent (string/trim (or graph-name "")))]
     (-> encoded
         (string/replace "%20" " ")
         (string/replace "~" "%7E")
@@ -18,7 +18,10 @@
                      (string/includes? dir-name "+3A+")))
     (when (some? dir-name)
       (try
-        (js/decodeURIComponent (string/replace dir-name "~" "%"))
+        (let [decoded (js/decodeURIComponent (string/replace dir-name "~" "%"))
+              trimmed (string/trim decoded)]
+          (when (= decoded trimmed)
+            (not-empty trimmed)))
         (catch :default _
           nil)))))
 
@@ -32,7 +35,7 @@
                           (string/replace "+3A+" ":")
                           (string/replace "++" "/"))]
       (try
-        (let [decoded (js/decodeURIComponent compat-name)]
+        (let [decoded (string/trim (js/decodeURIComponent compat-name))]
           (when (seq decoded)
             decoded))
         (catch :default _
@@ -40,10 +43,7 @@
 
 (defn repo->graph-dir-key
   [repo]
-  (when (seq repo)
-    (if (string/starts-with? repo common-config/db-version-prefix)
-      (subs repo (count common-config/db-version-prefix))
-      repo)))
+  (some-> repo common-config/strip-leading-db-version-prefix not-empty))
 
 (defn repo-identity
   "Return the canonical value used for repo identity comparison.

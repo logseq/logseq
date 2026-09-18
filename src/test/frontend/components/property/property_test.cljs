@@ -24,6 +24,26 @@
           (gobj/set js/globalThis "React" previous-react)
           (js-delete js/globalThis "React"))))))
 
+(deftest restore-closed-values-uses-row-identities-when-snapshot-omits-them-test
+  (let [restore #'property-component/restore-closed-values
+        choice-uuid (random-uuid)
+        choice {:block/uuid choice-uuid :block/title "Choice after"}
+        snapshot {:db/ident :user.property/reactive-priority
+                  :logseq.property/type :default}]
+    (is (nil? (:property/closed-values snapshot)))
+    (is (= [choice]
+           (:property/closed-values (restore snapshot [choice-uuid] [choice])))
+        "Hydrated choice entities win when the row watched them.")
+    (is (= [{:block/uuid choice-uuid}]
+           (:property/closed-values (restore snapshot [choice-uuid] nil)))
+        "Compact UUIDs still make select-type? true while choices load.")
+    (is (= [{:db/id 1}]
+           (:property/closed-values
+            (restore (assoc snapshot :property/closed-values [{:db/id 1}])
+                     [choice-uuid]
+                     [choice])))
+        "A snapshot that already has closed-values is left alone.")))
+
 (deftest display-property-resource-value-is-authoritative-test
   (let [value-uuid (random-uuid)
         value-entity {:block/uuid value-uuid :block/title "canonical"}
@@ -68,6 +88,10 @@
       (render-static (property-default-value/default-value-config property))
       (is (= [property-uuid] @calls)
           "The default-value editor must own a live property subscription."))))
+
+(deftest default-value-property-pull-pattern-avoids-virtual-closed-values-test
+  (is (= '[*] property-default-value/default-value-property-pull-pattern)
+      "Datascript pull rejects :property/closed-values; the submenu must use a wildcard pull."))
 
 (deftest removing-status-from-task-view-preserves-task-tag-test
   (async done

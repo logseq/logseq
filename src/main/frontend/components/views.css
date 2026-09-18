@@ -17,6 +17,6 @@
 }
 
 .ls-table-block {
-    @apply flex flex-row items-start text-sm;
+    @apply flex flex-row items-center text-sm;
     margin-right: 6px;
 }

@@ -1648,6 +1648,38 @@
       (is (= [:escape-editing] @calls)
           "insert-new-block! must not create a next block from a URL value."))))
 
+(deftest enter-on-default-value-block-saves-and-exits-instead-of-inserting-test
+  (let [default-block {:db/id 10
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "hello world"
+                       :block/parent {:db/id 5
+                                      :block/tags [:logseq.class/Property]
+                                      :logseq.property/default-value {:db/id 10}}}
+        target #js {:value "hello world"
+                    :selectionStart 11}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block default-block
+                                                :config {:id (str (:block/uuid default-block))}
+                                                :node target
+                                                :value "hello world"
+                                                :pos 11})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))
+                  editor/insert-new-block! (fn [& _args]
+                                             (swap! calls conj :insert-new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter on a default-value block must save and exit without creating a child."))))
+
 (deftest loaded-block-builds-master-compatible-focus
   (let [previous {:db/id 1
                   :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -1939,14 +1971,14 @@
               (p/let [_ (p/delay 0)
                       _ (is (= [:selection-captured
                                 [:copy-started
-                                 [true :selected-ids selected-ids]]]
+                                 [true :selected-ids selected-ids :op :cut]]]
                                @calls)
                             "Cut must not delete blocks while the structured copy is pending.")
                       _ (p/resolve! copy-finished nil)
                       _ cut-request]
                 (is (= [:selection-captured
                         [:copy-started
-                         [true :selected-ids selected-ids]]
+                         [true :selected-ids selected-ids :op :cut]]
                         :cut]
                        @calls)))))
           (p/finally done)))))
@@ -1967,6 +1999,69 @@
     (is (= #{:db/id :block/uuid :block/title :block/parent}
            (set (keys block))))
     (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
+
+(deftest selection-copy-ids-use-view-row-uuids-test
+  (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        editor-ids [#uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]]
+    (with-redefs [state/get-selection-block-ids (constantly editor-ids)]
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [page-a page-b] nil))
+          "All pages rows are UUIDs; copy must use those instead of editor selection.")
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [{:block/uuid page-a} {:uuid page-b}] nil))
+          "Toolbar rows wrapped as block maps still copy their UUIDs.")
+      (is (= [page-a]
+             (#'editor/selection-copy-ids nil [page-a]))
+          ":selected-ids still work for cut and other callers.")
+      (is (= editor-ids
+             (#'editor/selection-copy-ids nil nil))
+          "Editor selection is used when the toolbar has no selected-blocks."))))
+
+(deftest top-level-blocks-include-pages-without-parent-test
+  (let [page-a (random-uuid)
+        page-b (random-uuid)
+        summaries [{:db/id 1
+                    :block/uuid page-a
+                    :block/title "Sep 15th, 2026"}
+                   {:db/id 2
+                    :block/uuid page-b
+                    :block/title "Apr 15th, 2027"}]]
+    (is (= [page-a page-b]
+           (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
+        "Pages and journals have no :block/parent; copy still treats them as top-level.")))
+
+(deftest compose-copied-blocks-contents-skips-empty-summaries-test
+  (async done
+         (-> (p/with-redefs [db-async/<get-block-summaries
+                             (fn [_repo _ids]
+                               (p/resolved []))]
+               (#'editor/compose-copied-blocks-contents "repo" [(random-uuid)]))
+             (p/then (fn [result]
+                       (is (= [[] "" []] result))))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
+
+(deftest copy-selection-blocks-loads-summaries-for-view-uuids-test
+  (async done
+         (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+               seen-ids (atom nil)]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [(random-uuid)])
+                               db-subs/block-snapshot (constantly {:status :missing})
+                               db-async/<get-block-summaries
+                               (fn [_repo ids]
+                                 (reset! seen-ids ids)
+                                 (p/resolved []))]
+                 (editor/copy-selection-blocks true :selected-blocks [page-a page-b]))
+               (p/then (fn [_]
+                         (is (= [page-a page-b] @seen-ids)
+                             "Copy from All pages must load the selected page UUIDs.")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
@@ -2211,6 +2306,58 @@
           "Comment editor expand shortcut should not expand synthetic draft blocks")
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
+
+(defn- <expand-unselected-block-ids
+  [blocks]
+  (let [expanded (atom [])]
+    (-> (p/with-redefs [util/stop (constantly nil)
+                        state/editing? (constantly false)
+                        state/selection? (constantly false)
+                        editor/<all-blocks-with-level (fn [_]
+                                                        (p/resolved blocks))
+                        editor/expand-block! (fn [block-id & _]
+                                               (swap! expanded conj block-id))]
+          (editor/expand! nil))
+        (p/then (fn [_] @expanded)))))
+
+(deftest expand-without-selection-expands-shallowest-collapsed-level
+  (async done
+         (let [root-id #uuid "11111111-1111-1111-1111-111111111111"
+               parent-id #uuid "22222222-2222-2222-2222-222222222222"
+               deep-a-id #uuid "33333333-3333-3333-3333-333333333333"
+               shallow-a-id #uuid "44444444-4444-4444-4444-444444444444"
+               deep-b-id #uuid "55555555-5555-5555-5555-555555555555"
+               shallow-b-id #uuid "66666666-6666-6666-6666-666666666666"
+               ignored-root {:block/uuid root-id
+                             :block/collapsed? true}
+               uncollapsed-parent {:block/uuid parent-id
+                                   :block/level 1}
+               deep-a {:block/uuid deep-a-id
+                       :block/level 2
+                       :block/collapsed? true}
+               shallow-a {:block/uuid shallow-a-id
+                          :block/level 1
+                          :block/collapsed? true}
+               deep-b {:block/uuid deep-b-id
+                       :block/level 2
+                       :block/collapsed? true}
+               shallow-b {:block/uuid shallow-b-id
+                          :block/level 1
+                          :block/collapsed? true}]
+           (-> (p/let [mixed-expanded (<expand-unselected-block-ids
+                                       [ignored-root uncollapsed-parent
+                                        deep-a shallow-a deep-b shallow-b])
+                       remaining-deep-expanded (<expand-unselected-block-ids
+                                                [ignored-root uncollapsed-parent
+                                                 deep-a deep-b])]
+                 (is (= [shallow-a-id shallow-b-id] mixed-expanded)
+                     "Mixed levels expand only the shallowest collapsed blocks in input order")
+                 (is (= [deep-a-id deep-b-id] remaining-deep-expanded)
+                     "When no shallower collapsed level remains, expand the remaining deep level in input order"))
+               (p/catch
+                (fn [error]
+                  (is false (str error))))
+               (p/finally done)))))
 
 (deftest db-based-save-assets-honors-explicit-target-block
   (async done
@@ -2755,4 +2902,12 @@
                :block.temp/property-keys [:block/tags]})))
     (is (not (editor/db-collapsable?
               {:block/title "plain"
-               :block/tags [{:db/ident :logseq.class/Page}]})))))
+               :block/tags [{:db/ident :logseq.class/Page}]}))))
+
+  (testing "created-from-property metadata does not make a node collapsable"
+    (is (not (editor/db-collapsable?
+              {:block/title "hello"
+               :block.temp/property-keys [:logseq.property/created-from-property]})))
+    (is (not (editor/db-collapsable?
+              {:block/title "hello"
+               :logseq.property/created-from-property {:db/ident :user.property/p1}})))))

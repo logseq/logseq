@@ -956,6 +956,27 @@
                     (shui/tooltip-content content-props tooltip-content))
                    (shui/tooltip-content content-props tooltip-content)))))
 
+(def ^:private date-picker-root-selector
+  ".ls-editor-date-picker, .ls-property-date-picker")
+
+(def ^:private date-picker-form-control-selector
+  "input, textarea, select, [contenteditable='true']")
+
+(defn date-picker-form-target?
+  "True when Enter should stay in a date-picker form control instead of confirming the date."
+  [^js e]
+  (let [target (.-target e)]
+    (boolean
+     (and target
+          (.closest target date-picker-root-selector)
+          (or (.closest target date-picker-form-control-selector)
+              (some-> target
+                      (.closest "[role='combobox']")
+                      (.getAttribute "aria-expanded")
+                      (= "true"))
+              (and (.closest target "button")
+                   (not (.closest target "[role='gridcell']"))))))))
+
 (hsx/defc DelDateButton
   [on-delete]
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
@@ -1005,7 +1026,7 @@
          :on-blur (fn [_]
                     (when-not (re-matches #"\d{4}" year-value)
                       (set-year-value! (str value))))
-         :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
+         :class "ls-date-year-input h-8 !w-[4.5rem] !px-2 !py-0"
          :value year-value
          :type "number"
          :min 1
@@ -1015,14 +1036,15 @@
                 (shui/dropdown-menu-trigger
                  {:as-child true}
                  (shui/button {:variant :ghost
-                               :class "!px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
+                               :class "ls-date-month-select !px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
                                :size :sm}
                               (get-month-label value)))
         (shui/dropdown-menu-content
          (for [[idx _month] (medley/indexed month-values)
                :let [label (get-month-label idx)]]
-           (shui/dropdown-menu-checkbox-item
-            {:checked (= value idx)
+           (shui/dropdown-menu-item
+            {:key idx
+             :class "ls-date-month-option"
              :on-select (fn []
                           (onChange (day-picker-change-event idx)))}
             label)))))]))

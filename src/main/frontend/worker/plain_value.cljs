@@ -109,10 +109,19 @@
           (>= n value) (recur (- n value) pairs (str result numeral))
           :else (recur n more result))))))
 
+(defn- order-list-type-label
+  [value]
+  (cond
+    (string? value) value
+    (keyword? value) (name value)
+    :else (or (:block/title value)
+              (:block/name value)
+              (some-> (:db/ident value) name))))
+
 (defn order-list-type
   [block]
   (some-> (:logseq.property/order-list-type block)
-          str
+          order-list-type-label
           string/lower-case))
 
 (def ^:private unsafe-plain-attrs

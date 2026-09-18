@@ -687,14 +687,27 @@
           (recur db (inc idx) (rest blocks) (conj entries nil)))
         entries))))
 
+(defn- uuid-for-insert
+  "Keep a uuid when insert is restoring identity.
+  Paste remints live (non-recycled) uuids so copied trees cannot reparent
+  existing children. Non-paste keep-uuid inserts, including undo restore,
+  must reuse live identities."
+  [db keep-uuid? outliner-op block-uuid]
+  (if (and keep-uuid? block-uuid)
+    (let [entity (d/entity db [:block/uuid block-uuid])]
+      (if (and (= :paste outliner-op)
+               entity
+               (not (ldb/recycled? entity)))
+        (common-uuid/gen-uuid)
+        block-uuid))
+    (common-uuid/gen-uuid)))
+
 (defn- insert-blocks-aux
-  [db blocks target-block {:keys [replace-empty-target? keep-uuid?]
+  [db blocks target-block {:keys [replace-empty-target? keep-uuid? outliner-op]
                            :as opts}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
-                      (if keep-uuid?
-                        block-uuids
-                        (repeatedly common-uuid/gen-uuid)))
+                      (map #(uuid-for-insert db keep-uuid? outliner-op %) block-uuids))
         uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
@@ -805,6 +818,15 @@
   [block]
   (= :url (:logseq.property/type (:logseq.property/created-from-property block))))
 
+(defn- default-value-block?
+  "A property's :logseq.property/default-value block is a leaf."
+  [block]
+  (let [parent (:block/parent block)
+        default (:logseq.property/default-value parent)]
+    (boolean (and (:db/id block)
+                  default
+                  (= (:db/id block) (:db/id default))))))
+
 (defn- url-property-value-forbidden-target?
   "True when insertion or movement would create a URL child or a single-value sibling."
   [target-block sibling?]
@@ -813,6 +835,14 @@
                (not= :db.cardinality/many
                      (:db/cardinality (:logseq.property/created-from-property target-block)))))
       (and sibling? (url-property-value? (:block/parent target-block)))))
+
+(defn- leaf-property-value-forbidden-target?
+  "True when insertion or movement would create a child of a leaf property value
+  (URL values and property default-value blocks)."
+  [target-block sibling?]
+  (or (url-property-value-forbidden-target? target-block sibling?)
+      (default-value-block? target-block)
+      (and sibling? (default-value-block? (:block/parent target-block)))))
 
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -827,6 +857,8 @@
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
+                    On paste, live (non-recycled) uuids are still reminted so
+                    copied trees cannot move existing blocks.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
@@ -875,7 +907,7 @@
                                       (string/blank? (:block/title target-block))
                                       (> (count blocks) 1)))]
      (when (and (seq blocks)
-                (not (url-property-value-forbidden-target? target-block sibling?)))
+                (not (leaf-property-value-forbidden-target? target-block sibling?)))
        (let [blocks' (let [blocks' (blocks-with-level blocks)]
                        (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                          update-timestamps?
@@ -1184,7 +1216,7 @@
               original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
           (when (and (every? #(move-source-allowed-for-comments? % sibling?) blocks)
                      (move-target-allowed-for-comments? target-block sibling?)
-                     (not (url-property-value-forbidden-target? target-block sibling?))
+                     (not (leaf-property-value-forbidden-target? target-block sibling?))
                      (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                      (not original-position?))
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})

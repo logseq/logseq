@@ -68,7 +68,7 @@
           :thread-api/build-publishing-html :thread-api/reset-db
           :thread-api/get-file-content :thread-api/get-all-properties :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
-          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
+          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
           :thread-api/export-db-binary :thread-api/import-file-graph
@@ -1593,7 +1593,13 @@
    (fn []
      (let [conn (d/create-conn db-schema/schema)
            block-uuid #uuid "11111111-2222-3333-4444-555555555555"]
-       (d/transact! conn [{:db/ident :logseq.class/Page
+       (d/transact! conn [{:db/ident :logseq.property/hide?
+                           :db/index true}
+                          {:db/ident :logseq.property/deleted-at
+                           :db/index true}
+                          {:db/ident :logseq.property/built-in?
+                           :db/index true}
+                          {:db/ident :logseq.class/Page
                            :block/title "Page"}
                           {:block/uuid block-uuid
                            :block/title "Tagged page"
@@ -3868,3 +3874,16 @@
          (is (string? (:error result)))
          (is (= page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page)))
              "Invalid datom import should not replace the existing graph"))))))
+
+(deftest close-db-attempts-remaining-handles-on-failure
+  (restoring-worker-state
+   (fn []
+     (let [closed (atom [])
+           failing (fake-db {})
+           search-db (fake-db {:close-calls closed :close-label :search})
+           client-db (fake-db {:close-calls closed :close-label :client-ops})]
+       (set! (.-close failing) (fn [] (throw (js/Error. "close failed"))))
+       (reset! worker-state/*sqlite-conns
+               {test-repo {:db failing :search search-db :client-ops client-db}})
+       (is (thrown? js/Error (db-core/close-db! test-repo)))
+       (is (= [:search :client-ops] @closed))))))

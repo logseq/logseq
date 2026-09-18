@@ -89,22 +89,21 @@
     (fs/writeFileSync path (js/JSON.stringify (clj->js legacy-lock)))
     (is (= :unknown (:owner-source (db-lock/read-lock path))))))
 
-(deftest update-lock-preserves-existing-owner-source-and-does-not-add-discovery-fields
+(deftest lock-preserves-admission-ticket-and-generation
   (async done
     (let [root-dir (node-helper/create-tmp-dir "db-worker-node-lock-update-owner")
           repo (str "logseq_db_lock_update_owner_" (subs (str (random-uuid)) 0 8))
           path (db-lock/lock-path root-dir repo)]
-      (-> (p/let [{:keys [lock]} (db-lock/ensure-lock! {:root-dir root-dir
+      (-> (p/let [_ (db-lock/ensure-lock! {:root-dir root-dir
                                                         :repo repo
-                                                        :owner-source :cli})
-                  _ (db-lock/update-lock! path (assoc lock
-                                                      :owner-source :electron
-                                                      :host "127.0.0.1"
-                                                      :port 9200
-                                                      :revision "attempted-new-revision"
-                                                      :startedAt "2024-01-01T00:00:00.000Z"))
+                                                        :owner-source :cli
+                                                        :ticket "worker-ticket"
+                                                        :generation "graph-generation"})
                   updated (db-lock/read-lock path)]
             (is (= :cli (:owner-source updated)))
+            (is (= root-dir (:root-dir updated)))
+            (is (= "worker-ticket" (:ticket updated)))
+            (is (= "graph-generation" (:generation updated)))
             (is (nil? (:host updated)))
             (is (nil? (:port updated)))
             (is (nil? (:revision updated)))
@@ -114,3 +113,9 @@
           (p/finally (fn []
                        (db-lock/remove-lock! path)
                        (done)))))))
+
+(deftest repo-paths-trim-graph-names-without-changing-storage-roots
+  (let [graphs-dir "/tmp/ storage root /graphs"]
+    (doseq [repo ["  space name  " "  logseq_db_space name  " "logseq_db_ space name "]]
+      (is (= (node-path/join graphs-dir "space name")
+             (db-lock/repo-dir graphs-dir repo))))))

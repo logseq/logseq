@@ -436,10 +436,16 @@
                  (:db/cardinality (:logseq.property/created-from-property block)))
            (block-self-alone-when-insert? config (:block/uuid block)))))
 
+(defn- leaf-property-value-insert-blocked?
+  "Default-value blocks and single URL values keep the editor but reject children."
+  [config block]
+  (or (entity/default-value-block? block)
+      (url-property-value-insert-blocked? config block)))
+
 (defn- skip-insert-for-url-property-value!
   "Save and exit when insertion would create a URL child or a single-value sibling."
   [config block]
-  (when (url-property-value-insert-blocked? config block)
+  (when (leaf-property-value-insert-blocked? config block)
     (escape-editing)
     (p/resolved [nil nil nil])))
 
@@ -684,7 +690,7 @@
   ([state block-value _right-sibling]
    (when (not config/publishing?)
      (when state
-       (if (url-property-value-insert-blocked? (:config state) (:block state))
+       (if (leaf-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
          (do
            (start-pending-new-block!)
@@ -1180,15 +1186,17 @@
 (defn- compose-copied-blocks-contents
   [repo block-ids & {:as opts}]
   (p/let [blocks (db-async/<get-block-summaries repo block-ids)]
-    (let [top-level-blocks (block-handler/get-top-level-blocks blocks)
-          top-level-block-uuids (map :block/uuid top-level-blocks)]
-      (p/let [content (export-text/export-blocks-as-markdown
-                       repo
-                       top-level-block-uuids
-                       (merge (dissoc opts :quick-copy?)
-                              {:indent-style (state/get-export-block-text-indent-style)
-                               :remove-options (set (state/get-export-block-text-remove-options))}))]
-        [top-level-block-uuids content blocks]))))
+    (if-not (seq blocks)
+      [[] "" []]
+      (let [top-level-blocks (block-handler/get-top-level-blocks blocks)
+            top-level-block-uuids (map :block/uuid top-level-blocks)]
+        (p/let [content (export-text/export-blocks-as-markdown
+                         repo
+                         top-level-block-uuids
+                         (merge (dissoc opts :quick-copy?)
+                                {:indent-style (state/get-export-block-text-indent-style)
+                                 :remove-options (set (state/get-export-block-text-remove-options))}))]
+          [top-level-block-uuids content blocks])))))
 
 (defn- copy-cached-selection-text!
   [block-uuids]
@@ -1287,25 +1295,30 @@
                 (assoc :db/id (:db/id b)))))
         blocks))
 
+(defn- selection-copy-ids
+  [selected-blocks selected-ids]
+  (or (seq (keep (comp :block/uuid entity/as-block-map) selected-blocks))
+      (seq selected-ids)
+      (seq (state/get-selection-block-ids))))
+
 (defn copy-selection-blocks
-  [html? & {:keys [selected-blocks selected-ids] :as opts}]
+  [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
-        selected-ids (or (seq selected-ids)
-                         (state/get-selection-block-ids))
-        ids (or (seq selected-ids) (map :block/uuid selected-blocks))]
-    (when (seq selected-ids)
-      (copy-cached-selection-text! selected-ids))
+        ids (selection-copy-ids selected-blocks selected-ids)
+        block-op (or op :copy)]
+    (when (seq ids)
+      (copy-cached-selection-text! ids))
     (p/let [[top-level-block-uuids content blocks]
             (compose-copied-blocks-contents
-             repo ids (assoc (dissoc opts :selected-blocks :selected-ids)
+             repo ids (assoc (dissoc opts :selected-blocks :selected-ids :op)
                              :quick-copy? true))]
       (when (seq blocks)
         (util/copy-to-clipboard! content)
         (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
                 html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property!
-           repo content (when html? html) (blocks-for-clipboard copied-source-blocks))
-          (state/set-block-op-type! :copy))
+           repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op)
+          (state/set-block-op-type! block-op))
         ;; (notification/show! "Copied!" :success)
         ))))
 
@@ -1365,7 +1378,7 @@
                              seq)]
     (p/do!
      (when copy?
-       (copy-selection-blocks true :selected-ids selected-ids))
+       (copy-selection-blocks true :selected-ids selected-ids :op :cut))
      (state/set-block-op-type! :cut)
      (when-let [blocks selected-blocks]
        ;; remove queries
@@ -1528,7 +1541,7 @@
                 html (export-html/export-blocks-as-html repo [block-id] nil)
                 copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
           (common-handler/copy-to-clipboard-without-id-property!
-           repo md-content html (blocks-for-clipboard copied-source-blocks))
+           repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut)
           (state/set-block-op-type! :cut)
           (delete-block-aux! block))))))
 
@@ -2650,7 +2663,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
-                (url-property-value-insert-blocked? (:config state) (:block state)))
+                (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
               (escape-editing))
@@ -3895,7 +3908,8 @@
                           (filter db-property/property? (keys block)))
         properties (->> property-keys
                         (remove db-property/db-attribute-properties)
-                        (remove #{:logseq.property/created-by-ref})
+                        (remove #{:logseq.property/created-by-ref
+                                  :logseq.property/created-from-property})
                         (remove nil?))]
     (or (seq properties)
         (:logseq.property/query block))))
@@ -4064,6 +4078,30 @@
        :else
        (state/set-collapsed-block! block-id false (or container-id (current-editor-container-id)))))))
 
+(defn- blocks-at-shallowest-collapsed-level
+  [blocks]
+  (:blocks
+   (reduce
+    (fn [{:keys [level] :as result} block]
+      (let [block-level (:block/level block)]
+        (cond
+          (not (and (pos-int? block-level)
+                    (util/collapsed? block)))
+          result
+
+          (or (nil? level) (< block-level level))
+          {:level block-level
+           :blocks [block]}
+
+          (= block-level level)
+          (update result :blocks conj block)
+
+          :else
+          result)))
+    {:level nil
+     :blocks []}
+    blocks)))
+
 (defn expand!
   ([e] (expand! e false))
   ([e clear-selection?]
@@ -4087,18 +4125,10 @@
 
      :else
      ;; expand one level
-     (p/let [blocks-with-level (<all-blocks-with-level {})
-             max-level (or (apply max (map :block/level blocks-with-level)) 99)]
-       (loop [level 1]
-         (if (> level max-level)
-           nil
-           (let [blocks-to-expand (->> blocks-with-level
-                                       (filter (fn [b] (= (:block/level b) level)))
-                                       (filter util/collapsed?))]
-             (if (empty? blocks-to-expand)
-               (recur (inc level))
-               (doseq [{:block/keys [uuid]} blocks-to-expand]
-                 (expand-block! uuid))))))))))
+     (p/let [blocks-with-level (<all-blocks-with-level {})]
+       (doseq [{:block/keys [uuid]}
+               (blocks-at-shallowest-collapsed-level blocks-with-level)]
+         (expand-block! uuid))))))
 
 (defn collapse!
   ([e] (collapse! e false))

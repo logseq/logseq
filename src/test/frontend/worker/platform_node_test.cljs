@@ -423,7 +423,8 @@
     (let [root-dir (node-helper/create-tmp-dir "platform-node-list-graphs")
           graphs-dir (node-path/join root-dir "graphs")]
       (fs/mkdirSync (node-path/join graphs-dir "alpha") #js {:recursive true})
-      (fs/mkdirSync (node-path/join graphs-dir "backup") #js {:recursive true})
+      (doseq [dir ["backup" " alpha " " padded-only " "   " "~20encoded-leading" "encoded-trailing~20"]]
+        (fs/mkdirSync (node-path/join graphs-dir dir) #js {:recursive true}))
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   graphs ((get-in platform [:storage :list-graphs]))]
             (is (= ["alpha"] graphs)))
@@ -431,7 +432,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest remove-vfs-removes-lock-file
+(deftest remove-vfs-preserves-worker-lock
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-remove-vfs")
           lock-json "{\"repo\":\"logseq_db_demo\",\"pid\":1,\"host\":\"127.0.0.1\",\"port\":9001}"]
@@ -447,7 +448,7 @@
                   _ (fs/writeFileSync db-path "db-bytes" "utf8")
                   _ (fs/writeFileSync nested-path "asset-bytes" "utf8")
                   _ ((:remove-vfs! storage) pool)]
-            (is (not (fs/existsSync lock-path)))
+            (is (= lock-json (.toString (fs/readFileSync lock-path) "utf8")))
             (is (not (fs/existsSync db-path)))
             (is (not (fs/existsSync nested-path))))
           (p/catch (fn [e]

@@ -322,9 +322,14 @@
                         hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
+(defn- ident-eid
+  [db ident]
+  (when-let [datom (first (d/datoms db :avet :db/ident ident))]
+    (:e datom)))
+
 (defn- get-exclude-page-ids
   [db]
-  (let [property-tag-id (:db/id (d/entity db :logseq.class/Property))]
+  (let [property-tag-id (ident-eid db :logseq.class/Property)]
     (persistent!
      (reduce (fn [result d]
                (conj! result (:e d)))
@@ -353,43 +358,567 @@
              (transient [])
              (d/datoms db :avet property-ident)))))
 
-(def ^:private fast-all-pages-sort-ids
-  "Sort ids supported by a datom-order fast path"
+(defn- indexed-attr-value
+  [db eid attr]
+  (when-let [datom (first (d/datoms db :eavt eid attr))]
+    (:v datom)))
+
+(defn- indexed-attr-values
+  [db eid attr]
+  (mapv :v (d/datoms db :eavt eid attr)))
+
+(defn- attr-keyword
+  [db eid attr]
+  (when-let [v (indexed-attr-value db eid attr)]
+    (if (integer? v)
+      (indexed-attr-value db v :db/ident)
+      v)))
+
+(defn- uuid->eid
+  [db block-uuid]
+  (when-let [datom (first (d/datoms db :avet :block/uuid block-uuid))]
+    (:e datom)))
+
+(defn- ref-value-content
+  [db value-eid]
+  (or (indexed-attr-value db value-eid :block/title)
+      (indexed-attr-value db value-eid :logseq.property/value)))
+
+(defn- match-item->id
+  [db v]
+  (cond
+    (nil? v) nil
+    (uuid? v) (uuid->eid db v)
+    (keyword? v) (ident-eid db v)
+    (number? v) v
+    (de/entity? v) (:db/id v)
+    (and (map? v) (contains? v :db/id)) (:db/id v)
+    :else nil))
+
+(defn- match-item-content
+  [db v]
+  (cond
+    (uuid? v)
+    (some-> (uuid->eid db v) (->> (ref-value-content db)))
+
+    (keyword? v)
+    (some-> (ident-eid db v) (->> (ref-value-content db)))
+
+    (and (integer? v) (indexed-attr-value db v :block/uuid))
+    (ref-value-content db v)
+
+    (de/entity? v)
+    (or (:block/title v) (:logseq.property/value v))
+
+    (map? v)
+    (or (:block/title v) (:logseq.property/value v))
+
+    :else v))
+
+(defn- match-journal-day
+  [db match]
+  (cond
+    (and (map? match) (contains? match :block/journal-day))
+    (:block/journal-day match)
+
+    (de/entity? match)
+    (:block/journal-day match)
+
+    (uuid? match)
+    (indexed-attr-value db (uuid->eid db match) :block/journal-day)
+
+    (integer? match)
+    (or (indexed-attr-value db match :block/journal-day) match)
+
+    :else nil))
+
+(defn- property-attr-schema
+  [db property-ident]
+  (let [prop-eid (ident-eid db property-ident)
+        value-type (when prop-eid (attr-keyword db prop-eid :db/valueType))
+        cardinality (when prop-eid (attr-keyword db prop-eid :db/cardinality))
+        prop-type (when prop-eid (attr-keyword db prop-eid :logseq.property/type))
+        built-in-ref? (contains? #{:block/page :block/tags :block/refs :block/parent} property-ident)
+        ref? (or built-in-ref?
+                 (= value-type :db.type/ref)
+                 (contains? db-property-type/all-ref-property-types prop-type))
+        closed-eids (when prop-eid
+                      (mapv :e (d/datoms db :avet :block/closed-value-property prop-eid)))
+        closed-order (when (seq closed-eids)
+                       (if (every? #(indexed-attr-value db % :block/order) closed-eids)
+                         (into {} (map (fn [eid]
+                                         [eid (indexed-attr-value db eid :block/order)])
+                                       closed-eids))
+                         (into {} (map-indexed (fn [idx eid] [eid idx])
+                                               (sort-by #(or (indexed-attr-value db % :block/order) "")
+                                                        closed-eids)))))]
+    {:ident property-ident
+     :type prop-type
+     :ref? ref?
+     :many? (or (= property-ident :block/tags)
+                (= cardinality :db.cardinality/many))
+     :closed-order closed-order}))
+
+(defn- eid-sort-value
+  [db {:keys [ident ref? many? closed-order] :as schema} eid]
+  (let [prop-type (:type schema)]
+  (cond
+    (= ident :block.temp/refs-count)
+    (common-initial-data/get-block-refs-count db eid)
+
+    :else
+    (let [vs (indexed-attr-values db eid ident)]
+      (cond
+        (empty? vs)
+        nil
+
+        closed-order
+        (closed-order (first vs))
+
+        (and ref? (= prop-type :date))
+        (indexed-attr-value db (first vs) :block/journal-day)
+
+        (and many? (or (= prop-type :number) (= prop-type :datetime)))
+        (let [nums (keep (fn [v]
+                           (let [n (if ref?
+                                     (or (indexed-attr-value db v :logseq.property/value)
+                                         (ref-value-content db v))
+                                     v)]
+                             (when (number? n) n)))
+                         vs)]
+          (when (seq nums)
+            (reduce + nums)))
+
+        many?
+        (let [col (keep (fn [v]
+                          (if ref? (ref-value-content db v) v))
+                        vs)]
+          (when (seq col)
+            (string/join ", " col)))
+
+        ref?
+        (let [v (first vs)]
+          (if (or (= prop-type :number) (= prop-type :datetime))
+            (or (indexed-attr-value db v :logseq.property/value)
+                (ref-value-content db v))
+            (ref-value-content db v)))
+
+        :else
+        (first vs))))))
+
+(defn- compare-sort-values
+  [va vb asc?]
+  (cond
+    (and (nil? va) (nil? vb)) 0
+    (nil? va) 1
+    (nil? vb) -1
+    :else (let [c (compare va vb)]
+            (if asc? c (- c)))))
+
+(def ^:private avet-first-window-sort-attrs
   #{:block/updated-at :block/created-at :block/title :block/name})
 
-(defn- get-all-page-ids-fast
-  "Fast path for all-pages where only sorted page ids are needed. Avoids
-  hydrating every page entity by deriving ordering from indexed datoms."
-  [db sorting]
-  (let [major-sorting (or (first sorting)
-                          {:id :block/updated-at :asc? false})
-        minor-sorting (seq (rest sorting))]
-    (when (and (empty? minor-sorting)
-               (contains? fast-all-pages-sort-ids (:id major-sorting)))
-      (let [exclude-ids (get-exclude-page-ids db)
-            page-ids (persistent!
-                      (reduce (fn [result datom]
-                                (let [eid (:e datom)]
-                                  (if (contains? exclude-ids eid)
-                                    result
-                                    (conj! result eid))))
-                              (transient [])
-                              (d/datoms db :avet :block/name)))
-            sort-id (:id major-sorting)
-            asc? (:asc? major-sorting)
-            get-sort-value (memoize
-                            (fn [eid]
-                              (get (entity-plus/unsafe->Entity db eid) sort-id)))
-            cmp (fn [eid-a eid-b]
-                  (let [va (get-sort-value eid-a)
-                        vb (get-sort-value eid-b)
-                        c (cond
-                            (and (nil? va) (nil? vb)) 0
-                            (nil? va) 1
-                            (nil? vb) -1
-                            :else (compare va vb))]
-                    (if asc? c (- c))))]
-        (sort cmp page-ids)))))
+(defn- avet-ordered-datoms
+  "AVET is a sorted-set slice. `nth` from the high end is O(n) per
+  step and took 1719ms to pick 26 All Pages rows."
+  [db attr asc?]
+  (if asc?
+    (d/datoms db :avet attr)
+    (d/rseek-datoms db :avet attr)))
+
+(defn- avet-take-eids
+  [datoms match? row-limit row-offset]
+  (let [xf (cond-> (comp (map :e) (filter match?) (distinct))
+             (pos? (or row-offset 0)) (comp (drop row-offset))
+             row-limit (comp (take row-limit)))]
+    (into [] xf datoms)))
+
+(defn- sort-eids-from-avet
+  "Walk one AVET attr instead of reading a sort value per row. A 40k All
+  Pages first window was spending ~2s in sort-eids-by-sorting."
+  [db match? sorting row-limit leftover-eids row-offset]
+  (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])]
+    (when (= 1 (count sorts))
+      (let [{:keys [id asc?]} (first sorts)]
+        (when (contains? avet-first-window-sort-attrs id)
+          (let [                ;; All Pages rseek+take is 1ms. Movies copied 79034 updated-at
+                ;; datoms in 132ms to pick 26 recent rows. Tags with 21 eids
+                ;; never reach here: take-sorted-eids sorts those eids.
+                use-rseek-window? (boolean row-limit)
+                datoms (if use-rseek-window?
+                         (avet-ordered-datoms db id (boolean asc?))
+                         (let [all (vec (d/datoms db :avet id))]
+                           (if asc? all (rseq all))))]
+            (when (seq datoms)
+              (let [matched (avet-take-eids datoms match? row-limit row-offset)]
+                (cond
+                  (and row-limit (< (count matched) row-limit))
+                  nil
+
+                  (or row-limit (nil? leftover-eids))
+                  matched
+
+                  :else
+                  (let [seen (set matched)]
+                    (into matched (remove seen) leftover-eids)))))))))))
+
+(defn- sort-eids-by-sorting
+  [db eids sorting]
+  (let [sorts (or (seq sorting) [{:id :block/updated-at :asc? false}])
+        schemas (mapv (fn [{:keys [id asc?]}]
+                        (assoc (property-attr-schema db id)
+                               :asc? (boolean asc?)))
+                      sorts)
+        eid-vec (vec eids)
+        value-maps (mapv (fn [schema]
+                           (persistent!
+                            (reduce (fn [acc eid]
+                                      (if-let [v (eid-sort-value db schema eid)]
+                                        (assoc! acc eid v)
+                                        acc))
+                                    (transient {})
+                                    eid-vec)))
+                         schemas)]
+    (sort (fn [a b]
+            (loop [i 0]
+              (if (>= i (count schemas))
+                0
+                (let [c (compare-sort-values (get (nth value-maps i) a)
+                                             (get (nth value-maps i) b)
+                                             (:asc? (nth schemas i)))]
+                  (if (zero? c)
+                    (recur (inc i))
+                    c)))))
+          eid-vec)))
+
+(defn- take-sorted-eids
+  [db eids sorting row-limit row-offset]
+  (let [eid-vec (vec eids)
+        wanted (set eid-vec)
+        match? #(contains? wanted %)
+        ;; 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
+        ;; set already fits the window, so sort those eids directly.
+        use-eid-sort? (and row-limit (<= (count eid-vec) row-limit))
+        avet (when-not use-eid-sort?
+               (sort-eids-from-avet db match? sorting row-limit eid-vec row-offset))
+        sorted (or avet (sort-eids-by-sorting db eid-vec sorting))]
+    (if avet
+      (vec sorted)
+      (if row-limit
+        (vec (->> sorted (drop (or row-offset 0)) (take row-limit)))
+        (vec sorted)))))
+
+(defn- feature-filters?
+  [filters input]
+  (or (not (string/blank? input))
+      (seq (or (:filters filters) []))))
+
+(defn- avet-slice-count
+  "Datascript AVET slices are Iters. `count` walked 41111 :block/name
+  datoms in 72ms. BTSet est-count is a tree distance. nbb-logseq does
+  not load that ns, so tests fall back to `count` on small fixtures."
+  [datoms]
+  (cond
+    (nil? datoms) 0
+    (counted? datoms) (count datoms)
+    (exists? js/me.tonsky.persistent_sorted_set.est_count)
+    (js/me.tonsky.persistent_sorted_set.est_count datoms)
+    :else (count datoms)))
+
+(defn- count-all-page-ids
+  [db exclude-ids]
+  (- (avet-slice-count (d/datoms db :avet :block/name))
+     (count (keep #(when (indexed-attr-value db % :block/name) %)
+                  exclude-ids))))
+
+(defn- all-pages-eid?
+  [db exclude-ids eid]
+  (and (not (contains? exclude-ids eid))
+       (some? (indexed-attr-value db eid :block/name))))
+
+(defn- first-window-feature-row-data
+  "A 26-row All Pages window does not need the 40938-id vector. Count
+  pages, then walk AVET until the window is full. Returns nil when the
+  sort attr is not an AVET first-window attr so the collect path runs."
+  [db feat-type class-id sorting row-limit row-offset]
+  (case feat-type
+    :all-pages
+    (let [exclude-ids (get-exclude-page-ids db)
+          data (sort-eids-from-avet db
+                                    #(all-pages-eid? db exclude-ids %)
+                                    sorting
+                                    row-limit
+                                    nil
+                                    row-offset)]
+      (when data
+        {:count (count-all-page-ids db exclude-ids)
+         :data data}))
+
+    :class-objects
+    (when class-id
+      (let [class-ids (cons class-id (db-class/get-structured-children db class-id))
+            tag-eids (db-class/filter-visible-class-object-ids
+                      db
+                      (mapcat (fn [id]
+                                (map :e (d/datoms db :avet :block/tags id)))
+                              class-ids))]
+        {:count (count tag-eids)
+         :data (take-sorted-eids db tag-eids sorting row-limit row-offset)}))
+
+    nil))
+
+(defn- empty-attr-values?
+  [raw empty-id]
+  (or (empty? raw)
+      (every? (fn [v]
+                (or (nil? v)
+                    (= v empty-id)
+                    (and (string? v) (string/blank? v))
+                    (and (coll? v) (empty? v))))
+              raw)))
+
+(defn- compile-filter-clause
+  [db [property-ident operator match]]
+  (let [schema (property-attr-schema db property-ident)
+        match-set? (set? match)]
+    {:schema schema
+     :operator operator
+     :match match
+     :match-eids (when (and match-set? (seq match) (not (contains? match :empty)))
+                   (into #{} (keep #(match-item->id db %)) match))
+     :match-contents (when (and match-set? (seq match) (not (contains? match :empty)))
+                       (into #{} (keep #(match-item-content db %)) match))
+     :journal-day (when (#{:date-before :date-after} operator)
+                    (match-journal-day db match))
+     :timestamp (when (#{:before :after} operator)
+                  (common-util/get-timestamp match))}))
+
+(defn- clause-row
+  [db eid {:keys [ident ref?] :as schema} empty-id]
+  (let [prop-type (:type schema)
+        raw (indexed-attr-values db eid ident)
+        first-raw (first raw)]
+    {:raw raw
+     :ref? ref?
+     :contents (mapv (fn [v]
+                       (if (and ref? (integer? v))
+                         (ref-value-content db v)
+                         v))
+                     raw)
+     :treat-as-entity? (and ref?
+                            (integer? first-raw)
+                            (or (indexed-attr-value db first-raw :db/ident)
+                                (not (contains? db-property-type/closed-value-property-types prop-type))))
+     :empty-values? (empty-attr-values? raw empty-id)}))
+
+(defn- hits-values?
+  [vs match-set]
+  (boolean (some #(contains? match-set %) vs)))
+
+(defn- match-is-clause
+  [{:keys [raw ref? contents treat-as-entity? empty-values?]} match match-eids match-contents]
+  (let [scalar-match (if (set? match) match #{match})]
+    (cond
+      (boolean? match)
+      (= (boolean (first contents)) match)
+
+      (= :empty match)
+      empty-values?
+
+      (and (coll? match) (empty? match))
+      true
+
+      (and ref? (set? match))
+      (if treat-as-entity?
+        (hits-values? raw match-eids)
+        (boolean (seq (set/intersection (set contents) match-contents))))
+
+      :else
+      (hits-values? (if ref? contents raw) scalar-match))))
+
+(defn- match-is-not-clause
+  [{:keys [raw ref? contents treat-as-entity? empty-values?]} match match-eids match-contents]
+  (let [scalar-match (if (set? match) match #{match})]
+    (cond
+      (boolean? match)
+      (not= (boolean (first contents)) match)
+
+      (= :empty match)
+      (not empty-values?)
+
+      (and (coll? match) (empty? match) (seq raw))
+      true
+
+      (and (coll? match) (seq match) empty-values?)
+      true
+
+      (and ref? (set? match))
+      (if treat-as-entity?
+        (not (hits-values? raw match-eids))
+        (empty? (set/intersection (set contents) match-contents)))
+
+      :else
+      (not (hits-values? (if ref? contents raw) scalar-match)))))
+
+(defn- number-compare-match
+  [contents match pred]
+  (when (seq contents)
+    (if match
+      (some (fn [c] (and (number? c) (pred c match))) contents)
+      true)))
+
+(defn- journal-day-of
+  [db v]
+  (if (integer? v)
+    (indexed-attr-value db v :block/journal-day)
+    v))
+
+(defn- match-text-or-number-clause
+  [{:keys [contents]} operator match]
+  (case operator
+    :text-contains
+    (some (fn [c]
+            (and (some? c)
+                 (string/includes? (string/lower-case (str c))
+                                   (string/lower-case (str match)))))
+          contents)
+
+    :text-not-contains
+    (not-any? (fn [c]
+                (string/includes? (str c) (str match)))
+              contents)
+
+    :number-gt (number-compare-match contents match >)
+    :number-gte (number-compare-match contents match >=)
+    :number-lt (number-compare-match contents match <)
+    :number-lte (number-compare-match contents match <=)
+
+    :between
+    (if (seq match)
+      (let [[start end] match]
+        (some (fn [c]
+                (and (number? c)
+                     (if start (<= start c) true)
+                     (if end (<= c end) true)))
+              contents))
+      true)
+
+    ::unhandled))
+
+(defn- match-temporal-clause
+  [db {:keys [raw ref? contents]} operator match journal-day timestamp]
+  (case operator
+    :date-before
+    (when (seq raw)
+      (if match
+        (some (fn [v]
+                (let [day (journal-day-of db v)]
+                  (and day journal-day (< day journal-day))))
+              raw)
+        true))
+
+    :date-after
+    (when (seq raw)
+      (if match
+        (some (fn [v]
+                (let [day (journal-day-of db v)]
+                  (and day journal-day (> day journal-day))))
+              raw)
+        true))
+
+    :before
+    (when (seq raw)
+      (if timestamp
+        (some (fn [v] (and (number? v) (<= v timestamp)))
+              (if ref? contents raw))
+        true))
+
+    :after
+    (when (seq raw)
+      (if timestamp
+        (some (fn [v] (and (number? v) (>= v timestamp)))
+              (if ref? contents raw))
+        true))
+
+    true))
+
+(defn- match-compare-clause
+  [db row operator match journal-day timestamp]
+  (let [text-or-number (match-text-or-number-clause row operator match)]
+    (if (= ::unhandled text-or-number)
+      (match-temporal-clause db row operator match journal-day timestamp)
+      text-or-number)))
+
+(defn- eid-clause-match?
+  [db eid {:keys [schema operator match match-eids match-contents journal-day timestamp]} empty-id]
+  (if (nil? match)
+    true
+    (let [row (clause-row db eid schema empty-id)]
+      (boolean
+       (case operator
+         :is (match-is-clause row match match-eids match-contents)
+         :is-not (match-is-not-clause row match match-eids match-contents)
+         (match-compare-clause db row operator match journal-day timestamp))))))
+
+(defn- title-matches-input?
+  [db eid input]
+  (or (string/blank? input)
+      (when-let [title (indexed-attr-value db eid :block/title)]
+        (string/includes? (string/lower-case title) (string/lower-case input)))))
+
+(defn- filter-eids
+  [db eids filters input]
+  (let [clauses (or (:filters filters) [])]
+    (if (and (string/blank? input) (empty? clauses))
+      (vec eids)
+      (let [compiled (mapv #(compile-filter-clause db %) clauses)
+            empty-id (ident-eid db :logseq.property/empty-placeholder)
+            check-f (if (:or? filters) some every?)]
+        (into []
+              (filter (fn [eid]
+                        (and (title-matches-input? db eid input)
+                             (or (empty? compiled)
+                                 (check-f #(eid-clause-match? db eid % empty-id)
+                                          compiled)))))
+              eids)))))
+
+(defn- get-all-page-ids
+  [db]
+  (let [exclude-ids (get-exclude-page-ids db)]
+    (persistent!
+     (reduce (fn [result datom]
+               (let [eid (:e datom)]
+                 (if (contains? exclude-ids eid)
+                   result
+                   (conj! result eid))))
+             (transient [])
+             (d/datoms db :avet :block/name)))))
+
+(defn- get-feature-row-data
+  "ID-only Tags/All Pages path: collect, filter, and sort without hydrating row entities.
+  A row-limit first window must not sort every remaining id."
+  [db feat-type class-id sorting filters input row-limit row-offset]
+  (let [first-window? (and row-limit (not (feature-filters? filters input)))]
+    (or (when first-window?
+          (first-window-feature-row-data db feat-type class-id sorting row-limit row-offset))
+        (when-let [eids (case feat-type
+                          :all-pages
+                          (get-all-page-ids db)
+
+                          :class-objects
+                          (when class-id
+                            (db-class/get-class-object-ids db class-id))
+
+                          nil)]
+          (let [filtered (filter-eids db eids filters input)]
+            {:count (count filtered)
+             :data (take-sorted-eids db filtered sorting row-limit row-offset)})))))
+
+(defn- maybe-limit-rows
+  [rows row-limit row-offset]
+  (if row-limit
+    (vec (->> rows (drop (or row-offset 0)) (take row-limit)))
+    (vec rows)))
 
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting {:keys [include-ref-pages-count?]
@@ -563,7 +1092,7 @@
      (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
+  [db view-id {:keys [journals? view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting row-limit row-offset]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -587,15 +1116,14 @@
                      (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                        (or sorting [{:id :block/updated-at :asc? false}])
                        sorting*))
-           fast-all-pages-ids (when (and (= feat-type :all-pages)
-                                         (not query?)
-                                         (nil? group-by-property-ident)
-                                         (empty? filters)
-                                         (string/blank? input))
-                                (get-all-page-ids-fast db sorting))]
-       (if fast-all-pages-ids
-         {:count (count fast-all-pages-ids)
-          :data fast-all-pages-ids}
+           class-id (or view-for-id (:db/id (:logseq.property/view-for view)))
+           fast-row-data (when (and (contains? #{:all-pages :class-objects} feat-type)
+                                    (not query?)
+                                    (nil? group-by-property-ident))
+                           (get-feature-row-data db feat-type class-id sorting filters input
+                                                 row-limit row-offset))]
+       (if fast-row-data
+         fast-row-data
          (let [entities-result (if query?
                                  (keep (fn [id]
                                          (let [e (d/entity db id)]
@@ -715,9 +1243,12 @@
              (linked-references-page-list-view-data view entities-result entities)
              (cond->
              {:count (count filtered-entities)
-              :data (if dedupe-data?
-                      (distinct data')
-                      data')}
+              :data (let [rows (if dedupe-data?
+                                 (distinct data')
+                                 data')]
+                      (if (and row-limit (nil? group-by-property-ident))
+                        (maybe-limit-rows rows row-limit row-offset)
+                        rows))}
              (= feat-type :linked-references)
              (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
              query?

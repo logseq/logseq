@@ -50,7 +50,10 @@
 (def ^:private canonical-block-excluded-attrs
   #{:block/children
     :block/properties
-    :block/properties-text-values})
+    :block/properties-text-values
+    ;; Legacy many-ref; migrate deletes this attr. 4k-movies still stores
+    ;; a copy of :block/refs here and expanding it doubled snapshot work.
+    :block/path-refs})
 
 (defn- valid-revision?
   [value]
@@ -68,41 +71,106 @@
                          {:basis-rev basis-rev}))
     basis-rev))
 
+(def ^:dynamic *attr-schema-cache* nil)
+
 (defn- render-attr-schema
   [db attr]
-  (or (get (d/schema db) attr)
-      (when-let [attr-entity (d/entity db attr)]
-        (select-keys attr-entity [:db/valueType :db/cardinality]))))
+  (let [cache *attr-schema-cache*]
+    (if (and cache (contains? @cache attr))
+      (get @cache attr)
+      (let [schema (or (get (d/schema db) attr)
+                       (when-let [attr-entity (d/entity db attr)]
+                         (select-keys attr-entity [:db/valueType :db/cardinality])))]
+        (when cache
+          (vswap! cache assoc attr schema))
+        schema))))
 
 (defn- canonical-attr?
   [attr]
   (and (not (contains? canonical-block-excluded-attrs attr))
        (not= "block.temp" (namespace attr))))
 
-(defn- canonical-positioned-properties-map
-  [db block]
-  (if (seq (property-handler/direct-block-property-ids db (:db/id block)))
-    (->> property-handler/render-property-positions
-         (keep (fn [position]
-                 (let [property-uuids
-                       (mapv :block/uuid
-                             (property-handler/block-positioned-properties
-                              db (:db/id block) position))]
-                   (when (seq property-uuids)
-                     [position property-uuids]))))
-         (into {}))
-    {}))
+(defn- eavt-scalar
+  [db eid attr]
+  (when-let [datom (first (d/datoms db :eavt eid attr))]
+    (:v datom)))
 
-(declare block-refs-count)
+(defn- tagged-with-ident?
+  [db eid tag-ident]
+  (some (fn [datom]
+          (= tag-ident (eavt-scalar db (:v datom) :db/ident)))
+        (d/datoms db :eavt eid :block/tags)))
+
+(defn- property-entity?
+  [db eid]
+  (tagged-with-ident? db eid :logseq.class/Property))
+
+(defn- class-entity?
+  [db eid]
+  (tagged-with-ident? db eid :logseq.class/Tag))
+
+(defn- block-order-list-type
+  [db eid]
+  (when-let [value (eavt-scalar db eid :logseq.property/order-list-type)]
+    (let [label (if (integer? value)
+                  (eavt-scalar db value :block/title)
+                  (str value))]
+      (some-> label string/lower-case))))
+
+(defn- inline-ref-attr?
+  "Table cells need property/tag/parent refs. :block/refs is only required
+  to resolve [[id]] titles; a Movie row's 37 refs are the same pages already
+  inlined on actors/genre plus path-refs."
+  [attr replace-id-refs?]
+  (or (not= attr :block/refs)
+      replace-id-refs?))
+
+(declare block-refs-count block-positioned-properties-map)
+
+(defn renderer-display-title
+  "Return the renderer-facing block title with id refs resolved."
+  [db entity-id]
+  (let [stored-title (eavt-scalar db entity-id :block/title)]
+    (cond
+      (and (string? stored-title)
+           (string/includes? stored-title "[["))
+      (:block/title (d/entity db entity-id))
+
+      (string? stored-title)
+      stored-title
+
+      :else
+      nil)))
+
+(defn renderer-raw-title
+  [db entity-id]
+  (let [stored-title (eavt-scalar db entity-id :block/title)]
+    (cond
+      (and (string? stored-title)
+           (string/includes? stored-title "[["))
+      (:block/raw-title (d/entity db entity-id))
+
+      (string? stored-title)
+      stored-title
+
+      :else
+      nil)))
 
 (defn canonical-block
   [db entity]
   (let [entity-id (:db/id entity)
-        block-uuid (:block/uuid entity)
-        block-tx-id (:block/tx-id entity)
-        raw-title (:block/raw-title entity)
-        display-title (:block/title entity)
-        order-list-type (worker-plain/order-list-type entity)]
+        block-uuid (or (:block/uuid entity)
+                       (eavt-scalar db entity-id :block/uuid))
+        block-tx-id (eavt-scalar db entity-id :block/tx-id)
+        stored-title (eavt-scalar db entity-id :block/title)
+        ;; Entity :block/title walks every :block/refs target to replace
+        ;; id-refs. Table rows (All Pages / Movies / journals) have plain
+        ;; titles; doing that for a screen-sized snapshot is multi-second work.
+        replace-id-refs? (and (string? stored-title)
+                              (string/includes? stored-title "[["))
+        raw-title (renderer-raw-title db entity-id)
+        display-title (renderer-display-title db entity-id)
+        order-list-type (block-order-list-type db entity-id)]
     (when-not (integer? entity-id)
       (fail-render-read! "Invalid canonical block entity"
                          {:db-id entity-id}))
@@ -118,7 +186,8 @@
     (let [block
           (reduce
            (fn [result {:keys [a v]}]
-             (if (canonical-attr? a)
+             (if (and (canonical-attr? a)
+                      (inline-ref-attr? a replace-id-refs?))
                (let [{value-type :db/valueType
                       cardinality :db/cardinality} (render-attr-schema db a)
                      value (if (= :db.type/ref value-type)
@@ -129,18 +198,16 @@
                    (assoc result a value)))
                result))
            {:db/id entity-id}
-           (d/datoms db :eavt entity-id))
-          block (if (ldb/property? entity)
-                  (merge block
-                         (property-handler/display-property-map db entity-id))
-                  block)]
+           (d/datoms db :eavt entity-id))]
       (cond-> (assoc block
-                     :block.temp/property-keys
-                     (property-handler/block-property-keys db entity)
-                     :block.temp/positioned-properties
-                     (canonical-positioned-properties-map db entity)
                      :block.temp/refs-count
-                     (block-refs-count db entity-id))
+                     (block-refs-count db entity-id)
+                     :block.temp/positioned-properties
+                     (block-positioned-properties-map db {:db/id entity-id}))
+        (property-entity? db entity-id)
+        (assoc :property/closed-values
+               (:property/closed-values
+                (property-handler/display-property-map db entity-id)))
         (string? raw-title)
         (assoc :block/raw-title raw-title)
 
@@ -149,7 +216,7 @@
 
         order-list-type
         (assoc :block.temp/order-list-index
-               (worker-plain/order-list-index entity order-list-type))))))
+               (worker-plain/order-list-index (d/entity db entity-id) order-list-type))))))
 
 (defn canonical-blocks
   [db block-uuids]
@@ -157,33 +224,32 @@
     (when-not (uuid? block-uuid)
       (fail-render-read! "Invalid canonical block UUID"
                          {:block-uuid block-uuid})))
-  (let [requested (keep #(d/entity db [:block/uuid %]) block-uuids)
-        dependencies
-        (fn [block]
-          (let [positioned-properties
-                (->> property-handler/render-property-positions
-                     (mapcat #(property-handler/block-positioned-properties
-                               db (:db/id block) %))
-                     (keep #(d/entity db (:db/ident %))))]
-            (distinct (concat [block] (:block/refs block) positioned-properties))))
-        dependencies-by-root
-        (into {}
-              (map (fn [block]
-                     [(:block/uuid block) (vec (dependencies block))]))
-              requested)
+  (binding [block-breadcrumb/*ref-identity-cache* (volatile! {})
+            *attr-schema-cache* (volatile! {})
+            property-handler/*display-property-cache* (volatile! {})
+            property-handler/*block-class-properties-cache* (volatile! {})
+            property-handler/*positioned-property-meta-cache* (volatile! {})]
+    (let [requested
+          (keep (fn [block-uuid]
+                  (when-let [eid (:e (first (d/datoms db :avet :block/uuid block-uuid)))]
+                    {:db/id eid :block/uuid block-uuid}))
+                block-uuids)
+        ;; Only requested rows become canonical snapshots. Positioned definitions
+        ;; are shared within this batch; references remain shallow identities.
+        ;; Expanding references into sibling snapshots made table windows slow.
+        ;; Do not d/entity here: entity-plus ILookup on a Movie walks title/refs.
         groups (into {}
-                     (map (fn [[block-uuid entities]]
-                            [block-uuid (into #{} (keep :block/uuid) entities)]))
-                     dependencies-by-root)
-        entities (distinct (mapcat val dependencies-by-root))]
+                     (map (fn [{:keys [block/uuid]}]
+                            [uuid #{uuid}]))
+                     requested)]
     {:basis-rev (render-basis-rev db)
      :groups groups
      :blocks
      (into {}
-           (map (fn [entity]
-                  (let [block (canonical-block db entity)]
+           (map (fn [row]
+                  (let [block (canonical-block db row)]
                     [(:block/uuid block) block])))
-           entities)}))
+           requested)})))
 
 (defn direct-children-membership
   [db parent-uuid]
@@ -255,8 +321,10 @@
 
 (defn- direct-child-blocks
   ([db block-id]
-   (direct-child-blocks db block-id false))
+   (direct-child-blocks db block-id false false))
   ([db block-id reverse?]
+   (direct-child-blocks db block-id reverse? false))
+  ([db block-id reverse? include-property-block?]
    (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
                         (map :e)
                         set)
@@ -269,12 +337,14 @@
                     true (keep #(d/entity db %))
                     true ldb/sort-by-order
                     reverse? reverse))]
-     (remove #(or (:block/closed-value-property %)
-                  (:logseq.property/created-from-property %))
-             blocks))))
+     (cond->> blocks
+       (not include-property-block?)
+       (remove :logseq.property/created-from-property)
+       true
+       (remove :block/closed-value-property)))))
 
 (defn- get-block-children
-  [db block {:keys [all? include-collapsed-children?]}]
+  [db block {:keys [all? include-collapsed-children? include-property-block?]}]
   (let [[large-page? children-blocks]
         (loop [pending [block]
                seen #{(:db/id block)}
@@ -288,7 +358,7 @@
                                 (some? (property-handler/entity-direct-value db parent :block/name)))
                     children (if expand?
                                (remove #(contains? seen (:db/id %))
-                                       (direct-child-blocks db (:db/id parent)))
+                                       (direct-child-blocks db (:db/id parent) false include-property-block?))
                                [])]
                 (recur (into pending children)
                        (into seen (map :db/id) children)
@@ -296,11 +366,10 @@
               [false result])))
         children-blocks (remove ldb/recycled? children-blocks)
         children (if large-page?
-                   (remove ldb/recycled? (direct-child-blocks db (:db/id block)))
+                   (remove ldb/recycled? (direct-child-blocks db (:db/id block) false include-property-block?))
                    children-blocks)]
     {:large-page? large-page?
-     :children (->> children
-                    (remove :block/closed-value-property))}))
+     :children children}))
 
 (defn- plain-render-block?
   [db block]
@@ -309,12 +378,10 @@
 
 (defn- block-positioned-properties-map
   [db block]
-  (->> property-handler/render-property-positions
-       (keep (fn [position]
-               (let [properties (property-handler/block-positioned-properties db (:db/id block) position)]
-                 (when (seq properties)
-                   [position properties]))))
-       (into {})))
+  (into {}
+        (map (fn [[position idents]]
+               [position (mapv #(property-handler/display-property-map db %) idents)]))
+        (property-handler/block-positioned-property-idents-by-position db (:db/id block))))
 
 (defn block-reactions
   [db block-id]
@@ -340,10 +407,23 @@
 
 (defn- block-refs-count
   [db block-id]
-  (if (and (empty? (d/datoms db :avet :block/refs block-id))
-           (empty? (d/datoms db :eavt block-id :block/alias))
-           (empty? (d/datoms db :avet :block/alias block-id)))
+  (cond
+    ;; Property pages are referenced by every node that uses them.
+    ;; Walking that set for 18 Movie column headers was ~3.5s.
+    (property-entity? db block-id)
     0
+
+    ;; Class/tag pages hide their objects from refs-count. Walking
+    ;; Movie's 3883 :block/refs to return 0 blocked the first Tags window.
+    (class-entity? db block-id)
+    0
+
+    (and (empty? (d/datoms db :avet :block/refs block-id))
+         (empty? (d/datoms db :eavt block-id :block/alias))
+         (empty? (d/datoms db :avet :block/alias block-id)))
+    0
+
+    :else
     (common-initial-data/get-block-refs-count db block-id)))
 
 (defn- assoc-render-property-data
@@ -385,7 +465,8 @@
                        (:children
                         (get-block-children
                          db block {:all? all?
-                                   :include-collapsed-children? include-collapsed-children?}))))
+                                   :include-collapsed-children? include-collapsed-children?
+                                   :include-property-block? include-property-block?}))))
           children' (when children?
                       (map (fn [child]
                              (let [child-map-base

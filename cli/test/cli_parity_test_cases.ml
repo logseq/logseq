@@ -97,7 +97,7 @@ let start_open_url_capture () : unit =
   globalThis.__logseqOpenUrlCapture = capture;
   childProcess.spawn = function (command, args, options) {
     capture.calls.push({ command, args: Array.from(args), options });
-    return { pid: 4242, unref: function () {} };
+    return { pid: undefined, on: function () {}, unref: function () {} };
   };
   Object.defineProperty(process, "platform", { value: "win32", configurable: true });
 })()
@@ -137,7 +137,7 @@ let start_spawn_capture () : unit =
   childProcess.spawn = function (command, args, options) {
     capture.calls.push({ command, args: Array.from(args), options });
     if (typeof capture.onSpawn === "function") capture.onSpawn(command, args, options);
-    return { pid: 4242, unref: function () {} };
+    return { pid: undefined, on: function () {}, unref: function () {} };
   };
 })()
 |}]
@@ -159,28 +159,6 @@ let spawn_capture_calls () : string =
     {|
 JSON.stringify((globalThis.__logseqSpawnCapture && globalThis.__logseqSpawnCapture.calls) || [])
 |}]
-
-let set_spawn_capture_on_spawn_raw : string -> string -> int -> unit =
-  [%mel.raw
-    {|
-function (lockPath, serverListPath, port) {
-  const capture = globalThis.__logseqSpawnCapture;
-  if (!capture) throw new Error("spawn capture is not active");
-  capture.onSpawn = function () {
-    const fs = require("fs");
-    fs.writeFileSync(lockPath, JSON.stringify({
-      repo: "logseq_db_demo",
-      pid: process.pid,
-      "lock-id": "test",
-      "owner-source": "cli"
-    }));
-    fs.writeFileSync(serverListPath, process.pid + " " + port + "\n");
-  };
-}
-|}]
-
-let set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port : unit =
-  set_spawn_capture_on_spawn_raw lock_path server_list_path port
 
 let set_env key value : unit = Js.Dict.set Node.Process.process##env key value
 
@@ -282,6 +260,7 @@ let config ?graph ?repo ?output_format ?auth_path ?id_token ?access_token
     owner_source = Cli_primitive.Cli;
     project_dir = None;
     raw_file_config;
+    graph_generation = None;
     profile_session = None;
   }
 
@@ -330,6 +309,40 @@ let run_cli_lifecycle ?(env = [||]) argv =
   { stdout = Some result##stdout; stderr; exit_code = result_status result }
 
 let stdout_text name output = expect_some name output.stdout
+
+let expect_graph_list_output root expected =
+  Vec.iter
+    (fun (Output.Mode.Packed mode) ->
+      let output = Output.Mode.to_string mode in
+      let cfg = config ~root_dir:root ~graph:"alpha" () in
+      let result =
+        run_cli_lifecycle
+          [|
+            "--root-dir";
+            root;
+            "--graph";
+            "alpha";
+            "--output";
+            output;
+            "graph";
+            "list";
+          |]
+      in
+      expect_int (output ^ " exit") 0 result.exit_code;
+      expect_string_vec (output ^ " stderr") [||] result.stderr;
+      expect_equal
+        (output ^ " directory listing")
+        (Format_types.format_result
+           (Cli_result.ok ~command:Command_id.Graph_list mode
+              (Cli_result.Raw expected))
+           (config_with_output cfg mode))
+        (string_trim_end (stdout_text output result)))
+    (Vec.of_array
+       [|
+         Output.Mode.Packed Output.Mode.Human;
+         Output.Mode.Packed Output.Mode.Json;
+         Output.Mode.Packed Output.Mode.Edn;
+       |])
 
 let invoke_args body =
   match Json_util.object_of_json_string body with
@@ -525,25 +538,65 @@ let () =
       expect_error_code "non numeric id" ":invalid-options"
         (Id_parse.parse_id_string "abc"));
 
-  test
-    "CLI parity graph directory names preserve canonical and old-format \
-     encoding" (fun () ->
-      expect_equal "space graph dir" "space name"
-        (Graph_dir.encode_graph_dir_name "space name");
-      expect_equal "slash graph dir" "old~2Fname"
-        (Graph_dir.encode_graph_dir_name "old/name");
-      expect_equal "tilde graph dir" "tilde~7Ename"
-        (Graph_dir.encode_graph_dir_name "tilde~name");
-      expect_equal "decode canonical" "old/name"
-        (expect_some "canonical"
-           (Graph_dir.canonical_graph_name_of_dir "old~2Fname"));
-      expect_none "old-format dir is not canonical"
-        (Graph_dir.canonical_graph_name_of_dir "old++name");
-      expect_equal "decode old-format slash" "old/name"
-        (expect_some "old-format"
-           (Graph_dir.decode_legacy_graph_dir_name "old++name")));
+  test "CLI parity graph directory names use only standard encoding" (fun () ->
+      let padded =
+        unicode_text [| 0x00a0 |] ^ "space name" ^ unicode_text [| 0x3000 |]
+      in
+      expect_equal "encoding trims graph names" "space name~2Fchild"
+        (Graph_dir.encode_graph_dir_name " \tspace name/child\n ");
+      expect_equal "encoding trims Unicode whitespace" "space name"
+        (Graph_dir.encode_graph_dir_name padded);
+      expect_equal "graph identity trims Unicode whitespace" "space name"
+        (Cli_primitive.create_graph padded |> Cli_primitive.string_of_graph);
+      expect_equal "repo identity trims prefixed graph name"
+        "logseq_db_space name"
+        (Cli_primitive.create_repo (" logseq_db_ " ^ padded)
+        |> Cli_primitive.string_of_repo);
+      Vec.iter
+        (fun (graph, dir) ->
+          expect_equal "standard encoding" dir
+            (Graph_dir.encode_graph_dir_name graph);
+          expect_equal "standard decoding" graph
+            (expect_some "canonical name"
+               (Graph_dir.canonical_graph_name_of_dir dir)))
+        (Vec.of_array
+           [|
+             ("space name", "space name");
+             ("old/name", "old~2Fname");
+             ("colon:name", "colon~3Aname");
+             ("plus+name", "plus~2Bname");
+             ("percent%name", "percent~25name");
+             ("tilde~name", "tilde~7Ename");
+             (unicode_text [| 0x4e2d; 0x6587 |], "~E4~B8~AD~E6~96~87");
+           |]);
+      Vec.iter
+        (fun dir ->
+          expect_none
+            ("nonstandard directory " ^ dir)
+            (Graph_dir.canonical_graph_name_of_dir dir))
+        (Vec.of_array
+           [|
+             "";
+             "old++name";
+             "c+3A+name";
+             "yy%20y";
+             "yy~20y";
+             "old~2fname";
+             "mix%20~2Fname";
+             "bad%ZZname";
+             "foo~2G";
+             "trailing~";
+             " alpha ";
+             "   ";
+             "~20alpha";
+             "alpha~20";
+             "~C2~A0alpha";
+             "alpha~E3~80~80";
+             "invalid~FF";
+           |]));
 
-  test "CLI parity unlink graph moves canonical encoded dir to unlinked dir"
+  test_promise
+    "CLI parity unlink graph moves canonical encoded dir to unlinked dir"
     (fun () ->
       let root = temp_dir "logseq-cli-parity-unlink-graph-" in
       let graphs_dir = Node.Path.join [| root; "graphs" |] in
@@ -557,8 +610,8 @@ let () =
       try
         mkdir_p graph_path;
         write_file (Node.Path.join [| graph_path; "db.sqlite" |]) "test-data";
-        let result =
-          effect_result "graph remove slash"
+        let* result =
+          effect_to_promise
             (execute_with_output Graph.execute
                (Graph.Graph_remove { graph; repo })
                (config ~root_dir:root ()) Output.Mode.Human)
@@ -570,12 +623,13 @@ let () =
           (Cli_unix.file_exists unlinked_path);
         expect_equal "contents preserved" "test-data"
           (read_file (Node.Path.join [| unlinked_path; "db.sqlite" |]));
-        remove_tree root
+        remove_tree root;
+        Js.Promise.resolve pass
       with exn ->
         remove_tree root;
-        fail_test (Printexc.to_string exn));
+        fail_promise (Printexc.to_string exn));
 
-  test
+  test_promise
     "CLI parity unlink graph moves space-preserving canonical dir to unlinked \
      dir" (fun () ->
       let root = temp_dir "logseq-cli-parity-unlink-space-" in
@@ -589,8 +643,8 @@ let () =
       try
         mkdir_p graph_path;
         write_file (Node.Path.join [| graph_path; "db.sqlite" |]) "test-data";
-        let result =
-          effect_result "graph remove space"
+        let* result =
+          effect_to_promise
             (execute_with_output Graph.execute
                (Graph.Graph_remove { graph; repo })
                (config ~root_dir:root ()) Output.Mode.Human)
@@ -603,10 +657,11 @@ let () =
           (Cli_unix.file_exists unlinked_path);
         expect_equal "space contents preserved" "test-data"
           (read_file (Node.Path.join [| unlinked_path; "db.sqlite" |]));
-        remove_tree root
+        remove_tree root;
+        Js.Promise.resolve pass
       with exn ->
         remove_tree root;
-        fail_test (Printexc.to_string exn));
+        fail_promise (Printexc.to_string exn));
 
   test "CLI parity root-dir helpers create directories and reject files"
     (fun () ->
@@ -983,7 +1038,9 @@ let () =
     (fun () ->
       let login_request = expect_parse_ok "login parse" [| "login" |] in
       (match login_request.command with
-      | Cli_request.Auth Auth_command.Parsed_login -> pass
+      | Cli_request.Auth
+          (Auth_command.Parsed_login { username = None; password = None }) ->
+          pass
       | _ -> fail_test "login parse: expected auth login");
       let logout_request = expect_parse_ok "logout parse" [| "logout" |] in
       (match logout_request.command with
@@ -991,9 +1048,9 @@ let () =
       | _ -> fail_test "logout parse: expected auth logout");
       (match
          Auth_command.build (config ()) (Global_opts.create ())
-           Auth_command.Parsed_login
+           (Auth_command.Parsed_login { username = None; password = None })
        with
-      | Ok Auth_command.Login -> pass
+      | Ok (Auth_command.Login Auth_state.Browser_login) -> pass
       | Ok _ -> fail_test "login build: expected Login"
       | Error err -> fail_test ("login build: " ^ err.Error.message));
       match
@@ -2563,7 +2620,9 @@ let () =
               (execute_with_output Remove.execute action cfg Output.Mode.Json)
           in
           expect_bool "remove page succeeds" false (Cli_result.is_error result);
-          let data = expect_some "remove page data" (Cli_result.data_value result) in
+          let data =
+            expect_some "remove page data" (Cli_result.data_value result)
+          in
           expect_bool "remove page result" true
             (expect_some "remove page result bool"
                (Edn_util.get_bool data "result"));
@@ -3657,56 +3716,6 @@ let () =
 
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
-      let nested =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "block/uuid",
-              Edn_util.uuid "00000000-0000-4000-8000-000000000401" );
-            ( Edn_util.keyword "block/children",
-              Edn_util.vector
-                [
-                  Edn_util.map
-                    [
-                      ( Edn_util.keyword "block/uuid",
-                        Edn_util.uuid "00000000-0000-4000-8000-000000000402" );
-                    ];
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "block/title", Edn_util.string "No uuid");
-                      ( Edn_util.keyword "block/children",
-                        Edn_util.vector
-                          [
-                            Edn_util.map
-                              [
-                                ( Edn_util.keyword "block/uuid",
-                                  Edn_util.uuid
-                                    "00000000-0000-4000-8000-000000000403" );
-                              ];
-                          ] );
-                    ];
-                ] );
-          ]
-      in
-      let inserted =
-        Edn_util.vector
-          [
-            nested;
-            Edn_util.map
-              [
-                ( Edn_util.keyword "block/uuid",
-                  Edn_util.uuid "00000000-0000-4000-8000-000000000404" );
-              ];
-            Edn_util.map
-              [
-                ( Edn_util.keyword "block/uuid",
-                  Edn_util.uuid "00000000-0000-4000-8000-000000000402" );
-              ];
-          ]
-      in
-      expect_equal "collected uuids"
-        "00000000-0000-4000-8000-000000000401,00000000-0000-4000-8000-000000000402,00000000-0000-4000-8000-000000000403,00000000-0000-4000-8000-000000000404"
-        (Vec.string_concat ","
-           (Add.collect_uuids_from_value inserted |> Add.unique));
       let child =
         Block.make ~uuid:"00000000-0000-4000-8000-000000000502" ~title:"Child"
           ()
@@ -3723,6 +3732,93 @@ let () =
         "00000000-0000-4000-8000-000000000501,00000000-0000-4000-8000-000000000502"
         (Vec.string_concat ","
            (Add.collect_action_block_uuids (Vec.of_array [| root; duplicate |]))));
+
+  List.iter
+    (fun missing_child ->
+      test_promise
+        (if missing_child then
+           "CLI parity create rejects an unresolved requested descendant"
+         else "CLI parity create returns only action entities in preorder")
+        (fun () ->
+          let root_uuid = "00000000-0000-4000-8000-000000000801" in
+          let child_uuid = "00000000-0000-4000-8000-000000000802" in
+          let ref_uuid = "00000000-0000-4000-8000-000000000899" in
+          let entity id uuid =
+            Printf.sprintf "[\"^ \",\"~:db/id\",%d,\"~:block/uuid\",\"~u%s\"]"
+              id uuid
+          in
+          let server =
+            invoke_server (fun body ->
+                if
+                  Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                    body
+                then
+                  "[" ^ entity 801 root_uuid ^ "," ^ entity 899 ref_uuid ^ "]"
+                else if Js.String.includes ~search:child_uuid body then
+                  if missing_child then "null" else entity 802 child_uuid
+                else if Js.String.includes ~search:root_uuid body then
+                  entity 801 root_uuid
+                else if Js.String.includes ~search:ref_uuid body then
+                  entity 899 ref_uuid
+                else entity 627 "00000000-0000-4000-8000-000000000627")
+          in
+          with_server server (fun base_url ->
+              let cfg =
+                {
+                  (config ~repo:"demo" ()) with
+                  Cli_config.base_url = Some base_url;
+                }
+              in
+              let action =
+                expect_ok "create action"
+                  (Add.build_add_block_action
+                     {
+                       Add.target_id = Some 627L;
+                       target_uuid = None;
+                       target_page_name = None;
+                       pos = None;
+                       status = None;
+                       tags_edn = None;
+                       properties_edn = None;
+                       content = None;
+                       blocks_edn =
+                         Some
+                           (Printf.sprintf
+                              "[{:block/title \"Root\" :block/uuid #uuid \
+                               \"%s\" :block/children [{:block/title \"Child\" \
+                               :block/uuid #uuid \"%s\"}]}]"
+                              root_uuid child_uuid);
+                       blocks_file = None;
+                     }
+                     Vec.empty
+                     (Cli_primitive.create_repo "demo"))
+              in
+              let* result =
+                effect_to_promise
+                  (Add.execute_add_block action
+                     (config_with_output cfg Output.Mode.Json)
+                     Output.Mode.Json)
+              in
+              if missing_child then (
+                expect_bool "missing child fails" true
+                  (Cli_result.is_error result);
+                let err =
+                  expect_some "resolution error" result.Cli_result.error
+                in
+                expect_equal "resolution code" "add-id-resolution-failed"
+                  (Error.code_to_string err.Error.code))
+              else (
+                expect_bool "create succeeds" false (Cli_result.is_error result);
+                let data =
+                  expect_some "result data" (Cli_result.data_value result)
+                in
+                let ids =
+                  expect_some "result ids" (Edn_util.get data "result")
+                in
+                expect_equal "requested entity IDs" "[801 802]"
+                  (Melange_edn_melange.to_edn_string ids));
+              Js.Promise.resolve pass)))
+    [ false; true ];
 
   test "CLI parity add action validates targets metadata and status" (fun () ->
       let base_opts =
@@ -5361,8 +5457,8 @@ let () =
               match err.Error.context with
               | None ->
                   fail_test
-                    "graph_validate_result Error.make should include structured \
-                     context, not only message"
+                    "graph_validate_result Error.make should include \
+                     structured context, not only message"
               | Some context -> (
                   match
                     Option.bind (Edn_util.get context "errors") Edn_util.as_seq
@@ -5405,8 +5501,7 @@ let () =
              Option.bind (Edn_util.get edn_value "error") (fun error ->
                  Option.bind (Edn_util.get error "errors") Edn_util.as_seq)
            with
-          | Some errors ->
-              expect_int "edn error.errors" 1 (Vec.length errors)
+          | Some errors -> expect_int "edn error.errors" 1 (Vec.length errors)
           | None ->
               fail_test
                 "edn error should include structured errors, not only message");
@@ -5789,8 +5884,72 @@ let () =
               mkdir_p (Filename.dirname path);
               write_file path "sqlite-copy";
               "[\"^ \",\"~:ok\",true]")
-            else if Js.String.includes ~search:"thread-api/export-edn" body then
-              "[\"^ \",\"~:exported\",true]"
+            else if Js.String.includes ~search:"thread-api/export-edn" body then (
+              let args =
+                expect_some "export args" (Edn_util.as_seq (invoke_args body))
+              in
+              let options = Vec.nth args 1 in
+              let export_type =
+                expect_some "export type"
+                  (Option.bind
+                     (Edn_util.get options "export-type")
+                     Edn_util.as_keyword)
+              in
+              (match export_type with
+              | "block" ->
+                  expect_int64 "top-level block id" 41L
+                    (expect_some "top-level block id"
+                       (Edn_util.get_int64 options "block-id"));
+                  expect_none "block graph options"
+                    (Edn_util.get options "graph-options")
+              | "page" ->
+                  expect_int64 "top-level page id" 40L
+                    (expect_some "top-level page id"
+                       (Edn_util.get_int64 options "page-id"));
+                  expect_none "page graph options"
+                    (Edn_util.get options "graph-options")
+              | "view-nodes" ->
+                  let rows =
+                    expect_some "top-level view rows"
+                      (Option.bind
+                         (Edn_util.get options "rows")
+                         Edn_util.as_seq)
+                  in
+                  expect_int64 "first view row" 42L
+                    (expect_some "first view row"
+                       (Edn_util.as_int64 (Vec.nth rows 0)));
+                  expect_bool "top-level group-by" false
+                    (expect_some "top-level group-by"
+                       (Edn_util.get_bool options "group-by?"));
+                  expect_none "view-nodes graph options"
+                    (Edn_util.get options "graph-options")
+              | "selected-nodes" ->
+                  let node_ids =
+                    expect_some "selected-nodes top-level node ids"
+                      (Option.bind
+                         (Edn_util.get options "node-ids")
+                         Edn_util.as_seq)
+                  in
+                  expect_int64 "selected-nodes first id" 42L
+                    (expect_some "selected-nodes first id"
+                       (Edn_util.as_int64 (Vec.nth node_ids 0)));
+                  expect_none "selected-nodes graph options"
+                    (Edn_util.get options "graph-options")
+              | "graph-human" ->
+                  let graph_options =
+                    expect_some "graph-human graph options"
+                      (Edn_util.get options "graph-options")
+                  in
+                  expect_bool "nested graph-human timestamps" true
+                    (expect_some "nested graph-human timestamps"
+                       (Edn_util.get_bool graph_options "include-timestamps?"));
+                  expect_none "graph-human top-level timestamps"
+                    (Edn_util.get options "include-timestamps?")
+              | "graph" ->
+                  expect_none "default graph options"
+                    (Edn_util.get options "graph-options")
+              | value -> fail_test ("unexpected export type: " ^ value));
+              "[\"^ \",\"~:exported\",true]")
             else if Js.String.includes ~search:"thread-api/import-edn" body then
               "[\"^ \",\"~:ok\",true]"
             else if
@@ -5807,19 +5966,20 @@ let () =
               Cli_config.base_url = Some base_url;
             }
           in
-          let edn_opts =
+          let make_edn_opts ?(pretty_print = false) edn_options =
             {
               Graph.export_type = Graph.Edn;
               file = Some edn_export;
-              edn_options =
-                Some
-                  (edn_of_string
-                     "{:export-type :graph :include-timestamps? true}");
-              pretty_print = true;
+              edn_options = Option.map edn_of_string edn_options;
+              pretty_print;
               include_timestamps = false;
               exclude_built_in_pages = false;
               exclude_namespaces = Vec.empty;
             }
+          in
+          let edn_opts =
+            make_edn_opts ~pretty_print:true
+              (Some "{:export-type :selected-nodes :node-ids [42]}")
           in
           let sqlite_opts =
             {
@@ -5843,6 +6003,38 @@ let () =
             ":exported true";
           expect_named_contains "pretty export writes multiline edn"
             (read_file edn_export) "\n";
+          let export_with options =
+            effect_to_promise
+              (execute_with_output Graph.execute
+                 (Graph.Graph_export
+                    { graph; repo; opts = make_edn_opts options })
+                 cfg Output.Mode.Edn)
+          in
+          let* block_result =
+            export_with (Some "{:export-type :block :block-id 41}")
+          in
+          expect_bool "block export ok" false (Cli_result.is_error block_result);
+          let* page_result =
+            export_with (Some "{:export-type :page :page-id 40}")
+          in
+          expect_bool "page export ok" false (Cli_result.is_error page_result);
+          let* view_result =
+            export_with
+              (Some "{:export-type :view-nodes :rows [42] :group-by? false}")
+          in
+          expect_bool "view-nodes export ok" false
+            (Cli_result.is_error view_result);
+          let* graph_human_result =
+            export_with
+              (Some
+                 "{:export-type :graph-human :graph-options \
+                  {:include-timestamps? true}}")
+          in
+          expect_bool "graph-human export ok" false
+            (Cli_result.is_error graph_human_result);
+          let* default_graph_result = export_with (Some "{}") in
+          expect_bool "default graph export ok" false
+            (Cli_result.is_error default_graph_result);
           let* sqlite_result =
             effect_to_promise
               (execute_with_output Graph.execute
@@ -6114,8 +6306,9 @@ let () =
       expect_parse_error_code "completion unsupported shell" ":invalid-options"
         [| "completion"; "fish" |]);
 
-  test "CLI parity path-specific short aliases resolve to command specific meanings"
-    (fun () ->
+  test
+    "CLI parity path-specific short aliases resolve to command specific \
+     meanings" (fun () ->
       let validate =
         expect_parse_ok "graph validate -f" [| "graph"; "validate"; "-f" |]
       in
@@ -6163,7 +6356,8 @@ let () =
         "'(-g --graph)'{-g=,--graph=}'[Graph name]:graph:{_logseq_graphs}'";
       expect_named_contains "zsh output choices" zsh
         "'(-o --output)'{-o=,--output=}'[Output format]:mode:(human json edn)'";
-      expect_named_contains "zsh nested leaf function" zsh "_logseq_graph_list()";
+      expect_named_contains "zsh nested leaf function" zsh
+        "_logseq_graph_list()";
       expect_named_contains "zsh show id option" zsh "'--id=[Entity id]::id:'";
       expect_named_contains "zsh show level option" zsh
         "'--level=[Tree depth]:n:'";
@@ -6707,35 +6901,6 @@ let () =
       expect_reason "already routed" "already-routed"
         (agent_task_entity ~session_id:"codex-1" ()));
 
-  test "CLI parity agent prompt template validates required and unknown vars"
-    (fun () ->
-      let template body =
-        {
-          Agent.kind = Agent.Task;
-          body;
-          required_vars = Vec.of_array [| "graph"; "task-block-tree" |];
-          allowed_vars =
-            Vec.of_array [| "graph"; "agent-name"; "task-block-tree" |];
-        }
-      in
-      ignore
-        (expect_ok "valid template"
-           (Agent.validate_prompt_template
-              (template "{{graph}}\n{{task-block-tree}}\n{{agent-name}}")));
-      expect_error_code "blank template" ":missing-template-code-block"
-        (Agent.validate_prompt_template (template "   "));
-      expect_error_code "unknown var" ":unknown-template-vars"
-        (Agent.validate_prompt_template
-           (template "{{graph}}\n{{task-block-tree}}\n{{other}}"));
-      expect_error_code "missing var" ":missing-template-vars"
-        (Agent.validate_prompt_template (template "{{graph}}"));
-      let documented_template =
-        template "{{graph}}\n{{task-block-tree}}\n'{{documented-only}}'"
-      in
-      ignore
-        (expect_ok "quoted docs var ignored"
-           (Agent.validate_prompt_template documented_template)));
-
   test "CLI parity parse covers additional command option surfaces" (fun () ->
       let list_node =
         expect_parse_ok "list node"
@@ -7237,230 +7402,7 @@ let () =
            (Cli_primitive.create_repo "logseq_db_foo/bar")));
 
   test_promise
-    "CLI parity server start launches db-worker-node with parent executable"
-    (fun () ->
-      let root = temp_dir "logseq-cli-server-parent-exec-" in
-      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
-      let graphs_dir = Node.Path.join [| root; "graphs" |] in
-      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
-      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
-      let server_list_path = Node.Path.join [| root; "server-list" |] in
-      let server =
-        create_server (fun[@u] req res ->
-            if req_method req = "GET" && req_url req = "/healthz" then
-              write_json res 200
-                (Printf.sprintf
-                   "{\"repo\":\"logseq_db_demo\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
-                   (Cli_unix.getpid ()) root)
-            else write_json res 404 (error_response "not found"))
-      in
-      try
-        mkdir_p graph_dir;
-        write_file worker_script "console.log('db-worker');\n";
-        start_spawn_capture ();
-        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
-        Js.Promise.make (fun ~resolve ~reject ->
-            server_listen server 0 "127.0.0.1" (fun[@u] () ->
-                let port = (server_address server)##port in
-                set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port;
-                let config = config ~root_dir:root ~repo:"demo" () in
-                let finish_ok () =
-                  server_close server (fun[@u] () -> (resolve pass [@u]))
-                in
-                let finish_error message =
-                  server_close server (fun[@u] () ->
-                      (reject (Failure message) [@u]))
-                in
-                Cli_effect.on_any
-                  (Server_runtime.start_server config
-                     (Cli_primitive.create_repo "logseq_db_demo")
-                     ~create_empty_db:false)
-                  (fun result ->
-                    let calls = spawn_capture_calls () in
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    match result with
-                    | Error err ->
-                        finish_error
-                          ("server start failed: " ^ err.Error.message)
-                    | Ok _ -> (
-                        let expected_command = Node.Process.argv.(0) in
-                        try
-                          expect_named_contains "spawn command" calls
-                            ("\"command\":\"" ^ expected_command ^ "\"");
-                          expect_named_contains "spawn worker arg" calls
-                            worker_script;
-                          finish_ok ()
-                        with exn -> finish_error (Printexc.to_string exn)))
-                  (fun exn ->
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    finish_error (Printexc.to_string exn))))
-      with exn ->
-        stop_spawn_capture ();
-        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-        remove_tree root;
-        server_close server (fun[@u] () -> ());
-        fail_promise (Printexc.to_string exn));
-
-  test_promise "CLI parity server start reuses starting db-worker-node"
-    (fun () ->
-      let root = temp_dir "logseq-cli-server-starting-existing-" in
-      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
-      let graphs_dir = Node.Path.join [| root; "graphs" |] in
-      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
-      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
-      let server_list_path = Node.Path.join [| root; "server-list" |] in
-      let health_calls = ref 0 in
-      let server =
-        create_server (fun[@u] req res ->
-            if req_method req = "GET" && req_url req = "/healthz" then (
-              incr health_calls;
-              let status_code, status =
-                if !health_calls = 1 then (503, "starting") else (200, "ready")
-              in
-              write_json res status_code
-                (Printf.sprintf
-                   "{\"repo\":\"logseq_db_demo\",\"status\":%S,\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
-                   status (Cli_unix.getpid ()) root))
-            else write_json res 404 (error_response "not found"))
-      in
-      try
-        mkdir_p graph_dir;
-        write_file worker_script "console.log('db-worker');\n";
-        write_file lock_path
-          (Printf.sprintf
-             "{\"repo\":\"logseq_db_demo\",\"pid\":%d,\"lock-id\":\"test\",\"owner-source\":\"cli\"}"
-             (Cli_unix.getpid ()));
-        start_spawn_capture ();
-        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
-        Js.Promise.make (fun ~resolve ~reject ->
-            server_listen server 0 "127.0.0.1" (fun[@u] () ->
-                let port = (server_address server)##port in
-                write_file server_list_path
-                  (string_of_int (Cli_unix.getpid ())
-                  ^ " " ^ string_of_int port ^ "\n");
-                let config = config ~root_dir:root ~repo:"demo" () in
-                let finish_ok () =
-                  server_close server (fun[@u] () -> (resolve pass [@u]))
-                in
-                let finish_error message =
-                  server_close server (fun[@u] () ->
-                      (reject (Failure message) [@u]))
-                in
-                Cli_effect.on_any
-                  (Server_runtime.start_server config
-                     (Cli_primitive.create_repo "logseq_db_demo")
-                     ~create_empty_db:false)
-                  (fun result ->
-                    let calls = spawn_capture_calls () in
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    match result with
-                    | Error err ->
-                        finish_error
-                          ("server start failed: " ^ err.Error.message)
-                    | Ok _ -> (
-                        try
-                          expect_equal "spawn calls" "[]" calls;
-                          expect_bool "health calls include ready retry" true
-                            (!health_calls >= 2);
-                          finish_ok ()
-                        with exn -> finish_error (Printexc.to_string exn)))
-                  (fun exn ->
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    finish_error (Printexc.to_string exn))))
-      with exn ->
-        stop_spawn_capture ();
-        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-        remove_tree root;
-        server_close server (fun[@u] () -> ());
-        fail_promise (Printexc.to_string exn));
-
-  test_promise "CLI parity ensure server retries final health discovery"
-    (fun () ->
-      let root = temp_dir "logseq-cli-ensure-final-health-" in
-      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
-      let graphs_dir = Node.Path.join [| root; "graphs" |] in
-      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
-      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
-      let server_list_path = Node.Path.join [| root; "server-list" |] in
-      let health_calls = ref 0 in
-      let server =
-        create_server (fun[@u] req res ->
-            if req_method req = "GET" && req_url req = "/healthz" then (
-              incr health_calls;
-              match !health_calls with
-              | 1 ->
-                  write_json res 503
-                    (Printf.sprintf
-                       "{\"repo\":\"logseq_db_demo\",\"status\":\"starting\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
-                       (Cli_unix.getpid ()) root)
-              | 3 -> write_json res 500 (error_response "busy")
-              | _ ->
-                  write_json res 200
-                    (Printf.sprintf
-                       "{\"repo\":\"logseq_db_demo\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
-                       (Cli_unix.getpid ()) root))
-            else write_json res 404 (error_response "not found"))
-      in
-      try
-        mkdir_p graph_dir;
-        write_file worker_script "console.log('db-worker');\n";
-        start_spawn_capture ();
-        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
-        Js.Promise.make (fun ~resolve ~reject ->
-            server_listen server 0 "127.0.0.1" (fun[@u] () ->
-                let port = (server_address server)##port in
-                set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port;
-                let config = config ~root_dir:root ~repo:"demo" () in
-                let finish_ok () =
-                  server_close server (fun[@u] () -> (resolve pass [@u]))
-                in
-                let finish_error message =
-                  server_close server (fun[@u] () ->
-                      (reject (Failure message) [@u]))
-                in
-                Cli_effect.on_any
-                  (Server_runtime.ensure_server config
-                     (Cli_primitive.create_repo "logseq_db_demo")
-                     ~create_empty_db:false)
-                  (fun result ->
-                    let calls = spawn_capture_calls () in
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    match result with
-                    | Error err ->
-                        finish_error
-                          ("ensure server failed: " ^ err.Error.message)
-                    | Ok _ -> (
-                        try
-                          expect_named_contains "spawned worker" calls
-                            worker_script;
-                          expect_bool "final health retried" true
-                            (!health_calls >= 4);
-                          finish_ok ()
-                        with exn -> finish_error (Printexc.to_string exn)))
-                  (fun exn ->
-                    stop_spawn_capture ();
-                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-                    remove_tree root;
-                    finish_error (Printexc.to_string exn))))
-      with exn ->
-        stop_spawn_capture ();
-        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-        remove_tree root;
-        server_close server (fun[@u] () -> ());
-        fail_promise (Printexc.to_string exn));
-
-  test_promise
-    "CLI parity server start orphan timeout reports db-worker-node command"
+    "CLI parity server start rejects a spawn without process identity"
     (fun () ->
       let root = temp_dir "logseq-cli-server-orphan-command-" in
       let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
@@ -7484,18 +7426,10 @@ let () =
             match result with
             | Ok _ -> fail_promise "expected orphan timeout"
             | Error err ->
-                expect_equal "orphan error code" "server-start-timeout-orphan"
+                expect_equal "orphan error code" "server-start-failed"
                   (Error.code_to_string err.Error.code);
-                expect_named_contains "orphan command executable"
-                  err.Error.message Node.Process.argv.(0);
-                expect_named_contains "orphan command worker" err.Error.message
-                  worker_script;
-                expect_named_contains "orphan command repo" err.Error.message
-                  "--repo logseq_db_demo";
-                expect_named_contains "orphan command root" err.Error.message
-                  ("--root-dir " ^ root);
-                expect_named_contains "orphan command owner" err.Error.message
-                  "--owner-source cli";
+                expect_named_contains "spawn error" err.Error.message
+                  "Worker failed to spawn";
                 expect_named_contains "spawn was attempted" calls worker_script;
                 Js.Promise.resolve pass)
       with exn ->
@@ -7564,94 +7498,127 @@ let () =
       | Error err -> fail_test ("server restart: " ^ err.Error.message));
       pass);
 
-  test
-    "CLI parity server graph item listing ignores non-graphs and marks old dir \
-     conflicts" (fun () ->
-      let root = temp_dir "logseq-cli-parity-graph-items-" in
+  test "CLI parity graph list discovers directories through the command path"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-list-discovery-" in
       let graphs = Node.Path.join [| root; "graphs" |] in
       try
         Vec.iter
           (fun dir -> mkdir_p (Node.Path.join [| graphs; dir |]))
           (Vec.of_array
              [|
-               "alpha";
-               "backup";
-               "foo~2G";
-               "Unlinked graphs";
-               "logseq_local_1";
-               "old++name";
-               "old~2Fname";
-               "yy y";
-               "yy~20y";
                "yy%20y";
+               "old~2Fname";
+               "colon~3Aname";
+               "percent~25name";
+               "plus~2Bname";
+               "tilde~7Ename";
+               "~E4~B8~AD~E6~96~87";
+               "alpha";
+               " alpha ";
+               " padded-only ";
+               "   ";
+               "~20encoded-leading";
+               "encoded-trailing~20";
+               "old++name";
+               "c+3A+name";
+               "yy y";
                "bad%ZZname";
+               "logseq_local_1";
+               "backup";
+               "Unlinked graphs";
+               "file-version-test";
+               "logseq_db_hidden";
+               "logseq_db_old++name";
+               "yy~20y";
+               "lower~2fname";
+               "mix%20~2Fname";
+               "foo~2G";
              |]);
-        let items =
-          Server_runtime.list_graph_items (config ~root_dir:root ())
+        write_file (Node.Path.join [| graphs; "ordinary-file" |]) "";
+        let expected =
+          edn_of_string
+            (Ustring.to_string
+               (Ustring.of_string
+                  {|{:graphs ["alpha" "colon:name" "logseq_local_1" "old/name"
+                          "percent%name" "plus+name" "tilde~name" "yy y" "中文"]
+                 :graph-items
+                 [{:kind :canonical :graph-name "alpha" :graph-dir "alpha"}
+                  {:kind :canonical :graph-name "colon:name" :graph-dir "colon~3Aname"}
+                  {:kind :canonical :graph-name "logseq_local_1" :graph-dir "logseq_local_1"}
+                  {:kind :canonical :graph-name "old/name" :graph-dir "old~2Fname"}
+                  {:kind :canonical :graph-name "percent%name" :graph-dir "percent~25name"}
+                  {:kind :canonical :graph-name "plus+name" :graph-dir "plus~2Bname"}
+                  {:kind :canonical :graph-name "tilde~name" :graph-dir "tilde~7Ename"}
+                  {:kind :canonical :graph-name "yy y" :graph-dir "yy y"}
+                  {:kind :canonical :graph-name "中文" :graph-dir "~E4~B8~AD~E6~96~87"}]}|}))
         in
-        let canonical =
-          Vec.filter
-            (fun item -> item.Graph_types.kind = Graph_types.Canonical)
-            items
+        expect_graph_list_output root expected;
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "CLI parity padded graph arguments use the canonical directory"
+    (fun () ->
+      let root = temp_dir "logseq-cli-trim-graph-" in
+      let graphs = Node.Path.join [| root; "graphs" |] in
+      let padded = Node.Path.join [| graphs; " alpha " |] in
+      let run args =
+        run_cli_lifecycle
+          (Array.append [| "--root-dir"; root; "--output"; "json" |] args)
+      in
+      try
+        mkdir_p padded;
+        write_file (Node.Path.join [| padded; "sentinel" |]) "untouched";
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        let created = run [| "graph"; "create"; "--graph"; " \talpha\n " |] in
+        expect_int "create trimmed graph" 0 created.exit_code;
+        expect_graph_list_output root
+          (edn_of_string
+             {|{:graphs ["alpha"] :graph-items [{:kind :canonical :graph-name "alpha" :graph-dir "alpha"}]}|});
+        let input = Node.Path.join [| root; "unused.sqlite" |] in
+        write_file input "";
+        let imported =
+          run
+            [|
+              "graph";
+              "import";
+              "--graph";
+              " alpha ";
+              "--type";
+              "sqlite";
+              "--input";
+              input;
+            |]
         in
-        expect_bool "has alpha canonical" true
-          (Vec.exists
-             (fun item ->
-               Option.equal String.equal
-                 (Option.map Cli_primitive.string_of_graph
-                    item.Graph_types.graph_name)
-                 (Some "alpha")
-               && item.Graph_types.graph_dir = Some "alpha")
-             canonical);
-        expect_bool "ignores backup" false
-          (Vec.exists
-             (fun item -> item.Graph_types.graph_dir = Some "backup")
-             items);
-        let old_item =
-          expect_some "old format item"
-            (Vec.find_opt
-               (fun item -> item.Graph_types.legacy_dir = Some "old++name")
-               items)
+        expect_int "import rejects existing trimmed graph" 1 imported.exit_code;
+        expect_named_contains "existing graph error"
+          (stdout_text "import" imported)
+          "graph-exists";
+        let padded_argument =
+          unicode_text [| 0x00a0 |] ^ "alpha" ^ unicode_text [| 0x3000 |]
         in
-        expect_bool "old item kind" true
-          (old_item.Graph_types.kind = Graph_types.Legacy);
-        expect_equal "old graph name" "old/name"
-          (Cli_primitive.string_of_graph
-             (expect_some "old graph name" old_item.Graph_types.graph_name));
-        expect_equal "old target dir" "old~2Fname"
-          (expect_some "target dir" old_item.Graph_types.target_graph_dir);
-        expect_bool "old conflict" true old_item.Graph_types.conflict;
-        let percent_encoded_old_dirs =
-          items
-          |> Vec.filter (fun item ->
-              match item.Graph_types.legacy_dir with
-              | Some ("yy~20y" | "yy%20y") -> true
-              | _ -> false)
-        in
-        expect_int "percent encoded old dir count" 1
-          (Vec.length percent_encoded_old_dirs);
-        Vec.iter
-          (fun item ->
-            expect_bool "percent encoded item kind" true
-              (item.Graph_types.kind = Graph_types.Legacy);
-            expect_equal "percent encoded graph name" "yy y"
-              (Cli_primitive.string_of_graph
-                 (expect_some "percent encoded graph name"
-                    item.Graph_types.graph_name));
-            expect_equal "percent encoded target dir" "yy y"
-              (expect_some "percent encoded target"
-                 item.Graph_types.target_graph_dir);
-            expect_bool "percent encoded conflict" true
-              item.Graph_types.conflict)
-          percent_encoded_old_dirs;
-        let undecodable =
-          expect_some "undecodable item"
-            (Vec.find_opt
-               (fun item -> item.Graph_types.legacy_dir = Some "bad%ZZname")
-               items)
-        in
-        expect_bool "undecodable kind" true
-          (undecodable.Graph_types.kind = Graph_types.Legacy_undecodable);
+        let removed = run [| "graph"; "remove"; "--graph"; padded_argument |] in
+        expect_int "remove trimmed graph" 0 removed.exit_code;
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        expect_equal "padded directory remains untouched" "untouched"
+          (read_file (Node.Path.join [| padded; "sentinel" |]));
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "CLI parity graph list accepts missing and empty graph directories"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-list-empty-" in
+      try
+        let expected = edn_of_string "{:graphs [] :graph-items []}" in
+        expect_graph_list_output root expected;
+        mkdir_p (Node.Path.join [| root; "graphs" |]);
+        expect_graph_list_output root expected;
         remove_tree root
       with exn ->
         remove_tree root;
@@ -7696,47 +7663,10 @@ let () =
       expect_equal "default table header order" "updated-at,title,created-at"
         (headers_from output |> Vec.of_array |> Vec.string_concat ","));
 
-  test "CLI parity format graph list marks current graph and old graph dirs"
+  test "CLI parity format graph list marks the current graph and shows count"
     (fun () ->
       let graph_list_data =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "graphs",
-              Edn_util.vector
-                [
-                  Edn_util.string "alpha";
-                  Edn_util.string "old/name";
-                  Edn_util.string "mystery";
-                ] );
-            ( Edn_util.keyword "graph-items",
-              Edn_util.vector
-                [
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "kind", Edn_util.keyword "canonical");
-                      (Edn_util.keyword "graph-name", Edn_util.string "alpha");
-                      (Edn_util.keyword "graph-dir", Edn_util.string "alpha");
-                    ];
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "kind", Edn_util.keyword "legacy");
-                      ( Edn_util.keyword "legacy-dir",
-                        Edn_util.string "old++name" );
-                      ( Edn_util.keyword "legacy-graph-name",
-                        Edn_util.string "old/name" );
-                      ( Edn_util.keyword "target-graph-dir",
-                        Edn_util.string "old~2Fname" );
-                      (Edn_util.keyword "conflict?", Edn_util.bool false);
-                    ];
-                  Edn_util.map
-                    [
-                      ( Edn_util.keyword "kind",
-                        Edn_util.keyword "legacy-undecodable" );
-                      (Edn_util.keyword "legacy-dir", Edn_util.string "mystery");
-                      (Edn_util.keyword "reason", Edn_util.keyword "undecodable");
-                    ];
-                ] );
-          ]
+        edn_of_string {|{:graphs ["alpha" "old/name" "mystery"]}|}
       in
       let output =
         Format_types.format_result
@@ -7745,10 +7675,7 @@ let () =
           (config ~graph:"old/name" ~root_dir:"/tmp/logseq-root" ())
       in
       expect_named_contains "current graph marker" output "* old/name";
-      expect_named_not_contains "old graph marker" output "old/name [legacy]";
-      expect_named_not_contains "old graph warning" output
-        "legacy graph directories detected";
-      expect_named_not_contains "rename guidance" output "old++name");
+      expect_named_contains "graph count" output "Count: 3");
 
   test "CLI parity format list and search table outputs keep count footer"
     (fun () ->

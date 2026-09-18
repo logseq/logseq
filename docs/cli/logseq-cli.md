@@ -93,6 +93,7 @@ Custom queries are defined in `:custom-queries` of a config file. This config is
 Use `logseq login` to authenticate the current machine with Logseq cloud.
 
 - `logseq login` starts a temporary callback server at `http://localhost:8765/auth/callback`, opens a browser to the Logseq Cognito Hosted UI, exchanges the returned authorization code, and writes `~/logseq/auth.json`.
+- `logseq login --username <username> --password <password>` authenticates directly with Cognito without opening a browser or starting a callback server. Supply both non-empty values. The username is a Cognito sign-in identifier, not necessarily an email address.
 - `logseq logout` removes `~/logseq/auth.json`, opens a browser to the Cognito Hosted UI logout endpoint, and completes the browser logout flow at `http://localhost:8765/logout-complete`.
 - Sync commands still pass an in-memory runtime `:auth-token` to db-sync, but that token is now resolved from `auth.json` instead of `cli.edn`.
 
@@ -100,12 +101,21 @@ Default auth file: `~/logseq/auth.json`
 
 Auth file contents include the persisted Cognito `id-token`, `access-token`, `refresh-token`, `expires-at`, `sub`, `email`, and `updated-at` values needed for headless refresh.
 
+Password login:
+- Passwords are passed exactly as supplied, including leading and trailing spaces. Quote shell arguments; use `--password='<password>'` when a password starts with `-`.
+- Command-line passwords can appear in shell history and process listings. This mode does not read credentials from environment variables, stdin, prompts, or `cli.edn`.
+- The account password is separate from an E2EE password. MFA, forced password changes, and other Cognito challenges return an explicit error; challenge continuation and social-provider password login are not supported. You can run `logseq login` separately to use the browser flow.
+- Password authentication uses the us-east-1 Cognito IDP endpoint and the configured OAuth client ID. A custom sync `http-base` does not change that endpoint. The app client must enable `USER_PASSWORD_AUTH` and must not require a client secret.
+- Successful login writes the same private auth file (or configured `:auth-path`) and returns `auth-path`, `updated-at`, and available `email`/`sub`. Password mode omits `authorize-url` and `opened`. It never stores the username/password pair or includes tokens in command output.
+- Authentication, transport, timeout, and response-validation failures leave the existing auth file untouched and exit nonzero. There is no automatic browser retry.
+- The existing OAuth refresh path is retained. Password login, refresh, and read-only authenticated sync were verified against the default production client on 2026-09-17. Custom client and user-pool configurations require their own verification.
+
 Verbose logging:
 - `--verbose` enables structured debug logs to stderr for CLI option parsing and db-worker-node API calls.
 - `sync download` can stream realtime progress lines to stdout when progress is enabled; debug previews remain truncated.
 
 Timeouts:
-- `--timeout-ms` continues to control request timeout behavior for CLI transport.
+- `--timeout-ms` controls request timeout behavior for CLI transport and password authentication.
 - Login callback timeout is controlled separately by `:login-timeout-ms` / `LOGSEQ_CLI_LOGIN_TIMEOUT_MS` and defaults to 5 minutes.
 - Logout callback timeout is controlled separately by `:logout-timeout-ms` / `LOGSEQ_CLI_LOGOUT_TIMEOUT_MS` and defaults to 2 minutes.
 
@@ -123,7 +133,7 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
   - EDN export also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`
-  - `--edn-options` is an EDN map; `:export-type` (if present) overrides the default `:graph`, and every other key is forwarded to the worker as `:graph-options` (for example, `'{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}'`)
+  - `--edn-options` is an EDN map passed directly to the worker, with `:export-type` defaulting to `:graph`. Parameters for `:block`, `:page`, `:view-nodes`, and `:selected-nodes` stay at the top level (for example, `'{:export-type :selected-nodes :node-ids [42]}'`). `:graph-human` options belong under `:graph-options` (for example, `'{:export-type :graph-human :graph-options {:include-timestamps? true}}'`).
   - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
   - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected
@@ -392,6 +402,10 @@ JSON key migration (flat -> namespaced):
 | `data.items[].cardinality` | `data.items[].db/cardinality` |
 | `data.root.children[]` | `data.root.block/children[]` |
 - `upsert page`, `upsert block`, `upsert task`, and `upsert asset` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+  - In create mode, block/task/asset results contain only the requested entities. Insertion targets, references (including automatically created pages), tags, properties, and property values are excluded.
+  - Block trees return every requested descendant in input-tree preorder: root, its children and their descendants in sibling order, then the next root. UUIDs are deduplicated by first occurrence. For `[Root(Child(Grandchild)), Sibling]`, the result is `[Root-id Child-id Grandchild-id Sibling-id]`.
+  - The same contract applies to `--blocks` and `--blocks-file`. A requested UUID that cannot be resolved fails the command with `add-id-resolution-failed`; creation does not return a partial success list. Writes may already have completed when resolution fails.
+  - Command-level `--update-tags` and `--update-properties` in block create mode apply to the requested top-level blocks. Returning descendants does not make these updates recursive.
   - Human example:
     ```text
     Upserted page:
