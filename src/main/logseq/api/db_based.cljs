@@ -37,7 +37,7 @@
 (defn -get-property
   [^js plugin k]
   (when (and (string? k) (not (string/blank? (string/trim k))))
-    (p/let [property-ident (api-block/<get-db-ident-from-property-name k plugin)]
+    (let [property-ident (api-block/get-db-ident-from-property-name k plugin)]
       (<get-block property-ident))))
 
 (defn get-favorites
@@ -136,7 +136,7 @@
 (defn- upsert-property-aux
   [this k schema opts]
   (p/let [k' (api-block/sanitize-user-property-name k)
-          property-ident (api-block/<get-db-ident-from-property-name k this)
+          property-ident (api-block/get-db-ident-from-property-name k this)
           _ (api-block/ensure-property-upsert-control this property-ident k')
           schema (or (some-> schema
                              (update-keys #(if (contains? #{:public} %)
@@ -254,10 +254,10 @@
                    properties (when (seq tag-properties)
                                  (p/all (map
                                            (fn [{:keys [name schema properties]}]
-                                             (p/let [property-ident (api-block/<get-db-ident-from-property-name name this)
-                                                     property-entity (<get-block property-ident)]
-                                               (or property-entity    ; property exists already
-                                                   (upsert-property-aux this name schema {:properties properties}))))
+                                             (let [property-ident (api-block/get-db-ident-from-property-name name this)]
+                                               (p/let [property-entity (<get-block property-ident)]
+                                                 (or property-entity    ; property exists already
+                                                     (upsert-property-aux this name schema {:properties properties})))))
                                         tag-properties)))]
              (when (seq properties)
                (db-property-handler/set-block-property! (:db/id tag)

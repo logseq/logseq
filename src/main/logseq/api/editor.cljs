@@ -468,7 +468,7 @@
   (this-as this
            (p/let [block (<get-block id {:children? false})]
              (when-let [block-uuid (:block/uuid block)]
-               (p/let [key (api-block/<get-db-ident-from-property-name key this)]
+               (let [key (api-block/get-db-ident-from-property-name key this)]
                  (property-handler/remove-block-property! block-uuid key))))))
 
 (defn- get-block-classes-properties-has-default-value
@@ -494,11 +494,11 @@
 (defn get_block_property
   [id key]
   (this-as this
-    (p/let [properties (get-all-block-properties id)
-            property-name (api-block/sanitize-user-property-name key)
-            ident (api-block/<get-db-ident-from-property-name key this)]
+    (p/let [properties (get-all-block-properties id)]
       (when (seq properties)
-        (let [property-value (or (get properties property-name)
+        (let [property-name (api-block/sanitize-user-property-name key)
+              ident (api-block/get-db-ident-from-property-name key this)
+              property-value (or (get properties property-name)
                                  (get properties (keyword property-name))
                                  (get properties ident))
               property-value (cond-> property-value
