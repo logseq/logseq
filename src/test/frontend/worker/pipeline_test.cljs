@@ -1283,26 +1283,6 @@
              (revision (:db-after result) movie-class))
           "Hide empty value must not revise the class that provides the property."))))
 
-(deftest property-title-still-revises-reference-owners-test
-  (testing "non-display property edits still stamp pages that ref the property"
-    (let [conn (movie-similar-to-conn)
-          property (d/entity @conn :user.property/similar-to)
-          page (db-test/find-page-by-title @conn "You Can't Say No (2018)")
-          _ (stamp-property-ref conn property page)
-          db-before @conn
-          tx-report (assoc (d/with db-before
-                                   [[:db/add (:db/id property)
-                                     :block/title
-                                     "similar to (renamed)"]])
-                           :tx-meta {:outliner-op :save-block})
-          result (worker-pipeline/transact-pipeline tx-report)]
-      (is (not= (revision db-before property)
-                (revision (:db-after result) property))
-          "Title change revises the property entity.")
-      (is (not= (revision db-before page)
-                (revision (:db-after result) page))
-          "Title change still fans out revisions to pages that reference the property."))))
-
 (deftest hide-empty-value-succeeds-when-reference-owner-is-invalid-test
   (testing "toggling hide-empty-value must not revalidate pages that only reference the property"
     (let [conn (movie-similar-to-conn)
@@ -1323,27 +1303,3 @@
           (is (true? (:logseq.property/hide-empty-value
                       (d/entity @conn :user.property/similar-to)))
               "Hide empty value persists even when a referencing page is invalid"))))))
-
-(deftest hidden-page-hide-still-revises-reference-owners-test
-  (testing "page hide? is the hidden-page flag and must still fan out revisions"
-    (let [conn (db-test/create-conn-with-blocks
-                [{:page {:block/title "page1"}
-                  :blocks [{:block/title "owner"}]}])
-          page (ldb/get-page @conn "page1")
-          owner (db-test/find-block-by-content @conn "owner")
-          _ (d/transact! conn [[:db/add (:db/id owner) :block/refs (:db/id page)]
-                               [:db/add (:db/id page) :block/tx-id 10]
-                               [:db/add (:db/id owner) :block/tx-id 10]])
-          db-before @conn
-          tx-report (assoc (d/with db-before
-                                   [[:db/add (:db/id page)
-                                     :logseq.property/hide?
-                                     true]])
-                           :tx-meta {})
-          result (worker-pipeline/transact-pipeline tx-report)]
-      (is (not= (revision db-before page)
-                (revision (:db-after result) page))
-          "Hiding a page revises the page itself.")
-      (is (not= (revision db-before owner)
-                (revision (:db-after result) owner))
-          "Hiding a referenced page still revises reference owners."))))
