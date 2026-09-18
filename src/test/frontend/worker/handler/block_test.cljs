@@ -1118,8 +1118,8 @@
   (let [conn (db-test/create-conn)
         library (ldb/get-built-in-page @conn "Library")
         parent-uuid (random-uuid)
-        child-a-uuid (random-uuid)
-        child-b-uuid (random-uuid)]
+        child-a-uuid #uuid "11111111-1111-4111-8111-111111111111"
+        child-b-uuid #uuid "22222222-2222-4222-8222-222222222222"]
     (d/transact! conn
                  [{:db/id (:db/id library)
                    :block/tx-id 10}
@@ -1190,6 +1190,9 @@
         (is (contains? nested-uuids child-b-uuid))
         (is (every? string? page-orders))
         (is (apply distinct? page-orders))
+        (is (neg? (compare (:block/order (d/entity @conn [:block/uuid child-a-uuid]))
+                           (:block/order (d/entity @conn [:block/uuid child-b-uuid]))))
+            "Smaller :block/uuid is assigned the earlier fractional-index key.")
         (is (every? #(pos? (compare % overview-order)) page-orders)
             "Repaired nested pages sort after existing content siblings.")))))
 

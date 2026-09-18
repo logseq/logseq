@@ -134,4 +134,8 @@
     (is (nil? (:block/order (d/entity @conn [:block/uuid child-uuid]))))
     (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
       (with-transact-pipeline #(worker-db-validate/validate-db conn))
-      (is (string? (:block/order (d/entity @conn [:block/uuid child-uuid])))))))
+      (let [order-after-first (:block/order (d/entity @conn [:block/uuid child-uuid]))]
+        (is (string? order-after-first))
+        (with-transact-pipeline #(worker-db-validate/validate-db conn))
+        (is (= order-after-first (:block/order (d/entity @conn [:block/uuid child-uuid])))
+            "A second validate-db does not rewrite an already-repaired order.")))))

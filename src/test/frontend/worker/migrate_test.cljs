@@ -409,8 +409,8 @@
 (deftest migrate-65-34-assigns-missing-internal-page-parent-orders
   (let [conn (d/create-conn db-schema/schema)
         parent-uuid (random-uuid)
-        child-a-uuid (random-uuid)
-        child-b-uuid (random-uuid)
+        child-a-uuid #uuid "11111111-1111-4111-8111-111111111111"
+        child-b-uuid #uuid "22222222-2222-4222-8222-222222222222"
         class-uuid (random-uuid)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     (let [library (ldb/get-built-in-page @conn "Library")]
@@ -459,6 +459,8 @@
       (is (string? (:block/order child-a)))
       (is (string? (:block/order child-b)))
       (is (not= (:block/order child-a) (:block/order child-b)))
+      (is (neg? (compare (:block/order child-a) (:block/order child-b)))
+          "Smaller :block/uuid is assigned the earlier fractional-index key.")
       (is (pos? (compare (:block/order child-a) overview-order)))
       (is (pos? (compare (:block/order child-b) overview-order)))
       (is (nil? (:block/order class))

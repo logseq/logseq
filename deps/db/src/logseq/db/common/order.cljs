@@ -41,7 +41,10 @@
   "Namespace import and older graphs can set :block/parent without :block/order.
   Only repair internal pages so class pages that share the same rewrite stay unordered.
   Insertion boundary uses every direct child so repaired page orders do not
-  collide with content-block siblings."
+  collide with content-block siblings.
+  Missing children are sorted by :block/uuid before keys are assigned so peers
+  generate the same orders. Pages that already have a string order are left
+  unchanged, so a second validate/migrate is a no-op."
   [db]
   (->> (d/datoms db :avet :block/parent)
        (map (fn [d] (d/entity db (:e d))))
@@ -51,6 +54,7 @@
           (let [missing (->> children
                              (filter entity-util/internal-page?)
                              (remove #(string? (:block/order %)))
+                             (sort-by (comp str :block/uuid))
                              vec)
                 max-order (->> children
                                (keep :block/order)
@@ -62,7 +66,10 @@
                      {:db/id (:db/id child)
                       :block/order order})
                    missing
-                   (gen-n-keys (count missing) max-order nil))))))))
+                   ;; Local max-key atom keeps this repair from mutating the
+                   ;; process-global *max-key used by later inserts.
+                   (gen-n-keys (count missing) max-order nil
+                               :max-key-atom (atom nil))))))))))
 
 (defn validate-order-key?
   [key]
