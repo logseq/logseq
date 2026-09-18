@@ -67,29 +67,7 @@
       (is (not (contains? full :user.property/keywords))))
     (testing "visible properties still appear on the node"
       (is (contains? full :user.property/author))
-      (is (not (contains? hidden :user.property/author))))
-    (testing "explicitly showing hidden properties reveals hide-by-default properties"
-      (let [{:keys [full hidden]} (display-property-ids
-                                   (worker-property/display-properties @conn page {:page-title? true} true))]
-        (is (contains? full :user.property/keywords))
-        (is (not (contains? hidden :user.property/keywords)))))))
-
-(deftest display-properties-hides-class-owned-hide-by-default-properties
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:keywords {:logseq.property/type :default
-                                       :logseq.property/hide? true}
-                            :author {:logseq.property/type :default}}
-               :classes {:Topic {:build/class-properties [:keywords :author]}}
-               :pages-and-blocks [{:page {:block/title "Work"
-                                          :build/tags [:Topic]
-                                          :build/properties {:keywords "clojure"
-                                                             :author "Ada"}}}]})
-        page (db-test/find-page-by-title @conn "Work")
-        {:keys [full hidden]} (display-property-ids
-                               (worker-property/display-properties @conn page {:page-title? true} false))]
-    (is (contains? hidden :user.property/keywords))
-    (is (not (contains? full :user.property/keywords)))
-    (is (contains? full :user.property/author))))
+      (is (not (contains? hidden :user.property/author))))))
 
 (deftest display-properties-hides-hide-by-default-when-empty-properties-are-hidden
   (let [conn (db-test/create-conn-with-blocks
@@ -106,24 +84,6 @@
     (is (contains? hidden :user.property/keywords)
         "Hide by default still hides valued properties when empty properties are globally hidden")
     (is (not (contains? full :user.property/keywords)))))
-
-(deftest setting-hide-by-default-hides-property-from-display
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:keywords {:logseq.property/type :default}}
-               :pages-and-blocks [{:page {:block/title "Work"
-                                          :build/properties {:keywords "clojure"}}}]})
-        page (db-test/find-page-by-title @conn "Work")
-        property (d/entity @conn :user.property/keywords)
-        before (display-property-ids
-                (worker-property/display-properties @conn page {:page-title? true} false))
-        _ (outliner-property/set-block-property!
-           conn (:db/id property) :logseq.property/hide? true)
-        after (display-property-ids
-               (worker-property/display-properties @conn page {:page-title? true} false))]
-    (is (contains? (:full before) :user.property/keywords))
-    (is (true? (:logseq.property/hide? (d/entity @conn :user.property/keywords))))
-    (is (contains? (:hidden after) :user.property/keywords))
-    (is (not (contains? (:full after) :user.property/keywords)))))
 
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]

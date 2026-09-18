@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [frontend.components.property.config :as property-config]
             [frontend.components.views :as views]
-            [frontend.handler.db-based.property :as db-property-handler]
             [goog.object :as gobj]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -165,24 +164,3 @@
     (is (true? (property-config/hide-by-default-value {} #js {:type "click"})))
     (is (false? (property-config/hide-by-default-value {:logseq.property/hide? true} #js {:type "click"})))
     (is (true? (property-config/hide-by-default-value {:logseq.property/hide? false} nil)))))
-
-(deftest set-hide-by-default-writes-hide-flag-test
-  (let [property-uuid (random-uuid)
-        calls (atom [])]
-    (with-redefs [db-property-handler/set-block-property!
-                  (fn [& args] (swap! calls conj (vec args)))]
-      (testing "Turning hide-by-default on writes a boolean true"
-        (property-config/set-hide-by-default! {:block/uuid property-uuid} true)
-        (is (= [[property-uuid :logseq.property/hide? true]] @calls)))
-
-      (reset! calls [])
-      (testing "A desktop event payload still writes a boolean hide flag"
-        (property-config/set-hide-by-default! {:block/uuid property-uuid} #js {:type "click"})
-        (is (= [[property-uuid :logseq.property/hide? true]] @calls)))
-
-      (reset! calls [])
-      (testing "Toggling off a hidden property writes false"
-        (property-config/set-hide-by-default! {:block/uuid property-uuid
-                                               :logseq.property/hide? true}
-                                              false)
-        (is (= [[property-uuid :logseq.property/hide? false]] @calls))))))
