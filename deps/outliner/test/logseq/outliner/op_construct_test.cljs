@@ -7,7 +7,68 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [logseq.outliner.op.construct :as op-construct]))
+
+(deftest asset-paste-history-preserves-inserted-identity
+  (doseq [cut? [false true]]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "document"
+                            :build/tags #{:logseq.class/Asset}
+                            :build/properties {:logseq.property.asset/type "pdf"
+                                               :logseq.property.asset/checksum "abc"
+                                               :logseq.property.asset/size 42}
+                            :build/children [{:block/title "caption"}]}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title ""}]}])
+          asset (db-test/find-block-by-content @conn "document")
+          child (db-test/find-block-by-content @conn "caption")
+          target (db-test/find-block-by-content @conn "")
+          source-page (ldb/get-page @conn "source")
+          note-uuid (random-uuid)
+          clipboard [{:block/uuid (:block/uuid asset)
+                      :block/title "document"
+                      :logseq.property.asset/type "pdf"
+                      :logseq.property.asset/checksum "abc"
+                      :logseq.property.asset/size 42
+                      :block/tags #{:logseq.class/Asset}}
+                     {:block/uuid (:block/uuid child)
+                      :block/title "caption"
+                      :block/parent [:block/uuid (:block/uuid asset)]}]
+          reports (atom [])]
+      (when cut? (outliner-core/delete-blocks! conn [asset] {}))
+      (d/listen! conn ::asset-history #(swap! reports conj %))
+      (outliner-op/apply-ops!
+       conn [[:insert-blocks [clipboard (:block/uuid target)
+                             {:outliner-op :paste :sibling? true
+                              :keep-uuid? cut? :replace-empty-target? true}]]
+             [:insert-blocks [[{:block/uuid note-uuid :block/title "note"}]
+                              (:block/uuid source-page) {:sibling? false :keep-uuid? true}]]] {})
+      (let [{:keys [db-before db-after tx-data tx-meta]} (last @reports)
+            {:keys [forward-outliner-ops inverse-outliner-ops]}
+            (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)
+            children #(ldb/sort-by-order (:block/_parent (ldb/get-page @conn "dest")))
+            inserted (first (children))
+            inserted-uuid (:block/uuid inserted)]
+        (is (= [(cond-> #{inserted-uuid} cut? (conj (:block/uuid child))) #{note-uuid}]
+               (mapv #(set (map :block/uuid (get-in % [1 0]))) forward-outliner-ops)))
+        (outliner-op/apply-ops! conn inverse-outliner-ops {})
+        (is (= [[(:block/uuid target) ""]] (mapv (juxt :block/uuid :block/title) (children))))
+        (outliner-op/apply-ops! conn forward-outliner-ops {})
+        (let [replayed (first (children))]
+          (is (= (:block/uuid source-page)
+                 (:block/uuid (:block/parent (d/entity @conn [:block/uuid note-uuid])))))
+          (is (= inserted-uuid (:block/uuid replayed)))
+          (if cut?
+            (do
+              (is (= (:block/uuid asset) (:block/uuid replayed)))
+              (is (= "pdf" (:logseq.property.asset/type replayed)))
+              (is (= [(:block/uuid child)] (mapv :block/uuid (:block/_parent replayed)))))
+            (do
+              (is (= (:block/uuid asset) (:block/uuid (:block/link replayed))))
+              (is (not (ldb/asset? replayed)))
+              (is (empty? (:block/_parent replayed))))))))))
 
 (defn- run-direct-outdent
   [conn block]
