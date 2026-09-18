@@ -28,12 +28,7 @@
                   attr)))
         (:schema db)))
 
-(defn without-recycled
-  "Return a DB in which recycled entities (and refs to them) are invisible.
-
-  User queries should run against this view so soft-deleted rows cannot
-  participate in joins, not, or, or aggregates. Recycle UI and internal
-  lookups should keep using the raw DB."
+(defn- build-without-recycled
   [db]
   (let [recycled (recycled-eids db)]
     (if (empty? recycled)
@@ -44,3 +39,26 @@
                     (not (or (contains? recycled (:e datom))
                              (and (contains? ref-attr-idents (:a datom))
                                   (contains? recycled (:v datom)))))))))))
+
+;; One-slot cache for the current Datascript snapshot. Renderer/query
+;; paths often run many queries against the same db value; rebuilding
+;; the recycled-id set is the expensive part. Do not memoize every db
+;; (that would retain previous graphs).
+(def ^:private *without-recycled-cache (volatile! nil))
+
+(defn without-recycled
+  "Return a DB in which recycled entities (and refs to them) are invisible.
+
+  User queries should run against this view so soft-deleted rows cannot
+  participate in joins, not, or, or aggregates. Recycle UI and internal
+  lookups should keep using the raw DB.
+
+  Recycled ids are collected once per db snapshot and reused while that
+  snapshot is still being queried."
+  [db]
+  (let [cached @*without-recycled-cache]
+    (if (identical? db (:source cached))
+      (:query-db cached)
+      (let [query-db (build-without-recycled db)]
+        (vreset! *without-recycled-cache {:source db :query-db query-db})
+        query-db))))
