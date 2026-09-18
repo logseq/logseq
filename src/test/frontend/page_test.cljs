@@ -1,6 +1,6 @@
 (ns frontend.page-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.page :as app-page]))
+            [frontend.page :as page]))
 
 (def ^:private page-uuid #uuid "11111111-1111-1111-1111-111111111111")
 (def ^:private other-page-uuid #uuid "33333333-3333-3333-3333-333333333333")
@@ -33,16 +33,16 @@
         by-title (page-route "Notes")
         by-renamed (page-route "Renamed")]
     (is (= (str page-uuid)
-           (app-page/route-view-key by-uuid paint)
-           (app-page/route-view-key by-title paint)
-           (app-page/route-view-key by-renamed paint))
+           (page/route-view-key by-uuid paint)
+           (page/route-view-key by-title paint)
+           (page/route-view-key by-renamed paint))
         "Route-view keeps the same page mounted when only the title/path name changes.")))
 
 (deftest route-view-key-changes-when-navigating-to-a-different-page-test
   (let [notes (page-route (str page-uuid))
         other (page-route (str other-page-uuid))]
-    (is (not= (app-page/route-view-key notes (ready-paint page-uuid "Notes"))
-              (app-page/route-view-key other (ready-paint other-page-uuid "Other")))
+    (is (not= (page/route-view-key notes (ready-paint page-uuid "Notes"))
+              (page/route-view-key other (ready-paint other-page-uuid "Other")))
         "Navigating to a different page remounts the page tree.")))
 
 (deftest route-view-key-stays-stable-when-zoomed-parent-title-changes-test
@@ -52,8 +52,8 @@
         by-heading (page-block-route "Notes" "parent")
         by-renamed-heading (page-block-route "Notes" "parent edited")]
     (is (= (str parent-uuid)
-           (app-page/route-view-key by-uuid paint)
-           (app-page/route-view-key by-uuid renamed)
-           (app-page/route-view-key by-heading paint)
-           (app-page/route-view-key by-renamed-heading renamed))
+           (page/route-view-key by-uuid paint)
+           (page/route-view-key by-uuid renamed)
+           (page/route-view-key by-heading paint)
+           (page/route-view-key by-renamed-heading renamed))
         "Zoomed parent title edits do not remount the child tree.")))
