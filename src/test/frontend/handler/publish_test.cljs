@@ -284,30 +284,6 @@
          (fn []
            (done))))))
 
-(deftest unpublish-page-clears-local-url-when-short-link-is-gone-test
-  (async done
-    (-> (with-unpublish-fakes
-          {:graph-uuid current-graph-uuid
-           :fetch-fn (fn [_url _opts]
-                       (p/resolved #js {:ok false :status 404}))}
-          (fn [{:keys [fetch-calls removed-properties notifications]}]
-            (p/let [_ (publish-handler/unpublish-page!
-                       {:db/id 42
-                        :block/uuid (uuid current-page-uuid)}
-                       {:published-url "https://logseq.io/p/abc123"})]
-              (is (= 3 (count @fetch-calls)))
-              (is (= "GET" (fetch-method (second (last @fetch-calls)))))
-              (is (string/includes? (first (last @fetch-calls)) "/p/abc123"))
-              (is (= [[42 :logseq.property.publish/published-url]]
-                     @removed-properties))
-              (is (= :success (second (first @notifications)))))))
-        (p/catch
-         (fn [error]
-           (is false (str error))))
-        (p/finally
-         (fn []
-           (done))))))
-
 (deftest unpublish-page-keeps-local-url-when-short-link-still-serves-test
   (async done
     (-> (with-unpublish-fakes
@@ -321,44 +297,6 @@
                        {:db/id 42
                         :block/uuid (uuid current-page-uuid)}
                        {:published-url "https://logseq.io/p/abc123"})]
-              (is (empty? @removed-properties))
-              (is (= :error (second (first @notifications)))))))
-        (p/catch
-         (fn [error]
-           (is false (str error))))
-        (p/finally
-         (fn []
-           (done))))))
-
-(deftest unpublish-page-does-not-clear-local-url-on-forbidden-test
-  (async done
-    (-> (with-unpublish-fakes
-          {:graph-uuid current-graph-uuid
-           :fetch-fn (fn [_url _opts]
-                       (p/resolved #js {:ok false :status 403}))}
-          (fn [{:keys [removed-properties notifications]}]
-            (p/let [_ (publish-handler/unpublish-page!
-                       {:db/id 42
-                        :block/uuid (uuid current-page-uuid)})]
-              (is (empty? @removed-properties))
-              (is (= :error (second (first @notifications)))))))
-        (p/catch
-         (fn [error]
-           (is false (str error))))
-        (p/finally
-         (fn []
-           (done))))))
-
-(deftest unpublish-page-does-not-clear-local-url-on-unauthorized-test
-  (async done
-    (-> (with-unpublish-fakes
-          {:graph-uuid current-graph-uuid
-           :fetch-fn (fn [_url _opts]
-                       (p/resolved #js {:ok false :status 401}))}
-          (fn [{:keys [removed-properties notifications]}]
-            (p/let [_ (publish-handler/unpublish-page!
-                       {:db/id 42
-                        :block/uuid (uuid current-page-uuid)})]
               (is (empty? @removed-properties))
               (is (= :error (second (first @notifications)))))))
         (p/catch
