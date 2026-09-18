@@ -19,7 +19,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
   function unresolved(ctx, reason) {
     fail(`Legacy ownership unresolved for ${ctx.graphDir}: ${reason}. Close old applications and daemons before explicit offline recovery.`);
   }
-  async function retireGraph(ctx, current) {
+  async function retireGraph(ctx, current, scan) {
     const file = path.join(ctx.graphDir, 'db-worker.lock');
     const original = artifact(file);
     const disk = parse(original);
@@ -28,7 +28,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const recordsBefore = JSON.stringify(current.workers);
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
     const roots = new Set([ctx.root, ...records.map(record => record.root)]);
-    const publications = [...roots].flatMap(root => entries(root).map(entry => ({ ...entry, root })));
+    const publications = [...roots].flatMap(root => (scan ? scan.entries(root) : entries(root)).map(entry => ({ ...entry, root })));
     const dead = publications.filter(entry => !pidExists(entry.pid));
     const candidates = new Map();
     for (const record of records) {
@@ -48,7 +48,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const unresolvedPublications = publications.filter(entry => !dead.includes(entry)
       && !candidates.has(entry.pid) && !current.workers.some(record => record.pid === entry.pid));
     const probes = await Promise.allSettled(unresolvedPublications.map(async publication =>
-      JSON.parse((await request(publication.port, '/healthz')).body)));
+      scan ? scan.probe(publication) : JSON.parse((await request(publication.port, '/healthz')).body)));
     for (const publication of publications.filter(entry => !dead.includes(entry))) {
       if (current.workers.some(record => record.pid === publication.pid && record['ownership-protocol'] !== undefined)) continue;
       const target = candidates.get(publication.pid);

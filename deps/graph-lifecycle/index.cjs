@@ -39,6 +39,14 @@ function graphName(repo) {
 function encodeGraph(repo) {
   return encodeURIComponent(graphName(repo)).replace(/%20/g, ' ').replace(/~/g, '%7E').replace(/%/g, '~');
 }
+function canonicalGraphDirectory(name) {
+  let decoded;
+  try { decoded = decodeURIComponent(name.replace(/~/g, '%')); }
+  catch (error) { if (error instanceof URIError) return null; throw error; }
+  if (!decoded.trim() || decoded === 'Unlinked graphs' || decoded === 'backup'
+      || decoded.startsWith('logseq_db_') || decoded.startsWith('logseq_local_')) return null;
+  return encodeGraph(decoded) === name ? decoded : null;
+}
 function canonicalRoot(root) {
   if (typeof root !== 'string' || !root) fail('root-dir is required', 'missing-root-dir');
   return fs.realpathSync(root.startsWith('~/') ? path.join(os.homedir(), root.slice(2)) : root);
@@ -304,7 +312,59 @@ async function health(ctx, target, port) {
       || target['ownership-protocol'] !== PROTOCOL || value['ownership-protocol'] !== PROTOCOL) fail('Worker endpoint identity mismatch');
   return value;
 }
-async function discover(ctx, current) {
+function ignorableDiscoveryError(error) {
+  return error instanceof SyntaxError || ['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
+    || error.message === 'Worker request timeout';
+}
+// Routing observations live for one upgrade scan only. Shutdown still validates
+// the current registration and endpoint under the graph's lease.
+function publicationScan() {
+  const roots = new Map();
+  const probes = new Map();
+  const grouped = new Map();
+  const read = root => {
+    if (!roots.has(root)) {
+      const publications = entries(root);
+      const byPid = new Map();
+      for (const publication of publications) {
+        if (!byPid.has(publication.pid)) byPid.set(publication.pid, []);
+        byPid.get(publication.pid).push(publication);
+      }
+      roots.set(root, { publications, byPid });
+    }
+    return roots.get(root);
+  };
+  const probe = publication => {
+    const key = `${publication.pid}:${publication.port}`;
+    if (!probes.has(key)) probes.set(key, request(publication.port, '/healthz').then(response => JSON.parse(response.body)));
+    return probes.get(key);
+  };
+  return {
+    entries: root => read(root).publications,
+    matching: (root, pid) => read(root).byPid.get(pid) || [],
+    probe,
+    async forGraph(root, repo) {
+      if (!grouped.has(root)) grouped.set(root, (async () => {
+        const groups = new Map();
+        const results = await Promise.allSettled(read(root).publications.map(async candidate => {
+          if (!pidExists(candidate.pid)) return;
+          let value;
+          try { value = await probe(candidate); }
+          catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
+          if (value?.repo) {
+            const name = graphName(value.repo);
+            if (!groups.has(name)) groups.set(name, []);
+            groups.get(name).push({ candidate, value });
+          }
+        }));
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
+        return groups;
+      })());
+      return (await grouped.get(root)).get(repo) || [];
+    },
+  };
+}
+async function discover(ctx, current, scan, registeredOnly = false) {
   const targets = new Map();
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
@@ -312,26 +372,38 @@ async function discover(ctx, current) {
     const target = { ...record, ...readRuntime(ctx, record) };
     targets.set(record.pid, target);
   }
+  const attach = (target, candidate) => {
+    if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
+    target.port = candidate.port;
+  };
+  const checkUnregistered = value => {
+    if (value?.repo && graphName(value.repo) === ctx.repo
+        && (value.storage ? sameStorage(ctx, value.storage)
+          : (!value['root-dir'] || canonicalRoot(value['root-dir']) === ctx.root)))
+      fail('Published graph worker is unregistered');
+  };
   const probes = [];
   for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
-    for (const candidate of entries(root)) {
-      if (!pidExists(candidate.pid)) continue;
-      const target = targets.get(candidate.pid);
-      if (target) {
-        if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
-        target.port = candidate.port;
-      } else probes.push(async () => {
-        let value;
-        try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
-        catch (error) {
-          if (!(error instanceof SyntaxError) && !['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
-              && error.message !== 'Worker request timeout') throw error;
-        }
-        if (value?.repo && graphName(value.repo) === ctx.repo
-            && (value.storage ? sameStorage(ctx, value.storage)
-              : (!value['root-dir'] || canonicalRoot(value['root-dir']) === ctx.root)))
-          fail('Published graph worker is unregistered');
+    if (scan) {
+      for (const target of targets.values()) {
+        if (pidExists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
+      }
+      if (!registeredOnly) probes.push(async () => {
+        for (const { candidate, value } of await scan.forGraph(root, ctx.repo))
+          if (pidExists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
       });
+    } else {
+      for (const candidate of entries(root)) {
+        if (!pidExists(candidate.pid)) continue;
+        const target = targets.get(candidate.pid);
+        if (target) attach(target, candidate);
+        else probes.push(async () => {
+          let value;
+          try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
+          catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
+          checkUnregistered(value);
+        });
+      }
     }
   }
   const results = await Promise.allSettled(probes.map(probe => probe()));
@@ -445,20 +517,16 @@ const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, g
 async function stopOutdatedWorkers(storage, revision, repo) {
   if (typeof revision !== 'string' || !revision) fail('Build revision is required');
   const names = repo === undefined
-    ? fs.readdirSync(storage.graphsDir, { withFileTypes: true }).filter(entry => entry.isDirectory()
-      && entry.name !== 'Unlinked graphs' && entry.name !== 'backup')
-      .map(entry => decodeURIComponent(entry.name.replace(/~/g, '%')))
+    ? fs.readdirSync(storage.graphsDir, { withFileTypes: true }).filter(entry => entry.isDirectory())
+      .map(entry => canonicalGraphDirectory(entry.name)).filter(name => name !== null)
     : [repo];
+  const scan = publicationScan();
   const results = await Promise.allSettled(names.map(name => {
     const ctx = context(storage, name);
     return withLease(ctx, 'upgrade', async () => {
       const current = state(ctx);
-      const retired = await legacy.retireGraph(ctx, current);
-      const targets = repo === undefined ? (await discover(ctx, current)).targets
-        : current.workers.map(record => {
-          validateRegistration(ctx, current, record);
-          return { ...record, ...readRuntime(ctx, record) };
-        });
+      const retired = await legacy.retireGraph(ctx, current, scan);
+      const { targets } = await discover(ctx, current, scan, repo !== undefined);
       const available = ownershipAvailable(ctx);
       for (const target of targets) {
         if (available && !pending(target)) {
@@ -468,7 +536,8 @@ async function stopOutdatedWorkers(storage, revision, repo) {
           writeJSON(ctx.stateFile, current);
           continue;
         }
-        if (!pidExists(target.pid) || !target.port) continue;
+        if (!pidExists(target.pid)) continue;
+        if (!target.port) fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
         const value = await health(ctx, target, target.port);
         if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
         if (value.revision === revision) continue;
@@ -499,7 +568,7 @@ async function cleanup(ctx, current, targets) {
   for (const target of targets) fs.rmSync(runtimeFile(ctx, target.ticket), { force: true });
 }
 async function stopUnderLease(ctx, current, deleting, owner) {
-  await legacy.retireGraph(ctx, current);
+  const retired = await legacy.retireGraph(ctx, current);
   const { targets } = await discover(ctx, current);
   const available = ownershipAvailable(ctx);
   if (!deleting) {
@@ -516,7 +585,7 @@ async function stopUnderLease(ctx, current, deleting, owner) {
   await cleanup(ctx, current, targets);
   current.workers = [];
   writeJSON(ctx.stateFile, current);
-  return targets.length > 0;
+  return retired.length > 0 || targets.length > 0;
 }
 async function stopGraph(storage, repo, owner) {
   const ctx = context(storage, repo);
