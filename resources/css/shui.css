@@ -463,6 +463,11 @@ kbd.shui-shortcut-key-pressed,
   background-color: var(--lx-accent-08-alpha, var(--color-level-4));
 }
 
+.ui__select-content,
+.ui__select-item {
+  -webkit-app-region: no-drag;
+}
+
 .ui__dropdown-menu-content, div[data-radix-menu-content],
 .ui__select-content {
   @apply overflow-y-auto;
