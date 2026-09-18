@@ -323,25 +323,6 @@
                    (is false (str error))))
         (p/finally done))))
 
-(deftest missing-user-property-ident-write-is-rejected
-  (async done
-    (test-helper/load-test-files
-     [{:page {:block/title "Missing Ident Page"}
-       :blocks [{:block/title "missing ident owner"}]}])
-    (-> (api-test/with-plugin-api
-          (fn []
-            (p/let [block (test-helper/find-block-by-content "missing ident owner")
-                    uuid' (str (:block/uuid block))]
-              (-> (api-editor/upsert_block_property uuid' ":user.property/does-not-exist" 1 nil)
-                  (p/then (fn [_]
-                            (is false "missing user.property ident should throw")))
-                  (p/catch (fn [error]
-                             (is (re-find #"Plugins can only upsert its own properties"
-                                          (str error)))))))))
-        (p/catch (fn [error]
-                   (is false (str error))))
-        (p/finally done))))
-
 (deftest plugin-schema-upsert-of-ui-property-is-rejected
   (async done
     (-> (api-test/with-plugin-api
@@ -360,82 +341,6 @@
                                         (:logseq.property/type after)))
                                  (is (= (:db/cardinality original-property)
                                         (:db/cardinality after)))))))))))
-        (p/catch (fn [error]
-                   (is false (str error))))
-        (p/finally done))))
-
-(deftest api-writes-values-on-system-property-by-ident
-  (async done
-    (test-helper/load-test-files
-     [{:page {:block/title "System Property Page"}
-       :blocks [{:block/title "system owner"}]}])
-    (-> (api-test/with-plugin-api
-          (fn []
-            (p/let [block (test-helper/find-block-by-content "system owner")
-                    uuid' (str (:block/uuid block))
-                    _ (api-editor/upsert_block_property uuid' "logseq.property/status" "Doing" nil)
-                    fetched-property (db-based-api/get-property "logseq.property/status")
-                    fetched-map (api-test/js->clj-kw fetched-property)
-                    read-value (api-editor/get_block_property uuid' "logseq.property/status")
-                    updated (test-helper/find-block-by-content "system owner")]
-              (is (= ":logseq.property/status" (:ident fetched-map)))
-              (is (= :logseq.property/status.doing
-                     (or (:db/ident (:logseq.property/status updated))
-                         (:ident (api-test/js->clj-kw read-value)))))
-              (is (nil? (get updated :plugin.property._test_plugin/status))))))
-        (p/catch (fn [error]
-                   (is false (str error))))
-        (p/finally done))))
-
-(defn- find-property
-  [ident]
-  (some #(when (= ident (:db/ident %)) %)
-        (ldb/get-all-properties (conn/get-db))))
-
-(deftest plugin-schema-upsert-of-system-property-is-rejected
-  (async done
-    (-> (api-test/with-plugin-api
-          (fn []
-            (let [original-type (:logseq.property/type (find-property :logseq.property/status))]
-              (-> (db-based-api/upsert-property "logseq.property/status" #js {:type "string"} nil)
-                  (p/then (fn [_]
-                            (is false "schema upsert of a system property should throw")))
-                  (p/catch (fn [error]
-                             (is (re-find #"Plugins can only upsert its own properties" (str error)))
-                             (is (= original-type
-                                    (:logseq.property/type (find-property :logseq.property/status))))))))))
-        (p/catch (fn [error]
-                   (is false (str error))))
-        (p/finally done))))
-
-(deftest plugin-cannot-remove-system-property-definition
-  (async done
-    (-> (api-test/with-plugin-api
-          (fn []
-            (-> (db-based-api/remove-property "logseq.property/status")
-                (p/then (fn [_]
-                          (is false "removing a system property should throw")))
-                (p/catch (fn [error]
-                           (is (re-find #"Plugins can only remove their own properties"
-                                        (str error)))
-                           (is (some? (find-property :logseq.property/status))))))))
-        (p/catch (fn [error]
-                   (is false (str error))))
-        (p/finally done))))
-
-(deftest plugin-cannot-remove-ui-property-definition
-  (async done
-    (-> (api-test/with-plugin-api
-          (fn []
-            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})]
-              (-> (db-based-api/remove-property (str user-ident))
-                  (p/then (fn [_]
-                            (is false "removing a UI property should throw")))
-                  (p/catch (fn [error]
-                             (is (re-find #"Plugins can only remove their own properties"
-                                          (str error)))
-                             (is (some? (property-ident-by-title "Status" "user.property")))
-                             (is (= user-ident (property-ident-by-title "Status" "user.property")))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

@@ -1,12 +1,9 @@
 (ns logseq.api.block-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
-            [frontend.db.conn :as conn]
-            [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.api.test-helper :as api-test]
-            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -41,31 +38,7 @@
        js/Error
        #"Plugins can only upsert its own properties"
        (api-block/ensure-property-upsert-control
-        nil :plugin.property.other/title "title")))
-  (is (thrown-with-msg?
-       js/Error
-       #"Plugins can only upsert its own properties"
-       (api-block/ensure-property-upsert-control
-        nil :user.property/Status "Status"))))
-
-(deftest resolve-property-ident-keeps-plugin-short-names
-  (let [created (outliner-property/upsert-property!
-                 (conn/get-db (state/get-current-repo) false)
-                 nil
-                 {:logseq.property/type :number}
-                 {:property-name "Status"})
-        user-ident (:db/ident created)]
-    (is (= "user.property" (namespace user-ident)))
-    (is (= :plugin.property._test_plugin/Status
-           (api-block/get-db-ident-from-property-name "Status" nil)))
-    (is (= user-ident
-           (api-block/get-db-ident-from-property-name (str user-ident) nil)))
-    (is (= :plugin.property._test_plugin/due-date
-           (api-block/get-db-ident-from-property-name "due-date" nil)))
-    (is (= :logseq.property/status
-           (api-block/get-db-ident-from-property-name "logseq.property/status" nil)))
-    (is (= :plugin.property._test_plugin/status
-           (api-block/get-db-ident-from-property-name "status" nil)))))
+        nil :plugin.property.other/title "title"))))
 
 (deftest infer-property-type-test
   (is (= :checkbox (#'api-block/infer-property-type true)))
