@@ -868,7 +868,7 @@
 
 (defn- prepare-pasted-assets
   "Embed copied assets and omit descendants rendered through the source link."
-  [db blocks target-block sibling?]
+  [db blocks target-block sibling? keep-uuid?]
   (let [parent-ids (cond-> (into #{(:db/id target-block)}
                                 (map :db/id)
                                 (ldb/get-block-parents db (:block/uuid target-block) {}))
@@ -879,7 +879,11 @@
       (if-let [block (first remaining)]
         (let [level (:block/level block)
               skip? (and embedded-level (> level embedded-level))
-              embed? (ldb/asset? block)]
+              embed? (and (not skip?)
+                          (ldb/asset? block)
+                          (or (not keep-uuid?)
+                              (when-let [source (d/entity db [:block/uuid (:block/uuid block)])]
+                                (not (ldb/recycled? source)))))]
           (recur (rest remaining)
                  (cond skip? embedded-level embed? level)
                  (cond
@@ -954,8 +958,8 @@
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
-         blocks (if (and (= outliner-op :paste) (not keep-uuid?) (some ldb/asset? blocks))
-                  (prepare-pasted-assets db blocks target-block sibling?)
+         blocks (if (and (= outliner-op :paste) (some ldb/asset? blocks))
+                  (prepare-pasted-assets db blocks target-block sibling? keep-uuid?)
                   blocks)
          replace-empty-target? (and (not (ldb/asset? target-block))
                                    (or (not (ldb/asset? (first blocks)))

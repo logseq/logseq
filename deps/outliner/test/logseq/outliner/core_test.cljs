@@ -536,7 +536,7 @@
         (is (= ["report"] (page-child-titles @conn "dest")))
         (when moved
           (outliner-core/insert-blocks! conn [clipboard] moved
-                                        {:sibling? true :outliner-op :paste :keep-uuid? false})
+                                        {:sibling? true :outliner-op :paste :keep-uuid? true})
           (let [copies (ldb/sort-by-order (:block/_parent (ldb/get-page @conn "dest")))]
             (is (= [asset-uuid] (mapv :block/uuid (filter ldb/asset? copies))))
             (is (= asset-uuid (:block/uuid (:block/link (last copies)))))))))))
