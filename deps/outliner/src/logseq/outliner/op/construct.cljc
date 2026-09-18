@@ -1095,14 +1095,16 @@
   [db-before db-after target-id opts]
   (when (:replace-empty-target? opts)
     (when-let [target-ref (stable-entity-ref db-before target-id)]
-      (when (d/entity db-after target-ref)
-        (when-let [target (d/entity db-before target-ref)]
-          (let [insert-block (build-insert-block-payload db-before target)
-                [target-id sibling?] (resolve-target-and-sibling target)]
-            [[:delete-blocks [[target-ref] {}]]
-             (to-insert-op db-before {:blocks [insert-block]
-                                      :target-id (stable-entity-ref db-before target-id)
-                                      :sibling? sibling?})]))))))
+      (when-let [target (d/entity db-before target-ref)]
+        (let [insert-block (build-insert-block-payload db-before target)
+              [target-id sibling?] (resolve-target-and-sibling target)]
+          (cond-> []
+            (d/entity db-after target-ref)
+            (conj [:delete-blocks [[target-ref] {}]])
+            :always
+            (conj (to-insert-op db-before {:blocks [insert-block]
+                                          :target-id (stable-entity-ref db-before target-id)
+                                          :sibling? sibling?}))))))))
 
 (defn- build-inverse-insert-like
   [db-before db-after tx-data args]
