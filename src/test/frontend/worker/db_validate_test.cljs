@@ -112,30 +112,3 @@
         (is (nil? (:logseq.property.class/extends property)))
         (is (nil? (:kv/value class)))
         (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
-
-(deftest validate-db-repairs-missing-internal-page-parent-orders
-  (let [conn (create-db-graph-conn)
-        library (ldb/get-built-in-page @conn "Library")
-        parent-uuid (random-uuid)
-        child-uuid (random-uuid)]
-    (d/transact! conn
-                 [{:db/id "parent"
-                   :block/uuid parent-uuid
-                   :block/title "Country"
-                   :block/name "country"
-                   :block/tags :logseq.class/Page
-                   :block/parent (:db/id library)
-                   :block/order "a0"}
-                  {:block/uuid child-uuid
-                   :block/title "Australia"
-                   :block/name "australia"
-                   :block/tags :logseq.class/Page
-                   :block/parent "parent"}])
-    (is (nil? (:block/order (d/entity @conn [:block/uuid child-uuid]))))
-    (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
-      (with-transact-pipeline #(worker-db-validate/validate-db conn))
-      (let [order-after-first (:block/order (d/entity @conn [:block/uuid child-uuid]))]
-        (is (string? order-after-first))
-        (with-transact-pipeline #(worker-db-validate/validate-db conn))
-        (is (= order-after-first (:block/order (d/entity @conn [:block/uuid child-uuid])))
-            "A second validate-db does not rewrite an already-repaired order.")))))

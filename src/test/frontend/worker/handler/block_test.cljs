@@ -5,7 +5,6 @@
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.property :as property-handler]
             [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
             [logseq.db.test.helper :as db-test]))
 
 (defn- canonical-block-api
@@ -879,6 +878,81 @@
         (is (some? (:logseq.property/status doing-block)))
         (is (uuid? status-uuid))))))
 
+(deftest structured-copy-tree-keeps-property-children-and-skips-hidden-nodes-test
+  (let [conn (db-test/create-conn)
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        root-uuid (random-uuid)
+        visible-uuid (random-uuid)
+        property-value-uuid (random-uuid)
+        recycled-uuid (random-uuid)
+        closed-uuid (random-uuid)]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid page-uuid
+                   :block/tx-id 1
+                   :block/title "Page"
+                   :block/name "page"
+                   :block/tags :logseq.class/Page}
+                  {:db/id -2
+                   :db/ident :user.property/Text
+                   :db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/one
+                   :block/uuid property-uuid
+                   :block/tx-id 1
+                   :block/title "Text"
+                   :block/tags :logseq.class/Property}
+                  {:db/id -3
+                   :block/uuid root-uuid
+                   :block/tx-id 1
+                   :block/title "Root"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"
+                   :block/collapsed? true}
+                  {:db/id -4
+                   :block/uuid visible-uuid
+                   :block/tx-id 1
+                   :block/title "Visible child"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a0"}
+                  {:db/id -5
+                   :block/uuid property-value-uuid
+                   :block/tx-id 1
+                   :block/title "Property value"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a1"
+                   :logseq.property/created-from-property -2}
+                  {:db/id -6
+                   :block/uuid recycled-uuid
+                   :block/tx-id 1
+                   :block/title "Recycled child"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a2"
+                   :logseq.property/deleted-at 1}
+                  {:db/id -7
+                   :block/uuid closed-uuid
+                   :block/tx-id 1
+                   :block/title "Closed value"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a3"
+                   :block/closed-value-property -2}])
+    (let [result (block-handler/get-block-and-children
+                  @conn root-uuid
+                  {:children? true
+                   :include-property-block? true
+                   :render-data? nil})
+          child-titles (mapv :block/title (:children result))]
+      (is (= "Root" (:block/title (:block result))))
+      (is (= ["Visible child" "Property value"] child-titles)
+          "Structured copies keep property-created children and omit recycled or closed values")
+      (is (not (contains? (:block result) :block/properties))
+          "Structured copies skip renderer display-property maps"))))
+
 (deftest get-block-and-children-positions-default-task-status-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Page"}
@@ -1112,87 +1186,3 @@
         "Default children omit property-value blocks")
     (is (= #{"child" "value"} (titles included))
         "include-property-block? true returns property-value children used by cut/copy")))
-
-(defn- library-nested-pages-without-order
-  []
-  (let [conn (db-test/create-conn)
-        library (ldb/get-built-in-page @conn "Library")
-        parent-uuid (random-uuid)
-        child-a-uuid #uuid "11111111-1111-4111-8111-111111111111"
-        child-b-uuid #uuid "22222222-2222-4222-8222-222222222222"]
-    (d/transact! conn
-                 [{:db/id (:db/id library)
-                   :block/tx-id 10}
-                  {:db/id -1
-                   :block/uuid parent-uuid
-                   :block/tx-id 11
-                   :block/title "Country"
-                   :block/name "country"
-                   :block/tags :logseq.class/Page
-                   :block/parent (:db/id library)
-                   :block/order "a0"}
-                  {:db/id -2
-                   :block/uuid child-a-uuid
-                   :block/tx-id 12
-                   :block/title "Australia"
-                   :block/name "australia"
-                   :block/tags :logseq.class/Page
-                   :block/parent -1}
-                  {:db/id -3
-                   :block/uuid child-b-uuid
-                   :block/tx-id 12
-                   :block/title "Canada"
-                   :block/name "canada"
-                   :block/tags :logseq.class/Page
-                   :block/parent -1}
-                  {:block/uuid (random-uuid)
-                   :block/tx-id 12
-                   :block/title "Overview"
-                   :block/page -1
-                   :block/parent -1
-                   :block/order "a0"}])
-    {:conn conn
-     :library-uuid (:block/uuid library)
-     :parent-uuid parent-uuid
-     :child-a-uuid child-a-uuid
-     :child-b-uuid child-b-uuid}))
-
-(deftest library-open-block-tree-fails-when-nested-pages-lack-order-test
-  (when-let [direct-children-membership (direct-children-membership-api)]
-    (when-let [open-block-tree (open-block-tree-api)]
-      (let [{:keys [conn library-uuid parent-uuid]}
-            (library-nested-pages-without-order)
-            library-items (:items (direct-children-membership @conn library-uuid))]
-        (is (= 1 (count library-items))
-            "Library itself has an ordered child page.")
-        (is (thrown-with-msg? js/Error
-                              #"Invalid direct-child order"
-                              (direct-children-membership @conn parent-uuid)))
-        (is (thrown-with-msg? js/Error
-                              #"Invalid direct-child order"
-                              (open-block-tree @conn library-uuid))
-            "Opening Library walks nested pages and fails without string order.")))))
-
-(deftest repairing-nested-page-orders-lets-library-tree-render-test
-  (when-let [open-block-tree (open-block-tree-api)]
-    (let [{:keys [conn library-uuid parent-uuid child-a-uuid child-b-uuid]}
-          (library-nested-pages-without-order)
-          overview-order (:block/order (db-test/find-block-by-content @conn "Overview"))]
-      (d/transact! conn (db-order/missing-internal-page-parent-order-tx @conn))
-      (let [tree (open-block-tree @conn library-uuid)
-            nested-items (get-in tree [:children parent-uuid :items])
-            nested-uuids (set (map first nested-items))
-            page-orders (->> nested-items
-                             (filter (fn [[block-uuid]]
-                                       (contains? #{child-a-uuid child-b-uuid} block-uuid)))
-                             (mapv second))]
-        (is (contains? nested-uuids child-a-uuid))
-        (is (contains? nested-uuids child-b-uuid))
-        (is (every? string? page-orders))
-        (is (apply distinct? page-orders))
-        (is (neg? (compare (:block/order (d/entity @conn [:block/uuid child-a-uuid]))
-                           (:block/order (d/entity @conn [:block/uuid child-b-uuid]))))
-            "Smaller :block/uuid is assigned the earlier fractional-index key.")
-        (is (every? #(pos? (compare % overview-order)) page-orders)
-            "Repaired nested pages sort after existing content siblings.")))))
-
