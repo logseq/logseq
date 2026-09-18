@@ -455,13 +455,23 @@
                        :or {include-collapsed-children? false}}]
   (when-let [block (resolve-block-entity db id-or-page-name)]
     (let [block-refs-count? (some #{:block.temp/refs-count} properties)
-          {:keys [children]} (when children?
-                               (get-block-children db block {:all? all?
-                                                             :include-collapsed-children? include-collapsed-children?
-                                                             :include-property-block? include-property-block?}))
+          children (when children?
+                     (if include-property-block?
+                       (->> (ldb/get-block-and-children
+                             db (:block/uuid block) {:include-property-block? true})
+                            next
+                            (remove #(or (ldb/recycled? %)
+                                         (:block/closed-value-property %))))
+                       (:children
+                        (get-block-children
+                         db block {:all? all?
+                                   :include-collapsed-children? include-collapsed-children?
+                                   :include-property-block? include-property-block?}))))
           children' (when children?
                       (map (fn [child]
-                             (let [child-map-base (worker-plain/entity-forward-map db child {})
+                             (let [child-map-base
+                                   (worker-plain/entity-forward-map
+                                    db child {:include-derived? (not include-property-block?)})
                                    child-map (cond
                                                render-data?
                                                (assoc-render-property-data db child child-map-base)
@@ -471,20 +481,25 @@
 
                                                :else
                                                child-map-base)]
-                               (-> child-map
-                                   (assoc :block.temp/property-keys
-                                          (property-handler/block-property-keys db child)
-                                          :block.temp/has-children?
-                                          (block-has-children? db (:db/id child))))))
+                               (cond-> child-map
+                                 (not include-property-block?)
+                                 (assoc :block.temp/property-keys
+                                        (property-handler/block-property-keys db child)
+                                        :block.temp/has-children?
+                                        (block-has-children? db (:db/id child))))))
                            children))
           block-map-base (-> (cond-> (merge
                                       (property-handler/entity-direct-map db block [:db/id :db/ident :block/uuid :block/name :block/tags])
-                                      (worker-plain/entity-forward-map db block {:properties properties}))
-                               (or render-data? (empty? properties))
+                                      (worker-plain/entity-forward-map
+                                       db block {:properties properties
+                                                 :include-derived? (not include-property-block?)}))
+                               (and (not include-property-block?)
+                                    (or render-data? (empty? properties)))
                                (assoc :block/properties
                                       (property-handler/display-properties-for-block db block)))
-                             (assoc :block.temp/property-keys
-                                    (property-handler/block-property-keys db block)))
+                             (cond-> (not include-property-block?)
+                               (assoc :block.temp/property-keys
+                                      (property-handler/block-property-keys db block))))
           block-map (cond
                       root-render-data?
                       (assoc-root-render-data db block block-map-base)
@@ -503,7 +518,7 @@
 
                    block-refs-count?
                    (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:db/id block)))
-                   true
+                   (not include-property-block?)
                    (assoc :block.temp/has-children?
                           (block-has-children? db (:db/id block))))]
       (cond-> {:block block'}
