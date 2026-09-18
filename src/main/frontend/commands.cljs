@@ -714,10 +714,53 @@
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
 
+(defn- block-order-list-type
+  [block]
+  (let [val (get block :logseq.property/order-list-type)
+        label (cond
+                (string? val)
+                val
+
+                (keyword? val)
+                (name val)
+
+                (map? val)
+                (or (:block/title val)
+                    (:logseq.property/value val)
+                    (some-> (:db/ident val) name)))]
+    (some-> label str string/lower-case)))
+
+(defn contiguous-same-list-type-siblings
+  "Return the contiguous same-list-type run containing `block` among ordered `siblings`.
+  Immediate children are already same-indent; a different list type breaks the run."
+  [siblings block]
+  (let [siblings (vec siblings)
+        block-uuid (:block/uuid block)
+        idx (first (keep-indexed (fn [i sibling]
+                                   (when (= (:block/uuid sibling) block-uuid)
+                                     i))
+                                 siblings))]
+    (if (nil? idx)
+      (cond-> [] block (conj block))
+      (let [current (nth siblings idx)
+            list-type (block-order-list-type current)
+            same-type? (fn [sibling]
+                         (= list-type (block-order-list-type sibling)))
+            start (loop [i idx]
+                    (if (and (pos? i) (same-type? (nth siblings (dec i))))
+                      (recur (dec i))
+                      i))
+            end (loop [i idx]
+                  (if (and (< (inc i) (count siblings))
+                           (same-type? (nth siblings (inc i))))
+                    (recur (inc i))
+                    i))]
+        (subvec siblings start (inc end))))))
+
 (defn- <number-list-command-target
   "Resolve the slash Number list target from the captured edit block.
-  Prefer the current list siblings so converting a bullet list numbers the
-  whole list, not only the block being edited."
+  Prefer the contiguous same-list-type siblings so converting a bullet list
+  numbers that list run, not every child of the parent."
   [block]
   (let [repo (state/get-current-repo)
         known-parent-uuid (or (:block/uuid (:block/parent block))
@@ -730,7 +773,7 @@
             siblings (when parent-uuid
                        (db-async/<get-block-immediate-children repo parent-uuid))]
       (if (seq siblings)
-        (mapv :block/uuid siblings)
+        (mapv :block/uuid (contiguous-same-list-type-siblings siblings block))
         block))))
 
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
