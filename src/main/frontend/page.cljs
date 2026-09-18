@@ -129,19 +129,30 @@
                  :variant :outline}
                 (shui/tabler-icon "home") (t :page/go-back-home))])
 
+(defn route-view-key
+  "React key for the painted route view. Title and path strings change while
+   typing; the resolved page or zoomed-block uuid does not."
+  [route-match paint]
+  (or (some-> (get-in paint [:page :block/uuid]) str)
+      (:path route-match)
+      (get-in route-match [:data :name])))
+
 (hsx/defc route-view
   "A route switch unmounts the previous view at once. Keep it on screen until
    the next route can paint in a single commit instead of flashing an empty
    main area while its snapshots load."
   [route-match]
-  (let [ready? (routes/use-route-paint-ready? route-match)
+  (let [paint (routes/use-route-paint route-match)
+        ready? (not= :loading (:status paint))
         [held set-held!] (hooks/use-state nil)
-        current (when ready? route-match)]
+        current (when ready?
+                  {:route-match route-match
+                   :key (route-view-key route-match paint)})]
     (when (and current (not= current held))
       (set-held! current))
-    (when-let [{:keys [path data] :as route-match} (or current held)]
-      ^{:key path}
-      [(:view data) route-match])))
+    (when-let [painted (or current held)]
+      ^{:key (:key painted)}
+      [(:view (:data (:route-match painted))) (:route-match painted)])))
 
 (hsx/defc current-page
   []
