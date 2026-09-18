@@ -2430,7 +2430,7 @@
         (is (thrown? js/Error
                      (call-resource-raw api conn
                                         [:query {:kind :dsl
-                                                 :query "\"needle\""}]))))))))
+                                                 :query "\"needle\""}])))))))
 
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
   (when-let [api (render-resource-api)]
