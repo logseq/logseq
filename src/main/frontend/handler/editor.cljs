@@ -1268,6 +1268,25 @@
                       (= "block.temp" (namespace attr)))))
         block))
 
+(defn- blocks-for-clipboard
+  [blocks]
+  (mapv (fn [block]
+          (let [b (copied-block-canonical-attrs block)]
+            (-> (into {}
+                      (map (fn [[k v]]
+                             [k (cond
+                                  (and (map? v) (:db/id v))
+                                  [:block/uuid (:block/uuid v)]
+
+                                  (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                  (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
+
+                                  :else
+                                  v)]))
+                      b)
+                (assoc :db/id (:db/id b)))))
+        blocks))
+
 (defn copy-selection-blocks
   [html? & {:keys [selected-blocks selected-ids] :as opts}]
   (let [repo (state/get-current-repo)
@@ -1283,25 +1302,9 @@
       (when (seq blocks)
         (util/copy-to-clipboard! content)
         (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
-                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
-                _ (let [copied-blocks (cond->> copied-source-blocks
-                        true
-                        (map (fn [block]
-                               (let [b (copied-block-canonical-attrs block)]
-                                 (->
-                                  (->> (map (fn [[k v]]
-                                              (let [v' (cond
-                                                         (and (map? v) (:db/id v))
-                                                         [:block/uuid (:block/uuid v)]
-                                                         (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
-                                                         (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
-                                                         :else
-                                                         v)]
-                                                [k v'])) b)
-                                       (into {}))
-                                  (assoc :db/id (:db/id b)))))))]
-                    (common-handler/copy-to-clipboard-without-id-property!
-                     repo content (when html? html) copied-blocks))]
+                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
+          (common-handler/copy-to-clipboard-without-id-property!
+           repo content (when html? html) (blocks-for-clipboard copied-source-blocks))
           (state/set-block-op-type! :copy))
         ;; (notification/show! "Copied!" :success)
         ))))
@@ -1521,12 +1524,13 @@
     (p/let [block (db-async/<get-block repo block-id {:children? false})]
       (when block
         ;; TODO: support org mode
-        (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])]
-          (p/let [html (export-html/export-blocks-as-html repo [block-id] nil)
-                  sorted-blocks (<sorted-block-and-children repo block)]
-            (common-handler/copy-to-clipboard-without-id-property! repo md-content html sorted-blocks)
-            (state/set-block-op-type! :cut)
-            (delete-block-aux! block)))))))
+        (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
+                html (export-html/export-blocks-as-html repo [block-id] nil)
+                copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
+          (common-handler/copy-to-clipboard-without-id-property!
+           repo md-content html (blocks-for-clipboard copied-source-blocks))
+          (state/set-block-op-type! :cut)
+          (delete-block-aux! block))))))
 
 (defn- selection-node-block-id
   [node]

@@ -377,8 +377,11 @@
     (let [block-refs-count? (some #{:block.temp/refs-count} properties)
           children (when children?
                      (if include-property-block?
-                       (next (ldb/get-block-and-children
-                              db (:block/uuid block) {:include-property-block? true}))
+                       (->> (ldb/get-block-and-children
+                             db (:block/uuid block) {:include-property-block? true})
+                            next
+                            (remove #(or (ldb/recycled? %)
+                                         (:block/closed-value-property %))))
                        (:children
                         (get-block-children
                          db block {:all? all?
@@ -409,7 +412,8 @@
                                       (worker-plain/entity-forward-map
                                        db block {:properties properties
                                                  :include-derived? (not include-property-block?)}))
-                               (or render-data? (empty? properties))
+                               (and (not include-property-block?)
+                                    (or render-data? (empty? properties)))
                                (assoc :block/properties
                                       (property-handler/display-properties-for-block db block)))
                              (cond-> (not include-property-block?)
