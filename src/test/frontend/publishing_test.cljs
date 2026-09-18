@@ -22,22 +22,21 @@
    :fetch js/fetch})
 
 (defn- stub-restore-deps!
-  "Replace vars with set! so async restore continuations still see the stubs.
-  p/with-redefs restores bindings when the first promise is returned, before
-  fetch/open/reset-db run."
+  "Keep stubs alive across async fetch/open by using the worker atom and set!.
+  p/with-redefs restores bindings when the first promise is returned."
   [calls]
   (let [original {:open persist-db/<open-and-fetch-schema
-                  :worker state/<invoke-db-worker
                   :restore repo-handler/restore-and-setup-repo!
-                  :rerender ui-handler/re-render-root!}]
+                  :rerender ui-handler/re-render-root!
+                  :worker @state/*db-worker}]
+    (reset! state/*db-worker
+            (fn [api repo payload]
+              (swap! calls conj [:worker api repo payload])
+              (p/resolved nil)))
     (set! persist-db/<open-and-fetch-schema
           (fn [repo _opts]
             (swap! calls conj [:open repo])
             (p/resolved {:schema {}})))
-    (set! state/<invoke-db-worker
-          (fn [api repo payload]
-            (swap! calls conj [:worker api repo payload])
-            (p/resolved nil)))
     (set! repo-handler/restore-and-setup-repo!
           (fn [repo]
             (swap! calls conj [:restore repo])
@@ -49,9 +48,9 @@
 
 (defn- restore-restore-deps! [original]
   (set! persist-db/<open-and-fetch-schema (:open original))
-  (set! state/<invoke-db-worker (:worker original))
   (set! repo-handler/restore-and-setup-repo! (:restore original))
-  (set! ui-handler/re-render-root! (:rerender original)))
+  (set! ui-handler/re-render-root! (:rerender original))
+  (reset! state/*db-worker (:worker original)))
 
 (deftest restore-from-transit-str-loads-external-db-and-restores-once
   (async done
@@ -64,9 +63,8 @@
       (set! js/fetch
             (fn [url]
               (swap! calls conj [:fetch url])
-              (p/resolved #js {:ok true
-                               :text (fn []
-                                       (p/resolved "external-transit-db"))})))
+              #js {:ok true
+                   :text (fn [] (js/Promise.resolve "external-transit-db"))}))
       (-> (publishing/restore-from-transit-str!)
           (p/then
            (fn [_]
