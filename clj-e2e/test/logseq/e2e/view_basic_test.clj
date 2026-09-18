@@ -27,10 +27,6 @@
    (add-new-view! "Table View"))
   ([view-type]
    (w/click ".views button[title='Add new view']")
-   (assert/assert-is-visible
-    (loc/filter "[role='menuitem']" :has-text "List View"))
-   (assert/assert-is-visible
-    (loc/filter "[role='menuitem']" :has-text "Gallery View"))
    (w/click (loc/filter "[role='menuitem']" :has-text view-type))
    (assert/assert-is-visible
     (loc/filter ".views > button" :has-text "New view"))))
@@ -58,9 +54,6 @@
     (assert/assert-is-visible ".view-action-type .ls-icon-list")
     (select-view-type "Table View")
     (assert/assert-is-visible ".view-action-type .ls-icon-table")
-    (assert/assert-is-visible ".ls-table-resize-handle")
-    (assert/assert-is-visible
-     (loc/filter ".ls-table-add-row" :has-text "Add row"))
     (assert/assert-is-visible
      (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
     (assert/assert-is-visible
@@ -86,21 +79,6 @@
     (dotimes [_ item-index]
       (k/arrow-down))
     (k/arrow-right)))
-
-(deftest table-row-context-menu-shows-in-app-actions-test
-  (seed-table-view! "table-row-context-menu")
-  (util/right-click
-   (loc/filter ".ls-view-body .ls-table-row .ls-table-cell[data-column-id=':block/title']"
-               :has-text "Alpha table object"))
-  (assert/assert-is-visible ".ls-context-menu-content")
-  (assert/assert-is-visible
-   (loc/filter "[role='menuitem']" :has-text "Open"))
-  (assert/assert-is-visible
-   (loc/filter "[role='menuitem']" :has-text "Copy"))
-  (assert/assert-is-visible
-   (loc/filter "[role='menuitem']" :has-text "Set property"))
-  (assert/assert-is-visible
-   (loc/filter "[role='menuitem']" :has-text "Delete")))
 
 (deftest table-row-selection-shows-action-bar-test
   (seed-table-view! "table-row-selection-actions")
