@@ -596,7 +596,10 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           (cond-> {:id (str uuid)
                    :page (str (or (:block/uuid page) uuid))
-                   :title (if (page-or-object? block) title (sanitize title))}
+                   ;; Keyword index must match accent-stripped queries.
+                   ;; SQLite LIKE/NOCASE only folds ASCII, so page/object titles
+                   ;; cannot keep umlauts while queries are search-normalized.
+                   :title (sanitize title)}
             include-vector-title?
             (assoc :vector-title title))))
       (catch :default e

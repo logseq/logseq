@@ -2,6 +2,21 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.common.search-fuzzy :as fuzzy]))
 
+(deftest fuzzy-search-matches-umlaut-property-values
+  (testing "property value picker filter finds labels when query or value has umlauts"
+    (let [data [{:label "Überprüfen"}
+                {:label "Grün"}
+                {:label "Ändern"}
+                {:label "Todo"}]]
+      (is (= [{:label "Grün"}]
+             (fuzzy/fuzzy-search data "grün" {:extract-fn :label :limit 10})))
+      (is (= [{:label "Überprüfen"}]
+             (fuzzy/fuzzy-search data "über" {:extract-fn :label :limit 10})))
+      (is (= [{:label "Ändern"}]
+             (fuzzy/fuzzy-search data "ä" {:extract-fn :label :limit 10})))
+      (is (= [{:label "Grün"}]
+             (fuzzy/fuzzy-search data "Grun" {:extract-fn :label :limit 10}))))))
+
 (deftest fuzzy-search-multi-finds-by-first-field
   (testing "locale query still returns correct item when first field matches"
     (let [data [{:locale "粗体" :en "Bold"}
