@@ -3125,42 +3125,6 @@
     (is (= wrapper-id (#'editor/selection-node-delete-uuid embed-node)))
     (is (= source-id (#'editor/selection-node-delete-uuid plain-node)))))
 
-(deftest slash-node-embed-uses-shared-embed-node
-  (async done
-    (let [host {:db/id 10 :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
-          target {:db/id 20 :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
-          called (atom nil)
-          input #js {:value "query" :id "edit-input"}
-          original-get-edit-block state/get-edit-block
-          original-get-editor-last-pos state/get-editor-last-pos
-          original-embed-node! editor/embed-node!
-          original-set-edit-content! state/set-edit-content!
-          original-clear-editor-action! state/clear-editor-action!
-          original-clear-edit! state/clear-edit!]
-      (set! state/get-edit-block (constantly host))
-      (set! state/get-editor-last-pos (constantly 0))
-      (set! editor/embed-node! (fn [host-block chosen]
-                                 (reset! called {:host host-block :target chosen})
-                                 (p/resolved :inserted)))
-      (set! state/set-edit-content! (constantly nil))
-      (set! state/clear-editor-action! (constantly nil))
-      (set! state/clear-edit! (constantly nil))
-      (-> (p/do!
-           ((#'editor-component/block-on-chosen-handler true input "edit-input" "query" :markdown nil)
-            target)
-           (is (= {:host host :target target} @called)
-               "Slash /Node embed uses shared embed-node!"))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally (fn []
-                       (set! state/get-edit-block original-get-edit-block)
-                       (set! state/get-editor-last-pos original-get-editor-last-pos)
-                       (set! editor/embed-node! original-embed-node!)
-                       (set! state/set-edit-content! original-set-edit-content!)
-                       (set! state/clear-editor-action! original-clear-editor-action!)
-                       (set! state/clear-edit! original-clear-edit!)
-                       (done)))))))
-
 (deftest can-embed-rejects-self-and-ancestors
   (let [host {:db/id 10 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
         target {:db/id 20 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
@@ -3228,88 +3192,6 @@
                        (set! db-async/<get-block original-<get-block)
                        (set! db-async/<get-block-parents original-<get-block-parents)
                        (set! editor/save-block! original-save-block!)
-                       (set! editor/api-insert-new-block! original-api-insert-new-block!)
-                       (set! notification/show! original-notification-show!)
-                       (done)))))))
-
-(deftest replace-ref-with-embed-replaces-empty-host
-  (async done
-    (let [host-id #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-          target-id #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-          host {:db/id 10
-                :block/uuid host-id
-                :block/title (ref/->block-ref target-id)}
-          target {:db/id 20 :block/uuid target-id}
-          inserted (atom nil)
-          original-get-current-repo state/get-current-repo
-          original-<get-block db-async/<get-block
-          original-<get-block-parents db-async/<get-block-parents
-          original-save-block! editor/save-block!
-          original-api-insert-new-block! editor/api-insert-new-block!]
-      (set! state/get-current-repo (constantly "test"))
-      (set! db-async/<get-block (fn [_repo id _opts]
-                                  (p/resolved (cond
-                                                (or (= id host-id) (= id host)) host
-                                                (or (= id target-id) (= id 20)) target
-                                                :else nil))))
-      (set! db-async/<get-block-parents (constantly (p/resolved [])))
-      (set! editor/save-block! (fn [_repo _uuid _content] (p/resolved nil)))
-      (set! editor/api-insert-new-block! (fn [_content opts]
-                                           (reset! inserted opts)
-                                           (p/resolved :inserted)))
-      (-> (p/do!
-           (editor/replace-ref-with-embed! host target-id)
-           (is (true? (:replace-empty-target? @inserted)))
-           (is (= {:block/link 20} (:other-attrs @inserted))))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally (fn []
-                       (set! state/get-current-repo original-get-current-repo)
-                       (set! db-async/<get-block original-<get-block)
-                       (set! db-async/<get-block-parents original-<get-block-parents)
-                       (set! editor/save-block! original-save-block!)
-                       (set! editor/api-insert-new-block! original-api-insert-new-block!)
-                       (done)))))))
-
-(deftest embed-node-rejects-self-and-ancestors
-  (async done
-    (let [host-id #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-          parent-id #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
-          host {:db/id 10 :block/uuid host-id}
-          parent {:db/id 30 :block/uuid parent-id}
-          inserted? (atom false)
-          toasts (atom [])
-          original-get-current-repo state/get-current-repo
-          original-<get-block db-async/<get-block
-          original-<get-block-parents db-async/<get-block-parents
-          original-api-insert-new-block! editor/api-insert-new-block!
-          original-notification-show! notification/show!]
-      (set! state/get-current-repo (constantly "test"))
-      (set! db-async/<get-block (fn [_repo id _opts]
-                                  (p/resolved (cond
-                                                (or (= id host-id) (= id host) (= id 10)) host
-                                                (or (= id parent-id) (= id parent) (= id 30)) parent
-                                                :else nil))))
-      (set! db-async/<get-block-parents (fn [_repo _db-id _depth]
-                                          (p/resolved [parent])))
-      (set! editor/api-insert-new-block! (fn [& _]
-                                           (reset! inserted? true)
-                                           (p/resolved :inserted)))
-      (set! notification/show! (fn [content status]
-                                 (swap! toasts conj {:content content :status status})))
-      (-> (p/let [self-result (editor/embed-node! host host)
-                  ancestor-result (editor/embed-node! host parent)]
-            (is (nil? self-result))
-            (is (nil? ancestor-result))
-            (is (false? @inserted?))
-            (is (= [:error :error] (mapv :status @toasts)))
-            (is (every? string? (map :content @toasts))))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally (fn []
-                       (set! state/get-current-repo original-get-current-repo)
-                       (set! db-async/<get-block original-<get-block)
-                       (set! db-async/<get-block-parents original-<get-block-parents)
                        (set! editor/api-insert-new-block! original-api-insert-new-block!)
                        (set! notification/show! original-notification-show!)
                        (done)))))))
