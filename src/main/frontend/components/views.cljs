@@ -3314,6 +3314,41 @@
                       (shui/popup-hide!))))}
      (ui/icon "x"))]])
 
+(defn- sortable-columns
+  "Columns not yet in `sorting` that can be added as a sort."
+  [columns sorting]
+  (let [sorted-ids (set (map :id sorting))]
+    (remove (fn [{:keys [id sortable?] :as column}]
+              (or (contains? #{:select :id} id)
+                  (false? sortable?)
+                  (nil? (:name column))
+                  (contains? sorted-ids id)))
+            columns)))
+
+(hsx/defc view-add-sorting
+  "Adds a sort from the view head, so views without column headers
+  (list and gallery) can be sorted too."
+  [table sorting columns set-sorting!]
+  (let [addable-columns (sortable-columns columns sorting)]
+    (when (seq addable-columns)
+      ;; Remount after each add so the select shows its placeholder again
+      [:div.px-2 {:key (str "add-sort-" (count sorting))}
+       (shui/select
+        {:on-value-change (fn [v]
+                            (when-let [column (some #(when (= v (str (:id %))) %) addable-columns)]
+                              (let [f (:column-set-sorting! table)]
+                                (set-sorting! (f sorting column true)))))}
+        (shui/select-trigger
+         {:class "!px-2 !py-0 !h-8 w-auto text-muted-foreground"}
+         (shui/select-value
+          {:placeholder (t :view.table/add-sort)}))
+        (shui/select-content
+         (shui/select-group
+          (for [column addable-columns]
+            (shui/select-item {:key (str (:id column))
+                               :value (str (:id column))}
+                              (:name column))))))])))
+
 (hsx/defc view-sorting-config
   [table sorting columns]
   (let [[sorting set-sorting!] (hooks/use-state sorting)]
@@ -3330,6 +3365,7 @@
                                         new-sorting (mapv (fn [column] (some #(when (= column (:id %)) %) sorting)) ordered-columns)]
                                     (set-sorting! new-sorting)
                                     (f new-sorting)))}))
+     (view-add-sorting table sorting columns set-sorting!)
      (shui/button
       {:variant :ghost
        :size :sm

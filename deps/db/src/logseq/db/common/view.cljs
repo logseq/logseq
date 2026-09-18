@@ -1133,6 +1133,29 @@
       properties
       (distinct (mapcat keys entities)))))
 
+(defn- nested-list-partitions
+  "Partitions list view rows by parent. Without a saved sorting, parents and
+  their blocks follow outline order. With one, blocks follow the sorting and
+  each parent is placed at its first sorted block."
+  [db saved-sorting entities]
+  (let [parent-groups (if saved-sorting
+                        (let [sorted (sort-entities db saved-sorting (ldb/sort-by-order entities))
+                              parent->blocks (group-by :block/parent sorted)]
+                          (map (fn [parent] [parent (get parent->blocks parent)])
+                               (distinct (map :block/parent sorted))))
+                        (->> entities
+                             (group-by :block/parent)
+                             (sort-by (fn [[parent _]] (:block/order parent)))
+                             (map (fn [[parent blocks]] [parent (ldb/sort-by-order blocks)]))))]
+    (map
+     (fn [[_parent blocks]]
+       [(:block/uuid (first blocks))
+        (map (fn [b]
+               {:db/id (:db/id b)
+                :block/parent (:block/uuid (:block/parent b))})
+             blocks)])
+     parent-groups)))
+
 (defn- linked-references-page-list-view-data
   [view entities-result entities]
   (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
@@ -1202,10 +1225,10 @@
            feat-type (or view-feature-type (:logseq.property.view/feature-type view))
            query? (= feat-type :query-result)
            query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
-           sorting (let [sorting* (:logseq.property.table/sorting view)]
-                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                       (or sorting [{:id :block/updated-at :asc? false}])
-                       sorting*))
+           saved-sorting (let [sorting* (:logseq.property.table/sorting view)]
+                           (when (and (sequential? sorting*) (seq sorting*))
+                             sorting*))
+           sorting (or saved-sorting sorting [{:id :block/updated-at :asc? false}])
            class-id (or view-for-id (:db/id (:logseq.property/view-for view)))
            fast-row-data (when (and (contains? #{:all-pages :class-objects} feat-type)
                                     (not query?)
@@ -1236,6 +1259,7 @@
                (and (= feat-type :linked-references)
                     group-by-page?
                     list-view?
+                    (nil? saved-sorting)
                     (empty? filters)
                     (string/blank? input))
                group-values
@@ -1310,17 +1334,7 @@
                                              (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
                                              by-value)
                                  group (if nested-list-view?
-                                         (let [parent-groups (->> entities
-                                                                  (group-by :block/parent)
-                                                                  (sort-by (fn [[parent _]] (:block/order parent))))]
-                                           (map
-                                             (fn [[_parent blocks]]
-                                               [(:block/uuid (first blocks))
-                                                (map (fn [b]
-                                                       {:db/id (:db/id b)
-                                                        :block/parent (:block/uuid (:block/parent b))})
-                                                  (ldb/sort-by-order blocks))])
-                                             parent-groups))
+                                         (nested-list-partitions db saved-sorting entities)
                                          (->> (sort-entities db sorting entities)
                                               (map :db/id)))]
                              [by-value' group]))

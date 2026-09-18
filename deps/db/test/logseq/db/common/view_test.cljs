@@ -1039,3 +1039,46 @@
     (is (= [10 2 1] desc-groups))
     ;; Explicit ascending order must reverse the default descending order.
     (is (= [1 2 10] asc-groups))))
+
+(defn- list-query-conn
+  []
+  (db-test/create-conn-with-blocks
+   {:properties {:user.property/score {:logseq.property/type :number}}
+    :pages-and-blocks
+    [{:page {:block/title "P"}
+      :blocks [{:block/title "X"
+                :build/children [{:block/title "x4" :build/properties {:user.property/score 4}}]}
+               {:block/title "Y"
+                :build/children [{:block/title "y1" :build/properties {:user.property/score 1}}
+                                 {:block/title "y5" :build/properties {:user.property/score 5}}]}]}]}))
+
+(defn- list-query-titles
+  [conn sorting]
+  (let [view-id (get-in (d/transact! conn [(cond-> {:db/id -100
+                                                    :block/title "Query"
+                                                    :block/uuid (random-uuid)
+                                                    :logseq.property.view/type :logseq.property.view/type.list}
+                                             sorting
+                                             (assoc :logseq.property.table/sorting sorting))])
+                        [:tempids -100])
+        ids (map :db/id (map #(db-test/find-block-by-content @conn %) ["x4" "y1" "y5"]))
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :query-result
+                                       :group-by-property-ident :block/page
+                                       :query-entity-ids ids
+                                       :sorting [{:id :block/updated-at :asc? false}]})]
+    (for [[_page partitions] (:data result)]
+      (for [[_breadcrumb rows] partitions]
+        (mapv #(:block/title (d/entity @conn (:db/id %))) rows)))))
+
+(deftest get-view-data-list-view-keeps-outline-order-without-sorting-test
+  (is (= [[["x4"] ["y1" "y5"]]]
+         (list-query-titles (list-query-conn) nil))))
+
+(deftest get-view-data-list-view-applies-saved-sorting-test
+  (let [conn (list-query-conn)]
+    (is (= [[["y5" "y1"] ["x4"]]]
+           (list-query-titles conn [{:id :user.property/score :asc? false}]))
+        "Blocks sort within their parent and parents follow their first sorted block")
+    (is (= [[["y1" "y5"] ["x4"]]]
+           (list-query-titles conn [{:id :user.property/score :asc? true}])))))

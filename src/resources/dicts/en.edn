@@ -1964,6 +1964,7 @@
  :view.gallery/height "Height"
  :view.gallery/width "Width"
 
+ :view.table/add-sort "Add sort"
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
  :view.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))
