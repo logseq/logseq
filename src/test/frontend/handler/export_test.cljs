@@ -18,6 +18,7 @@
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.util :as util]
             [frontend.worker.export :as worker-export]
+            [goog.dom :as gdom]
             [logseq.db.sqlite.build :as sqlite-build]
             [promesa.core :as p]))
 
@@ -596,9 +597,11 @@
                  (fn [html repo-path asset-filenames output-dir db-transit]
                    (swap! calls conj [html db-transit repo-path (js->clj asset-filenames) output-dir]))})
       (-> (p/with-redefs [state/<invoke-db-worker
-                          (fn [api repo _opts]
+                          (fn [api repo opts]
                             (is (= :thread-api/build-publishing-html api))
                             (is (= "logseq_db_published" repo))
+                            (is (false? (:inline-db? opts))
+                                "Desktop export writes db.transit beside index.html")
                             (p/resolved {:html "<html>small</html>"
                                          :asset-filenames ["pic.png"]
                                          :db-transit "TRANSIT-DB"}))
@@ -617,4 +620,49 @@
            (fn []
              (set! util/electron? original-electron?)
              (set! (.-apis js/window) original-apis)
+             (done)))))))
+
+(deftest download-repo-as-html-on-web-inlines-transit
+  (async done
+    (let [attrs (atom {})
+          original-electron? util/electron?
+          original-get-element gdom/getElement
+          anchor (let [el #js {}]
+                   (set! (.-setAttribute el) (fn [k v] (swap! attrs assoc k v)))
+                   (set! (.-click el) (fn [] (swap! attrs assoc :clicked true)))
+                   el)]
+      (set! util/electron? (constantly false))
+      (set! gdom/getElement (fn [id]
+                              (when (= "download-as-html" id)
+                                anchor)))
+      (-> (p/with-redefs [state/<invoke-db-worker
+                          (fn [api repo opts]
+                            (is (= :thread-api/build-publishing-html api))
+                            (is (= "logseq_db_published" repo))
+                            (is (true? (:inline-db? opts))
+                                "Web download is a single HTML file and must request an inline graph")
+                            (p/resolved {:html "<html><script>window.logseq_db=\"INLINED-DB\"</script></html>"
+                                         :asset-filenames []
+                                         :db-transit "TRANSIT-DB"}))]
+            (export/download-repo-as-html! "logseq_db_published"))
+          (p/then
+           (fn [_]
+             (let [href (get @attrs "href")
+                   decoded (some-> href
+                                   (string/replace #"^data:text/html;charset=UTF-8," "")
+                                   js/decodeURIComponent)]
+               (is (string? href))
+               (is (string/starts-with? (or href "") "data:text/html;charset=UTF-8,"))
+               (is (string/includes? (or decoded "") "window.logseq_db=\"INLINED-DB\""))
+               (is (not (string/includes? (or decoded "") "window.logseq_db_url=")))
+               (is (= "index.html" (get @attrs "download")))
+               (is (true? (:clicked @attrs))
+                   "Browser publish download must trigger the hidden anchor"))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! gdom/getElement original-get-element)
              (done)))))))

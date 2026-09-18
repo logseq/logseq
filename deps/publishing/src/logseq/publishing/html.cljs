@@ -6,11 +6,26 @@ necessary db filtering"
             [datascript.transit :as dt]
             [goog.string :as gstring]
             [goog.string.format]
+            [logseq.publishing.const :as publish-const]
             [logseq.publishing.db :as db]))
 
-(def db-transit-file-path
-  "Relative path of the published graph transit file."
-  "static/js/db.transit")
+;; Copied from hiccup but tweaked for publish usage
+;; Any changes here should also be made in frontend.publishing/unescape-html
+(defn- escape-html
+  "Change special characters into HTML character entities."
+  [text]
+  (-> text
+      (string/replace "&"  "logseq____&amp;")
+      (string/replace "<"  "logseq____&lt;")
+      (string/replace ">"  "logseq____&gt;")
+      (string/replace "\"" "logseq____&quot;")
+      (string/replace "'" "logseq____&apos;")))
+
+(defn- published-db-boot-script
+  [inline-db]
+  (if (some? inline-db)
+    [:script (gstring/format "window.logseq_db=%s" (js/JSON.stringify (escape-html inline-db)))]
+    [:script (str "window.logseq_db_url=" (js/JSON.stringify publish-const/db-transit-file-path))]))
 
 ;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
 (defn- html [v]
@@ -33,7 +48,7 @@ necessary db filtering"
         :else (str v)))
 
 (defn- ^:large-vars/html publishing-html
-  [app-state options]
+  [app-state options inline-db]
   (let [{name' :name :keys [icon alias title description url]} options
         icon (or icon "static/img/logo.png")
         project (or alias name')]
@@ -82,7 +97,7 @@ necessary db filtering"
              {:description description}]]
            [:body
             [:div {:id "root"}]
-            [:script (str "window.logseq_db_url=" (js/JSON.stringify db-transit-file-path))]
+            (published-db-boot-script inline-db)
             [:script (str "window.logseq_state=" (js/JSON.stringify (pr-str app-state)))]
             [:script {:type "text/javascript"}
              "// Single Page Apps for GitHub Pages
@@ -129,7 +144,7 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [repo app-state repo-config html-options dev?]}]
+  [db* {:keys [repo app-state repo-config html-options dev? inline-db?]}]
   (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
                             value
                             (:all-pages-public? repo-config))
@@ -149,7 +164,7 @@ generated index.html string and assets used by the html"
         state (assoc app-state
                      :git/current-repo repo
                      :config {repo repo-config})
-        raw-html-str (publishing-html state html-options)]
+        raw-html-str (publishing-html state html-options (when inline-db? db-str))]
     {:html raw-html-str
      :asset-filenames asset-filenames
      :db-transit db-str}))
