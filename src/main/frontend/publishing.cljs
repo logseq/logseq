@@ -64,10 +64,12 @@
 
 (defn- apply-published-state!
   [data]
-  (state/swap-state! merge data)
-  (when-let [repo (or (:git/current-repo data)
-                      (first (keys (:config data))))]
-    (state/set-current-repo! repo)))
+  (let [repo (or (:git/current-repo data)
+                 (first (keys (:config data))))]
+    (state/swap-state! merge (cond-> data
+                               repo (assoc :git/current-repo repo)))
+    (when repo
+      (state/set-current-repo! repo))))
 
 (defn restore-state!
   []

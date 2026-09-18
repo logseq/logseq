@@ -2,11 +2,13 @@
   "HTML export should honor :default-home as the published start page."
   (:require [cljs.reader :as reader]
             [cljs.test :refer [deftest is testing]]
+            [electron.ipc :as ipc]
             [frontend.components.container :as container]
             [frontend.components.left-sidebar :as left-sidebar]
             [frontend.handler.export :as export]
             [frontend.publishing :as publishing]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [logseq.db.test.helper :as db-test]
             [logseq.publishing.html :as publish-html]))
 
@@ -34,6 +36,8 @@
                      @conn
                      {:publishing/all-pages-public? true
                       :default-home {:page "My Home"}})]
+      (is (= "logseq_db_published" (:git/current-repo published))
+          "Export writes :git/current-repo so restore does not guess from config keys")
       (is (= {:page "My Home"}
              (get-in published [:config "logseq_db_published" :default-home])))))
 
@@ -44,6 +48,7 @@
           published (build-published-state
                      @conn
                      {:publishing/all-pages-public? true})]
+      (is (= "logseq_db_published" (:git/current-repo published)))
       (is (nil? (get-in published [:config "logseq_db_published" :default-home :page]))))))
 
 (deftest publishing-export-options-include-default-home
@@ -53,9 +58,10 @@
       (state/set-current-repo! repo)
       (state/set-config! repo {:default-home {:page "My Home"}
                                :publishing/all-pages-public? true})
-      (is (= {:page "My Home"}
-             (get-in (#'export/publishing-export-options repo)
-                     [:repo-config :default-home])))
+      (let [options (#'export/publishing-export-options repo)]
+        (is (= repo (get-in options [:app-state :git/current-repo])))
+        (is (= {:page "My Home"}
+               (get-in options [:repo-config :default-home]))))
       (finally
         (state/replace-state! previous-state)))))
 
@@ -107,12 +113,28 @@
 
 (deftest apply-published-state-sets-current-repo-so-default-home-is-readable
   (let [previous-state (state/get-state)
-        repo "logseq_db_published"]
+        leftover-repo "logseq_db_broken"
+        repo "logseq_db_published"
+        published {:git/current-repo repo
+                   :ui/theme "dark"
+                   :config {repo {:default-home {:page "My Home"}}}}]
     (try
-      (#'publishing/apply-published-state!
-       {:ui/theme "dark"
-        :config {repo {:default-home {:page "My Home"}}}})
-      (is (= repo (state/get-current-repo)))
-      (is (= {:page "My Home"} (state/get-default-home)))
+      (state/replace-state! (-> previous-state
+                                (assoc :git/current-repo leftover-repo)
+                                (assoc :config {leftover-repo {}})))
+      ;; Isolate getters/setters from leaked with-redefs in the same Node shard
+      ;; (frontend.handler.graph-test stubs get-current-repo to leftover-repo).
+      (with-redefs [state/get-current-repo (fn []
+                                             (:git/current-repo (state/get-state)))
+                    storage/set (fn [_key _value] nil)
+                    ipc/ipc (fn [& _args] nil)]
+        (#'publishing/apply-published-state! published)
+        (is (= repo (:git/current-repo (state/get-state)))
+            "Merge of published state writes :git/current-repo")
+        (is (= repo (state/get-current-repo))
+            "set-current-repo! keeps the exported repo as current")
+        (is (= {:page "My Home"}
+               (get-in (state/get-state) [:config repo :default-home])))
+        (is (= {:page "My Home"} (state/get-default-home))))
       (finally
         (state/replace-state! previous-state)))))
