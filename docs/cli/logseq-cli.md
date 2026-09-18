@@ -133,10 +133,10 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
   - EDN export also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`
-  - `--edn-options` is an EDN map passed directly to the worker, with `:export-type` defaulting to `:graph`. Parameters for `:block`, `:page`, `:view-nodes`, and `:selected-nodes` stay at the top level (for example, `'{:export-type :selected-nodes :node-ids [42]}'`). `:graph-human` options belong under `:graph-options` (for example, `'{:export-type :graph-human :graph-options {:include-timestamps? true}}'`).
+  - `--edn-options` is an EDN map validated by the CLI before contacting the worker. `:export-type` defaults to `:graph` only when omitted. Selectors stay at the top level (for example, `'{:export-type :selected-nodes :node-ids [42]}'`); graph content controls require `:graph-human` and belong under `:graph-options` (for example, `'{:export-type :graph-human :graph-options {:include-timestamps? true}}'`). See the [EDN export option contract](#edn-export-option-contract) for supported keys, types, and required selectors.
   - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
-  - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected
+  - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected. Invalid EDN option maps return `invalid-options` and exit nonzero: non-map values, unknown or misplaced keys, keys inapplicable to the selected export type, invalid value types, and missing required selectors are rejected before worker setup or export file writes. These validation failures neither create nor overwrite the destination file.
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite; SQLite import requires a new graph, while EDN import may target an existing graph
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
@@ -480,3 +480,57 @@ node ./dist/logseq.js --graph demo sync start --e2ee-password "my-secret"
 node ./dist/logseq.js --graph demo sync download --e2ee-password "my-secret"
 node ./dist/logseq.js logout
 ```
+
+## EDN export option contract
+
+Option keys must be EDN keywords, not strings. `:export-type` must be one of
+the keywords below; an explicit `nil` or string such as `"graph-human"` is
+invalid. Omitting it selects `:graph`, including when `:graph-options` is present.
+
+Every export type accepts an optional `:graph-options` map. The only other
+allowed top-level keys are those listed for the selected type:
+
+| `:export-type` | Required top-level selectors | Other top-level options |
+| --- | --- | --- |
+| `:graph` | None | None |
+| `:graph-human` | None | None |
+| `:graph-ontology` | None | None |
+| `:block` | `:block-id` | None |
+| `:page` | `:page-id` | None |
+| `:selected-nodes` | `:node-ids` | None |
+| `:view-nodes` | `:rows` | `:group-by?` (boolean) |
+
+`:block-id` and `:page-id` accept integer entity IDs, keyword idents, or
+two-element lookup refs expressed as vectors or lists. Lookup refs contain a
+keyword or string attribute and its lookup value, for example
+`[:block/uuid #uuid "13071000-0000-4000-8000-000000000001"]`. Entity existence,
+attribute uniqueness, and lookup-value resolution are checked by the worker.
+
+`:node-ids` and ungrouped `:rows` accept vectors, lists, or sets of those
+selectors. View rows also accept bare UUIDs. With `:group-by? true`, `:rows`
+must be a map from arbitrary group labels to node collections, or a collection
+of two-element `[group-label node-collection]` pairs. Group labels are data,
+not option maps. Empty selections are valid; missing or `nil` selectors are
+invalid.
+
+The allowed keys inside `:graph-options` are:
+
+| Key | Value type | Applicable export types | Effect |
+| --- | --- | --- | --- |
+| `:catch-validation-errors?` | Boolean | All seven types | Catch final export validation exceptions in the worker; never bypass CLI option validation |
+| `:include-timestamps?` | Boolean | `:graph-human` only | Include stored node and file-record timestamps |
+| `:exclude-namespaces` | Set of keywords or strings, such as `#{:schema "matrix"}` | `:graph-human` only | Exclude property/class definitions in matching parent namespaces |
+| `:exclude-built-in-pages?` | Boolean | `:graph-human` only | Exclude built-in pages |
+| `:exclude-files?` | Boolean | `:graph-human` only | Exclude database file records |
+
+Boolean values must be EDN `true` or `false`; `nil`, numbers, and strings are
+invalid. An empty `:graph-options` map and an empty namespace set are valid.
+Graph content controls are rejected for other export types even when their
+values are `false` or empty.
+
+All five graph option keys are invalid at the top level. Flat options are not
+converted to nested options; providing both forms is also rejected. Internal
+helper options such as `:include-uuid?`, `:shallow-copy?`, and
+`:include-children?` are not part of the public contract. Unknown, misplaced,
+or inapplicable keys and invalid values produce `invalid-options` diagnostics
+with their option paths and corrective guidance.
