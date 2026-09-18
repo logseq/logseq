@@ -56,12 +56,27 @@
                      (str id)))
          id)))))
 
+(defn- nfc-normalize
+  [s]
+  #?(:cljs (.normalize s "NFC")
+     :clj (java.text.Normalizer/normalize s java.text.Normalizer$Form/NFC)
+     :default s))
+
+(def ^:private ident-name-disallowed-char-re
+  "Drop characters that cannot appear in a keyword name.
+  Keep ASCII symbol chars allowed in Clojure keywords and the rest of the BMP
+  so Cyrillic, CJK, and other letters survive."
+  #"[^0-9A-Za-z*+!_'?<>=\u00A0-\uFFFF-]")
+
 (defn normalize-ident-name-part
   [name-string]
-  (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
-       ;; '-' must go last in char class
-       (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
-       (apply str)))
+  (let [normalized (-> name-string
+                       nfc-normalize
+                       (string/replace-first #"^(\d)" "NUM-$1")
+                       (string/replace ident-name-disallowed-char-re ""))]
+    (if (string/blank? normalized)
+      "u"
+      normalized)))
 
 (defn create-db-ident-from-name
   "Creates a :db/ident for a class or property by sanitizing the given name.
