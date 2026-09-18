@@ -30,8 +30,9 @@
                   :rerender ui-handler/re-render-root!
                   :worker @state/*db-worker}]
     (reset! state/*db-worker
-            (fn [api repo payload]
-              (swap! calls conj [:worker api repo payload])
+            (fn [api & args]
+              (when (= :thread-api/reset-db api)
+                (swap! calls conj (into [:worker api] args)))
               (p/resolved nil)))
     (set! persist-db/<open-and-fetch-schema
           (fn [repo _opts]
