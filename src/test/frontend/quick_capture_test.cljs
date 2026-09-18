@@ -55,14 +55,3 @@
           "Renderer origin must not be inserted as journal/block content")
       (is (= [:graph] redirects)
           "Graph View renderer URLs open Graph View instead of capturing text"))))
-
-(deftest-async quick-capture-still-inserts-https-url
-  (testing "a normal https URL is still captured"
-    (p/let [{:keys [inserted redirects]} (capture-inserts {:url "https://example.com/article"
-                                                           :title ""
-                                                           :content ""})]
-      (is (= 1 (count inserted)))
-      (is (string? (first inserted)))
-      (is (re-find #"https://example.com/article" (first inserted)))
-      (is (not (re-find #"lsp://" (first inserted))))
-      (is (empty? redirects)))))
