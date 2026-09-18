@@ -61,7 +61,11 @@
     (is (= user-ident
            (api-block/get-db-ident-from-property-name (str user-ident) nil)))
     (is (= :plugin.property._test_plugin/due-date
-           (api-block/get-db-ident-from-property-name "due-date" nil)))))
+           (api-block/get-db-ident-from-property-name "due-date" nil)))
+    (is (= :logseq.property/status
+           (api-block/get-db-ident-from-property-name "logseq.property/status" nil)))
+    (is (= :plugin.property._test_plugin/status
+           (api-block/get-db-ident-from-property-name "status" nil)))))
 
 (deftest infer-property-type-test
   (is (= :checkbox (#'api-block/infer-property-type true)))

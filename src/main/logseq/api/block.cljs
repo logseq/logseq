@@ -54,8 +54,9 @@
   "Resolves a property :db/ident.
 
   Unqualified names stay in the caller's plugin namespace. Qualified idents
-  (`user.property/…`, `plugin.property.<id>/…`) are used as-is so a plugin can
-  set values on an existing UI property without taking over short names."
+  (`user.property/…`, `logseq.property/…`, `plugin.property.<id>/…`) are used
+  as-is so a plugin can set values on an existing property without taking over
+  short names."
   [property-name plugin]
   (let [property-name' (property-name->title property-name)
         property-key (keyword property-name')]
