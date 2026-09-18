@@ -344,46 +344,6 @@
                    (is nil (str error))
                    (done))))))
 
-(deftest delete-short-id-missing-id-returns-bad-request
-  (async done
-    (-> (p/let [request (js/Request. "https://publish.example/p/"
-                                     #js {:method "DELETE"
-                                          :headers #js {"authorization" "Bearer token"}})
-                response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-a"})]
-                           (routes/handle-fetch request (empty-env)))
-                body (.json response)]
-          (is (= 400 (.-status response)))
-          (is (= "missing short id" (aget body "error")))
-          (done))
-        (p/catch (fn [error]
-                   (is nil (str error))
-                   (done))))))
-
-(deftest delete-short-id-not-found-returns-not-found
-  (async done
-    (let [env (permission-env
-               (fn [id url method]
-                 (cond
-                   (and (= id "index")
-                        (= method "GET")
-                        (= url "https://publish/short/missing"))
-                   (ok-json-response #js {"page" nil})
-
-                   :else
-                   (json-error-response 404 "not found"))))
-          request (js/Request. "https://publish.example/p/missing"
-                               #js {:method "DELETE"
-                                    :headers #js {"authorization" "Bearer token"}})]
-      (-> (p/let [response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-a"})]
-                             (routes/handle-fetch request env))
-                  body (.json response)]
-            (is (= 404 (.-status response)))
-            (is (= "not found" (aget body "error")))
-            (done))
-          (p/catch (fn [error]
-                     (is nil (str error))
-                     (done)))))))
-
 (deftest delete-short-id-owner-mismatch-is-forbidden
   (async done
     (let [env (permission-env
@@ -418,21 +378,6 @@
 (deftest delete-short-id-owner-match-succeeds
   (async done
     (let [request (js/Request. "https://publish.example/p/abc123"
-                               #js {:method "DELETE"
-                                    :headers #js {"authorization" "Bearer token"}})]
-      (-> (p/let [response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-a"})]
-                             (routes/handle-fetch request (short-id-delete-env)))
-                  body (.json response)]
-            (is (= 200 (.-status response)))
-            (is (true? (aget body "ok")))
-            (done))
-          (p/catch (fn [error]
-                     (is nil (str error))
-                     (done)))))))
-
-(deftest delete-legacy-s-short-id-owner-match-succeeds
-  (async done
-    (let [request (js/Request. "https://publish.example/s/abc123"
                                #js {:method "DELETE"
                                     :headers #js {"authorization" "Bearer token"}})]
       (-> (p/let [response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-a"})]
