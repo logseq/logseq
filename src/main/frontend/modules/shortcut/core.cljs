@@ -193,7 +193,9 @@
             :shortcut.handler/global-non-editing-only
             :shortcut.handler/global-prevent-default
             :shortcut.handler/block-editing-only])
-       (map #(install-shortcut-handler! % {}))
+       (map #(install-shortcut-handler! % (if (= % :shortcut.handler/global-prevent-default)
+                                            {:prevent-default? true}
+                                            {})))
        doall))
 
 (defn use-shortcut-handler!
