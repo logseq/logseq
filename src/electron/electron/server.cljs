@@ -161,7 +161,11 @@
                                    :requestTimeout        (* 1000 42)
                                    :forceCloseConnections true})
               ;; middlewares
-              _     (.register s FastifyCORS #js {:origin "*"})
+              ;; Browser MCP clients must read mcp-session-id from the initialize
+              ;; response and send it back on every later request, and a browser
+              ;; only exposes response headers that CORS lists explicitly.
+              _     (.register s FastifyCORS #js {:origin "*"
+                                                  :exposedHeaders #js ["mcp-session-id"]})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)

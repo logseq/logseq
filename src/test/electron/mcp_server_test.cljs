@@ -4,6 +4,7 @@
 
 (def ^:private cors-headers
   {"access-control-allow-origin" "*"
+   "access-control-expose-headers" "mcp-session-id"
    "vary" "Origin"})
 
 (defn- fake-reply
