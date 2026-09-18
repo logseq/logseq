@@ -209,8 +209,10 @@ builds do not have the same graph-directory filesystem guarantees.
 4. Blocks are Markdown list items that use `-`.
 5. User-visible page and block properties are Markdown list items that use `*`
    and keep the Logseq property marker, for example `* owner:: [[Alice]]`.
-6. Open default property values are exported as nested value blocks below the
-   property key. Closed values remain inline with the property key.
+6. Single-cardinality open default property values are exported inline as
+   `key:: value`. Many-cardinality open default values, and values with nested
+   blocks or properties, are exported as nested value blocks below the property
+   key. Closed values remain inline with the property key.
 7. Node property values are exported as Logseq page references, for example
    `[[Node title]]`, rather than block reference syntax.
 8. Task status is encoded on the block line, for example `- TODO ship`, and is
