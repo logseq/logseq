@@ -140,34 +140,37 @@
           (util/rec-get-node "ls-block")
           node-original-block))
 
-(defn- get-original-block
-  "Get the original block from the current editing block or selected blocks"
-  [linked-block]
-  (cond
-    (and
-     (= (:block/uuid linked-block)
-        (:block/uuid (state/get-edit-block)))
-     (state/get-input)) ; editing block
-    (get-original-block-by-dom (state/get-input))
-
-    (seq (state/get-selection-blocks))
-    (->> (state/get-selection-blocks)
-         (remove nil?)
-         (keep #(when-let [id (dom/attr % "blockid")]
-                  (when (= (uuid id) (:block/uuid linked-block))
-                    (node-original-block %))))
-         ;; FIXME: what if there're multiple same blocks in the selection
-         first)))
+(defn- selected-original-blocks-by-id
+  [nodes]
+  (reduce (fn [result node]
+            (if-let [block-id (some-> (dom/attr node "blockid") uuid)]
+              (if (contains? result block-id)
+                result
+                (if-let [original-block (node-original-block node)]
+                  (assoc result block-id original-block)
+                  result))
+              result))
+          {}
+          (remove nil? nodes)))
 
 (defn get-top-level-blocks
   "Get only the top level blocks and their original blocks."
   [blocks]
   {:pre [(seq blocks)]}
-  (let [level-blocks (outliner-core/blocks-with-level blocks)]
+  (let [level-blocks (outliner-core/blocks-with-level blocks)
+        editing-block-id (:block/uuid (state/get-edit-block))
+        input (state/get-input)
+        editing-original-block (when input
+                                 (get-original-block-by-dom input))
+        selected-original-blocks (selected-original-blocks-by-id
+                                  (state/get-selection-blocks))]
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
          (map (fn [b]
-                (let [original (or (:original-block b)
-                                   (get-original-block b))]
+                (let [block-id (:block/uuid b)
+                      original (or (:original-block b)
+                                   (if (and input (= block-id editing-block-id))
+                                     editing-original-block
+                                     (get selected-original-blocks block-id)))]
                   (or original b)))))))
 
 (defn get-current-editing-original-block
