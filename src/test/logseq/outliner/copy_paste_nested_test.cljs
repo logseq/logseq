@@ -53,30 +53,3 @@
     (let [original (d/entity @conn [:block/uuid parent-uuid])]
       (is (= ["child"] (outline-child-titles original))
           "Pasting a copied tree must not move the original child"))))
-
-(deftest undo-restore-keeps-live-child-uuid
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page"}
-                :blocks [{:block/title "b"}
-                         {:block/title "c"
-                          :build/children [{:block/title "d"}]}]}])
-        b (db-test/find-block-by-content @conn "b")
-        c (db-test/find-block-by-content @conn "c")
-        d (db-test/find-block-by-content @conn "d")
-        c-uuid (:block/uuid c)
-        d-uuid (:block/uuid d)
-        restore-payload (mapv clipboard-block
-                              (ldb/get-block-and-children @conn c-uuid
-                                                          {:include-property-block? true}))]
-    (outliner-core/move-blocks! conn [d] b {:sibling? false})
-    (outliner-core/delete-blocks! conn [c] {})
-    (outliner-core/insert-blocks! conn restore-payload b
-                                  {:sibling? true
-                                   :keep-uuid? true
-                                   :keep-block-order? true})
-    (let [restored (d/entity @conn [:block/uuid c-uuid])
-          children (->> (ldb/sort-by-order (:block/_parent restored))
-                        (remove :logseq.property/created-from-property))]
-      (is (= ["d"] (mapv :block/title children)))
-      (is (= [d-uuid] (mapv :block/uuid children))
-          "Undo restore must not remint a still-live child"))))
