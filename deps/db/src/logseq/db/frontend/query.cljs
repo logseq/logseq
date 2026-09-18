@@ -2,23 +2,35 @@
   "DB views for user query evaluation."
   (:require [datascript.core :as d]))
 
+(defn- deleted-at-roots
+  "Use :aevt: :logseq.property/deleted-at is not in the static schema and is
+  not guaranteed to be :db/index true (minimal test conns, mid-migration)."
+  [db]
+  (into #{} (map :e) (d/datoms db :aevt :logseq.property/deleted-at)))
+
 (defn recycled-eids
   "Entity ids that are recycle roots or descendants via :block/parent or :block/page.
 
   Roots are entities with :logseq.property/deleted-at. Descendants do not always
-  carry that attribute, so query evaluation must collect the full subtree."
+  carry that attribute, so a filtered query view must know the subtree.
+
+  Empty recycle is one AEVT seek and returns immediately. A non-empty set is
+  walked once per db snapshot (see without-recycled); the walk is bounded by
+  recycle-tree size, not graph or query size."
   [db]
-  (let [roots (into #{} (map :e) (d/datoms db :avet :logseq.property/deleted-at))]
-    (loop [seen roots
-           pending (seq roots)]
-      (if-let [eid (first pending)]
-        (let [child-eids (into []
-                               (comp cat (remove seen))
-                               [(map :e (d/datoms db :avet :block/parent eid))
-                                (map :e (d/datoms db :avet :block/page eid))])]
-          (recur (into seen child-eids)
-                 (concat (rest pending) child-eids)))
-        seen))))
+  (let [roots (deleted-at-roots db)]
+    (if (empty? roots)
+      roots
+      (loop [seen roots
+             pending (seq roots)]
+        (if-let [eid (first pending)]
+          (let [child-eids (into []
+                                 (comp cat (remove seen))
+                                 [(map :e (d/datoms db :avet :block/parent eid))
+                                  (map :e (d/datoms db :avet :block/page eid))])]
+            (recur (into seen child-eids)
+                   (concat (rest pending) child-eids)))
+          seen)))))
 
 (defn- ref-idents
   [db]

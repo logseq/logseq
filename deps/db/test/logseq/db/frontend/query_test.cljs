@@ -52,6 +52,27 @@
   (let [conn (stream-conn)]
     (is (identical? @conn (db-query/without-recycled @conn)))))
 
+(deftest without-recycled-works-when-deleted-at-is-not-indexed
+  (let [schema {:block/parent {:db/valueType :db.type/ref :db/index true}
+                :block/page {:db/valueType :db.type/ref :db/index true}
+                :block/title {:db/index true}}
+        conn (d/create-conn schema)]
+    (d/transact! conn [{:db/id 1 :block/title "live"}])
+    (is (identical? @conn (db-query/without-recycled @conn))
+        "Unindexed deleted-at must not throw when the recycle set is empty")
+    (d/transact! conn [{:db/id 2
+                        :block/title "gone"
+                        :block/parent 1
+                        :logseq.property/deleted-at 1}
+                       {:db/id 3
+                        :block/title "child"
+                        :block/parent 2
+                        :block/page 2}])
+    (is (= #{"live"}
+           (set (d/q '[:find [?title ...]
+                       :where [?e :block/title ?title]]
+                     (db-query/without-recycled @conn)))))))
+
 (deftest without-recycled-reuses-the-same-snapshot
   (let [conn (stream-conn)
         _ (mark-deleted! conn "child")
