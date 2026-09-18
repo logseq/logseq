@@ -52,6 +52,16 @@
   (let [conn (stream-conn)]
     (is (identical? @conn (db-query/without-recycled @conn)))))
 
+(deftest without-recycled-reuses-the-same-snapshot
+  (let [conn (stream-conn)
+        _ (mark-deleted! conn "child")
+        db @conn
+        query-db (db-query/without-recycled db)]
+    (is (identical? query-db (db-query/without-recycled db)))
+    (mark-deleted! conn "parent")
+    (is (not (identical? query-db (db-query/without-recycled @conn)))
+        "A new db snapshot must rebuild the recycled view")))
+
 (deftest recycled-eids-include-deleted-root-and-page-descendants
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
