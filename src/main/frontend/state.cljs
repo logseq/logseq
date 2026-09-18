@@ -1825,9 +1825,6 @@ should be done through this fn in order to get global config and config defaults
 (defn set-editing!
   [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
-  (when (and block
-             (not= (:block/uuid block) (:block/uuid (get-edit-block))))
-    (clear-editor-action!))
   (when-not (exists? js/process)
     (when (and edit-input-id block
                (or

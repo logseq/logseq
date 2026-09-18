@@ -56,8 +56,6 @@
 (defn- edit-block-aux
   [repo block content text-range {:keys [container-id direction event pos]}]
   (when block
-    (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-      (state/clear-editor-action!))
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
