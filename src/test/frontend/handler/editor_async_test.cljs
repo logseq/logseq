@@ -1004,6 +1004,7 @@
          (fn []
            (is (= (:block/uuid comment-block) @resolved-block-ref)))))))
 
+;; Collapsed copy/cut/paste coverage for https://github.com/logseq/db-test/issues/1216
 (defn- <complete-tree-worker
   [_api repo' requests]
   (let [db' (conn/get-db repo')]
