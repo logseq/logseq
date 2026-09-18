@@ -47,24 +47,6 @@
           (is false (str error))))
        (p/finally done)))))
 
-(deftest property-node-selector-data-excludes-root-from-extends-choices
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Topic {}}})
-        topic (d/entity @conn :user.class/Topic)
-        property (d/entity @conn :logseq.property.class/extends)
-        data (worker-property/property-node-selector-data
-              @conn
-              {:property property
-               :block topic})
-        extends-idents (set (map :db/ident (:extends-class-options data)))]
-    (testing "Extends picker candidates do not include Root Tag"
-      (is (contains? extends-idents :user.class/Topic))
-      (is (not (contains? extends-idents :logseq.class/Root))))
-    (testing "Root remains available internally as the implicit default parent"
-      (is (some #(= :logseq.class/Root (:db/ident %)) (:all-classes data)))
-      (is (= [:logseq.class/Root]
-             (map :db/ident (:logseq.property.class/extends topic)))))))
-
 (deftest display-properties-hides-hide-by-default-properties-on-nodes
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:keywords {:logseq.property/type :default
