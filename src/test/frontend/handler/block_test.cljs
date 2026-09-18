@@ -71,12 +71,22 @@
                :block/title "linked block"}
         original {:db/id 2
                   :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
-                  :block/title "original block"}]
+                  :block/title "original block"}
+        selected-node-without-original
+        #js {:getAttribute #({"blockid" (str block-id)} %)}
+        selected-node #js {:getAttribute
+                           #({"blockid" (str block-id)
+                              "originalblockid" (str (:block/uuid original))} %)}
+        later-selected-node #js {:getAttribute
+                                 #({"blockid" (str block-id)
+                                    "originalblockid" (str (random-uuid))} %)}]
     (with-redefs [outliner-core/blocks-with-level (fn [_] [(assoc block :block/level 1)])
-                  block-handler/get-original-block (fn [b]
-                                                     (when (= (:block/uuid b) block-id)
-                                                       original))]
-      (is (= [original]
+                  state/get-edit-block (constantly nil)
+                  state/get-input (constantly nil)
+                  state/get-selection-blocks (constantly [selected-node-without-original
+                                                          selected-node
+                                                          later-selected-node])]
+      (is (= [(select-keys original [:block/uuid])]
              (block-handler/get-top-level-blocks [block]))))))
 
 (deftest edit-block-loads-target-through-worker-test
