@@ -1,0 +1,12 @@
+{
+  "url": "http://localhost:3001/#/graphs",
+  "heading": "All graphs",
+  "titles": [
+    {
+      "text": "Demo",
+      "title": "/tmp/logseq-custom-graphs-dir/Demo",
+      "testid": "logseq_db_Demo"
+    }
+  ],
+  "body": "All graphs\nLOGSEQ_GRAPHS_DIR=/tmp/logseq-custom-graphs-dir\nCreate a new graph\nLocal graphs:\nDemo\nLast opened at: Sep 18, 2026/tmp/logseq-custom-graphs-dir/Demo"
+}
