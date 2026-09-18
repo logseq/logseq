@@ -4,11 +4,16 @@
   (:require ["fs" :as fs]
             ["fs-extra" :as fse]
             ["path" :as node-path]
+            [logseq.publishing.runtime :as publish-runtime]
             [promesa.core :as p]))
 
 (def ^:api js-files
   "js files from publishing release build"
   ["main.js" "code-editor.js"])
+
+(def ^:api required-js-runtime-files
+  "Worker/wasm/fs files a hosted export must copy from static/js"
+  publish-runtime/required-js-runtime-files)
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"
@@ -46,6 +51,16 @@
       (.isFile stat)
       (copy-file! from to))))
 
+(defn- assert-required-runtime-files!
+  [output-static-dir]
+  (let [js-dir (node-path/join output-static-dir "js")]
+    (doseq [file (concat js-files required-js-runtime-files)]
+      (let [file-path (node-path/join js-dir file)]
+        (when-not (fs/existsSync file-path)
+          (throw (ex-info (str "Missing publishing runtime file: " file)
+                          {:file file
+                           :path file-path})))))))
+
 (defn- cleanup-js-dir
   "Moves used js files to the correct dir and removes unused js files"
   [output-static-dir source-static-dir {:keys [dev?]}]
@@ -69,7 +84,8 @@
                 (fs/symlinkSync (node-path/join source-static-dir "js" "publishing" "cljs-runtime")
                                 (node-path/join output-static-dir "js" "cljs-runtime")))
             ;; remove publishing-dir
-            _ (when-not dev? (fse/remove publishing-dir))])))
+            _ (when-not dev? (fse/remove publishing-dir))
+            _ (assert-required-runtime-files! output-static-dir)])))
 
 (defn- copy-static-files-and-assets
   [static-dir repo-path output-dir {:keys [log-error-fn asset-filenames]
