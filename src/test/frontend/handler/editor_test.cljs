@@ -2284,7 +2284,7 @@
     (handle-last-input-handler {:value "#+BEGIN_NOTE"
                                 :cursor-pos 1})
     (is (= nil (state/get-editor-action))
-        "Does not open hashtag search when inserting # before + in an org directive")))
+        "Does not open hashtag search when inserting # before + in an org directive"))
 
   (testing "Comment editors do not open tag autocompletion"
     (handle-last-input-handler {:value "#"
