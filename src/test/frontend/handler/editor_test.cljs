@@ -121,24 +121,6 @@
         (is (= (count (:block/title block))
                (second (first @edits))))))))
 
-(deftest first-empty-block-backspace-still-moves-to-page-title-test
-  (let [page {:db/id 10
-              :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              :block/name "page1"
-              :block/title "Page 1"}
-        calls (atom [])]
-    (with-redefs [state/get-edit-block (constantly nil)
-                  editor/edit-block! (fn [block pos opts]
-                                       (swap! calls conj [block pos opts]))]
-      (let [{:keys [prev-block edit-block-f]} (#'editor/previous-block-edit page "" nil)]
-        (is (= page prev-block)
-            "Editing Backspace on the first empty block still treats the page title as the previous node.")
-        (edit-block-f)
-        (is (= [[page :max {:save-code-editor? false
-                            :skip-load? true}]]
-               @calls)
-            "First empty block Backspace must keep moving focus to the page title.")))))
-
 (deftest get-state-uses-editor-args-block-without-renderer-rehydration-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"

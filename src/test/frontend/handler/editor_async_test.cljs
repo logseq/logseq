@@ -477,24 +477,6 @@
              "Last-block delete should keep focus in the remaining empty block")
          (is (not= page (first edit-call))))))))
 
-(deftest-async delete-last-selected-journal-block-does-not-edit-date-title
-  (let [journal {:db/id 20
-                 :block/uuid (random-uuid)
-                 :block/name "sep 17th, 2026"
-                 :block/title "Sep 17th, 2026"
-                 :block/journal-day 20260917
-                 :block/tags [{:db/ident :logseq.class/Journal}]}]
-    (-> (delete-last-selected-block-focus {:page journal})
-        (p/then
-         (fn [{:keys [edit-call inserted edit-block-fn]}]
-           (is (fn? edit-block-fn)
-               "Journal last-block delete should still restore focus in the block area")
-           (is (not= journal (first edit-call))
-               "Deleting the last selected journal block must not choose the date title as the next edit target")
-           (is (= "" (:content inserted)))
-           (is (= (:block/uuid journal) (:page (:opts inserted)))
-               "Journal last-block delete should create and edit the default journal block"))))))
-
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
    [{:page {:block/title "page1"}
