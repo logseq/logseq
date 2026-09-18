@@ -4,15 +4,12 @@
   (:require ["fs" :as fs]
             ["fs-extra" :as fse]
             ["path" :as node-path]
+            [logseq.publishing.const :as publish-const]
             [promesa.core :as p]))
 
 (def ^:api js-files
   "js files from publishing release build"
   ["main.js" "code-editor.js"])
-
-(def db-transit-file-path
-  "Relative path of the published graph transit file."
-  "static/js/db.transit")
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"
@@ -123,7 +120,7 @@
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
                 _ (cleanup-js-dir output-static-dir static-dir options)
                 _ (when db-transit
-                    (let [db-path (node-path/join output-dir db-transit-file-path)]
+                    (let [db-path (node-path/join output-dir publish-const/db-transit-file-path)]
                       (fs/mkdirSync (node-path/dirname db-path) #js {:recursive true})
                       (fs/writeFileSync db-path db-transit)))]
           (notification-fn {:type "success"

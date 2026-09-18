@@ -25,7 +25,10 @@
    :app-state (select-keys (state/get-state)
                            [:ui/theme
                             :ui/sidebar-collapsed-blocks])
-   :repo-config (get-in (state/get-state) [:config repo])})
+   :repo-config (get-in (state/get-state) [:config repo])
+   ;; Browser download is a lone index.html. Keep the transit graph inline so
+   ;; the file can still restore without static/js/db.transit next to it.
+   :inline-db? (not (util/electron?))})
 
 (defn download-repo-as-html!
   "download public pages as html"
