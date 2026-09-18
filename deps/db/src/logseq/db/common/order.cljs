@@ -69,7 +69,7 @@
                    ;; Local max-key atom keeps this repair from mutating the
                    ;; process-global *max-key used by later inserts.
                    (gen-n-keys (count missing) max-order nil
-                               :max-key-atom (atom nil))))))))))
+                               :max-key-atom (atom nil)))))))))
 
 (defn validate-order-key?
   [key]
