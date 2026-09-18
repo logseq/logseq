@@ -7683,17 +7683,6 @@ let () =
           expect_bool "subscription closed" true !closed;
           Js.Promise.resolve pass));
 
-  test "CLI parity server lock paths use canonical graph directory names"
-    (fun () ->
-      expect_equal "plain lock path"
-        "/tmp/logseq-root/graphs/demo/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_demo"));
-      expect_equal "encoded lock path"
-        "/tmp/logseq-root/graphs/foo~2Fbar/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_foo/bar")));
-
   test_promise
     "CLI parity server start rejects a spawn without process identity"
     (fun () ->

@@ -44,7 +44,6 @@ async function worker(t, storage, options = {}) {
 test('startup stops every outdated worker across graphs and owners, then graphs reopen', async t => {
   const storage = fixture(t);
   const old = await Promise.all(['cli', 'electron'].map(owner => worker(t, storage, { repo: owner, owner })));
-  await assert.rejects(lifecycle.startGraph({ storage, repo: 'cli' }), /unregistered live owner/);
   await lifecycle.stopOutdatedWorkers(storage, 'current');
   for (const target of old) {
     assert.equal(lifecycle.pidExists(target.pid), false);
@@ -62,17 +61,16 @@ test('startup stops every outdated worker across graphs and owners, then graphs 
   await lifecycle.stopOutdatedWorkers(storage, 'current');
 });
 
-test('startup retains a current worker and an unrelated storage root', async t => {
+test('startup migrates legacy ownership even at the same revision and preserves unrelated storage', async t => {
   const storage = fixture(t);
   const current = await worker(t, storage, { revision: 'current' });
   const other = fixture(t);
   const foreign = await worker(t, other);
   fs.appendFileSync(path.join(storage.root, 'server-list'), `${foreign.pid} ${foreign.port}\n`);
   await lifecycle.stopOutdatedWorkers(storage, 'current');
-  for (const target of [current, foreign]) {
-    assert.ok(lifecycle.pidExists(target.pid));
-    assert.equal(fs.existsSync(path.join(target.directory, 'shutdown-requested')), false);
-  }
+  assert.equal(lifecycle.pidExists(current.pid), false);
+  assert.ok(lifecycle.pidExists(foreign.pid));
+  assert.equal(fs.existsSync(path.join(foreign.directory, 'shutdown-requested')), false);
 });
 
 test('startup escalates to SIGKILL when an identified outdated worker ignores shutdown and SIGTERM', async t => {
@@ -163,12 +161,12 @@ test('targeted retirement ignores an unrelated unverifiable worker and reports t
   assert.ok(lifecycle.pidExists(unrelated.pid));
 });
 
-test('targeted retirement preserves a matching revision and skips graphs without a lock', async t => {
+test('targeted retirement migrates matching legacy revisions and skips absent graphs', async t => {
   const storage = fixture(t);
   const current = await worker(t, storage, { revision: 'current' });
-  assert.deepEqual(await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo'), []);
+  assert.deepEqual((await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo')).map(x => x.pid), [current.pid]);
   assert.deepEqual(await lifecycle.stopOutdatedWorkers(storage, 'current', 'missing'), []);
-  assert.ok(lifecycle.pidExists(current.pid));
+  assert.equal(lifecycle.pidExists(current.pid), false);
 });
 
 for (const owner of ['cli', 'electron']) {
@@ -193,3 +191,35 @@ for (const owner of ['cli', 'electron']) {
     });
   }
 }
+
+for (const options of [{ malformedLock: '' }, { malformedLock: '{broken' }, { noLock: true }]) {
+  test(`registered legacy evidence permits retirement with damaged disk artifact ${JSON.stringify(options)}`, async t => {
+    const storage = fixture(t);
+    const generation = await lifecycle.createGraph(storage, 'demo');
+    const target = await worker(t, storage, { registered: true, ...options });
+    await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+    assert.equal(lifecycle.pidExists(target.pid), false);
+    assert.equal(lifecycle.snapshot(storage, 'demo').generation, generation);
+    assert.equal(fs.existsSync(path.join(target.directory, 'db-worker.lock')), false);
+  });
+}
+
+test('legacy cleanup preserves a registration replaced during shutdown', async t => {
+  const storage = fixture(t);
+  await lifecycle.createGraph(storage, 'demo');
+  const target = await worker(t, storage, { registered: true, replaceRegistration: true });
+  await assert.rejects(lifecycle.stopOutdatedWorkers(storage, 'current', 'demo'), /registration changed/);
+  assert.equal(lifecycle.pidExists(target.pid), false);
+  assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].ticket, 'replacement-ticket');
+  assert.ok(fs.existsSync(path.join(target.directory, 'db-worker.lock')));
+});
+
+test('a legacy artifact restored after successful migration is classified again', async t => {
+  const storage = fixture(t);
+  const target = await worker(t, storage);
+  await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+  const file = path.join(target.directory, 'db-worker.lock');
+  fs.writeFileSync(file, '');
+  await assert.rejects(lifecycle.startGraph({ storage, repo: 'demo' }), /offline recovery/);
+  assert.equal(fs.readFileSync(file, 'utf8'), '');
+});

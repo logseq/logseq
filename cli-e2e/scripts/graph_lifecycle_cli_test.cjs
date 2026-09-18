@@ -145,7 +145,7 @@ test('CLI target command remains responsive with three unrelated workers paused'
   const resumed = ok('demo', 'list', 'page', '--limit', '1', '--profile');
   assert.deepEqual(paused.json, baseline.json);
   assert.deepEqual(resumed.json, baseline.json);
-  assert.ok(paused.seconds < 2, `Unrelated timeouts accumulated: ${paused.seconds}s`);
+  assert.ok(paused.seconds < 2, `Unrelated timeouts accumulated: ${paused.seconds}s\n${paused.stderr}`);
   console.log(JSON.stringify({ baseline: baseline.seconds, paused: paused.seconds, resumed: resumed.seconds, equal: true }));
   for (const graph of ['demo', 'other1', 'other2', 'other3']) ok(graph, 'graph', 'remove');
 });
