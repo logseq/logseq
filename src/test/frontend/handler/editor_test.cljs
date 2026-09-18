@@ -2177,9 +2177,9 @@
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
-  [{:keys [value cursor-pos editor-config]}]
+  [{:keys [value cursor-pos editor-config action]}]
   ;; Reset editor action in order to test result
-  (state/set-editor-action! nil)
+  (state/set-editor-action! action)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))]
     (with-redefs [state/get-input (constantly #js {:value value})
@@ -2253,7 +2253,38 @@
     (handle-last-input-handler {:value "`String#gsub and String#`"
                                 :cursor-pos (dec (count "`String#gsub and String#`"))})
     (is (= nil (state/get-editor-action))
-        "No page search within backticks"))
+        "No page search within backticks")
+
+    (handle-last-input-handler {:value "#+"
+                                :cursor-pos 2})
+    (is (= nil (state/get-editor-action))
+        "No page search for org keyword prefix #+")
+
+    (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                                :cursor-pos (count "#+BEGIN_NOTE")})
+    (is (= nil (state/get-editor-action))
+        "No page search for org #+BEGIN_NOTE directive")
+
+    (handle-last-input-handler {:value "#+END_QUOTE"
+                                :cursor-pos (count "#+END_QUOTE")})
+    (is (= nil (state/get-editor-action))
+        "No page search for org #+END_QUOTE directive")
+
+    (handle-last-input-handler {:value "foo #+"
+                                :cursor-pos 6})
+    (is (= nil (state/get-editor-action))
+        "No page search when #+ is typed after a word")
+
+    (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                                :cursor-pos (count "#+BEGIN_NOTE")
+                                :action :page-search-hashtag})
+    (is (= nil (state/get-editor-action))
+        "Closes hashtag search when # is part of an org directive")
+
+    (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                                :cursor-pos 1})
+    (is (= nil (state/get-editor-action))
+        "Does not open hashtag search when inserting # before + in an org directive")))
 
   (testing "Comment editors do not open tag autocompletion"
     (handle-last-input-handler {:value "#"
@@ -2263,6 +2294,15 @@
         "No tag search in comment editors"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest org-directive-hashtag-query-test
+  (is (true? (editor/org-directive-hashtag-query? "+BEGIN_NOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "#+END_QUOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "+TITLE")))
+  (is (false? (editor/org-directive-hashtag-query? "BEGIN_NOTE")))
+  (is (false? (editor/org-directive-hashtag-query? "foo")))
+  (is (false? (editor/org-directive-hashtag-query? "#foo")))
+  (is (false? (editor/org-directive-hashtag-query? nil))))
 
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"

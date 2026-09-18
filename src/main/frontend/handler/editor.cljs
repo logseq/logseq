@@ -2282,6 +2282,23 @@
   [input pos]
   (contains? #{" " "\t"} (get (.-value input) (- pos 2))))
 
+(defn- org-directive-hashtag?
+  "True when the `#` at or before `pos` starts an org keyword such as `#+BEGIN_NOTE`."
+  [content pos]
+  (boolean
+   (when (and (string? content) (number? pos) (>= pos 2))
+     (let [from-start (subs content 0 pos)
+           hash-idx (string/last-index-of from-start commands/hashtag)]
+       (and (number? hash-idx)
+            (= "+" (util/nth-safe from-start (inc hash-idx))))))))
+
+(defn org-directive-hashtag-query?
+  "True when a hashtag-search query is an org keyword (`+BEGIN_NOTE`, `#+END_QUOTE`)."
+  [q]
+  (boolean
+   (when (string? q)
+     (re-find #"^#?\+[A-Za-z]" (string/trim q)))))
+
 (defn handle-last-input []
   (let [input           (state/get-input)
         input-id        (state/get-edit-input-id)
@@ -2310,12 +2327,15 @@
 
       (or (= last-input-char last-prev-input-char commands/hashtag)
           (and (= last-prev-input-char commands/hashtag)
-               (= last-input-char " ")))
+               (= last-input-char " "))
+          (org-directive-hashtag? content pos))
       (state/clear-editor-action!)
 
       ;; Open "Search page or New page" auto-complete
       (and (not (:comment-editor? config))
            (= last-input-char commands/hashtag)
+           ;; `#+WORD` is org keyword syntax, not a hashtag
+           (not= "+" (util/nth-safe content pos))
              ;; Only trigger at beginning of a line, before whitespace or after a reference
            (or (re-find #"(?m)^#" (str (.-value input)))
                (start-of-new-word? input pos)
