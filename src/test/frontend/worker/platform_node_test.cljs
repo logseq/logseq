@@ -423,7 +423,8 @@
     (let [root-dir (node-helper/create-tmp-dir "platform-node-list-graphs")
           graphs-dir (node-path/join root-dir "graphs")]
       (fs/mkdirSync (node-path/join graphs-dir "alpha") #js {:recursive true})
-      (fs/mkdirSync (node-path/join graphs-dir "backup") #js {:recursive true})
+      (doseq [dir ["backup" " alpha " " padded-only " "   " "~20encoded-leading" "encoded-trailing~20"]]
+        (fs/mkdirSync (node-path/join graphs-dir dir) #js {:recursive true}))
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   graphs ((get-in platform [:storage :list-graphs]))]
             (is (= ["alpha"] graphs)))

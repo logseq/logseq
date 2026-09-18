@@ -339,81 +339,20 @@ let ignored_graph_dir name =
   || starts_with ~prefix:"file-version-" name
   || starts_with ~prefix:"logseq_db_" name
 
-let contains_substring ~needle text =
-  let needle_len = String.length needle in
-  let text_len = String.length text in
-  let rec loop index =
-    index + needle_len <= text_len
-    && (String.sub text index needle_len = needle || loop (index + 1))
-  in
-  needle_len = 0 || loop 0
-
-let legacy_derivation_signal dir_name =
-  contains_substring ~needle:"++" dir_name
-  || contains_substring ~needle:"+3A+" dir_name
-  || contains_substring ~needle:"%" dir_name
-
-let decode_legacy_graph_dir_name dir_name =
-  if not (legacy_derivation_signal dir_name) then None
-  else Graph_dir.decode_legacy_graph_dir_name dir_name
-
-let canonical_graph_name graph =
-  if graph <> "" && not (starts_with ~prefix:"logseq_db_" graph) then Some graph
-  else None
-
-let classify_graph_dir graphs_root dir_name =
+let classify_graph_dir dir_name =
   if ignored_graph_dir dir_name then None
   else
-    match
-      Option.bind
-        (Graph_dir.canonical_graph_name_of_dir dir_name)
-        canonical_graph_name
-    with
-    | Some graph_name ->
-        Some
-          {
-            Graph_types.kind = Graph_types.Canonical;
-            graph_name = Some (Cli_primitive.create_graph graph_name);
-            graph_dir = Some dir_name;
-            legacy_dir = None;
-            target_graph_dir = None;
-            conflict = false;
-            reason = None;
-          }
-    | None -> (
-        match
-          Option.bind
-            (decode_legacy_graph_dir_name dir_name)
-            canonical_graph_name
-        with
-        | Some graph_name ->
-            let target_graph_dir = Graph_dir.encode_graph_dir_name graph_name in
-            Some
-              {
-                Graph_types.kind = Graph_types.Legacy;
-                graph_name = Some (Cli_primitive.create_graph graph_name);
-                graph_dir = None;
-                legacy_dir = Some dir_name;
-                target_graph_dir = Some target_graph_dir;
-                conflict =
-                  target_graph_dir <> dir_name
-                  && Cli_unix.file_exists
-                       (Filename.concat graphs_root target_graph_dir);
-                reason = None;
-              }
-        | None ->
-            if legacy_derivation_signal dir_name then
-              Some
-                {
-                  Graph_types.kind = Graph_types.Legacy_undecodable;
-                  graph_name = None;
-                  graph_dir = None;
-                  legacy_dir = Some dir_name;
-                  target_graph_dir = None;
-                  conflict = false;
-                  reason = Some (Edn_util.keyword_t "graph-name-not-derivable");
-                }
-            else None)
+    Graph_dir.canonical_graph_name_of_dir dir_name
+    |> Option.map (fun graph_name ->
+        {
+          Graph_types.kind = Graph_types.Canonical;
+          graph_name = Some (Cli_primitive.create_graph graph_name);
+          graph_dir = Some dir_name;
+          legacy_dir = None;
+          target_graph_dir = None;
+          conflict = false;
+          reason = None;
+        })
 
 let list_graph_items config =
   let dir = graphs_dir config in
@@ -421,16 +360,12 @@ let list_graph_items config =
     Cli_unix.readdir dir |> Vec.of_array
     |> Vec.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
     |> Vec.sort_uniq String.compare
-    |> Vec.filter_map (classify_graph_dir dir)
+    |> Vec.filter_map classify_graph_dir
   else Vec.empty
 
 let list_graphs config =
   list_graph_items config
-  |> Vec.filter_map (function
-    | { Graph_types.kind = Graph_types.Canonical; graph_name = Some graph; _ }
-      ->
-        Some graph
-    | _ -> None)
+  |> Vec.map (fun item -> Option.get item.Graph_types.graph_name)
 
 let revision_matches cli_revision server =
   match server.revision with

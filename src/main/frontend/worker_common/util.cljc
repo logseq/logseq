@@ -49,6 +49,7 @@
        (str "logseq-pool-"
             (-> graph-name
                 (string/replace sqlite-util/db-version-prefix "")
+                string/trim
                 (string/replace "/" "_")
                 (string/replace "\\" "_")
                 (string/replace ":" "_"))))

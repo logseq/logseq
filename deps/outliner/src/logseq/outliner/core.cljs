@@ -688,9 +688,10 @@
         entries))))
 
 (defn- uuid-for-insert
-  "Keep a uuid when keep-uuid? is set.
-  Paste remints still-live (non-recycled) uuids so it cannot reparent existing
-  children. Undo restore and other keep-uuid? inserts keep live uuids."
+  "Keep a uuid when insert is restoring identity.
+  Paste remints live (non-recycled) uuids so copied trees cannot reparent
+  existing children. Non-paste keep-uuid inserts, including undo restore,
+  must reuse live identities."
   [db keep-uuid? outliner-op block-uuid]
   (if (and keep-uuid? block-uuid)
     (let [entity (d/entity db [:block/uuid block-uuid])]
@@ -856,8 +857,9 @@
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
-                    Paste still remints live (non-recycled) uuids so it cannot
-                    move existing blocks. Undo restore keeps live uuids.
+                    On paste, live (non-recycled) uuids are still reminted so
+                    copied trees cannot move existing blocks.
+                    Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
