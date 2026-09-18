@@ -1122,20 +1122,7 @@ abc
       (is (= 2
              (count (set/difference preserve-empty-properties-uuids
                                     #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid})))
-          "in-place template content blocks are marked to preserve empty properties"))
-
-    (testing "template roots with extra properties are marked for Apply template to tags"
-      (is (= {"trimmed template" [:name]
-              "nested child" [:name]}
-             (->> blocks
-                  (filter :block.temp/template-applied-to-class)
-                  (map (juxt :block/title :block.temp/template-class-properties))
-                  (into {}))))
-      (is (nil? (->> blocks
-                     (filter #(= "children only" (:block/title %)))
-                     first
-                     :block.temp/template-applied-to-class))
-          "templates without extra properties are not marked for Apply template to tags"))))
+          "in-place template content blocks are marked to preserve empty properties"))))
 
 (deftest-async import-file-template-with-properties-maps-to-applied-to-tag
   (p/let [file (write-temp-graph-file
@@ -1760,18 +1747,6 @@ abc
                                      set)]
         (is (= #{journal-uuid} template-page-uuids)
             "All template blocks are created on their source journal page"))
-      (let [meeting (find-template-by-title @conn "meeting")
-            meeting-tag (first (:logseq.property/template-applied-to meeting))
-            title-only (find-template-by-title @conn "title-only-no-children")]
-        (is (ldb/class? meeting-tag)
-            "Imported template with extra properties has Apply template to tags set to a tag")
-        (is (= "meeting" (:block/name meeting-tag))
-            "The generated tag is named after the template")
-        (is (contains? (set (map :db/ident (:logseq.property.class/properties meeting-tag)))
-                       :user.property/participants)
-            "The generated tag owns the template's extra properties")
-        (is (nil? (:logseq.property/template-applied-to title-only))
-            "Templates without extra properties do not get Apply template to tags"))
       (is (= [{:title "MEETING TITLE"
                :properties {:user.property/participants #{"TODO"}}
                :children []}]
