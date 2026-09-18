@@ -738,11 +738,10 @@
                    :html html
                    :blocks (when (and graph (seq blocks))
                              (pr-str
-                              (common-util/remove-nils-non-nested
                                {:graph graph
                                 :embed-block? embed-block?
                                 :op op
-                                :blocks (vec blocks)})))}))]
+                                :blocks (vec blocks)}))}))]
        (if owner-window
          (write-clipboard data owner-window)
          (write-clipboard data)))))
