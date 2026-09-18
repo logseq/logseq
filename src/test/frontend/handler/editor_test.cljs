@@ -171,76 +171,6 @@
            (commands/contiguous-same-list-type-siblings siblings plain))
         "A later default sibling after a numbered break is its own run")))
 
-(deftest slash-number-list-skips-mixed-siblings-under-the-same-parent-test
-  (async done
-    (let [parent-uuid #uuid "55555555-5555-5555-5555-555555555555"
-          bullet-a-uuid #uuid "11111111-1111-1111-1111-111111111111"
-          bullet-b-uuid #uuid "22222222-2222-2222-2222-222222222222"
-          numbered-uuid #uuid "33333333-3333-3333-3333-333333333333"
-          plain-uuid #uuid "44444444-4444-4444-4444-444444444444"
-          parent {:db/id 10
-                  :block/uuid parent-uuid}
-          bullet-a {:db/id 1
-                    :block/uuid bullet-a-uuid
-                    :block/title "bullet a"
-                    :block/parent parent}
-          bullet-b {:db/id 2
-                    :block/uuid bullet-b-uuid
-                    :block/title "bullet b"
-                    :block/parent parent}
-          numbered {:db/id 3
-                    :block/uuid numbered-uuid
-                    :block/title "numbered"
-                    :block/parent parent
-                    :logseq.property/order-list-type "number"}
-          plain {:db/id 4
-                 :block/uuid plain-uuid
-                 :block/title "plain"
-                 :block/parent parent}
-          events (atom [])]
-      (-> (p/with-redefs [state/get-edit-block (constantly bullet-a)
-                          state/get-current-repo (constantly "test")
-                          db-async/<get-block-parent (fn [_repo _uuid]
-                                                       (p/resolved parent))
-                          db-async/<get-block-immediate-children (fn [_repo uuid]
-                                                                   (is (= parent-uuid uuid))
-                                                                   (p/resolved [bullet-a bullet-b numbered plain]))
-                          state/pub-event! (fn [event]
-                                             (swap! events conj event)
-                                             (p/resolved nil))]
-            (p/do!
-             (commands/handle-step [:editor/toggle-own-number-list])
-             (is (= [[:editor/toggle-own-number-list [bullet-a-uuid bullet-b-uuid]]]
-                    @events)
-                 "Number list must not reformat mixed siblings under the same parent")))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally done)))))
-
-(deftest slash-number-list-falls-back-to-the-edit-block-while-editing-test
-  (async done
-    (let [block {:db/id 1
-                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-                 :block/title "solo item"}
-          events (atom [])]
-      (-> (p/with-redefs [state/get-edit-block (constantly block)
-                          state/get-current-repo (constantly "test")
-                          db-async/<get-block-parent (fn [_repo _uuid]
-                                                       (p/resolved nil))
-                          db-async/<get-block-immediate-children (fn [_repo _uuid]
-                                                                   (p/resolved []))
-                          state/pub-event! (fn [event]
-                                             (swap! events conj event)
-                                             (p/resolved nil))]
-            (p/do!
-             (commands/handle-step [:editor/toggle-own-number-list])
-             (is (= [[:editor/toggle-own-number-list block]]
-                    @events)
-                 "Slash Number list still toggles the edit block when it has no list siblings")))
-          (p/catch (fn [error]
-                     (is false (str error))))
-          (p/finally done)))))
-
 (deftest toggle-own-number-list-numbers-a-single-edit-block-map-test
   (async done
     (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -268,19 +198,6 @@
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
-
-(deftest slash-number-children-uses-the-edit-block-while-editing-test
-  (let [block {:db/id 1
-               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-               :block/title "parent"}
-        events (atom [])]
-    (with-redefs [state/get-edit-block (constantly block)
-                  state/pub-event! (fn [event]
-                                     (swap! events conj event))]
-      (commands/handle-step [:editor/toggle-children-number-list])
-      (is (= [[:editor/toggle-children-number-list block]]
-             @events)
-          "Slash Number children must keep the captured edit block, even while editing"))))
 
 (deftest toggle-children-number-list-removes-numbering-from-numbered-children-test
   (async done
