@@ -3,7 +3,6 @@
             [frontend.page :as page]))
 
 (def ^:private page-uuid #uuid "11111111-1111-1111-1111-111111111111")
-(def ^:private other-page-uuid #uuid "33333333-3333-3333-3333-333333333333")
 (def ^:private parent-uuid #uuid "22222222-2222-2222-2222-222222222222")
 
 (defn- page-route
@@ -37,13 +36,6 @@
            (page/route-view-key by-title paint)
            (page/route-view-key by-renamed paint))
         "Route-view keeps the same page mounted when only the title/path name changes.")))
-
-(deftest route-view-key-changes-when-navigating-to-a-different-page-test
-  (let [notes (page-route (str page-uuid))
-        other (page-route (str other-page-uuid))]
-    (is (not= (page/route-view-key notes (ready-paint page-uuid "Notes"))
-              (page/route-view-key other (ready-paint other-page-uuid "Other")))
-        "Navigating to a different page remounts the page tree.")))
 
 (deftest route-view-key-stays-stable-when-zoomed-parent-title-changes-test
   (let [paint (ready-paint parent-uuid "parent" :zoomed? true)

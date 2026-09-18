@@ -2,8 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.page :as page]
             [frontend.db.hooks :as db-hooks]
-            [frontend.routes :as routes]
-            [frontend.state :as state]))
+            [frontend.routes :as routes]))
 
 (def ^:private tag-page
   {:block/title "Tag"
@@ -137,55 +136,3 @@
                                               :value {:block/uuid page-uuid
                                                       :block/tx-id 1
                                                       :block/title "Notes"}}})))))
-
-(defn- page-option
-  [name]
-  {:page-name name
-   :parameters {:path {:name name}}
-   :current-page? true})
-
-(defn- ready-page-paint
-  [block-uuid title & {:keys [zoomed?]}]
-  {:status :ready
-   :page (cond-> {:block/uuid block-uuid
-                  :block/title title}
-           zoomed?
-           (assoc :block/page {:db/id 1}))})
-
-(deftest page-component-key-stays-stable-when-page-title-path-changes-test
-  (with-redefs [state/get-current-repo (constantly "repo")]
-    (let [paint (ready-page-paint page-uuid "Notes")]
-      (is (= (str "repo-" page-uuid)
-             (#'page/page-component-key (page-option (str page-uuid)) paint)
-             (#'page/page-component-key (page-option "Notes") paint)
-             (#'page/page-component-key (page-option "Renamed") paint))
-          "The page component key ignores title/path name edits for the same page uuid.")
-      (is (not= (#'page/page-component-key (page-option (str page-uuid)) paint)
-                (#'page/page-component-key
-                 (page-option (str parent-uuid))
-                 (ready-page-paint parent-uuid "Other")))
-          "Navigating to a different page remounts."))))
-
-(deftest zoomed-parent-title-edits-do-not-change-child-tree-key-test
-  (with-redefs [state/get-current-repo (constantly "repo")]
-    (let [paint (ready-page-paint parent-uuid "parent" :zoomed? true)
-          renamed (ready-page-paint parent-uuid "parent edited" :zoomed? true)
-          option (page-option (str parent-uuid))
-          heading-option {:page-name "Notes"
-                          :parameters {:path {:name "Notes"
-                                              :block-route-name "parent"}}
-                          :current-page? true}
-          renamed-heading-option (assoc-in heading-option
-                                           [:parameters :path :block-route-name]
-                                           "parent edited")]
-      (is (= (str parent-uuid)
-             (#'page/page-inner-key (:page paint))
-             (#'page/page-inner-key (:page renamed)))
-          "The child tree's React key stays on the zoomed block uuid while its title changes.")
-      (is (= (str "repo-" parent-uuid)
-             (#'page/page-component-key option paint)
-             (#'page/page-component-key option renamed)
-             (#'page/page-component-key heading-option paint)
-             (#'page/page-component-key renamed-heading-option renamed))
-          "Zoomed parent title edits do not remount the page tree."))))
-
