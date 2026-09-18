@@ -46,6 +46,11 @@
           (is false (str error))))
        (p/finally done)))))
 
+(defn- display-property-ids
+  [result]
+  {:full (set (map :property-id (:full-properties result)))
+   :hidden (set (map :property-id (:hidden-properties result)))})
+
 (deftest display-properties-hides-hide-by-default-properties-on-nodes
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:keywords {:logseq.property/type :default
@@ -55,15 +60,30 @@
                                           :build/properties {:keywords "clojure"
                                                              :author "Ada"}}}]})
         page (db-test/find-page-by-title @conn "Work")
-        result (worker-property/display-properties @conn page {:page-title? true} false)
-        full-ids (set (map :property-id (:full-properties result)))
-        hidden-ids (set (map :property-id (:hidden-properties result)))]
+        {:keys [full hidden]} (display-property-ids
+                               (worker-property/display-properties @conn page {:page-title? true} false))]
     (testing "hide-by-default still hides the property on nodes that use it"
-      (is (contains? hidden-ids :user.property/keywords))
-      (is (not (contains? full-ids :user.property/keywords))))
+      (is (contains? hidden :user.property/keywords))
+      (is (not (contains? full :user.property/keywords))))
     (testing "visible properties still appear on the node"
-      (is (contains? full-ids :user.property/author))
-      (is (not (contains? hidden-ids :user.property/author))))))
+      (is (contains? full :user.property/author))
+      (is (not (contains? hidden :user.property/author))))))
+
+(deftest display-properties-hides-hide-by-default-when-empty-properties-are-hidden
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}}
+               :pages-and-blocks [{:page {:block/title "Work"
+                                          :build/properties {:keywords "clojure"}}}]})
+        page (db-test/find-page-by-title @conn "Work")
+        {:keys [full hidden]} (display-property-ids
+                               (worker-property/display-properties
+                                @conn page {:page-title? true
+                                            :state-hide-empty-properties? true}
+                                false))]
+    (is (contains? hidden :user.property/keywords)
+        "Hide by default still hides valued properties when empty properties are globally hidden")
+    (is (not (contains? full :user.property/keywords)))))
 
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
