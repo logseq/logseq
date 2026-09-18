@@ -14,6 +14,15 @@
 
 (declare create-mcp-api-server)
 
+(defn- copy-reply-headers!
+  "The MCP transport writes straight to the raw Node response, so headers that
+  fastify plugins queued on the reply - notably the CORS headers from
+  @fastify/cors - would never be sent. Copy them onto the raw response before
+  handing it to the transport."
+  [^js res]
+  (doseq [[k v] (js/Object.entries (.getHeaders res))]
+    (.setHeader (.-raw res) k v)))
+
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
 ;; for how to respond to different MCP requests
 (defn handle-post-request [api-fn {:keys [port host]} req res]
@@ -22,6 +31,7 @@
     (cond
       (and session-id (@transports session-id))
       (let [^js transport (@transports session-id)]
+        (copy-reply-headers! res)
         (.handleRequest transport (.-raw req) (.-raw res) (.-body req)))
 
       (and (not session-id)
@@ -36,6 +46,7 @@
                 (js/console.log "Transport closed" (.-sessionId transport))
                 (swap! transports dissoc (.-sessionId transport))))
         (.connect mcp-server transport)
+        (copy-reply-headers! res)
         (.handleRequest transport (.-raw req) (.-raw res) (.-body req))
         (js/console.log "Initialize sessionId" (.-sessionId transport))
         (if (.-sessionId transport)
@@ -56,7 +67,9 @@
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "GET /mcp" session-id)
     (if-let [transport (and session-id (@transports session-id))]
-      (.handleRequest ^js transport (.-raw req) (.-raw res))
+      (do
+        (copy-reply-headers! res)
+        (.handleRequest ^js transport (.-raw req) (.-raw res)))
       (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn handle-delete-request
