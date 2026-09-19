@@ -1877,10 +1877,6 @@ should be done through this fn in order to get global config and config defaults
   [key-code]
   (set-state! :editor/last-key-code key-code))
 
-(defn get-last-key-code
-  []
-  (get-state :editor/last-key-code))
-
 (defn set-ui-last-key-code!
   [key-code]
   (set-state! :ui/global-last-key-code key-code))
