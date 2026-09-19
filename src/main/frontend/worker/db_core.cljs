@@ -571,20 +571,24 @@
                                      {:sqlite @*sqlite
                                       :pool pool
                                       :path db-path})
+            _ (swap! *sqlite-conns assoc-in [repo :db] db)
             _ (log/info :db-worker/get-dbs-open {:repo repo :search-path search-path})
             search-db (platform/sqlite-open (platform/current)
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
+            _ (swap! *sqlite-conns assoc-in [repo :search] search-db)
             vector-index (when (get-in current-platform [:vector :open-index])
                            (platform/vector-open current-platform
                                                  {:path vector-path
                                                   :dimension (platform/embedding-dimension current-platform)}))
+            _ (when vector-index (swap! *vector-indexes assoc repo vector-index))
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
                                                  :pool pool
                                                  :path client-ops-path})]
+      (swap! *sqlite-conns assoc-in [repo :client-ops] client-ops-db)
       [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!

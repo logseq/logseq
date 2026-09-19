@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 import urllib.request
@@ -19,6 +20,17 @@ import urllib.request
 PROJECT = Path(__file__).resolve().parents[2]
 CLI = PROJECT / "static/logseq-cli.js"
 WORKER = PROJECT / "static/db-worker-node.js"
+
+
+def lifecycle_info(root, graph):
+    result = subprocess.run(["node", "-e", """
+const lifecycle = require('./deps/graph-lifecycle');
+const path = require('node:path');
+const storage = lifecycle.resolveStorage(process.argv[1], path.join(process.argv[1], 'graphs'));
+const ctx = lifecycle.context(storage, process.argv[2]);
+console.log(JSON.stringify({ctx, state: lifecycle.snapshot(storage, process.argv[2]), ownership: lifecycle.ownershipPath(ctx)}));
+""", str(root), graph], cwd=PROJECT, capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)
 
 
 def alive(pid):
@@ -77,12 +89,12 @@ class GraphDeletionLifecycle(unittest.TestCase):
     def create(self, root=None, graph=None):
         self.ok(self.cli("graph", "create", root=root, graph=graph))
         self.ok(self.cli("server", "start", root=root, graph=graph))
-        lock = json.loads(self.lock_path(root, graph).read_text())
+        lock = lifecycle_info(root or self.root, graph or self.graph)["state"]["workers"][0]
         self.pids.add(lock["pid"])
         return lock
 
-    def lock_path(self, root=None, graph=None):
-        return (root or self.root) / "graphs" / (graph or self.graph) / "db-worker.lock"
+    def graph_path(self):
+        return self.root / "graphs" / self.graph
 
     def servers(self):
         return json.loads(self.ok(self.cli("server", "list")).stdout)["data"]
@@ -116,10 +128,10 @@ class GraphDeletionLifecycle(unittest.TestCase):
 
     def assert_removed(self, pid):
         self.assertFalse(alive(pid), f"Worker {pid} survived successful deletion")
-        self.assertFalse(self.lock_path().parent.exists())
+        self.assertFalse(self.graph_path().exists())
         saved = self.root / "graphs" / "Unlinked graphs" / self.graph
         self.assertTrue((saved / "db.sqlite").is_file())
-        self.assertFalse((saved / "db-worker.lock").exists())
+        self.assertTrue(Path(lifecycle_info(self.root, self.graph)["ownership"]).exists())
         self.assertNotIn(str(pid) + " ", (self.root / "server-list").read_text())
 
     def test_cli_owned_worker_and_explicit_recreate(self):
@@ -128,9 +140,9 @@ class GraphDeletionLifecycle(unittest.TestCase):
         self.assert_removed(lock["pid"])
         result = self.cli("server", "start")
         self.assertNotEqual(0, result.returncode, result.stdout)
-        self.assertFalse(self.lock_path().parent.exists())
+        self.assertFalse(self.graph_path().exists())
         next_lock = self.create()
-        self.assertNotEqual(lock["lock-id"], next_lock["lock-id"])
+        self.assertNotEqual(lock["generation"], next_lock["generation"])
         self.ok(self.cli("list", "page"))
 
     def test_cli_removes_desktop_owned_worker(self):
@@ -138,15 +150,23 @@ class GraphDeletionLifecycle(unittest.TestCase):
         self.ok(self.cli("server", "stop"))
         until(lambda: not alive(initial["pid"]))
         worker, _ = self.direct_worker()
+        threading.Thread(target=worker.wait, daemon=True).start()
         self.ok(self.cli("graph", "remove"))
         worker.wait(timeout=5)
         self.assert_removed(worker.pid)
 
-    def test_missing_lock_ready_endpoint_is_rejected_then_deleted(self):
+    def test_changed_runtime_identity_is_rejected_before_shutdown(self):
         lock = self.create()
-        self.lock_path().unlink()
+        info = lifecycle_info(self.root, self.graph)
+        runtime_path = Path(info["ctx"]["dir"]) / f"runtime-{lock['ticket']}.json"
+        original = runtime_path.read_text()
+        changed = json.loads(original)
+        changed["ownership-protocol"] = "unknown-protocol"
+        runtime_path.write_text(json.dumps(changed))
         result = self.cli("server", "start")
         self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertTrue(alive(lock["pid"]))
+        runtime_path.write_text(original)
         self.ok(self.cli("graph", "remove"))
         self.assert_removed(lock["pid"])
 
@@ -154,12 +174,12 @@ class GraphDeletionLifecycle(unittest.TestCase):
         lock = self.create()
         saved = self.root / "graphs" / "Unlinked graphs" / self.graph
         saved.parent.mkdir()
-        self.lock_path().parent.rename(saved)
+        self.graph_path().rename(saved)
         result = self.cli("graph", "remove")
         self.assertNotEqual(0, result.returncode, result.stdout)
         self.assertFalse(alive(lock["pid"]), result.stdout)
-        self.assertFalse(self.lock_path().parent.exists())
-        self.assertFalse((saved / "db-worker.lock").exists())
+        self.assertFalse(self.graph_path().exists())
+        self.assertTrue(Path(lifecycle_info(self.root, self.graph)["ownership"]).exists())
         self.assertTrue((saved / "db.sqlite").is_file())
 
     def test_stopped_graph_removal_and_output_modes(self):
@@ -169,7 +189,7 @@ class GraphDeletionLifecycle(unittest.TestCase):
                 self.ok(self.cli("server", "stop"))
                 until(lambda: not alive(lock["pid"]))
                 self.ok(self.cli("graph", "remove", output=mode))
-                self.assertFalse(self.lock_path().parent.exists())
+                self.assertFalse(self.graph_path().exists())
 
     def test_other_graph_and_same_name_other_root_remain_available(self):
         removed = self.create()
@@ -182,17 +202,24 @@ class GraphDeletionLifecycle(unittest.TestCase):
         self.ok(self.cli("list", "page", graph="unrelated"))
         self.ok(self.cli("list", "page", root=self.root / "other-root"))
 
-    def test_live_unknown_lock_owner_fails_without_moving(self):
+    def test_unregistered_sqlite_owner_prevents_move(self):
         lock = self.create()
         self.ok(self.cli("server", "stop"))
         until(lambda: not alive(lock["pid"]))
-        child = subprocess.Popen(["node", "-e", "setInterval(() => {}, 1000)"])
+        child = subprocess.Popen(["node", "-e", """
+const lifecycle = require('./deps/graph-lifecycle');
+const path = require('node:path');
+const storage = lifecycle.resolveStorage(process.argv[1], path.join(process.argv[1], 'graphs'));
+const handle = lifecycle.acquireOwnership(lifecycle.context(storage, process.argv[2]));
+console.log('owned');
+setInterval(() => handle.assert(), 1000);
+""", str(self.root), self.graph], cwd=PROJECT, stdout=subprocess.PIPE, text=True)
         self.children.append(child)
-        self.lock_path().write_text(json.dumps({"repo": "logseq_db_" + self.graph,
-                                               "pid": child.pid, "lock-id": "unknown"}))
+        self.assertEqual(child.stdout.readline().strip(), "owned")
+        child.stdout.close()
         result = self.cli("graph", "remove")
         self.assertNotEqual(0, result.returncode, result.stdout)
-        self.assertTrue(self.lock_path().exists())
+        self.assertTrue(self.graph_path().exists())
         self.assertTrue(alive(child.pid))
 
 

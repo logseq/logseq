@@ -135,29 +135,37 @@ stale metadata.
 
 #### Graph lock and ownership
 
-The three discovery records have deliberately different scopes:
+Graph ownership and discovery have separate responsibilities:
 
-- `db-worker.lock` records `repo`, `pid`, `lock-id`, and `owner-source`.
-- `server-list` records only `pid` and `port` pairs.
-- `/healthz` reports `repo`, readiness status, host, port, pid, owner source,
-  root directory, and runtime revision.
+- A private `node:sqlite` connection holds `BEGIN IMMEDIATE` on the per-user,
+  canonical-graph-path `lock.sqlite` until graph resources finish closing.
+- Registration and runtime records correlate the graph generation, admission
+  ticket, PID, storage, owner source, and `ownership-protocol: sqlite-v1`.
+- `server-list` records only PID/port pairs. `/healthz` reports the correlated
+  identity, readiness, root directory, and runtime revision.
 
-Neither the graph lock nor `server-list` is a readiness or revision authority.
+The ownership database has no application tables or persistent locked flag.
+File existence does not establish ownership, and the file remains after stop,
+deletion, or same-path recreation. SQLite contention enforces exclusion.
 
 Lifecycle behavior:
 
-1. Resolve and validate the graph directory under the configured root.
-2. Read the graph lock and remove it only when its owner process is absent.
-3. Read `server-list`, discard entries whose pid is absent, and probe remaining
-   entries through `/healthz`.
-4. Spawn only when neither a discovered graph server nor a graph lock exists.
-5. Require both a graph lock and a discovered server, then wait for readiness.
-6. Reuse the daemon only when its reported revision matches the requester.
-7. On revision mismatch, stop that exact server, start once, and verify the new
-   revision; fail if stop, startup, or the second revision check fails.
+1. Resolve canonical storage and serialize admission under the management lease.
+2. Classify legacy evidence through the bounded sequential-upgrade adapter;
+   retire only verified old workers and preserve unverifiable evidence.
+3. Acquire ownership before initializing any graph resources. Correlate new
+   workers using registration, runtime, and health protocol identities.
+4. Retain ownership across import, backup, data connection close/reopen, and
+   accepted asynchronous writes.
+5. Stop accepting work, drain requests and background writes, close resources,
+   then release ownership. Management still establishes verified worker exit.
+6. Hold ownership separately during management filesystem mutations. Never
+   unlink or replace the ownership database as a recovery operation.
+7. Retire mismatched SQLite-protocol revisions through normal identity checks;
+   revision mismatch alone never selects the legacy adapter.
 
-A discovered process without the expected usable lock is not adopted as a valid
-runtime; startup fails instead of returning an unowned endpoint.
+The detailed replacement contract is recorded in
+`docs/agent-guide/implemented/architecture/2026-09-18-replace-db-worker-lock-with-sqlite.md`.
 
 Normal stop and restart operations respect owner boundaries. A proven revision
 mismatch may replace the exact stale daemon across owner sources because the

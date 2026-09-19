@@ -8,13 +8,18 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [cognitect.transit :as transit]
-            [frontend.worker.db-worker-node-lock :as db-lock]
+            [logseq.cli.root-dir :as root-dir]
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.defkeywords :refer [defkeyword]]
+            [logseq.db-worker.daemon :as daemon]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db.sqlite.backup :as sqlite-backup]
             [promesa.core :as p]
             ["keytar" :as keytar]))
+
+(defkeyword ::drain-writes! "Stops new graph resource work and waits for pending writes.")
 
 (defn- resolve-database-sync-ctor
   []
@@ -55,7 +60,7 @@
 
 (defn- repo-dir
   [data-dir repo]
-  (db-lock/repo-dir data-dir repo))
+  (node-path/join data-dir (graph-dir/repo->encoded-graph-dir-name repo)))
 
 (defn- pool-path
   [^js pool path]
@@ -85,7 +90,7 @@
             db-dirs (->> entries
                          (filter dir?))
             graph-names (map (fn [dirent]
-                               (db-lock/decode-canonical-graph-dir-key (.-name dirent)))
+                               (graph-dir/decode-canonical-graph-dir-key (.-name dirent)))
                              db-dirs)]
       (->> graph-names
            (remove #(or (= % common-config/unlinked-graphs-dir)
@@ -195,9 +200,12 @@
         closed? (atom false)
         tx-depth (atom 0)
         savepoint-seq (atom 0)]
-    (set! (.-exec wrapper) (fn [opts-or-sql] (exec-sql db opts-or-sql)))
+    (set! (.-exec wrapper) (fn [opts-or-sql]
+                             (when write-guard-fn (write-guard-fn))
+                             (exec-sql db opts-or-sql)))
     (set! (.-transaction wrapper)
           (fn [f]
+            (when write-guard-fn (write-guard-fn))
             (with-transaction db tx-depth savepoint-seq
               (fn []
                 (f wrapper)))))
@@ -218,7 +226,9 @@
 
 (defn- open-sqlite-db
   [write-guard-fn {:keys [path]}]
-  (p/let [_ (ensure-dir! (node-path/dirname path))]
+  (p/let [_ (when write-guard-fn (write-guard-fn))
+          _ (ensure-dir! (node-path/dirname path))]
+    (when write-guard-fn (write-guard-fn))
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
 (def ^:private default-embedding-model "all-MiniLM-L6-v2")
@@ -495,7 +505,7 @@
             entries (fs/readdir directory)]
       (p/all (map (fn [entry]
                     (fs/rm (node-path/join directory entry) #js {:recursive true :force true}))
-                  (remove #{"db-worker.lock"} (array-seq entries)))))))
+                  (array-seq entries))))))
 
 (defn- read-text!
   [data-dir path]
@@ -685,13 +695,45 @@
                      payload (serialize-kv-state @state)]
                (fs/writeFile kv-path payload "utf8")))}))
 
+(defn- track-platform-writes
+  [platform]
+  (let [pending (atom #{})
+        accepting? (atom true)
+        wrap (fn [f]
+               (fn [& args]
+                 (when-not @accepting?
+                   (throw (ex-info "Graph resources are draining" {:code :repo-locked})))
+                 (let [result (apply f args)]
+                   (if (p/promise? result)
+                     (do
+                       (swap! pending conj result)
+                       (p/finally result #(swap! pending disj result)))
+                     result))))
+        wrap-keys (fn [m ks]
+                    (reduce (fn [result k]
+                              (if-let [f (get result k)] (assoc result k (wrap f)) result))
+                            m ks))]
+    (cond-> (-> platform
+                (update :storage wrap-keys [:install-opfs-pool :import-db :remove-vfs! :write-text!
+                                            :write-text-atomic! :delete-file! :asset-write-bytes! :asset-delete!])
+                (update :sqlite wrap-keys [:open-db :backup-db])
+                (assoc ::drain-writes! (fn []
+                                       (reset! accepting? false)
+                                       (p/all (map #(p/catch % identity) @pending)))))
+      (:vector platform)
+      (update-in [:vector :open-index]
+                 (fn [open!]
+                   (wrap (fn [opts]
+                           (p/let [index (open! opts)]
+                             (wrap-keys index [:upsert! :delete! :truncate! :set-metadata!])))))))))
+
 (defn node-platform
   [{:keys [root-dir storage event-fn write-guard-fn owner-source
            embedding-endpoint embedding-model-id open-vector-index-fn]}]
-  (let [root-dir (db-lock/resolve-root-dir root-dir)
-        storage (or storage (lifecycle/resolveStorage root-dir (db-lock/graphs-dir root-dir)))
+  (let [root-dir (root-dir/normalize-root-dir root-dir)
+        storage (or storage (lifecycle/resolveStorage root-dir (root-dir/graphs-dir root-dir)))
         data-dir (.-graphsDir ^js storage)
-        owner-source (db-lock/normalize-owner-source owner-source)
+        owner-source (daemon/normalize-owner-source owner-source)
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
         vector-embedding-enabled? (boolean
                                    (and (macos-arm64?)
@@ -709,7 +751,8 @@
                                           :vector-embedding-enabled? vector-embedding-enabled?
                                           :embedding-endpoint embedding-endpoint
                                           :embedding-model-id embedding-model-id})
-     (cond->
+     (track-platform-writes
+      (cond->
       {:env {:publishing? false
              :runtime :node
              :root-dir root-dir
@@ -760,4 +803,15 @@
                           :dimension embedding-dimension
                           :embed-texts (fn [texts]
                                          (<embed-texts embedding-endpoint embedding-model-id texts))}
-              :vector {:open-index open-vector-index-fn})))))
+              :vector {:open-index
+                       (fn [opts]
+                         (p/let [_ (when write-guard-fn (write-guard-fn))
+                                 index (open-vector-index-fn opts)]
+                           (reduce (fn [result operation]
+                                     (if-let [f (get index operation)]
+                                       (assoc result operation
+                                              (fn [& args]
+                                                (when write-guard-fn (write-guard-fn))
+                                                (apply f args)))
+                                       result))
+                                   index [:upsert! :delete! :truncate! :set-metadata!])))}))))))

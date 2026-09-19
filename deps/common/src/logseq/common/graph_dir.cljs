@@ -73,3 +73,10 @@
   (some-> repo
           repo->graph-dir-key
           graph-dir-key->encoded-dir-name))
+
+(defn decode-canonical-graph-dir-key
+  [encoded-graph-dir-key]
+  (let [decoded (decode-graph-dir-name encoded-graph-dir-key)]
+    (when (and (seq decoded)
+               (not (string/starts-with? decoded common-config/db-version-prefix)))
+      decoded)))
