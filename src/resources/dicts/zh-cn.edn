@@ -1600,6 +1600,7 @@
  :publish/unpublish-error "取消发布失败。"
  :publish/unpublish-missing-page-id "取消发布失败：缺少页面 ID。"
  :publish/unpublished "已取消发布。"
+ :publish/unpublished-already-gone "此页面已不再发布。本地的已发布 URL 已清除。"
 
  :query/advanced-results "高级查询结果"
  :query/custom-view-error "自定义视图错误：{1}"

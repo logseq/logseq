@@ -302,6 +302,94 @@
                      (is nil (str error))
                      (done)))))))
 
+(defn- short-id-delete-env
+  []
+  (permission-env
+   (fn [id url method]
+     (cond
+       (and (= id "index")
+            (= method "GET")
+            (= url "https://publish/short/abc123"))
+       (ok-json-response #js {"page" #js {"graph_uuid" "graph-1"
+                                          "page_uuid" "page-1"}})
+
+       (and (= id "index")
+            (= method "GET")
+            (= url "https://publish/pages/graph-1/page-1"))
+       (ok-json-response #js {"owner_sub" "owner-a"})
+
+       (and (= id "index")
+            (= method "DELETE")
+            (= url "https://publish/pages/graph-1/page-1"))
+       (ok-json-response #js {"ok" true})
+
+       (and (= id "graph-1:page-1")
+            (= method "DELETE")
+            (= url "https://publish/pages/graph-1/page-1"))
+       (ok-json-response #js {"ok" true})
+
+       :else
+       (json-error-response 404 "not found")))))
+
+(deftest delete-short-id-without-auth-is-unauthorized
+  (async done
+    (-> (p/let [request (js/Request. "https://publish.example/p/abc123"
+                                     #js {:method "DELETE"})
+                response (routes/handle-fetch request (empty-env))
+                body (.json response)]
+          (is (= 401 (.-status response)))
+          (is (= "unauthorized" (aget body "error")))
+          (done))
+        (p/catch (fn [error]
+                   (is nil (str error))
+                   (done))))))
+
+(deftest delete-short-id-owner-mismatch-is-forbidden
+  (async done
+    (let [env (permission-env
+               (fn [id url method]
+                 (cond
+                   (and (= id "index")
+                        (= method "GET")
+                        (= url "https://publish/short/abc123"))
+                   (ok-json-response #js {"page" #js {"graph_uuid" "graph-1"
+                                                      "page_uuid" "page-1"}})
+
+                   (and (= id "index")
+                        (= method "GET")
+                        (= url "https://publish/pages/graph-1/page-1"))
+                   (ok-json-response #js {"owner_sub" "owner-a"})
+
+                   :else
+                   (json-error-response 404 "not found"))))
+          request (js/Request. "https://publish.example/p/abc123"
+                               #js {:method "DELETE"
+                                    :headers #js {"authorization" "Bearer token"}})]
+      (-> (p/let [response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-b"})]
+                             (routes/handle-fetch request env))
+                  body (.json response)]
+            (is (= 403 (.-status response)))
+            (is (= "forbidden" (aget body "error")))
+            (done))
+          (p/catch (fn [error]
+                     (is nil (str error))
+                     (done)))))))
+
+(deftest delete-short-id-owner-match-succeeds
+  (async done
+    (let [request (js/Request. "https://publish.example/p/abc123"
+                               #js {:method "DELETE"
+                                    :headers #js {"authorization" "Bearer token"}})]
+      (-> (p/let [response (p/with-redefs [authorization/verify-jwt (fn [_ _] #js {"sub" "owner-a"})]
+                             (routes/handle-fetch request (short-id-delete-env)))
+                  body (.json response)]
+            (is (= 200 (.-status response)))
+            (is (true? (aget body "ok")))
+            (done))
+          (p/catch (fn [error]
+                     (is nil (str error))
+                     (done)))))))
+
 (deftest delete-graph-owner-mismatch-is-forbidden
   (async done
     (let [env (permission-env

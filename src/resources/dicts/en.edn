@@ -1600,6 +1600,7 @@
  :publish/unpublish-error "Unpublish failed."
  :publish/unpublish-missing-page-id "Unpublish failed: missing page id."
  :publish/unpublished "Unpublished."
+ :publish/unpublished-already-gone "This page is no longer published. The local Published URL has been cleared."
 
  :query/advanced-results "Advanced query results"
  :query/custom-view-error "Custom view error: {1}"
