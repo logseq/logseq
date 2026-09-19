@@ -30,6 +30,7 @@
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.common.util.page-ref :as page-ref]
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -4637,6 +4638,78 @@
             (let [page-after (db-test/find-page-by-title @conn page-title)]
               (is (some? page-after))
               (is (= page-uuid (:block/uuid page-after))))))))))
+
+(defn- tx-item-entity-uuid
+  [item]
+  (let [e (second item)]
+    (cond
+      (uuid? e) e
+      (and (vector? e) (= :block/uuid (first e))) (second e)
+      (and (string? e) (common-util/uuid-string? e)) (parse-uuid e)
+      :else nil)))
+
+(defn- page-only-remote-tx
+  [page-uuid tx]
+  (filterv (fn [item]
+             (= page-uuid (tx-item-entity-uuid item)))
+           tx))
+
+(defn- page-child-titles
+  [page]
+  (->> (:block/_parent page)
+       (remove ldb/page?)
+       ldb/sort-by-order
+       (map :block/title)
+       vec))
+
+(deftest rebase-create-journal-keeps-tag-template-children-test
+  (testing "rebase against a remote empty/page-only journal keeps local #Journal template children"
+    (let [today (date-time-util/ms->journal-day (js/Date.))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Templates"}
+                   :blocks [{:block/title "journal template root"
+                             :build/children [{:block/title "Daily plan"}]}]}]})
+          journal-title (date-time-util/int->journal-title
+                         today
+                         (:logseq.property.journal/title-format
+                          (d/entity @conn :logseq.class/Journal)))
+          client-ops-conn (new-client-ops-db)
+          template-root (db-test/find-block-by-content @conn "journal template root")]
+      (ldb/transact! conn [[:db/add (:db/id template-root)
+                            :logseq.property/template-applied-to
+                            :logseq.class/Journal]])
+      (reset! ldb/*transact-pipeline-fn worker-pipeline/transact-pipeline)
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:create-page [journal-title {:today-journal? true
+                                                     :redirect? false
+                                                     :split-namespace? false
+                                                     :tags ()}]]]
+                      local-tx-meta)
+          (let [journal-before (db-test/find-journal-by-journal-day @conn today)
+                page-uuid (:block/uuid journal-before)
+                pending-before (last (#'sync-apply/pending-txs test-repo))
+                remote-page-tx (page-only-remote-tx page-uuid (:tx pending-before))]
+            (is (some? journal-before))
+            (is (= ["Daily plan"] (page-child-titles journal-before)))
+            (is (= [:create-page] (map first (:forward-outliner-ops pending-before))))
+            (is (seq remote-page-tx))
+            (is (some (fn [item]
+                        (and (not= page-uuid (tx-item-entity-uuid item))
+                             (= :block/title (nth item 2 nil))))
+                      (:tx pending-before))
+                "pending create-page tx includes pipeline template children")
+            (#'sync-apply/apply-remote-txs!
+             test-repo
+             nil
+             [{:tx-data remote-page-tx}])
+            (let [journal-after (db-test/find-journal-by-journal-day @conn today)]
+              (is (some? journal-after))
+              (is (= page-uuid (:block/uuid journal-after)))
+              (is (= ["Daily plan"] (page-child-titles journal-after))
+                  "template children survive rebase with a remote page-only journal"))))))))
 
 (deftest rebase-duplicate-create-page-keeps-remote-children-test
   (testing "rebased duplicate create-page should not remove remote children"
