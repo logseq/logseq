@@ -79,7 +79,6 @@
  :asset/align-left "左对齐"
  :asset/align-right "右对齐"
  :asset/already-exists "资源已存在，标题：{1}，节点引用：[[{2}]]"
- :asset/cannot-embed-parent-as-own-property "不能把父块嵌入为它自己的属性"
  :asset/confirm-delete-image "确定要删除这张图片吗？"
  :asset/copy "复制图片"
  :asset/copy-image-unsupported-extension "不支持复制 {1} 文件中的图片"
@@ -510,6 +509,8 @@
  :editor.document-mode/new-block-hint "{1} 创建新块"
  :editor.document-mode/title "文档模式"
  :editor.document-mode/toggle-desc "按 `D` 键或输入 {1} 切换文档模式"
+
+ :editor.embed/cannot-embed-self-or-ancestor "不能将节点嵌入到自身或其祖先中"
 
  :editor.quick-add/add-to-today "添加到今天"
  :editor.quick-add/title "快速添加"

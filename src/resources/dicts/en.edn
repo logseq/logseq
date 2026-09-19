@@ -79,7 +79,6 @@
  :asset/align-left "Align left"
  :asset/align-right "Align right"
  :asset/already-exists "Asset exists already, title: {1}, node reference: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Can't embed parent block as its own property"
  :asset/confirm-delete-image "Are you sure you want to delete this image?"
  :asset/copy "Copy image"
  :asset/copy-image-unsupported-extension "Copy image is not supported for {1} files"
@@ -510,6 +509,8 @@
  :editor.document-mode/new-block-hint "{1} to create new block"
  :editor.document-mode/title "Document mode"
  :editor.document-mode/toggle-desc "Click `D` or type {1} to toggle document mode"
+
+ :editor.embed/cannot-embed-self-or-ancestor "Can't embed a node into itself or one of its ancestors"
 
  :editor.quick-add/add-to-today "Add to today"
  :editor.quick-add/title "Quick add"

@@ -47,7 +47,6 @@
  :asset/align-left "По левому краю"
  :asset/align-right "По правому краю"
  :asset/already-exists "Актив уже существует, название: {1}, ссылка на узел: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Невозможно встроить родителя как собственное свойство"
  :asset/confirm-delete-image "Вы уверены, что хотите удалить это изображение?"
  :asset/copy "Копировать изображение"
  :asset/copy-image-unsupported-extension "Копирование изображения не поддерживается для файлов {1}"

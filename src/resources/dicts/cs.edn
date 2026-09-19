@@ -47,7 +47,6 @@
  :asset/align-left "Vlevo"
  :asset/align-right "Vpravo"
  :asset/already-exists "Dílo již existuje, název: {1}, odkaz na uzel: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Nelze vložit rodiče jako vlastní vlastnost"
  :asset/confirm-delete-image "Jste si jisti, že chcete odstranit tento obrázek?"
  :asset/copy "Kopírovat obrázek"
  :asset/copy-image-unsupported-extension "Kopírování obrázku není pro soubory {1} podporováno"

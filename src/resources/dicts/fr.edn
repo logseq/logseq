@@ -47,7 +47,6 @@
  :asset/align-left "Gauche"
  :asset/align-right "Droite"
  :asset/already-exists "L'actif existe déjà, titre : {1}, référence du nœud : [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Impossible d'intégrer le parent comme sa propre propriété"
  :asset/confirm-delete-image "Voulez-vous vraiment supprimer cette image ?"
  :asset/copy "Copier l'image"
  :asset/copy-image-unsupported-extension "La copie d'image n'est pas prise en charge pour les fichiers {1}"

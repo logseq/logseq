@@ -47,7 +47,6 @@
  :asset/align-left "Esquerra"
  :asset/align-right "Dreta"
  :asset/already-exists "L'actiu ja existeix, títol: {1}, referència del node: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "No es pot incrustar el pare com a propietat pròpia"
  :asset/confirm-delete-image "Esteu segur que voleu eliminar aquesta imatge?"
  :asset/copy "Copiar imatge"
  :asset/copy-image-unsupported-extension "Copiar la imatge no és compatible amb els fitxers {1}"

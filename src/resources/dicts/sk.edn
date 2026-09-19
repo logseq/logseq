@@ -47,7 +47,6 @@
  :asset/align-left "Vlevo"
  :asset/align-right "Vpravo"
  :asset/already-exists "Dielo už existuje, názov: {1}, referencia uzla: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Nemožno vložit rodiče jako vlastní vlastnosť"
  :asset/confirm-delete-image "Naozaj chcete odstrániť tento obrázok?"
  :asset/copy "Kopírovať obrázok"
  :asset/copy-image-unsupported-extension "Kopírovanie obrázka nie je podporované pre súbory {1}"
