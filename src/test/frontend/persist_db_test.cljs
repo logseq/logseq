@@ -1929,7 +1929,7 @@
                     _ (persist-db/<open-and-fetch-schema "logseq_db_downloaded" {:sync-download-graph? true})]
               (doseq [repo ["imported" "downloaded"]]
                 (is (fs/existsSync (node-path/join root "graphs" repo "db.sqlite")))
-                (is (fs/existsSync (node-path/join root "graphs" repo "db-worker.lock")))
+                (is (fs/existsSync (lifecycle/ownershipPath (lifecycle/context (lifecycle/resolveStorage root (node-path/join root "graphs")) repo))))
                 (is (= "available" (.-phase (lifecycle/snapshot (lifecycle/resolveStorage root (node-path/join root "graphs")) repo)))))
               (is (= "logseq_db_downloaded" @persist-db/remote-repo))))
           (p/catch (fn [error] (is false (str error))))

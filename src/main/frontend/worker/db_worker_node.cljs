@@ -4,7 +4,7 @@
             ["http" :as http]
             [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
-            [frontend.worker.db-worker-node-lock :as db-lock]
+            [logseq.db-worker.daemon :as daemon]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
@@ -19,9 +19,9 @@
 
 (defonce ^:private *ready? (atom false))
 (defonce ^:private *sse-clients (atom #{}))
-(defonce ^:private *lock-info (atom nil))
 (defonce ^:private *server-list-file (atom nil))
 (defonce ^:private *admission (atom nil))
+(defonce ^:private *platform (atom nil))
 (defonce ^:private *stopping? (atom false))
 (defonce ^:private *requests (atom #{}))
 (def ^:private sse-keepalive-ms 15000)
@@ -95,7 +95,7 @@
 
 (defn- normalize-owner-source
   [owner-source]
-  (db-lock/normalize-owner-source owner-source))
+  (daemon/normalize-owner-source owner-source))
 
 (defn- encode-event-type
   [type]
@@ -204,7 +204,10 @@
 (defn- <close-bound-repo!
   [proxy repo]
   (<close-after!
-   (<invoke! proxy "thread-api/db-sync-stop" :thread-api/db-sync-stop [])
+   (<close-after!
+    (<invoke! proxy "thread-api/db-sync-stop" :thread-api/db-sync-stop [])
+    (fn []
+      (when-let [drain! (::platform-node/drain-writes! @*platform)] (drain!))))
    #(<invoke! proxy "thread-api/close-db" :thread-api/close-db [repo])))
 
 (def ^:private non-repo-methods
@@ -307,7 +310,7 @@
    :port (if (satisfies? IDeref port) @port port)
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
-   :lock-id (get-in @*lock-info [:lock :lock-id])
+   :ownership-protocol "sqlite-v1"
    :ticket (some-> ^js @*admission .-ticket)
    :generation (some-> ^js @*admission .-generation)
    :root-dir root-dir
@@ -331,6 +334,13 @@
                 :method method-kw})
     (send-json! res status payload)))
 
+(defn- assert-lock-owner!
+  []
+  (try
+    (lifecycle/assertOwnership @*admission)
+    (catch :default error
+      (throw (ex-info (.-message error) {:code :repo-locked} error)))))
+
 (defn- handle-import-db-binary!
   [proxy bound-repo ^js parsed-url ^js req ^js res]
   (let [repo (.get (.-searchParams parsed-url) "repo")
@@ -340,8 +350,7 @@
                 args-for-validation [repo binary]]
           (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
             (send-json! res status {:ok false :error error})
-            (p/let [_ (let [{:keys [path lock]} @*lock-info]
-                        (db-lock/assert-lock-owner! path lock))
+            (p/let [_ (assert-lock-owner!)
                     result (<invoke-binary! proxy method-str method-kw repo binary)]
               (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
         (p/catch (fn [error]
@@ -362,8 +371,7 @@
            (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
              (send-json! res status {:ok false :error error})
              (p/let [_ (when-not (contains? non-repo-methods method-kw)
-                         (let [{:keys [path lock]} @*lock-info]
-                           (db-lock/assert-lock-owner! path lock)))
+                         (assert-lock-owner!))
                      result (<invoke! proxy method-str method-kw args')]
                (when-not (string? result)
                  (throw (ex-info "db-worker invoke result must be a transit string"
@@ -463,12 +471,6 @@
      :sync-download-graph? true}
     {}))
 
-(defn- assert-lock-owner!
-  []
-  (lifecycle/checkAdmission @*admission)
-  (let [{:keys [path lock]} @*lock-info]
-    (db-lock/assert-lock-owner! path lock)))
-
 (defn- close-server!
   [^js server]
   (p/create
@@ -498,6 +500,8 @@
             result (-> (p/let [_ (p/all (map #(p/catch % identity) @*requests))
                                _ (<close-after! (<close-bound-repo! proxy repo)
                                                 #(close-server! server))]
+                         (db-worker-log/uninstall!)
+                         (lifecycle/releaseOwnership @*admission)
                          (lifecycle/recordStop @*admission nil)
                          (when (fn? on-stopped!) (on-stopped! nil))
                          true)
@@ -522,7 +526,7 @@
                            :stopped? stopped?
                            :on-stopped! on-stopped!})]
     (p/let [_ (lifecycle/publish
-               @*admission (clj->js (:lock @*lock-info)) actual-port
+               @*admission actual-port
                (fn []
                  (when-let [file-path @*server-list-file]
                    (server-list/append-entry! file-path {:pid (.-pid js/process)
@@ -566,8 +570,6 @@
                                  (.close server)
                                  (reject error))))))
        (.on server "error" (fn [error]
-                              (when-let [lock-path (:path @*lock-info)]
-                                (db-lock/remove-lock! lock-path))
                               (reject error)))))))
 
 (defn start-daemon!
@@ -592,36 +594,29 @@
                                                   :generation (:graph-generation opts)})
                   _ (reset! *admission admission)
                   root-dir (.-root admission)
-                  server-list-file (server-list-file-path root-dir)]
-          (db-worker-log/install! {:root-dir root-dir :storage storage
-                                   :repo repo
-                                   :log-level (keyword (or log-level "info"))})
-          (log/info :db-worker-node-version {:build-time (build-version/build-time)
-                                             :revision (build-version/revision)})
-          (reset! *ready? false)
-          (reset! *stopping? false)
-          (reset! *requests #{})
-          (reset! *lock-info nil)
-          (reset! *server-list-file server-list-file)
-          (set-main-thread-stub!)
-          (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir :storage storage
+                  server-list-file (server-list-file-path root-dir)
+                  proxy* (atom nil)]
+          (-> (p/let [_ (do
+                         (db-worker-log/install! {:root-dir root-dir :storage storage
+                                                  :repo repo :log-level (keyword (or log-level "info"))})
+                         (log/info :db-worker-node-version {:build-time (build-version/build-time)
+                                                           :revision (build-version/revision)})
+                         (reset! *ready? false)
+                         (reset! *stopping? false)
+                         (reset! *requests #{})
+                         (reset! *platform nil)
+                         (reset! *server-list-file server-list-file)
+                         (set-main-thread-stub!))
+                      platform (platform-node/node-platform {:root-dir root-dir :storage storage
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
                                                              :embedding-endpoint (:embedding-endpoint opts)
                                                              :embedding-model-id (:embedding-model-id opts)})
+                      _ (reset! *platform platform)
                       proxy (db-core/init-core! platform)
+                      _ (reset! proxy* proxy)
                       _ (<init-worker! proxy)
-                      {:keys [path lock]} (lifecycle/withLease
-                                           admission "lock"
-                                           (fn []
-                                             (lifecycle/checkAdmission admission)
-                                             (db-lock/ensure-lock! {:root-dir root-dir :storage storage
-                                                                    :repo repo
-                                                                    :ticket (.-ticket admission)
-                                                                    :generation (.-generation admission)
-                                                                    :owner-source owner-source})))
-                      _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
                           (<invoke! proxy method-str method-kw [repo (startup-db-opts opts)]))]
@@ -632,9 +627,17 @@
                                      :owner-source owner-source
                                      :root-dir root-dir
                                      :on-stopped! on-stopped!}))
-              (p/catch (fn [e]
-                         (lifecycle/abortAdmission admission e)
-                         (throw e)))))
+              (p/catch (fn [error]
+                         (-> (p/let [_ (when-let [proxy @proxy*]
+                                         (<close-bound-repo! proxy repo))]
+                               (db-worker-log/uninstall!)
+                               (lifecycle/releaseOwnership admission)
+                               (lifecycle/abortAdmission admission error))
+                             (p/catch (fn [close-error]
+                                        (lifecycle/abortAdmission admission close-error)
+                                        (log/error :db-worker-node-startup-close-failed close-error)
+                                        (.exit js/process 1)))
+                             (p/then (fn [_] (throw error))))))))
           (p/catch (fn [e] (throw e)))))))
 
 (defn main

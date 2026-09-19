@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from graph_deletion_lifecycle_test import CLI, alive, until
+from graph_deletion_lifecycle_test import CLI, alive, until, lifecycle_info
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root-dir', required=True)
@@ -28,7 +28,8 @@ status = invoke(args.root_dir, args.config, 'sync', 'status')
 assert status['data']['ws-state'] == 'open', status
 root = Path(args.root_dir)
 graph_dir = root / 'graphs' / args.graph
-lock = json.loads((graph_dir / 'db-worker.lock').read_text())
+info = lifecycle_info(root, args.graph)
+lock = info['state']['workers'][0]
 entry = next(line.split() for line in (root / 'server-list').read_text().splitlines()
              if int(line.split()[0]) == lock['pid'])
 connection = http.client.HTTPConnection('127.0.0.1', int(entry[1]), timeout=10)
@@ -47,7 +48,7 @@ assert not any(line.split()[0] == str(lock['pid'])
                for line in (root / 'server-list').read_text().splitlines())
 moved = root / 'graphs' / 'Unlinked graphs' / args.graph
 assert (moved / 'db.sqlite').exists()
-assert not (moved / 'db-worker.lock').exists()
+assert Path(info['ownership']).exists()
 peer = invoke(args.other_root, args.other_config, 'sync', 'status')
 assert peer['data']['ws-state'] == 'open', peer
 peer['data']['deleted-worker-pid'] = lock['pid']

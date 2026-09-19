@@ -2,7 +2,10 @@
   "Shared db-worker-node health and discovery helpers."
   (:require ["http" :as http]
             [clojure.string :as string]
+            [logseq.common.defkeywords :refer [defkeyword]]
             [promesa.core :as p]))
+
+(defkeyword :ownership-protocol "The graph ownership protocol published by a Node worker.")
 
 (def ^:private valid-owner-sources
   #{:cli :electron :unknown})
