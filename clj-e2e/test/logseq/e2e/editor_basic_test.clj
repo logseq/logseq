@@ -1138,6 +1138,23 @@
     (b/new-block "another nested child")
     (b/indent)))
 
+(deftest page-icon-visible-in-library
+  (testing "Library page entries show the same page icon as on-page"
+    (b/new-block "library icon source")
+    (util/set-tag "Page" {:hidden? true})
+    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (p/goto-page "Library")
+    (assert/assert-is-visible
+     (-> ".ls-page-blocks .ls-block"
+         (loc/filter :has-text "library icon source")
+         (loc/filter :has ".ls-icon-file")))
+    (b/new-block "library created page")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     (-> ".ls-page-blocks .ls-block"
+         (loc/filter :has-text "library created page")
+         (loc/filter :has ".ls-icon-file")))))
+
 (defn- selection-range
   []
   (w/eval-js
