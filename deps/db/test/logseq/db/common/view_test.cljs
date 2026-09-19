@@ -17,6 +17,10 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
+(defn- result-titles
+  [conn result]
+  (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
+
 (deftest get-view-data-journals-returns-ordered-compact-index-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -347,10 +351,6 @@
     (is (< elapsed-ms 150)
         (str "A 2500-page first window must not sort every page, took "
              elapsed-ms "ms"))))
-
-(defn- result-titles
-  [conn result]
-  (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
 
 (deftest get-view-data-class-objects-first-window-filters-hidden-objects-test
   (let [conn (db-test/create-conn-with-blocks

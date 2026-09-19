@@ -614,10 +614,11 @@
       (seq (or (:filters filters) []))))
 
 (defn- count-all-page-ids
-  "Exact visible-page count. BTSet est-count is a tree distance and
-  reported hundreds of All Pages rows for graphs with a few dozen
-  pages, so the table painted empty placeholder rows after delete or
-  filter. Walk :block/name once; do not allocate the id vector."
+  "Exact visible-page count. BTSet est-count is a tree distance; on a
+  56-page graph compiled ClojureScript reported 98 first-window rows
+  and the table painted empty placeholders. Walk :block/name once; do
+  not allocate the id vector. nbb has no est-count, so nbb tests cannot
+  catch this."
   [db exclude-ids]
   (reduce (fn [n datom]
             (if (contains? exclude-ids (:e datom))
