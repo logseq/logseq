@@ -9,6 +9,12 @@
     (is (= "/tmp/home/logseq/graphs/foo~2Fbar"
            (config/get-local-dir (str common-config/db-version-prefix "foo/bar"))))))
 
+(deftest get-local-dir-uses-system-info-graphs-dir
+  (with-redefs [state/get-state (fn [] {:system/info {:home-dir "/tmp/home"
+                                                     :graphs-dir "/custom/graphs"}})]
+    (is (= "/custom/graphs/foo~2Fbar"
+           (config/get-local-dir (str common-config/db-version-prefix "foo/bar"))))))
+
 (deftest get-electron-backup-dir-uses-unified-backup-directory
   (with-redefs [state/get-state (fn [] {:system/info {:home-dir "/tmp/home"}})]
     (is (= "/tmp/home/logseq/graphs/foo~2Fbar/backup"

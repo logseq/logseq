@@ -323,11 +323,18 @@
   [s]
   (str "/" (string/replace s #"^[./]*" "")))
 
+(defn- local-graphs-dir
+  "Resolved DB graphs directory from Electron main (`:system/info :graphs-dir`).
+  Falls back to `~/logseq/graphs` when the renderer has not received system info."
+  []
+  (or (get-in (state/get-state) [:system/info :graphs-dir])
+      (path/path-join (get-in (state/get-state) [:system/info :home-dir])
+                      "logseq"
+                      "graphs")))
+
 (defn get-local-dir
   [repo]
-  (path/path-join (get-in (state/get-state) [:system/info :home-dir])
-                  "logseq"
-                  "graphs"
+  (path/path-join (local-graphs-dir)
                   (common-graph-dir/repo->encoded-graph-dir-name repo)))
 
 (defn get-electron-backup-dir
