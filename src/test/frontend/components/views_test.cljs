@@ -8,8 +8,11 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
@@ -1276,3 +1279,62 @@
         "A different tag still opens the popup and navigates.")
     (is (= [:popup] @popup-calls))
     (is (= [:redirect] @redirect-calls))))
+
+(deftest delete-pages-needs-confirm-covers-every-destructive-view
+  (let [pages [{:db/id 1 :block/uuid (random-uuid)}]
+        tag-parent {:db/ident :user.class/MyTag}
+        page-class-parent {:db/ident :logseq.class/Page}]
+    (is (true? (views/delete-pages-needs-confirm? tag-parent :class-objects pages))
+        "A tag page's trash action deleted pages instantly before this fix (db-test#1211)")
+    (is (true? (views/delete-pages-needs-confirm? nil :query-result pages))
+        "A query result's trash action deleted pages instantly before this fix")
+    (is (true? (views/delete-pages-needs-confirm? nil :all-pages pages))
+        "All Pages already confirmed and must keep doing so")
+    (is (false? (views/delete-pages-needs-confirm? page-class-parent :class-objects pages))
+        "The built-in Page class never deletes its rows, so nothing needs confirming")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :property-objects pages))
+        "Property objects only retract a property value, they delete no page")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :unknown-feature pages))
+        "An unrecognised view must not be treated as destructive")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :class-objects []))
+        "A block-only selection must delete at once, with no page dialog")))
+
+(deftest on-delete-rows-confirms-instead-of-deleting-pages-inline
+  (async done
+    (let [on-delete-rows #'views/on-delete-rows
+          page {:db/id 1
+                :block/uuid (random-uuid)
+                :block/title "Alpha"
+                :block/tags [:logseq.class/Page]}
+          deleted-pages (atom [])
+          events (atom [])
+          cleared (atom 0)
+          table {:data-fns {:set-row-selection! (fn [_] (swap! cleared inc))}}
+          original-repo state/get-current-repo
+          original-get-blocks db-async/<get-blocks
+          original-delete-page! outliner-op/delete-page!
+          original-pub-event! state/pub-event!]
+      (set! state/get-current-repo (fn [] "views-delete-test"))
+      (set! db-async/<get-blocks (fn [_repo _ids _opts] (p/resolved [{:block page}])))
+      (set! outliner-op/delete-page! (fn [id] (swap! deleted-pages conj id) nil))
+      (set! state/pub-event! (fn [event] (swap! events conj event) nil))
+      (-> (p/let [_ (on-delete-rows {:db/ident :user.class/MyTag} :class-objects table [1])]
+            (is (empty? @deleted-pages)
+                "A tag page must not delete pages inline any more (db-test#1211)")
+            (is (= 1 (count @events))
+                "The trash action raises exactly one event")
+            (let [[event-name event-pages] (first @events)]
+              (is (= :page/show-delete-dialog event-name)
+                  "That event is the page confirmation dialog")
+              (is (= [(:block/uuid page)] (mapv :block/uuid event-pages))
+                  "The dialog is handed the selected pages"))
+            (is (zero? @cleared)
+                "The selection is cleared by the dialog's callback, never before it"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! state/get-current-repo original-repo)
+                       (set! db-async/<get-blocks original-get-blocks)
+                       (set! outliner-op/delete-page! original-delete-page!)
+                       (set! state/pub-event! original-pub-event!)
+                       (done)))))))
