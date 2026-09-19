@@ -1746,11 +1746,11 @@
      (cond-> {:error (js/Error. "Sync apply remote txs failed")
               :payload {:source "db-sync"
                         :operation "apply-remote-txs"
-                        :has-local-changes? has-local-changes?
+                        :has-local-changes has-local-changes?
                         :remote-tx-count (count remote-txs)
                         :local-tx-count (count local-txs)}}
        (ex-data error)
-       (assoc :extra {:error-data (ex-data error)})))
+       (assoc :extra {:error-data (str (ex-data error))})))
     (catch :default report-error
       (log/error :db-sync/report-apply-remote-txs-error-failed
                  {:error report-error}))))
