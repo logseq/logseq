@@ -2,6 +2,7 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.app-url :as app-url]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
@@ -30,12 +31,15 @@
 
       (contains? transfer-types "text/plain")
       (let [text (.getData data-transfer "text/plain")]
-        (editor-handler/api-insert-new-block!
-         text
-         {:block-uuid uuid
-          :edit-block? false
-          :sibling? (= move-to :sibling)
-          :before? (= move-to :top)}))
+        (when (app-url/privileged-renderer-url? text)
+          (util/stop event))
+        (when (app-url/insertable-block-content? text)
+          (editor-handler/api-insert-new-block!
+           text
+           {:block-uuid uuid
+            :edit-block? false
+            :sibling? (= move-to :sibling)
+            :before? (= move-to :top)})))
 
       :else
       (log/warn :block/unhandled-drop-data-transfer-type {:types transfer-types}))))
