@@ -18,3 +18,22 @@
   []
   (or (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
       (get-in (first (state/get-editor-args)) [:block :db/id])))
+
+(defn entity-is-current-page?
+  "True when the page-ref/tag entity is the page currently being viewed.
+   `current-page` is typically `state/get-current-page` (uuid string or page name)."
+  ([entity]
+   (entity-is-current-page? entity (state/get-current-page)))
+  ([entity current-page]
+   (boolean
+    (when (and entity current-page)
+      (let [current (str current-page)
+            ids (cond
+                  (uuid? entity) [(str entity)]
+                  (string? entity) [entity]
+                  (map? entity)
+                  (keep identity
+                        [(some-> (:block/uuid entity) str)
+                         (:block/name entity)])
+                  :else nil)]
+        (some #(= current %) ids))))))
