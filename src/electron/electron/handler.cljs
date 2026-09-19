@@ -597,7 +597,8 @@
   (server/set-config! config))
 
 (defmethod handle :system/info [^js _win _]
-  {:home-dir (.homedir os)})
+  {:home-dir (.homedir os)
+   :graphs-dir (common-graph/get-db-graphs-dir)})
 
 (defmethod handle :window/open-blank-callback [^js win [_ _type]]
   (win/setup-window-listeners! win) nil)
