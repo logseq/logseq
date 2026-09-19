@@ -460,6 +460,22 @@
     (created-block-uuids-from-tx-data
      (filter #(contains? parent-ids (entity-id %)) tx-data))))
 
+(defn- replaces-empty-target?
+  [db tx-data source-uuids target-ref opts]
+  (and (or (:replace-empty-target? opts)
+           (and (:sibling? opts) (> (count source-uuids) 1)))
+       (or (= (first source-uuids) (:block/uuid (d/entity db target-ref)))
+           (some (fn [item]
+                   (let [[e a v added?]
+                         (if (vector? item)
+                           [(second item) (nth item 2 nil) (nth item 3 nil)
+                            (= :db/add (first item))]
+                           [(:e item) (:a item) (:v item) (:added item)])]
+                     (and (= :block/title a) (false? added?)
+                          (string? v) (string/blank? v)
+                          (= target-ref (stable-entity-ref db e)))))
+                 tx-data))))
+
 (defn- canonicalize-insert-blocks-op
   ([db tx-data args]
    (canonicalize-insert-blocks-op db tx-data args (inserted-block-uuids-from-tx-data tx-data)))
@@ -467,20 +483,23 @@
    (let [[blocks target-id opts] args
          source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
          source-uuids (mapv :block/uuid source-blocks)
-         available-set (set available-uuids)
-         created-uuids (if (every? available-set source-uuids)
-                         source-uuids
-                         (vec (take (count source-blocks) available-uuids)))
          target-ref (stable-entity-ref db target-id)
          target (d/entity db target-ref)
+         available-set (set available-uuids)
+         replaced-target? (replaces-empty-target? db tx-data source-uuids target-ref opts)
+         new-source-uuids (if replaced-target? (subvec source-uuids 1) source-uuids)
+         created-uuids (if (every? available-set new-source-uuids)
+                         new-source-uuids
+                         (vec (take (count new-source-uuids) available-uuids)))
          block-with-new-id (fn [block block-uuid]
                              (assoc block
                                     :block/uuid block-uuid
                                     :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
                                                     [:block/uuid (:block/uuid parent)])))
-         blocks* (if (seq created-uuids)
-                   (if (and (:replace-empty-target? opts)
-                            (= (inc (count created-uuids)) (count source-blocks)))
+         blocks* (if (or replaced-target? (seq created-uuids))
+                   (if (or replaced-target?
+                           (and (:replace-empty-target? opts)
+                                (= (inc (count created-uuids)) (count source-blocks))))
                      (let [[fst-block & rst-blocks] source-blocks
                            created-rst-uuids created-uuids]
                        (into [(assoc fst-block :block/uuid (:block/uuid target))]

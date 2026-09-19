@@ -41,6 +41,7 @@
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
+   [logseq.db.sqlite.export :as sqlite-export]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
    [logseq.graph-parser.block :as gp-block]
@@ -453,6 +454,53 @@
                           (mapv #(normalize-op-block-ids @conn %) ops)
                           opts))
 
+(defn- upload-pending-and-assert-converged!
+  [conn server-conn]
+  (let [{:keys [tx-entries drop-tx-ids]}
+        (sync-apply/prepare-upload-tx-entries conn (sync-apply/pending-txs test-repo))]
+    (doseq [{:keys [tx-data outliner-op]} tx-entries]
+      ;; Validate raw lookups before the server's stale-rebase handling can drop them.
+      (d/with @server-conn tx-data)
+      (#'sync-handler/apply-tx-entry!
+       server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))
+    (is (= (sync-checksum/recompute-checksum @conn)
+           (sync-checksum/recompute-checksum @server-conn)))
+    (sync-apply/mark-pending-txs-false! test-repo (into drop-tx-ids (map :tx-id tx-entries)))
+    (is (empty? (sync-apply/pending-txs test-repo)))))
+
+(deftest additional-outliner-operations-upload-test
+  (doseq [op [:restore-recycled :recycle-delete-permanently :collapse-expand-blocks :batch-import-edn]
+          rebase? [false true]]
+    (testing (str op ", rebase=" rebase?)
+      (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+            [_ recycled-uuid] (outliner-page/create! conn "Recycled upload page" {})
+            _ (outliner-page/delete! conn recycled-uuid)
+            source-conn (db-test/create-conn-with-blocks
+                         [{:page {:block/title "Imported upload page"}
+                           :blocks [{:block/title "Imported child"}]}])
+            export-map (sqlite-export/build-export @source-conn
+                                                   {:export-type :page
+                                                    :page-id (:db/id (ldb/get-page @source-conn "Imported upload page"))})
+            args (case op
+                   (:restore-recycled :recycle-delete-permanently) [recycled-uuid]
+                   :collapse-expand-blocks [[{:block/uuid (:block/uuid child1) :block/collapsed? true}] {}]
+                   :batch-import-edn [export-map {}])
+            server-conn (d/conn-from-db @conn)]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (let [result (apply-ops! conn [[op args]] local-tx-meta)]
+              (is (nil? (:error result))))
+            (when rebase?
+              (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                                     [[:db/add (:db/id child2) :block/title "Remote edit"]]))]
+                (sync-apply/apply-remote-tx! test-repo nil remote-tx)))
+            (case op
+              :restore-recycled (is (not (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid]))))
+              :recycle-delete-permanently (is (nil? (d/entity @conn [:block/uuid recycled-uuid])))
+              :collapse-expand-blocks (is (true? (:block/collapsed? (d/entity @conn (:db/id child1)))))
+              :batch-import-edn (is (some? (ldb/get-page @conn "Imported upload page"))))
+            (upload-pending-and-assert-converged! conn server-conn)))))))
+
 (deftest rebase-save-new-page-reference-and-insert-sibling-test
   (doseq [persisted-bad-history? [false true]
           recycle? [false true]
@@ -523,12 +571,14 @@
                                [:forward-outliner-ops 1 1 0 0 :block/uuid]))))
               (is (some #{tx-id} (map :tx-id (sync-apply/pending-txs test-repo))))
               (when recycle?
-                (is (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid])))))))))))
+                (is (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid]))))
+              (upload-pending-and-assert-converged! conn remote-conn))))))))
 
 (deftest rebase-insert-page-in-library-with-reference-test
   (doseq [with-reference? [false true]]
     (testing (str "Library page insertion, with reference=" with-reference?)
       (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+            server-conn (d/conn-from-db @conn)
             library (ldb/get-built-in-page @conn common-config/library-page-name)
             parsed-ref (gp-block/page-name->map "Referenced Page" @conn true
                                                 date-time-util/default-journal-title-formatter)
@@ -547,6 +597,7 @@
                   page-before (d/entity @conn [:block/uuid page-uuid])
                   pending (first (sync-apply/pending-txs test-repo))]
               (is (= page-uuid (get-in pending [:forward-outliner-ops 0 1 0 0 :block/uuid])))
+              (ldb/transact! server-conn [[:db/add (:db/id child1) :block/title "Remote edit"]])
               (sync-apply/apply-remote-tx! test-repo nil
                                          [[:db/add (:db/id child1) :block/title "Remote edit"]])
               (let [inserted (d/entity @conn [:block/uuid page-uuid])]
@@ -559,21 +610,28 @@
                          (set (map :block/uuid (:block/refs inserted)))))
                   (is (contains? (set (map :block/uuid (:block/refs inserted))) (:block/uuid parsed-ref)))
                   (is (= "Referenced Page"
-                         (:block/title (d/entity @conn [:block/uuid (:block/uuid parsed-ref)])))))))))))))
+                         (:block/title (d/entity @conn [:block/uuid (:block/uuid parsed-ref)]))))))
+              (upload-pending-and-assert-converged! conn server-conn))))))))
 
 (deftest rebase-multiple-insertions-preserves-identities-test
-  (doseq [keep-uuid? [false true]]
+  (doseq [keep-uuid? [false true]
+          replace-empty-target? [false true]]
     (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)
+          _ (when replace-empty-target?
+              (ldb/transact! conn [[:db/add (:db/id child1) :block/title ""]]))
           server-conn (d/conn-from-db @conn)]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
                       [[:insert-blocks [[{:block/uuid (random-uuid) :block/title "First insertion"}]
-                                       (:db/id child1) {:sibling? true :keep-uuid? keep-uuid?}]]
+                                       (:db/id child1) {:sibling? true :keep-uuid? keep-uuid?
+                                                        :replace-empty-target? replace-empty-target?}]]
                        [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Second insertion"}]
                                        (:db/id child2) {:sibling? true :keep-uuid? keep-uuid?}]]]
                       local-tx-meta)
-          (let [first-uuid (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1))))
+          (let [first-uuid (if replace-empty-target?
+                             (:block/uuid child1)
+                             (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1)))))
                 second-uuid (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child2))))]
             (apply-ops! conn [[:save-block [{:block/uuid second-uuid :block/title "Second edited"} {}]]]
                         local-tx-meta)
@@ -7815,6 +7873,31 @@
      :local-empty-uuid local-empty-uuid
      :seed-conn seed-conn
      :client-ops-conn client-ops-conn}))
+
+(deftest template-uploads-after-rebase-and-undo-redo-test
+  (doseq [rebase? [false true]
+          undo-redo? [false true]]
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          server-conn (d/conn-from-db @seed-conn)
+          seed (db-test/find-block-by-content @conn "seed")]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-redefs [undo-redo/*apply-history-action! (atom sync-apply/apply-history-action!)]
+              (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+              (let [inserted (select-offline-inserted-three conn template-root-uuid)
+                    inserted-uuid (:block/uuid inserted)]
+                (is (uuid? inserted-uuid))
+                (when undo-redo?
+                  (undo-redo/undo test-repo)
+                  (undo-redo/redo test-repo))
+                (when rebase?
+                  (let [tx (:tx-data (ldb/transact! server-conn
+                                                  [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+                    (sync-apply/apply-remote-tx! test-repo nil tx)))
+                (is (= "3" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
+                (upload-pending-and-assert-converged! conn server-conn))))))))
 
 (deftest rebase-apply-template-preserves-followup-insert-target-uuid-test
   (testing "rebase should replay apply-template with stable UUIDs so follow-up insert-blocks is not dropped"
