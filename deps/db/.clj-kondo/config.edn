@@ -4,7 +4,7 @@
   :used-underscored-binding {:level :warning}
   :shadowed-var {:level :warning
                  ;; FIXME: Remove these as shadowing core fns isn't a good practice
-                 :exclude [val key name]}
+                 :exclude [val key]}
 
   :consistent-alias
   {:aliases {clojure.string string

@@ -16,10 +16,10 @@
         child-title {child-a-uuid ["Australia" "australia"]
                      child-b-uuid ["Canada" "canada"]}
         child-txs (map (fn [child-uuid]
-                         (let [[title name] (child-title child-uuid)]
+                         (let [[title page-name] (child-title child-uuid)]
                            {:block/uuid child-uuid
                             :block/title title
-                            :block/name name
+                            :block/name page-name
                             :block/tags :logseq.class/Page
                             :block/parent "parent"}))
                        child-uuids)]
