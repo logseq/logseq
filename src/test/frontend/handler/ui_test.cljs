@@ -8,6 +8,21 @@
             [frontend.util :as util]
             [promesa.core :as p]))
 
+(deftest auto-complete-next-scrolls-via-virtuoso-ref
+  (testing "keyboard movement uses the Virtuoso ref from shortcut state, not a DOM expando"
+    (let [scroll-calls (atom [])
+          current-idx (atom 0)
+          virtuoso #js {:current #js {:scrollToIndex (fn [opts]
+                                                       (swap! scroll-calls conj (.-index opts)))}}
+          state {:frontend.ui/current-idx current-idx
+                 :frontend.ui/virtuoso virtuoso
+                 :matched (vec (range 5))
+                 :opts {}}]
+      (with-redefs [util/stop (fn [_])]
+        (ui-handler/auto-complete-next state #js {})
+        (is (= 1 @current-idx))
+        (is (= [1] @scroll-calls))))))
+
 (deftest auto-complete-scroll-geometry-test
   (testing "normalizes focused-item geometry from container and target DOM data"
     (let [container #js {:scrollTop 100

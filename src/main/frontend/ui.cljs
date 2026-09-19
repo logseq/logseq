@@ -435,6 +435,35 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
+(def auto-complete-virtualize-threshold
+  "Window ungrouped autocomplete lists once they exceed this many rows.
+  Keep this above typical built-in property/command counts so keyboard
+  highlight and click targets stay mounted."
+  200)
+
+(def auto-complete-virtualize-height 240)
+
+(hsx/defc auto-complete-item
+  [idx item {:keys [on-chosen on-shift-chosen item-render *current-idx current-idx]}]
+  (let [react-key (str idx)
+        choose! (fn [e]
+                  (util/stop e)
+                  (when-not (:disabled? item)
+                    (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                      (on-shift-chosen item)
+                      (on-chosen item e))))]
+    [:div.menu-link-wrap
+     {:key react-key
+      :on-mouse-move #(reset! *current-idx idx)
+      :on-click choose!}
+     (menu-link
+      {:id (str "ac-" react-key)
+       :tab-index "0"
+       :class (when (= current-idx idx) "chosen")
+       :on-mouse-down util/stop
+       :on-click choose!}
+      (if item-render (item-render item (= current-idx idx)) item))]))
+
 (hsx/defc auto-complete
   [matched
    {:keys [on-chosen
@@ -444,38 +473,32 @@
            item-render
            class
            header
-           grouped?]
+           grouped?
+           virtualize?]
+    :or {virtualize? true}
     :as opts}]
-  (let [*current-idx (hooks/use-memo #(atom 0) [])
+  (let [matched (vec matched)
+        *current-idx (hooks/use-memo #(atom 0) [])
         [current-idx] (hooks/use-atom *current-idx)
+        *virtuoso (hooks/use-ref nil)
         shortcut-state {:matched matched
                         :opts opts
-                        ::current-idx *current-idx}
+                        ::current-idx *current-idx
+                        ::virtuoso *virtuoso}
         _ (shortcut/use-shortcut-handler! :shortcut.handler/auto-complete shortcut-state)
+        item-opts {:on-chosen on-chosen
+                   :on-shift-chosen on-shift-chosen
+                   :item-render item-render
+                   :*current-idx *current-idx
+                   :current-idx current-idx}
         *groups (atom #{})
+        virtualize? (and virtualize?
+                         (not grouped?)
+                         (not (fn? get-group-name))
+                         (>= (count matched) auto-complete-virtualize-threshold))
         render-f (fn [matched]
                    (for [[idx item] matched]
-                     (let [react-key (str idx)
-                           choose! (fn [e]
-                                     (util/stop e)
-                                     (when-not (:disabled? item)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item e))))
-                           item-cp
-                           [:div.menu-link-wrap
-                            {:key react-key
-                             ;; mouse-move event to indicate that cursor moved by user
-                             :on-mouse-move  #(reset! *current-idx idx)
-                             :on-click choose!}
-                            (let [chosen? (= current-idx idx)]
-                              (menu-link
-                               {:id (str "ac-" react-key)
-                                :tab-index "0"
-                                :class (when chosen? "chosen")
-                                :on-mouse-down util/stop
-                                :on-click choose!}
-                               (if item-render (item-render item chosen?) item)))]
+                     (let [item-cp [auto-complete-item idx item item-opts]
                            group-name (and (fn? get-group-name) (get-group-name item))]
                        (if (and group-name (not (contains? @*groups group-name)))
                          (do
@@ -483,22 +506,35 @@
                            [:div
                             [:div.ui__ac-group-name group-name]
                             item-cp])
-                         item-cp))))]
+                         item-cp))))
+        results (cond
+                  virtualize?
+                  (virtualized-list
+                   {:ref (fn [el] (hooks/set-ref! *virtuoso el))
+                    :style {:height auto-complete-virtualize-height}
+                    :total-count (count matched)
+                    :increase-viewport-by 80
+                    :item-content (fn [idx]
+                                    (auto-complete-item idx (nth matched idx) item-opts))})
+
+                  grouped?
+                  (let [*idx (atom -1)
+                        inc-idx #(swap! *idx inc)]
+                    (for [[group matched] (group-by :group matched)]
+                      (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
+                        (if group
+                          [:div
+                           [:div.ui__ac-group-name group]
+                           (render-f matched')]
+                          (render-f matched')))))
+
+                  :else
+                  (render-f (medley/indexed matched)))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
-        (if grouped?
-          (let [*idx (atom -1)
-                inc-idx #(swap! *idx inc)]
-            (for [[group matched] (group-by :group matched)]
-              (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
-                (if group
-                  [:div
-                   [:div.ui__ac-group-name group]
-                   (render-f matched')]
-                  (render-f matched')))))
-          (render-f (medley/indexed matched)))]
+        results]
        (when empty-placeholder
          empty-placeholder))]))
 

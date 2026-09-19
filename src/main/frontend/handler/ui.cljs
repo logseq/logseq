@@ -247,6 +247,13 @@
         (set! (.-scrollTop container)
               (auto-complete-keep-visible-scroll-top geometry))))))
 
+(defn- scroll-auto-complete-item!
+  [state idx]
+  (let [^js virtuoso (some-> (get state :frontend.ui/virtuoso) .-current)]
+    (if (and virtuoso (fn? (.-scrollToIndex virtuoso)))
+      (.scrollToIndex virtuoso #js {:index idx :align "center"})
+      (auto-complete-scroll-into-view! idx))))
+
 (defn auto-complete-prev
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
@@ -258,7 +265,7 @@
       (= @current-idx 0)
       (reset! current-idx (dec (count matched)))
       :else nil)
-    (auto-complete-scroll-into-view! @current-idx)))
+    (scroll-auto-complete-item! state @current-idx)))
 
 (defn auto-complete-next
   [state e]
@@ -269,7 +276,7 @@
       (if (>= @current-idx (dec total))
         (reset! current-idx 0)
         (swap! current-idx inc)))
-    (auto-complete-scroll-into-view! @current-idx)))
+    (scroll-auto-complete-item! state @current-idx)))
 
 (defn auto-complete-complete
   [state e]

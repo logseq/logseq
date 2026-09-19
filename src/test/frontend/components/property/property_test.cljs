@@ -150,6 +150,21 @@
                             (is false (str error))))
                  (p/finally done))))))
 
+(deftest choosing-existing-property-without-label-opens-value-setter-test
+  (let [input-key #'property-component/chosen-property-input-key
+        translate (fn [_] "{Missing key}")]
+    (is (= "Alias"
+           (input-key {:block/title "Alias"}
+                      {:value :block/alias}
+                      translate))
+        "Existing properties must yield a truthy key without a visual :label.")
+    (is (= "new"
+           (input-key nil {:value "new"} translate)))
+    (is (= "Some page"
+           (input-key {:block/title "Some page"}
+                      {:convert-page-to-property? true :value "x"}
+                      translate)))))
+
 (deftest toggle-hidden-properties-visibility-test
   (let [block-uuid (random-uuid)]
     (is (false? (property-component/hidden-properties-visible? block-uuid)))
