@@ -1251,6 +1251,15 @@
                        (fn [size]
                          (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
 
+(defn delete-pages-needs-confirm?
+  [view-parent view-feature-type pages]
+  (boolean
+   (and (seq pages)
+        (case view-feature-type
+          :class-objects (not= :logseq.class/Page (:db/ident view-parent))
+          (:query-result :all-pages) true
+          false))))
+
 (defn- on-delete-rows
   [view-parent view-feature-type table selected-ids]
   (p/let [results (db-async/<get-blocks (state/get-current-repo) selected-ids {:children? false})
@@ -1260,40 +1269,36 @@
           blocks (remove entity/page? selected-rows)
           page-ids (map :db/id pages)
           {:keys [set-row-selection!]} (:data-fns table)
-          clear-selection! #(set-row-selection! {})]
-      (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :delete-blocks}
-        (when (seq blocks)
-          (outliner-op/delete-blocks! blocks nil))
-        (case view-feature-type
-          :class-objects
-          (when (seq page-ids)
-            (when-not (= :logseq.class/Page (:db/ident view-parent))
-              (doseq [page pages]
-                (when-let [id (:block/uuid page)]
-                  (outliner-op/delete-page! id)))))
-
-          :property-objects
-          ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-          (when-not (:logseq.property/built-in? view-parent)
-            (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
-              (when (seq tx-data)
-                (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-
-          :query-result
-          (doseq [page pages]
-            (when-let [id (:block/uuid page)]
-              (outliner-op/delete-page! id)))
-
-          :all-pages
-          (state/pub-event! [:page/show-delete-dialog selected-rows clear-selection!])
-
-          nil))
-
-       (when-not (or (= view-feature-type :all-pages)
-                     (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
-         (clear-selection!))))))
+          clear-selection! #(set-row-selection! {})
+          confirm-pages? (delete-pages-needs-confirm? view-parent view-feature-type pages)
+          ;; Everything that is not a page deletion. Held in a closure so that it can be
+          ;; deferred until after confirmation instead of running straight away.
+          delete-rest!
+          (fn []
+            (ui-outliner-tx/transact!
+             {:outliner-op :delete-blocks}
+             (when (seq blocks)
+               (outliner-op/delete-blocks! blocks nil))
+             (when (= view-feature-type :property-objects)
+               ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+               (when-not (:logseq.property/built-in? view-parent)
+                 (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
+                   (when (seq tx-data)
+                     (outliner-op/transact! tx-data {:outliner-op :save-block})))))))]
+      (if confirm-pages?
+        ;; Nothing at all is deleted until the user confirms. batch-delete-dialog invokes this
+        ;; callback only from its "Yes" handler, so Cancel leaves the pages AND any blocks in
+        ;; the same selection untouched.
+        (state/pub-event! [:page/show-delete-dialog pages
+                           (fn []
+                             (p/do!
+                              (delete-rest!)
+                              (clear-selection!)))])
+        (p/do!
+         (delete-rest!)
+         (when-not (and (= view-feature-type :property-objects)
+                        (:logseq.property/built-in? view-parent))
+           (clear-selection!)))))))
 
 (defn- always-eager-column?
   [column]
