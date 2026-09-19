@@ -1,7 +1,12 @@
 (ns logseq.db-sync.node.server
-  (:require ["http" :as http]
+  (:require ["crypto" :as node-crypto]
+            ["fs" :as fs]
+            ["http" :as http]
+            ["os" :as node-os]
             ["path" :as node-path]
+            ["qrcode-terminal" :as qrcode]
             ["ws" :as ws]
+            [goog.object :as gobj]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.index :as index]
@@ -23,8 +28,70 @@
 
 (logging/install!)
 
+(defn resolve-local-token!
+  "Resolve the shared-secret token for local (no-Cognito) self-hosting.
+   Precedence: DB_SYNC_LOCAL_TOKEN env var; otherwise, when no Cognito issuer
+   is configured, a token persisted under the data dir, generated on first
+   run. Returns nil when Cognito auth is configured."
+  [cfg]
+  (let [env-token (some-> js/process .-env (aget "DB_SYNC_LOCAL_TOKEN") not-empty)]
+    (cond
+      (some? env-token)
+      env-token
+
+      (some? (:cognito-issuer cfg))
+      nil
+
+      :else
+      (let [token-file (node-path/join (:data-dir cfg) "local-token")
+            existing (when (fs/existsSync token-file)
+                       (some-> (fs/readFileSync token-file "utf8") string/trim not-empty))]
+        (or existing
+            (let [token (.toString (node-crypto/randomBytes 32) "hex")]
+              (fs/mkdirSync (:data-dir cfg) #js {:recursive true})
+              ;; 0600 — the token file is a credential
+              (fs/writeFileSync token-file token #js {:mode 384})
+              token))))))
+
+(defn- lan-ip
+  "First non-internal IPv4 address, or nil."
+  []
+  (let [interfaces (js->clj (node-os/networkInterfaces))]
+    (some (fn [[_name addrs]]
+            (some (fn [addr]
+                    (when (and (= "IPv4" (get addr "family"))
+                               (not (get addr "internal")))
+                      (get addr "address")))
+                  addrs))
+          interfaces)))
+
+(defn- print-local-mode-banner!
+  "Print the local-mode access token and a pairing QR code.
+   The QR encodes <base>/pair#<token> — the token travels in the URL fragment
+   so it is never sent to the server; the /pair page turns it into a
+   logseq://sync-setup deep link."
+  [cfg port]
+  (let [token (:local-token cfg)
+        token-file (node-path/join (:data-dir cfg) "local-token")
+        pair-base (or (:base-url cfg)
+                      (when-let [ip (lan-ip)]
+                        (str "http://" ip ":" port)))
+        pair-url (when pair-base (str pair-base "/pair#" token))]
+    (println "Local sync mode: no Cognito auth configured.")
+    (println (str "Access token: " token))
+    (println (str "(persisted at " token-file "; set DB_SYNC_LOCAL_TOKEN to override)"))
+    (when pair-url
+      (println)
+      (println (str "Pair a device: open " pair-url))
+      ;; string-based access: survives Closure property renaming
+      (when (gobj/getValueByKeys js/process "stdout" "isTTY")
+        (println "or scan:")
+        (qrcode/generate pair-url #js {:small true})))))
+
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        local-token (:local-token cfg)
+        local-user-id (some-> js/process .-env (aget "DB_SYNC_LOCAL_USER_ID"))
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
@@ -36,6 +103,10 @@
               (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
     (when (some? allow-unverified-jwt-claims)
       (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    (when (some? local-token)
+      (aset env "DB_SYNC_LOCAL_TOKEN" local-token))
+    (when (some? local-user-id)
+      (aset env "DB_SYNC_LOCAL_USER_ID" local-user-id))
     env))
 
 (defn- request-origin-opts
@@ -110,6 +181,9 @@
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        local-token (resolve-local-token! cfg)
+        cfg (cond-> cfg
+              local-token (assoc :local-token local-token))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
@@ -166,6 +240,8 @@
               address (.address server)
               port (if (number? address) address (.-port address))
               base-url (or (:base-url cfg) (str "http://localhost:" port))]
+        (when (:local-token cfg)
+          (print-local-mode-banner! cfg port))
         {:server server
          :wss wss
          :env env

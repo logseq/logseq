@@ -3,6 +3,11 @@ package com.logseq.app
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
@@ -193,7 +198,12 @@ private fun TopBarContent(
     color = background,
     shadowElevation = 4.dp
   ) {
-    Column {
+    // This overlay is attached to the activity root, outside ComposeHost's insets.
+    Column(
+      modifier = Modifier.windowInsetsPadding(
+        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+      )
+    ) {
       Row(
         modifier = Modifier
           .fillMaxWidth()
