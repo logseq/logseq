@@ -67,7 +67,10 @@
   (when-let [queue (:asset-queue client)]
     (swap! queue
            (fn [prev]
-             (p/then prev (fn [_] (task)))))))
+             (-> prev
+                 ;; Keep queue alive even if one asset task fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task))))))))
 
 (defn- enqueue-send-task!
   [client task]
