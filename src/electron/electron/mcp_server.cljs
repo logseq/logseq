@@ -4,6 +4,7 @@
             ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
             ["zod/v3" :as z] ;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
+            [electron.mcp-transport :as mcp-transport]
             [promesa.core :as p]))
 
 ;; Server util fns
@@ -14,15 +15,6 @@
 
 (declare create-mcp-api-server)
 
-(defn- copy-reply-headers!
-  "The MCP transport writes straight to the raw Node response, so headers that
-  fastify plugins queued on the reply - notably the CORS headers from
-  @fastify/cors - would never be sent. Copy them onto the raw response before
-  handing it to the transport."
-  [^js res]
-  (doseq [[k v] (js/Object.entries (.getHeaders res))]
-    (.setHeader (.-raw res) k v)))
-
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
 ;; for how to respond to different MCP requests
 (defn handle-post-request [api-fn {:keys [port host]} req res]
@@ -30,9 +22,7 @@
     (js/console.log "POST /mcp request" session-id (pr-str (.-body req)))
     (cond
       (and session-id (@transports session-id))
-      (let [^js transport (@transports session-id)]
-        (copy-reply-headers! res)
-        (.handleRequest transport (.-raw req) (.-raw res) (.-body req)))
+      (mcp-transport/handle-request! (@transports session-id) req res (.-body req))
 
       (and (not session-id)
            (isInitializeRequest (.-body req)))
@@ -46,8 +36,7 @@
                 (js/console.log "Transport closed" (.-sessionId transport))
                 (swap! transports dissoc (.-sessionId transport))))
         (.connect mcp-server transport)
-        (copy-reply-headers! res)
-        (.handleRequest transport (.-raw req) (.-raw res) (.-body req))
+        (mcp-transport/handle-request! transport req res (.-body req))
         (js/console.log "Initialize sessionId" (.-sessionId transport))
         (if (.-sessionId transport)
           (swap! transports assoc (.-sessionId transport) transport)
@@ -67,9 +56,7 @@
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "GET /mcp" session-id)
     (if-let [transport (and session-id (@transports session-id))]
-      (do
-        (copy-reply-headers! res)
-        (.handleRequest ^js transport (.-raw req) (.-raw res)))
+      (mcp-transport/handle-request! transport req res)
       (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn handle-delete-request
