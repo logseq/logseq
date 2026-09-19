@@ -270,7 +270,12 @@
 
 (defn- enqueue-asset-task! [client task]
   (when-let [queue (:asset-queue client)]
-    (swap! queue (fn [prev] (p/then prev (fn [_] (task)))))))
+    (swap! queue
+           (fn [prev]
+             (-> prev
+                 ;; Keep queue alive even if one asset task fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task))))))))
 
 (defn- derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
