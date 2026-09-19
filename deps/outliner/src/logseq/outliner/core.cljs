@@ -859,6 +859,7 @@
                     need to be changed, but there's no need for internal cut or drag & drop.
                     On paste, live (non-recycled) uuids are still reminted so
                     copied trees cannot move existing blocks.
+                    Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
