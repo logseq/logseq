@@ -1038,8 +1038,38 @@
                                                                                     nil))
                                       (shui/popup-hide!))}))))
 
+(def ^:private broad-scoped-node-class-idents
+  #{:logseq.class/Page})
+
+(defn- broad-scoped-node-property?
+  [property classes]
+  (and (= :node (:logseq.property/type property))
+       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
+
+(defn- scoped-class-ids
+  [classes structured-children-by-class-id]
+  (->> classes
+       (mapcat (fn [class]
+                 (cons (:db/id class)
+                       (get structured-children-by-class-id (:db/id class)))))
+       set))
+
+(defn- <get-scoped-page-id
+  "Returns the oldest page named `page-name` that is tagged with one of `class-ids`"
+  [repo page-name class-ids]
+  (p/let [ids (db-async/<q repo {}
+                           '[:find [?p ...]
+                             :in $ ?name [?class ...]
+                             :where
+                             [?p :block/name ?name]
+                             [?p :block/tags ?class]
+                             (not [?p :logseq.property/deleted-at])]
+                           (util/page-name-sanity-lc page-name)
+                           (vec class-ids))]
+    (first (sort ids))))
+
 (defn- <create-page-if-not-exists!
-  [block property classes extends-by-class-id page]
+  [block property classes {:keys [extends-by-class-id structured-children-by-class-id]} page]
   (p/let [repo (state/get-current-repo)
           page* (string/trim page)
           ;; inline-class is only for input from :transform-fn
@@ -1047,8 +1077,6 @@
                                 (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
                                     [page* nil])
                                 [page* nil])
-          page-entity (db-async/<get-block repo page {:children? false})
-          id (:db/id page-entity)
           class? (or (= :block/tags (:db/ident property))
                      (and (= :logseq.property.class/extends (:db/ident property))
                           (entity/class? block))
@@ -1061,6 +1089,16 @@
                                                (= :logseq.class/Tag (:db/ident e)))
                                              (get extends-by-class-id (:db/id class)))))
                                     classes))))
+          ;; A class-scoped property only reuses a same-name page that has one of its classes
+          scope-class-ids (when (and (seq classes)
+                                     (not class?)
+                                     (not (broad-scoped-node-property? property classes)))
+                            (scoped-class-ids classes structured-children-by-class-id))
+          page-entity (when-not scope-class-ids
+                        (db-async/<get-block repo page {:children? false}))
+          id (if scope-class-ids
+               (<get-scoped-page-id repo page scope-class-ids)
+               (:db/id page-entity))
           ;; Note: property and other types shouldn't be converted to class
           page? (entity/internal-page? page-entity)]
     (cond
@@ -1167,22 +1205,6 @@
     (if (some node-choice-match? initial-choices')
       initial-choices'
       (conj initial-choices' new-choice))))
-
-(def ^:private broad-scoped-node-class-idents
-  #{:logseq.class/Page})
-
-(defn- broad-scoped-node-property?
-  [property classes]
-  (and (= :node (:logseq.property/type property))
-       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
-
-(defn- scoped-class-ids
-  [classes structured-children-by-class-id]
-  (->> classes
-       (mapcat (fn [class]
-                 (cons (:db/id class)
-                       (get structured-children-by-class-id (:db/id class)))))
-       set))
 
 (defn- node-matches-scoped-classes?
   [class-ids node]
@@ -1396,7 +1418,7 @@
                                                                                           :property-key chosen
                                                                                           :target target}]))
                                                (<create-page-if-not-exists! block property classes'
-                                                                            extends-by-class-id chosen))))
+                                                                            (:class-data opts) chosen))))
                                       entity (when (integer? id)
                                                (db-async/<get-block (state/get-current-repo) id {:children? false}))]
                                 (if id
