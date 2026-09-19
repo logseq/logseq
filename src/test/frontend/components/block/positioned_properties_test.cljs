@@ -119,6 +119,36 @@
                  zoom-in-config root false false))
         "No pill when there are no hidden properties")))
 
+(deftest properties-area-suppresses-hidden-toggle-when-pill-renders-test
+  (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        root-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        child-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        scheduled {:block/uuid scheduled-uuid
+                   :db/ident :logseq.property/scheduled
+                   :block/title "Scheduled"}
+        with-block-below (fn [block]
+                           (assoc block :block.temp/positioned-properties
+                                  {:block-below [scheduled]}))
+        root {:block/uuid root-uuid :block/title "zoom-in root"}
+        child {:block/uuid child-uuid :block/title "nested block"}
+        zoom-in-config {:block? true :id (str root-uuid)}
+        owns? property-component/block-below-pill-owns-hidden-toggle?]
+    (is (true? (owns? (with-block-below root) zoom-in-config))
+        "Zoom-in root with a block-below property shows the pill, so the properties area must not add a second toggle")
+    (is (true? (#'block/show-block-below-hidden-properties-pill-toggle?
+                zoom-in-config (with-block-below root) false true))
+        "The pill really renders whenever the properties area suppresses its toggle")
+    (is (false? (owns? root zoom-in-config))
+        "Zoom-in root without block-below properties has no pill row, the properties area keeps its toggle")
+    (is (false? (owns? (assoc root :block.temp/positioned-properties {}) zoom-in-config))
+        "Empty positioned properties keep the properties area toggle")
+    (is (false? (owns? (with-block-below child) zoom-in-config))
+        "Nested blocks never show the pill, the properties area keeps its toggle")
+    (is (false? (owns? (with-block-below root) {:block? false :id (str root-uuid)}))
+        "Only the block route root hands the toggle to the pill")
+    (is (false? (owns? (assoc (with-block-below root) :block/tags [{:db/ident :logseq.class/Page}]) zoom-in-config))
+        "Pages keep the properties area toggle")))
+
 (deftest nested-outliner-block-omits-hidden-properties-pill-test
   (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
         root-uuid #uuid "88888888-8888-8888-8888-888888888888"
