@@ -29,6 +29,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.entity :as entity]
+            [frontend.util.page :as page-util]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -155,6 +156,32 @@
   (when-let [node (some-> target (.closest "a"))]
     (not (or (d/has-class? node "page-ref")
              (d/has-class? node "tag")))))
+
+(defn- page-ref-entity-from-event-target
+  [target]
+  (when-let [node (some-> target (.closest "a"))]
+    (when (or (d/has-class? node "page-ref")
+              (d/has-class? node "tag"))
+      (let [uuid-str (not-empty (.getAttribute node "data-uuid"))
+            page-name (not-empty (.getAttribute node "data-ref"))]
+        (when (or uuid-str page-name)
+          (cond-> {}
+            uuid-str (assoc :block/uuid (or (parse-uuid uuid-str) uuid-str))
+            page-name (assoc :block/name page-name)))))))
+
+(defn- page-ref-cell-click
+  "Handle a table tag/page-ref cell click.
+   Returns :noop when the entity is the current page so we don't flash a popup
+   or re-navigate to the page the user is already on."
+  [{:keys [entity current-page open-popup! redirect!]}]
+  (if (page-util/entity-is-current-page? entity current-page)
+    :noop
+    (do
+      (when (fn? open-popup!)
+        (open-popup!))
+      (when (fn? redirect!)
+        (redirect!))
+      :open)))
 
 (defn- alias-value-on-pointer-down
   [property show-popup!]
@@ -1871,7 +1898,10 @@
                                     (util/shift-key? e)
                                     (util/meta-key? e)
                                     (property-value-popup-blocked-link? target))
-                        (show-popup! target))))]
+                        (page-ref-cell-click
+                         {:entity (page-ref-entity-from-event-target target)
+                          :current-page (state/get-current-page)
+                          :open-popup! #(show-popup! target)}))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
          {:ref *el
@@ -2500,11 +2530,15 @@
                           (let [target (.-target e)]
                             (when-not (or config/publishing?
                                           (property-value-popup-blocked-link? target))
-                              (shui/popup-show! (hooks/deref *el)
-                                                (fn [opts]
-                                                  (content-fn opts target))
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))]
+                              (page-ref-cell-click
+                               {:entity (page-ref-entity-from-event-target target)
+                                :current-page (state/get-current-page)
+                                :open-popup! (fn []
+                                               (shui/popup-show! (hooks/deref *el)
+                                                                 (fn [opts]
+                                                                   (content-fn opts target))
+                                                                 {:as-dropdown? true :as-content? false
+                                                                  :align "start" :auto-focus? true}))}))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
