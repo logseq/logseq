@@ -2018,10 +2018,14 @@
 (deftest cut-selection-blocks-uses-inner-text-property-value-test
   (async done
     (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          value-block {:db/id 1
+                       :block/uuid value-uuid
+                       :block/title "value"}
           inner (mock-ls-block {:blockid (str value-uuid)})
           wrapper (mock-ls-block {:class-name "ls-block property-value-container"
                                   :inner inner})
-          requested-ids (atom nil)]
+          requested-ids (atom nil)
+          deleted-uuids (atom nil)]
       (-> (p/with-redefs [editor/copy-selection-blocks
                           (fn [& _] (p/resolved nil))
                           editor/get-selected-blocks (constantly [wrapper])
@@ -2030,11 +2034,19 @@
                           db-async/<get-blocks
                           (fn [_repo ids _opts]
                             (reset! requested-ids ids)
-                            (p/resolved []))]
+                            (p/resolved [{:block value-block}]))
+                          db-async/<get-block-with-children
+                          (fn [_repo _id _opts]
+                            (p/resolved {:block value-block :children []}))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
             (editor/cut-selection-blocks true))
           (p/then (fn [_]
                     (is (= [value-uuid] @requested-ids)
-                        "Cut must load the inner text property-value block, not drop the wrapper.")))
+                        "Cut must load the inner text property-value block, not drop the wrapper.")
+                    (is (= [value-uuid] @deleted-uuids)
+                        "Cut must delete the inner text property-value block.")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))

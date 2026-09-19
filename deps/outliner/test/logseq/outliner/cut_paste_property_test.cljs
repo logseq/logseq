@@ -296,7 +296,8 @@
                                    :keep-uuid? false
                                    :outliner-op :paste})
     (let [original (d/entity @conn (:db/id block))
-          pasted (->> (ldb/sort-by-order (:block/_parent (:block/parent target)))
+          target' (d/entity @conn (:db/id target))
+          pasted (->> (ldb/sort-by-order (:block/_parent (:block/parent target')))
                       (remove :logseq.property/created-from-property)
                       (remove #(contains? #{(:block/uuid block) (:block/uuid target)}
                                           (:block/uuid %)))
@@ -309,7 +310,7 @@
       (is (nil? (:logseq.property/created-from-property pasted))
           "Pasted value is a regular block, not a hidden property value")
       (is (not= original-value-uuid (:block/uuid pasted)))
-      (is (some #{"value"} (outline-sibling-titles target))))))
+      (is (some #{"value"} (outline-sibling-titles target'))))))
 
 (deftest cut-paste-text-property-value-as-regular-block
   (let [conn (create-case-conn (first property-cases))
@@ -324,6 +325,7 @@
                                    :keep-uuid? true
                                    :outliner-op :paste})
     (let [host (d/entity @conn (:db/id block))
+          target' (d/entity @conn (:db/id target))
           pasted (d/entity @conn [:block/uuid value-uuid])]
       (is (nil? (property-contents (:user.property/p1 host)))
           "Cut removes the text property value from its host")
@@ -331,4 +333,4 @@
       (is (= "value" (:block/title pasted)))
       (is (nil? (:logseq.property/created-from-property pasted))
           "Cut+paste converts the value into a regular outline block")
-      (is (some #{"value"} (outline-sibling-titles target))))))
+      (is (some #{"value"} (outline-sibling-titles target'))))))
