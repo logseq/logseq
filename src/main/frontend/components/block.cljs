@@ -71,6 +71,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.entity :as entity]
+            [frontend.util.page :as page-util]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
@@ -769,10 +770,12 @@
         ((:on-pointer-down config) e)
 
         :else
-        (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
-          (when-not (and (util/mobile?) @block-handler/*swiped?)
-            (f (or (:block/uuid page) (:block/name page))
-               {:ignore-alias? ignore-alias?}))))))
+        (when-not (or (page-util/entity-is-current-page? page)
+                      (page-util/entity-is-current-page? page-entity))
+          (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
+            (when-not (and (util/mobile?) @block-handler/*swiped?)
+              (f (or (:block/uuid page) (:block/name page))
+                 {:ignore-alias? ignore-alias?})))))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -813,6 +816,7 @@
                 recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
+       :data-uuid (some-> (:block/uuid page-entity) str)
        :title (when recycled? (t :ui/deleted))
        :draggable true
        :on-drag-start (fn [e]
