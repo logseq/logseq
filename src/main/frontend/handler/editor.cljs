@@ -3392,7 +3392,7 @@
         (contains? #{"ArrowLeft" "ArrowRight"} key)
         (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
+        (and (util/native-event-is-composing? e true) ;; #3218 #12966
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3559,7 +3559,7 @@
 (defn keyup-handler
   [_state input]
   (fn [e key-code]
-    (when-not (util/goog-event-is-composing? e)
+    (when-not (util/native-event-is-composing? e false)
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
@@ -3585,8 +3585,8 @@
                (if (mobile-util/native-android?)
                  (gobj/get e "key")
                  (event-code e))
-               ;; #3440
-               (util/goog-event-is-composing? e true)])
+               ;; #3440 #12966 — native window keyup events
+               (util/native-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
           (= value "``````") ; turn this block into a code block
