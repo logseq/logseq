@@ -675,6 +675,9 @@
   (let [action (state/get-editor-action)
         config (:config state)]
     (cond
+      (and editing-another-block? action)
+      (state/clear-editor-action!)
+
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
 
