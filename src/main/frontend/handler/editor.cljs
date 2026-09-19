@@ -254,8 +254,8 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:block/uuid (:block/uuid block)
-               :block/title value}
+  (let [block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
+                     :block/title value)
         block' (-> (wrap-parse-block block)
                    ;; :block/uuid might be changed when backspace/delete
                    ;; a block that has been refed
