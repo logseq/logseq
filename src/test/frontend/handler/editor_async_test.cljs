@@ -385,6 +385,101 @@
                      "Deletion should restore focus from the renderer callback")))))
         (p/finally (fn [] nil)))))
 
+(defn- page-title-dom
+  [page]
+  (let [node #js {:className "ls-page-title"
+                  :getAttribute #({"blockid" (str (:block/uuid page))
+                                   "containerid" nil} %)}]
+    (aset node "__logseqBlock" page)
+    node))
+
+(defn- content-block-dom
+  [block]
+  (let [node #js {:getAttribute #({"blockid" (str (:block/uuid block))
+                                   "containerid" nil} %)}]
+    (aset node "__logseqBlock" block)
+    node))
+
+(defn- delete-last-selected-block-focus
+  [{:keys [page remaining-block]}]
+  (let [deleted-block {:db/id 2
+                       :block/uuid (random-uuid)
+                       :block/title "last"
+                       :block/page {:db/id (:db/id page)
+                                    :block/uuid (:block/uuid page)}}
+        deleted-dom #js {}
+        page-title-node (page-title-dom page)
+        remaining-dom (when remaining-block
+                        (content-block-dom remaining-block))
+        tx-opts (atom nil)
+        edit-call (atom nil)
+        inserted (atom nil)]
+    (-> (p/with-redefs [util/get-prev-block-non-collapsed-non-embed
+                        (constantly page-title-node)
+                        util/get-next-block-non-collapsed
+                        (fn [node _opts]
+                          (when (identical? node deleted-dom)
+                            remaining-dom))
+                        util/rec-get-node
+                        (fn [node class]
+                          (when (and (identical? node page-title-node)
+                                     (= class "ls-page-title"))
+                            node))
+                        db-transact/apply-outliner-ops
+                        (fn [_conn _ops opts]
+                          (reset! tx-opts opts)
+                          (p/resolved nil))
+                        editor/edit-block! (fn [block pos opts]
+                                             (reset! edit-call [block pos opts]))
+                        editor/api-insert-new-block!
+                        (fn [content opts]
+                          (reset! inserted {:content content :opts opts})
+                          (p/resolved {:block/uuid (random-uuid)}))]
+          (-> (editor/delete-blocks! "test-repo"
+                                     [(:block/uuid deleted-block)]
+                                     [deleted-block]
+                                     [deleted-dom]
+                                     false)
+              (p/then
+               (fn [_]
+                 (when-let [edit-block-f (:editor/edit-block-fn @tx-opts)]
+                   (edit-block-f [page remaining-block]))
+                 {:page page
+                  :remaining-block remaining-block
+                  :edit-call @edit-call
+                  :inserted @inserted
+                  :edit-block-fn (:editor/edit-block-fn @tx-opts)})))))))
+
+(deftest-async delete-last-selected-block-does-not-edit-page-title
+  (let [page {:db/id 10
+              :block/uuid (random-uuid)
+              :block/name "page1"
+              :block/title "Page 1"
+              :block/tags [{:db/ident :logseq.class/Page}]}
+        remaining {:db/id 3
+                   :block/uuid (random-uuid)
+                   :block/title ""}]
+    (p/do!
+     (testing "last remaining selected block inserts a default page block instead of the title"
+       (p/let [{:keys [edit-call inserted edit-block-fn]}
+               (delete-last-selected-block-focus {:page page})]
+         (is (fn? edit-block-fn)
+             "Selection deletion should still restore focus after the last block is removed")
+         (is (not= page (first edit-call))
+             "Deleting the last selected block must not choose the page-title node as the next edit target")
+         (is (= "" (:content inserted)))
+         (is (= (:block/uuid page) (:page (:opts inserted)))
+             "Last-block delete should create and edit the default page block")))
+     (testing "a remaining empty block is edited instead of the page title"
+       (p/let [{:keys [edit-call inserted]}
+               (delete-last-selected-block-focus {:page page
+                                                  :remaining-block remaining})]
+         (is (nil? inserted)
+             "A remaining empty block should be reused instead of inserting another default block")
+         (is (= remaining (first edit-call))
+             "Last-block delete should keep focus in the remaining empty block")
+         (is (not= page (first edit-call))))))))
+
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
    [{:page {:block/title "page1"}

@@ -943,6 +943,49 @@
           (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id))]
             (edit-block-f)))))))
 
+(defn- page-title-edit-target?
+  [node]
+  (boolean
+   (or (util/rec-get-node node "ls-page-title")
+       (let [block (mounted-block node)]
+         (or (entity/page? block)
+             (:block/name block))))))
+
+(defn- remaining-content-block-node
+  [start-node deleted-uuids]
+  (loop [node (when start-node
+                (util/get-next-block-non-collapsed start-node {}))]
+    (when node
+      (let [block-uuid (some-> (dom/attr node "blockid") uuid)]
+        (cond
+          (or (page-title-edit-target? node)
+              (dom/has-class? node "block-add-button")
+              (contains? deleted-uuids block-uuid))
+          (recur (util/get-next-block-non-collapsed node {}))
+
+          block-uuid
+          node
+
+          :else
+          (recur (util/get-next-block-non-collapsed node {})))))))
+
+(defn- edit-default-page-block-fn
+  [page-title-node]
+  (when-let [page-uuid (or (some-> (mounted-block page-title-node) :block/uuid)
+                           (some-> (dom/attr page-title-node "blockid") uuid))]
+    (fn [_rows]
+      (api-insert-new-block! "" {:page page-uuid}))))
+
+(defn- selection-delete-edit-block-fn
+  "Selection Backspace must not focus the page title."
+  [sibling-block block-parent deleted-uuids]
+  (if (page-title-edit-target? sibling-block)
+    (if-let [remaining (remaining-content-block-node block-parent deleted-uuids)]
+      (edit-previous-window-block-fn remaining)
+      (edit-default-page-block-fn sibling-block))
+    (when sibling-block
+      (edit-previous-window-block-fn sibling-block))))
+
 (defn- loaded-block-edit
   [block value container-id]
   (when block
@@ -1154,8 +1197,10 @@
                           (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)
           mobile? (util/capacitor?)
-          edit-block-fn (when (and sibling-block (not mobile?))
-                          (edit-previous-window-block-fn sibling-block))
+          edit-block-fn (when-not mobile?
+                          (selection-delete-edit-block-fn sibling-block
+                                                          block-parent
+                                                          (set block-uuids)))
           journals (and mobile? (filter entity/journal? blocks'))
           blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
       (when (or (seq journals) (seq blocks))
