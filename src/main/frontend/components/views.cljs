@@ -2364,6 +2364,20 @@
   (max (count rows)
        (if (number? items-count) items-count 0)))
 
+(defn- windowed-items-count
+  "First-window All Pages used an estimated count. After delete or
+  filter the full id list is smaller; never paint extra empty rows."
+  [items-count full-rows]
+  (cond
+    (nil? full-rows)
+    items-count
+
+    (number? items-count)
+    (min items-count (count full-rows))
+
+    :else
+    (count full-rows)))
+
 (defn- windowed-view-total-count
   [rows {:keys [all-row-ids items-count]}]
   (if (seq all-row-ids)
@@ -3993,6 +4007,9 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
+       ;; Keep previous paint only for same-context refetches (delete).
+       ;; A new filter/sort/input key must not keep the old 431-row table.
+       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
     (hooks/use-effect!
@@ -4040,7 +4057,12 @@
                                             :set-data! ignore!
                                             :set-input! set-input!
                                             :input input
-                                            :items-count (:items-count paint)
+                                            :items-count (if (and (:full-key plan)
+                                                                  (= :flat (:partition paint)))
+                                                           (windowed-items-count
+                                                            (:items-count paint)
+                                                            full-rows)
+                                                           (:items-count paint))
                                             :group-by-property-ident group-by-property-ident
                                             :ref-pages-count (:ref-pages-count view-data)
                                             :ref-matched-children-ids

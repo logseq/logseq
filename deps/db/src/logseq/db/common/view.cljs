@@ -613,23 +613,18 @@
   (or (not (string/blank? input))
       (seq (or (:filters filters) []))))
 
-(defn- avet-slice-count
-  "Datascript AVET slices are Iters. `count` walked 41111 :block/name
-  datoms in 72ms. BTSet est-count is a tree distance. nbb-logseq does
-  not load that ns, so tests fall back to `count` on small fixtures."
-  [datoms]
-  (cond
-    (nil? datoms) 0
-    (counted? datoms) (count datoms)
-    (exists? js/me.tonsky.persistent_sorted_set.est_count)
-    (js/me.tonsky.persistent_sorted_set.est_count datoms)
-    :else (count datoms)))
-
 (defn- count-all-page-ids
+  "Exact visible-page count. BTSet est-count is a tree distance and
+  reported hundreds of All Pages rows for graphs with a few dozen
+  pages, so the table painted empty placeholder rows after delete or
+  filter. Walk :block/name once; do not allocate the id vector."
   [db exclude-ids]
-  (- (avet-slice-count (d/datoms db :avet :block/name))
-     (count (keep #(when (indexed-attr-value db % :block/name) %)
-                  exclude-ids))))
+  (reduce (fn [n datom]
+            (if (contains? exclude-ids (:e datom))
+              n
+              (inc n)))
+          0
+          (d/datoms db :avet :block/name)))
 
 (defn- all-pages-eid?
   [db exclude-ids eid]
