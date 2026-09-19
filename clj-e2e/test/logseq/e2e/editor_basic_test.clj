@@ -702,6 +702,65 @@
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
 
+(defn- journals-rows-state
+  "Every rendered row of the virtualized journals list: whether it holds
+   page content or a placeholder, and the inline min-height on its item
+   (empty when the row is not pinned to a cached height)."
+  []
+  (js-json
+   "(() => {
+      const rows = Array.from(document.querySelectorAll('#journals [data-index]'));
+      return JSON.stringify(rows.map((row) => {
+        const item = row.querySelector('.journal-item');
+        return {index: row.dataset.index,
+                content: !!row.querySelector('.cp__page-inner-wrap'),
+                placeholder: !!row.querySelector('.journal-item-placeholder'),
+                minHeight: item ? item.style.minHeight : null};
+      }));
+    })()"))
+
+(defn- scroll-journals-down!
+  "Scrolls the main container down by `step` px `steps` times, a frame apart,
+   so the list passes through its scrolling state and pins the rows it
+   scrolls past. Returns the final scrollTop."
+  [step steps]
+  (w/eval-js
+   (format
+    "(async () => {
+      const scrollContainer = document.querySelector('#main-content-container');
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      for (let i = 0; i < %d; i++) {
+        scrollContainer.scrollTop += %d;
+        await nextFrame();
+      }
+      return scrollContainer.scrollTop;
+    })()"
+    steps step)))
+
+(deftest journals-list-rows-hold-no-pin-once-content-is-in
+  (testing "after a scroll, a journal row that holds content carries no inline min-height"
+    (seed-journals!
+     (mapv (fn [idx]
+             {:date (format "2026-03-%02dT12:00:00" idx)
+              :blocks [(format "journals pin block %02d" idx)]})
+           (range 1 31)))
+    (enable-virtualized-rendering!)
+    (w/wait-for "#journals [data-virtuoso-scroller]")
+    (w/wait-for "#journals [data-index]")
+    ;; Down to the end, then a third of the way back up: the rows rendered on
+    ;; the way back were placeholders pinned to a cached height moments ago.
+    (is (pos? (scroll-journals-down! 400 60)))
+    (util/wait-timeout 2000)
+    (let [rows-at-end (journals-rows-state)
+          _ (scroll-journals-down! -300 20)
+          _ (util/wait-timeout 3000)
+          rows-on-way-back (journals-rows-state)
+          rows (concat rows-at-end rows-on-way-back)
+          content-rows (filter :content rows)
+          pinned (filter #(and (:content %) (seq (:minHeight %))) rows)]
+      (is (< 2 (count content-rows)) (pr-str rows))
+      (is (empty? pinned) (pr-str pinned)))))
+
 (deftest journals-list-remounts-complete-long-journal-with-one-scroller
   (testing "an outer journal remount restores all content without a nested virtualizer"
     (let [first-block-title "journals remount stable block 001"
