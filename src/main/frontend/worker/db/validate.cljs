@@ -6,6 +6,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.validate :as db-validate]))
@@ -291,6 +292,12 @@
       (recur (validate-db-result @conn))
       result)))
 
+(defn- fix-missing-internal-page-parent-orders!
+  [conn]
+  (let [tx-data (db-order/missing-internal-page-parent-order-tx @conn)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {:fix-db? true}))))
+
 (defn validate-db
   [conn & {:keys [fix] :or {fix true}}]
   (when fix
@@ -298,7 +305,8 @@
     (fix-icon-wrong-type! conn)
     (db-migrate/ensure-built-in-data-exists! conn)
     (fix-non-closed-values! conn)
-    (fix-num-prefix-db-idents! conn))
+    (fix-num-prefix-db-idents! conn)
+    (fix-missing-internal-page-parent-orders! conn))
 
   (let [{:keys [errors datom-count entities invalid-entity-ids]}
         (if fix

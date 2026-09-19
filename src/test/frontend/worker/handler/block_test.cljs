@@ -1186,3 +1186,4 @@
         "Default children omit property-value blocks")
     (is (= #{"child" "value"} (titles included))
         "include-property-block? true returns property-value children used by cut/copy")))
+
