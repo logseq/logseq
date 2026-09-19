@@ -2264,6 +2264,18 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event true)
+      (is (nil? (state/get-editor-action))
+          "Slash commands should close when leaving the original block to edit another")
+      (finally
+        (state/set-editor-action! prev-action)))))
+
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
                    :value ">"}

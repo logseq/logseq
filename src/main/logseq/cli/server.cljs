@@ -4,7 +4,6 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
-            [frontend.worker.db-worker-node-lock :as db-lock]
             [lambdaisland.glogi :as log]
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
@@ -34,10 +33,6 @@
   [config]
   (or (:storage config)
       (lifecycle/resolveStorage (resolve-root-dir config) (graphs-dir config))))
-
-(defn lock-path
-  [root-dir repo]
-  (db-lock/lock-path root-dir repo))
 
 (defn- server-list-path
   [config]
@@ -365,7 +360,7 @@
 (defn- classify-graph-dir
   [graphs-root dir-name]
   (when-not (ignored-graph-dir? dir-name)
-    (let [decoded-canonical (db-lock/decode-canonical-graph-dir-key dir-name)
+    (let [decoded-canonical (graph-dir/decode-canonical-graph-dir-key dir-name)
           canonical? (and (seq decoded-canonical)
                           (not (ignored-graph-dir? decoded-canonical))
                           (canonical-dir-name? dir-name decoded-canonical))

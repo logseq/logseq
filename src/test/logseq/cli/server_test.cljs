@@ -12,18 +12,6 @@
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
-(deftest lock-path-uses-canonical-graph-dir
-  (let [root-dir "/tmp/logseq-root"
-        repo "logseq_db_demo"
-        expected (node-path/join root-dir "graphs" "demo" "db-worker.lock")]
-    (is (= expected (cli-server/lock-path root-dir repo)))))
-
-(deftest lock-path-encodes-special-characters-in-graph-dir
-  (let [root-dir "/tmp/logseq-root"
-        repo "logseq_db_foo/bar"
-        expected (node-path/join root-dir "graphs" "foo~2Fbar" "db-worker.lock")]
-    (is (= expected (cli-server/lock-path root-dir repo)))))
-
 (deftest db-worker-runtime-script-path-matches-runtime-selection
   (is (= (cli-server/db-worker-script-path)
          (cli-server/db-worker-runtime-script-path))))

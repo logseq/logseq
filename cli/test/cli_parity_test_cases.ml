@@ -5200,7 +5200,8 @@ let () =
             "--file";
             "/tmp/export.edn";
             "--edn-options";
-            "{:export-type :graph :include-timestamps? true}";
+            "{:export-type :graph-human :graph-options {:include-timestamps? \
+             true}}";
             "--pretty-print";
           |]
       in
@@ -5348,7 +5349,8 @@ let () =
                   edn_options =
                     Some
                       (edn_of_string
-                         "{:export-type :graph :include-timestamps? true}");
+                         "{:export-type :graph-human :graph-options \
+                          {:include-timestamps? true}}");
                   pretty_print = true;
                   include_timestamps = false;
                   exclude_built_in_pages = false;
@@ -5365,6 +5367,297 @@ let () =
           expect_bool "export pretty" true opts.pretty_print;
           expect_some "export edn options" opts.edn_options |> ignore
       | _ -> fail_test "expected Graph_export action");
+
+  let build_edn_export options =
+    let request =
+      expect_parse_ok "EDN export request"
+        [|
+          "graph";
+          "export";
+          "--type";
+          "edn";
+          "--file";
+          "/tmp/export.edn";
+          "--edn-options";
+          options;
+        |]
+    in
+    effect_result "build export"
+      (Cli_action.build (config ~graph:"demo" ()) request)
+  in
+  let invalid_edn_export options fragments =
+    test ("CLI parity EDN export rejects " ^ options) (fun () ->
+        match build_edn_export options with
+        | Ok _ -> fail_test "expected invalid-options before worker setup"
+        | Error err ->
+            expect_equal "error code" "invalid-options"
+              (Error.code_to_string err.Error.code);
+            List.iter
+              (expect_named_contains "actionable diagnostic" err.message)
+              fragments)
+  in
+  List.iter
+    (fun (options, fragments) -> invalid_edn_export options fragments)
+    [
+      ( "{:export-type :graph-human :include-timestamps? true}",
+        [
+          ":include-timestamps?";
+          "{:export-type :graph-human :graph-options {:include-timestamps? \
+           true}}";
+        ] );
+      ( "{:export-type :graph-human :include-timestamps? false :graph-options \
+         {:include-timestamps? true}}",
+        [ ":include-timestamps?" ] );
+      ( "{:no-such-option true}",
+        [ ":no-such-option"; "Allowed keys"; ":graph-options" ] );
+      ( "{:export-type :graph-human :graph-options {:no-such-option true}}",
+        [
+          "[:graph-options :no-such-option]";
+          "Allowed keys";
+          ":include-timestamps?";
+        ] );
+      ("{\"export-type\" :graph-human}", [ "\"export-type\"" ]);
+      ( "{:export-type :graph-human :graph-options {\"include-timestamps?\" \
+         true}}",
+        [ "[:graph-options \"include-timestamps?\"]" ] );
+      ("{1 true}", [ "1"; "Allowed keys" ]);
+      ("{:export-type :other}", [ ":export-type"; ":graph-human" ]);
+      ("{:export-type nil}", [ ":export-type" ]);
+      ("{:export-type \"graph-human\"}", [ ":export-type" ]);
+      ( "{:graph-options {:graph-options {}}}",
+        [ "[:graph-options :graph-options]"; "top level" ] );
+      ("{:graph-options nil}", [ ":graph-options"; "map" ]);
+      ("{:graph-options []}", [ ":graph-options"; "map" ]);
+      ("{:block-id 42}", [ ":block-id"; ":block" ]);
+      ("{:export-type :block :block-id 42 :page-id 1}", [ ":page-id"; ":page" ]);
+      ( "{:graph-options {:include-timestamps? false}}",
+        [ "[:graph-options :include-timestamps?]"; ":graph-human"; ":graph" ] );
+      ( "{:export-type :graph-human :graph-options {:catch-validation-errors? \
+         true :typo true}}",
+        [ "[:graph-options :typo]" ] );
+      ( "{:export-type :view-nodes :rows [] :group-by? nil}",
+        [ ":group-by?"; "boolean" ] );
+      ( "{:export-type :view-nodes :rows [] :group-by? 1}",
+        [ ":group-by?"; "boolean" ] );
+      ("{:export-type :block}", [ ":block-id"; "required" ]);
+      ("{:export-type :page}", [ ":page-id"; "required" ]);
+      ("{:export-type :selected-nodes}", [ ":node-ids"; "required" ]);
+      ("{:export-type :view-nodes}", [ ":rows"; "required" ]);
+      ("{:export-type :block :block-id nil}", [ ":block-id"; "entity" ]);
+      ("{:export-type :block :block-id true}", [ ":block-id"; "entity" ]);
+      ("{:export-type :page :page-id \"Home\"}", [ ":page-id"; "entity" ]);
+      ("{:export-type :page :page-id [:block/name]}", [ ":page-id"; "lookup" ]);
+      ("{:export-type :page :page-id [42 \"Home\"]}", [ ":page-id"; "lookup" ]);
+      ( "{:export-type :page :page-id #uuid \
+         \"13071000-0000-4000-8000-000000000001\"}",
+        [ ":page-id" ] );
+      ( "{:export-type :selected-nodes :node-ids nil}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids 42}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids {}}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids [nil]}",
+        [ "[:node-ids 0]"; "entity" ] );
+      ( "{:export-type :selected-nodes :node-ids [#uuid \
+         \"13071000-0000-4000-8000-000000000001\"]}",
+        [ "[:node-ids 0]" ] );
+      ("{:export-type :view-nodes :rows nil}", [ ":rows"; "collection" ]);
+      ("{:export-type :view-nodes :rows {}}", [ ":rows"; "collection" ]);
+      ("{:export-type :view-nodes :rows [true]}", [ "[:rows 0]" ]);
+      ( "{:export-type :view-nodes :group-by? true :rows [42]}",
+        [ "[:rows 0]"; "group" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows [[\"label\" [42] \
+         :extra]]}",
+        [ "[:rows 0]" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows {\"label\" nil}}",
+        [ ":rows"; "collection" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows [[nil [false]]]}",
+        [ "[:rows 0 1 0]" ] );
+    ];
+  List.iter
+    (fun key ->
+      invalid_edn_export ("{" ^ key ^ " false}") [ key; ":graph-options" ];
+      List.iter
+        (fun value ->
+          invalid_edn_export
+            ("{:export-type :graph-human :graph-options {" ^ key ^ " " ^ value
+           ^ "}}")
+            [ "[:graph-options " ^ key ^ "]"; "boolean" ])
+        [ "nil"; "1"; "\"false\"" ])
+    [
+      ":include-timestamps?";
+      ":exclude-built-in-pages?";
+      ":exclude-files?";
+      ":catch-validation-errors?";
+    ];
+  List.iter
+    (fun value ->
+      invalid_edn_export
+        ("{:export-type :graph-human :graph-options {:exclude-namespaces "
+       ^ value ^ "}}")
+        [ "[:graph-options :exclude-namespaces]"; "set" ])
+    [ "nil"; "[:schema]"; "#{1}"; "#{nil}"; "\"schema\"" ];
+  List.iter
+    (fun key ->
+      invalid_edn_export
+        ("{:export-type :graph-human :graph-options {" ^ key ^ " true}}")
+        [ "[:graph-options " ^ key ^ "]"; "Allowed keys" ])
+    [ ":include-uuid?"; ":shallow-copy?"; ":include-children?" ];
+  let partial_exports =
+    [
+      (":graph", "");
+      (":graph-ontology", "");
+      (":block", ":block-id 42");
+      (":page", ":page-id 42");
+      (":selected-nodes", ":node-ids []");
+      (":view-nodes", ":rows []");
+    ]
+  in
+  List.iter
+    (fun (kind, selectors) ->
+      List.iter
+        (fun key ->
+          invalid_edn_export
+            ("{:export-type " ^ kind ^ " " ^ selectors ^ " :graph-options {"
+           ^ key ^ " false}}")
+            [ "[:graph-options " ^ key ^ "]"; ":graph-human"; kind ])
+        [
+          ":include-timestamps?";
+          ":exclude-built-in-pages?";
+          ":exclude-files?";
+          ":exclude-namespaces";
+        ])
+    partial_exports;
+  List.iter
+    (fun options ->
+      test ("CLI parity EDN export accepts " ^ options) (fun () ->
+          ignore (expect_ok "valid export" (build_edn_export options))))
+    ([
+       "{}";
+       "{:graph-options {}}";
+       "{:export-type :graph-human :graph-options {:include-timestamps? false \
+        :exclude-files? false :exclude-built-in-pages? false \
+        :catch-validation-errors? false :exclude-namespaces #{:schema \
+        \"user\"}}}";
+       "{:export-type :block :block-id [:block/uuid #uuid \
+        \"13071000-0000-4000-8000-000000000001\"]}";
+       "{:export-type :page :page-id (:block/name \"home\")}";
+       "{:export-type :page :page-id [\"unique-attribute\" {:arbitrary [nil \
+        true]}]}";
+       "{:export-type :page :page-id :logseq.class/Page}";
+       "{:export-type :selected-nodes :node-ids (42 :logseq.class/Page \
+        [:block/name \"home\"])}";
+       "{:export-type :selected-nodes :node-ids #{}}";
+       "{:export-type :view-nodes :rows [#uuid \
+        \"13071000-0000-4000-8000-000000000001\" [:block/name \"home\"]] \
+        :group-by? false}";
+       "{:export-type :view-nodes :rows {nil [42] {:arbitrary-key true} []} \
+        :group-by? true}";
+       "{:export-type :view-nodes :rows [[{:arbitrary-key true} #{42}] [nil \
+        []]] :group-by? true}";
+       "{:export-type :view-nodes :rows {} :group-by? true}";
+     ]
+    @ List.map
+        (fun (kind, selectors) ->
+          "{:export-type " ^ kind ^ " " ^ selectors
+          ^ " :graph-options {:catch-validation-errors? false}}")
+        partial_exports);
+  test "CLI parity EDN export diagnostics have stable key ordering" (fun () ->
+      let message options =
+        match build_edn_export options with
+        | Error err -> err.Error.message
+        | Ok _ ->
+            fail_test "expected invalid export";
+            ""
+      in
+      let first =
+        message "{:z true :a true :graph-options {:z true :a true}}"
+      in
+      expect_named_contains "top-level first key" first ":a";
+      expect_named_contains "top-level second key" first ":z";
+      expect_named_contains "nested first key" first "[:graph-options :a]";
+      expect_named_contains "nested second key" first "[:graph-options :z]";
+      expect_equal "same diagnostics regardless of insertion order" first
+        (message "{:graph-options {:a true :z true} :a true :z true}"));
+  List.iter
+    (fun mode ->
+      test ("CLI parity EDN export rejection protects files in " ^ mode)
+        (fun () ->
+          let root = temp_dir "logseq-edn-validation-" in
+          let file = Node.Path.join [| root; "export.edn" |] in
+          let run () =
+            run_cli_lifecycle
+              [|
+                "--root-dir";
+                root;
+                "--graph";
+                "missing";
+                "--output";
+                mode;
+                "graph";
+                "export";
+                "--type";
+                "edn";
+                "--file";
+                file;
+                "--edn-options";
+                "{:export-type :graph-human :include-timestamps? true}";
+              |]
+          in
+          let missing = run () in
+          expect_int "nonzero exit" 1 missing.exit_code;
+          expect_named_contains "invalid options"
+            (stdout_text "error" missing)
+            "invalid-options";
+          expect_bool "no output created" false (Node.Fs.existsSync file);
+          write_file file "existing export\n";
+          let existing = run () in
+          expect_int "nonzero exit" 1 existing.exit_code;
+          expect_equal "existing output untouched" "existing export\n"
+            (read_file file);
+          expect_bool "worker never creates graph" false
+            (Node.Fs.existsSync
+               (Node.Path.join [| root; "graphs"; "missing" |]));
+          remove_tree root))
+    [ "human"; "json"; "edn" ];
+
+  test_promise "CLI parity EDN export rejects before any worker RPC" (fun () ->
+      let calls = ref 0 in
+      let server =
+        invoke_server (fun _ ->
+            incr calls;
+            "null")
+      in
+      with_server server (fun base_url ->
+          let root = temp_dir "logseq-edn-no-rpc-" in
+          let* result =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--root-dir";
+                root;
+                "--graph";
+                "demo";
+                "--output";
+                "json";
+                "graph";
+                "export";
+                "--type";
+                "edn";
+                "--file";
+                Node.Path.join [| root; "export.edn" |];
+                "--edn-options";
+                "{:export-type :graph-human :graph-options \
+                 {:catch-validation-errors? true :typo true}}";
+              |]
+          in
+          remove_tree root;
+          expect_int "no worker RPC" 0 !calls;
+          expect_int "failure exit" 1 result.code;
+          expect_named_contains "invalid options" result.stdout
+            "invalid-options";
+          Js.Promise.resolve pass));
 
   test_promise "CLI parity graph validate result reports ok and error states"
     (fun () ->
@@ -7389,17 +7682,6 @@ let () =
           expect_named_contains "event payload" payload "downloaded 1 block";
           expect_bool "subscription closed" true !closed;
           Js.Promise.resolve pass));
-
-  test "CLI parity server lock paths use canonical graph directory names"
-    (fun () ->
-      expect_equal "plain lock path"
-        "/tmp/logseq-root/graphs/demo/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_demo"));
-      expect_equal "encoded lock path"
-        "/tmp/logseq-root/graphs/foo~2Fbar/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_foo/bar")));
 
   test_promise
     "CLI parity server start rejects a spawn without process identity"
