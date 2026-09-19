@@ -30,6 +30,7 @@
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.common.util.page-ref :as page-ref]
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -42,6 +43,7 @@
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
+   [logseq.graph-parser.block :as gp-block]
    [logseq.outliner.core :as outliner-core]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.page :as outliner-page]
@@ -450,6 +452,114 @@
   (outliner-op/apply-ops! conn
                           (mapv #(normalize-op-block-ids @conn %) ops)
                           opts))
+
+(deftest rebase-save-new-page-reference-and-insert-sibling-test
+  (doseq [persisted-bad-history? [false true]
+          recycle? [false true]
+          move-reference-to-library? [false true]]
+    (testing (str "reference plus Enter, persisted bad history=" persisted-bad-history?
+                  ", recycle=" recycle? ", move reference to Library=" move-reference-to-library?)
+      (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+            [_ recycled-uuid] (outliner-page/create! conn "TickTick" {})
+            remote-conn (d/conn-from-db @conn)
+            parsed-ref (gp-block/page-name->map "New Contact" @conn true
+                                                date-time-util/default-journal-title-formatter)
+            page-uuid (:block/uuid parsed-ref)]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (apply-ops! conn
+                        [[:save-block [{:block/uuid (:block/uuid child1)
+                                        :block/title (str "Call [[" page-uuid "]]")
+                                        :block/refs [parsed-ref]} {}]]
+                         [:insert-blocks [[{:block/title "" :block/uuid (random-uuid)}]
+                                          (:db/id child1) {:sibling? true}]]]
+                        (assoc local-tx-meta :outliner-op :insert-blocks))
+            (let [inserted (ldb/get-right-sibling (d/entity @conn (:db/id child1)))
+                  inserted-uuid (:block/uuid inserted)
+                  pending (first (sync-apply/pending-txs test-repo))
+                  tx-id (:tx-id pending)]
+              (is (not= page-uuid inserted-uuid))
+              (when-not persisted-bad-history?
+                (is (= inserted-uuid
+                       (get-in pending [:forward-outliner-ops 1 1 0 0 :block/uuid]))))
+              (when persisted-bad-history?
+                ;; The affected client stored the created reference UUID as the
+                ;; inserted sibling UUID, while its durable datoms stayed correct.
+                (client-op/upsert-local-tx-entry!
+                 test-repo
+                 (assoc pending
+                        :normalized-tx-data (:tx pending)
+                        :reversed-tx-data (:reversed-tx pending)
+                        :forward-outliner-ops
+                        (-> (:forward-outliner-ops pending)
+                            (assoc-in [1 1 0 0 :block/uuid] page-uuid)
+                            (assoc-in [1 1 0 0 :block/parent] [:block/uuid nil])))))
+              (when recycle?
+                (apply-ops! conn [[:delete-page [recycled-uuid {}]]] local-tx-meta))
+              (when move-reference-to-library?
+                (apply-ops! conn
+                            [[:move-blocks [[page-uuid]
+                                             (:block/uuid (ldb/get-built-in-page @conn common-config/library-page-name))
+                                             {:sibling? false}]]]
+                            local-tx-meta))
+              (dotimes [attempt 2]
+                (let [title (str "Remote edit " attempt)
+                      remote-tx (:tx-data (ldb/transact! remote-conn
+                                                        [[:db/add (:db/id child2) :block/title title]]))]
+                  (is (= :applied
+                         (try
+                           (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                           :applied
+                           (catch :default error (ex-message error)))))
+                  (is (= title (:block/title (d/entity @conn (:db/id child2)))))
+                  (is (= "New Contact" (:block/title (d/entity @conn [:block/uuid page-uuid]))))
+                  (is (= (when move-reference-to-library?
+                           (:db/id (ldb/get-built-in-page @conn common-config/library-page-name)))
+                         (:db/id (:block/parent (d/entity @conn [:block/uuid page-uuid])))))
+                  (is (= inserted-uuid
+                         (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1)))))))
+                (is (= inserted-uuid
+                       (get-in (client-op/get-local-tx-entry test-repo tx-id)
+                               [:forward-outliner-ops 1 1 0 0 :block/uuid]))))
+              (is (some #{tx-id} (map :tx-id (sync-apply/pending-txs test-repo))))
+              (when recycle?
+                (is (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid])))))))))))
+
+(deftest rebase-insert-page-in-library-with-reference-test
+  (doseq [with-reference? [false true]]
+    (testing (str "Library page insertion, with reference=" with-reference?)
+      (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+            library (ldb/get-built-in-page @conn common-config/library-page-name)
+            parsed-ref (gp-block/page-name->map "Referenced Page" @conn true
+                                                date-time-util/default-journal-title-formatter)
+            title (if with-reference?
+                    (str "Page with [[" (:block/uuid parsed-ref) "]]")
+                    "Library Page")
+            page (cond-> (gp-block/page-name->map title @conn true
+                                                 date-time-util/default-journal-title-formatter)
+                   with-reference? (assoc :block/refs [parsed-ref]))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (apply-ops! conn [[:insert-blocks [[page] (:db/id library)
+                                              {:sibling? false :keep-uuid? true}]]]
+                        local-tx-meta)
+            (let [page-uuid (:block/uuid page)
+                  page-before (d/entity @conn [:block/uuid page-uuid])
+                  pending (first (sync-apply/pending-txs test-repo))]
+              (is (= page-uuid (get-in pending [:forward-outliner-ops 0 1 0 0 :block/uuid])))
+              (sync-apply/apply-remote-tx! test-repo nil
+                                         [[:db/add (:db/id child1) :block/title "Remote edit"]])
+              (let [inserted (d/entity @conn [:block/uuid page-uuid])]
+                (is (ldb/page? inserted))
+                (is (= (:block/title page-before) (:block/title inserted)))
+                (is (= (:block/uuid library) (:block/uuid (:block/parent inserted))))
+                (is (= "Remote edit" (:block/title (d/entity @conn (:db/id child1)))))
+                (when with-reference?
+                  (is (= (set (map :block/uuid (:block/refs page-before)))
+                         (set (map :block/uuid (:block/refs inserted)))))
+                  (is (contains? (set (map :block/uuid (:block/refs inserted))) (:block/uuid parsed-ref)))
+                  (is (= "Referenced Page"
+                         (:block/title (d/entity @conn [:block/uuid (:block/uuid parsed-ref)])))))))))))))
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done

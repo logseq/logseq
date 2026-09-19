@@ -277,8 +277,14 @@
   (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta))
 
 (defn- rebase-history-ops
-  [local-tx]
-  {:forward-ops (seq (:forward-outliner-ops local-tx))
+  [local-tx db-before]
+  {:forward-ops (seq (mapv (fn [[op args :as entry]]
+                             (if (= :insert-blocks op)
+                               ;; Recover insert identities using the durable transaction
+                               ;; and the DB snapshot from before the rebase.
+                               [op (op-construct/canonicalize-insert-blocks-op db-before (:tx local-tx) args)]
+                               entry))
+                           (:forward-outliner-ops local-tx)))
    :inverse-ops (seq (:inverse-outliner-ops local-tx))})
 
 (defn- normalize-tx-data-for-rebase
@@ -1579,7 +1585,7 @@
   (if (= :fix (:outliner-op local-tx))
     {:tx-id (:tx-id local-tx)
      :status :kept}
-    (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
+    (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx rebase-db-before)
           tx-meta {:outliner-op :rebase
                    :original-outliner-op (:outliner-op local-tx)
                    :db-sync/rebased-local? true

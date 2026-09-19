@@ -437,14 +437,37 @@
                       (assoc (into {} block) :db/id (:db/id block)))
                     (rest template-blocks))))))))
 
-(defn- canonicalize-insert-blocks-op
+(defn- inserted-block-uuids-from-tx-data
+  [tx-data]
+  (let [entity-id (fn [item]
+                    (cond
+                      (some? (:a item)) (:e item)
+                      (vector? item) (second item)
+                      :else (or (:db/id item) [:block/uuid (:block/uuid item)])))
+        parent-ids (into #{}
+                         (comp (filter (fn [item]
+                                         (or (:block/parent item)
+                                             (and (= :block/parent (:a item))
+                                                  (true? (:added item)))
+                                             (and (vector? item)
+                                                  (= :db/add (first item))
+                                                  (= :block/parent (nth item 2 nil))))))
+                               (map entity-id))
+                         tx-data)]
+    ;; Saving a reference and inserting a sibling creates both a page and a
+    ;; block. Only the inserted tree has parent writes in that transaction.
+    ;; Use durable datoms: later edits can move or delete either entity.
+    (created-block-uuids-from-tx-data
+     (filter #(contains? parent-ids (entity-id %)) tx-data))))
+
+(defn canonicalize-insert-blocks-op
   [db tx-data args]
   (let [[blocks target-id opts] args
-        created-uuids (created-block-uuids-from-tx-data tx-data)
+        created-uuids (inserted-block-uuids-from-tx-data tx-data)
         source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
         source-uuids (mapv :block/uuid source-blocks)
         target-ref (stable-entity-ref db target-id)
-        target (d/entity db target-id)
+        target (d/entity db target-ref)
         block-with-new-id (fn [block block-uuid]
                             (assoc block
                                    :block/uuid block-uuid
