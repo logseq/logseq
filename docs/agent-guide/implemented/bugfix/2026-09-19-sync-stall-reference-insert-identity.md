@@ -84,13 +84,21 @@ The request-boundary test exercises an insertion whose interleaved temporary-ID 
 ## Results
 
 - `pnpm cljs:test`: worker and test targets compile with zero warnings.
-- `LOGSEQ_STABLE_IDENTS=1 node static/tests.js -n frontend.worker.db-sync-test`: 229 tests / 1,128 assertions, zero failures/errors.
+- `LOGSEQ_STABLE_IDENTS=1 node static/tests.js -n frontend.worker.db-sync-test`: 230 tests / 2,216 assertions, zero failures/errors.
 - Operation matrix and online/offline, concurrent undo/redo, and three-client simulations: 4 tests / 268 assertions, zero failures/errors.
 - Outliner operation, construction, recycling, and page namespaces in the Node worker: 55 tests / 202 assertions, zero failures/errors.
 - Full standalone Outliner `pnpm test`: 124 tests / 562 assertions, zero failures/errors.
 - Existing DB batch transaction regressions: 3 tests / 4 assertions, zero failures/errors.
 - Root `bb lint:dev`; DB and Outliner clj-kondo, unused-code, namespace, and size checks; Outliner public-variable check; DB Datalog rules: passed.
 - Fresh persistence run writes with PID 17949 and reloads with PID 21712: remote edit applied, referenced page/sibling/recycle state preserved on both sides, equal checksums, pending count 2 before recovery and 0 after acknowledgment.
+
+## Template text-property follow-up
+
+The dedicated template text-property test creates values through both the normal property setter and the explicit property-value-block operation. It covers plain and multiline reference text, empty-target replacement and nonempty insertion, direct upload, repeated rebase, undo/redo, and editing before or after rebase. The matrix checks both client and server state. The copy must retain its own value UUID while the original template value remains unchanged.
+
+This reproduced 12 failing identity assertions in the live Node worker: replay pointed the copied property back to the source value block. The insert transaction already remapped DataScript Entity references through the source-ID-to-new-UUID map, but captured history did not. History now uses the same mapping before serialization. All 64 combinations pass 1,088 assertions, including actual server application, pending queue acknowledgment, and checksum comparison.
+
+A dedicated text-property persistence run writes the template application and subsequent value edit with worker PID 21712, then reloads the graph and operation SQLite with PID 42360. Rebase and server application preserve copied-value ownership, reference, edited text, and template source text: all 14 state assertions pass, pending operations drain from 2 to 0, and checksums agree.
 
 ## Verification scope
 

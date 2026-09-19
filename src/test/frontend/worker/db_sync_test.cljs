@@ -8002,6 +8002,82 @@
                 (is (= "3" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
                 (upload-pending-and-assert-converged! conn server-conn))))))))
 
+(defn- setup-template-text-property-state
+  [explicit-value-block? with-reference? nonempty-target?]
+  (let [{:keys [seed-conn template-3-uuid empty-target-uuid] :as state}
+        (setup-rebase-apply-template-repro-state)
+        property-id :user.property/template-notes
+        page-uuid (:block/uuid (db-test/find-page-by-title @seed-conn "page 1"))
+        text (str "Template notes" (when with-reference? (str "\n" (page-ref/->page-ref page-uuid))))]
+    (outliner-property/upsert-property! seed-conn property-id
+                                        {:logseq.property/type :default :db/cardinality :db.cardinality/one}
+                                        {:property-name "template-notes"})
+    (if explicit-value-block?
+      (outliner-property/create-property-text-block! seed-conn [:block/uuid template-3-uuid]
+                                                     property-id text {})
+      (outliner-property/set-block-property! seed-conn [:block/uuid template-3-uuid] property-id text))
+    (when nonempty-target?
+      (ldb/transact! seed-conn [[:db/add [:block/uuid empty-target-uuid] :block/title "Existing target"]]))
+    (assoc state :property-text text :reference-uuid (when with-reference? page-uuid))))
+
+(defn- assert-template-text-property
+  [db inserted-uuid value-uuid source-uuid text reference-uuid]
+  (let [copied (d/entity db [:block/uuid inserted-uuid])
+        value (:user.property/template-notes copied)
+        original (:user.property/template-notes (d/entity db [:block/uuid source-uuid]))]
+    (is (= "3" (:block/title copied)))
+    (is (= (str "Edited " text) (:v (first (d/datoms db :eavt (:db/id value) :block/title)))))
+    (is (= text (:v (first (d/datoms db :eavt (:db/id original) :block/title)))))
+    (is (= value-uuid (:block/uuid value)))
+    (is (= inserted-uuid (:block/uuid (:block/parent value))))
+    (is (= source-uuid (:block/uuid (:block/parent original))))
+    (when reference-uuid
+      (is (contains? (set (map :block/uuid (:block/refs value))) reference-uuid)))))
+
+(deftest template-text-property-uploads-after-rebase-and-undo-redo-test
+  (doseq [explicit-value-block? [false true]
+          with-reference? [false true]
+          nonempty-target? [false true]
+          rebase? [false true]
+          undo-redo? [false true]
+          edit-before-rebase? [false true]]
+    (testing (pr-str {:explicit-value-block? explicit-value-block? :with-reference? with-reference?
+                     :nonempty-target? nonempty-target? :rebase? rebase?
+                     :undo-redo? undo-redo? :edit-before-rebase? edit-before-rebase?})
+      (let [{:keys [template-root-uuid template-3-uuid empty-target-uuid seed-conn client-ops-conn
+                    property-text reference-uuid]}
+            (setup-template-text-property-state explicit-value-block? with-reference? nonempty-target?)
+            conn (d/conn-from-db @seed-conn)
+            server-conn (d/conn-from-db @seed-conn)
+            seed (db-test/find-block-by-content @conn "seed")
+            source-value (:user.property/template-notes (d/entity @conn [:block/uuid template-3-uuid]))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (with-redefs [undo-redo/*apply-history-action! (atom sync-apply/apply-history-action!)]
+              (apply-template-with-opts! conn template-root-uuid empty-target-uuid {:sibling? true})
+              (let [inserted (select-offline-inserted-three conn template-root-uuid)
+                    inserted-uuid (:block/uuid inserted)
+                    value-uuid (:block/uuid (:user.property/template-notes inserted))
+                    edit! #(apply-ops! conn [[:save-block [(cond-> {:block/uuid value-uuid
+                                                                   :block/title (str "Edited " property-text)}
+                                                            reference-uuid (assoc :block/refs [{:block/uuid reference-uuid}])) {}]]]
+                                      local-tx-meta)]
+                (is (uuid? value-uuid))
+                (is (not= (:block/uuid source-value) value-uuid))
+                (when undo-redo?
+                  (undo-redo/undo test-repo)
+                  (undo-redo/redo test-repo))
+                (when edit-before-rebase? (edit!))
+                (when rebase?
+                  (doseq [title ["Remote seed" "Remote seed again"]]
+                    (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title title]]))]
+                      (sync-apply/apply-remote-tx! test-repo nil tx))))
+                (when-not edit-before-rebase? (edit!))
+                (upload-pending-and-assert-converged! conn server-conn)
+                (doseq [db [@conn @server-conn]]
+                  (assert-template-text-property db inserted-uuid value-uuid template-3-uuid
+                                                 property-text reference-uuid))))))))))
+
 (deftest rebase-apply-template-preserves-followup-insert-target-uuid-test
   (testing "rebase should replay apply-template with stable UUIDs so follow-up insert-blocks is not dropped"
     (let [{:keys [template-root-uuid empty-target-uuid local-empty-uuid seed-conn client-ops-conn]}

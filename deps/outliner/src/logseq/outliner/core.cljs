@@ -845,7 +845,7 @@
       (and sibling? (default-value-block? (:block/parent target-block)))))
 
 (defn- insert-history-blocks
-  [blocks page-txs]
+  [blocks page-txs id->new-uuid]
   (let [pages (reduce (fn [pages tx]
                        (if (and (map? tx) (:block/uuid tx))
                          (update pages (:block/uuid tx) merge (dissoc tx :db/id))
@@ -861,7 +861,13 @@
                                   (merge page ref)
                                   ref))
                               refs)))))
-          blocks)))
+          (walk/prewalk (fn [value]
+                          (if (de/entity? value)
+                            (if-let [uuid' (get id->new-uuid (:db/id value))]
+                              [:block/uuid uuid']
+                              (:db/id value))
+                            value))
+                        blocks))))
 
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
@@ -989,7 +995,7 @@
                            full-tx)]
              {:tx-data full-tx'
               :blocks tx
-              :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs)
+              :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs id->new-uuid)
                                                        (:block/uuid target-block)
                                                        (assoc insert-opts :keep-uuid? true)]]]}})))))))
 
