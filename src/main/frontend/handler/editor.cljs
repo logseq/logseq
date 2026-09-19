@@ -2360,15 +2360,14 @@
     (cursor/move-cursor-forward input 2)))
 
 (defn- paste-block-cleanup
-  [_repo block page _exclude-properties _format content-update-fn keep-uuid?]
+  [_repo block page _exclude-properties _format content-update-fn]
   (let [new-content
         (if content-update-fn
           (content-update-fn (:block/title block))
           (:block/title block))]
-    (merge (cond-> block
-             (not keep-uuid?) (dissoc :block/uuid))
-           {:block/page {:db/id [:block/uuid (:block/uuid page)]}
-            :block/title new-content})))
+    (assoc block
+           :block/page {:db/id [:block/uuid (:block/uuid page)]}
+           :block/title new-content)))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2463,7 +2462,7 @@
                                    (let [format (get target-block' :block/format :markdown)
                                          repo (state/get-current-repo)
                                          blocks' (map (fn [block]
-                                                        (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                                        (paste-block-cleanup repo block page exclude-properties format content-update-fn))
                                                       blocks)]
                                      (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                                         :outliner-op :paste
