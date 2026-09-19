@@ -164,3 +164,30 @@
         (is (= child-uuids dest-child-uuids)
             "Live child identities are reused, not duplicated")
         (is (= "dest" (:block/title (:block/page moved))))))))
+
+(deftest undo-restore-keeps-live-child-uuid
+  (testing "Undo insert of a deleted parent must reuse a still-live child uuid, not remint a duplicate."
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page"}
+                  :blocks [{:block/title "b"}
+                           {:block/title "c"
+                            :build/children [{:block/title "d"}]}]}])
+          b (db-test/find-block-by-content @conn "b")
+          c (db-test/find-block-by-content @conn "c")
+          d (db-test/find-block-by-content @conn "d")
+          c-uuid (:block/uuid c)
+          d-uuid (:block/uuid d)
+          restore-payload (copied-blocks-for @conn c)]
+      (outliner-core/move-blocks! conn [d] b {:sibling? false})
+      (outliner-core/delete-blocks! conn [c] {})
+      (outliner-core/insert-blocks! conn restore-payload b
+                                    {:sibling? true
+                                     :keep-uuid? true
+                                     :keep-block-order? true})
+      (let [restored (d/entity @conn [:block/uuid c-uuid])
+            children (->> (ldb/sort-by-order (:block/_parent restored))
+                          (remove :logseq.property/created-from-property))]
+        (is (some? restored))
+        (is (= ["d"] (mapv :block/title children)))
+        (is (= [d-uuid] (mapv :block/uuid children))
+            "Live children reparented by merge must keep their uuid on undo restore")))))
