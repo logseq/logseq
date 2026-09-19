@@ -1832,6 +1832,7 @@
  :sync/conflicts-description "These server versions conflicted with local edits. Copy the text you want and edit the block manually."
  :sync/conflicts-title "Sync conflicts"
  :sync/creating-remote-graph "Creating remote graph..."
+ :sync/download-error "Couldn't download the graph. Check the logs for details."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Downloading {1} ..."
  :sync/graph-count-exceed-limit "Sync graph count exceed limit"
