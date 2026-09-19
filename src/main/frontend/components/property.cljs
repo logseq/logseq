@@ -842,6 +842,18 @@
         {:keys [hidden-properties]} (use-display-properties block opts enabled? show-empty-and-hidden?)]
     (boolean (seq hidden-properties))))
 
+(defn block-below-pill-owns-hidden-toggle?
+  "True when the block-below pill row already renders the hidden-properties
+  toggle: an outliner zoom-in root with block-below positioned properties.
+  The properties area must not render a second toggle in that case."
+  [block opts]
+  (boolean
+   (and (not config/publishing?)
+        (not (entity/page? block))
+        (:block? opts)
+        (= (:id opts) (str (:block/uuid block)))
+        (seq (get-in block [:block.temp/positioned-properties :block-below])))))
+
 (hsx/defc hidden-properties-toggle-button
   [block {:keys [icon-only? tab-index bottom-row-nav? bottom-pill?] :as _opts}]
   (let [block-uuid (:block/uuid block)
@@ -932,7 +944,8 @@
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
         show-hidden-properties-toggle-button? (and (seq hidden-properties)
                                                    (or current-route-page?
-                                                       root-block?))]
+                                                       root-block?)
+                                                   (not (block-below-pill-owns-hidden-toggle? target-block opts)))]
     [:<>
      (cond
        (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
