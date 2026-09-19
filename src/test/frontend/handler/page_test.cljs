@@ -288,6 +288,31 @@
                (restore!)
                (done)))))))
 
+(deftest hashtag-chosen-skips-org-directive-query-test
+  (let [input (doto (js-obj)
+                (aset "value" "#+BEGIN_NOTE")
+                (aset "selectionStart" 12)
+                (aset "selectionEnd" 12)
+                (aset "focus" (fn [])))
+        event (doto (js-obj)
+                (aset "identifier" "auto-complete/shift-complete")
+                (aset "preventDefault" (fn []))
+                (aset "stopPropagation" (fn [])))
+        calls (atom [])
+        restore! (install-hashtag-on-chosen-stubs! {:block/title "ignored"} calls)]
+    (try
+      ((page-handler/on-chosen-handler input "edit-input" 1 :markdown)
+       {:block/title "New tag +BEGIN_NOTE"}
+       event)
+      (is (nil? (some #(when (= :tag-on-chosen (first %)) %) @calls))
+          "Org directives do not create tags")
+      (is (nil? (some #(when (= :insert-command (first %)) %) @calls))
+          "Org directives do not rewrite the editor as a tag")
+      (is (some #(= :clear-editor-action (first %)) @calls)
+          "Hashtag search is closed without creating a tag")
+      (finally
+        (restore!)))))
+
 (deftest chosen-result-loads-uuid-result-through-worker-test
   (async done
     (let [tag-id #uuid "22222222-2222-2222-2222-222222222222"
