@@ -113,6 +113,39 @@
         "row-offset drops the first window and takes the next screen.")
     (is (= (subvec (vec (:data full)) 1 3) (:data window)))))
 
+(deftest get-view-data-manual-order-precedes-row-window-test
+  (doseq [feature-type [:all-pages :class-objects]]
+    (let [class-view? (= :class-objects feature-type)
+          conn (db-test/create-conn-with-blocks
+                (cond-> {:pages-and-blocks
+                         (mapv (fn [title]
+                                 {:page (cond-> {:block/title title}
+                                          class-view? (assoc :build/tags [:Topic]))})
+                               ["A" "B" "C" "D"])}
+                  class-view? (assoc :classes {:Topic {:block/title "Topic"}})))
+          class-id (when class-view? (:db/id (d/entity @conn :user.class/Topic)))
+          view-id (create-view-id conn feature-type :view-for-id class-id)
+          saved-order (mapv #(:block/uuid (db-test/find-page-by-title @conn %)) ["C" "A" "D" "B"])
+          options {:view-feature-type feature-type
+                   :view-for-id class-id
+                   :sorting [{:id :block/title :asc? true}]}
+          titles (fn [result]
+                   (mapv #(:block/title (d/entity @conn %)) (:data result)))]
+      (d/transact! conn [{:db/id view-id
+                         :logseq.property.table/sort-order {:flat saved-order :groups {}}}])
+      (let [full (db-view/get-view-data @conn view-id options)
+            first-window (db-view/get-view-data @conn view-id (assoc options :row-limit 2))
+            offset-window (db-view/get-view-data @conn view-id (assoc options :row-limit 2 :row-offset 1))
+            filtered-window (db-view/get-view-data @conn view-id
+                                                  (assoc options :row-limit 2 :row-offset 1
+                                                         :filters {:filters [[:block/title :is-not #{"A"}]]}))]
+        (is (= ["C" "A" "D" "B"] (titles full)))
+        (is (= ["C" "A"] (titles first-window)))
+        (is (= ["A" "D"] (titles offset-window)))
+        (is (= ["D" "B"] (titles filtered-window)))
+        (is (= 4 (:count full) (:count first-window) (:count offset-window)))
+        (is (= 3 (:count filtered-window)))))))
+
 (deftest get-view-data-class-objects-row-offset-returns-the-scrolled-window-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Topic {:block/title "Topic"}}
