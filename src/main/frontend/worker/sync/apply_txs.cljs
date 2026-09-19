@@ -278,7 +278,7 @@
 
 (defn- rebase-history-ops
   [local-tx db-before]
-  {:forward-ops (seq (op-construct/canonicalize-insert-blocks-ops
+  {:forward-ops (seq (op-construct/canonicalize-insert-ops
                      db-before (:tx local-tx) (:forward-outliner-ops local-tx)))
    :inverse-ops (seq (:inverse-outliner-ops local-tx))})
 

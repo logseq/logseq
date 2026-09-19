@@ -486,7 +486,8 @@
          target-ref (stable-entity-ref db target-id)
          target (d/entity db target-ref)
          available-set (set available-uuids)
-         replaced-target? (replaces-empty-target? db tx-data source-uuids target-ref opts)
+         replaced-target? (and (not (every? available-set source-uuids))
+                                (replaces-empty-target? db tx-data source-uuids target-ref opts))
          new-source-uuids (if replaced-target? (subvec source-uuids 1) source-uuids)
          created-uuids (if (every? available-set new-source-uuids)
                          new-source-uuids
@@ -523,15 +524,37 @@
       (assoc (dissoc (or opts {}) :outliner-op)
              :keep-uuid? true)])))
 
-(defn ^:api canonicalize-insert-blocks-ops
+(defn- canonicalize-template-op
+  [db tx-data args available-uuids]
+  (let [[template-id target-id opts] args
+        template-ref (stable-entity-ref db template-id)
+        target-ref (stable-entity-ref db target-id)
+        template-blocks (or (some-> (:template-blocks opts) seq vec)
+                            (template-children-blocks-for-history db template-ref))
+        opts-base (dissoc opts :template-id :outliner-op)
+        opts' (if (seq template-blocks)
+                (let [[blocks* _target-ref insert-opts]
+                      (canonicalize-insert-blocks-op db tx-data [template-blocks target-id opts-base] available-uuids)]
+                  (assoc insert-opts :template-blocks blocks*))
+                (dissoc opts-base :template-blocks))]
+    (when-not (and template-ref target-ref)
+      (throw (ex-info "Invalid apply-template args"
+                      {:args args})))
+    [:apply-template [template-ref target-ref opts']]))
+
+(defn ^:api canonicalize-insert-ops
   [db tx-data ops]
   (:ops
    (reduce (fn [{:keys [available] :as result} [op args :as entry]]
-             (if (= :insert-blocks op)
-               (let [args' (canonicalize-insert-blocks-op db tx-data args available)
-                     inserted-uuids (set (map :block/uuid (first args')))]
+             (if (contains? #{:insert-blocks :apply-template} op)
+               (let [[_ args' :as entry']
+                     (if (= :insert-blocks op)
+                       [op (canonicalize-insert-blocks-op db tx-data args available)]
+                       (canonicalize-template-op db tx-data args available))
+                     blocks (if (= :insert-blocks op) (first args') (get-in args' [2 :template-blocks]))
+                     inserted-uuids (set (map :block/uuid blocks))]
                  (-> result
-                     (update :ops conj [op args'])
+                     (update :ops conj entry')
                      (assoc :available (filterv #(not (contains? inserted-uuids %)) available))))
                (update result :ops conj entry)))
            {:ops [] :available (inserted-block-uuids-from-tx-data tx-data)}
@@ -576,21 +599,7 @@
      (canonicalize-insert-blocks-op db tx-data args)]
 
     :apply-template
-    (let [[template-id target-id opts] args
-          template-ref (stable-entity-ref db template-id)
-          target-ref (stable-entity-ref db target-id)
-          template-blocks (or (some-> (:template-blocks opts) seq vec)
-                              (template-children-blocks-for-history db template-ref))
-          opts-base (dissoc opts :template-id :outliner-op)
-          opts' (if (seq template-blocks)
-                  (let [[blocks* _target-ref insert-opts]
-                        (canonicalize-insert-blocks-op db tx-data [template-blocks target-id opts-base])]
-                    (assoc insert-opts :template-blocks blocks*))
-                  (dissoc opts-base :template-blocks))]
-      (when-not (and template-ref target-ref)
-        (throw (ex-info "Invalid apply-template args"
-                        {:args args})))
-      [:apply-template [template-ref target-ref opts']])
+    (canonicalize-template-op db tx-data args (inserted-block-uuids-from-tx-data tx-data))
 
     :move-blocks-up-down
     (let [[ids up?] args]
@@ -1140,9 +1149,9 @@
       nil
 
       (seq ops')
-      (->> (canonicalize-insert-blocks-ops db tx-data ops')
+      (->> (canonicalize-insert-ops db tx-data ops')
            (mapv (fn [op]
-                   (let [canonicalized-op (if (= :insert-blocks (first op))
+                   (let [canonicalized-op (if (contains? #{:insert-blocks :apply-template} (first op))
                                             op
                                             (canonicalize-semantic-outliner-op db tx-data op))]
                      (if (and (sequential? canonicalized-op)

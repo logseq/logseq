@@ -58,40 +58,44 @@ Before the fix, two successive applications throw `Page can't have block as pare
 
 The persistence experiment writes the constructed graph snapshot and affected pending operations to local files, closes SQLite, stops the worker process, starts a new worker, and reloads the files. Applying the remote edit, delivering the rebased transactions to the peer, and acknowledging them preserves both clients' page/sibling/recycle state and reduces the pending count from 2 to 0.
 
-## Verification scope
+## Extended reproduction and fixes
 
-The reproduction and recovery run through the Node worker sync apply path. They do not exercise production WebSockets, deploy a release, or modify the user's graph. The supplied SQLite is the operation store, not the full graph database, so the user's complete graph has not been replayed end to end.
+Compound operations exposed additional failures in the live Node worker:
 
-The standalone Outliner nbb runner cannot load `sqlite-export/validate-import-txs` in the installed dependency bundle. Relevant Outliner tests were also evaluated in the Node worker with `LOGSEQ_STABLE_IDENTS=1`. Its `page-test/delete-page` raw-title assertion fails identically when the original unmodified operation-construction source is loaded; this is outside the insert-identity change.
+- Two insertions could consume the same created UUID, losing one block and its later edit during rebase.
+- Empty-target replacement could consume the UUID belonging to a subsequent insertion.
+- Saving an initially blank target before inserting caused transaction-wide blank-title inference to overwrite the saved target.
+- Applying a template with implicit insertion options followed by a separate insertion could truncate the template payload.
+
+New insert and template history now captures the actual inserted blocks and effective options at the execution boundary. Batch metadata is finalized after all operations execute. New reference-page definitions are preserved in the captured payload, including when the page transaction ends with a UUID-only stub. Existing numeric reference IDs remain unchanged. Durable affected history is still reconstructed from its original transaction evidence, with created identities allocated once across insertion and template operations.
+
+The compound template and save-before-insert cases failed six assertions before this change; afterward they passed all 37 assertions. Running them together with Library/reference creation passed 54 assertions. A template followed by permanent deletion of its target also preserves the surviving template and converges on the server.
+
+The page deletion test now verifies the stored title datom and preserved internal reference after recycling, and checks that no raw-title datom is stored. This avoids depending on worker-only derived entity lookups, which are absent in the nbb test runtime.
+
+## Systematic upload verification
+
+The operation matrix forces each of the 24 core operation generators plus undo and redo to execute both directly and after a remote change: 52 scenarios and 208 assertions. Each checks raw normalized transaction application, Transit delivery through the actual server handler, checksum agreement, and queue acknowledgment. The raw transaction check prevents the server's stale-rebase handling from hiding a missing-entity exception.
+
+Focused cases additionally cover template insertion and undo/redo, Library page creation with new references, recycling restore/permanent deletion, folding, EDN import, reference creation plus Enter, compound insertion, and target deletion. The declared collapse-expand-block-property operation has no dispatch implementation or production call site and emits no transaction; collapse-expand-blocks covers implemented folding behavior.
+
+The request-boundary test exercises an insertion whose interleaved temporary-ID dependencies must remain atomic, and permanent deletion spanning multiple requests. It checks stable retry payloads before acknowledgment, duplicate delivery after a lost response, persisted upload progress, empty pending queues, and equal checksums.
 
 ## Results
 
-- Before change: locally generated save/reference/Enter plus remote edit repeatedly throws `Page can't have block as parent` and leaves the remote edit unapplied.
-- Final targeted Node worker tests: 2 tests, 133 assertions, zero failures/errors, including the later Library move and affected persisted history.
-- Compiled sync namespace: `bb dev:run-test-namespaces -n frontend.worker.db-sync-test -e long -e fix-me` — 220 tests, 973 assertions, zero failures/errors.
-- Outliner worker evaluation: 54 tests, 199 passing assertions and one failing raw-title assertion. Running that test against the unmodified construction source reproduces the same failure (7 passing assertions, one failure).
-- `clojure -M:clj-kondo --lint` for the changed source/test files, from both the root and Outliner package: zero warnings/errors.
-- Root and Outliner `bb lint:large-vars`, `git diff --check`, and `spec-dev-tool check --all`: passed.
-- Final persistence run writes with worker PID 4024 and reloads with PID 5998: remote edit applied, referenced page/sibling/recycle state preserved on both peers, pending count 2 before recovery and 0 after acknowledgment.
+- `pnpm cljs:test`: worker and test targets compile with zero warnings.
+- `LOGSEQ_STABLE_IDENTS=1 node static/tests.js -n frontend.worker.db-sync-test`: 229 tests / 1,128 assertions, zero failures/errors.
+- Operation matrix and online/offline, concurrent undo/redo, and three-client simulations: 4 tests / 268 assertions, zero failures/errors.
+- Outliner operation, construction, recycling, and page namespaces in the Node worker: 55 tests / 202 assertions, zero failures/errors.
+- Full standalone Outliner `pnpm test`: 124 tests / 562 assertions, zero failures/errors.
+- Existing DB batch transaction regressions: 3 tests / 4 assertions, zero failures/errors.
+- Root `bb lint:dev`; DB and Outliner clj-kondo, unused-code, namespace, and size checks; Outliner public-variable check; DB Datalog rules: passed.
+- Fresh persistence run writes with PID 17949 and reloads with PID 21712: remote edit applied, referenced page/sibling/recycle state preserved on both sides, equal checksums, pending count 2 before recovery and 0 after acknowledgment.
 
-No production data was changed and no release was deployed.
+## Verification scope
 
-## Extended outliner verification
+The reproduction and recovery use the Node worker because the affected code owns graph transactions and durable sync operations. The persistence experiment stops the writer process, starts a new worker, reloads the graph snapshot and operation SQLite, applies a remote edit, sends the resulting transactions through the server handler, and acknowledges the queue.
 
-The broader client-to-server audit is ongoing. A compound transaction containing two insert operations reproduced a separate identity collision: after a remote edit, the first block acquired the second insertion's title and the second block disappeared with its later edit. Both UUID-preserving and UUID-reminting insertions reproduced it. Canonicalization now allocates created identities across the insertion operations and preserves matching source identities. The regression applies serialized prepared uploads to an independent server connection and compares checksums as well as the intended block titles.
+The initial local nbb runner failure was caused by a stale extracted dependency cache that lacked validate-import-txs. Regenerating that disposable cache allowed the full standalone Outliner test runner to execute against current sources.
 
-The nested-insertion-then-permanent-deletion probe currently passes, including server application. A small request-size probe also applied a four-entity permanent deletion across two upload requests successfully; the suspected missing-entity failure has not been reproduced by that probe.
-
-The page deletion assertion was obsolete: `:block/raw-title` is a derived lookup of the original stored title, so recycling a page preserves its child's raw title and internal reference. The corrected test verifies the exact preserved title and absence of a stored `:block/raw-title` datom. Before correction the worker reported one failure; afterward the deletion test passed all nine assertions and the full page namespace passed 16 tests / 71 assertions.
-
-Four targeted sync regressions passed 154 assertions in the Node worker after the compound-insertion change. After recompiling with `pnpm cljs:test`, the sync namespace passed 222 tests / 994 assertions. Changed-file lint, large-function checks, document validation, and diff checks passed. This evidence does not yet establish complete coverage of every outliner operation, upload chunk boundary, or persisted recovery combination.
-
-### Operation matrix and empty-target replacement
-
-The systematic upload matrix forces each of the 24 core operation generators plus undo and redo to execute, with and without a preceding remote change. It validates raw normalized transactions and independently applies their Transit serialization through the actual server handler, compares checksums, and requires the pending queue to drain. All 52 scenarios passed 208 assertions. Additional scenarios cover recycling restore, permanent deletion, folding, EDN page import, template insertion with undo/redo, reference creation plus Enter, and Library page insertion. Four focused tests covering those additions and the original reference scenarios passed 201 assertions after server application was added.
-
-An empty-target replacement followed by a separate insertion in the same transaction reproduced a further collision: replacement incorrectly consumed the new entity's UUID. The Node worker failed the assertion that the second edited block survives rebase. Replacement now uses the existing target identity, supported by the original blank-title retraction, and only new nodes consume created identities. The expanded compound insertion test passes 24 assertions for UUID-preserving/reminting and replacement/non-replacement cases.
-
-After this correction, the operation matrix plus the online random simulation passed 212 assertions. The four existing offline/concurrent undo-redo/cut-paste/three-client simulations passed 66 assertions before the empty-target correction. Outliner operation, construction, recycling, and page namespaces passed 54 tests / 201 assertions in the Node worker. The runtime loading of the simulator itself requires the compiled test environment because it imports frontend browser globals; its matrix was executed using `static/tests.js`, while the targeted worker reproductions use the live isolated Node worker.
-
-The compiled sync namespace subsequently passed 224 tests / 1,074 assertions. A final helper extraction for the line-count lint was checked with the same 24-assertion worker replacement test. Remaining verification includes durable request-chunk regressions and a fresh restart/recovery run against the latest implementation.
+No production data was changed or release deployed. Production WebSockets and the reporter's full graph were not replayed: the supplied SQLite contains pending operations, not the complete graph database. The tests establish coverage for the enumerated operation families and reproduced compound failures; they do not prove the absence of errors in every possible arbitrary future operation sequence.

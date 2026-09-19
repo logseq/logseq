@@ -209,7 +209,7 @@
       (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
       (is (integer? (:logseq.property/deleted-at d1')))
       (is (= (str "b1 " (page-ref/->page-ref (:block/uuid d1)))
-             (:block/raw-title b1'))
+             (:v (first (d/datoms @conn :eavt (:db/id b1') :block/title))))
           "Recycling preserves the child's original title and internal page reference")
       (is (empty? (d/datoms @conn :eavt (:db/id b1') :block/raw-title))
           "Raw title is a derived lookup, not a stored attribute")

@@ -468,6 +468,48 @@
     (sync-apply/mark-pending-txs-false! test-repo (into drop-tx-ids (map :tx-id tx-entries)))
     (is (empty? (sync-apply/pending-txs test-repo)))))
 
+(deftest outliner-upload-chunks-preserve-entities-and-acknowledgment-test
+  (doseq [delete? [false true]]
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          _ (when delete? (outliner-page/delete! conn (:block/uuid parent)))
+          server-conn (d/conn-from-db @conn)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      (if delete?
+                        [[:recycle-delete-permanently [(:block/uuid parent)]]]
+                        [[:insert-blocks [(mapv (fn [n] {:block/uuid (random-uuid)
+                                                        :block/title (str "Chunk block " n)})
+                                               (range 6))
+                                          (:db/id parent) {:sibling? false :keep-uuid? true}]]])
+                      local-tx-meta)
+          (with-redefs [sync-apply/max-upload-request-datoms (if delete? 2 15)]
+            (loop [requests 0]
+              (let [pending (sync-apply/pending-txs test-repo)
+                    {:keys [tx-entries]} (sync-apply/prepare-upload-tx-entries test-repo conn pending)]
+                (if (seq tx-entries)
+                  (do
+                    (is (< requests 20) "Chunk progress must be bounded")
+                    (when (< requests 20)
+                      (is (= tx-entries (:tx-entries (sync-apply/prepare-upload-tx-entries test-repo conn pending)))
+                          "Before acknowledgment a retry must contain the same chunk")
+                      (doseq [{:keys [tx-data outliner-op]} tx-entries]
+                        (d/with @server-conn tx-data)
+                        (let [entry {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}]
+                          (#'sync-handler/apply-tx-entry! server-conn entry)
+                          ;; A lost response resends the chunk before advancing the cursor.
+                          (#'sync-handler/apply-tx-entry! server-conn entry)))
+                      (#'sync-apply/commit-large-upload-progress! test-repo tx-entries)
+                      (sync-apply/mark-pending-txs-false! test-repo (keep :tx-id tx-entries))
+                      (recur (inc requests))))
+                  (do
+                    (if delete?
+                      (is (> requests 1) "Permanent deletion must span requests")
+                      (is (= 1 requests) "Interleaved tempid dependencies must stay in one atomic request"))
+                    (is (empty? (sync-apply/pending-txs test-repo)))
+                    (is (= (sync-checksum/recompute-checksum @conn)
+                           (sync-checksum/recompute-checksum @server-conn)))))))))))))
+
 (deftest additional-outliner-operations-upload-test
   (doseq [op [:restore-recycled :recycle-delete-permanently :collapse-expand-blocks :batch-import-edn]
           rebase? [false true]]
@@ -647,6 +689,27 @@
                           server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
             (is (= (sync-checksum/recompute-checksum @conn)
                    (sync-checksum/recompute-checksum @server-conn)))))))))
+
+(deftest compound-save-empty-target-then-insert-preserves-identities-test
+  (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+        _ (ldb/transact! conn [[:db/add (:db/id child1) :block/title ""]])
+        server-conn (d/conn-from-db @conn)
+        first-uuid (random-uuid)
+        second-uuid (random-uuid)]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-ops! conn
+                    [[:save-block [{:block/uuid (:block/uuid child1) :block/title "Typed"} {}]]
+                     [:insert-blocks [[{:block/uuid first-uuid :block/title "First"}
+                                       {:block/uuid second-uuid :block/title "Second"}]
+                                      (:db/id child1) {:sibling? true :keep-uuid? true
+                                                       :replace-empty-target? false}]]]
+                    local-tx-meta)
+        (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id child2) :block/title "Remote"]]))]
+          (sync-apply/apply-remote-tx! test-repo nil tx))
+        (doseq [[id title] [[(:block/uuid child1) "Typed"] [first-uuid "First"] [second-uuid "Second"]]]
+          (is (= title (:block/title (d/entity @conn [:block/uuid id])))))
+        (upload-pending-and-assert-converged! conn server-conn)))))
 
 (deftest rebase-nested-insert-then-delete-preserves-tree-test
   (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
@@ -7873,6 +7936,46 @@
      :local-empty-uuid local-empty-uuid
      :seed-conn seed-conn
      :client-ops-conn client-ops-conn}))
+
+(deftest compound-template-and-insert-upload-test
+  (doseq [keep-uuid? [false true]
+          template-first? [false true]
+          explicit-sibling? [false true]]
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          server-conn (d/conn-from-db @seed-conn)
+          seed (db-test/find-block-by-content @conn "seed")
+          template-op [:apply-template [template-root-uuid empty-target-uuid
+                                        (if explicit-sibling? {:sibling? true} {})]]
+          insert-op [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Compound followup"}]
+                                    (:block/uuid seed) {:sibling? true :keep-uuid? keep-uuid?}]]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn (if template-first? [template-op insert-op] [insert-op template-op]) local-tx-meta)
+          (let [followup-uuid (:block/uuid (db-test/find-block-by-content @conn "Compound followup"))
+                tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+            (sync-apply/apply-remote-tx! test-repo nil tx)
+            (is (= "Compound followup" (:block/title (d/entity @conn [:block/uuid followup-uuid]))))
+            (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "3"]] @conn))))
+            (upload-pending-and-assert-converged! conn server-conn)))))))
+
+(deftest rebase-template-after-target-permanently-deleted-test
+  (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+        (setup-rebase-apply-template-repro-state)
+        conn (d/conn-from-db @seed-conn)
+        server-conn (d/conn-from-db @seed-conn)
+        seed (db-test/find-block-by-content @conn "seed")]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+        (apply-ops! conn [[:delete-blocks [[empty-target-uuid] {}]]
+                         [:recycle-delete-permanently [empty-target-uuid]]] local-tx-meta)
+        (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+          (sync-apply/apply-remote-tx! test-repo nil tx))
+        (is (nil? (d/entity @conn [:block/uuid empty-target-uuid])))
+        (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "2"]] @conn))))
+        (upload-pending-and-assert-converged! conn server-conn)))))
 
 (deftest template-uploads-after-rebase-and-undo-redo-test
   (doseq [rebase? [false true]
