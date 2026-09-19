@@ -504,7 +504,7 @@
       (assoc (dissoc (or opts {}) :outliner-op)
              :keep-uuid? true)])))
 
-(defn canonicalize-insert-blocks-ops
+(defn ^:api canonicalize-insert-blocks-ops
   [db tx-data ops]
   (:ops
    (reduce (fn [{:keys [available] :as result} [op args :as entry]]
