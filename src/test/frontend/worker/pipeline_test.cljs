@@ -1234,3 +1234,134 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(defn- convert-block-to-page!
+  [conn block]
+  (ldb/transact! conn [{:db/id (:db/id block)
+                        :block/tags :logseq.class/Page}]))
+
+(defn- convert-page-to-block!
+  [conn page]
+  (ldb/transact! conn [[:db/retract (:db/id page) :block/tags :logseq.class/Page]]))
+
+(deftest toggle-page-and-block-rewrites-nested-descendants-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"
+                                            :build/children [{:block/title "grandchild"}]}]}]}])
+        page1 (db-test/find-page-by-title @conn "page1")
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        grandchild (db-test/find-block-by-content @conn "grandchild")]
+    (with-transact-pipeline
+      (fn []
+        (is (= (:db/id page1) (:db/id (:block/page child))))
+        (is (= (:db/id page1) (:db/id (:block/page grandchild))))
+        (convert-block-to-page! conn parent)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))]
+          (is (ldb/page? parent)
+              "Parent becomes a page")
+          (is (nil? (:block/page parent))
+              "Converted page no longer points at the original page")
+          (is (= (:db/id parent) (:db/id (:block/page child)))
+              "Direct child :block/page follows the new page")
+          (is (= (:db/id parent) (:db/id (:block/page grandchild)))
+              "Depth-2 descendant :block/page follows the new page")
+          (is (not (ldb/page? child)))
+          (is (not (ldb/page? grandchild)))
+          (convert-page-to-block! conn parent)
+          (let [parent (d/entity @conn (:db/id parent))
+                child (d/entity @conn (:db/id child))
+                grandchild (d/entity @conn (:db/id grandchild))
+                nearest-page (or (db-test/find-page-by-title @conn "page1") page1)]
+            (is (not (ldb/page? parent))
+                "Parent converts back to a block")
+            (is (= (:db/id nearest-page) (:db/id (:block/page parent)))
+                "Converted block points at the remaining page ancestor")
+            (is (= (:db/id nearest-page) (:db/id (:block/page child)))
+                "Direct child is re-pointed to the remaining page ancestor")
+            (is (= (:db/id nearest-page) (:db/id (:block/page grandchild)))
+                "Depth-2 descendant is re-pointed to the remaining page ancestor")))))))
+
+(deftest toggle-page-and-block-skips-descendants-under-nested-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"
+                                            :build/children [{:block/title "grandchild"}]}
+                                           {:block/title "sibling"}]}]}])
+        page1 (db-test/find-page-by-title @conn "page1")
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        grandchild (db-test/find-block-by-content @conn "grandchild")
+        sibling (db-test/find-block-by-content @conn "sibling")]
+    (with-transact-pipeline
+      (fn []
+        (convert-block-to-page! conn parent)
+        (convert-block-to-page! conn child)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))
+              sibling (d/entity @conn (:db/id sibling))]
+          (is (ldb/page? parent))
+          (is (ldb/page? child))
+          (is (= (:db/id child) (:db/id (:block/page grandchild)))
+              "Nested page keeps its own children after the ancestor converts")
+          (is (= (:db/id parent) (:db/id (:block/page sibling)))))
+        (convert-page-to-block! conn parent)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))
+              sibling (d/entity @conn (:db/id sibling))]
+          (is (not (ldb/page? parent)))
+          (is (ldb/page? child)
+              "Intermediate page is unchanged when the ancestor converts back")
+          (is (= (:db/id child) (:db/id (:block/page grandchild)))
+              "Descendants under the nested page are not rewritten")
+          (is (= (:db/id page1) (:db/id (:block/page parent))))
+          (is (= (:db/id page1) (:db/id (:block/page sibling)))
+              "Siblings of the nested page follow the remaining page ancestor"))
+        (convert-block-to-page! conn parent)
+        (let [parent (d/entity @conn (:db/id parent))
+              child (d/entity @conn (:db/id child))
+              grandchild (d/entity @conn (:db/id grandchild))
+              sibling (d/entity @conn (:db/id sibling))]
+          (is (ldb/page? parent))
+          (is (ldb/page? child))
+          (is (= (:db/id child) (:db/id (:block/page grandchild)))
+              "Re-converting the ancestor still leaves nested-page children alone")
+          (is (= (:db/id parent) (:db/id (:block/page sibling)))))))))
+
+(deftest toggle-page-and-block-keeps-blank-library-insert-as-draft-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "keep"}]}])
+        library (ldb/get-library-page @conn)
+        draft-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/insert-blocks!
+         conn
+         [{:block/uuid draft-uuid
+           :block/title ""
+           :block/name ""
+           :block/tags #{:logseq.class/Page}
+           :block/page (:db/id library)}]
+         library
+         {:sibling? false
+          :keep-uuid? true})
+        (let [draft (d/entity @conn [:block/uuid draft-uuid])]
+          (is (some? draft)
+              "Empty Library #Page drafts are inserted instead of rolling back")
+          (is (ldb/page? draft)
+              "Library Enter inserts an empty page draft")
+          (is (= (:db/id library) (:db/id (:block/parent draft))))
+          (ldb/transact! conn [{:db/id (:db/id draft)
+                                :block/title "library draft"}])
+          (let [draft (d/entity @conn (:db/id draft))]
+            (is (ldb/page? draft)
+                "Filling the draft title keeps it a page")
+            (is (= "library draft" (:block/title draft)))))))))

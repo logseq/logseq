@@ -23,7 +23,8 @@
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.template :as outliner-template]))
+            [logseq.outliner.template :as outliner-template]
+            [logseq.outliner.validate :as outliner-validate]))
 
 (def ^:private rtc-tx-or-download-graph?
   (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
@@ -207,11 +208,41 @@
                nil))))
        tx-data))))
 
+(defn- block-title
+  [block]
+  (or (:block/raw-title block) (:block/title block)))
+
 (defn- remove-inline-page-class-from-title
   "Remove inline page tag from title"
   [block page-tag]
-  (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
-      string/trim))
+  (let [title (block-title block)]
+    (if (string? title)
+      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+          string/trim)
+      title)))
+
+(defn- page-between-parent-and-root?
+  [child root-id]
+  (loop [parent (:block/parent child)]
+    (cond
+      (or (nil? parent) (= (:db/id parent) root-id)) false
+      (ldb/page? parent) true
+      :else (recur (:block/parent parent)))))
+
+(defn- descendant-block-page-tx
+  "Rewrite :block/page for non-page descendants after a parent type flip.
+  Skips descendants under an intermediate page so nested pages keep their own children."
+  [db root-id page-id]
+  (when page-id
+    (into []
+          (keep (fn [id]
+                  (let [child (d/entity db id)]
+                    (when (and (not (ldb/page? child))
+                               (not (page-between-parent-and-root? child root-id))
+                               (not= (:db/id (:block/page child)) page-id))
+                      {:db/id id
+                       :block/page page-id}))))
+          (ldb/get-block-full-children-ids db root-id))))
 
 (defn- fix-inline-built-in-page-classes
   [{:keys [db-after tx-data tx-meta]}]
@@ -227,7 +258,7 @@
                      (contains? class-ids (:v datom)))
             (let [id (:e datom)
                   entity (d/entity db-after id)
-                  title (or (:block/raw-title entity) (:block/title entity))
+                  title (block-title entity)
                   page-tag (d/entity db-after (:v datom))]
               (when (and title
                          (string/includes? title "#[[")
@@ -239,6 +270,19 @@
                    [:db/retract id :block/tags :logseq.class/Page]])))))
         tx-data)
        (apply concat)))))
+
+(defn- convert-non-page-under-library-tx
+  "Convert a non-page Library child to a page after title validation."
+  [db-after id block]
+  (let [page-title (outliner-validate/validate-page-conversion-title
+                    db-after block (block-title block))]
+    (concat
+     [{:db/id id
+       :block/name (common-util/page-name-sanity-lc page-title)
+       :block/title page-title
+       :block/tags :logseq.class/Page}
+      [:db/retract id :block/page]]
+     (descendant-block-page-tx db-after id id))))
 
 (defn- toggle-page-and-block
   [db {:keys [db-before db-after tx-data tx-meta]}]
@@ -252,46 +296,60 @@
                                      (= (:db/id page-tag) (:v datom)))
                move-to-library? (and (= :block/parent (:a datom))
                                      (= (:db/id library-page) (:v datom))
-                                     (:added datom))]
-           (when (or page-tag-update? move-to-library?)
+                                     (:added datom))
+               library-title-update? (and (contains? #{:block/title :block/raw-title} (:a datom))
+                                          (:added datom))]
+           (when (or page-tag-update? move-to-library? library-title-update?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)]
                (when block-after
                  (cond
-                   ;; move non-page block to Library
-                   (and move-to-library? (not (ldb/page? block-after)))
-                   [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
-                     :block/tags :logseq.class/Page}
-                    [:db/retract id :block/page]]
+                   ;; Library child: convert titled blocks. Empty newly inserted
+                   ;; children stay drafts so Enter can create an editor first.
+                   (and (not (ldb/page? block-after))
+                        (= (:db/id (:block/parent block-after)) (:db/id library-page))
+                        (or move-to-library? library-title-update?))
+                   (when-not (and (string/blank? (block-title block-after))
+                                  (nil? block-before))
+                     (convert-non-page-under-library-tx db-after id block-after))
 
                    ;; block->page
-                   (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
+                   (and page-tag-update?
+                        (:added datom)
+                        (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
-                         block-parent (:block/parent block)
-                         ;; remove inline #Page from title
-                         page-title (remove-inline-page-class-from-title block page-tag)
-                         ->page-tx (concat
-                                    [{:db/id id
-                                      :block/name (common-util/page-name-sanity-lc page-title)
-                                      :block/title page-title}
-                                     [:db/retract id :block/page]]
-                                    (when (or (ldb/class? block-parent) (ldb/property? block-parent))
-                                      [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]]))
-                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
-                                                              (nil? (:block/parent block-parent))
-                                                              block-parent
-                                                              (not= (:db/id block-parent) (:db/id library-page))
-                                                              (not (:db/ident block-parent))
-                                                              (not (ldb/built-in? block-parent)))
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                         block-parent (:block/parent block)]
+                     ;; Enter inserts an empty #Page draft (Library or under an
+                     ;; existing page). Validate once the draft has a title.
+                     (when-not (and (string/blank? (block-title block))
+                                    (nil? block-before))
+                       (let [page-title (outliner-validate/validate-page-conversion-title
+                                         db-after block (block-title block))
+                             ->page-tx (concat
+                                        [{:db/id id
+                                          :block/name (common-util/page-name-sanity-lc page-title)
+                                          :block/title page-title}
+                                         [:db/retract id :block/page]]
+                                        (when (or (ldb/class? block-parent) (ldb/property? block-parent))
+                                          [[:db/retract id :block/parent]
+                                           [:db/retract id :block/order]])
+                                        (descendant-block-page-tx db-after id id))
+                             move-parent-to-library-tx (when (and (ldb/page? block-parent)
+                                                                  (nil? (:block/parent block-parent))
+                                                                  block-parent
+                                                                  (not= (:db/id block-parent) (:db/id library-page))
+                                                                  (not (:db/ident block-parent))
+                                                                  (not (ldb/built-in? block-parent)))
+                                                         [{:db/id (:db/id block-parent)
+                                                           :block/parent (:db/id (ldb/get-library-page db-after))
+                                                           :block/order (db-order/gen-key)}])]
+                         (concat ->page-tx move-parent-to-library-tx))))
 
                    ;; page->block
-                   (and block-before (not (:added datom)) (ldb/internal-page? block-before))
+                   (and page-tag-update?
+                        block-before
+                        (not (:added datom))
+                        (ldb/internal-page? block-before))
                    (let [parent (:block/parent block-before)
                          parent-page (when parent
                                        (loop [parent parent]
@@ -299,8 +357,10 @@
                                            parent
                                            (recur (:block/parent parent)))))]
                      (when parent-page
-                       [[:db/retract id :block/name]
-                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+                       (concat
+                        [[:db/retract id :block/name]
+                         [:db/add id :block/page (:db/id parent-page)]]
+                        (descendant-block-page-tx db-after id (:db/id parent-page)))))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
