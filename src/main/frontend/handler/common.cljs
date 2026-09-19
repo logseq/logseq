@@ -12,12 +12,11 @@
                        (assoc block :block/title (or (:block/raw-title block)
                                                      (:block/title block))))
                      blocks)]
-    (apply util/copy-to-clipboard!
-           raw-text
-           (concat [:html html
-                    :graph repo
-                    :blocks blocks']
-                   (when op [:op op])))))
+    (util/copy-to-clipboard! raw-text
+                             :html html
+                             :graph repo
+                             :blocks blocks'
+                             :op op)))
 
 (defn safe-read-string
   [content error-message-or-handler]
