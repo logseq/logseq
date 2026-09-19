@@ -1,21 +1,33 @@
 (ns frontend.components.all-pages
   "All pages"
-  (:require [frontend.components.views :as views]
+  (:require [clojure.string :as string]
+            [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db.hooks :as db-hooks]
+            [frontend.util :as util]
             [logseq.common.config :as common-config]
             [io.factorhouse.hsx.core :as hsx]
             [reitit.frontend.easy :as rfe]))
 
+(defn- untitled-page-title?
+  "Pages with a blank title or a UUID title are shown as Untitled elsewhere."
+  [title]
+  (or (string/blank? title)
+      (util/uuid-string? title)))
+
 (defn- page-title-cell
   [row]
   (let [title (some-> (:block/title row) str)
-        page-name (or (:block/uuid row) (:block/name row) title)]
+        untitled? (untitled-page-title? title)
+        display-title (if untitled? (t :ui/untitled) title)
+        href-name (some-> (or (:block/uuid row) (:block/name row)) str)]
     [:div.flex.h-full.min-w-0.items-center
      [:a.page-ref.truncate
-      {:href (rfe/href :page {:name page-name})
-       :title title}
-      title]]))
+      (cond-> {:title display-title
+               :data-ref href-name}
+        href-name (assoc :href (rfe/href :page {:name href-name}))
+        untitled? (assoc :class "opacity-50"))
+      display-title]]))
 
 (defn- columns
   []
