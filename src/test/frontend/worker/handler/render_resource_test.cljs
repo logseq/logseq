@@ -2280,6 +2280,32 @@
                                 {:rows [["Jan 1st, 2020" 20200101]]}
                                 response))))
 
+(deftest query-resource-keeps-pull-maps-without-uuid-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn journal-a]} (render-resource-fixture)
+          doing-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid doing-uuid
+                          :block/tx-id 20
+                          :block/title "Doing task"
+                          :block/page [:block/uuid journal-a]
+                          :block/parent [:block/uuid journal-a]
+                          :block/order "z0"
+                          :logseq.property/status :logseq.property/status.doing}])
+      (let [resource-key
+            [:query {:kind :datalog
+                     :query '[:find (pull ?h [*]) (pull ?p [:block/title :block/journal-day])
+                              :where
+                              (task ?h #{"Doing"})
+                              [?h :block/page ?p]]}]
+            response (call-resource api conn resource-key)]
+        (assert-resource-envelope @conn
+                                  resource-key
+                                  (datalog-query-watch-keys resource-key)
+                                  {:rows [[doing-uuid
+                                           {:block/title "Jan 1st, 2020"
+                                            :block/journal-day 20200101}]]}
+                                  response)))))
+
 (deftest query-resource-applies-serialized-transform-and-top-level-filter-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-child-a journal-child-b journal-grandchild
@@ -2404,15 +2430,7 @@
         (is (thrown? js/Error
                      (call-resource-raw api conn
                                         [:query {:kind :dsl
-                                                 :query "\"needle\""}]))))
-      (testing "query result maps without UUIDs never cross the boundary"
-        (with-redefs [query-dsl/execute-query
-                      (fn [_query _db _opts]
-                        [[{:db/id 1 :block/title "No UUID"}]])]
-          (is (thrown? js/Error
-                       (call-resource-raw api conn
-                                          [:query {:kind :dsl
-                                                   :query "(task TODO)"}]))))))))
+                                                 :query "\"needle\""}])))))))
 
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
   (when-let [api (render-resource-api)]
