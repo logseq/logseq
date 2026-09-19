@@ -95,6 +95,11 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
+(defn- block-revision
+  [db eid]
+  (let [revision (eavt-scalar db eid :block/tx-id)]
+    (if (nil? revision) 0 revision)))
+
 (defn- tagged-with-ident?
   [db eid tag-ident]
   (some (fn [datom]
@@ -161,7 +166,7 @@
   (let [entity-id (:db/id entity)
         block-uuid (or (:block/uuid entity)
                        (eavt-scalar db entity-id :block/uuid))
-        block-tx-id (eavt-scalar db entity-id :block/tx-id)
+        block-tx-id (block-revision db entity-id)
         stored-title (eavt-scalar db entity-id :block/title)
         ;; Entity :block/title walks every :block/refs target to replace
         ;; id-refs. Table rows (All Pages / Movies / journals) have plain
@@ -200,6 +205,7 @@
            {:db/id entity-id}
            (d/datoms db :eavt entity-id))]
       (cond-> (assoc block
+                     :block/tx-id block-tx-id
                      :block.temp/refs-count
                      (block-refs-count db entity-id)
                      :block.temp/positioned-properties
@@ -258,7 +264,7 @@
                        {:parent-uuid parent-uuid}))
   (let [parent (d/entity db [:block/uuid parent-uuid])
         parent-id (:db/id parent)
-        parent-tx-id (:block/tx-id parent)]
+        parent-tx-id (when parent (block-revision db parent-id))]
     (when-not parent
       (fail-render-read! "Missing direct-children parent"
                          {:parent-uuid parent-uuid}))
