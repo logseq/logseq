@@ -1480,6 +1480,59 @@
              @edited)
           "Deleting an empty predecessor must not restore the erased mounted title."))))
 
+(deftest library-insert-skips-untitled-page-tag-test
+  (let [inserted (atom nil)
+        saved (atom nil)
+        current-block {:db/id 1
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                       :block/title "Library"}
+        empty-block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                     :block/title ""}
+        named-block {:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                     :block/title "Named"}]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly "test")
+                  state/get-editor-args (constantly [nil nil {:library? true}])
+                  state/get-edit-block (constantly current-block)
+                  state/get-edit-input-id (constantly "edit-block-test")
+                  gdom/getElement (constantly #js {:value ""})
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [block & _opts]
+                                                     (reset! saved block))
+                  frontend-outliner-op/insert-blocks! (fn [blocks & _args]
+                                                        (reset! inserted (first blocks)))
+                  db-transact/apply-outliner-ops (constantly :tx)]
+      (testing "empty Library inserts stay blocks"
+        (editor/outliner-insert-block!
+         {:library? true}
+         current-block
+         empty-block
+         {:sibling? true :keep-uuid? true})
+        (is (= empty-block @inserted))
+        (is (not (contains? (set (:block/tags @inserted)) :logseq.class/Page)))
+        (is (nil? (:block/name @inserted))))
+
+      (testing "titled Library inserts are still pages"
+        (editor/outliner-insert-block!
+         {:library? true}
+         current-block
+         named-block
+         {:sibling? true :keep-uuid? true})
+        (is (= #{:logseq.class/Page} (:block/tags @inserted)))
+        (is (= "named" (:block/name @inserted)))
+        (is (nil? (:block/page @inserted))))
+
+      (testing "saving a titled block on Library promotes it to a page"
+        (#'editor/save-block-inner!
+         {:block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+          :block/title ""}
+         "Later Named"
+         {})
+        (is (= "Later Named" (:block/title @saved)))
+        (is (= #{:logseq.class/Page} (:block/tags @saved)))
+        (is (= "later named" (:block/name @saved)))))))
+
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"
