@@ -1749,7 +1749,6 @@
  :view/all "Semua"
  :view/export-edn "Ekspor EDN"
  :view/linked-references "Referensi tertaut"
- :view/new "Baru"
  :view/new-property "Properti baru"
  :view/new-view "Tampilan baru"
  :view/rename "Ganti nama"

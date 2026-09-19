@@ -1070,7 +1070,8 @@ html.is-mobile .ls-block-content-indent {
     }
 
     .view-actions > .view-action-search,
-    .view-actions > .view-action-type {
+    .view-actions > .view-action-type,
+    .view-actions > button.ls-table-add-row {
         display: inline-flex;
     }
 
@@ -1858,6 +1859,14 @@ html.is-mac {
 .view-actions button {
   padding-left: 0 !important;
   padding-right: 0 !important;
+}
+
+.view-actions button.ls-table-add-row {
+  width: auto;
+  min-width: 24px;
+  flex-shrink: 0;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
 
 .filters-row {

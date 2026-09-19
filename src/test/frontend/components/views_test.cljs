@@ -1242,3 +1242,54 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
+
+(deftest table-row-context-actions-include-open-copy-and-delete
+  (let [column {:id :user.property/score
+                :name "Score"
+                :property {:db/ident :user.property/score}}
+        actions (#'views/table-row-context-actions
+                 column
+                 {:view-parent {:db/ident :user.class/Movie}})]
+    (is (= [:open :open-sidebar :copy :set-property :unset-property :delete]
+           (map :id actions)))
+    (is (= :user.property/score
+           (:property-key (some #(when (= :set-property (:id %)) %) actions))))))
+
+(deftest table-row-context-actions-hide-delete-on-page-class
+  (is (not (some #(= :delete (:id %))
+                 (#'views/table-row-context-actions
+                  nil
+                  {:view-parent {:db/ident :logseq.class/Page}})))))
+
+(deftest view-type-choices-surface-list-and-gallery
+  (is (= [:logseq.property.view/type.table
+          :logseq.property.view/type.list
+          :logseq.property.view/type.gallery]
+         (map :id (#'views/view-type-choices)))))
+
+(deftest add-new-table-object-passes-options-map
+  (let [calls (atom [])
+        table {:data-fns {:add-new-object!
+                          (fn [view table' opts]
+                            (swap! calls conj [view table' opts]))}}]
+    (#'views/add-new-table-object! table :view-entity)
+    (is (= [[:view-entity table {}]] @calls))))
+
+(deftest grouped-add-new-object-fn-merges-caller-properties
+  (let [calls (atom [])
+        add-new-object! (fn [view table opts]
+                          (swap! calls conj [view table opts]))
+        grouped (#'views/grouped-add-new-object-fn
+                 add-new-object! :view :outer-table
+                 {:db/ident :user.property/status} "Open")]
+    (grouped :ignored-view :ignored-table {:properties {:user.property/score 5}})
+    (is (= [[:view :outer-table {:properties {:user.property/score 5
+                                              :user.property/status "Open"}}]]
+           @calls))))
+
+(deftest toolbar-add-object-hidden-when-grouped
+  (is (true? (#'views/toolbar-add-object? {} identity)))
+  (is (false? (#'views/toolbar-add-object?
+               {:logseq.property.view/group-by-property {:db/id 1}}
+               identity)))
+  (is (false? (#'views/toolbar-add-object? {} nil))))

@@ -1749,7 +1749,6 @@
  :view/all "전체"
  :view/export-edn "EDN 내보내기"
  :view/linked-references "링크된 참조"
- :view/new "새로 만들기"
  :view/new-property "새 속성"
  :view/new-view "새 뷰"
  :view/rename "이름 변경"

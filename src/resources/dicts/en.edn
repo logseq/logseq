@@ -1919,7 +1919,6 @@
  :view/all "All"
  :view/export-edn "Export EDN"
  :view/linked-references "Linked references"
- :view/new "New"
  :view/new-property "New property"
  :view/new-view "New view"
  :view/rename "Rename"
@@ -1963,6 +1962,7 @@
  :view.gallery/height "Height"
  :view.gallery/width "Width"
 
+ :view.table/add-row "Add row"
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
  :view.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))
@@ -1980,6 +1980,7 @@
  :view.table/page "Page"
  :view.table/pages "Pages"
  :view.table/pin "Pin"
+ :view.table/resize-column "Resize column"
  :view.table/row-number "Row number"
  :view.table/select-all "Select all"
  :view.table/select-column "Select"

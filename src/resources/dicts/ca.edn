@@ -1749,7 +1749,6 @@
  :view/all "Tots"
  :view/export-edn "Exportar EDN"
  :view/linked-references "Referències vinculades"
- :view/new "Nou"
  :view/new-property "Nova propietat"
  :view/new-view "Nova visualització"
  :view/rename "Reanomenar"

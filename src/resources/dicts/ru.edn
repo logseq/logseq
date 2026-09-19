@@ -1749,7 +1749,6 @@
  :view/all "Все"
  :view/export-edn "Экспортировать EDN"
  :view/linked-references "Связанные ссылки"
- :view/new "Новый"
  :view/new-property "Новое свойство"
  :view/new-view "Новое представление"
  :view/rename "Переименовать"

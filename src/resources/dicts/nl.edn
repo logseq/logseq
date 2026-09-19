@@ -1749,7 +1749,6 @@
  :view/all "Alle"
  :view/export-edn "EDN exporteren"
  :view/linked-references "Gekoppelde referenties"
- :view/new "Nieuw"
  :view/new-property "Nieuwe eigenschap"
  :view/new-view "Nieuwe weergave"
  :view/rename "Hernoemen"

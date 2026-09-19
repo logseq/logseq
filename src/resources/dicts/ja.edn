@@ -1762,7 +1762,6 @@
  :view/all "すべて"
  :view/export-edn "EDNをエクスポート"
  :view/linked-references "リンクされた参照"
- :view/new "新規"
  :view/new-property "新しいプロパティ"
  :view/new-view "新しいビュー"
  :view/rename "名前を変更"
