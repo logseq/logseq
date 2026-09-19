@@ -2264,6 +2264,17 @@
          :uuid uuid
          :fallback-props {:style {:font-size 9}}})])))
 
+(defn- block-control-with-icon?
+  "Replace the bullet with a node icon. Pages keep the page icon in Library."
+  [block config icon link?]
+  (and (some? icon)
+       (not (:hide-block-icon? config))
+       (or (entity/page? block)
+           (:logseq.property/icon block)
+           link?
+           (some :logseq.property/icon (:block/tags block))
+           (contains? #{"pdf"} (:logseq.property.asset/type block)))))
+
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? has-children? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
@@ -2287,14 +2298,7 @@
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
-        with-icon? (and (some? icon)
-                        (not (:hide-block-icon? config))
-                                (or (and (entity/page? block)
-                                         (not (:library? config)))
-                            (:logseq.property/icon block)
-                            link?
-                            (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        with-icon? (block-control-with-icon? block config icon link?)
         movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:data-has-children (boolean has-children?)
