@@ -448,6 +448,27 @@
            (#'property-value/scoped-class-nodes
             property [page-class] [matching-choice unrelated-choice] {})))))
 
+(deftest extends-choice-nodes-exclude-root-tag-test
+  (let [root {:db/id 1 :db/ident :logseq.class/Root :block/title "Root Tag"}
+        parent {:db/id 2 :db/ident :user.class/Parent :block/title "Parent"}
+        child {:db/id 3
+               :db/ident :user.class/Child
+               :block/title "Child"
+               :block/tags [{:db/ident :logseq.class/Tag}]
+               :logseq.property.class/extends [root]}
+        choices (#'property-value/extends-choice-nodes
+                 child
+                 nil
+                 {:extends-class-options [root parent]
+                  :structured-children-by-class-id {3 []}
+                  :extends-by-class-id {1 []}})]
+    (is (= [parent] choices)
+        "Root Tag is not a selectable Extends option, even when it is the current parent")
+    (is (= [(:db/id parent)]
+           (#'property-value/extends-selected-choice-ids
+            {:logseq.property.class/extends [root parent]}))
+        "Selected Extends values omit Root Tag")))
+
 (deftest load-initial-node-choices-loads-existing-values-for-broad-page-scope-test
   (async done
          (let [property {:db/ident :user.property/p1

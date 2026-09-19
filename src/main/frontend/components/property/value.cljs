@@ -1214,6 +1214,45 @@
            (distinct (apply concat result))))
        (<get-property-values (:db/ident property))))))
 
+(defn- root-tag?
+  [entity]
+  (= :logseq.class/Root (:db/ident entity)))
+
+(defn- extends-choice-nodes
+  "Selectable Extends values for a class. Root Tag is an implicit default parent,
+  not a user-facing choice, even when it is the current parent."
+  [block result {:keys [extends-class-options structured-children-by-class-id extends-by-class-id]}]
+  (let [extends (->> (mapcat #(get extends-by-class-id (:db/id %))
+                             (:logseq.property.class/extends block))
+                     distinct)
+        children-pages (get structured-children-by-class-id (:db/id block))
+        ;; Disallows cyclic hierarchies
+        exclude-ids (-> (set children-pages)
+                        (conj (:db/id block)) ; break cycle
+                        ;; hide parent extends for existing values
+                        (set/union (set (map :db/id extends))))
+        options (if (entity/class? block)
+                  extends-class-options
+                  result)]
+    (->> options
+         (remove (fn [e]
+                   (or (contains? exclude-ids (:db/id e))
+                       (root-tag? e)))))))
+
+(defn- extends-parent-entities
+  [block]
+  (let [v (:logseq.property.class/extends block)]
+    (cond
+      (nil? v) []
+      (and (coll? v) (not (map? v))) v
+      :else [v])))
+
+(defn- extends-selected-choice-ids
+  [block]
+  (->> (extends-parent-entities block)
+       (remove root-tag?)
+       property-value->ids))
+
 (hsx/defc ^:large-vars/cleanup-todo select-node
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
@@ -1240,29 +1279,20 @@
         alias-source-page (when alias? (or (:block/page block) block))
         alias-source-page-id (:db/id alias-source-page)
         alias-source-page-owned? (and alias? (:block/alias-source-page-id alias-source-page))
-        selected-choices (when block
-                           (property-value->ids (get block (:db/ident property))))
-        selected-choice-ids (set selected-choices)
         extends-property? (= (:db/ident property) :logseq.property.class/extends)
+        selected-choices (when block
+                           (if extends-property?
+                             (extends-selected-choice-ids block)
+                             (property-value->ids (get block (:db/ident property)))))
+        selected-choice-ids (set selected-choices)
         children-pages (when extends-property? (get structured-children-by-class-id (:db/id block)))
         property-type (:logseq.property/type property)
         nodes (cond
                 extends-property?
-                (let [extends (->> (mapcat #(get extends-by-class-id (:db/id %))
-                                           (:logseq.property.class/extends block))
-                                   distinct)
-                      ;; Disallows cyclic hierarchies
-                      exclude-ids (-> (set children-pages)
-                                      (conj (:db/id block)) ; break cycle
-                                      ;; hide parent extends for existing values
-                                      (set/union (set (map :db/id extends))))
-                      options (if (entity/class? block)
-                                extends-class-options
-                                result)
-
-                      excluded-options (->> options
-                                            (remove (fn [e] (contains? exclude-ids (:db/id e)))))]
-                  excluded-options)
+                (extends-choice-nodes block result
+                                      {:extends-class-options extends-class-options
+                                       :structured-children-by-class-id structured-children-by-class-id
+                                       :extends-by-class-id extends-by-class-id})
 
                 (= :class property-type)
                 (let [include-page-class? (or (contains? selected-choice-ids page-class-id)
