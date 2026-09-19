@@ -185,6 +185,75 @@
      (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
              (db-class/get-structured-children db (:db/id class))))))
 
+(defn- property-value-entities
+  [value]
+  (cond
+    (de/entity? value) [value]
+    (and (coll? value) (not (map? value)) (every? de/entity? value)) (vec value)
+    :else []))
+
+(defn- property-value-ids
+  [value]
+  (let [items (cond
+                (nil? value) []
+                (and (coll? value) (not (map? value))) value
+                :else [value])]
+    (into #{} (keep (fn [item]
+                      (cond
+                        (de/entity? item) (:db/id item)
+                        (integer? item) item))
+                    items))))
+
+(defn- property-value-referrer-ids
+  [db property-ident value-id]
+  (set (d/q '[:find [?e ...]
+              :in $ ?property-id ?value-id
+              :where
+              [?e ?property-id ?value-id]]
+            db
+            property-ident
+            value-id)))
+
+(defn- generated-property-value-block?
+  "True for a private property value block that is safe to edit or delete.
+  Pages, closed values, empty placeholder, and a property's configured default
+  value are shared and must not be reclaimed."
+  [property value]
+  (and (de/entity? value)
+       (:logseq.property/created-from-property value)
+       (not (entity-util/page? value))
+       (not (ldb/closed-value? value))
+       (not= :logseq.property/empty-placeholder (:db/ident value))
+       (not= (:db/id value) (:db/id (:logseq.property/default-value property)))))
+
+(defn- unreferenced-generated-property-value-blocks
+  "Generated property value blocks that will have no remaining property
+  referrers after `retracting-block-ids` stop pointing at them."
+  [db property values retracting-block-ids]
+  (filter
+   (fn [value]
+     (and (generated-property-value-block? property value)
+          (empty? (set/difference (property-value-referrer-ids db (:db/ident property) (:db/id value))
+                                  retracting-block-ids))))
+   values))
+
+(defn- retract-unreferenced-property-value-blocks-tx
+  [db property values retracting-block-ids]
+  (let [deleting (unreferenced-generated-property-value-blocks db property values retracting-block-ids)]
+    (when (seq deleting)
+      (:tx-data (outliner-core/delete-blocks db deleting {:reclaim-property-value? true})))))
+
+(defn- replaced-generated-property-value-tx
+  [db block property old-value new-value replace-all-values?]
+  (when replace-all-values?
+    (retract-unreferenced-property-value-blocks-tx
+     db
+     property
+     (remove (fn [entity]
+               (contains? (property-value-ids new-value) (:db/id entity)))
+             (property-value-entities old-value))
+     #{(:db/id block)})))
+
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
@@ -205,7 +274,10 @@
                             (should-add-task-tag-for-property? conn block property-id)
                             (assoc :block/tags :logseq.class/Task)
                             (= :logseq.property/template-applied-to property-id)
-                            (assoc :block/tags :logseq.class/Template))]
+                            (assoc :block/tags :logseq.class/Template))
+          retract-old-value-tx (replaced-generated-property-value-tx
+                                @conn block property old-value tx-value
+                                (or (not multiple-values?) retract-multiple-values?))]
       (cond-> []
         multiple-values-empty?
         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
@@ -213,6 +285,8 @@
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
         (into (redundant-extends-retraction-tx-data @conn block value))
+        (seq retract-old-value-tx)
+        (into retract-old-value-tx)
         true
         (conj update-block-tx)))))
 
@@ -454,6 +528,32 @@
           property-id
           raw-value))))
 
+(defn- exclusive-generated-property-value-block?
+  [db property block value]
+  (and (some? block)
+       (generated-property-value-block? property value)
+       (= #{(:db/id block)} (property-value-referrer-ids db (:db/ident property) (:db/id value)))))
+
+(defn- reuse-or-create-default-url-property-value
+  "Reuse this block's exclusive :default/:url value block when possible so string
+  updates edit in place instead of minting orphans. Mint a new value block when
+  the current value is shared or missing."
+  [conn property property-id v block-id]
+  (throw-error-if-invalid-new-property-value @conn property v)
+  (let [block (when block-id (d/entity @conn block-id))
+        existing (when block (get block property-id))]
+    (if (exclusive-generated-property-value-block? @conn property block existing)
+      (do
+        (when (not= v (db-property/property-value-content existing))
+          (ldb/transact! conn
+                         [(outliner-core/block-with-updated-at
+                           {:db/id (:db/id existing)
+                            :block/title v})]
+                         {:outliner-op :save-block}))
+        (:db/id existing))
+      (let [v-uuid (create-property-text-block! conn block-id property-id v {:set-block-property? false})]
+        (:db/id (d/entity @conn [:block/uuid v-uuid]))))))
+
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v block-id]
@@ -470,9 +570,7 @@
       (and default-or-url?
            ;; FIXME: remove this when :logseq.property/order-list-type updated to closed values
            (not= property-id :logseq.property/order-list-type))
-      (let [_ (throw-error-if-invalid-new-property-value @conn property v)
-            v-uuid (create-property-text-block! conn block-id property-id v {:set-block-property? false})]
-        (:db/id (d/entity @conn [:block/uuid v-uuid])))
+      (reuse-or-create-default-url-property-value conn property property-id v block-id)
 
       :else
       (or (get-property-value-eid @conn property-id v)
@@ -617,37 +715,11 @@
         (let [txs (mapcat
                    (fn [block]
                      (let [value (get block property-id)
-                           entities (cond
-                                      (de/entity? value) [value]
-                                      (and (sequential? value) (every? de/entity? value)) value
-                                      :else nil)
-                           deleting-entities (filter
-                                              (fn [value]
-                                                (let [value-referrers*
-                                                      (d/q '[:find [?e ...]
-                                                             :in $ ?property-id ?value-id
-                                                             :where
-                                                             [?e ?property-id ?value-id]]
-                                                           @conn
-                                                           (:db/ident property)
-                                                           (:db/id value))
-                                                      value-referrers
-                                                      (cond
-                                                        (nil? value-referrers*)
-                                                        #{}
-
-                                                        (coll? value-referrers*)
-                                                        (set value-referrers*)
-
-                                                        :else
-                                                        #{value-referrers*})]
-                                                  (and
-                                                   (:logseq.property/created-from-property value)
-                                                   (not (or (entity-util/page? value) (ldb/closed-value? value)))
-                                                   (empty? (set/difference value-referrers block-id-set)))))
-                                              entities)
-                           retract-blocks-tx (when (seq deleting-entities)
-                                               (:tx-data (outliner-core/delete-blocks @conn deleting-entities {})))]
+                           retract-blocks-tx (retract-unreferenced-property-value-blocks-tx
+                                              @conn
+                                              property
+                                              (property-value-entities value)
+                                              block-id-set)]
                        (concat
                         [[:db/retract (:db/id block) (:db/ident property)]]
                         retract-blocks-tx)))
@@ -740,54 +812,58 @@
    (throw-error-if-read-only-property property-id)
    (if (nil? v)
      (batch-remove-property! conn block-ids property-id options)
-     (let [block-eids (map ->eid block-ids)
-           _ (throw-error-if-batch-alias-targets block-eids property-id)
-           _ (validate-batch-set-property conn block-eids property-id v)
-           property (d/entity @conn property-id)
-           _ (when (nil? property)
-               (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
-           property-type (get property :logseq.property/type :default)
-           many? (= :db.cardinality/many (:db/cardinality property))
-           entity-id? (and (:entity-id? options) (number? v))
-           ref? (contains? db-property-type/all-ref-property-types property-type)
-           extends? (= property-id :logseq.property.class/extends)
-           default-url-not-closed? (and (contains? #{:default :url} property-type)
-                                        (not extends?)
-                                        (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
-           v' (cond
-                extends?
-                (normalize-extends-value @conn v)
+     (ldb/batch-transact-with-temp-conn!
+      conn
+      {:outliner-op :batch-set-property}
+      (fn [conn]
+        (let [block-eids (map ->eid block-ids)
+              _ (throw-error-if-batch-alias-targets block-eids property-id)
+              _ (validate-batch-set-property conn block-eids property-id v)
+              property (d/entity @conn property-id)
+              _ (when (nil? property)
+                  (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
+              property-type (get property :logseq.property/type :default)
+              many? (= :db.cardinality/many (:db/cardinality property))
+              entity-id? (and (:entity-id? options) (number? v))
+              ref? (contains? db-property-type/all-ref-property-types property-type)
+              extends? (= property-id :logseq.property.class/extends)
+              default-url-not-closed? (and (contains? #{:default :url} property-type)
+                                           (not extends?)
+                                           (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
+              v' (cond
+                   extends?
+                   (normalize-extends-value @conn v)
 
-                (and ref? (not entity-id?))
-                (if default-url-not-closed?
-                  (normalize-and-validate-default-url-property-values conn property v many?)
-                  (convert-ref-property-values conn property-id v property-type {:many? many?}))
+                   (and ref? (not entity-id?))
+                   (if default-url-not-closed?
+                     (normalize-and-validate-default-url-property-values conn property v many?)
+                     (convert-ref-property-values conn property-id v property-type {:many? many?}))
 
-                :else
-                v)
-           _ (when (nil? v')
-               (throw (ex-info "Property value must be not nil" {:v v})))
-           txs (doall
-                (mapcat
-                 (fn [eid]
-                   (if-let [block (d/entity @conn eid)]
-                     (let [v' (if (and default-url-not-closed?
-                                       (not (and (keyword? v) entity-id?)))
-                                (convert-ref-property-values conn property-id v' property-type
-                                                             {:many? many?
-                                                              :block-id (:db/id block)})
-                                v')]
-                       (throw-error-if-self-value block v' ref?)
-                       (throw-error-if-invalid-property-value @conn property v')
-                       (when (= property-id :block/alias)
-                         (doseq [alias-id (if (coll? v') v' [v'])]
-                           (when (number? alias-id)
-                             (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
-                     (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-                 block-eids))]
-       (when (seq txs)
-         (ldb/transact! conn txs {:outliner-op :batch-set-property}))))))
+                   :else
+                   v)
+              _ (when (nil? v')
+                  (throw (ex-info "Property value must be not nil" {:v v})))
+              txs (doall
+                   (mapcat
+                    (fn [eid]
+                      (if-let [block (d/entity @conn eid)]
+                        (let [v' (if (and default-url-not-closed?
+                                          (not (and (keyword? v) entity-id?)))
+                                   (convert-ref-property-values conn property-id v' property-type
+                                                                {:many? many?
+                                                                 :block-id (:db/id block)})
+                                   v')]
+                          (throw-error-if-self-value block v' ref?)
+                          (throw-error-if-invalid-property-value @conn property v')
+                          (when (= property-id :block/alias)
+                            (doseq [alias-id (if (coll? v') v' [v'])]
+                              (when (number? alias-id)
+                                (throw-error-if-invalid-alias @conn block alias-id))))
+                          (build-property-value-tx-data conn block property-id v'))
+                        (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+                    block-eids))]
+          (when (seq txs)
+            (ldb/transact! conn txs {:outliner-op :batch-set-property}))))))))
 
 (defn remove-block-property!
   [conn eid property-id]
@@ -980,13 +1056,21 @@
              (doseq [block-eid block-eids]
                (when-let [block (d/entity @conn block-eid)]
                  (let [current-val (get block property-id)
-                       fv (first current-val)]
+                       fv (first current-val)
+                       removed-value (some (fn [value]
+                                             (when (or (= property-value value)
+                                                       (= property-value (:db/id value)))
+                                               value))
+                                           current-val)]
                    (if (and (= 1 (count current-val))
                             (or (= property-value fv)
                                 (= property-value (:db/id fv))))
                      (remove-block-property! conn (:db/id block) property-id)
                      (ldb/transact! conn
-                                    [[:db/retract (:db/id block) property-id property-value]]
+                                    (concat
+                                     [[:db/retract (:db/id block) property-id property-value]]
+                                     (retract-unreferenced-property-value-blocks-tx
+                                      @conn property (property-value-entities removed-value) #{(:db/id block)}))
                                     {:outliner-op :save-block}))))))))))))
 
 (defn delete-property-value!
