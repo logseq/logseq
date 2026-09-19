@@ -25,12 +25,15 @@
    :app-state (select-keys (state/get-state)
                            [:ui/theme
                             :ui/sidebar-collapsed-blocks])
-   :repo-config (get-in (state/get-state) [:config repo])})
+   :repo-config (get-in (state/get-state) [:config repo])
+   ;; Browser download is a lone index.html. Keep the transit graph inline so
+   ;; the file can still restore without static/js/db.transit next to it.
+   :inline-db? (not (util/electron?))})
 
 (defn download-repo-as-html!
   "download public pages as html"
   [repo]
-  (p/let [{:keys [asset-filenames html]}
+  (p/let [{:keys [asset-filenames html db-transit]}
           (state/<invoke-db-worker :thread-api/build-publishing-html repo (publishing-export-options repo))]
     (when html
       (let [html-str (str "data:text/html;charset=UTF-8,"
@@ -40,7 +43,8 @@
            html
            (config/get-repo-dir repo)
            (clj->js asset-filenames)
-           (util/mocked-open-dir-path))
+           (util/mocked-open-dir-path)
+           db-transit)
 
           (when-let [anchor (gdom/getElement "download-as-html")]
             (.setAttribute anchor "href" html-str)

@@ -4,6 +4,7 @@
   (:require ["fs" :as fs]
             ["fs-extra" :as fse]
             ["path" :as node-path]
+            [logseq.publishing.const :as publish-const]
             [promesa.core :as p]))
 
 (def ^:api js-files
@@ -100,7 +101,7 @@
   "Given a graph's directory, the generated html and the directory containing
   html/static assets, creates the export at the specified output-dir and
   includes the index.html with supporting assets"
-  [html static-dir repo-path output-dir {:keys [notification-fn]
+  [html static-dir repo-path output-dir {:keys [notification-fn db-transit]
                                          :or {notification-fn default-notification}
                                          :as options}]
   (let [custom-css-path (node-path/join repo-path "logseq" "custom.css")
@@ -117,7 +118,11 @@
                 _ (fs/writeFileSync (node-path/join output-static-dir "css" "custom.css") custom-css)
                 custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
-                _ (cleanup-js-dir output-static-dir static-dir options)]
+                _ (cleanup-js-dir output-static-dir static-dir options)
+                _ (when db-transit
+                    (let [db-path (node-path/join output-dir publish-const/db-transit-file-path)]
+                      (fs/mkdirSync (node-path/dirname db-path) #js {:recursive true})
+                      (fs/writeFileSync db-path db-transit)))]
           (notification-fn {:type "success"
                             :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
         (p/catch (fn [error]

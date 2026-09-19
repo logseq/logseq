@@ -28,7 +28,8 @@ can be passed:
                    (assoc-in [:app-state :ui/theme] (:ui/theme options))
                    (:ui/radix-color options)
                    (assoc-in [:app-state :ui/radix-color] (:ui/radix-color options)))
-        {:keys [html asset-filenames]} (publish-html/build-html db options')]
+        {:keys [html asset-filenames db-transit]} (publish-html/build-html db options')]
     (publish-export/create-export html static-dir graph-dir output-dir {:asset-filenames asset-filenames
+                                                                        :db-transit db-transit
                                                                         :notification-fn notification-fn
                                                                         :dev? dev?})))
