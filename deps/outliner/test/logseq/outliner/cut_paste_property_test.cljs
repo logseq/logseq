@@ -277,3 +277,58 @@
     (is (contains? insert-uuids (:block/uuid block)))
     (is (contains? insert-uuids value-uuid)
         "Undo restore payload includes the retracted property-value child")))
+
+(defn- outline-sibling-titles
+  [block]
+  (->> (ldb/sort-by-order (:block/_parent (:block/parent block)))
+       (remove :logseq.property/created-from-property)
+       (mapv :block/title)))
+
+(deftest copy-paste-text-property-value-as-regular-block
+  (let [conn (create-case-conn (first property-cases))
+        block (find-source-block @conn (first property-cases))
+        target (db-test/find-block-by-content @conn "target")
+        value (:user.property/p1 block)
+        original-value-uuid (:block/uuid value)
+        copied (copied-blocks-for @conn value true)]
+    (outliner-core/insert-blocks! conn copied target
+                                  {:sibling? true
+                                   :keep-uuid? false
+                                   :outliner-op :paste})
+    (let [original (d/entity @conn (:db/id block))
+          pasted (->> (ldb/sort-by-order (:block/_parent (:block/parent target)))
+                      (remove :logseq.property/created-from-property)
+                      (remove #(contains? #{(:block/uuid block) (:block/uuid target)}
+                                          (:block/uuid %)))
+                      first)]
+      (is (= "value" (property-contents (:user.property/p1 original)))
+          "Copy leaves the original text property value in place")
+      (is (= original-value-uuid (:block/uuid (:user.property/p1 original))))
+      (is (some? pasted) "Copied text property value pastes as a visible outline block")
+      (is (= "value" (:block/title pasted)))
+      (is (nil? (:logseq.property/created-from-property pasted))
+          "Pasted value is a regular block, not a hidden property value")
+      (is (not= original-value-uuid (:block/uuid pasted)))
+      (is (some #{"value"} (outline-sibling-titles target))))))
+
+(deftest cut-paste-text-property-value-as-regular-block
+  (let [conn (create-case-conn (first property-cases))
+        block (find-source-block @conn (first property-cases))
+        target (db-test/find-block-by-content @conn "target")
+        value (:user.property/p1 block)
+        value-uuid (:block/uuid value)
+        copied (copied-blocks-for @conn value true)]
+    (outliner-core/delete-blocks! conn [value] {})
+    (outliner-core/insert-blocks! conn copied target
+                                  {:sibling? true
+                                   :keep-uuid? true
+                                   :outliner-op :paste})
+    (let [host (d/entity @conn (:db/id block))
+          pasted (d/entity @conn [:block/uuid value-uuid])]
+      (is (nil? (property-contents (:user.property/p1 host)))
+          "Cut removes the text property value from its host")
+      (is (some? pasted) "Cut text property value pastes as a block")
+      (is (= "value" (:block/title pasted)))
+      (is (nil? (:logseq.property/created-from-property pasted))
+          "Cut+paste converts the value into a regular outline block")
+      (is (some #{"value"} (outline-sibling-titles target))))))
