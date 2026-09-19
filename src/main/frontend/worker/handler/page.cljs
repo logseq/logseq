@@ -207,7 +207,11 @@
 (def-thread-api :thread-api/get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (mapv entity-util/entity->map (ldb/get-children @conn block-uuid))))
+    (let [db @conn]
+      (mapv (fn [child]
+              (-> (worker-plain/entity-forward-map db child {})
+                  worker-plain/with-explicit-ref-fields-recursive))
+            (ldb/get-children db block-uuid)))))
 
 (def-thread-api :thread-api/get-block-sibling
   [repo block-id direction]
