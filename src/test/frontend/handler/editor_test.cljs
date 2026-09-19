@@ -2000,6 +2000,45 @@
            (set (keys block))))
     (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
 
+(defn- mock-ls-block
+  [{:keys [blockid class-name inner]}]
+  (let [class-name (or class-name "ls-block")
+        classes (set (.split class-name " "))]
+    #js {:className class-name
+         :classList #js {:contains (fn [class] (contains? classes class))}
+         :getAttribute (fn [attr]
+                         (case attr
+                           "blockid" blockid
+                           "id" (when blockid (str "ls-block-" blockid))
+                           "data-query" nil
+                           "data-transclude" nil
+                           nil))
+         :querySelector (fn [_] inner)}))
+
+(deftest cut-selection-blocks-uses-inner-text-property-value-test
+  (async done
+    (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          inner (mock-ls-block {:blockid (str value-uuid)})
+          wrapper (mock-ls-block {:class-name "ls-block property-value-container"
+                                  :inner inner})
+          requested-ids (atom nil)]
+      (-> (p/with-redefs [editor/copy-selection-blocks
+                          (fn [& _] (p/resolved nil))
+                          editor/get-selected-blocks (constantly [wrapper])
+                          state/get-selection-block-ids (constantly [value-uuid])
+                          state/set-block-op-type! (fn [_])
+                          db-async/<get-blocks
+                          (fn [_repo ids _opts]
+                            (reset! requested-ids ids)
+                            (p/resolved []))]
+            (editor/cut-selection-blocks true))
+          (p/then (fn [_]
+                    (is (= [value-uuid] @requested-ids)
+                        "Cut must load the inner text property-value block, not drop the wrapper.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
 (deftest selection-copy-ids-use-view-row-uuids-test
   (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
