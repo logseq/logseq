@@ -561,6 +561,69 @@
                   (is (= "Referenced Page"
                          (:block/title (d/entity @conn [:block/uuid (:block/uuid parsed-ref)])))))))))))))
 
+(deftest rebase-multiple-insertions-preserves-identities-test
+  (doseq [keep-uuid? [false true]]
+    (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)
+          server-conn (d/conn-from-db @conn)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid (random-uuid) :block/title "First insertion"}]
+                                       (:db/id child1) {:sibling? true :keep-uuid? keep-uuid?}]]
+                       [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Second insertion"}]
+                                       (:db/id child2) {:sibling? true :keep-uuid? keep-uuid?}]]]
+                      local-tx-meta)
+          (let [first-uuid (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1))))
+                second-uuid (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child2))))]
+            (apply-ops! conn [[:save-block [{:block/uuid second-uuid :block/title "Second edited"} {}]]]
+                        local-tx-meta)
+            (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                                   [[:db/add (:db/id child3) :block/title "Remote edit"]]))]
+              (is (= :applied (try (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                                  :applied (catch :default e (ex-message e))))))
+            (is (= "First insertion" (:block/title (d/entity @conn [:block/uuid first-uuid]))))
+            (is (= "Second edited" (:block/title (d/entity @conn [:block/uuid second-uuid]))))
+            (doseq [{:keys [tx-data outliner-op]} (:tx-entries (sync-apply/prepare-upload-tx-entries
+                                                             conn (sync-apply/pending-txs test-repo)))]
+              (is (true? (#'sync-handler/apply-tx-entry!
+                          server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (sync-checksum/recompute-checksum @server-conn)))))))))
+
+(deftest rebase-nested-insert-then-delete-preserves-tree-test
+  (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+        server-conn (d/conn-from-db @conn)
+        root-uuid (random-uuid)
+        child-uuid (random-uuid)
+        grandchild-uuid (random-uuid)]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-ops! conn
+                    [[:insert-blocks [[{:block/uuid root-uuid :block/title "Inserted root"}
+                                      {:block/uuid child-uuid :block/title "Inserted child"
+                                       :block/parent [:block/uuid root-uuid]}
+                                      {:block/uuid grandchild-uuid :block/title "Inserted grandchild"
+                                       :block/parent [:block/uuid child-uuid]}]
+                                     (:db/id child1) {:sibling? true :keep-uuid? true}]]]
+                    local-tx-meta)
+        (is (= child-uuid (:block/uuid (:block/parent (d/entity @conn [:block/uuid grandchild-uuid])))))
+        (apply-ops! conn [[:delete-blocks [[child-uuid] {}]]
+                         [:recycle-delete-permanently [child-uuid]]] local-tx-meta)
+        (is (nil? (d/entity @conn [:block/uuid grandchild-uuid])))
+        (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                               [[:db/add (:db/id child2) :block/title "Remote edit"]]))]
+          (is (= :applied (try (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                              :applied (catch :default e (ex-message e))))))
+        (is (= "Inserted root" (:block/title (d/entity @conn [:block/uuid root-uuid]))))
+        (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+        (is (nil? (d/entity @conn [:block/uuid grandchild-uuid])))
+        (doseq [{:keys [tx-data outliner-op]} (:tx-entries (sync-apply/prepare-upload-tx-entries
+                                                         conn (sync-apply/pending-txs test-repo)))]
+          (is (true? (#'sync-handler/apply-tx-entry!
+                      server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
+        (is (= (sync-checksum/recompute-checksum @conn)
+               (sync-checksum/recompute-checksum @server-conn)))))))
+
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
          (let [fetch-calls (atom [])

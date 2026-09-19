@@ -278,13 +278,8 @@
 
 (defn- rebase-history-ops
   [local-tx db-before]
-  {:forward-ops (seq (mapv (fn [[op args :as entry]]
-                             (if (= :insert-blocks op)
-                               ;; Recover insert identities using the durable transaction
-                               ;; and the DB snapshot from before the rebase.
-                               [op (op-construct/canonicalize-insert-blocks-op db-before (:tx local-tx) args)]
-                               entry))
-                           (:forward-outliner-ops local-tx)))
+  {:forward-ops (seq (op-construct/canonicalize-insert-blocks-ops
+                     db-before (:tx local-tx) (:forward-outliner-ops local-tx)))
    :inverse-ops (seq (:inverse-outliner-ops local-tx))})
 
 (defn- normalize-tx-data-for-rebase

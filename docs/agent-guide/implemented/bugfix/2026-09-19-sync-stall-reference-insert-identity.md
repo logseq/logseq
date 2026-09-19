@@ -75,3 +75,13 @@ The standalone Outliner nbb runner cannot load `sqlite-export/validate-import-tx
 - Final persistence run writes with worker PID 4024 and reloads with PID 5998: remote edit applied, referenced page/sibling/recycle state preserved on both peers, pending count 2 before recovery and 0 after acknowledgment.
 
 No production data was changed and no release was deployed.
+
+## Extended outliner verification
+
+The broader client-to-server audit is ongoing. A compound transaction containing two insert operations reproduced a separate identity collision: after a remote edit, the first block acquired the second insertion's title and the second block disappeared with its later edit. Both UUID-preserving and UUID-reminting insertions reproduced it. Canonicalization now allocates created identities across the insertion operations and preserves matching source identities. The regression applies serialized prepared uploads to an independent server connection and compares checksums as well as the intended block titles.
+
+The nested-insertion-then-permanent-deletion probe currently passes, including server application. A small request-size probe also applied a four-entity permanent deletion across two upload requests successfully; the suspected missing-entity failure has not been reproduced by that probe.
+
+The page deletion assertion was obsolete: `:block/raw-title` is a derived lookup of the original stored title, so recycling a page preserves its child's raw title and internal reference. The corrected test verifies the exact preserved title and absence of a stored `:block/raw-title` datom. Before correction the worker reported one failure; afterward the deletion test passed all nine assertions and the full page namespace passed 16 tests / 71 assertions.
+
+Four targeted sync regressions passed 154 assertions in the Node worker after the compound-insertion change. After recompiling with `pnpm cljs:test`, the sync namespace passed 222 tests / 994 assertions. Changed-file lint, large-function checks, document validation, and diff checks passed. This evidence does not yet establish complete coverage of every outliner operation, upload chunk boundary, or persisted recovery combination.

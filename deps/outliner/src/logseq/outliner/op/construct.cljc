@@ -460,44 +460,63 @@
     (created-block-uuids-from-tx-data
      (filter #(contains? parent-ids (entity-id %)) tx-data))))
 
-(defn canonicalize-insert-blocks-op
-  [db tx-data args]
-  (let [[blocks target-id opts] args
-        created-uuids (inserted-block-uuids-from-tx-data tx-data)
-        source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
-        source-uuids (mapv :block/uuid source-blocks)
-        target-ref (stable-entity-ref db target-id)
-        target (d/entity db target-ref)
-        block-with-new-id (fn [block block-uuid]
-                            (assoc block
-                                   :block/uuid block-uuid
-                                   :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
-                                                   [:block/uuid (:block/uuid parent)])))
-        blocks* (if (seq created-uuids)
-                  (if (and (:replace-empty-target? opts)
-                           (= (inc (count created-uuids)) (count source-blocks)))
-                    (let [[fst-block & rst-blocks] source-blocks
-                          created-rst-uuids created-uuids]
-                      (into [(assoc fst-block :block/uuid (:block/uuid target))]
-                            (if (seq created-rst-uuids)
-                              (map block-with-new-id rst-blocks created-rst-uuids)
-                              rst-blocks)))
-                    (mapv block-with-new-id source-blocks created-uuids))
-                  source-blocks)
-        uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
-                        (keep (fn [[old-uuid new-uuid]]
-                                (when (and (uuid? old-uuid)
-                                           (uuid? new-uuid)
-                                           (not= old-uuid new-uuid))
-                                  [old-uuid new-uuid])))
-                        (into {}))
-        blocks* (if (seq uuid-remap)
-                  (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
-                  blocks*)]
-    [blocks*
-     target-ref
-     (assoc (dissoc (or opts {}) :outliner-op)
-            :keep-uuid? true)]))
+(defn- canonicalize-insert-blocks-op
+  ([db tx-data args]
+   (canonicalize-insert-blocks-op db tx-data args (inserted-block-uuids-from-tx-data tx-data)))
+  ([db tx-data args available-uuids]
+   (let [[blocks target-id opts] args
+         source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
+         source-uuids (mapv :block/uuid source-blocks)
+         available-set (set available-uuids)
+         created-uuids (if (every? available-set source-uuids)
+                         source-uuids
+                         (vec (take (count source-blocks) available-uuids)))
+         target-ref (stable-entity-ref db target-id)
+         target (d/entity db target-ref)
+         block-with-new-id (fn [block block-uuid]
+                             (assoc block
+                                    :block/uuid block-uuid
+                                    :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
+                                                    [:block/uuid (:block/uuid parent)])))
+         blocks* (if (seq created-uuids)
+                   (if (and (:replace-empty-target? opts)
+                            (= (inc (count created-uuids)) (count source-blocks)))
+                     (let [[fst-block & rst-blocks] source-blocks
+                           created-rst-uuids created-uuids]
+                       (into [(assoc fst-block :block/uuid (:block/uuid target))]
+                             (if (seq created-rst-uuids)
+                               (map block-with-new-id rst-blocks created-rst-uuids)
+                               rst-blocks)))
+                     (mapv block-with-new-id source-blocks created-uuids))
+                   source-blocks)
+         uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
+                         (keep (fn [[old-uuid new-uuid]]
+                                 (when (and (uuid? old-uuid)
+                                            (uuid? new-uuid)
+                                            (not= old-uuid new-uuid))
+                                   [old-uuid new-uuid])))
+                         (into {}))
+         blocks* (if (seq uuid-remap)
+                   (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
+                   blocks*)]
+     [blocks*
+      target-ref
+      (assoc (dissoc (or opts {}) :outliner-op)
+             :keep-uuid? true)])))
+
+(defn canonicalize-insert-blocks-ops
+  [db tx-data ops]
+  (:ops
+   (reduce (fn [{:keys [available] :as result} [op args :as entry]]
+             (if (= :insert-blocks op)
+               (let [args' (canonicalize-insert-blocks-op db tx-data args available)
+                     inserted-uuids (set (map :block/uuid (first args')))]
+                 (-> result
+                     (update :ops conj [op args'])
+                     (assoc :available (filterv #(not (contains? inserted-uuids %)) available))))
+               (update result :ops conj entry)))
+           {:ops [] :available (inserted-block-uuids-from-tx-data tx-data)}
+           ops)))
 
 (defn- canonical-move-op-for-block
   [db block-id opts]
@@ -1102,9 +1121,11 @@
       nil
 
       (seq ops')
-      (->> ops'
+      (->> (canonicalize-insert-blocks-ops db tx-data ops')
            (mapv (fn [op]
-                   (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                   (let [canonicalized-op (if (= :insert-blocks (first op))
+                                            op
+                                            (canonicalize-semantic-outliner-op db tx-data op))]
                      (if (and (sequential? canonicalized-op)
                               (sequential? (first canonicalized-op))
                               (keyword? (ffirst canonicalized-op)))
