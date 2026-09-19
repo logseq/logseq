@@ -60,7 +60,10 @@ const mode = args[args.indexOf('--mode') + 1];
   }
   if (mode === 'before-admission') {
     fs.writeFileSync(path.join(root, 'before-admission'), String(process.pid));
-    await new Promise(() => { setInterval(() => {}, 1000); });
+    await new Promise(() => { setInterval(() => {
+      const state = lifecycle.snapshot(storage, repo);
+      if (!state.workers.some(record => record.ticket === option('--admission-ticket'))) process.exit(1);
+    }, 20); });
   }
   const runtime = await lifecycle.admit({ storage, repo, owner, ticket: option('--admission-ticket'),
     generation: option('--graph-generation') });
@@ -72,27 +75,25 @@ const mode = args[args.indexOf('--mode') + 1];
     fs.writeFileSync(path.join(root, `continued-${stage}`), String(process.pid));
   }
   await barrier('after-admission');
-  const lock = { repo, pid: process.pid, 'lock-id': runtime.ticket,
+  const identity = { repo, pid: process.pid, 'ownership-protocol': 'sqlite-v1', revision: 'current',
     'root-dir': runtime.root, ticket: runtime.ticket, generation: runtime.generation, 'owner-source': owner, storage };
   const graphDir = runtime.graphDir;
-  await lifecycle.withLease(runtime, 'lock', () => {
-    lifecycle.checkAdmission(runtime);
-    fs.writeFileSync(path.join(graphDir, 'db-worker.lock'), JSON.stringify(lock));
-    fs.writeFileSync(path.join(graphDir, 'db.sqlite-wal'), 'preserved');
-  });
+  lifecycle.assertOwnership(runtime);
+  fs.writeFileSync(path.join(graphDir, 'db.sqlite-wal'), 'preserved');
   await barrier('before-publication');
   const server = http.createServer((request, response) => {
+    response.setHeader('Connection', 'close');
     if (request.url === '/healthz') {
-      response.end(JSON.stringify({ ...lock, 'root-dir': runtime.root, host: '127.0.0.1',
+      response.end(JSON.stringify({ ...identity, 'root-dir': runtime.root, host: '127.0.0.1',
         port: server.address().port, status: 'ready',
         ...(option('--health-field') ? { [option('--health-field')]: JSON.parse(option('--health-value')) } : {}) }));
     } else if (request.url === '/v1/shutdown') {
       response.end('{}');
       if (mode === 'stubborn') {
-        fs.unlinkSync(path.join(graphDir, 'db-worker.lock'));
         fs.writeFileSync(path.join(runtime.root, 'server-list'), '');
       } else {
         fs.writeFileSync(path.join(root, 'close-under-lease.json'), JSON.stringify(lifecycle.snapshot(storage, repo)));
+        if (mode !== 'close-error') lifecycle.releaseOwnership(runtime);
         lifecycle.recordStop(runtime, mode === 'close-error' ? Error('close failed') : null);
         server.close(() => process.exit(mode === 'close-error' ? 1 : 0));
       }
@@ -104,9 +105,10 @@ const mode = args[args.indexOf('--mode') + 1];
   process.on('SIGTERM', () => {});
   server.listen(0, '127.0.0.1', async () => {
     try {
-      await lifecycle.publish(runtime, lock, server.address().port, () => {
+      await lifecycle.publish(runtime, server.address().port, () => {
         fs.appendFileSync(path.join(runtime.root, 'server-list'), `${process.pid} ${server.address().port}\n`);
       });
+      if (mode === 'released-but-alive') lifecycle.releaseOwnership(runtime);
       if (process.send) process.send({ ready: true });
     } catch (error) { console.error(error); process.exit(1); }
   });
