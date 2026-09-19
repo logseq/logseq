@@ -27,6 +27,14 @@
 
 (defonce *profile-state (volatile! {}))
 
+;; Per-keystroke bookkeeping kept outside the reactive store. The editor
+;; handlers read these imperatively through the getters below, and every
+;; write to the store re-evaluates every mounted subscription.
+(defonce ^:private *last-input-time (atom {}))
+(defonce ^:private *last-key-code (atom nil))
+(defonce ^:private *last-saved-cursor (atom {}))
+(defonce ^:private *ui-last-key-code (atom nil))
+
 (defonce *db-worker (atom nil))
 (defonce *db-worker-thread (atom nil))
 (defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
@@ -189,19 +197,15 @@
       :editor/action                         nil
       :editor/action-data                    nil
       ;; With label or other data
-      :editor/last-saved-cursor              {}
       :editor/editing?                       nil
       :editor/in-composition?                false
       :editor/code-mode?                     false
       :editor/content                        {}
       :editor/block                          nil
       :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
-      :editor/last-input-time                {}
       :editor/document-mode?                 document-mode?
       :editor/args                           nil
       :editor/on-paste?                      false
-      :editor/last-key-code                  nil
-      :ui/global-last-key-code               nil
       :editor/block-op-type                  nil ;; :cut, :copy
       :editor/block-refs                     #{}
 
@@ -1297,13 +1301,13 @@ should be done through this fn in order to get global config and config defaults
   [& {:keys [clear-editing-block?]
       :or {clear-editing-block? true}}]
   (let [online-users (some-> (get-state :rtc/state) :online-users)]
+    (reset! *last-saved-cursor {})
     (swap-state!
      (fn [db]
        (cond-> (assoc db
                       :editor/action nil
                       :editor/args nil
                       :editor/start-pos nil
-                      :editor/last-saved-cursor {}
                       :editor/cursor-range nil
                       :ui/select-query-cache {}
                       :editor/block-refs #{}
@@ -1321,12 +1325,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-editor-last-pos!
   [new-pos]
-  (update-state! :editor/last-saved-cursor
-                 (fn [m] (assoc m (:block/uuid (get-edit-block)) new-pos))))
+  (swap! *last-saved-cursor assoc (:block/uuid (get-edit-block)) new-pos))
 
 (defn get-editor-last-pos
   []
-  (get (get-state :editor/last-saved-cursor) (:block/uuid (get-edit-block))))
+  (get @*last-saved-cursor (:block/uuid (get-edit-block))))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
@@ -1655,13 +1658,13 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-editor-last-input-time!
   [repo time]
-  (set-state! :editor/last-input-time time :nested-path repo))
+  (swap! *last-input-time assoc repo time))
 
 (defn input-idle?
   [repo & {:keys [diff]
            :or {diff 1000}}]
   (when repo
-    (let [last-input-time (get (get-state :editor/last-input-time) repo)]
+    (let [last-input-time (get @*last-input-time repo)]
       (or
        (nil? last-input-time)
 
@@ -1847,6 +1850,7 @@ should be done through this fn in order to get global config and config defaults
             native-platform? (mobile-util/native-platform?)]
         (assert (and container-id (:block/uuid block))
                 "container-id or block uuid is missing")
+        (reset! *last-key-code nil)
         (swap-state!
          (fn [db]
            (cond-> (-> db
@@ -1854,7 +1858,6 @@ should be done through this fn in order to get global config and config defaults
                               :editor/block block
                               :editor/editing? {editing-block-id true}
                               :editor/container-id container-id
-                              :editor/last-key-code nil
                               :editor/set-timestamp-block nil
                               :editor/cursor-range cursor-range)
                        (assoc-in [:editor/content block-id] content))
@@ -1875,15 +1878,15 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-last-key-code!
   [key-code]
-  (set-state! :editor/last-key-code key-code))
+  (reset! *last-key-code key-code))
 
 (defn set-ui-last-key-code!
   [key-code]
-  (set-state! :ui/global-last-key-code key-code))
+  (reset! *ui-last-key-code key-code))
 
 (defn get-ui-last-key-code
   []
-  (get-state :ui/global-last-key-code))
+  @*ui-last-key-code)
 
 (defn set-block-op-type!
   [op-type]
