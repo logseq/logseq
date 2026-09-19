@@ -341,6 +341,30 @@
           (is (pos? (:keyword-score (first result)))))
         (is (some #(= ["%n%w%p%" 40] (:bind %)) @calls))))))
 
+(deftest search-blocks-fuzzy-matches-sanitized-umlaut-titles
+  (testing "umlaut queries normalize to an ASCII LIKE pattern that matches sanitized titles"
+    (let [calls (atom [])
+          page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (swap! calls conj {:sql sql :bind bind})
+                            (if (and (string/includes? sql "lower(title) like ?")
+                                     (= "%g%r%u%n%" (first bind)))
+                              (clj->js [[page-id page-id "Grun"]])
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      (assoc result :block/uuid (uuid (:id result))))]
+        (let [result (vec (search/search-blocks (atom :large-db) db "grün" {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Grun"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (pos? (:keyword-score (first result)))))
+        (is (some #(= ["%g%r%u%n%" 40] (:bind %)) @calls))))))
+
 (deftest search-blocks-fuzzy-prioritizes-page-candidates
   (testing "large graphs keep page rows first without sorting the whole blocks table"
     (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
@@ -755,6 +779,20 @@
         (let [indexed (search/block->index page)]
           (is (= (str page-id) (:id indexed)))
           (is (= "Artificial Intelligence ai" (:title indexed))))))))
+
+(deftest block-index-sanitizes-page-titles-for-accent-insensitive-search
+  (testing "page titles drop accents so accent-stripped node picker queries can match"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000236"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Überprüfen"}]
+      (with-redefs [ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (is (= "Uberprufen" (:title (search/block->index page))))))))
 
 (deftest block-index-does-not-generate-vector-embedding
   (testing "desktop vector embeddings are supplied by the platform embedding backend"

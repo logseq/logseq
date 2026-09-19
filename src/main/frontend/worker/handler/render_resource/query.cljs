@@ -19,8 +19,15 @@
          (uuid? (:block/uuid cell)))
     (:block/uuid cell)
 
-    (or (map? cell) (de/entity? cell))
-    (common/fail! "Renderer query result map has no UUID" {:value cell})
+    ;; Partial pull maps are valid query cells. Keep them transit-safe
+    ;; instead of failing the whole get-render-snapshots batch.
+    (de/entity? cell)
+    (cond-> {:db/id (:db/id cell)}
+      (keyword? (:db/ident cell))
+      (assoc :db/ident (:db/ident cell)))
+
+    (map? cell)
+    (update-vals cell normalize-query-cell)
 
     (fn? cell)
     (common/fail! "Renderer query result contains a function" {})

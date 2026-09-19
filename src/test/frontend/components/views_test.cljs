@@ -7,12 +7,12 @@
             [datascript.impl.entity :as de]
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
-            [frontend.components.views :as views] 
-            [frontend.db.async :as db-async] 
+            [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.state :as state] 
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
@@ -1245,7 +1245,41 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
-                                          
+
+(deftest table-tag-cell-click-is-noop-on-current-page-test
+  (let [tag-uuid (random-uuid)
+        tag {:block/uuid tag-uuid
+             :block/title "Book"
+             :block/name "book"}
+        popup-calls (atom [])
+        redirect-calls (atom [])]
+    (is (= :noop
+           (#'property-value/page-ref-cell-click
+            {:entity tag
+             :current-page (str tag-uuid)
+             :open-popup! #(swap! popup-calls conj :popup)
+             :redirect! #(swap! redirect-calls conj :redirect)}))
+        "Clicking the current tag page's own tag value should not open a popup or navigate.")
+    (is (empty? @popup-calls))
+    (is (empty? @redirect-calls))))
+
+(deftest table-tag-cell-click-opens-popup-for-other-tags-test
+  (let [current-page (str (random-uuid))
+        other-tag {:block/uuid (random-uuid)
+                   :block/title "Movie"
+                   :block/name "movie"}
+        popup-calls (atom [])
+        redirect-calls (atom [])]
+    (is (= :open
+           (#'property-value/page-ref-cell-click
+            {:entity other-tag
+             :current-page current-page
+             :open-popup! #(swap! popup-calls conj :popup)
+             :redirect! #(swap! redirect-calls conj :redirect)}))
+        "A different tag still opens the popup and navigates.")
+    (is (= [:popup] @popup-calls))
+    (is (= [:redirect] @redirect-calls))))
+
 (deftest delete-pages-needs-confirm-covers-every-destructive-view
   (let [pages [{:db/id 1 :block/uuid (random-uuid)}]
         tag-parent {:db/ident :user.class/MyTag}

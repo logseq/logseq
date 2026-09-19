@@ -7,6 +7,17 @@
 > existence probes and lifecycle metadata, with explicitly accepted PID reuse
 > races. Historical evidence and verification results below remain unchanged.
 
+## Current ownership contract
+
+The SQLite ownership decision in
+`docs/agent-guide/implemented/architecture/2026-09-18-replace-db-worker-lock-with-sqlite.md`
+supersedes this document's JSON graph-lock, graph lock-ID, and PID-based lease
+recovery requirements. New workers retain a separate local SQLite transaction;
+registration and health correlate `ownership-protocol: sqlite-v1`, ticket,
+generation, PID, storage, and owner. Graph deletion preserves the ownership file.
+Legacy JSON readers are restricted to the sequential-upgrade retirement adapter.
+The original observations and test results below remain historical evidence.
+
 ## Problem
 
 The review of all uncommitted changes on 2026-09-15 found four reproducible

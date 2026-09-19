@@ -702,6 +702,65 @@
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
 
+(defn- journals-rows-state
+  "Every rendered row of the virtualized journals list: whether it holds
+   page content or a placeholder, and the inline min-height on its item
+   (empty when the row is not pinned to a cached height)."
+  []
+  (js-json
+   "(() => {
+      const rows = Array.from(document.querySelectorAll('#journals [data-index]'));
+      return JSON.stringify(rows.map((row) => {
+        const item = row.querySelector('.journal-item');
+        return {index: row.dataset.index,
+                content: !!row.querySelector('.cp__page-inner-wrap'),
+                placeholder: !!row.querySelector('.journal-item-placeholder'),
+                minHeight: item ? item.style.minHeight : null};
+      }));
+    })()"))
+
+(defn- scroll-journals-down!
+  "Scrolls the main container down by `step` px `steps` times, a frame apart,
+   so the list passes through its scrolling state and pins the rows it
+   scrolls past. Returns the final scrollTop."
+  [step steps]
+  (w/eval-js
+   (format
+    "(async () => {
+      const scrollContainer = document.querySelector('#main-content-container');
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      for (let i = 0; i < %d; i++) {
+        scrollContainer.scrollTop += %d;
+        await nextFrame();
+      }
+      return scrollContainer.scrollTop;
+    })()"
+    steps step)))
+
+(deftest journals-list-rows-hold-no-pin-once-content-is-in
+  (testing "after a scroll, a journal row that holds content carries no inline min-height"
+    (seed-journals!
+     (mapv (fn [idx]
+             {:date (format "2026-03-%02dT12:00:00" idx)
+              :blocks [(format "journals pin block %02d" idx)]})
+           (range 1 31)))
+    (enable-virtualized-rendering!)
+    (w/wait-for "#journals [data-virtuoso-scroller]")
+    (w/wait-for "#journals [data-index]")
+    ;; Down to the end, then a third of the way back up: the rows rendered on
+    ;; the way back were placeholders pinned to a cached height moments ago.
+    (is (pos? (scroll-journals-down! 400 60)))
+    (util/wait-timeout 2000)
+    (let [rows-at-end (journals-rows-state)
+          _ (scroll-journals-down! -300 20)
+          _ (util/wait-timeout 3000)
+          rows-on-way-back (journals-rows-state)
+          rows (concat rows-at-end rows-on-way-back)
+          content-rows (filter :content rows)
+          pinned (filter #(and (:content %) (seq (:minHeight %))) rows)]
+      (is (< 2 (count content-rows)) (pr-str rows))
+      (is (empty? pinned) (pr-str pinned)))))
+
 (deftest journals-list-remounts-complete-long-journal-with-one-scroller
   (testing "an outer journal remount restores all content without a nested virtualizer"
     (let [first-block-title "journals remount stable block 001"
@@ -1650,3 +1709,68 @@
       (is (= "completion updated and focused" (util/get-edit-content)))
       (ls-api-call! :editor.removeBlock uuid)
       (assert/assert-have-count (str "#ls-block-" uuid) 0))))
+
+;; The caret helpers read a hidden mirror of the editing textarea, one per
+;; editor. A helper that resolves another editor's mirror, or none, returns no
+;; position, and the arrow key then does nothing at all: the caret stays on its
+;; row while the block still has rows above and below it. These two tests hold
+;; the behaviour through the content, so they need no access to the mirror.
+
+(def ^:private caret-row "abcdefghij klmnopqrst")
+
+(defn- block-of-three-rows!
+  "A block of 3 identical newline-separated rows, caret left at the end."
+  []
+  (b/new-block "")
+  (util/input (string/join "\n" [caret-row caret-row caret-row]))
+  (util/move-cursor-to-end)
+  (is (= (string/join "\n" [caret-row caret-row caret-row])
+         (util/get-edit-content))))
+
+(deftest arrow-up-down-move-the-caret-inside-a-block-test
+  (testing "up and down move the caret one row inside the block, not to another block"
+    (block-of-three-rows!)
+    (k/arrow-up)
+    (util/press-seq "X")
+    (is (= (string/join "\n" [caret-row (str caret-row "X") caret-row])
+           (util/get-edit-content))
+        "up from the end of the last row puts the caret at the end of the middle row")
+    (k/arrow-down)
+    (util/press-seq "Y")
+    (is (= (string/join "\n" [caret-row (str caret-row "X") (str caret-row "Y")])
+           (util/get-edit-content))
+        "down from the middle row puts the caret back on the last row")))
+
+(deftest shift-arrow-up-selects-inside-a-block-test
+  (testing "shift with up selects up to the previous row of the same block"
+    (block-of-three-rows!)
+    (k/shift+arrow-up)
+    (util/press-seq "Z")
+    (is (= (string/join "\n" [caret-row (str caret-row "Z")])
+           (util/get-edit-content))
+        "the selection covered the last row and the newline before it")))
+
+(defn- editor-box-heights
+  "clientHeight and scrollHeight of the editing textarea."
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const editor = document.querySelector('.editor-wrapper textarea');
+       return JSON.stringify({client: editor.clientHeight, scroll: editor.scrollHeight});
+     })();")
+   json/keyword-keys-object-mapper))
+
+(deftest heading-editor-shows-every-row-test
+  (testing "the editor of a heading block is sized for the heading font when it opens"
+    (let [title (string/join " " (repeat 12 "heading row"))]
+      ;; "# " at the start becomes the heading property, so the content is
+      ;; the title alone.
+      (b/new-block (str "# " title))
+      (util/exit-edit)
+      (w/click (loc/filter ".block-title-wrap" :has-text "heading row"))
+      (util/wait-editor-visible)
+      (is (= title (util/get-edit-content)))
+      (let [{:keys [client scroll]} (editor-box-heights)]
+        (is (<= scroll client)
+            (str "textarea clientHeight " client " scrollHeight " scroll))))))
