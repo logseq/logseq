@@ -2774,8 +2774,9 @@
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
   (let [empty-rows? (empty-table-ready-on-mount? (:rows table))
-        [items-rendered? set-items-rendered!] (hooks/use-state empty-rows?)
-        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state empty-rows?)
+        cells-ready? (or empty-rows? (true? (:disable-virtualized? option)))
+        [items-rendered? set-items-rendered!] (hooks/use-state cells-ready?)
+        [mount-unpinned-cells? set-mount-unpinned-cells!] (hooks/use-state cells-ready?)
         option (assoc option
                       :mount-unpinned-cells? mount-unpinned-cells?
                       :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
@@ -3476,7 +3477,7 @@
       (if (= view-feature-type :query-result)
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :view.table/default-title)
-            (count (:rows table)))]
+            (:items-count option))]
         (views-tab view-parent (:block/uuid view-entity)
                    (assoc option
                           :hover? hover?

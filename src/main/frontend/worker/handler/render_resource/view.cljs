@@ -6,6 +6,7 @@
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.render-resource.common :as common]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]))
@@ -417,6 +418,11 @@
                           {:feature-type feature-type
                            :query-row-uuids query-row-uuids})))
         (let [config (effective-view-config view context)
+              query-block (when (= :query-result feature-type)
+                            (:logseq.property/query view))
+              query (when (= :code (:logseq.property.node/display-type query-block))
+                      (:query (common-util/safe-read-string {:log-error? false}
+                                                            (:block/title query-block))))
               query-entity-ids (mapv (fn [block-uuid]
                                        (:db/id (common/entity-by-uuid! db
                                                                       :query-row-uuid
@@ -428,7 +434,7 @@
                                  (assoc :view-feature-type feature-type))
                        owner (assoc :view-for-id (:db/id owner))
                        (= :query-result feature-type)
-                       (assoc :query-entity-ids query-entity-ids)
+                       (assoc :query-entity-ids query-entity-ids :query query)
                        (:initial-row-count context)
                        (assoc :row-limit (:initial-row-count context))
                        (contains? context :row-offset)
@@ -443,6 +449,7 @@
                       (assoc :row-previews (first-window-row-previews db (:rows value))))
               value-partition (:partition value)]
           [(cond-> (view-watch-keys db view-uuid owner feature-type config value-partition)
+             query-block (conj [:entity (:block/uuid query-block)])
              include-row-previews? (conj [:attr :block/title]))
            value]))
       (missing-view-data view-uuid))))

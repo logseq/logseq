@@ -67,6 +67,7 @@
 (def ^:private scalar-identity-attrs
   #{:block/uuid :block/title :block/name :db/ident
     :logseq.property/type :db/cardinality :logseq.property/value
+    :logseq.property.node/display-type :logseq.property.code/lang
     :logseq.property/icon :logseq.property.class/hide-from-node
     :logseq.property.asset/type :logseq.property.asset/width
     :logseq.property.asset/height :logseq.property.asset/resize-metadata
@@ -118,7 +119,7 @@
         created-from-property? (some? (:logseq.property/created-from-property collected))
         property-value-title (when (and ref-title (or closed-value? created-from-property?))
                                ref-title)]
-    (cond-> {}
+    (cond-> (select-keys collected [:logseq.property.node/display-type :logseq.property.code/lang])
       (seq choice-exclusions)
       (assoc :logseq.property/choice-exclusions choice-exclusions)
       (some? property-type) (assoc :logseq.property/type property-type)
