@@ -239,6 +239,48 @@
     (is (= 2 (:count window)))
     (is (= (take 10 (:data full)) (:data window)))))
 
+(deftest get-view-data-all-pages-count-drops-after-delete-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Alpha" :block/updated-at 10}}
+                {:page {:block/title "Beta" :block/updated-at 20}}
+                {:page {:block/title "Gamma" :block/updated-at 30}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/updated-at :asc? false}]}
+        before (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        gamma (db-test/find-page-by-title @conn "Gamma")
+        _ (d/transact! conn [{:db/id (:db/id gamma)
+                              :logseq.property/deleted-at 1}])
+        after (db-view/get-view-data @conn view-id (assoc option :row-limit 10))]
+    (is (= 3 (:count before)))
+    (is (= ["Gamma" "Beta" "Alpha"] (result-titles conn before)))
+    (is (= 2 (:count after))
+        "Deleting a page must shrink All Pages. A leftover estimate left empty rows.")
+    (is (= ["Beta" "Alpha"] (result-titles conn after)))
+    (is (= (:count after) (count (:data after))))))
+
+(deftest get-view-data-all-pages-filter-count-matches-rows-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "alpha" :block/updated-at 1}}
+                {:page {:block/title "alpine" :block/updated-at 2}}
+                {:page {:block/title "beta" :block/updated-at 3}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/title :asc? true}]}
+        unfiltered (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        filtered (db-view/get-view-data
+                  @conn view-id
+                  (assoc option
+                         :row-limit 10
+                         :filters {:or? false
+                                   :filters [[:block/title :text-contains "alp"]]}))]
+    (is (= 3 (:count unfiltered)))
+    (is (= 2 (:count filtered) (count (:data filtered)))
+        "A title filter must not keep the unfiltered All Pages count.")
+    (is (= ["alpha" "alpine"] (result-titles conn filtered)))))
+
 (deftest get-view-data-all-pages-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Page " idx)

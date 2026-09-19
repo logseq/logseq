@@ -668,7 +668,15 @@
         "Without titles, an empty table still waits for hydrate.")
     (is (= 3883 (#'views/table-total-count (range 26) 3883))
         "The first window already has the full count. Do not wait for remaining ids.")
-    (is (= 26 (#'views/table-total-count (range 26) nil)))))
+    (is (= 26 (#'views/table-total-count (range 26) nil)))
+    (is (= 56 (#'views/windowed-items-count 431 (range 56)))
+        "After the full id list arrives, drop the first-window estimate so delete/filter does not leave empty rows.")
+    (is (= 46 (#'views/windowed-items-count 46 (range 56)))
+        "A newer first-window count after delete wins over a stale full list.")
+    (is (= 0 (#'views/windowed-items-count 431 []))
+        "A filter that matches nothing must not keep the unfiltered placeholder rows.")
+    (is (= 431 (#'views/windowed-items-count 431 nil))
+        "While the full id list is still loading, keep the first-window count.")))
 
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
