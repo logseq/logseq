@@ -41,4 +41,23 @@
     (is (valid-edn-keyword? (db-ident/create-db-ident-from-name "user.property" "foo.bar"))
         "Kw created from name with '.' is valid edn")
     (is (not (string/includes? (name (db-ident/create-db-ident-from-name "user.property" "foo.bar")) "."))
-        "Kw created from name with '.' doesn't contain '.'")))
+        "Kw created from name with '.' doesn't contain '.'"))
+
+  (testing "Non-ASCII letters are kept so typed hashtags get readable idents"
+    (doseq [name-string ["исследование" "日本語" "über" "café"]]
+      (let [ident (db-ident/create-db-ident-from-name "user.class" name-string)
+            ident-name (name ident)]
+        (is (qualified-keyword? ident)
+            (str "Ident for " name-string " is a qualified keyword"))
+        (is (valid-edn-keyword? ident)
+            (str "Ident for " name-string " is valid edn"))
+        (is (string/includes? ident-name (db-ident/normalize-ident-name-part name-string))
+            (str "Ident for " name-string " keeps its letters"))
+        (is (not= "" ident-name)
+            (str "Ident for " name-string " must not be empty"))))
+    (is (= "исследование" (db-ident/normalize-ident-name-part "исследование")))
+    (is (= "日本語" (db-ident/normalize-ident-name-part "日本語")))
+    (is (= "über" (db-ident/normalize-ident-name-part "über")))
+    (is (= "café" (db-ident/normalize-ident-name-part "café")))
+    (is (= "u" (db-ident/normalize-ident-name-part "!!"))
+        "Names with no allowed characters still produce a non-empty ident part"))))
