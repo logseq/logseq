@@ -213,3 +213,10 @@
                (set! state/<invoke-db-worker original-invoke-db-worker)
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest convert-action-distinguishes-page-and-block
+  (is (= :to-block
+         (db-page-handler/convert-action {:block/tags [{:db/ident :logseq.class/Page}]})))
+  (is (= :to-page
+         (db-page-handler/convert-action {:block/title "plain block"})))
+  (is (nil? (db-page-handler/convert-action {:block/tags [{:db/ident :logseq.class/Journal}]}))))

@@ -3,7 +3,10 @@
   (:require [clojure.string :as string]
             [frontend.components.select :as components-select]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.library :as library-handler]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -12,15 +15,56 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn merge-library-select-items
+  "Show current Library members plus unfiled search hits."
+  [member-items search-blocks input]
+  (let [search-items (library-handler/member-items search-blocks)
+        query (string/trim (or input ""))
+        visible-members (if (string/blank? query)
+                          member-items
+                          (filter (fn [item]
+                                    (string/includes? (string/lower-case (or (:label item) ""))
+                                                      (string/lower-case query)))
+                                  member-items))]
+    (second
+     (reduce (fn [[seen acc] item]
+               (let [value (:value item)]
+                 (if (contains? seen value)
+                   [seen acc]
+                   [(conj seen value) (conj acc item)])))
+             [#{} []]
+             (concat visible-members search-items)))))
+
 (hsx/defc select-pages
   [library-page]
-  (let [[result set-result!] (hooks/use-state nil)
+  (let [child-uuids (db-hooks/use-children (:block/uuid library-page))
+        [members set-members!] (hooks/use-state [])
+        [result set-result!] (hooks/use-state nil)
         [input set-input!] (hooks/use-state "")
-        [selected-choices set-selected-choices!] (hooks/use-state #{})
-        items (map (fn [block]
-                     {:value (:db/id block)
-                      :label (:block/title block)})
-                   result)]
+        member-items (library-handler/member-items members)
+        member-ids (into #{} (map :value) member-items)
+        [selected-choices set-selected-choices!] (hooks/use-state member-ids)
+        items (merge-library-select-items member-items result input)]
+    (hooks/use-effect!
+     (fn []
+       (set-selected-choices! member-ids))
+     [member-ids])
+    (hooks/use-effect!
+     (fn []
+       (if (seq child-uuids)
+         (let [cancelled? (atom false)]
+           (-> (db-async/<get-block-summaries (state/get-current-repo) child-uuids)
+               (p/then (fn [summaries]
+                         (when-not @cancelled?
+                           (set-members! (or summaries [])))))
+               (p/catch (fn [_]
+                          (when-not @cancelled?
+                            (set-members! [])))))
+           #(reset! cancelled? true))
+         (do
+           (set-members! [])
+           nil)))
+     [child-uuids])
     (hooks/use-effect!
      (fn []
        (if (string/blank? input)
@@ -34,20 +78,18 @@
     (components-select/select
      {:items items
       :extract-fn :label
-	      :extract-chosen-fn :value
-	      :selected-choices selected-choices
-	      :on-chosen (fn [chosen selected?]
-	                   (if selected?
-	                     (let [chosen-block (some #(when (= chosen (:db/id %)) %) result)]
-	                       (editor-handler/move-blocks! [chosen-block] library-page {:bottom? true})
-	                       (set-selected-choices! (conj selected-choices chosen)))
-                     (do
-	                       (state/<invoke-db-worker :thread-api/transact
-	                                                (state/get-current-repo)
-	                                                [[:db/retract chosen :block/parent]]
-	                                                {:outliner-op :save-block}
-	                                                nil)
-                       (set-selected-choices! (disj selected-choices chosen)))))
+      :extract-chosen-fn :value
+      :selected-choices selected-choices
+      :on-chosen (fn [chosen selected?]
+                   (if selected?
+                     (let [chosen-block (some #(when (= chosen (:db/id %)) %) result)]
+                       (when chosen-block
+                         (editor-handler/move-blocks! [chosen-block] library-page {:bottom? true})
+                         (set-selected-choices! (conj selected-choices chosen))))
+                     (-> (library-handler/<confirm-remove-page! chosen)
+                         (p/then (fn [removed?]
+                                   (when removed?
+                                     (set-selected-choices! (disj selected-choices chosen))))))))
       :multiple-choices? true
       :input-default-placeholder (t :library/add-pages)
       :show-new-when-not-exact-match? false
@@ -58,6 +100,8 @@
 (hsx/defc add-pages
   [library-page]
   [:div.ls-add-pages.px-1.mt-4
+   [:p.text-sm.text-muted-foreground.mb-3
+    (t :library/tip)]
    (shui/button
     {:variant :secondary
      :size :sm

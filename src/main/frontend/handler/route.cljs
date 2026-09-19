@@ -8,6 +8,7 @@
             [frontend.db.async :as db-async]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.library :as library-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
@@ -152,6 +153,12 @@
                        (boolean? push)
                        (assoc :push push))]
               (redirect! m)))))))))
+
+(defn redirect-to-library!
+  []
+  (if (config/db-based-graph?)
+    (redirect-to-page! (library-handler/page-uuid))
+    (notification/show! (t :library/file-graph-unavailable) :warning)))
 
 (defn built-in-page-title
   [page-name]

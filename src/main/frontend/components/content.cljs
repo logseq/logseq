@@ -15,6 +15,7 @@
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -284,6 +285,26 @@
                 :icon-value icon-value}))]))
 
          (shui/dropdown-menu-separator)
+
+         (when-let [convert (and (config/db-based-graph?)
+                                 (not property-default-value?)
+                                 (not (ldb/built-in? block))
+                                 (db-page-handler/convert-action block))]
+           [:<>
+            (case convert
+              :to-page
+              (shui/dropdown-menu-item
+               {:key "Convert to page"
+                :on-click (fn [_e]
+                            (db-page-handler/convert-block-to-page! block))}
+               (t :page.convert/to-page-action))
+              :to-block
+              (shui/dropdown-menu-item
+               {:key "Convert to block"
+                :on-click (fn [_e]
+                            (db-page-handler/convert-page-to-block! block))}
+               (t :page.convert/to-block-action)))
+            (shui/dropdown-menu-separator)])
 
          (shui/dropdown-menu-item
           {:key "Copy block ref"
