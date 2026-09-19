@@ -1234,3 +1234,52 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest empty-library-block-does-not-become-untitled-page-test
+  (let [conn (db-test/create-conn)
+        library (ldb/get-library-page @conn)
+        empty-uuid (random-uuid)
+        named-uuid (random-uuid)
+        insert! (fn [block-uuid title]
+                  (outliner-core/insert-blocks!
+                   conn
+                   [{:block/uuid block-uuid
+                     :block/title title}]
+                   library
+                   {:sibling? false
+                    :keep-uuid? true
+                    :outliner-op :insert-blocks}))]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (testing "empty Library children stay blocks"
+        (insert! empty-uuid "")
+        (let [block (d/entity @conn [:block/uuid empty-uuid])]
+          (is (some? block))
+          (is (not (ldb/page? block)))
+          (is (string/blank? (:block/title block)))
+          (is (nil? (:block/name block)))
+          (is (= (:db/id library) (:db/id (:block/parent block))))
+          (is (= (:db/id library) (:db/id (:block/page block))))))
+
+      (testing "titled Library children still become pages"
+        (insert! named-uuid "Named Library Page")
+        (let [page (d/entity @conn [:block/uuid named-uuid])]
+          (is (ldb/page? page))
+          (is (= "Named Library Page" (:block/title page)))
+          (is (= "named library page" (:block/name page)))
+          (is (= (:db/id library) (:db/id (:block/parent page))))
+          (is (nil? (:block/page page)))))
+
+      (testing "filling an empty Library block later promotes it to a page"
+        (outliner-core/save-block!
+         conn
+         {:db/id (:db/id (d/entity @conn [:block/uuid empty-uuid]))
+          :block/uuid empty-uuid
+          :block/title "Later Named"})
+        (let [page (d/entity @conn [:block/uuid empty-uuid])]
+          (is (ldb/page? page))
+          (is (= "Later Named" (:block/title page)))
+          (is (= "later named" (:block/name page)))
+          (is (nil? (:block/page page)))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))

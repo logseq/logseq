@@ -252,14 +252,34 @@
   [block]
   (db-editor-handler/wrap-parse-block block))
 
+(defn- library-editor?
+  []
+  (boolean (some :library? (state/get-editor-args))))
+
+(defn- as-library-page-block
+  "Library inserts are pages. Empty titles stay blocks so they do not become Untitled."
+  [block]
+  (if (string/blank? (:block/title block))
+    block
+    (-> block
+        (assoc :block/tags #{:logseq.class/Page}
+               :block/name (util/page-name-sanity-lc (:block/title block)))
+        (dissoc :block/page))))
+
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:block/uuid (:block/uuid block)
+  (let [original block
+        block {:block/uuid (:block/uuid original)
                :block/title value}
         block' (-> (wrap-parse-block block)
                    ;; :block/uuid might be changed when backspace/delete
                    ;; a block that has been refed
-                   (assoc :block/uuid (:block/uuid block)))
+                   (assoc :block/uuid (:block/uuid original)))
+        block' (if (and (library-editor?)
+                        (not (entity/page? original))
+                        (not (string/blank? (:block/title block'))))
+                 (as-library-page-block block')
+                 block')
         opts' (assoc opts :outliner-op :save-block)]
     (ui-outliner-tx/transact!
      opts'
@@ -401,10 +421,7 @@
                    :else
                    (not has-children?))
         new-block' (if library?
-                     (-> new-block
-                         (-> (assoc :block/tags #{:logseq.class/Page}
-                                    :block/name (util/page-name-sanity-lc (:block/title new-block)))
-                             (dissoc :block/page)))
+                     (as-library-page-block new-block)
                      new-block)
         insert-opts {:sibling? sibling?
                      :keep-uuid? keep-uuid?
