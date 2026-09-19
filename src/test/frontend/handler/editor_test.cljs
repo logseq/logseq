@@ -2253,38 +2253,7 @@
     (handle-last-input-handler {:value "`String#gsub and String#`"
                                 :cursor-pos (dec (count "`String#gsub and String#`"))})
     (is (= nil (state/get-editor-action))
-        "No page search within backticks")
-
-    (handle-last-input-handler {:value "#+"
-                                :cursor-pos 2})
-    (is (= nil (state/get-editor-action))
-        "No page search for org keyword prefix #+")
-
-    (handle-last-input-handler {:value "#+BEGIN_NOTE"
-                                :cursor-pos (count "#+BEGIN_NOTE")})
-    (is (= nil (state/get-editor-action))
-        "No page search for org #+BEGIN_NOTE directive")
-
-    (handle-last-input-handler {:value "#+END_QUOTE"
-                                :cursor-pos (count "#+END_QUOTE")})
-    (is (= nil (state/get-editor-action))
-        "No page search for org #+END_QUOTE directive")
-
-    (handle-last-input-handler {:value "foo #+"
-                                :cursor-pos 6})
-    (is (= nil (state/get-editor-action))
-        "No page search when #+ is typed after a word")
-
-    (handle-last-input-handler {:value "#+BEGIN_NOTE"
-                                :cursor-pos (count "#+BEGIN_NOTE")
-                                :action :page-search-hashtag})
-    (is (= nil (state/get-editor-action))
-        "Closes hashtag search when # is part of an org directive")
-
-    (handle-last-input-handler {:value "#+BEGIN_NOTE"
-                                :cursor-pos 1})
-    (is (= nil (state/get-editor-action))
-        "Does not open hashtag search when inserting # before + in an org directive"))
+        "No page search within backticks"))
 
   (testing "Comment editors do not open tag autocompletion"
     (handle-last-input-handler {:value "#"
@@ -2295,6 +2264,39 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest handle-last-input-org-directive-test
+  (handle-last-input-handler {:value "#+"
+                              :cursor-pos 2})
+  (is (= nil (state/get-editor-action))
+      "No page search for org keyword prefix #+")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+BEGIN_NOTE directive")
+
+  (handle-last-input-handler {:value "#+END_QUOTE"
+                              :cursor-pos (count "#+END_QUOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+END_QUOTE directive")
+
+  (handle-last-input-handler {:value "foo #+"
+                              :cursor-pos 6})
+  (is (= nil (state/get-editor-action))
+      "No page search when #+ is typed after a word")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")
+                              :action :page-search-hashtag})
+  (is (= nil (state/get-editor-action))
+      "Closes hashtag search when # is part of an org directive")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos 1})
+  (is (= nil (state/get-editor-action))
+      "Does not open hashtag search when inserting # before + in an org directive")
+  (state/set-editor-action! nil))
+
 (deftest org-directive-hashtag-query-test
   (is (true? (editor/org-directive-hashtag-query? "+BEGIN_NOTE")))
   (is (true? (editor/org-directive-hashtag-query? "#+END_QUOTE")))
@@ -2303,6 +2305,18 @@
   (is (false? (editor/org-directive-hashtag-query? "foo")))
   (is (false? (editor/org-directive-hashtag-query? "#foo")))
   (is (false? (editor/org-directive-hashtag-query? nil))))
+
+(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event true)
+      (is (nil? (state/get-editor-action))
+          "Slash commands should close when leaving the original block to edit another")
+      (finally
+        (state/set-editor-action! prev-action)))))
 
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"

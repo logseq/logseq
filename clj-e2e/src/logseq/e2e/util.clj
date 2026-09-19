@@ -150,9 +150,12 @@
     (.textContent locator)))
 
 (defn get-edit-content
+  "The live text of the editing textarea. Read through inputValue, not through
+   the DOM text: a textarea keeps what the user types in its value, while its
+   child text node holds whatever it was rendered with."
   []
   (when-let [editor (get-editor)]
-    (get-text editor)))
+    (.inputValue editor)))
 
 (defn bounding-xy
   [locator]
