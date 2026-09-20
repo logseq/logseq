@@ -613,11 +613,14 @@
                          tx-data)]
     (if (empty? target-ids)
       ;; Nothing to project. Keep the cache tracking the conn's db object so the
-      ;; next transaction's db-before still hits it; a definition change drops it.
+      ;; next transaction's db-before still hits it — but only when db-before is
+      ;; the same object the attrs were computed on (a global cache could carry
+      ;; another conn's attrs onto this db). A definition change drops it.
       (do (reset! *reference-attrs-cache
                   (when-let [cached (and (not reference-attrs-changed?)
                                          @*reference-attrs-cache)]
-                    (assoc cached :db db-after)))
+                    (when (identical? db-before (:db cached))
+                      (assoc cached :db db-after))))
           #{})
       (let [cached @*reference-attrs-cache
             cached-db (:db cached)
