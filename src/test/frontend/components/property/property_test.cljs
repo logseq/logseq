@@ -1,7 +1,9 @@
 (ns frontend.components.property.property-test
-  (:require ["react" :as react]
+  (:require ["fs" :as fs]
+            ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
             [frontend.components.property.default-value :as property-default-value]
@@ -183,3 +185,39 @@
        (#'property-component/show-property-panel-bullet?
         {:logseq.property/type :default}
         {:db/id 1}))))
+
+(defn- css-rule-selectors
+  [css]
+  (->> (string/split css #"}")
+       (map (fn [block]
+              (-> block (string/split #"\{" 2) first string/trim)))
+       (remove string/blank?)))
+
+(defn- url-property-value-panel-anchor-selectors
+  "Selectors that style anchors inside a URL property value panel."
+  [css]
+  (->> (css-rule-selectors css)
+       (filter (fn [selector]
+                 (and (string/includes? selector "[data-property-type=url]")
+                      (string/includes? selector ".property-value-panel")
+                      (re-find #"(^|[\s,])a(:|[,\s]|$)" selector))))))
+
+(defn- selector-targets-value-panel-chrome?
+  "True when a `.property-value-panel a` rule can match block chrome."
+  [selector chrome-class]
+  (boolean
+   (and (re-find #"\.property-value-panel\s+a" selector)
+        (not (string/includes? selector (str ":not(." chrome-class ")"))))))
+
+(deftest url-property-wrapping-rule-must-not-target-the-bullet-test
+  (let [css (str (fs/readFileSync "src/main/frontend/components/property.css" "utf8"))
+        selectors (url-property-value-panel-anchor-selectors css)]
+    (is (seq selectors)
+        "URL value-panel wrapping should still target content anchors so long links wrap.")
+    (is (not-any? #(selector-targets-value-panel-chrome? % "bullet-link-wrap") selectors)
+        (str "Wrapping must not apply to .bullet-link-wrap. A bare `.property-value-panel a` "
+             "rule applies min-width:0 to the inline-flex bullet and pulls it off the "
+             "value mid-line (db-test#1239). Selectors: " (pr-str selectors)))
+    (is (not-any? #(selector-targets-value-panel-chrome? % "block-control") selectors)
+        (str "Wrapping must not apply to .block-control for the same reason. Selectors: "
+             (pr-str selectors)))))

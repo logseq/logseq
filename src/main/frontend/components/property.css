@@ -117,7 +117,10 @@
     @apply items-center;
   }
 
-  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a,
+  /* Keep wrapping on URL text only. The block bullet and fold control are also
+     anchors; min-width:0 / white-space:normal on those chrome links collapses
+     the inline-flex bullet and shifts it off the value mid-line (db-test#1239). */
+  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
   .property-pair.property-panel-row[data-property-type=url] .asset-image-fallback {
     overflow-wrap: anywhere;
     word-break: break-word;
