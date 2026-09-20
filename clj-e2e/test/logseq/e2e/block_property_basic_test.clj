@@ -551,7 +551,7 @@
               (pr-str {:url url-align :text text-align :delta-gap delta-gap})))))))
 
 (deftest checkbox-property-toggle-persists-test
-  (testing "checkbox property toggles immediately and survives refresh")
+  (testing "checkbox property toggles immediately and survives refresh"
     (let [property-name "e2e checkbox"
           page-name (page/get-page-name)]
       (ls-api-call! :editor.upsertProperty property-name {:type "checkbox"})
