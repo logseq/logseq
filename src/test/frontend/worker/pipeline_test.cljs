@@ -1240,6 +1240,7 @@
         library (ldb/get-library-page @conn)
         empty-uuid (random-uuid)
         named-uuid (random-uuid)
+        nested-uuid (random-uuid)
         insert! (fn [block-uuid title]
                   (outliner-core/insert-blocks!
                    conn
@@ -1269,6 +1270,27 @@
           (is (= "named library page" (:block/name page)))
           (is (= (:db/id library) (:db/id (:block/parent page))))
           (is (nil? (:block/page page)))))
+
+      (testing "blocks nested under a Library block stay blocks"
+        (outliner-core/insert-blocks!
+         conn
+         [{:block/uuid nested-uuid
+           :block/title "Nested Under Block"}]
+         (d/entity @conn [:block/uuid empty-uuid])
+         {:sibling? false
+          :keep-uuid? true
+          :outliner-op :insert-blocks})
+        (let [nested (d/entity @conn [:block/uuid nested-uuid])]
+          (is (some? nested))
+          (is (not (ldb/page? nested))))
+        (outliner-core/save-block!
+         conn
+         {:db/id (:db/id (d/entity @conn [:block/uuid nested-uuid]))
+          :block/uuid nested-uuid
+          :block/title "Nested Renamed"})
+        (let [nested (d/entity @conn [:block/uuid nested-uuid])]
+          (is (not (ldb/page? nested)))
+          (is (= "Nested Renamed" (:block/title nested)))))
 
       (testing "filling an empty Library block later promotes it to a page"
         (outliner-core/save-block!
