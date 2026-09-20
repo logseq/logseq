@@ -1038,27 +1038,17 @@
 
 (defn- orphaned-range-comments-areas
   [db deleted-block-ids]
-  (let [comments-area-target-ids
-        (->> (d/datoms db :aevt comments-blocks-property)
-             (mapcat (fn [datom]
-                       (map (fn [target-id] [(:e datom) target-id])
-                            (datom-value-ids (:v datom)))))
-             (group-by first)
-             (map (fn [[comments-area-id entries]]
-                    [comments-area-id (set (map second entries))]))
-             (into {}))
-        candidate-comments-areas
-        (->> comments-area-target-ids
-             (filter (fn [[_comments-area-id target-ids]]
-                       (seq (set/intersection deleted-block-ids target-ids))))
-             (map first)
+  (let [candidate-comments-areas
+        (->> deleted-block-ids
+             (mapcat (fn [id] (d/datoms db :avet comments-blocks-property id)))
+             (map :e)
+             (distinct)
              (keep #(d/entity db %))
              (filter comments-area?)
-             (remove #(contains? deleted-block-ids (:db/id %)))
-             (common-util/distinct-by :db/id))]
+             (remove #(contains? deleted-block-ids (:db/id %))))]
     (filter
      (fn [comments-area]
-       (let [targets (seq (get comments-area-target-ids (:db/id comments-area)))]
+       (let [targets (seq (map :db/id (datom-value-ids (get comments-area comments-blocks-property))))]
          (and targets
               (every? #(contains? deleted-block-ids %) targets))))
      candidate-comments-areas)))
