@@ -4,6 +4,7 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [datascript.storage :refer [IStorage]]
+   [lambdaisland.glogi :as log]
    [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db-sync.common :as common]
    [logseq.db.common.normalize :as db-normalize]
@@ -197,9 +198,17 @@
             (set-t! sql new-t)
             (when-not (:db-sync/skip-checksum-update? tx-meta)
               (let [prev-checksum (get-checksum sql)
-                    checksum (sync-checksum/update-checksum
-                              prev-checksum
-                              (assoc tx-report :tx-data normalized-data))]
+                    checksum (if (sync-checksum/valid-checksum? prev-checksum)
+                               (sync-checksum/update-checksum
+                                prev-checksum
+                                (assoc tx-report :tx-data normalized-data))
+                               ;; Explicit repair for missing/corrupt incremental
+                               ;; state; normal txs never pay for a graph scan.
+                               (let [recomputed (sync-checksum/recompute-checksum db-after)]
+                                 (log/warn :db-sync/checksum-repaired
+                                           {:previous-checksum prev-checksum
+                                            :recomputed-checksum recomputed})
+                                 recomputed))]
                 (set-checksum! sql checksum)))))))))
 
 (defn- listen-db-updates!

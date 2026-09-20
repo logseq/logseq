@@ -90,7 +90,8 @@
             replayed-incremental-from-full-before
             (sync-checksum/update-checksum replayed-prev-full tx-report)
             replayed-incremental-from-input
-            (sync-checksum/update-checksum input-checksum tx-report)
+            (when (sync-checksum/valid-checksum? input-checksum)
+              (sync-checksum/update-checksum input-checksum tx-report))
             replayed-recomputed (sync-checksum/recompute-checksum (:db-after tx-report))
             result {:log-file log-path
                     :prev-tx (:prev-tx payload)

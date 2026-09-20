@@ -125,12 +125,17 @@
                                   {:tx-data [[:db/add 4 :block/updated-at 1773661308002]]}])]
       (is (= checksum (checksum/recompute-checksum db))))))
 
-(deftest incremental-checksum-uses-recompute-when-initial-checksum-missing-test
-  (testing "nil initial checksum uses db-before recompute as baseline"
+(deftest incremental-checksum-throws-when-initial-checksum-missing-test
+  (testing "missing or invalid initial checksum requires explicit repair, not an implicit full-graph scan"
     (let [db-before (sample-db)
           tx-report (d/with db-before [[:db/add 4 :block/title "Child updated"]])]
-      (is (= (checksum/recompute-checksum (:db-after tx-report))
-             (checksum/update-checksum nil tx-report))))))
+      (doseq [bad-checksum [nil "not-a-checksum" "0123"]]
+        (is (thrown? js/Error (checksum/update-checksum bad-checksum tx-report))))
+      (try
+        (checksum/update-checksum nil tx-report)
+        (catch :default e
+          (is (= :db-sync/checksum-not-initialized
+                 (:type (ex-data e)))))))))
 
 (deftest checksum-e2ee-ignores-title-and-name-test
   (testing "with E2EE enabled, checksum ignores title/name changes for both modes"
@@ -563,8 +568,7 @@
         (is (= checksum-before actual))
         (is (zero? @entity-reads)
             "Derived import attributes cannot change the checksum or require entity scans")))
-    (is (= (checksum/recompute-checksum (:db-after report))
-           (checksum/update-checksum nil report))
-        "An invalid initial checksum is still repaired")
+    (is (thrown? js/Error (checksum/update-checksum nil report))
+        "An invalid initial checksum requires explicit repair")
     (assert-incremental=full! db checksum-before
                               (conj tx [:db/add 3 :block/title "Changed title"]))))

@@ -56,7 +56,7 @@
      (or (parse-hex32 (subs checksum 8 16)) 0)]
     [0 0]))
 
-(defn- valid-checksum?
+(defn valid-checksum?
   [checksum]
   (boolean
    (and (string? checksum)
@@ -418,7 +418,12 @@
       :else
       (let [initial-state (if (valid-checksum? checksum)
                             (checksum->state checksum)
-                            (checksum->state (recompute-checksum db-before)))
+                            ;; No implicit full-graph scan in transaction latency:
+                            ;; missing/corrupt incremental state must be repaired
+                            ;; explicitly (recompute-checksum) by the caller.
+                            (throw (ex-info "db-sync checksum is missing or invalid"
+                                            {:type :db-sync/checksum-not-initialized
+                                             :checksum checksum})))
             {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
             state-after-removals (reduce-kv (fn [checksum-state tuple count]
                                               (apply-digest-n checksum-state tuple count subtract-digest))

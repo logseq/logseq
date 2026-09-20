@@ -52,29 +52,36 @@
 (defn update-local-sync-checksum!
   [repo tx-report]
   (when (worker-state/get-client-ops-conn repo)
-    (let [current-checksum (client-op/get-local-checksum repo)
-          new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
-      (when (and (exists? js/process)
-                 (= "1" (aget (.-env js/process) "LOGSEQ_CHECKSUM_ASSERT")))
-        (let [recomputed-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
-          (when-not (= new-checksum recomputed-checksum)
-            (let [{:keys [tx-meta tx-data]} tx-report]
-              (log/error :db-sync/checksum-incremental-drift
-                         {:repo repo
-                          :current-checksum current-checksum
-                          :incremental-checksum new-checksum
-                          :recomputed-checksum recomputed-checksum
-                          :tx-meta tx-meta
-                          :tx-count (count tx-data)
-                          :tx-sample (take 30 tx-data)})
-              (throw (ex-info "Incremental checksum drift"
-                              {:repo repo
-                               :current-checksum current-checksum
-                               :incremental-checksum new-checksum
-                               :recomputed-checksum recomputed-checksum
-                               :tx-meta tx-meta
-                               :tx-count (count tx-data)}))))))
-      (client-op/update-local-checksum repo new-checksum))))
+    (let [current-checksum (client-op/get-local-checksum repo)]
+      (if-not (sync-checksum/valid-checksum? current-checksum)
+        ;; Explicit repair for missing/corrupt incremental state; normal
+        ;; transactions never pay for a full-graph scan.
+        (let [repaired-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+          (log/warn :db-sync/checksum-repaired {:repo repo
+                                                :previous-checksum current-checksum})
+          (client-op/update-local-checksum repo repaired-checksum))
+        (let [new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
+          (when (and (exists? js/process)
+                     (= "1" (aget (.-env js/process) "LOGSEQ_CHECKSUM_ASSERT")))
+            (let [recomputed-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+              (when-not (= new-checksum recomputed-checksum)
+                (let [{:keys [tx-meta tx-data]} tx-report]
+                  (log/error :db-sync/checksum-incremental-drift
+                             {:repo repo
+                              :current-checksum current-checksum
+                              :incremental-checksum new-checksum
+                              :recomputed-checksum recomputed-checksum
+                              :tx-meta tx-meta
+                              :tx-count (count tx-data)
+                              :tx-sample (take 30 tx-data)})
+                  (throw (ex-info "Incremental checksum drift"
+                                  {:repo repo
+                                   :current-checksum current-checksum
+                                   :incremental-checksum new-checksum
+                                   :recomputed-checksum recomputed-checksum
+                                   :tx-meta tx-meta
+                                   :tx-count (count tx-data)}))))))
+          (client-op/update-local-checksum repo new-checksum))))))
 
 (defn- broadcast-rtc-state!
   [client]

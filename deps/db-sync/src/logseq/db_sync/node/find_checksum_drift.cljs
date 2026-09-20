@@ -96,7 +96,7 @@
   [rows]
   (let [conn (d/create-conn db-schema/schema)]
     (loop [idx 0
-           checksum nil]
+           checksum (sync-checksum/recompute-checksum @conn)]
       (if (>= idx (count rows))
         {:ok? true
          :idx idx

@@ -500,11 +500,20 @@
            (when sql
              (storage/set-checksum!
               sql
-              (sync-checksum/update-checksum
-               prev-checksum
-               {:db-before db-before
-                :db-after @conn
-                :tx-data @logical-tx-data})))
+              (if (sync-checksum/valid-checksum? prev-checksum)
+                (sync-checksum/update-checksum
+                 prev-checksum
+                 {:db-before db-before
+                  :db-after @conn
+                  :tx-data @logical-tx-data})
+                ;; Explicit repair for missing/corrupt incremental state.
+                (let [recomputed (sync-checksum/recompute-checksum @conn)]
+                  (log/warn :db-sync/checksum-repaired
+                            {:graph-id (:graph-id request-context)
+                             :tx-id tx-id
+                             :previous-checksum prev-checksum
+                             :recomputed-checksum recomputed})
+                  recomputed))))
            (finally
              (when sql
                (d/unlisten! conn ::large-logical-tx-checksum))))))

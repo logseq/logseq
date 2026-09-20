@@ -536,6 +536,11 @@
                             (finalize-import! repo graph-id remote-tx import-id))]
                   (when-let [conn (worker-state/get-datascript-conn repo)]
                     (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?))
+                  ;; Seed the local incremental checksum from the snapshot's
+                  ;; authoritative remote checksum so normal txs never need a
+                  ;; full-graph scan to initialize it.
+                  (when-let [remote-checksum (:checksum pull-resp)]
+                    (client-op/update-local-checksum repo remote-checksum))
                   {:repo repo
                    :graph-id graph-id
                    :remote-tx remote-tx
