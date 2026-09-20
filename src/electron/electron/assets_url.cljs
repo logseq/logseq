@@ -13,16 +13,17 @@
 (defn- path-from-url
   [^js parsed win32?]
   (let [host (.-host parsed)
-        pathname (.-pathname parsed)]
+        pathname (.-pathname parsed)
+        ;; Single-letter host carrying the drive marker is a rewritten Windows
+        ;; drive: assets://C/logseq__colon/Users/...
+        drive-host? (boolean (and (re-matches #"[A-Za-z]" host)
+                                  (string/starts-with? pathname "/logseq__colon/")))]
     (cond
       (string/blank? host)
       pathname
 
-      ;; Windows drive rewritten as host: assets://C/logseq__colon/Users/...
-      (re-matches #"[A-Za-z]" host)
-      (str "/" host pathname)
-
-      win32?
+      ;; Any other host on Windows is a rewritten UNC path: assets://server/share/...
+      (and win32? (not drive-host?))
       (str "//" host pathname)
 
       ;; Chromium standard-scheme rewrite: assets:///home/foo → assets://home/foo

@@ -37,4 +37,16 @@
     (is (= "//server/share/file.jpg"
            (assets-url/assets-url->fs-path
             "assets://server/share/file.jpg"
-            {:win32? true})))))
+            {:win32? true}))))
+
+  (testing "single-letter host without drive marker is still a UNC server"
+    (is (= "//s/share/file.jpg"
+           (assets-url/assets-url->fs-path
+            "assets://s/share/file.jpg"
+            {:win32? true}))))
+
+  (testing "url that fails js/URL parsing falls back to string handling"
+    (is (= "/tmp:abc/x"
+           (assets-url/assets-url->fs-path
+            "assets://tmp:abc/x"
+            {:win32? false})))))
