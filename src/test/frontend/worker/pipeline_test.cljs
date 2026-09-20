@@ -1,5 +1,7 @@
 (ns frontend.worker.pipeline-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -1230,6 +1232,57 @@
           (is (some? asset))
           (is (some? inserted)
               "Template children are copied under the new asset")
+          (is (= (:db/id template-root)
+                 (:db/id (:logseq.property/used-template inserted)))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest journal-tag-template-applied-on-repeating-task-reschedule-test
+  (testing "Journal pages created by repeating-task reschedule receive the Journal tag template"
+    (let [now (t/date-time 2026 9 20 12 0 0)
+          scheduled-ms (tc/to-long now)
+          expected-next-day 20260926
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Inbox"}
+                   :blocks [{:block/title "repeating task"
+                             :build/tags [:logseq.class/Task]
+                             :build/properties
+                             {:logseq.property/status :logseq.property/status.todo
+                              :logseq.property/scheduled scheduled-ms
+                              :logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 6
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}}]}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "journal template"
+                             :build/tags [:logseq.class/Template]
+                             :build/children [{:block/title "journal template body"}]}]}]})
+          task (db-test/find-block-by-content @conn "repeating task")
+          template-root (db-test/find-block-by-content @conn "journal template")
+          journal-class (d/entity @conn :logseq.class/Journal)]
+      (d/transact! conn [[:db/add (:db/id task)
+                          :logseq.property.repeat/repeat-type
+                          :logseq.property.repeat/repeat-type.double-plus]
+                         [:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id journal-class)]])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (is (nil? (db-test/find-journal-by-journal-day @conn expected-next-day))
+            "The next occurrence has no journal page yet")
+        (with-redefs [t/now (fn [] now)]
+          (ldb/transact! conn [[:db/add (:db/id task)
+                                :logseq.property/status
+                                :logseq.property/status.done]]))
+        (let [next-journal (db-test/find-journal-by-journal-day @conn expected-next-day)
+              inserted (->> (:block/_parent next-journal)
+                            (filter #(= "journal template body" (:block/title %)))
+                            first)]
+          (is (some? next-journal)
+              "Reschedule creates the next journal page")
+          (is (contains? (set (map :db/ident (:block/tags next-journal))) :logseq.class/Journal))
+          (is (some? inserted)
+              "Journal tag template children are inserted on the reschedule-created page")
           (is (= (:db/id template-root)
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
