@@ -722,16 +722,25 @@
            (mapv #(to-insert-op db-before %))
            seq))))
 
+(defn- created-from-property-ref
+  [db-before root]
+  (when-let [prop (:logseq.property/created-from-property root)]
+    (or (:db/ident prop)
+        (stable-entity-ref db-before prop))))
+
 (defn- move-root->restore-op
   [db-before root]
   (let [root-id (:db/id root)
-        [target-id sibling?] (block-restore-target root)]
+        [target-id sibling?] (block-restore-target root)
+        created-from-property (created-from-property-ref db-before root)]
     (when (and (some? root-id)
                (some? target-id))
       [:move-blocks
        [[(stable-entity-ref db-before root-id)]
         (stable-entity-ref db-before target-id)
-        {:sibling? (boolean sibling?)}]])))
+        (cond-> {:sibling? (boolean sibling?)}
+          created-from-property
+          (assoc :created-from-property created-from-property))]])))
 
 (defn- build-inverse-move-blocks
   [db-before ids]
