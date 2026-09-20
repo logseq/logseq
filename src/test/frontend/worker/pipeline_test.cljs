@@ -1234,3 +1234,39 @@
                  (:db/id (:logseq.property/used-template inserted)))))
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest ordinary-transactions-reuse-cached-reference-attrs-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "block"}]}])
+        block-id (:db/id (db-test/find-block-by-content @conn "block"))
+        property-class-id (d/entid @conn :logseq.class/Property)
+        orig-datoms d/datoms
+        scans (atom 0)
+        count-scans (fn [f]
+                      (reset! scans 0)
+                      (with-redefs [d/datoms
+                                    (fn [db index & components]
+                                      (when (and (= :avet index)
+                                                 (or (and (= :block/tags (first components))
+                                                          (= property-class-id (second components)))
+                                                     (= :logseq.property/public? (first components))))
+                                        (swap! scans inc))
+                                      (apply orig-datoms db index components))]
+                        (f))
+                      @scans)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (is (pos? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "one"]])))
+          "The first transaction discovers the reference attributes")
+      (is (zero? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "two"]])))
+          "An ordinary transaction reuses the cached reference attributes")
+      (let [property-id (d/entid @conn :logseq.property/publishing-public?)]
+        (is (pos? (count-scans
+                   #(ldb/transact! conn [[:db/add property-id
+                                          :logseq.property/public? false]])))
+            "A property-definition change recomputes the reference attributes"))
+      (is (zero? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "three"]])))
+          "The recomputed attributes are cached again")
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))

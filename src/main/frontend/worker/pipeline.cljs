@@ -587,6 +587,13 @@
     :block/tags
     :logseq.property/public?})
 
+(defonce ^:private *reference-attrs-cache
+  ;; Derived schema metadata: {:db <immutable db> :attrs <set of attr idents>}.
+  ;; :attrs is reused only for the exact db object it was computed on (db-before
+  ;; of a transaction is identical? to the db-after the pipeline returned for the
+  ;; previous transaction on the same conn) or when no definition attr changed.
+  (atom nil))
+
 (defn- reference-owner-ids-at
   [db reference-attrs' target-id]
   (into #{}
@@ -596,20 +603,36 @@
 
 (defn- projected-reference-owner-ids
   [{:keys [db-before db-after tx-data]}]
-  (let [target-ids (into #{}
+  (let [reference-attrs-changed?
+        (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
+        target-ids (into #{}
                          (comp
                           (filter projected-reference-content-datom?)
                           (map :e)
                           (filter #(d/entity db-before %)))
                          tx-data)]
     (if (empty? target-ids)
-      #{}
-      (let [reference-attrs-changed?
-            (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
-            before-reference-attrs (reference-attrs db-before)
-            after-reference-attrs (if reference-attrs-changed?
+      ;; Nothing to project. Keep the cache tracking the conn's db object so the
+      ;; next transaction's db-before still hits it; a definition change drops it.
+      (do (reset! *reference-attrs-cache
+                  (when-let [cached (and (not reference-attrs-changed?)
+                                         @*reference-attrs-cache)]
+                    (assoc cached :db db-after)))
+          #{})
+      (let [cached @*reference-attrs-cache
+            cached-db (:db cached)
+            before-reference-attrs (if (identical? db-before cached-db)
+                                     (:attrs cached)
+                                     (reference-attrs db-before))
+            after-reference-attrs (cond
+                                    (identical? db-after cached-db)
+                                    (:attrs cached)
+                                    reference-attrs-changed?
                                     (reference-attrs db-after)
+                                    :else
                                     before-reference-attrs)]
+        (reset! *reference-attrs-cache
+                {:db db-after :attrs after-reference-attrs})
         (into #{}
               (mapcat (fn [target-id]
                         (concat
@@ -676,6 +699,13 @@
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))
         tx-report' (or replace-tx-report tx-report*)
+        ;; The conn ends up holding (:db-after tx-report'), so re-point the
+        ;; cache at it: ref stamping only adds :block/refs/:block/tx-id and
+        ;; cannot change reference-attribute definitions.
+        _ (when-let [cached @*reference-attrs-cache]
+            (when (identical? (:db cached) (:db-after tx-report*))
+              (reset! *reference-attrs-cache
+                      (assoc cached :db (:db-after tx-report')))))
         full-tx-data (concat (:tx-data tx-report*)
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
