@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
@@ -327,18 +328,27 @@
   (when-let [datom (first (d/datoms db :avet :db/ident ident))]
     (:e datom)))
 
+(defonce ^:private exclude-page-ids-cache (js/WeakMap.))
+
 (defn- get-exclude-page-ids
+  "Hidden/deleted/built-in/property-page ids only change when the snapshot
+  changes, so cache them per immutable db value instead of rescanning four
+  AVET slices per request."
   [db]
-  (let [property-tag-id (ident-eid db :logseq.class/Property)]
-    (persistent!
-     (reduce (fn [result d]
-               (conj! result (:e d)))
-             (transient #{})
-             (concat
-              (d/datoms db :avet :logseq.property/hide? true)
-              (d/datoms db :avet :logseq.property/deleted-at)
-              (d/datoms db :avet :logseq.property/built-in? true)
-              (d/datoms db :avet :block/tags property-tag-id))))))
+  (or (.get exclude-page-ids-cache db)
+      (let [property-tag-id (ident-eid db :logseq.class/Property)
+            exclude-ids
+            (persistent!
+             (reduce (fn [result d]
+                       (conj! result (:e d)))
+                     (transient #{})
+                     (concat
+                      (d/datoms db :avet :logseq.property/hide? true)
+                      (d/datoms db :avet :logseq.property/deleted-at)
+                      (d/datoms db :avet :logseq.property/built-in? true)
+                      (d/datoms db :avet :block/tags property-tag-id))))]
+        (.set exclude-page-ids-cache db exclude-ids)
+        exclude-ids)))
 
 (defn- get-entities-for-all-pages [db sorting property-ident]
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
@@ -694,14 +704,27 @@
 
     :class-objects
     (when class-id
-      (let [class-ids (cons class-id (db-class/get-structured-children db class-id))
-            tag-eids (db-class/filter-visible-class-object-ids
-                      db
-                      (mapcat (fn [id]
-                                (map :e (d/datoms db :avet :block/tags id)))
-                              class-ids))]
-        {:count (count tag-eids)
-         :data (take-sorted-eids db tag-eids sorting row-limit row-offset)}))
+      (let [class-ids (into #{class-id} (db-class/get-structured-children db class-id))
+            property-tag-eid (ident-eid db :logseq.class/Property)
+            eid-visible? (fn [eid]
+                           (db-class/class-object-eid-visible?
+                            db eid
+                            (indexed-attr-values db eid :block/tags)
+                            property-tag-eid))
+            member-visible? (fn [eid]
+                              (and (some class-ids
+                                         (indexed-attr-values db eid :block/tags))
+                                   (eid-visible? eid)))
+            ;; The data window walks the sort index and stops once it has enough
+            ;; visible members; only the total count still enumerates membership.
+            data (sort-eids-from-avet db member-visible? sorting row-limit nil row-offset)]
+        (when data
+          {:count (count
+                   (db-class/filter-visible-class-object-ids
+                    db
+                    (mapcat (fn [id] (map :e (d/datoms db :avet :block/tags id)))
+                            class-ids)))
+           :data data})))
 
     nil))
 
@@ -958,6 +981,39 @@
     (vec (->> rows (drop (or row-offset 0)) (take row-limit)))
     (vec rows)))
 
+(defn- recycled-eid?
+  "entity-util/recycled? over raw datoms so a lazy scan never hydrates entities:
+  a :logseq.property/deleted-at datom on the entity or any :block/parent ancestor."
+  [db eid]
+  (loop [id eid
+         seen #{}]
+    (cond
+      (or (nil? id) (contains? seen id))
+      false
+
+      (seq (d/datoms db :eavt id :logseq.property/deleted-at))
+      true
+
+      :else
+      (recur (indexed-attr-value db id :block/parent) (conj seen id)))))
+
+(defn- latest-journal-day-pairs
+  "Lazy [eid journal-day] pairs, newest first, matching ldb/get-latest-journals'
+  journal?/recycled? contract through indexed lookups only. A bounded window
+  walks just enough :block/journal-day datoms to fill it."
+  [db]
+  (let [today (date-time-util/date->int (js/Date.))
+        journal-tag-eid (ident-eid db :logseq.class/Journal)]
+    (->> (d/rseek-datoms db :avet :block/journal-day)
+         (filter (fn [d] (<= (:v d) today)))
+         (common-util/distinct-by :e)
+         (filter (fn [d]
+                   (let [eid (:e d)]
+                     (and (some #(= journal-tag-eid %)
+                                (indexed-attr-values db eid :block/tags))
+                          (not (recycled-eid? db eid))))))
+         (map (fn [d] [(:e d) (:v d)])))))
+
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting {:keys [include-ref-pages-count?]
                                                           :or {include-ref-pages-count? true}}]
@@ -1135,9 +1191,15 @@
   ;; TODO: create a view for journals maybe?
   (cond
      journals?
-     (let [journals (vec (ldb/get-latest-journals db))
-           index (mapv #(select-keys % [:db/id :block/journal-day]) journals)]
-       {:count (count index)
+     (let [journal-days (latest-journal-day-pairs db)
+           window (cond->> journal-days
+                    (pos? (or row-offset 0)) (drop row-offset)
+                    row-limit (take row-limit))
+           index (mapv (fn [[eid day]] {:db/id eid :block/journal-day day})
+                       window)]
+       {:count (if (or row-limit (pos? (or row-offset 0)))
+                 (count journal-days)
+                 (count index))
         :data index})
      :else
      (let [view (d/entity db view-id)

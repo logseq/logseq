@@ -269,13 +269,19 @@
   (when-let [datom (first (d/datoms db :avet :db/ident ident))]
     (:e datom)))
 
+(defonce ^:private class-object-hidden-index-cache (js/WeakMap.))
+
 (defn- class-object-hidden-index
+  "Cached per immutable db value: the index only changes with the snapshot."
   [db]
-  (let [property-tag-id (ident-eid db :logseq.class/Property)]
-    {:property-eids (eids-with-attr-value db :block/tags property-tag-id)
-     :hide-eids (eids-with-attr-value db :logseq.property/hide? true)
-     :deleted-eids (eids-with-attr db :logseq.property/deleted-at)
-     :built-in-eids (eids-with-attr-value db :logseq.property/built-in? true)}))
+  (or (.get class-object-hidden-index-cache db)
+      (let [property-tag-id (ident-eid db :logseq.class/Property)
+            index {:property-eids (eids-with-attr-value db :block/tags property-tag-id)
+                   :hide-eids (eids-with-attr-value db :logseq.property/hide? true)
+                   :deleted-eids (eids-with-attr db :logseq.property/deleted-at)
+                   :built-in-eids (eids-with-attr-value db :logseq.property/built-in? true)}]
+        (.set class-object-hidden-index-cache db index)
+        index)))
 
 (defn- hidden-class-object-eid?
   [db eid {:keys [property-eids hide-eids deleted-eids built-in-eids]}]
@@ -285,6 +291,35 @@
              (not (eid-has-true-attr? db eid :logseq.property/public?))))
     (and (or (seq hide-eids) (seq deleted-eids))
          (hidden-by-ancestor? db eid hide-eids deleted-eids))))
+
+(defn- hidden-by-ancestor-eid?
+  "Per-eid form of hidden-by-ancestor? that reads the flags straight from the
+  indexes instead of precomputed id sets, so bounded iteration can check a
+  candidate without materializing every hidden/deleted id in the graph."
+  [db eid]
+  (loop [id eid
+         seen #{}]
+    (cond
+      (or (nil? id) (contains? seen id))
+      false
+
+      (or (eid-has-true-attr? db id :logseq.property/hide?)
+          (seq (d/datoms db :eavt id :logseq.property/deleted-at)))
+      true
+
+      :else
+      (recur (parent-eid db id) (conj seen id)))))
+
+(defn class-object-eid-visible?
+  "Per-eid form of the visibility contract in filter-visible-class-object-ids.
+  `tag-eids` is the candidate's :block/tags values; pass them in when the
+  caller already looked them up for the membership check."
+  [db eid tag-eids property-tag-eid]
+  (if (some #(= property-tag-eid %) tag-eids)
+    (and (empty? (d/datoms db :eavt eid :logseq.property/deleted-at))
+         (or (not (eid-has-true-attr? db eid :logseq.property/built-in?))
+             (eid-has-true-attr? db eid :logseq.property/public?)))
+    (not (hidden-by-ancestor-eid? db eid))))
 
 (defn filter-visible-class-object-ids
   "Filters candidate class-object entity ids with the same hidden/deleted
