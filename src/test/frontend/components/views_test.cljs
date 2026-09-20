@@ -287,26 +287,33 @@
 
 (deftest query-table-id-column-visibility-can-be-toggled-test
   "db-test#1240: # (row order) must stay in Columns Visibility and honor
-   a saved hidden-columns preference instead of always being forced hidden."
+   hidden-columns. Empty hidden-columns retracts the property, so :id cannot
+   be default-hidden and still shown on its own."
   (let [columns (views/build-columns {} [] {:add-tags-column? false})
         id-column (some #(when (= :id (:id %)) %) columns)
-        visibility-columns (#'views/columns-visibility-columns columns)]
+        persist-hidden (fn [visible-columns]
+                         (vec (keep (fn [[column visible?]]
+                                      (when (false? visible?)
+                                        column))
+                                    visible-columns)))]
     (is (some? id-column)
         "Query tables include the # row-order column")
-    (is (some #(= :id (:id %)) visibility-columns)
+    (is (not (false? (:column-list? id-column)))
         "# appears in Columns Visibility")
-    (is (false? (get (#'views/table-visible-columns {} columns) :id))
-        "# stays hidden until the user shows it")
-    (is (nil? (get (#'views/table-visible-columns
-                    {:logseq.property.table/hidden-columns []}
-                    columns)
-                   :id))
-        "Showing # persists after hidden-columns is saved without :id")
+    (is (not (:disable-hide? id-column))
+        "# can be toggled in Columns Visibility")
+    (is (nil? (get (#'views/table-visible-columns {} columns) :id))
+        "# is visible by default like other columns")
+    (is (= [:id]
+           (persist-hidden (assoc (#'views/table-visible-columns {} columns) :id false)))
+        "Hiding # persists as [:id]")
     (is (false? (get (#'views/table-visible-columns
                       {:logseq.property.table/hidden-columns [:id]}
                       columns)
                      :id))
-        "Hiding # persists")
+        "Hiding # is honored")
+    (is (empty? (persist-hidden (assoc {:id false} :id true)))
+        "Showing # clears hidden-columns, which retracts to the default visible state")
     (is (nil? (get (#'views/table-visible-columns
                     {:logseq.property.table/hidden-columns [:block/updated-at]}
                     columns)
