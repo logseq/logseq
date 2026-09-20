@@ -1248,6 +1248,24 @@
      :remove ["--page"]}},
    :tags [:remove],
    :extends :non-sync/graph-json-env}
+  {:id "remove-page-force-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page ForceMe >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page ForceMe --force"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :result] true,
+     [:data :permanently-deleted?] true}},
+   :covers
+   {:commands ["remove page"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :remove ["--page" "--force"]}},
+   :tags [:remove],
+   :extends :non-sync/graph-json-env}
   {:id "graph-remove-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"],
