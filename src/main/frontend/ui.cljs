@@ -1081,13 +1081,15 @@
      :toYear 3000
      :formatters {:formatWeekdayName (fn [weekday _]
                                        (i18n/locale-format-date weekday {:weekday "short"}))}
-     :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
-                   del-btn? (assoc :Head #(DelDateButton on-delete)))
+     :components {:Dropdown #(date-year-month-select (bean/bean %))}
      :class-names {:root (when del-btn? "has-del-btn")}
      :on-day-key-down (fn [^js d _ ^js e]
                         (when (= "Enter" (.-key e))
                           (let [on-select' (or on-select on-day-click)]
                             (on-select' d))))}
+    (when del-btn?
+      ;; react-day-picker v9 no longer has a Head slot; footer still mounts inside the root.
+      {:footer (DelDateButton on-delete)})
     opts)))
 
 (defn- get-current-hh-mm
