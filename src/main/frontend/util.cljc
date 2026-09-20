@@ -730,11 +730,12 @@
    (defn selection-node-block-id
      "Block UUID for a selected node, including text property-value wrappers."
      [node]
-     (when-let [id (or (d/attr node "blockid")
-                       (some-> (property-value-inner-block node)
-                               (d/attr "blockid")))]
-       (when (uuid-string? (str id))
-         (uuid id)))))
+     (when (some-> node .-getAttribute)
+       (when-let [id (or (d/attr node "blockid")
+                         (some-> (property-value-inner-block node)
+                                 (d/attr "blockid")))]
+         (when (uuid-string? (str id))
+           (uuid id))))))
 
 #?(:cljs
    (defn get-selected-text

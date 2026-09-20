@@ -136,5 +136,8 @@
         "Selecting the wrapper still copies/cuts the inner text property value")
     (is (nil? (util/selection-node-block-id empty-wrapper))
         "Empty property-value wrappers have no block to copy")
+    (is (nil? (util/selection-node-block-id (str "ls-block-" value-uuid)))
+        "Non-element inputs such as block id strings return nil instead of throwing")
+    (is (nil? (util/selection-node-block-id nil)))
     (is (= inner (util/unwrap-property-value-container wrapper)))
     (is (= inner (util/unwrap-property-value-container inner)))))

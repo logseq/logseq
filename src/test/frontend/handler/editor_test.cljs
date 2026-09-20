@@ -2015,6 +2015,15 @@
                            nil))
          :querySelector (fn [_] inner)}))
 
+(deftest selection-node-block-id-accepts-block-id-strings-test
+  (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        inner (mock-ls-block {:blockid (str value-uuid)})]
+    (is (= value-uuid (#'editor/selection-node-block-id inner)))
+    (is (= value-uuid (#'editor/selection-node-block-id (str "ls-block-" value-uuid)))
+        "Selection nodes may be \"ls-block-<uuid>\" id strings from get-selection-start-block-or-first")
+    (is (= value-uuid (#'editor/selection-node-block-id (str value-uuid)))
+        "Virtualized selection passes bare uuid strings for unmounted blocks")))
+
 (deftest cut-selection-blocks-uses-inner-text-property-value-test
   (async done
     (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
