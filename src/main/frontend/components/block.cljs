@@ -2273,7 +2273,7 @@
            (:logseq.property/icon block)
            link?
            (some :logseq.property/icon (:block/tags block))
-           (contains? #{"pdf"} (:logseq.property.asset/type block)))))
+           (= "pdf" (:logseq.property.asset/type block)))))
 
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? has-children? *control-show? edit? selected? top? bottom?]}]
