@@ -1,5 +1,9 @@
 type block_opts = { id_raw : string option; uuid : Cli_primitive.uuid option }
-type page_opts = { id : Cli_primitive.db_id option; page : string option }
+type page_opts = {
+  id : Cli_primitive.db_id option;
+  page : string option;
+  force : bool;
+}
 
 type named_entity_opts = {
   id : Cli_primitive.db_id option;
@@ -26,6 +30,7 @@ type action =
       graph : Cli_primitive.graph;
       id : Cli_primitive.db_id option;
       page : string option;
+      force : bool;
     }
   | Remove_tag of {
       repo : Cli_primitive.repo;
@@ -122,9 +127,13 @@ let build_page repo graph (opts : page_opts) =
   match (opts.id, Option.map String.trim opts.page) with
   | None, None ->
       Error (Error.make Error.Missing_page_name "page name or id is required")
-  | Some id, None -> Ok (Remove_page { repo; graph; id = Some id; page = None })
+  | Some id, None ->
+      Ok
+        (Remove_page { repo; graph; id = Some id; page = None; force = opts.force })
   | None, Some page when page <> "" ->
-      Ok (Remove_page { repo; graph; id = None; page = Some page })
+      Ok
+        (Remove_page
+           { repo; graph; id = None; page = Some page; force = opts.force })
   | None, Some _ -> Error (Error.invalid_options "page must be non-empty")
   | Some _, Some _ ->
       Error (Error.invalid_options "only one of --id or --page is allowed")
@@ -202,6 +211,11 @@ let entity_selector =
 let result_value value =
   Edn_util.map_vec (Vec.of_array [| (kw "result", value) |])
 
+let page_result_value ~force value =
+  Edn_util.map_vec
+    (Vec.of_array
+       [| (kw "result", value); (kw "permanently-deleted?", Edn_util.bool force) |])
+
 let entity_result_value result id name =
   Edn_util.map_vec
     (Vec.of_array
@@ -273,9 +287,9 @@ let apply_outliner_ops config repo ops =
     ~ops:(Edn_util.vector_t_vec ops)
     ~options:(Edn_util.map_t_vec Vec.empty)
 
-let apply_delete_op config repo op =
+let apply_delete_ops config repo ops =
   let open Cli_effect in
-  bind (apply_outliner_ops config repo (Vec.singleton op)) (fun response ->
+  bind (apply_outliner_ops config repo ops) (fun response ->
       let result =
         if Edn_util.is_null response then Edn_util.bool true
         else
@@ -284,6 +298,9 @@ let apply_delete_op config repo op =
           | None -> response
       in
       pure result)
+
+let apply_delete_op config repo op =
+  apply_delete_ops config repo (Vec.singleton op)
 
 let delete_block_uuids config repo uuids =
   let op =
@@ -302,8 +319,8 @@ let delete_block_uuids config repo uuids =
   in
   apply_delete_op config repo op
 
-let delete_page_uuid config repo uuid =
-  let op =
+let delete_page_uuid ?(force = false) config repo uuid =
+  let delete_op =
     Edn_util.vector_vec
       (Vec.of_array
          [|
@@ -312,7 +329,21 @@ let delete_page_uuid config repo uuid =
              (Vec.of_array [| Edn_util.uuid uuid; Edn_util.map_vec Vec.empty |]);
          |])
   in
-  apply_delete_op config repo op
+  let ops =
+    if force then
+      Vec.of_array
+        [|
+          delete_op;
+          Edn_util.vector_vec
+            (Vec.of_array
+               [|
+                 kw "recycle-delete-permanently";
+                 Edn_util.vector_vec (Vec.singleton (Edn_util.uuid uuid));
+               |]);
+        |]
+    else Vec.singleton delete_op
+  in
+  apply_delete_ops config repo ops
 
 let entities_of_value value =
   match
@@ -511,7 +542,7 @@ let execute_remove_block_ids mode invoke_config repo ids =
                     (multi_block_result ~deleted_ids ~missing_ids ~result
                        ~page_ids)))))
 
-let execute_remove_page_id mode invoke_config repo id =
+let execute_remove_page_id mode invoke_config repo ~force id =
   let open Cli_effect in
   bind
     (pull invoke_config repo page_selector (Edn_util.int64 id))
@@ -527,12 +558,12 @@ let execute_remove_page_id mode invoke_config repo id =
               (Cli_result.error ~command:Command_id.Remove_page mode
                  (Error.make Error.Page_not_found "page not found"))
         | Some uuid ->
-            bind (delete_page_uuid invoke_config repo uuid) (fun result ->
+            bind (delete_page_uuid ~force invoke_config repo uuid) (fun result ->
                 pure
                   (Cli_result.ok ~command:Command_id.Remove_page mode
-                     (Raw (result_value result)))))
+                     (Raw (page_result_value ~force result)))))
 
-let execute_remove_page_name mode invoke_config repo name =
+let execute_remove_page_name mode invoke_config repo ~force name =
   let open Cli_effect in
   bind (list_pages invoke_config repo) (fun pages_value ->
       let matches =
@@ -554,10 +585,10 @@ let execute_remove_page_name mode invoke_config repo name =
               (Cli_result.error ~command:Command_id.Remove_page mode
                  (Error.make Error.Page_not_found "page not found"))
         | Some uuid ->
-            bind (delete_page_uuid invoke_config repo uuid) (fun result ->
+            bind (delete_page_uuid ~force invoke_config repo uuid) (fun result ->
                 pure
                   (Cli_result.ok ~command:Command_id.Remove_page mode
-                     (Raw (result_value result)))))
+                     (Raw (page_result_value ~force result)))))
 
 let execute_remove_entity mode invoke_config repo ~command ~list_method
     ~not_found_code ~ambiguous_code ~label ~validate ~id ~name =
@@ -646,19 +677,20 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Remove_block mode
            (Error.make Error.Missing_target "block is required"))
-  | Remove_page { repo; id = Some id; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-        (function
-        | Error err ->
-            pure (Cli_result.error ~command:Command_id.Remove_page mode err)
-        | Ok invoke_config -> execute_remove_page_id mode invoke_config repo id)
-  | Remove_page { repo; page = Some page; _ } ->
+  | Remove_page { repo; id = Some id; force; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_page mode err)
         | Ok invoke_config ->
-            execute_remove_page_name mode invoke_config repo page)
+            execute_remove_page_id mode invoke_config repo ~force id)
+  | Remove_page { repo; page = Some page; force; _ } ->
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
+        | Error err ->
+            pure (Cli_result.error ~command:Command_id.Remove_page mode err)
+        | Ok invoke_config ->
+            execute_remove_page_name mode invoke_config repo ~force page)
   | Remove_page _ ->
       pure
         (Cli_result.error ~command:Command_id.Remove_page mode
@@ -722,6 +754,7 @@ let metadata () =
              [|
                "logseq remove page --graph my-graph --page Home";
                "logseq remove page --graph my-graph --id 123";
+               "logseq remove page --graph my-graph --page Home --force";
              |])
         Remove_page "Remove page";
       meta
