@@ -2521,7 +2521,8 @@ let () =
         "only one of --id or --page is allowed"
         (expect_some "invalid"
            (Remove.invalid_options
-              (Remove.Parsed_page { id = Some 1L; page = Some "Home" })));
+              (Remove.Parsed_page
+                 { id = Some 1L; page = Some "Home"; force = false })));
       expect_equal "remove tag blank" "name must be non-empty"
         (expect_some "invalid"
            (Remove.invalid_options
@@ -2563,12 +2564,23 @@ let () =
       let page =
         expect_ok "remove page by title"
           (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-             (Remove.Parsed_page { id = None; page = Some " Home " }))
+             (Remove.Parsed_page
+                { id = None; page = Some " Home "; force = false }))
       in
       (match page with
       | Remove.Remove_page { page = Some page; id = None; _ } ->
           expect_equal "remove page trims" "Home" page
       | _ -> fail_test "expected remove page by title");
+      let forced_page =
+        expect_ok "remove page with force"
+          (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
+             (Remove.Parsed_page
+                { id = None; page = Some "Home"; force = true }))
+      in
+      (match forced_page with
+      | Remove.Remove_page { force; _ } ->
+          expect_bool "remove page force flows through" true force
+      | _ -> fail_test "expected remove page with force");
       let tag =
         expect_ok "remove tag by id"
           (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
@@ -2585,7 +2597,7 @@ let () =
            (Remove.Parsed_block { id_raw = None; uuid = None }));
       expect_error_code "remove page missing" "missing-page-name"
         (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-           (Remove.Parsed_page { id = None; page = None })));
+           (Remove.Parsed_page { id = None; page = None; force = false })));
 
   test_promise "CLI parity remove page unwraps apply result map" (fun () ->
       let server =
@@ -2607,6 +2619,7 @@ let () =
                 graph = Cli_config.repo_to_graph repo;
                 id = None;
                 page = Some "Home";
+                force = false;
               }
           in
           let cfg =
@@ -2626,6 +2639,70 @@ let () =
           expect_bool "remove page result" true
             (expect_some "remove page result bool"
                (Edn_util.get_bool data "result"));
+          expect_bool "remove page not permanent" false
+            (expect_some "remove page permanent flag"
+               (Edn_util.get_bool data "permanently-deleted?"));
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity remove page --force permanently deletes the page"
+    (fun () ->
+      let calls = ref Vec.empty in
+      let server =
+        invoke_server (fun body ->
+            calls := Vec.push_front !calls body;
+            if Js.String.includes ~search:"thread-api/cli-list-pages" body then
+              "[[\"^ \
+               \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "[\"^ \",\"~:result\",true]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = None;
+                page = Some "Home";
+                force = true;
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "remove page --force succeeds" false
+            (Cli_result.is_error result);
+          let data =
+            expect_some "remove page --force data" (Cli_result.data_value result)
+          in
+          expect_bool "remove page --force result" true
+            (expect_some "remove page --force result bool"
+               (Edn_util.get_bool data "result"));
+          expect_bool "remove page --force is permanent" true
+            (expect_some "remove page --force permanent flag"
+               (Edn_util.get_bool data "permanently-deleted?"));
+          let ops_call =
+            expect_some "apply-outliner-ops call"
+              (Vec.find_opt
+                 (fun body ->
+                   Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body)
+                 !calls)
+          in
+          expect_named_contains "force sends delete-page op" ops_call
+            "delete-page";
+          expect_named_contains "force sends recycle-delete-permanently op"
+            ops_call "recycle-delete-permanently";
           Js.Promise.resolve pass));
 
   test_promise "CLI parity remove block rejects page entities before delete"
@@ -6632,6 +6709,14 @@ let () =
       | Cli_request.List (List_command.Parsed_page opts) ->
           expect_bool "list page -e is expand" true opts.expand
       | _ -> fail_test "expected list page");
+      let remove_page =
+        expect_parse_ok "remove page -f"
+          [| "remove"; "page"; "--page"; "Home"; "-f" |]
+      in
+      (match remove_page.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page -f is force" true opts.force
+      | _ -> fail_test "expected remove page");
       expect_parse_error_code "graph validate rejects --fields"
         ":invalid-options"
         [| "graph"; "validate"; "--fields"; "id" |]);

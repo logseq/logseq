@@ -315,7 +315,12 @@ let options_for_command =
   | Remove_block -> selector_options
   | Remove_page ->
       Vec.of_array
-        [| value "id" "id" "Page id"; value "page" "page" "Page name" |]
+        [|
+          value "id" "id" "Page id";
+          value "page" "page" "Page name";
+          option_of_array [| "-f"; "--force" |] Flag
+            "Permanently delete instead of recycling";
+        |]
   | Remove_tag | Remove_property ->
       Vec.of_array
         [| value "id" "id" "Entity id"; value "name" "name" "Entity name" |]
