@@ -35,6 +35,18 @@
         (is (= (storage/get-t sql) (:t changes)))
         (is (= "After" (get-in (first (:upserts changes)) [:attrs :block/title])))))))
 
+(deftest entity-pull-after-hibernation-preserves-graph-id-test
+  (let [sql (test-sql/make-sql)
+        conn (storage/open-conn sql)
+        socket #js {:readyState 1}
+        sent (atom nil)
+        self #js {:conn conn :schema-ready true :sql sql
+                  :state #js {:getTags (fn [_] #js ["graph-ws"])}}]
+    (with-redefs [ws/send! (fn [_ message] (reset! sent message))]
+      (ws-handler/handle-ws-message!
+       self socket (protocol/encode-message {:type "entity/pull" :since 0})))
+    (is (= "graph-ws" (:graph-id (common/read-transit (:data @sent)))))))
+
 (deftest entity-pull-message-returns-reset-for-expired-cursor-test
   (let [sql (test-sql/make-sql)
         conn (storage/open-conn sql)

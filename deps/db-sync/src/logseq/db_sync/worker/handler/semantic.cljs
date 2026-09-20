@@ -733,14 +733,53 @@
           (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
 
     :semantic/blocks-delete
-    (if-let [block (find-entity db (:block-id path-params))]
-      (do
-        (if (page? block)
-          (outliner-page/delete! conn (:block/uuid block))
-          (outliner-core/delete-blocks! conn [block] {}))
-        (broadcast-change! self)
-        (js/Response. nil #js {:status 204}))
-      (http/not-found))
+    (p/let [body (body-clj request)]
+      (let [sql (.-sql self)
+            operation-id (:operationId body)
+            expected-server-t (:expectedServerT body)
+            target (str (:block-id path-params))
+            operation-result (storage/operation-result sql operation-id)]
+        (cond
+          (or (not (string? operation-id)) (string/blank? operation-id))
+          (http/bad-request "operationId is required")
+
+          (or (not (number? expected-server-t))
+              (neg? expected-server-t)
+              (not= expected-server-t (js/Math.floor expected-server-t)))
+          (http/bad-request "expectedServerT must be a non-negative integer")
+
+          (some? operation-result)
+          (if (= {:target target :expected-server-t expected-server-t}
+                 (select-keys operation-result [:target :expected-server-t]))
+            (http/json-response nil {:operationId operation-id
+                                     :acceptedT (:accepted-t operation-result)
+                                     :changed false})
+            (http/error-response "operationId was already used for another request" 409))
+
+          (not= expected-server-t (storage/get-t sql))
+          (http/error-response "server cursor changed" 409)
+
+          :else
+          (if-let [block (find-entity db (:block-id path-params))]
+            (if (page? block)
+              (http/bad-request "ordinary block delete cannot delete a page")
+              (let [accepted-t
+                    (storage/with-sql-transaction!
+                      sql
+                      (fn []
+                        (outliner-core/delete-blocks! conn [block] {:operation-id operation-id})
+                        (let [accepted-t (storage/get-t sql)]
+                          (storage/set-operation-result!
+                           sql operation-id
+                           {:target target
+                            :expected-server-t expected-server-t
+                            :accepted-t accepted-t})
+                          accepted-t)))]
+                (broadcast-change! self)
+                (http/json-response nil {:operationId operation-id
+                                         :acceptedT accepted-t
+                                         :changed true})))
+            (http/not-found)))))
 
     :semantic/blocks-move
     (p/let [body (body-clj request)

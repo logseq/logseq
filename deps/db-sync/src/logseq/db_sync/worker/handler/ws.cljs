@@ -8,6 +8,14 @@
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
 
+(defn- socket-graph-id [^js self socket]
+  ;; WebSocket tags survive Durable Object hibernation; instance fields do not.
+  (let [graph-id (or (aget self "graph-id")
+                     (first (.getTags (.-state self) socket)))]
+    (when-not (and (string? graph-id) (seq graph-id))
+      (throw (js/Error. "WebSocket graph identity is missing; reconnect required")))
+    graph-id))
+
 (defn handle-ws-message! [^js self ^js ws raw]
   (let [message (-> raw protocol/parse-message ws/coerce-ws-client-message)]
     (if-not (map? message)
@@ -48,7 +56,7 @@
                                      {:reason "cursor-ahead"
                                       :snapshot-required true})})
                 (let [result (sync-handler/latest-entity-changes
-                              self (aget self "graph-id") since)]
+                              self (socket-graph-id self ws) since)]
                   (ws/send! ws {:type (if (:reason result) "reset" "graph-changes")
                                 :data (common/write-transit result)}))))))
 
@@ -65,7 +73,7 @@
                           ws
                           txs
                           t-before
-                          (cond-> {:graph-id (aget self "graph-id")}
+                          (cond-> {:graph-id (socket-graph-id self ws)}
                             (:client-revision message)
                             (assoc :client-revision (:client-revision message))
                             (:username user)
@@ -84,7 +92,7 @@
               server (aget pair 1)
               state (.-state self)]
           (aset self "graph-id" graph-id)
-          (.acceptWebSocket state server)
+          (.acceptWebSocket state server #js [graph-id])
           (let [token (auth/token-from-request request)
                 claims (auth/unsafe-jwt-claims token)
                 user (presence/claims->user claims)]

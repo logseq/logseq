@@ -18,8 +18,7 @@
       (is (= :sync/admin-reset (:handler match))))
     (let [match (sync-routes/match-route "POST" "/tx/batch")]
       (is (= :sync/tx-batch (:handler match))))
-    (let [match (sync-routes/match-route "POST" "/chat/tx/batch")]
-      (is (= :sync/chat-tx-batch (:handler match))))
+    (is (nil? (sync-routes/match-route "POST" "/chat/tx/batch")))
     (let [match (sync-routes/match-route "POST" "/snapshot/upload")]
       (is (= :sync/snapshot-upload (:handler match))))))
 

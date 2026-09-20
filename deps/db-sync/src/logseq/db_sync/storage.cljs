@@ -1,5 +1,6 @@
 (ns logseq.db-sync.storage
   (:require
+   [cljs.reader :as reader]
    [cljs-bean.core :as bean]
    [clojure.string :as string]
    [datascript.core :as d]
@@ -73,6 +74,24 @@
 
 (defn set-t! [sql t]
   (set-meta! sql :t t))
+
+(def ^:private semantic-operation-prefix "semantic-operation/")
+
+(defn operation-result
+  [sql operation-id]
+  (when (and (string? operation-id) (not (string/blank? operation-id)))
+    (when-let [value (get-meta sql (str semantic-operation-prefix operation-id))]
+      (try
+        (reader/read-string value)
+        (catch :default _ nil)))))
+
+(defn operation-t
+  [sql operation-id]
+  (:accepted-t (operation-result sql operation-id)))
+
+(defn set-operation-result!
+  [sql operation-id result]
+  (set-meta! sql (str semantic-operation-prefix operation-id) (pr-str result)))
 
 (def ^:dynamic *in-sql-transaction?* false)
 

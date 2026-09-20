@@ -245,6 +245,7 @@
                                                    :block/page [:block/uuid page-id]
                                                    :block/parent [:block/uuid page-id]
                                                    :block/order "a0"}])
+                   expected-t (storage/get-t sql)
                    calls (atom [])
                    requests [(semantic-json-request (str "/semantic/blocks/" page-id "/children?graph-id=graph-1") "POST"
                                                     {:position "append"
@@ -253,7 +254,8 @@
                                                                :children [{:title "Nested block links to [[Reference]]"}]}]})
                              (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH"
                                                     {:title "Edited block links to [[Reference]]"})
-                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE" nil)]]
+                             (semantic-json-request (str "/semantic/blocks/" block-id "?graph-id=graph-1") "DELETE"
+                                                    {:operationId "op-delete" :expectedServerT expected-t})]]
                (-> (p/with-redefs [outliner-core/insert-blocks! (fn [_ blocks target opts]
                                                                   (swap! calls conj [:insert blocks target opts])
                                                                   {:tx-data []})
@@ -272,7 +274,7 @@
                                    ws/broadcast! (fn [& _] nil)]
                      (p/let [responses (p/all (map #(sync-handler/handle-http self %) requests))
                               insert-body (json-body (first responses))]
-                       (is (= [201 200 204] (mapv #(.-status %) responses)))
+                       (is (= [201 200 200] (mapv #(.-status %) responses)))
                        (is (uuid? (some-> (get-in insert-body [:blocks 0 :children 0 :uuid]) uuid)))
                        (let [[[_ inserted-blocks _ _] [_ nested-blocks _ _]] (filter #(= :insert (first %)) @calls)
                              [_ saved-block _] (first (filter #(= :save (first %)) @calls))
@@ -289,6 +291,112 @@
                                 (:block/title saved-block)))
                          (is (= #{[:block/uuid reference-id]} (set (:block/refs saved-block)))))
                        (is (= #{:insert :save :delete} (set (map first @calls))))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-delete-block-requires-operation-id-and-current-server-t-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (storage/set-t! sql 12)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   _ (d/transact! (.-conn self)
+                                  [{:db/ident :logseq.class/Page}
+                                   {:block/uuid page-id :block/name "page" :block/title "Page"
+                                    :block/tags :logseq.class/Page}
+                                   {:block/uuid block-id :block/title "Existing"
+                                    :block/page [:block/uuid page-id]
+                                    :block/parent [:block/uuid page-id]
+                                    :block/order "a0"}])
+                   calls (atom [])
+                   request (fn [body]
+                             (semantic-json-request
+                              (str "/semantic/blocks/" block-id "?graph-id=graph-1")
+                              "DELETE" body))]
+               (-> (p/with-redefs [outliner-core/delete-blocks! (fn [& args] (swap! calls conj args))
+                                   ws/broadcast! (fn [& _] nil)]
+                     (p/let [missing-operation (sync-handler/handle-http self (request {:expectedServerT 12}))
+                             missing-cursor (sync-handler/handle-http self (request {:operationId "op-delete"}))
+                             stale (sync-handler/handle-http self (request {:operationId "op-delete"
+                                                                           :expectedServerT 11}))]
+                       (is (= [400 400 409]
+                              (mapv #(.-status %) [missing-operation missing-cursor stale])))
+                       (is (empty? @calls))))
+                   (p/then (fn [] (done)))
+                   (p/catch (fn [error]
+                              (is false (str error))
+                              (done)))))))))
+
+(deftest semantic-delete-block-rejects-pages-and-deletes-a-block-once-test
+  (async done
+         (with-memory-sql-async
+           (fn [sql]
+             (storage/init-schema! sql)
+             (let [self #js {:sql sql :conn (storage/open-conn sql) :schema-ready true}
+                   page-id (random-uuid)
+                   block-id (random-uuid)
+                   _ (d/transact! (.-conn self)
+                                  [{:db/ident :logseq.class/Page}
+                                   {:block/uuid page-id :block/name "page" :block/title "Page"
+                                    :block/tags :logseq.class/Page}
+                                   {:block/uuid block-id :block/title "Existing"
+                                    :block/page [:block/uuid page-id]
+                                    :block/parent [:block/uuid page-id]
+                                    :block/order "a0"}])
+                   expected-t (storage/get-t sql)
+                   calls (atom [])
+                   broadcasts (atom [])
+                   request (fn [id body]
+                             (semantic-json-request
+                              (str "/semantic/blocks/" id "?graph-id=graph-1")
+                              "DELETE" body))]
+               (-> (p/with-redefs
+                     [outliner-core/delete-blocks!
+                      (fn [conn blocks opts]
+                        (swap! calls conj [(mapv :block/uuid blocks) opts])
+                        (d/transact! conn
+                                     [[:db/retractEntity (:db/id (first blocks))]]
+                                     (assoc opts :outliner-op :delete-blocks)))
+                      outliner-page/delete! (fn [& _] (throw (js/Error. "page delete must not run")))
+                      ws/broadcast! (fn [_ _ message] (swap! broadcasts conj message))]
+                     (p/let [page-response (sync-handler/handle-http
+                                            self
+                                            (request page-id {:operationId "op-page"
+                                                              :expectedServerT expected-t}))
+                             first-response (sync-handler/handle-http
+                                             self
+                                             (request block-id {:operationId "op-delete"
+                                                               :expectedServerT expected-t}))
+                             retry-response (sync-handler/handle-http
+                                             self
+                                             (request block-id {:operationId "op-delete"
+                                                               :expectedServerT expected-t}))
+                             reused-response (sync-handler/handle-http
+                                              self
+                                              (request page-id {:operationId "op-delete"
+                                                                :expectedServerT expected-t}))
+                             first-body (json-body first-response)
+                             retry-body (json-body retry-response)]
+                       (is (= 400 (.-status page-response)))
+                       (is (= 200 (.-status first-response)))
+                       (is (= 200 (.-status retry-response)))
+                       (is (= 409 (.-status reused-response)))
+                       (is (= {:operationId "op-delete"
+                               :acceptedT (storage/operation-t sql "op-delete")
+                               :changed true}
+                              first-body))
+                       (is (= {:operationId "op-delete"
+                               :acceptedT (storage/operation-t sql "op-delete")
+                               :changed false}
+                              retry-body))
+                       (is (= [[[block-id] {:operation-id "op-delete"}]] @calls))
+                       (is (= 1 (count @broadcasts)))
+                       (is (number? (storage/operation-t sql "op-delete")))))
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))
@@ -466,7 +574,7 @@
                    (p/then (fn [] (done)))
                    (p/catch (fn [error]
                               (is false (str error))
-                              (done)))))))))
+                               (done)))))))))
 
 (deftest semantic-collection-routes-use-cursor-pagination-test
   (async done
@@ -1478,67 +1586,28 @@
      :conn conn
      :self self}))
 
-(deftest chat-tx-batch-allows-block-create-and-property-modification-test
-  (let [{:keys [conn]} (make-server-self)
-        page-id (random-uuid)
-        block-id (random-uuid)
-        new-block-id (random-uuid)]
-    (d/transact! conn [{:block/uuid page-id
-                        :block/name "page"
-                        :block/title "Page"}
-                       {:block/uuid block-id
-                        :block/title "Before"
-                        :block/parent [:block/uuid page-id]
-                        :block/page [:block/uuid page-id]
-                        :block/order "a0"}])
-    (is (sync-handler/chat-tx-batch-allowed?
-         @conn
-         [{:outliner-op :insert-blocks
-           :tx (protocol/tx->transit [{:db/id -1
-                                       :block/uuid new-block-id
-                                       ;; E2EE titles are opaque strings to db-sync.
-                                       :block/title "encrypted-title"
-                                       :block/parent [:block/uuid page-id]
-                                       :block/page [:block/uuid page-id]
-                                       :block/order "a1"}])}]))
-    (is (sync-handler/chat-tx-batch-allowed?
-         @conn
-         [{:outliner-op :save-block
-           :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
-                                       :block/title "encrypted-after"]
-                                      [:db/add [:block/uuid block-id]
-                                       :user.property/priority "high"]
-                                      [:db/retract [:block/uuid block-id]
-                                       :user.property/obsolete "old"]])}]))))
-
-(deftest chat-tx-batch-rejects-delete-move-page-and-arbitrary-mutations-test
-  (let [{:keys [conn]} (make-server-self)
-        page-id (random-uuid)
-        block-id (random-uuid)
-        other-page-id (random-uuid)]
-    (d/transact! conn [{:block/uuid page-id :block/name "page" :block/title "Page"}
-                       {:block/uuid other-page-id :block/name "other" :block/title "Other"}
-                       {:block/uuid block-id
-                        :block/title "Block"
-                        :block/parent [:block/uuid page-id]
-                        :block/page [:block/uuid page-id]
-                        :block/order "a0"}])
-    (doseq [tx-entry
-            [{:outliner-op :save-block
-              :tx (protocol/tx->transit [[:db/retractEntity [:block/uuid block-id]]])}
-             {:outliner-op :save-block
-              :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
-                                          :block/page [:block/uuid other-page-id]]])}
-             {:outliner-op :insert-blocks
-              :tx (protocol/tx->transit [{:db/id -1
-                                          :block/uuid (random-uuid)
-                                          :block/name "new-page"
-                                          :block/title "New page"}])}
-             {:outliner-op :save-block
-              :tx (protocol/tx->transit [[:db/add [:block/uuid block-id]
-                                          :file/content "arbitrary"]])}]]
-      (is (not (sync-handler/chat-tx-batch-allowed? @conn [tx-entry]))
-          (pr-str tx-entry)))))
+(deftest tx-batch-http-route-coerces-json-request-body-test
+  (async done
+         (let [{:keys [self]} (make-server-self)
+               block-uuid (random-uuid)
+               request (semantic-json-request
+                        "/sync/graph-1/tx/batch"
+                        "POST"
+                        {:t-before 0
+                         :txs [{:tx (protocol/tx->transit
+                                     [[:db/add -1 :block/uuid block-uuid]
+                                      [:db/add -1 :block/title "Mobile request"]])
+                                :outliner-op "save-block"}]})]
+           (-> (p/with-redefs [ws/broadcast! (fn [& _] nil)]
+                 (p/let [response (sync-handler/handle-http self request)
+                         body (json-body response)]
+                   (is (= 200 (.-status response)) (pr-str body))
+                   (is (= "tx/batch/ok" (:type body)))
+                   (is (= 1 (:t body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
 
 (defn- apply-entries!
   [^js self entries]

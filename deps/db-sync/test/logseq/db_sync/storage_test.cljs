@@ -95,6 +95,15 @@
               {:t 3 :tx "tx-3" :outliner-op nil}]
              result)))))
 
+(deftest semantic-operation-id-is-idempotency-key-test
+  (let [sql (test-sql/make-sql)]
+    (storage/init-schema! sql)
+    (storage/set-operation-result! sql "op-delete" {:target "block-1" :expected-server-t 6 :accepted-t 7})
+    (is (= 7 (storage/operation-t sql "op-delete")))
+    (is (= {:target "block-1" :expected-server-t 6 :accepted-t 7}
+           (storage/operation-result sql "op-delete")))
+    (is (nil? (storage/operation-t sql "unknown")))))
+
 (deftest stale-checksum-no-op-transact-does-not-throw-test
   (testing "a no-op tx should not throw and should keep incremental checksum state"
     (with-memory-sql
