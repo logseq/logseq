@@ -285,6 +285,34 @@
     (is (not (some #(= :block/page (:id %))
                    (views/build-columns {} [] {:add-tags-column? false}))))))
 
+(deftest query-table-id-column-visibility-can-be-toggled-test
+  "db-test#1240: # (row order) must stay in Columns Visibility and honor
+   a saved hidden-columns preference instead of always being forced hidden."
+  (let [columns (views/build-columns {} [] {:add-tags-column? false})
+        id-column (some #(when (= :id (:id %)) %) columns)
+        visibility-columns (#'views/columns-visibility-columns columns)]
+    (is (some? id-column)
+        "Query tables include the # row-order column")
+    (is (some #(= :id (:id %)) visibility-columns)
+        "# appears in Columns Visibility")
+    (is (false? (get (#'views/table-visible-columns {} columns) :id))
+        "# stays hidden until the user shows it")
+    (is (nil? (get (#'views/table-visible-columns
+                    {:logseq.property.table/hidden-columns []}
+                    columns)
+                   :id))
+        "Showing # persists after hidden-columns is saved without :id")
+    (is (false? (get (#'views/table-visible-columns
+                      {:logseq.property.table/hidden-columns [:id]}
+                      columns)
+                     :id))
+        "Hiding # persists")
+    (is (nil? (get (#'views/table-visible-columns
+                    {:logseq.property.table/hidden-columns [:block/updated-at]}
+                    columns)
+                   :id))
+        "Hiding other columns must not force-hide #")))
+
 (deftest sort-columns-should-deduplicate-ordered-ids
   "Reproduces db-test#837 amplification: When ordered-column-ids contains
    duplicates (e.g., from corrupted drag-and-drop state), sort-columns

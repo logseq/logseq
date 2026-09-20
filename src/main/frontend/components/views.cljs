@@ -1058,8 +1058,7 @@
           (shui/dropdown-menu-sub-trigger
            (t :view.table/columns-visibility))
           (shui/dropdown-menu-sub-content
-           (for [column (remove #(or (false? (:column-list? %))
-                                     (:disable-hide? %)) columns)]
+           (for [column (columns-visibility-columns columns)]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
@@ -2177,6 +2176,30 @@
    :set-sized-columns!
    (fn [sized-columns]
      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns))})
+
+(defn- table-visible-columns
+  "Map of column id -> false for hidden columns. Missing keys are visible.
+
+  The # (row order) column is hidden until the user shows it. Once
+  :logseq.property.table/hidden-columns has been saved, :id follows that list
+  like any other column."
+  [view-entity columns]
+  (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+    (zipmap hidden-columns (repeat false))
+    ;; This case can happen for imported tables
+    (-> (if (seq (:logseq.property.table/ordered-columns view-entity))
+          (zipmap (set/difference (set (map :id columns))
+                                  (set (:logseq.property.table/ordered-columns view-entity))
+                                  #{:select :block/created-at :block/updated-at})
+                  (repeat false))
+          {})
+        (assoc :id false))))
+
+(defn- columns-visibility-columns
+  [columns]
+  (remove #(or (false? (:column-list? %))
+               (:disable-hide? %))
+          columns))
 
 (defn- lazy-item-placeholder-height
   [table-view?]
@@ -3606,16 +3629,7 @@
                         (set-head-ready! true)
                         (when on-first-table-paint!
                           (on-first-table-paint!))))
-        visible-columns (-> (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
-                              (zipmap hidden-columns (repeat false))
-                              ;; This case can happen for imported tables
-                              (if (seq (:logseq.property.table/ordered-columns view-entity))
-                                (zipmap (set/difference (set (map :id columns))
-                                                        (set (:logseq.property.table/ordered-columns view-entity))
-                                                        #{:select :block/created-at :block/updated-at})
-                                        (repeat false))
-                                {}))
-                            (assoc :id false))
+        visible-columns (table-visible-columns view-entity columns)
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
