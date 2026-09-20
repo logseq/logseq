@@ -34,7 +34,7 @@ let split_equals_option token =
 
 let boolean_option = function
   | "version" | "help" | "verbose" | "profile" | "enable-sync" | "expand"
-  | "fix" | "include-built-in" | "include-journal" | "journal-only"
+  | "fix" | "force" | "include-built-in" | "include-journal" | "journal-only"
   | "include-hidden" | "with-properties" | "with-extends" | "with-classes"
   | "with-type" | "page-hierarchy" | "linked-references" | "ref-id-footer"
   | "progress" | "upload-keys" | "pretty-print" ->
@@ -215,7 +215,8 @@ let allowed_options_for_path path =
     Vec.append common_list_options (option_names [| "tags"; "properties" |])
   else if path2 path "list" "asset" then common_list_options
   else if path2 path "remove" "block" then option_names [| "id"; "uuid" |]
-  else if path2 path "remove" "page" then option_names [| "id"; "page" |]
+  else if path2 path "remove" "page" then
+    option_names [| "id"; "page"; "force" |]
   else if path2_any path "remove" (option_names [| "tag"; "property" |]) then
     option_names [| "id"; "name" |]
   else if path2 path "upsert" "block" then
@@ -560,6 +561,7 @@ let parsed_remove_command options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
+                force = option_present "force" options;
               }))
   | "tag" ->
       Some
@@ -765,6 +767,7 @@ let parsed_list_command options = function
 let path_alias_overrides = function
   | [| "graph"; "validate" |] -> [ ("-f", "--fix") ]
   | [| "graph"; "export" |] -> [ ("-f", "--file") ]
+  | [| "remove"; "page" |] -> [ ("-f", "--force") ]
   | [| "list"; "page" | "tag" | "property" |] -> [ ("-e", "--expand") ]
   | _ -> []
 
