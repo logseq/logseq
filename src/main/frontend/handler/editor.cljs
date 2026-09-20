@@ -3679,11 +3679,28 @@
           (when-not editor-action
             (util/scroll-editor-cursor input)))))))
 
+(defn- context-menu-popup?
+  [popup]
+  (let [class (some-> popup :content-props :class)]
+    (and (string? class)
+         (string/includes? class "ls-context-menu-content"))))
+
+(defn- hide-block-context-popup!
+  "Close the block context menu after cut/delete so it cannot act on a removed block."
+  []
+  (state/hide-custom-context-menu!)
+  (doseq [{:keys [id] :as popup} (shui-popup/get-popups)]
+    (when (context-menu-popup? popup)
+      (shui/popup-hide! id))))
+
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (when-not (:active? (state/get-state :ui/find-in-page))
-    (p/do! (cut-selection-blocks copy?)
-           (clear-selection!))))
+    ;; Capture selection first; hiding the context menu also clears selection.
+    (let [cut-p (cut-selection-blocks copy?)]
+      (hide-block-context-popup!)
+      (p/do! cut-p
+             (clear-selection!)))))
 
 (defn shortcut-copy-selection
   [e]

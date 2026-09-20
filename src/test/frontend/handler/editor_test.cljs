@@ -29,6 +29,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
+            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before (fn []
@@ -1948,6 +1949,50 @@
                     (is (empty? @delete-calls)
                         "Backspace at the beginning of a must preserve a and its child b.")))
           (p/finally done)))))
+
+(deftest shortcut-cut-and-delete-close-context-popup-test
+  (let [cut-calls (atom [])
+        event #js {:target #js {}}
+        popup-id :ls-context-menu-content-test
+        show-context-popup!
+        (fn []
+          (shui-popup/show! nil (fn [] [:div "ctx"])
+                            {:id popup-id
+                             :content-props {:class "w-[280px] ls-context-menu-content"}})
+          (state/set-state! :custom-context-menu/show? true))]
+    (with-redefs [state/selection? (constantly true)
+                  util/input? (constantly false)
+                  util/stop (fn [_])
+                  editor/cut-selection-blocks
+                  (fn [copy?]
+                    (swap! cut-calls conj copy?)
+                    (p/resolved nil))
+                  editor/clear-selection! (fn [])]
+      (try
+        (let [other-id :unrelated-popup]
+          (shui-popup/show! nil (fn [] [:div "other"])
+                            {:id other-id
+                             :content-props {:class "ls-preview-popup"}})
+          (show-context-popup!)
+          (editor/shortcut-cut event)
+          (is (= [true] @cut-calls))
+          (is (nil? (shui-popup/get-popup popup-id))
+              "Ctrl+X must close the block context popup after cutting the selected block.")
+          (is (some? (shui-popup/get-popup other-id))
+              "Unrelated popups stay open when cutting a selection.")
+          (is (false? (state/get-state :custom-context-menu/show?)))
+          (shui-popup/hide! other-id))
+
+        (show-context-popup!)
+        (editor/delete-selection event)
+        (is (= [true false] @cut-calls))
+        (is (nil? (shui-popup/get-popup popup-id))
+            "Delete must close the block context popup after removing the selected block.")
+        (is (false? (state/get-state :custom-context-menu/show?)))
+        (finally
+          (shui-popup/hide! popup-id)
+          (shui-popup/hide! :unrelated-popup)
+          (state/set-state! :custom-context-menu/show? false))))))
 
 (deftest cutting-selected-blocks-waits-for-the-structured-copy-test
   (async done
