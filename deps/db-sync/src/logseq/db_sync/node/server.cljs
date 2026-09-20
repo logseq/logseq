@@ -74,12 +74,18 @@
 
 (defn- reject-ws-upgrade!
   [^js socket status reason]
-  (.write socket
-          (str "HTTP/1.1 " status " Conflict\r\n"
+  (let [status-text (case status
+                      400 "Bad Request"
+                      403 "Forbidden"
+                      409 "Conflict"
+                      "Error")
+        body (str "{\"error\":\"" reason "\"}")]
+    (.end socket
+          (str "HTTP/1.1 " status " " status-text "\r\n"
                "Connection: close\r\n"
-               "Content-Type: application/json\r\n\r\n"
-               "{\"error\":\"" reason "\"}"))
-  (.destroy socket))
+               "Content-Type: application/json\r\n"
+               "Content-Length: " (js/Buffer.byteLength body) "\r\n\r\n"
+               body))))
 
 (defn- handle-ws-connection
   [ctx env request ^js socket]
@@ -158,8 +164,8 @@
                                              (attach-ws! ctx ws-socket)
                                              (handle-ws-connection ctx env request ws-socket)))
                            (reject-ws-upgrade! socket 409 "graph not ready"))))
-                     (.destroy socket)))
-                 (.destroy socket)))))
+                     (reject-ws-upgrade! socket 403 "access denied")))
+                 (reject-ws-upgrade! socket 400 "invalid sync path")))))
       (p/let [_ (js/Promise.
                  (fn [resolve]
                    (.listen server (:port cfg)

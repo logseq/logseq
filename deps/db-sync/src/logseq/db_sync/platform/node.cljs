@@ -32,19 +32,13 @@
   [^js res ^js response]
   (let [headers (headers->object (.-headers response))
         status (.-status response)]
-    (.writeHead res status headers)
-    (if-let [body (.-body response)]
-      (let [^js stream (try
-                         (let [Readable (.-Readable (js/require "stream"))]
-                           (when (and Readable (.-fromWeb Readable))
-                             (.fromWeb Readable body)))
-                         (catch :default _ nil))]
-        (if stream
-          (do
-            (.pipe stream res)
-            (js/Promise.resolve nil))
-          (p/let [buf (.arrayBuffer response)]
-            (.end res (js/Buffer.from buf)))))
+    (if (.-body response)
+      (p/let [buf (.arrayBuffer response)
+              node-buf (js/Buffer.from buf)]
+        (aset headers "content-length" (str (.-length node-buf)))
+        (.writeHead res status headers)
+        (.end res node-buf))
       (do
+        (.writeHead res status headers)
         (.end res)
         (js/Promise.resolve nil)))))
