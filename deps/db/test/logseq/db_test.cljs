@@ -450,3 +450,39 @@
       (is (= 300 (count (:entities (first results)))))
       (is (<= @attr-lookups 12)
           (str "expected bounded attr lookups, got " @attr-lookups)))))
+
+(deftest sort-page-random-blocks
+  (testing "non-consecutive blocks are sorted in page preorder"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "b1"
+                             :build/children [{:block/title "b1-1"}
+                                              {:block/title "b1-2"}]}
+                            {:block/title "b2"}
+                            {:block/title "b3"
+                             :build/children [{:block/title "b3-1"}]}]}]})
+          pick (fn [title] (db-test/find-block-by-content @conn title))
+          shuffled [(pick "b3-1") (pick "b2") (pick "b1-2") (pick "b1")]]
+      (is (= ["b1" "b1-2" "b2" "b3-1"]
+             (map :block/title (ldb/sort-page-random-blocks @conn shuffled))))))
+
+  (testing "sorting a few blocks doesn't traverse the whole page"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks (mapv (fn [i] {:block/title (str "b" i)})
+                                 (range 2000))}]})
+          picks (map #(db-test/find-block-by-content @conn (str "b" %))
+                     [7 1000 1999])
+          sort-by-order-calls (atom 0)
+          original-sort-by-order ldb/sort-by-order
+          sorted (with-redefs [ldb/sort-by-order
+                               (fn [blocks]
+                                 (swap! sort-by-order-calls inc)
+                                 (original-sort-by-order blocks))]
+                   (ldb/sort-page-random-blocks @conn picks))]
+      (is (= ["b7" "b1000" "b1999"] (map :block/title sorted)))
+      (is (<= @sort-by-order-calls (count picks))
+          (str "expected sibling sorts bounded by the selected blocks, got "
+               @sort-by-order-calls)))))
