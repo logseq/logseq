@@ -1,5 +1,5 @@
 type scope = Block | Page | Property | Tag
-type opts = { content : string }
+type opts = { content : string; include_hidden : bool }
 
 type parsed =
   | Parsed_block of opts
@@ -13,6 +13,7 @@ type action = {
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
   query : string;
+  include_hidden : bool;
 }
 
 val scope_of_parsed : parsed -> scope
