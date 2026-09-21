@@ -208,8 +208,14 @@
                      :block/tx-id block-tx-id
                      :block.temp/refs-count
                      (block-refs-count db entity-id)
+                     :block.temp/has-children?
+                     (block-has-children? db entity-id)
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
+        (and (:logseq.property/view-for block)
+             (not (contains? block :logseq.property.view/sort-groups-desc?)))
+        (assoc :logseq.property.view/sort-groups-desc? true)
+
         (property-entity? db entity-id)
         (assoc :property/closed-values
                (:property/closed-values
@@ -257,73 +263,159 @@
                     [(:block/uuid block) block])))
            requested)})))
 
+(def ^:private membership-row-attrs
+  #{:block/uuid :block/order :block/collapsed?
+    :block/closed-value-property
+    :logseq.property/created-from-property
+    :logseq.property/deleted-at})
+
+(defn- membership-row-attr-map
+  "One :eavt slice read covering every attribute needed to decide whether a
+   child is part of a parent's membership and whether its subtree expands."
+  [db child-id]
+  (into {}
+        (comp (filter #(contains? membership-row-attrs (:a %)))
+              (map (fn [{:keys [a v]}] [a v])))
+        (d/datoms db :eavt child-id)))
+
+(defn- recycled-chain?
+  "Whether the entity or any ancestor is marked deleted. Walks :block/parent
+   through eavt slices instead of entities so membership checks stay cheap."
+  [db entity-id]
+  (loop [eid entity-id
+         seen #{}]
+    (cond
+      (nil? eid) false
+      (contains? seen eid) false
+      (some? (eavt-scalar db eid :logseq.property/deleted-at)) true
+      :else (recur (eavt-scalar db eid :block/parent) (conj seen eid)))))
+
+(defn- membership-row
+  [db parent-uuid parent-recycled? {:keys [e]}]
+  (let [attrs (membership-row-attr-map db e)]
+    (when-not (or parent-recycled?
+                  (contains? attrs :logseq.property/deleted-at)
+                  (contains? attrs :block/closed-value-property)
+                  (contains? attrs :logseq.property/created-from-property))
+      (let [child-uuid (:block/uuid attrs)
+            order (:block/order attrs)]
+        (when-not (uuid? child-uuid)
+          (fail-render-read! "Invalid direct-child UUID"
+                             {:parent-uuid parent-uuid
+                              :block-uuid child-uuid}))
+        (when-not (string? order)
+          (fail-render-read! "Invalid direct-child order"
+                             {:parent-uuid parent-uuid
+                              :block-uuid child-uuid
+                              :block-order order}))
+        {:db/id e
+         :block/uuid child-uuid
+         :block/order order
+         :block/collapsed? (true? (:block/collapsed? attrs))}))))
+
+(defn- resolve-parent-id
+  [db parent-uuid]
+  (let [parent-id (:e (first (d/datoms db :avet :block/uuid parent-uuid)))]
+    (when-not parent-id
+      (fail-render-read! "Missing direct-children parent"
+                         {:parent-uuid parent-uuid}))
+    parent-id))
+
+(defn- parent-membership
+  [db parent-uuid parent-id parent-recycled?]
+  (let [parent-tx-id (block-revision db parent-id)]
+    (when-not (valid-revision? parent-tx-id)
+      (fail-render-read! "Invalid direct-children parent transaction ID"
+                         {:parent-uuid parent-uuid
+                          :block-tx-id parent-tx-id}))
+    {:parent-tx-id parent-tx-id
+     :rows (->> (d/datoms db :avet :block/parent parent-id)
+                (keep #(membership-row db parent-uuid parent-recycled? %))
+                (sort-by :block/order)
+                vec)}))
+
 (defn direct-children-membership
   [db parent-uuid]
   (when-not (uuid? parent-uuid)
     (fail-render-read! "Invalid direct-children parent UUID"
                        {:parent-uuid parent-uuid}))
-  (let [parent (d/entity db [:block/uuid parent-uuid])
-        parent-id (:db/id parent)
-        parent-tx-id (when parent (block-revision db parent-id))]
-    (when-not parent
-      (fail-render-read! "Missing direct-children parent"
-                         {:parent-uuid parent-uuid}))
-    (when-not (valid-revision? parent-tx-id)
-      (fail-render-read! "Invalid direct-children parent transaction ID"
-                         {:parent-uuid parent-uuid
-                          :block-tx-id parent-tx-id}))
+  (let [parent-id (resolve-parent-id db parent-uuid)
+        {:keys [parent-tx-id rows]}
+        (parent-membership db parent-uuid parent-id
+                           (recycled-chain? db parent-id))]
     {:basis-rev (render-basis-rev db)
      :parent-tx-id parent-tx-id
-     :items
-     (->> (d/datoms db :avet :block/parent parent-id)
-          (map #(d/entity db (:e %)))
-          (remove #(or (ldb/recycled? %)
-                       (ldb/closed-value? %)
-                       (:logseq.property/created-from-property %)))
-          (map (fn [child]
-                 (let [child-uuid (:block/uuid child)
-                       order (:block/order child)]
-                   (when-not (uuid? child-uuid)
-                     (fail-render-read! "Invalid direct-child UUID"
-                                        {:parent-uuid parent-uuid
-                                         :block-uuid child-uuid}))
-                   (when-not (string? order)
-                     (fail-render-read! "Invalid direct-child order"
-                                        {:parent-uuid parent-uuid
-                                         :block-uuid child-uuid
-                                         :block-order order}))
-                   [child-uuid order])))
-          (sort-by second)
-          vec)}))
+     :items (mapv (juxt :block/uuid :block/order) rows)}))
+
+(defn open-children-tree
+  "Membership for expanded nodes of the subtree, visited in document order (a
+   node's children come before its following siblings) and bounded to at most
+   `node-limit` expanded nodes. Nodes beyond the limit produce no [:children]
+   slot; the renderer loads them on demand when their rows mount."
+  ([db root-uuid]
+   (open-children-tree db root-uuid nil))
+  ([db root-uuid node-limit]
+   (when-not (uuid? root-uuid)
+     (fail-render-read! "Invalid direct-children parent UUID"
+                        {:parent-uuid root-uuid}))
+   (let [root-id (resolve-parent-id db root-uuid)
+         remaining0 (or node-limit ##Inf)]
+     (loop [pending [[root-id root-uuid (recycled-chain? db root-id)]]
+            seen #{}
+            remaining remaining0
+            children {}]
+       (if-let [[parent-id parent-uuid parent-recycled?] (when (pos? remaining)
+                                                           (peek pending))]
+         (let [pending (pop pending)]
+           (if (contains? seen parent-uuid)
+             (recur pending seen remaining children)
+             (let [{:keys [parent-tx-id rows]}
+                   (parent-membership db parent-uuid parent-id parent-recycled?)
+                   ;; Rows enqueued here passed every membership filter, so their
+                   ;; ancestry is already known to be recycled-free. Reverse so
+                   ;; the stack pops the first child first (document order).
+                   open-children
+                   (into [] (comp (remove :block/collapsed?)
+                                  (map (fn [row] [(:db/id row) (:block/uuid row) false])))
+                         (rseq rows))]
+               (recur (into pending open-children)
+                      (conj seen parent-uuid)
+                      (dec remaining)
+                      (assoc children parent-uuid
+                             {:parent-tx-id parent-tx-id
+                              :items (mapv (juxt :block/uuid :block/order) rows)})))))
+         children)))))
+
+(defn document-order-uuids
+  "First `limit` uuids in render order: a node's expanded children come before
+   its following siblings."
+  [children root-uuid limit]
+  (loop [pending (list root-uuid)
+         n limit
+         result []]
+    (if (and (pos? n) (seq pending))
+      (let [uuid (first pending)
+            items (mapv first (:items (get children uuid)))]
+        (recur (concat items (rest pending))
+               (dec n)
+               (conj result uuid)))
+      result)))
 
 (defn open-block-tree
   [db root-uuid]
-  (loop [pending [root-uuid]
-         seen #{}
-         block-uuids #{root-uuid}
-         children {}]
-    (if-let [parent-uuid (peek pending)]
-      (let [pending (pop pending)]
-        (if (contains? seen parent-uuid)
-          (recur pending seen block-uuids children)
-          (let [membership (direct-children-membership db parent-uuid)
-                child-uuids (mapv first (:items membership))
-                open-child-uuids
-                (remove #(true? (:block/collapsed?
-                                  (d/entity db [:block/uuid %])))
-                        child-uuids)]
-            (recur (into pending open-child-uuids)
-                   (conj seen parent-uuid)
-                   (into block-uuids child-uuids)
-                   (assoc children parent-uuid
-                          (dissoc membership :basis-rev))))))
-      (let [blocks (:blocks (canonical-blocks db (vec block-uuids)))
-            root-membership (get children root-uuid)]
-        (assoc root-membership
-               :blocks (select-keys blocks block-uuids)
-               :children children)))))
+  (let [children (open-children-tree db root-uuid)
+        block-uuids (into #{root-uuid}
+                          (mapcat (fn [{:keys [items]}] (map first items)))
+                          (vals children))
+        blocks (:blocks (canonical-blocks db (vec block-uuids)))
+        root-membership (get children root-uuid)]
+    (assoc root-membership
+           :blocks (select-keys blocks block-uuids)
+           :children children)))
 
 (def ^:private block-children-limit 100)
+
+(def ^:private block-refs-count-scan-limit 500)
 
 (defn- direct-child-blocks
   ([db block-id]
@@ -331,18 +423,10 @@
   ([db block-id reverse?]
    (direct-child-blocks db block-id reverse? false))
   ([db block-id reverse? include-property-block?]
-   (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
-                        (map :e)
-                        set)
-         blocks (if (>= (count child-ids) block-children-limit)
-                  (->> ((if reverse? d/rseek-datoms d/datoms) db :avet :block/order)
-                       (keep (fn [datom]
-                               (when (contains? child-ids (:e datom))
-                                 (d/entity db (:e datom))))))
-                  (cond->> child-ids
-                    true (keep #(d/entity db %))
-                    true ldb/sort-by-order
-                    reverse? reverse))]
+   (let [blocks (cond->> (d/datoms db :avet :block/parent block-id)
+                  true (keep #(d/entity db (:e %)))
+                  true ldb/sort-by-order
+                  reverse? reverse)]
      (cond->> blocks
        (not include-property-block?)
        (remove :logseq.property/created-from-property)
@@ -430,7 +514,11 @@
     0
 
     :else
-    (common-initial-data/get-block-refs-count db block-id)))
+    ;; Beyond the limit the exact count is deferred: the renderer fetches it
+    ;; through the on-demand [:block-ref-count uuid] resource when the value
+    ;; is actually displayed, instead of stalling block snapshots on a scan
+    ;; proportional to a heavily referenced page's inbound refs.
+    (common-initial-data/get-block-refs-count db block-id block-refs-count-scan-limit)))
 
 (defn- assoc-render-property-data
   [db block block-map]

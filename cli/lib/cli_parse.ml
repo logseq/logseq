@@ -286,7 +286,7 @@ let allowed_options_for_path path =
   else if
     path2_any path "search"
       (option_names [| "block"; "page"; "property"; "tag" |])
-  then option_names [| "content" |]
+  then option_names [| "content"; "include-hidden" |]
   else if path2 path "query" "list" then Vec.empty
   else if path1 path "query" then option_names [| "query"; "name"; "inputs" |]
   else if path1 path "show" then
@@ -921,6 +921,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "page" |] ->
         make [| "search"; "page" |]
@@ -929,6 +930,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "property" |] ->
         make [| "search"; "property" |]
@@ -937,6 +939,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "search"; "tag" |] ->
         make [| "search"; "tag" |]
@@ -945,6 +948,7 @@ let parse ?stdin argv =
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
+                  include_hidden = option_present "include-hidden" options;
                 }))
     | [| "query"; "list" |] ->
         make [| "query"; "list" |] (Query Query.Parsed_list)

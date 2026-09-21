@@ -714,6 +714,30 @@
           (remove (fn [b] (d/has-class? b "property-value-container"))))))
 
 #?(:cljs
+   (defn property-value-inner-block
+     "The real `.ls-block[blockid]` inside a property-value wrapper, if any."
+     [node]
+     (when (and node (d/has-class? node "property-value-container"))
+       (.querySelector node ".ls-block[blockid]"))))
+
+#?(:cljs
+   (defn unwrap-property-value-container
+     "Map a selected property-value wrapper to its inner block."
+     [node]
+     (or (property-value-inner-block node) node)))
+
+#?(:cljs
+   (defn selection-node-block-id
+     "Block UUID for a selected node, including text property-value wrappers."
+     [node]
+     (when (some-> node .-getAttribute)
+       (when-let [id (or (d/attr node "blockid")
+                         (some-> (property-value-inner-block node)
+                                 (d/attr "blockid")))]
+         (when (uuid-string? (str id))
+           (uuid id))))))
+
+#?(:cljs
    (defn get-selected-text
      []
      (utils/getSelectionText)))
