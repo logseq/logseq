@@ -5281,7 +5281,7 @@
        config
        child-uuids
        (fn [visible-uuids]
-         (render-loaded-block-row config block visible-uuids plain-block-list opts)))))
+         (render-loaded-block-row config block visible-uuids plain-block-list opts))))))
 
 (hsx/defc plain-block-list
   [config block-uuids]
