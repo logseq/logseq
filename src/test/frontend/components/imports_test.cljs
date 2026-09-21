@@ -1,6 +1,7 @@
 (ns frontend.components.imports-test
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.imports :as imports]
+            [frontend.context.i18n :as i18n]
             [frontend.config :as config]
             [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.notification :as notification]
@@ -329,6 +330,28 @@
                          (is (not (notify-status? @calls :error))
                              "A dropped RPC must not invent validation or ignored-file notifications.")
                          (is (= expected-repo (:git/current-repo @ui)))
+                         (is (nil? (:graph/importing @ui)))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
+(deftest file-graph-import-worker-restart-shows-interrupted-message
+  (async done
+         (let [previous-repo "logseq_db_old"
+               ui (atom {:git/current-repo previous-repo})
+               calls (atom [])]
+           (-> (run-file-graph-import!
+                {:ui ui
+                 :calls calls
+                 :options {:graph-name "Broken"}
+                 :invoke-import (fn [] (p/rejected (state/db-worker-uninitialized-error)))})
+               (p/then (fn [_]
+                         (is (some #(= [:notify :error (i18n/t :import/file-to-db-interrupted)] %)
+                                   @calls)
+                             "Worker unavailability shows the interrupted message, not the raw error.")
+                         (is (some #{[:event [:graph/switch previous-repo {:persist? false}]]} @calls)
+                             "Interrupted import switches back to the previous graph.")
+                         (is (some #{[:dialog-close :import-indicator]} @calls))
                          (is (nil? (:graph/importing @ui)))))
                (p/catch (fn [error]
                           (is false (str error))))

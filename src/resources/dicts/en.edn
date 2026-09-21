@@ -924,6 +924,7 @@
  :import/extract-inline-code-snippets "Extract inline code snippets as child blocks"
  :import/file-finished "Import finished!"
  :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
+ :import/file-to-db-interrupted "Import stopped because the database worker restarted. Please try the import again."
  :import/file-to-db-title "File to DB graph"
  :import/finishing "Finishing graph import"
  :import/graph-name-conflict "Please specify another name as another graph with this name already exists!"

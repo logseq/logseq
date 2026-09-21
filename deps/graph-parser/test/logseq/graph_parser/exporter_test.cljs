@@ -3093,3 +3093,25 @@ abc
             "root's alias pointing to mid dropped: mid already owns aliases")
         (is (some #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)
             "alias-owns-aliases reason recorded")))))
+
+(deftest split-pages-and-properties-tx-keeps-pages-without-titles
+  (let [split (some-> (resolve 'logseq.graph-parser.exporter/split-pages-and-properties-tx)
+                      deref)]
+    (is (fn? split))
+    (when (fn? split)
+      (let [import-state {:property-schemas (atom {:foo {:logseq.property/type :default}})
+                          :all-idents (atom {:foo :user.property/foo})
+                          :all-existing-page-uuids (atom {})}]
+        (testing "a page matching a new property but with no title stays a page"
+          (let [page-uuid (random-uuid)
+                result (split [{:block/name "foo" :block/uuid page-uuid}]
+                              [] {} import-state {})]
+            (is (= [{:block/name "foo" :block/uuid page-uuid}]
+                   (:pages-tx result)))
+            (is (empty? (:property-pages-tx result)))))
+        (testing "titled property pages still become properties"
+          (let [page-uuid (random-uuid)
+                result (split [{:block/name "foo" :block/title "Foo" :block/uuid page-uuid}]
+                              [] {} import-state {})]
+            (is (empty? (:pages-tx result)))
+            (is (seq (:property-pages-tx result)))))))))
