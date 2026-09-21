@@ -334,6 +334,43 @@
                          (canonical-block @conn (d/entity @conn [:block/uuid block-uuid])))))
           "The dashed chip matches on :db/ident after shallow-ref-identity."))))
 
+(deftest canonical-view-block-includes-default-groups-sort-order-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          default-view-uuid (random-uuid)
+          asc-view-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Page"
+                     :block/name "page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid default-view-uuid
+                     :block/tx-id 1
+                     :block/title "All"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table}
+                    {:db/id -3
+                     :block/uuid asc-view-uuid
+                     :block/tx-id 1
+                     :block/title "Ascending"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table
+                     :logseq.property.view/sort-groups-desc? false}])
+      (is (true? (:logseq.property.view/sort-groups-desc?
+                  (canonical-block @conn
+                                   (d/entity @conn [:block/uuid default-view-uuid]))))
+          "The renderer receives the default descending group order on view blocks.")
+      (is (false? (:logseq.property.view/sort-groups-desc?
+                   (canonical-block @conn
+                                    (d/entity @conn [:block/uuid asc-view-uuid]))))
+          "An explicit ascending selection must not be overwritten."))))
+
 (deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)

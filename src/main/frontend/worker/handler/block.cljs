@@ -210,6 +210,10 @@
                      (block-refs-count db entity-id)
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
+        (and (:logseq.property/view-for block)
+             (not (contains? block :logseq.property.view/sort-groups-desc?)))
+        (assoc :logseq.property.view/sort-groups-desc? true)
+
         (property-entity? db entity-id)
         (assoc :property/closed-values
                (:property/closed-values
