@@ -1364,36 +1364,24 @@
                  (contains? (get eid->attrs (second tx)) (nth tx 2))))
           tx-data))
 
-(defn- validation-error-entity-ids
-  "Stable ids used to match the same entity across db-before and db-after."
-  [{:keys [entity]}]
-  (cond-> #{}
-    (:block/uuid entity) (conj (:block/uuid entity))
-    (:db/ident entity) (conj (:db/ident entity))
-    (:db/id entity) (conj (:db/id entity))))
-
 (defn- introduced-validation-errors
   "Errors in after-errors that were not already present in before-errors.
-   Entities are matched by :block/uuid, :db/ident, or :db/id."
+   Entities are matched by :db/id, which is present on every validated entity
+   map and preserved by d/with for pre-existing entities."
   [before-errors after-errors]
-  (let [before-by-id (reduce (fn [idx error]
-                               (reduce (fn [idx id]
-                                         (assoc idx id error))
-                                       idx
-                                       (validation-error-entity-ids error)))
-                             {}
-                             before-errors)]
+  (let [before-errors-by-eid (into {}
+                                   (map (fn [{:keys [entity errors]}]
+                                          [(:db/id entity) errors]))
+                                   before-errors)]
     (keep (fn [error]
-            (let [before (some before-by-id (validation-error-entity-ids error))
-                  before-entity-errors (:errors before)
-                  after-entity-errors (:errors error)
+            (let [before-entity-errors (get before-errors-by-eid (-> error :entity :db/id))
                   introduced (if (nil? before-entity-errors)
-                               after-entity-errors
+                               (:errors error)
                                (not-empty
                                 (into {}
                                       (remove (fn [[attr error-val]]
-                                                (= error-val (get before-entity-errors attr)))
-                                              after-entity-errors))))]
+                                                (= error-val (get before-entity-errors attr))))
+                                      (:errors error))))]
               (when (seq introduced)
                 (assoc error :errors introduced))))
           after-errors)))
@@ -1404,7 +1392,7 @@
     (loop [tx-data (import-tx-data txs)]
       (let [db-after (:db-after (d/with db tx-data))
             validation (db-validate/validate-local-db! db-after)
-            errors (not-empty (vec (introduced-validation-errors before-errors (:errors validation))))]
+            errors (seq (introduced-validation-errors before-errors (:errors validation)))]
         (if errors
           (let [eid->attrs (disallowed-key-attrs errors)
                 tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
