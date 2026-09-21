@@ -40,7 +40,7 @@
 (defonce ^:private *repo->enabled? (atom {}))
 (defonce ^:private *repo->queued-page-jobs (atom {}))
 (defonce ^:private *repo->flush-timeout (atom {}))
-(defonce ^:private *repo->stem-index (atom {}))
+(defonce ^:private stem-index-cache (js/WeakMap.))
 
 (defn- normalize-unicode
   [s]
@@ -80,14 +80,6 @@
   (and (ldb/page? page)
        (not (ldb/journal? page))))
 
-(defn- pages-with-file-stem
-  [db stem]
-  (->> (d/datoms db :avet :block/name)
-       (map #(d/entity db (:e %)))
-       (filter #(and (non-journal-page? %)
-                     (= stem (normalize-file-stem (:block/title %)))))
-       (sort-by (comp str :block/uuid))))
-
 (defn- build-stem-index
   "One-time build of normalized file stem -> non-journal page uuids.
   Kept current incrementally by update-stem-index on each tx-report."
@@ -100,6 +92,13 @@
                 m)))
           {}
           (d/datoms db :avet :block/name)))
+
+(defn- stem-index
+  [db]
+  (or (.get stem-index-cache db)
+      (let [index (build-stem-index db)]
+        (.set stem-index-cache db index)
+        index)))
 
 (defn- update-stem-index
   "Recomputes index membership only for `page-ids` touched by a tx."
@@ -121,29 +120,23 @@
           index
           page-ids))
 
-(defn- stem-index-lookup
-  "Returns a `pages-with-file-stem`-compatible lookup backed by `index`."
-  [index]
-  (fn [db stem]
-    (->> (get index stem)
-         (keep #(d/entity db [:block/uuid %]))
-         (filter non-journal-page?)
-         (sort-by (comp str :block/uuid)))))
+(defn- pages-with-file-stem
+  [db stem]
+  (->> (get (stem-index db) stem)
+       (keep #(d/entity db [:block/uuid %]))
+       (sort-by (comp str :block/uuid))))
 
 (defn page-relative-path
   ([db page]
    (page-relative-path db page {}))
   ([db page {:keys [journal-file-stem-fn]
-             :or {journal-file-stem-fn journal-file-stem}
-             :as opts}]
+             :or {journal-file-stem-fn journal-file-stem}}]
    (when page
      (if (ldb/journal? page)
        (when-let [stem (normalize-file-stem (journal-file-stem-fn (:block/journal-day page)))]
          (str "journals/" stem ".md"))
        (when-let [stem (normalize-file-stem (:block/title page))]
-         (let [pages-with-stem (or (:pages-with-stem-fn opts)
-                                  pages-with-file-stem)
-               duplicate-pages (pages-with-stem db stem)
+         (let [duplicate-pages (pages-with-file-stem db stem)
                index (inc (or (first (keep-indexed
                                        (fn [idx p]
                                          (when (= (:block/uuid page) (:block/uuid p))
@@ -199,8 +192,7 @@
         (js/clearTimeout timeout-id))
       (swap! *repo->enabled? dissoc repo)
       (swap! *repo->queued-page-jobs dissoc repo)
-      (swap! *repo->flush-timeout dissoc repo)
-      (swap! *repo->stem-index dissoc repo)))
+      (swap! *repo->flush-timeout dissoc repo)))
   nil)
 
 (defn enabled?
@@ -678,15 +670,11 @@
   [repo {:keys [db-before db-after]} page-id opts]
   (let [before-page (d/entity db-before page-id)
         after-page (d/entity db-after page-id)
-        opts-before (if-let [f (:pages-with-stem-fn-before opts)]
-                      (assoc opts :pages-with-stem-fn f)
-                      opts)
-        old-relative-path (when before-page (page-relative-path db-before before-page opts-before))
+        old-relative-path (when before-page (page-relative-path db-before before-page opts))
         new-relative-path (when after-page (page-relative-path db-after after-page opts))]
     {:repo repo
      :page-id page-id
      :db db-after
-     :pages-with-stem-fn (:pages-with-stem-fn opts)
      :old-path (when old-relative-path (mirror-path repo old-relative-path))
      :new-path (when new-relative-path (mirror-path repo new-relative-path))
      :delete? (deleted-page? after-page)}))
@@ -723,7 +711,7 @@
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
 (defn- <run-job!
-  [platform* {:keys [repo db page-id old-path new-path delete?] :as job} opts]
+  [platform* {:keys [repo db page-id old-path new-path delete?]} opts]
   (cond
     delete?
     (if old-path
@@ -734,10 +722,7 @@
                    :reason :missing-old-path}))
 
     :else
-    (p/let [result (<mirror-page! repo db page-id
-                                 (assoc opts :platform platform*
-                                        :pages-with-stem-fn (or (:pages-with-stem-fn job)
-                                                                (:pages-with-stem-fn opts))))
+    (p/let [result (<mirror-page! repo db page-id (assoc opts :platform platform*))
             _ (when (and old-path
                          new-path
                          (not= old-path new-path)
@@ -753,17 +738,13 @@
     (if (and (enabled? repo)
              (supported-runtime? platform*))
       (let [affected-ids (affected-page-ids tx-report)
-            index-before (or (get @*repo->stem-index repo)
-                             (build-stem-index db-before))
+            index-before (stem-index db-before)
             index-after (update-stem-index index-before db-before db-after affected-ids)]
-        (swap! *repo->stem-index assoc repo index-after)
+        (.set stem-index-cache db-after index-after)
         (if (get-in tx-report [:tx-meta :from-disk?])
           (p/resolved {:status :skipped
                        :reason :from-disk})
-          (let [opts' (assoc opts
-                             :platform platform*
-                             :pages-with-stem-fn-before (stem-index-lookup index-before)
-                             :pages-with-stem-fn (stem-index-lookup index-after))
+          (let [opts' (assoc opts :platform platform*)
                 jobs (map #(page-job repo tx-report % opts')
                           affected-ids)]
             (if defer?
