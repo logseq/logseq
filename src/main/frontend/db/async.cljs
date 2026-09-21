@@ -19,10 +19,11 @@
   (let [blocks-by-uuid (into {}
                              (map (fn [[db-id block-uuid title parent-id]]
                                     [block-uuid
-                                     {:db/id db-id
-                                      :block/uuid block-uuid
-                                      :block/title title
-                                      :block/parent {:db/id parent-id}}]))
+                                     (cond-> {:db/id db-id
+                                              :block/uuid block-uuid
+                                              :block/title title}
+                                       (integer? parent-id)
+                                       (assoc :block/parent {:db/id parent-id}))]))
                              rows)]
     (vec (keep blocks-by-uuid ids))))
 
@@ -36,7 +37,7 @@
                        :where
                        [?e :block/uuid ?uuid]
                        [?e :block/title ?title]
-                       [?e :block/parent ?parent]]
+                       [(get-else $ ?e :block/parent :none) ?parent]]
                      ids)]
       (order-block-summaries ids rows))))
 
@@ -222,7 +223,8 @@
           {:id id
            :opts (select-keys opts [:all? :children? :properties :render-data? :root-render-data?
                                     :block-metadata?
-                                    :include-collapsed-children?])})
+                                    :include-collapsed-children?
+                                    :include-property-block?])})
         requests))
 
 (defn- <invoke-worker-get-blocks

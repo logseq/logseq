@@ -464,6 +464,13 @@ DROP TRIGGER IF EXISTS blocks_au;
   [q]
   (boolean (re-find #"\S\s+\S" q)))
 
+(defn- tag-title-query
+  [q]
+  (when (and (string? q)
+             (string/starts-with? q "#")
+             (not (re-find #"\s" q)))
+    (not-empty (subs q 1))))
+
 (defn- exact-title-query?
   [q]
   (not (re-find #"\s" q)))
@@ -589,7 +596,10 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           (cond-> {:id (str uuid)
                    :page (str (or (:block/uuid page) uuid))
-                   :title (if (page-or-object? block) title (sanitize title))}
+                   ;; Keyword index must match accent-stripped queries.
+                   ;; SQLite LIKE/NOCASE only folds ASCII, so page/object titles
+                   ;; cannot keep umlauts while queries are search-normalized.
+                   :title (sanitize title)}
             include-vector-title?
             (assoc :vector-title title))))
       (catch :default e
@@ -894,40 +904,6 @@ DROP TRIGGER IF EXISTS blocks_au;
                          (d/entity @conn [:block/uuid block-id]))]
       (include-search-block? conn block code-class option))))
 
-(defn- direct-page-results
-  [conn q code-class option limit]
-  (when (d/db? @conn)
-    (let [needle (some-> q
-                         (fuzzy/search-normalize true)
-                         fuzzy/clean-str
-                         string/lower-case)]
-      (when-not (string/blank? needle)
-      (let [pages (->> (d/datoms @conn :avet :block/name)
-                       (keep #(d/entity @conn (:e %)))
-                       (filter (fn [page]
-                                 (and (ldb/page? page)
-                                      (:block/name page)
-                                      (:block/title page))))
-                       (filter (fn [page]
-                                 (let [haystack (some-> (:block/title page)
-                                                        (fuzzy/search-normalize true)
-                                                        fuzzy/clean-str
-                                                        string/lower-case)]
-                                   (and haystack (string/includes? haystack needle)))))
-                       (take limit)
-                       vec)]
-        (keep (fn [page]
-                (search-result->block-result
-                 conn
-                 q
-                 code-class
-                 option
-                 {:id (str (:block/uuid page))
-                  :page (str (:block/uuid page))
-                  :title (:block/title page)
-                  search-result-block-key page}))
-              pages))))))
-
 (defn- vector-search-blocks
   [vector-index {:keys [limit page query-embedding]}]
   (when-let [query-fn (:query vector-index)]
@@ -959,68 +935,70 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([conn search-db vector-index q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
                                    :as option
                                    :or {enable-snippet? true}}]
-   (when-not (string/blank? q)
-     (let [option (assoc option :enable-snippet? enable-snippet?)
-           match-input (get-match-input q)
-           non-match-input (when (<= (count q) 2)
-                             (str "%" (string/replace q #"\s+" "%") "%"))
-           limit (or limit 100)
-           limit-p (or search-limit limit)
-           exact-title-result (when (and (not page-only?)
-                                         (exact-title-query? q))
-                                (search-blocks-exact-title-aux search-db q page limit-p))
-           enough-exact-title-results? (>= (count exact-title-result) limit-p)
-           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
-           select "select id, page, title, rank from blocks_fts where "
-           pg-sql (if page "page = ? and" "")
-           match-sql (if (ns-util/namespace-page? q)
-                       (str select pg-sql " title match ? or title match ? limit ?")
-                       (str select pg-sql " title match ? limit ?"))
-           non-match-sql (str select pg-sql " title like ? limit ?")
-           matched-result (when (and (not page-only?)
-                                     (not enough-exact-title-results?))
-                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-           non-match-result (when (and (not page-only?) non-match-input)
-                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
-                                   (map (fn [result]
-                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-           skip-fuzzy? (or enough-exact-title-results?
-                           (and (multi-term-query? q)
-                                (seq matched-result)))
-           fuzzy-result (when-not skip-fuzzy?
-                          (search-blocks-fuzzy-aux search-db q page limit))
-           vector-result (when (and (not page-only?)
-                                    (:feature/enable-semantic-search? option))
-                           (vector-search-blocks vector-index {:limit limit-p
-                                                               :page page
-                                                               :query-embedding (:query-embedding option)}))
-           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
-           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
-           ;;      (prn :debug :keyword-search-result item))
-           combined-result (combine-results @conn
-                                            (concat exact-title-result fuzzy-result matched-result non-match-result)
-                                            vector-result
-                                            q)
-           code-class (when code-only?
-                        (d/entity @conn :logseq.class/Code-block))
-           matched-count (when include-matched-count?
-                           (count (filter #(search-result-visible? conn code-class option %) combined-result)))
-           result (->> combined-result
-                       (common-util/distinct-by :id)
-                       (keep #(search-result->block-result conn q code-class option %)))
-           result (cond->> result
-                    (not code-only?)
-                    (concat (direct-page-results conn q code-class option limit))
-                    true
-                    (remove nil?)
-                    true
-                    (common-util/distinct-by :block/uuid))
-           matched-count (when include-matched-count?
-                           (max (or matched-count 0) (count result)))]
-       (if include-matched-count?
-         {:items (take limit result)
-          :matched-count matched-count}
-         (take limit result))))))
+   (let [tag-title? (boolean (tag-title-query q))
+         q (or (tag-title-query q) q)]
+     (when-not (string/blank? q)
+       (let [option (assoc option :enable-snippet? enable-snippet?)
+             match-input (get-match-input q)
+             non-match-input (when (<= (count q) 2)
+                               (str "%" (string/replace q #"\s+" "%") "%"))
+             limit (or limit 100)
+             limit-p (or search-limit limit)
+             exact-title-result (when (and (not page-only?)
+                                           (exact-title-query? q))
+                                  (search-blocks-exact-title-aux search-db q page limit-p))
+             enough-exact-title-results? (>= (count exact-title-result) limit-p)
+             ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
+             select "select id, page, title, rank from blocks_fts where "
+             pg-sql (if page "page = ? and" "")
+             match-sql (if (ns-util/namespace-page? q)
+                         (str select pg-sql " title match ? or title match ? limit ?")
+                         (str select pg-sql " title match ? limit ?"))
+             non-match-sql (str select pg-sql " title like ? limit ?")
+             matched-result (when (and (not page-only?)
+                                       (not tag-title?)
+                                       (not enough-exact-title-results?))
+                              (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+             non-match-result (when (and (not page-only?) (not tag-title?) non-match-input)
+                                (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
+                                     (map (fn [result]
+                                            (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+             skip-fuzzy? (or enough-exact-title-results?
+                             tag-title?
+                             (and (multi-term-query? q)
+                                  (seq matched-result)))
+             fuzzy-result (when-not skip-fuzzy?
+                            (search-blocks-fuzzy-aux search-db q page limit))
+             vector-result (when (and (not page-only?)
+                                      (:feature/enable-semantic-search? option))
+                             (vector-search-blocks vector-index {:limit limit-p
+                                                                 :page page
+                                                                 :query-embedding (:query-embedding option)}))
+             ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
+             ;;  _ (doseq [item (concat fuzzy-result matched-result)]
+             ;;      (prn :debug :keyword-search-result item))
+             combined-result (combine-results @conn
+                                              (concat exact-title-result fuzzy-result matched-result non-match-result)
+                                              vector-result
+                                              q)
+             code-class (when code-only?
+                          (d/entity @conn :logseq.class/Code-block))
+             matched-count (when include-matched-count?
+                             (count (filter #(search-result-visible? conn code-class option %) combined-result)))
+             result (->> combined-result
+                         (common-util/distinct-by :id)
+                         (keep #(search-result->block-result conn q code-class option %)))
+             result (cond->> result
+                      true
+                      (remove nil?)
+                      true
+                      (common-util/distinct-by :block/uuid))
+             matched-count (when include-matched-count?
+                             (max (or matched-count 0) (count result)))]
+         (if include-matched-count?
+           {:items (take limit result)
+            :matched-count matched-count}
+           (take limit result)))))))
 
 (defn upsert-vector-blocks!
   [vector-index blocks]

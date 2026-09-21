@@ -156,6 +156,49 @@
      :graph ["--type" "--file" "--edn-options" "--pretty-print"]}},
    :tags [:graph],
    :extends :non-sync/graph-json-env}
+  {:id "graph-export-selected-nodes-edn-options",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Export Contract Page\"} :blocks [{:block/title \"selected node survives export\" :block/uuid #uuid \"13071000-0000-4000-8000-000000000001\" :build/keep-uuid? true}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}} --edn-options '{:export-type :selected-nodes :node-ids [[:block/uuid #uuid \"13071000-0000-4000-8000-000000000001\"]]}' >/dev/null"
+    "grep -q 'selected node survives export' {{export-path-arg}}"],
+   :expect {:exit 0},
+   :covers
+   {:commands ["graph export"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--file" "--edn-options"]}},
+   :tags [:graph],
+   :extends :non-sync/graph-json-env}
+  {:id "graph-export-edn-options-timestamps"
+   :extends :non-sync/graph-json-env
+   :tags [:graph :edn-options]
+   :setup ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} upsert page --page TimestampPage >/dev/null"
+           "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} upsert block --target-page TimestampPage --content TimestampBlock >/dev/null"]
+   :cmds ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output edn --graph {{graph-arg}} query --query '[:find (pull ?e [:block/title :block/created-at :block/updated-at]) :where [?e :block/title ?t] [(contains? #{\"TimestampPage\" \"TimestampBlock\"} ?t)]]' > {{export-path-arg}}.stored"
+          "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} graph export --type edn --file {{export-path-arg}} --edn-options '{:export-type :graph-human :graph-options {:include-timestamps? true}}' >/dev/null"
+          "bb -e '(require (quote [clojure.edn :as edn])) (let [read-edn #(edn/read-string {:readers {(quote transit/time) identity}} (slurp %)) x (read-edn (first *command-line-args*)) stored (-> (read-edn (second *command-line-args*)) :data :result) p (first (filter #(= \"TimestampPage\" (get-in % [:page :block/title])) (:pages-and-blocks x))) actual (into {} (map (juxt :block/title identity) (cons (:page p) (:blocks p))))] (assert (= 2 (count stored))) (doseq [[node] stored k [:block/created-at :block/updated-at]] (assert (some? (get node k))) (assert (= (get node k) (get-in actual [(:block/title node) k])))))' {{export-path-arg}} {{export-path-arg}}.stored"]
+   :expect {:exit 0}
+   :covers {:commands ["graph export"] :options {:graph ["--edn-options"]}}}
+  {:id "graph-export-edn-options-partial"
+   :extends :non-sync/graph-json-env
+   :tags [:graph :edn-options]
+   :setup ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} upsert page --page TimestampPage >/dev/null"
+           "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} upsert block --target-page TimestampPage --content TimestampBlock >/dev/null"]
+   :cmds ["BLOCK_ID=$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} query --query '[:find ?e . :where [?e :block/title \"TimestampBlock\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])'); PAGE_ID=$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} query --query '[:find ?e . :where [?e :block/title \"TimestampPage\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])'); BLOCK_UUID=$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} query --query '[:find ?u . :where [?e :block/title \"TimestampBlock\"] [?e :block/uuid ?u]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])'); for options in \"{:export-type :block :block-id $BLOCK_ID}\" \"{:export-type :page :page-id $PAGE_ID}\" \"{:export-type :selected-nodes :node-ids [[:block/uuid #uuid \\\"$BLOCK_UUID\\\"]]}\" \"{:export-type :view-nodes :rows [#uuid \\\"$BLOCK_UUID\\\"] :group-by? false}\" \"{:export-type :view-nodes :rows {{:arbitrary-label true} [$BLOCK_ID]} :group-by? true}\"; do {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} graph export --type edn --file {{export-path-arg}} --edn-options \"$options\" >/dev/null || exit 1; grep -q TimestampBlock {{export-path-arg}} || exit 1; done"
+          "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} graph export --type edn --file {{export-path-arg}} --edn-options '{:export-type :graph-ontology :graph-options {:catch-validation-errors? false}}' >/dev/null"
+          "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json --graph {{graph-arg}} graph export --type edn --file {{export-path-arg}} --edn-options '{}' >/dev/null"
+          "grep -q ':datoms' {{export-path-arg}}"]
+   :expect {:exit 0}
+   :covers {:commands ["graph export"] :options {:graph ["--edn-options"]}}}
+  {:id "graph-export-edn-options-invalid"
+   :extends :non-sync/graph-json-env
+   :tags [:graph :edn-options]
+   :setup []
+   :cmds ["set -eu; printf 'existing export\\n' > {{export-path-arg}}; cp {{export-path-arg}} {{export-path-arg}}.original; for mode in human json edn; do for options in '{:export-type :graph-human :include-timestamps? true}' '{:export-type :graph-human :include-timestamps? false :graph-options {:include-timestamps? true}}' '{:export-type :graph-human :graph-options {:typo true}}' '{:no-such-option true}' '{:export-type :graph-human :graph-options {:catch-validation-errors? true :include-timestamps? nil}}' '{:export-type :block}' '{:graph-options {:include-timestamps? false}}'; do for file in {{export-path-arg}} {{export-path-arg}}.absent; do if {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output \"$mode\" --graph {{graph-arg}} graph export --type edn --file \"$file\" --edn-options \"$options\" > {{export-path-arg}}.error; then cat {{export-path-arg}}.error; exit 1; fi; grep -q invalid-options {{export-path-arg}}.error; cmp {{export-path-arg}} {{export-path-arg}}.original; test ! -e {{export-path-arg}}.absent; done; done; done"]
+   :expect {:exit 0}
+   :covers {:commands ["graph export"] :options {:graph ["--edn-options"]}}}
   {:tags [:graph],
    :extends :non-sync/source-graph-json-env,
    :expect
@@ -391,6 +434,26 @@
      :list ["--fields" "--limit" "--sort" "--order"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "created-entity-result-metadata",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case metadata"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-block",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case block"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-task",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case task"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
+  {:id "created-entity-result-asset",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case asset"],
+   :expect {:exit 0},
+   :tags [:upsert :created-entity-result]}
   {:id "block-upsert-and-show-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
@@ -750,7 +813,7 @@
    :extends :non-sync/graph-json-env}
   {:id "block-upsert-blocks-inline-property-missing-does-not-create-target-page-json",
    :cmds
-   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]' 2>&1)\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]')\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
    :expect
    {:exit 0,
     :stdout-contains ["property-not-found"]},
@@ -1418,4 +1481,13 @@
     :options
     {:global ["--config" "--root-dir" "--output"],
      :doctor ["--dev-script"]}},
-   :tags [:doctor :smoke]}]}
+   :tags [:doctor :smoke]}
+  {:id "graph-deletion-worker-lifecycle"
+   :cmds ["python3 {{repo-root-arg}}/cli-e2e/scripts/graph_deletion_lifecycle_test.py"]
+   :tags [:graph :lifecycle]}
+  {:id "graph-lifecycle-cli-followups"
+   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/cli_build_revision_test.mjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_cli_test.cjs"]
+   :tags [:graph :lifecycle]}
+  {:id "graph-lifecycle-process-protocol"
+   :cmds ["node --test {{repo-root-arg}}/cli-e2e/scripts/graph_ownership_test.cjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_protocol_test.cjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_upgrade_test.cjs {{repo-root-arg}}/cli-e2e/scripts/graph_lifecycle_startup_test.cjs"]
+   :tags [:graph :lifecycle]}]}

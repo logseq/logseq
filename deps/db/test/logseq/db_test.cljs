@@ -81,6 +81,59 @@
     (is (= "Apr 11th, 2026"
            (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
 
+(defn- create-sibling-conn
+  [middle-attrs]
+  (let [conn (db-test/create-conn)]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/title "page"
+                   :block/name "page"}
+                  {:db/id -2
+                   :db/ident :user.property/p}
+                  {:db/id -3
+                   :block/title "ordinary before"
+                   :block/parent -1
+                   :block/order "a0"}
+                  (merge
+                   {:db/id -4
+                    :block/title "property value"
+                    :block/parent -1
+                    :block/order "a1"}
+                   middle-attrs)
+                  {:db/id -5
+                   :block/title "ordinary after"
+                   :block/parent -1
+                   :block/order "a2"}])
+    conn))
+
+(defn- block-by-title
+  [db title]
+  (d/entity db
+            (d/q '[:find ?b .
+                   :in $ ?title
+                   :where [?b :block/title ?title]]
+                 db title)))
+
+(deftest ordinary-sibling-skips-created-from-property-children
+  (let [conn (create-sibling-conn
+              {:logseq.property/created-from-property -2})
+        before (block-by-title @conn "ordinary before")
+        after (block-by-title @conn "ordinary after")]
+    (is (some? before))
+    (is (some? after))
+    (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
+    (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
+
+(deftest ordinary-sibling-skips-closed-value-property-children
+  (let [conn (create-sibling-conn
+              {:block/closed-value-property -2})
+        before (block-by-title @conn "ordinary before")
+        after (block-by-title @conn "ordinary after")]
+    (is (some? before))
+    (is (some? after))
+    (is (= (:db/id before) (:db/id (ldb/get-left-sibling after))))
+    (is (= (:db/id after) (:db/id (ldb/get-right-sibling before))))))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties
@@ -397,3 +450,39 @@
       (is (= 300 (count (:entities (first results)))))
       (is (<= @attr-lookups 12)
           (str "expected bounded attr lookups, got " @attr-lookups)))))
+
+(deftest sort-page-random-blocks
+  (testing "non-consecutive blocks are sorted in page preorder"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "b1"
+                             :build/children [{:block/title "b1-1"}
+                                              {:block/title "b1-2"}]}
+                            {:block/title "b2"}
+                            {:block/title "b3"
+                             :build/children [{:block/title "b3-1"}]}]}]})
+          pick (fn [title] (db-test/find-block-by-content @conn title))
+          shuffled [(pick "b3-1") (pick "b2") (pick "b1-2") (pick "b1")]]
+      (is (= ["b1" "b1-2" "b2" "b3-1"]
+             (map :block/title (ldb/sort-page-random-blocks @conn shuffled))))))
+
+  (testing "sorting a few blocks doesn't traverse the whole page"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks (mapv (fn [i] {:block/title (str "b" i)})
+                                 (range 2000))}]})
+          picks (map #(db-test/find-block-by-content @conn (str "b" %))
+                     [7 1000 1999])
+          sort-by-order-calls (atom 0)
+          original-sort-by-order ldb/sort-by-order
+          sorted (with-redefs [ldb/sort-by-order
+                               (fn [blocks]
+                                 (swap! sort-by-order-calls inc)
+                                 (original-sort-by-order blocks))]
+                   (ldb/sort-page-random-blocks @conn picks))]
+      (is (= ["b7" "b1000" "b1999"] (map :block/title sorted)))
+      (is (<= @sort-by-order-calls (count picks))
+          (str "expected sibling sorts bounded by the selected blocks, got "
+               @sort-by-order-calls)))))
