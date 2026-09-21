@@ -2185,7 +2185,9 @@
         height-key [(state/resolve-container-id (:container-id config'))
                     (:block/uuid block)]
         forced? (rfx/use-sub [:ui/anchor-mount (:block/uuid block)])
-        [near? set-near!] (hooks/use-state false)]
+        ;; Lazy mounting only applies inside the standalone page outliner;
+        ;; embedded containers mount children eagerly.
+        [near? set-near!] (hooks/use-state (not (:virtualize? config')))]
     (hooks/use-layout-effect!
      (fn []
        (when-not near?
@@ -4916,7 +4918,9 @@
   [config block & {:as opts}]
   (let [block-uuid (if (uuid? block) block (:block/uuid block))]
     (when block-uuid
-      (subscribed-block-row config block-uuid opts))))
+      ;; An embedded block render (view row, query result, property value, ...)
+      ;; is its own container, not the standalone page outliner.
+      (subscribed-block-row (dissoc config :virtualize?) block-uuid opts))))
 
 (defn divide-lists
   [[f & l]]
@@ -5332,14 +5336,18 @@
 
 (defn- use-virtual-list-opts
   "Shared virtualized-list wiring for flat block-uuid lists: scroll container,
-   item identity, overscan, and selection-range bookkeeping."
+   item identity, overscan, and selection-range bookkeeping. Only the
+   standalone page outliner (config :virtualize?) window-renders; pages shown
+   inside other containers (views, journals, references, sidebar, previews)
+   always render their block lists in full."
   [config block-uuids]
   (let [disable-virtualized? (util/rtc-test-without-virtualization?)
         block-uuids (vec block-uuids)
         blocks-count (count block-uuids)
         virtualized? (and (not disable-virtualized?)
                           (or (util/force-virtualization?)
-                              (>= blocks-count 64)))
+                              (and (:virtualize? config)
+                                   (>= blocks-count 64))))
         selection-block-ids (or (:selection/block-ids config) block-uuids)
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
@@ -5518,9 +5526,10 @@
        {:id id
         :class (when doc-mode? "document-mode")
         :containerid container-id}
-       (plain-block-list (assoc config
-                                :blocks-node-id id
-                                :container-id container-id)
+       (plain-block-list (-> config
+                             (dissoc :virtualize?)
+                             (assoc :blocks-node-id id
+                                    :container-id container-id))
                          block-uuids)])))
 
 (defn- grouped-blocks-container
