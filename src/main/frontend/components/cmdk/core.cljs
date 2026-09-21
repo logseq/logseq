@@ -232,11 +232,16 @@
        pages))
 
 (defmethod load-results :initial [_ state]
-  (let [!results (::results state)]
+  (let [!input (::input state)
+        !results (::results state)]
     (p/let [recent-pages (db-recent-handler/get-recent-pages)]
-      (reset! !results (assoc-in default-results
-                                 [:recently-updated-pages :items]
-                                 (recent-page-items recent-pages))))))
+      ;; get-recent-pages is async. A typed search can finish first; resetting
+      ;; the whole results atom would wipe those nodes.
+      (when (and (string/blank? @!input)
+                 (not (:group @(::filter state))))
+        (reset! !results (assoc-in default-results
+                                   [:recently-updated-pages :items]
+                                   (recent-page-items recent-pages)))))))
 
 ;; The commands search uses the command-palette handler
 (defn- translate-locale
@@ -540,6 +545,13 @@
           (load-results :recently-updated-pages state)
           ;; (load-results :recents state)
           )))))
+
+(defn- refresh-results-key
+  [state]
+  [(state/get-current-repo)
+   @(::input state)
+   (:group @(::filter state))
+   (get-action)])
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -1020,12 +1032,23 @@
 
 (defn- refresh-results!
   [state]
-  (persist-cmdk-query-state! state)
-  (load-results :default state))
+  (let [refresh-key (refresh-results-key state)]
+    (when-not (= refresh-key @(::last-refresh-key state))
+      (reset! (::last-refresh-key state) refresh-key)
+      (persist-cmdk-query-state! state)
+      (load-results :default state))))
+
+(def search-debounce-ms 300)
 
 (defn make-search-debouncer
   [refresh-fn]
-  (util/cancelable-debounce refresh-fn 150))
+  (util/cancelable-debounce refresh-fn search-debounce-ms))
+
+(defn search-on-input-event?
+  "Typing updates the input immediately. Search waits for the debounced
+  refresh, except for an explicit refresh after composition ends."
+  [refresh? composing? composing-end?]
+  (and refresh? (or (not composing?) composing-end?)))
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value) true))
@@ -1046,7 +1069,7 @@
      (when container
        (set! (.-scrollTop container) 0))
      ;; retrieve the load-results function and update all the results
-     (when (and refresh? (or (not composing?) composing-end?))
+     (when (search-on-input-event? refresh? composing? composing-end?)
        (refresh-results! state)))))
 
 (defn- open-current-item-link
@@ -1084,7 +1107,10 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
-        composing? (util/goog-event-is-composing? e)
+        ;; Native addEventListener keydown, not goog.events. Include keyCode 229 /
+        ;; key "Process" so macOS IME Enter commits composition instead of running
+        ;; the highlighted action (logseq/db-test#1154).
+        composing? (util/native-event-is-composing? e)
         shift? (.-shiftKey e)
         highlighted-group (some-> (state->highlighted-item state) :group)
         show-less (fn []
@@ -1197,7 +1223,7 @@
                                (.focus el)
                                (.select el)))
                            0))]
-         (load-results :default state)
+         (refresh-results! state)
          (fn []
            (when timeout-id
              (js/clearTimeout timeout-id)))))
@@ -1356,6 +1382,7 @@
      ::accel-start-ts (atom nil)
      ::highlighted-item (atom nil)
      ::focus-source (atom :keyboard)
+     ::last-refresh-key (atom nil)
      ::results (atom default-results)}))
 
 (defn- cmdk-will-unmount

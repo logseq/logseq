@@ -48,7 +48,7 @@
   [subscribe! snapshot key]
   (snapshot-value (use-external-store-snapshot subscribe! snapshot key)))
 
-(defn- use-external-store-projection
+(defn- use-external-store-projection-snapshot
   [subscribe! snapshot key project]
   (let [key (use-graph-key key)
         projection-ref (react/useRef nil)
@@ -71,8 +71,28 @@
                                     {:source source :snapshot projected})
                               projected))))
                       #js [snapshot key project])
-        result (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
-    (snapshot-value result)))
+        {:keys [status] :as result}
+        (react/useSyncExternalStore subscribe get-snapshot get-snapshot)]
+    (when-not (contains? #{:ready :loading :missing :error} status)
+      (throw (ex-info "Invalid renderer subscription snapshot"
+                      {:key key :snapshot result})))
+    result))
+
+(defn- use-external-store-projection
+  [subscribe! snapshot key project]
+  (snapshot-value
+   (use-external-store-projection-snapshot subscribe! snapshot key project)))
+
+(defn- subscribe-nothing!
+  [_key _listener]
+  (fn []))
+
+(def ^:private nil-snapshot-value
+  {:status :ready :value nil})
+
+(defn- nil-snapshot
+  [_key]
+  nil-snapshot-value)
 
 (defn use-block
   [block-uuid]
@@ -110,23 +130,31 @@
                                  block-uuid project))
 
 (defn use-children
+  "Children ids for `parent-uuid`. A nil uuid subscribes to nothing and reads
+   as nil — collapsed rows pass nil so children load only when expanded."
   [parent-uuid]
-  (use-external-store subs/subscribe-children! subs/children-snapshot parent-uuid))
+  (let [subscribe! (if parent-uuid subs/subscribe-children! subscribe-nothing!)
+        snapshot (if parent-uuid subs/children-snapshot nil-snapshot)]
+    (use-external-store subscribe! snapshot parent-uuid)))
+
+(defn peek-children
+  "Synchronous read of a children slot's ordered uuid vector without
+   subscribing. Returns nil while the slot is unloaded."
+  [parent-uuid]
+  (let [{:keys [status value]} (subs/children-snapshot parent-uuid)]
+    (when (= :ready status) value)))
 
 (defn use-resource
   [resource-key]
   (use-external-store subs/subscribe-resource! subs/resource-snapshot resource-key))
 
-(defn- subscribe-nothing!
-  [_key _listener]
-  (fn []))
-
-(def ^:private nil-resource-snapshot-value
-  {:status :ready :value nil})
-
-(defn- nil-resource-snapshot
-  [_key]
-  nil-resource-snapshot-value)
+(defn use-block-projection-snapshot
+  "Status-aware `use-block-projection`. A nil uuid reads as a ready nil value
+   so a caller can wait on an upstream lookup without conditional hooks."
+  [block-uuid project]
+  (let [subscribe! (if block-uuid subs/subscribe-block! subscribe-nothing!)
+        snapshot (if block-uuid subs/block-snapshot nil-snapshot)]
+    (use-external-store-projection-snapshot subscribe! snapshot block-uuid project)))
 
 (defn use-resource-snapshot
   [resource-key]
@@ -135,5 +163,5 @@
                      subscribe-nothing!)
         snapshot (if resource-key
                    subs/resource-snapshot
-                   nil-resource-snapshot)]
+                   nil-snapshot)]
     (use-external-store-snapshot subscribe! snapshot resource-key)))

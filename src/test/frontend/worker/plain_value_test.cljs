@@ -92,6 +92,40 @@
     (is (= value-uuid (:block/uuid value)))
     (is (= "11111111-1111-1111-1111-111111111111" (:block/title value)))))
 
+(deftest asset-property-values-keep-render-fields
+  (let [conn (d/create-conn db-schema/schema)
+        asset-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        host-uuid #uuid "33333333-3333-3333-3333-333333333333"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.property/cover
+                        :block/title "Cover"
+                        :logseq.property/type :asset
+                        :db/valueType :db.type/ref
+                        :db/cardinality :db.cardinality/one
+                        :block/tags :logseq.class/Property}
+                       {:db/id -2
+                        :block/uuid asset-uuid
+                        :block/title "poster"
+                        :block/tags :logseq.class/Asset
+                        :logseq.property.asset/type "webp"
+                        :logseq.property.asset/width 640
+                        :logseq.property.asset/height 480}
+                       {:db/id -3
+                        :block/uuid host-uuid
+                        :block/title "Host"
+                        :block/name "host"
+                        :block/tags :logseq.class/Page
+                        :user.property/cover -2}])
+    (let [db @conn
+          host (d/entity db [:block/uuid host-uuid])
+          value (:user.property/cover (plain-value/entity-forward-map db host {}))]
+      (is (= asset-uuid (:block/uuid value)))
+      (is (= "webp" (:logseq.property.asset/type value)))
+      (is (= 640 (:logseq.property.asset/width value)))
+      (is (= 480 (:logseq.property.asset/height value)))
+      (is (not= {:db/id (:db/id value)} value)))))
+
 (deftest entity-forward-map-excludes-requested-attributes
   (let [[db host _target-uuid _value-uuid] (property-value-db :default {})
         result (plain-value/entity-forward-map db host {:exclude-attrs #{:block/name
@@ -99,6 +133,12 @@
     (is (not (contains? result :block/name)))
     (is (not (contains? result :user.property/related)))
     (is (= "Host" (:block/title result)))))
+
+(deftest entity-forward-map-includes-own-property-keys
+  (let [[db host _target-uuid _value-uuid] (property-value-db :default {})
+        result (plain-value/entity-forward-map db host {})]
+    (is (some #{:user.property/related} (:block.temp/property-keys result))
+        "Own property idents are persisted so renderer collapse can see them.")))
 
 (deftest get-block-display-properties-use-resolved-node-values
   (let [[db host target-uuid _value-uuid]

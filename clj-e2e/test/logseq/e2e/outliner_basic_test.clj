@@ -315,6 +315,17 @@
         (util/wait-timeout 500)
         (is (= immediate (editor-state)))))))
 
+(deftest held-backspace-does-not-duplicate-merged-content-test
+  (testing "Repeated Backspace cannot merge the same block twice"
+    (p/new-page "held backspace merge")
+    (b/new-blocks ["Foo" "" "Foo" "" "Foo" ""])
+    (util/repeat-keyboard 75 "Backspace")
+    (util/wait-timeout 500)
+    (let [editor-content (util/get-edit-content)
+          block-contents (util/get-page-blocks-contents)]
+      (is (not= "FooFoo" editor-content))
+      (is (not-any? #{"FooFoo"} block-contents)))))
+
 (deftest rapid-retype-before-enter-keeps-the-edit-test
   (testing "Backspace, retype, and Enter keep the retyped content"
     (b/open-last-block)

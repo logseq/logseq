@@ -13,11 +13,13 @@
   (if (common-util/wrapped-by-quotes? s)
     s
     (let [quoted-page-ref
-          (fn [matches]
-            (let [match' (string/replace (second matches) "#" tag-placeholder)]
-              (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
+          (fn [[match page-name]]
+            (if (some? page-name)
+              (let [page-name' (string/replace page-name "#" tag-placeholder)]
+                (str "\"" page-ref/left-brackets page-name' page-ref/right-brackets "\""))
+              match))]
       (some-> s
-              (string/replace #"\"?\[\[(.*?)\]\]\"?" quoted-page-ref)
+              (string/replace #"\"(?:\\.|[^\"\\])*\"|\[\[(.*?)\]\]" quoted-page-ref)
               (string/replace #"\(between ([^\)]+)\)"
                               (fn [[_ x]]
                                 (->> (string/split x #" ")

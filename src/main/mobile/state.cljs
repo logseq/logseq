@@ -21,11 +21,16 @@
 (defn use-tab [] (hooks/use-atom *tab))
 
 (defonce *popup-data (atom nil))
+(defonce *popup-presenting? (atom false))
 (defn set-popup!
   [data]
   (reset! *popup-data data)
   (when data
     (state/pub-event! [:mobile/clear-edit])))
+
+(defn set-popup-presenting!
+  [presenting?]
+  (reset! *popup-presenting? presenting?))
 
 (defonce *flashcards-header (atom nil))
 (defn set-flashcards-header!

@@ -3,10 +3,6 @@
   (:require [frontend.state :as state]
             [frontend.util :as util]))
 
-(defn- worker-not-initialized?
-  [e]
-  (state/db-worker-uninitialized-error? e))
-
 (defn- normalize-empty-result
   [result]
   (case result
@@ -20,14 +16,8 @@
 
 (defn- invoke-db-worker
   [thread-api & args]
-  (if-not @state/db-worker-ready?
-    nil
-    (try
-      (apply state/<invoke-db-worker thread-api args)
-      (catch :default e
-        (if (worker-not-initialized? e)
-          nil
-          (throw e))))))
+  (when @state/db-worker-ready?
+    (apply state/<invoke-db-worker thread-api args)))
 
 (defn clear-history!
   [repo]

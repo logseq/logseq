@@ -43,23 +43,43 @@
         (assoc data :addresses addresses)
         data))))
 
+(def store-profile-state
+  "Optional map. When set, each sqlite -store records {:ms :n :nodes :series}."
+  (atom nil))
+
+(defn- store-addr-content!
+  [db addr+data-seq]
+  (let [data (map
+              (fn [[addr data]]
+                (let [data' (if (map? data) (dissoc data :addresses) data)
+                      addresses (when (map? data)
+                                  (when-let [addresses (:addresses data)]
+                                    (js/JSON.stringify (bean/->js addresses))))]
+                  #js {:addr addr
+                       :content (sqlite-util/write-transit-str data')
+                       :addresses addresses}))
+              addr+data-seq)]
+    (upsert-addr-content! db data)))
+
 (defn new-sqlite-storage
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
       ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
-      (let [data (map
-                  (fn [[addr data]]
-                    (let [data' (if (map? data) (dissoc data :addresses) data)
-                          addresses (when (map? data)
-                                      (when-let [addresses (:addresses data)]
-                                        (js/JSON.stringify (bean/->js addresses))))]
-                      #js {:addr addr
-                           :content (sqlite-util/write-transit-str data')
-                           :addresses addresses}))
-                  addr+data-seq)]
-        (upsert-addr-content! db data)))
+      (if @store-profile-state
+        (let [start (js/Date.now)
+              n (count addr+data-seq)]
+          (store-addr-content! db addr+data-seq)
+          (let [ms (- (js/Date.now) start)]
+            (swap! store-profile-state
+                   (fn [s]
+                     (-> s
+                         (update :ms (fnil + 0) ms)
+                         (update :n (fnil inc 0))
+                         (update :nodes (fnil + 0) n)
+                         (update :series (fnil conj []) ms))))))
+        (store-addr-content! db addr+data-seq)))
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 

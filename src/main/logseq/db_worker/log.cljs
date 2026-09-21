@@ -1,14 +1,13 @@
 (ns logseq.db-worker.log
   "Unified db-worker-node logging."
-  (:require ["fs" :as fs]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]
             [goog.log :as glog]
             [lambdaisland.glogi :as log]
             [logseq.cli.root-dir :as root-dir]
             [logseq.common.graph-dir :as graph-dir]))
-
-(def stdio-redirected-env "LOGSEQ_DB_WORKER_NODE_STDIO_REDIRECTED_TO_LOG")
 
 (defonce ^:private *installed (atom nil))
 (defonce ^:private *writing? (atom false))
@@ -62,9 +61,9 @@
       (fs/unlinkSync (node-path/join graph-dir-path name)))))
 
 (defn- ensure-log-file!
-  [{:keys [root-dir repo]}]
-  (let [graph-dir-path (repo-dir root-dir repo)
-        file-path (log-path root-dir repo)]
+  [{:keys [storage repo]}]
+  (let [graph-dir-path (node-path/join (.-graphsDir ^js storage) (graph-dir/repo->encoded-graph-dir-name repo))
+        file-path (node-path/join graph-dir-path (str "db-worker-node-" (yyyymmdd (js/Date.)) ".log"))]
     (fs/mkdirSync graph-dir-path #js {:recursive true})
     (fs/writeFileSync file-path "" #js {:flag "a"})
     (enforce-retention! graph-dir-path)
@@ -172,64 +171,57 @@
       (reset! *forwarding? false))))
 
 (defn- wrap-print!
-  [{:keys [file-path stdio-redirected?] :as state}]
+  [{:keys [file-path] :as state}]
   (let [original-print-fn *print-fn*
         original-print-err-fn *print-err-fn*]
     (set-print-fn!
      (fn [value]
        (append-lines! file-path "stdout" value)
-       (when-not stdio-redirected?
-         (call-print-original original-print-fn value))))
+       (call-print-original original-print-fn value)))
     (set-print-err-fn!
      (fn [value]
        (append-lines! file-path "stderr" value)
-       (when-not stdio-redirected?
-         (call-print-original original-print-err-fn value))))
+       (call-print-original original-print-err-fn value)))
     (assoc state
            :original-print-fn original-print-fn
            :original-print-err-fn original-print-err-fn)))
 
 (defn- wrap-console!
-  [{:keys [file-path stdio-redirected?] :as state}]
+  [{:keys [file-path] :as state}]
   (let [original-log (.-log js/console)
         original-warn (.-warn js/console)
         original-error (.-error js/console)]
     (set! (.-log js/console)
           (fn [& args]
             (append-lines! file-path "console.log" (args->text args))
-            (when-not stdio-redirected?
-              (call-original original-log js/console args))))
+            (call-original original-log js/console args)))
     (set! (.-warn js/console)
           (fn [& args]
             (append-lines! file-path "console.warn" (args->text args))
-            (when-not stdio-redirected?
-              (call-original original-warn js/console args))))
+            (call-original original-warn js/console args)))
     (set! (.-error js/console)
           (fn [& args]
             (append-lines! file-path "console.error" (args->text args))
-            (when-not stdio-redirected?
-              (call-original original-error js/console args))))
+            (call-original original-error js/console args)))
     (assoc state
            :original-console-log original-log
            :original-console-warn original-warn
            :original-console-error original-error)))
 
 (defn- wrap-stream!
-  [stream source file-path stdio-redirected?]
+  [stream source file-path]
   (let [original-write (.-write stream)]
     (set! (.-write stream)
           (fn [& args]
             (append-lines! file-path source (chunk-args->text args))
-            (if stdio-redirected?
-              true
-              (call-original original-write stream args))))
+            (call-original original-write stream args)))
     original-write))
 
 (defn- wrap-streams!
-  [{:keys [file-path stdio-redirected?] :as state}]
+  [{:keys [file-path] :as state}]
   (assoc state
-         :original-stdout-write (wrap-stream! (.-stdout js/process) "stdout" file-path stdio-redirected?)
-         :original-stderr-write (wrap-stream! (.-stderr js/process) "stderr" file-path stdio-redirected?)))
+         :original-stdout-write (wrap-stream! (.-stdout js/process) "stdout" file-path)
+         :original-stderr-write (wrap-stream! (.-stderr js/process) "stderr" file-path)))
 
 (defn uninstall!
   []
@@ -263,18 +255,17 @@
     (reset! *installed nil)))
 
 (defn install!
-  [{:keys [root-dir repo log-level]}]
+  [{:keys [root-dir storage repo log-level]}]
   (uninstall!)
-  (let [{:keys [file-path]} (ensure-log-file! {:root-dir root-dir :repo repo})
-        stdio-redirected? (= "1" (aget (.-env js/process) stdio-redirected-env))
+  (let [storage (or storage (lifecycle/resolveStorage root-dir (graphs-dir root-dir)))
+        {:keys [file-path]} (ensure-log-file! {:storage storage :repo repo})
         original-root-level (current-root-level)
         handler (fn [record]
                   (when-not @*forwarding?
                     (fs/appendFileSync file-path (format-glogi-line record))))
         state (-> {:file-path file-path
                    :handler handler
-                   :original-root-level original-root-level
-                   :stdio-redirected? stdio-redirected?}
+                   :original-root-level original-root-level}
                   wrap-print!
                   wrap-console!
                   wrap-streams!)]
@@ -282,17 +273,3 @@
     (log/set-levels {:glogi/root (or log-level :info)})
     (reset! *installed state)
     file-path))
-
-(defn child-stdio!
-  [{:keys [root-dir repo]}]
-  (let [{:keys [file-path]} (ensure-log-file! {:root-dir root-dir :repo repo})
-        stdout-fd (fs/openSync file-path "a")]
-    (try
-      (let [stderr-fd (fs/openSync file-path "a")]
-        {:stdio #js ["ignore" stdout-fd stderr-fd]
-         :close! (fn []
-                   (fs/closeSync stdout-fd)
-                   (fs/closeSync stderr-fd))})
-      (catch :default e
-        (fs/closeSync stdout-fd)
-        (throw e)))))
