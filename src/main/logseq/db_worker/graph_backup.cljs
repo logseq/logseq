@@ -189,15 +189,6 @@
       (fs/rmSync dir-path #js {:recursive true :force true}))
     (mapv #(select-keys % [:name :dir-path :path]) to-remove)))
 
-(defn remove-backup!
-  [graphs-dir repo backup-name]
-  (let [dir-path (backup-dir-path graphs-dir repo backup-name)]
-    (if (fs/existsSync dir-path)
-      (do
-        (fs/rmSync dir-path #js {:recursive true :force true})
-        true)
-      false)))
-
 (defn- reserve-next-backup-target!
   [graphs-dir repo base-name]
   (fs/mkdirSync (backup-root-path graphs-dir repo) #js {:recursive true})

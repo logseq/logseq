@@ -200,6 +200,28 @@
     (is (= block-uuid (:block/uuid (db-test/find-block-by-content @conn "hi"))))
     (is (contains? (:block/refs block-with-block-ref) (db-test/find-block-by-content @conn "hi")))))
 
+(deftest build-class-page-name-from-title
+  (testing "user tag with a random ident suffix is named from its title"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:user.class/warning-A04sq4Ln {:block/title "warning"}}})
+          tag (d/entity @conn :user.class/warning-A04sq4Ln)]
+      (is (= "warning" (:block/title tag)))
+      (is (= "warning" (:block/name tag))
+          "Tag page :block/name matches the title, not the ident suffix")))
+
+  (testing "graph-human import uses the title for the tag page name"
+    (let [conn (db-test/create-conn-with-import-map
+                {::sqlite-export/export-type :graph-human
+                 :classes {:user.class/cite-X7ab12Cd {:block/title "cite"}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "some text"
+                             :build/tags #{:user.class/cite-X7ab12Cd}}]}]})
+          tag (d/entity @conn :user.class/cite-X7ab12Cd)]
+      (is (= "cite" (:block/title tag)))
+      (is (= "cite" (:block/name tag))
+          "Imported tag page is named from its title, not the ident suffix"))))
+
 (deftest build-class-and-property-pages
   (let [class-uuid (random-uuid)
         property-uuid (random-uuid)

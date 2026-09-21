@@ -61,7 +61,13 @@
   (not (or (:rtc-download-graph? tx-meta)
            (:sync-download-graph? tx-meta)
            (:skip-validate-db? tx-meta)
-           (:logseq.graph-parser.exporter/new-graph? tx-meta))))
+           (:logseq.graph-parser.exporter/new-graph? tx-meta)
+           ;; File-graph import persists into the worker conn (and sqlite at
+           ;; the end on web). The renderer reloads or re-renders from that
+           ;; graph. Do not broadcast imported entities to any client — a
+           ;; large graph posts a giant Comlink payload and can freeze or
+           ;; crash (`RangeError: Too many properties to enumerate`).
+           (:logseq.graph-parser.exporter/imported-data? tx-meta))))
 
 (defn- tagged-with-ident?
   [db block ident]
@@ -79,16 +85,19 @@
 
 (defn- canonical-replacements
   [{:keys [db-after tx-data]}]
-  (into {}
-        (comp
-         (filter (fn [datom]
-                   (and (:added datom)
-                        (= :block/tx-id (:a datom)))))
-         (keep (fn [datom]
-                 (when-let [entity (d/entity db-after (:e datom))]
-                   (let [block (block-handler/canonical-block db-after entity)]
-                     [(:block/uuid block) block])))))
-        tx-data))
+  (let [block-uuids (into []
+                          (comp
+                           (filter #(and (:added %) (= :block/tx-id (:a %))))
+                           (keep #(some-> (d/entity db-after (:e %)) :block/uuid)))
+                          tx-data)
+        ;; Parents of membership changes: their :block.temp/has-children?
+        ;; snapshot field must refresh even when their own datoms are untouched.
+        parent-uuids (into []
+                           (comp
+                            (filter #(= :block/parent (:a %)))
+                            (keep #(some-> (d/entity db-after (:v %)) :block/uuid)))
+                           tx-data)]
+    (:blocks (block-handler/canonical-blocks db-after (into block-uuids parent-uuids)))))
 
 (defn- build-render-delta
   [repo {:keys [db-after tx-meta] :as tx-report}
@@ -162,9 +171,15 @@
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
+(defn- skip-search-sync?
+  [tx-meta]
+  (or (:from-disk? tx-meta)
+      (:logseq.graph-parser.exporter/imported-data? tx-meta)
+      (:logseq.db.sqlite.export/imported-data? tx-meta)))
+
 (defmethod listen-db-changes :search
   [_ {:keys [repo]} {:keys [tx-meta] :as tx-report}]
-  (when-not (:from-disk? tx-meta)
+  (when-not (skip-search-sync? tx-meta)
     (p/do!
      (let [{:keys [blocks-to-remove-set blocks-to-add]}
            (search/sync-search-indice tx-report

@@ -124,6 +124,37 @@
       (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
               (common-util/safe-decode-uri-component)))))
 
+(defn- encode-iframe-path-segment
+  [segment]
+  (let [escaped (string/replace segment #"%(?![0-9a-fA-F]{2})" "%25")
+        decoded (try
+                  (js/decodeURIComponent escaped)
+                  ;; Invalid escapes represent literal filename characters.
+                  (catch :default _ segment))]
+    (js/encodeURIComponent decoded)))
+
+(defn local-file-iframe-src->assets-url
+  "Return an assets URL for a file or graph-relative asset `src`, or nil.
+
+  Preserve URL parameters and fragments, and encode filesystem path segments
+  once for the Electron assets protocol."
+  [src]
+  (when (string? src)
+    (when-let [url (try
+                     (cond
+                       (re-find #"(?i)^file:" src)
+                       (js/URL. src)
+
+                       (re-find #"^(?:\./|\.\./)*assets/" src)
+                       (when-let [repo-dir (some-> (state/get-current-repo) config/get-repo-dir)]
+                         (js/URL. (string/replace-first src #"^[./]+" "")
+                                  (str (path/prepend-protocol "file:" repo-dir) "/"))))
+                     (catch :default _ nil))]
+      (let [pathname (string/replace-first (.-pathname url)
+                                           #"^/([A-Za-z]):/" "/$1/logseq__colon/")
+            encoded-path (string/replace pathname #"[^/]+" encode-iframe-path-segment)]
+        (str "assets://" (.-host url) encoded-path (.-search url) (.-hash url))))))
+
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]

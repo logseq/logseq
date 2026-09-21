@@ -225,43 +225,35 @@
     (let [mkdir-calls (atom [])
           writes (atom [])
           notification-calls (atom [])
-          original-electron? util/electron?
-          original-time-ms util/time-ms
-          original-get-repo-dir config/get-repo-dir
-          original-mkdir-if-not-exists fs/mkdir-if-not-exists
-          original-apis (.-apis js/window)
-          original-export-db persist-db/<export-db
-          original-invoke-db-worker state/<invoke-db-worker
-          original-get-all-assets assets-handler/<get-all-assets
-          original-notification-show! notification/show!]
-      (set! util/electron? (constantly true))
-      (set! util/time-ms (constantly 123000))
-      (set! config/get-repo-dir (fn [repo]
-                                  (is (= "logseq_db_big_graph" repo))
-                                  "/tmp/logseq/graphs/logseq_db_big_graph"))
-      (set! fs/mkdir-if-not-exists (fn [path]
-                                     (swap! mkdir-calls conj path)
-                                     (p/resolved nil)))
+          original-apis (.-apis js/window)]
       (set! (.-apis js/window)
             #js {:writeFileBytes (fn [path content]
                                    (swap! writes conj [path content])
                                    (p/resolved nil))})
-      (set! persist-db/<export-db
-            (fn [& _args]
-              (p/rejected (ex-info "desktop zip export should read binary from db worker" {}))))
-      (set! state/<invoke-db-worker
-            (fn [qkw repo]
-              (is (= :thread-api/export-db-binary qkw))
-              (is (= "logseq_db_big_graph" repo))
-              (p/resolved {:type "Buffer"
-                           :data [1 2 3]})))
-      (set! assets-handler/<get-all-assets
-            (fn []
-              (p/resolved [["assets/a.bin" {:type "Buffer"
-                                            :data [4 5 6]}]])))
-      (set! notification/show! (fn [& args]
-                                 (swap! notification-calls conj args)))
-      (-> (export/db-based-export-repo-as-zip! "logseq_db_big_graph")
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          util/time-ms (constantly 123000)
+                          config/get-repo-dir (fn [repo]
+                                                (is (= "logseq_db_big_graph" repo))
+                                                "/tmp/logseq/graphs/logseq_db_big_graph")
+                          fs/mkdir-if-not-exists (fn [path]
+                                                   (swap! mkdir-calls conj path)
+                                                   (p/resolved nil))
+                          persist-db/<export-db
+                          (fn [& _args]
+                            (p/rejected (ex-info "desktop zip export should read binary from db worker" {})))
+                          state/<invoke-db-worker
+                          (fn [qkw repo]
+                            (is (= :thread-api/export-db-binary qkw))
+                            (is (= "logseq_db_big_graph" repo))
+                            (p/resolved {:type "Buffer"
+                                         :data [1 2 3]}))
+                          assets-handler/<get-all-assets
+                          (fn []
+                            (p/resolved [["assets/a.bin" {:type "Buffer"
+                                                          :data [4 5 6]}]]))
+                          notification/show! (fn [& args]
+                                               (swap! notification-calls conj args))]
+            (export/db-based-export-repo-as-zip! "logseq_db_big_graph"))
           (p/then (fn [_]
                     (let [expected-path "/tmp/logseq/graphs/logseq_db_big_graph/export/big_graph_123.zip"]
                       (is (= ["/tmp/logseq/graphs/logseq_db_big_graph/export"]
@@ -274,15 +266,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally
            (fn []
-             (set! util/electron? original-electron?)
-             (set! util/time-ms original-time-ms)
-             (set! config/get-repo-dir original-get-repo-dir)
-             (set! fs/mkdir-if-not-exists original-mkdir-if-not-exists)
              (set! (.-apis js/window) original-apis)
-             (set! persist-db/<export-db original-export-db)
-             (set! state/<invoke-db-worker original-invoke-db-worker)
-             (set! assets-handler/<get-all-assets original-get-all-assets)
-             (set! notification/show! original-notification-show!)
              (done)))))))
 
 (deftest auto-db-backup-reads-backup-folder-through-worker-test
