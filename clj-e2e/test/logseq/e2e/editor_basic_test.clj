@@ -1797,3 +1797,26 @@
       (let [{:keys [client scroll]} (editor-box-heights)]
         (is (<= scroll client)
             (str "textarea clientHeight " client " scrollHeight " scroll))))))
+
+(deftest page-ref-navigate-persists-unsaved-edit-buffer-test
+  (testing "clicking a page-ref while editing flushes the editor so typed text is not lost (db-test#1250)"
+    (let [target-page (str "pageref-flush-target-" (random-uuid))
+          marker (str "pageref-flush-marker-" (random-uuid))
+          host-page (p/get-page-name)]
+      (p/new-page target-page)
+      (p/goto-page host-page)
+      (b/new-block (str "See [[" target-page "]] here"))
+      (util/exit-edit)
+      (assert/assert-is-visible
+       (loc/filter ".page-reference .page-ref" :has-text target-page))
+      ;; New empty block, type without idle autosave, then immediately navigate via page-ref
+      (b/new-block "")
+      (w/fill util/editor-q marker)
+      (is (= marker (util/get-edit-content)))
+      (w/click
+       (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (is (= target-page (p/get-page-name)))
+      (p/goto-page host-page)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(= marker %) (util/get-page-blocks-contents))))))

@@ -856,12 +856,16 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when mouse-down?
+                          ;; Flush editor buffer before clear-edit/navigate so text typed
+                          ;; within the autosave idle window is not discarded (db-test#1250).
+                          (editor-handler/save-current-block!)
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
                             (<open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
                             (util/stop e)
+                            (editor-handler/save-current-block!)
                             (state/clear-edit!)
                             (<open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
