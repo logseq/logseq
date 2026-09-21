@@ -623,18 +623,12 @@
                (page-cp {:disable-preview? true
                          :skip-async-load? true} page))))})
 
-(defn- property->ident
-  [property]
-  (cond
-    (keyword? property) property
-    (map? property) (or (:db/ident property) (:id property))
-    :else nil))
-
 (defn- include-asset-file-column?
   [config properties]
   (or (= :logseq.class/Asset (:db/ident (:view-parent config)))
       (some (fn [property]
-              (= :logseq.property.asset/type (property->ident property)))
+              (= :logseq.property.asset/type
+                 (or (:db/ident property) (:id property) property)))
             properties)))
 
 (defn- asset-file-column
@@ -655,8 +649,7 @@
   [config properties columns]
   (if (and (include-asset-file-column? config properties)
            (not (some #(= :file (:id %)) columns)))
-    (let [[before-cols after-cols] (split-with #(not (and (keyword? (:id %))
-                                                          (db-property/logseq-property? (:id %))))
+    (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %)))
                                                columns)]
       (concat before-cols [(asset-file-column config)] after-cols))
     columns))
@@ -2952,22 +2945,18 @@
   [block asset-property-ident]
   (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
                       (get block asset-property-ident))
-        ->entity (fn [value]
-                   (cond
-                     (map? value) value
-                     :else value))
         from-property (cond
                         (= :block/uuid asset-property-ident)
                         block
 
                         (set? asset-value)
-                        (some ->entity asset-value)
+                        (some identity asset-value)
 
                         (sequential? asset-value)
-                        (some ->entity asset-value)
+                        (some identity asset-value)
 
                         :else
-                        (->entity asset-value))]
+                        asset-value)]
     (or from-property
         (when (ldb/asset? block)
           block))))
