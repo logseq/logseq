@@ -10,8 +10,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.app-url :as app-url]
             [promesa.core :as p]))
 
 (defn- is-tweet-link
@@ -20,83 +22,101 @@
     (or (re-matches #"^https://twitter\.com/.*?/status/.*?$" url)
         (re-matches #"^https://x\.com/.*?/status/.*?$" url))))
 
+(defn- capturable-value
+  "Keep user-provided capture text, but drop the privileged renderer origin."
+  [s]
+  (let [s (or s "")]
+    (if (app-url/privileged-renderer-url? s)
+      ""
+      s)))
+
+(defn- maybe-open-renderer-route!
+  [url]
+  (when (= :redirect-graph (app-url/open-url-action url))
+    (route-handler/redirect-to-graph-view!)))
+
 (defn quick-capture [args]
   (p/let [today-page-title (db-async/<get-today-journal-title (state/get-current-repo))]
-   (if today-page-title
-    (let [{:keys [url title content page append]} (bean/->clj args)
-          title (or title "")
-          url (or url "")
-          insert-today? (get-in (state/get-config)
-                                [:quick-capture-options :insert-today?]
-                                false)
-          redirect-page? (get-in (state/get-config)
-                                 [:quick-capture-options :redirect-page?]
-                                 false)
-          prettify-url? (get-in (state/get-config)
-                                [:quick-capture-option :prettify-url?]
-                                true)
-          today-page (string/lower-case today-page-title)
-          current-page (state/get-current-page) ;; empty when in journals page
-          default-page (get-in (state/get-config)
-                               [:quick-capture-options :default-page])
-          page (cond
-                 (or (= page "TODAY")
-                     (and (string/blank? page) insert-today?))
-                 today-page
+    (if today-page-title
+      (let [{:keys [url title content page append]} (bean/->clj args)
+            _ (maybe-open-renderer-route! url)
+            title (capturable-value title)
+            url (capturable-value url)
+            content (capturable-value content)]
+        (when-not (and (string/blank? url)
+                       (string/blank? title)
+                       (string/blank? content))
+          (let [insert-today? (get-in (state/get-config)
+                                      [:quick-capture-options :insert-today?]
+                                      false)
+                redirect-page? (get-in (state/get-config)
+                                       [:quick-capture-options :redirect-page?]
+                                       false)
+                prettify-url? (get-in (state/get-config)
+                                      [:quick-capture-option :prettify-url?]
+                                      true)
+                today-page (string/lower-case today-page-title)
+                current-page (state/get-current-page) ;; empty when in journals page
+                default-page (get-in (state/get-config)
+                                     [:quick-capture-options :default-page])
+                page (cond
+                       (or (= page "TODAY")
+                           (and (string/blank? page) insert-today?))
+                       today-page
 
-                 (not-empty page)
-                 page
+                       (not-empty page)
+                       page
 
-                 (not-empty default-page)
-                 default-page
+                       (not-empty default-page)
+                       default-page
 
-                 (not-empty current-page)
-                 current-page
+                       (not-empty current-page)
+                       current-page
 
-                 :else
-                 today-page)
-          time (date/get-current-time)
-          text (or (and content (not-empty (string/trim content))) "")
-          link (cond
-                 (string/blank? url)
-                 title
+                       :else
+                       today-page)
+                time (date/get-current-time)
+                text (or (and content (not-empty (string/trim content))) "")
+                link (cond
+                       (string/blank? url)
+                       title
 
-                 (and prettify-url? (boolean (video/get-matched-video url)))
-                 (str title " {{video " url "}}")
+                       (and prettify-url? (boolean (video/get-matched-video url)))
+                       (str title " {{video " url "}}")
 
-                 (and prettify-url? (is-tweet-link url))
-                 (util/format "{{twitter %s}}" url)
+                       (and prettify-url? (is-tweet-link url))
+                       (util/format "{{twitter %s}}" url)
 
-                 (= title url)
-                 (config/link-format nil url)
+                       (= title url)
+                       (config/link-format nil url)
 
-                 :else
-                 (config/link-format title url))
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :text]
-                           "**{time}** [[quick capture]]: {text} {url}")
-          date-ref-name today-page-title
-          content (-> template
-                      (string/replace "{time}" time)
-                      (string/replace "{date}" date-ref-name)
-                      (string/replace "{url}" link)
-                      (string/replace "{text}" text))
-          edit-content (state/get-edit-content)
-          edit-content-blank? (string/blank? edit-content)
-          edit-content-include-capture? (and (not-empty edit-content)
-                                             (string/includes? edit-content "[[quick capture]]"))]
-      (if (and (state/editing?) (not append) (not edit-content-include-capture?))
-        (if edit-content-blank?
-          (editor-handler/insert content)
-          (editor-handler/insert (str "\n" content)))
+                       :else
+                       (config/link-format title url))
+                template (get-in (state/get-config)
+                                 [:quick-capture-templates :text]
+                                 "**{time}** [[quick capture]]: {text} {url}")
+                date-ref-name today-page-title
+                content (-> template
+                            (string/replace "{time}" time)
+                            (string/replace "{date}" date-ref-name)
+                            (string/replace "{url}" link)
+                            (string/replace "{text}" text))
+                edit-content (state/get-edit-content)
+                edit-content-blank? (string/blank? edit-content)
+                edit-content-include-capture? (and (not-empty edit-content)
+                                                   (string/includes? edit-content "[[quick capture]]"))]
+            (if (and (state/editing?) (not append) (not edit-content-include-capture?))
+              (if edit-content-blank?
+                (editor-handler/insert content)
+                (editor-handler/insert (str "\n" content)))
 
-        (p/do!
-         (editor-handler/escape-editing)
-         (when (not= page (state/get-current-page))
-           (page-handler/<create! page {:redirect? redirect-page?}))
-        ;; Or else this will clear the newly inserted content
-         (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
-                                                                        :edit-block? true
-                                                                        :replace-empty-target? true})
-                        100))))
-    (notification/show! (t :journal/parse-date-to-name-error) :error))))
+              (p/do!
+               (editor-handler/escape-editing)
+               (when (not= page (state/get-current-page))
+                 (page-handler/<create! page {:redirect? redirect-page?}))
+               ;; Or else this will clear the newly inserted content
+               (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
+                                                                              :edit-block? true
+                                                                              :replace-empty-target? true})
+                              100))))))
+      (notification/show! (t :journal/parse-date-to-name-error) :error))))

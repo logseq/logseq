@@ -4,6 +4,7 @@
             [electron.state :as state]
             [electron.utils :refer [send-to-renderer send-to-focused-renderer] :as utils]
             [electron.window :as win]
+            [frontend.util.app-url :as app-url]
             [promesa.core :as p]))
 
 ;; Keep same as main/frontend.util.url
@@ -70,15 +71,23 @@
       ;; page:    (string) Page name to insert to, use "TODAY" to insert to today page
       ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
       (= action "/quickCapture")
-      (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])]
-        (send-to-focused-renderer "quickCapture" {:url url
-                                                  :title title
-                                                  :content content
-                                                  :page page
-                                                  :append (if (nil? append)
-                                                            append
-                                                            (= append "true"))}
-                                  win))
+      (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])
+            url' (when (app-url/insertable-block-content? url) url)
+            title' (when (app-url/insertable-block-content? title) title)
+            content' (when (app-url/insertable-block-content? content) content)]
+        (when (= :redirect-graph (app-url/open-url-action url))
+          (send-to-focused-renderer "redirect" {:payload {:to :graph}} win))
+        (when (or (not (string/blank? url'))
+                  (not (string/blank? title'))
+                  (not (string/blank? content')))
+          (send-to-focused-renderer "quickCapture" {:url url'
+                                                    :title title'
+                                                    :content content'
+                                                    :page page
+                                                    :append (if (nil? append)
+                                                              append
+                                                              (= append "true"))}
+                                    win)))
 
       (= action "/invokeCommand")
       (let [[action payload] (get-URL-decoded-params parsed-url ["action" "payload"])]
@@ -120,3 +129,13 @@
                                        "` to any target.")
                          :i18n-key :electron/link-open-failed-no-target
                          :i18n-args [url-host]}))))
+
+(defn handle-renderer-origin-url!
+  "Handle a privileged renderer origin URL received via open-url.
+   Never insert it as block content; open Graph View when that is the hash route."
+  [^js win url]
+  (case (app-url/open-url-action url)
+    :redirect-graph
+    (send-to-renderer win "redirect" {:payload {:to :graph}})
+
+    nil))

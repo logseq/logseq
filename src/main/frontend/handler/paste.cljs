@@ -13,6 +13,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.app-url :as app-url]
             [frontend.util.thingatpt :as thingatpt]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -146,56 +147,57 @@
 
 (defn- paste-copied-text
   [input *text html]
-  (let [replace-text-f (fn [text]
-                         (let [input-id (state/get-edit-input-id)]
-                           (commands/delete-selection! input-id)
-                           (commands/simple-insert! input-id text nil)))
-        text (string/replace *text "\r\n" "\n") ;; Fix for Windows platform
-        input-id (state/get-edit-input-id)
-        {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-        text-url? (common-util/url? text)
-        selection-url? (common-util/url? selection)]
-    (cond
-      ;; When a url is selected in a formatted link, replaces it with pasted text
-      (or (and (or text-url? selection-url?)
-               (selection-within-link? selection-and-format))
-          (and text-url? selection-url?))
-      (replace-text-f text)
+  (when (app-url/insertable-block-content? *text)
+    (let [replace-text-f (fn [text]
+                           (let [input-id (state/get-edit-input-id)]
+                             (commands/delete-selection! input-id)
+                             (commands/simple-insert! input-id text nil)))
+          text (string/replace *text "\r\n" "\n") ;; Fix for Windows platform
+          input-id (state/get-edit-input-id)
+          {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+          text-url? (common-util/url? text)
+          selection-url? (common-util/url? selection)]
+      (cond
+        ;; When a url is selected in a formatted link, replaces it with pasted text
+        (or (and (or text-url? selection-url?)
+                 (selection-within-link? selection-and-format))
+            (and text-url? selection-url?))
+        (replace-text-f text)
 
-      ;; Paste a formatted link over selected text or paste text over a selected formatted link
-      (and (or text-url? selection-url?)
-           (not (string/blank? (util/get-selected-text))))
-      (editor-handler/html-link-format! text)
+        ;; Paste a formatted link over selected text or paste text over a selected formatted link
+        (and (or text-url? selection-url?)
+             (not (string/blank? (util/get-selected-text))))
+        (editor-handler/html-link-format! text)
 
-      ;; Pastes only block id when inside of '(())'
-      (and (block-ref/block-ref? text)
-           (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
-      (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
+        ;; Pastes only block id when inside of '(())'
+        (and (block-ref/block-ref? text)
+             (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+        (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
 
-      :else
-      ;; from external
-      (let [format :markdown
-            html-text (let [result (when-not (string/blank? html)
-                                     (try
-                                       (html-parser/convert html)
-                                       (catch :default e
-                                         (log/error :exception e)
-                                         nil)))]
-                        (if (string/blank? result) nil result))
-            text' (or html-text
-                      (when (common-util/url? text)
-                        (wrap-macro-url text))
-                      text)
-            blocks? (markdown-blocks? text')]
-        (cond
-          blocks?
-          (paste-text-parseable format text')
+        :else
+        ;; from external
+        (let [format :markdown
+              html-text (let [result (when-not (string/blank? html)
+                                       (try
+                                         (html-parser/convert html)
+                                         (catch :default e
+                                           (log/error :exception e)
+                                           nil)))]
+                          (if (string/blank? result) nil result))
+              text' (or html-text
+                        (when (common-util/url? text)
+                          (wrap-macro-url text))
+                        text)
+              blocks? (markdown-blocks? text')]
+          (cond
+            blocks?
+            (paste-text-parseable format text')
 
-          (util/safe-re-find #"(?:\r?\n){2,}" text')
-          (paste-segmented-text format text')
+            (util/safe-re-find #"(?:\r?\n){2,}" text')
+            (paste-segmented-text format text')
 
-          :else
-          (replace-text-f text'))))))
+            :else
+            (replace-text-f text')))))))
 
 (defn- <block-with-db-id
   [repo block]
@@ -246,7 +248,8 @@
   []
   (utils/getClipText
    (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
+     (when (and (state/get-input)
+                (app-url/insertable-block-content? clipboard-data))
        (if (common-util/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
@@ -306,7 +309,8 @@
   (state/set-state! :editor/on-paste? true)
   (utils/getClipText
    (fn [clipboard-data]
-     (when (state/get-input)
+     (when (and (state/get-input)
+                (app-url/insertable-block-content? clipboard-data))
        (commands/delete-selection! (state/get-edit-input-id))
        (editor-handler/insert clipboard-data true)))
    (fn [error]
