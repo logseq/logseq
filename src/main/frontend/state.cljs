@@ -165,6 +165,9 @@
       ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
+      ;; block uuids whose lazy children must mount regardless of viewport
+      ;; distance (set while scrolling to an anchor target inside them)
+      :ui/anchor-mount                       {}
       :ui/file-component                     nil
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)

@@ -9,6 +9,7 @@
    [frontend.worker.plain-value :as worker-plain]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
+   [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
@@ -98,12 +99,17 @@
                                  {:type :db/missing-connection
                                   :repo repo})))]
     (try
+      ;; Folded into this call so the client pays one worker roundtrip
+      ;; per outliner op instead of two; must run before apply-ops! so undo
+      ;; records pre-op editor state.
+      (worker-undo-redo/set-pending-editor-info! repo (:pending-editor-info opts))
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
             editor-row-uuids (:editor-row-uuids opts)
             operation-opts (dissoc opts
                                    :affected-block-uuids
                                    :editor-row-uuids
+                                   :pending-editor-info
                                    :return-updated-blocks?)
             apply-started-at (perf-time-ms)
             operation-result (worker-util/profile
