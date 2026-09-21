@@ -21,6 +21,12 @@
    (and outliner?
         (seq comment-targets))))
 
+(defn- restore-action-bar
+  "Hide the action bar, then re-show it if blocks are still selected."
+  []
+  (state/pub-event! [:editor/hide-action-bar])
+  (editor-handler/show-action-bar! {:delay 50}))
+
 (defn- unset-property-event
   [target selected-blocks view-parent]
   [:editor/new-property {:target target
@@ -28,7 +34,7 @@
                          :view-parent view-parent
                          :remove-property? true
                          :select-opts {:show-new-when-not-exact-match? false}
-                         :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])
+                         :on-dialog-close restore-action-bar}])
 
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
@@ -69,7 +75,7 @@
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
                                                                             :property-key "Tags"
-                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+                                                                            :on-dialog-close restore-action-bar}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
         (when (show-comment-action? outliner? comment-targets)
@@ -94,7 +100,7 @@
                                    (util/stop e)
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
-                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+                                                                            :on-dialog-close restore-action-bar}])))
          (t :property/set-property))
         (shui/toolbar-button
          (assoc button-opts
