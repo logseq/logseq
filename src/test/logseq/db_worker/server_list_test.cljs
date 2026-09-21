@@ -131,10 +131,10 @@
         lock-file (server-list/lock-path file-path)
         write-metadata @#'server-list/write-lock-metadata!]
     (with-redefs [server-list/write-lock-metadata!
-                  (fn [fd metadata]
+                  (fn [tmp-path metadata]
                     (is (not (fs/existsSync lock-file))
                         "An acquiring writer must not publish an empty lock")
-                    (write-metadata fd metadata))]
+                    (write-metadata tmp-path metadata))]
       (server-list/append-entry! file-path {:pid 123 :port 456}))
     (is (= [{:pid 123 :port 456}] (server-list/read-entries file-path)))))
 
