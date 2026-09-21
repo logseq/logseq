@@ -1,6 +1,7 @@
 (ns frontend.worker.handler.page-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.worker.handler.block :as worker-handler-block]
             [frontend.worker.handler.page :as worker-page]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
@@ -51,21 +52,89 @@
           (is (true? (:block/collapsed? (first index))))
           (is (true? (:block.temp/has-children? (first index)))))))))
 
+;; Reconstruction of the pre-PR index construction: materialize the whole
+;; subtree, then build a parent/level index over every descendant before
+;; taking the limit. Used to compare total work, not just materialization.
+(defn- old-visible-index-entries
+  [index]
+  (loop [entries index
+         collapsed-level nil
+         result []]
+    (if-let [entry (first entries)]
+      (let [level (:block/level entry)
+            hidden? (and collapsed-level (> level collapsed-level))
+            collapsed-level (cond
+                              hidden? collapsed-level
+                              (:block/collapsed? entry) level
+                              :else nil)]
+        (recur (next entries)
+               collapsed-level
+               (cond-> result (not hidden?) (conj entry))))
+      result)))
+
+(defn- old-block-index-entry
+  [block parent-ids level]
+  {:db/id (:db/id block)
+   :block/uuid (:block/uuid block)
+   :block/parent {:db/id (:db/id (:block/parent block))}
+   :block/order (:block/order block)
+   :block/collapsed? (boolean (:block/collapsed? block))
+   :block/level level
+   :block.temp/has-children? (contains? parent-ids (:db/id block))})
+
 (deftest get-page-block-index-scales-with-limit-not-page-size-test
-  (let [get-page-block-index (page-block-index-api)]
+  (let [get-page-block-index (page-block-index-api)
+        get-block-and-children (deref #'worker-handler-block/get-block-and-children)]
     (doseq [child-count [50 500]]
       (let [conn (conn-with-page child-count 10)
+            db @conn
+            root-uuid (page-uuid conn)
             total (* child-count 10)
-            _ (dotimes [_ 3] (get-page-block-index @conn (page-uuid conn) 50))
-            start (system-time)
-            result (get-page-block-index @conn (page-uuid conn) 50)
-            elapsed (- (system-time) start)
-            ;; Baseline: what the old implementation paid before taking the
-            ;; limit — materializing the whole subtree.
-            full-start (system-time)
-            full-count (count (ldb/get-block-and-children @conn (page-uuid conn)))
-            full-elapsed (- (system-time) full-start)]
-        (is (= 50 (count (:index result))))
-        (is (>= full-count (inc total)))
-        (println (str "page-size=" total " initial-limit=50 bounded-ms=" elapsed
-                      " full-materialization-ms=" full-elapsed))))))
+            _ (dotimes [_ 3] (get-page-block-index db root-uuid 50))
+            root (d/entity db [:block/uuid root-uuid])
+            ;; --- new implementation, split into index traversal + render fetch
+            t0 (system-time)
+            result (get-page-block-index db root-uuid 50)
+            bounded-total (- (system-time) t0)
+            index (:index result)
+            ta (system-time)
+            _ ((deref #'worker-page/visible-index-entries) root 50)
+            traverse-ms (- (system-time) ta)
+            ;; old implementation: full materialization + full index build,
+            ;; then the same render-data fetches for the first `limit` blocks
+            t1 (system-time)
+            tree-entities (vec (ldb/get-block-and-children db root-uuid))
+            children (subvec tree-entities 1)
+            materialize-ms (- (system-time) t1)
+            t2 (system-time)
+            parent-ids (into #{} (keep #(some-> % :block/parent :db/id)) children)
+            levels (volatile! {(:db/id (first tree-entities)) 0})
+            full-index (mapv (fn [block]
+                               (let [parent-id (:db/id (:block/parent block))
+                                     level (inc (get @levels parent-id 0))]
+                                 (vswap! levels assoc (:db/id block) level)
+                                 (old-block-index-entry block parent-ids level)))
+                             children)
+            old-initial-ids (->> full-index
+                                 old-visible-index-entries
+                                 (take 50)
+                                 (map :db/id))
+            index-ms (- (system-time) t2)
+            t3 (system-time)
+            _ (mapv (fn [block-id]
+                      (:block (get-block-and-children
+                               db block-id {:children? false
+                                            :render-data? true})))
+                    old-initial-ids)
+            render-ms (- (system-time) t3)
+            old-total (+ materialize-ms index-ms render-ms)]
+        (is (= 50 (count index)))
+        (is (= old-initial-ids (mapv :db/id index)))
+        (is (>= (count tree-entities) (inc total)))
+        (println (str "page-size=" total " initial-limit=50"
+                      " bounded-total-ms=" bounded-total
+                      " (traverse=" traverse-ms ")"
+                      " old-total-ms=" old-total
+                      " (materialize=" materialize-ms
+                      " index-build=" index-ms
+                      " render-fetch=" render-ms ")"))))))
