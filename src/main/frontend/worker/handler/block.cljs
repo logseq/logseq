@@ -375,6 +375,21 @@
                              :items (mapv (juxt :block/uuid :block/order) rows)})))))
         children))))
 
+(defn document-order-uuids
+  "First `limit` uuids in render order: a node's expanded children come before
+   its following siblings."
+  [children root-uuid limit]
+  (loop [pending (list root-uuid)
+         n limit
+         result []]
+    (if (and (pos? n) (seq pending))
+      (let [uuid (first pending)
+            items (mapv first (:items (get children uuid)))]
+        (recur (concat items (rest pending))
+               (dec n)
+               (conj result uuid)))
+      result)))
+
 (defn open-block-tree
   [db root-uuid]
   (let [children (open-children-tree db root-uuid)

@@ -7,7 +7,7 @@
             [promesa.core :as p]))
 
 (def ^:private loading-snapshot {:status :loading})
-(def ^:private warm-cache-size 5000)
+(def ^:private warm-cache-size 20000)
 
 (defn require-uuid!
   [label value]

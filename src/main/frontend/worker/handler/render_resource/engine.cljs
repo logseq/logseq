@@ -106,13 +106,22 @@
                              #{[:block block-uuid]})]))
                    block-uuids)}))
 
+(def ^:private children-eager-block-limit
+  "Canonical blocks shipped with a [:children] snapshot, in document order, so
+   the visible prefix renders without per-row placeholder loads."
+  200)
+
 (defn- children-snapshot-groups
   [db parent-uuids]
   (into {}
         (map (fn [parent-uuid]
-               (let [children (block-handler/open-children-tree db parent-uuid)]
+               (let [children (block-handler/open-children-tree db parent-uuid)
+                     eager-uuids (block-handler/document-order-uuids
+                                  children parent-uuid children-eager-block-limit)
+                     {:keys [blocks]} (block-handler/canonical-blocks db eager-uuids)]
                  [[:children parent-uuid]
-                  (common/children-slots children)])))
+                  (merge (common/children-slots children)
+                         (common/block-slots blocks))])))
         parent-uuids))
 
 (defn render-snapshots
