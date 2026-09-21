@@ -1561,7 +1561,7 @@
              (some-> target (.closest "input, textarea, [data-table-row-select]"))))))
 
 (defn- table-row-context-menu
-  [table row column {:keys [view-parent view-feature-type] :as option}]
+  [table row column anchor {:keys [view-parent view-feature-type] :as option}]
   (let [actions (table-row-context-actions column option)
         block-uuid (:block/uuid row)
         selected-blocks [row]]
@@ -1569,7 +1569,7 @@
      (for [{:keys [id label-key property-key]} actions]
        (shui/dropdown-menu-item
         {:key (name id)
-         :on-click (fn [e]
+         :on-click (fn [_]
                      (case id
                        :open
                        (when block-uuid
@@ -1586,13 +1586,13 @@
                                                               :selected-ids [block-uuid]))
 
                        :set-property
-                       (state/pub-event! [:editor/new-property (cond-> {:target (.-currentTarget e)
+                       (state/pub-event! [:editor/new-property (cond-> {:target anchor
                                                                         :selected-blocks selected-blocks}
                                                                  property-key
                                                                  (assoc :property-key property-key))])
 
                        :unset-property
-                       (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
+                       (state/pub-event! [:editor/new-property {:target anchor
                                                                 :selected-blocks selected-blocks
                                                                 :view-parent view-parent
                                                                 :remove-property? true
@@ -1607,15 +1607,20 @@
 (defn- show-table-row-context-menu!
   [e table row column option]
   (util/stop e)
-  (shui/popup-show!
-   e
-   (fn [{:keys [id]}]
-     [:div {:on-click #(shui/popup-hide! id)
-            :data-keep-selection true}
-      (table-row-context-menu table row column option)])
-   {:as-dropdown? true
-    :dropdown-menu? true
-    :content-props {:class "w-[220px] ls-context-menu-content"}}))
+  (let [;; Anchor to the clicked cell, not a menu item: the popup unmounts its
+        ;; content on click, so a menu-item target would detach before the
+        ;; property dialog measures it.
+        anchor (some-> (event-element e)
+                       (.closest ".ls-table-cell, .ls-table-row"))]
+    (shui/popup-show!
+     e
+     (fn [{:keys [id]}]
+       [:div {:on-click #(shui/popup-hide! id)
+              :data-keep-selection true}
+        (table-row-context-menu table row column anchor option)])
+     {:as-dropdown? true
+      :dropdown-menu? true
+      :content-props {:class "w-[220px] ls-context-menu-content"}})))
 
 (def ^:private table-fixed-row-height 33)
 
@@ -2243,11 +2248,9 @@
              (shui/select-item {:value "or"} (t :view.filter/match-any-filter)))))])])))
 
 (defn- add-new-table-object!
-  ([table view-entity]
-   (add-new-table-object! table view-entity {}))
-  ([table view-entity opts]
-   (when-let [f (get-in table [:data-fns :add-new-object!])]
-     (f view-entity table opts))))
+  [table view-entity]
+  (when-let [f (get-in table [:data-fns :add-new-object!])]
+    (f view-entity table {})))
 
 (defn- grouped-add-new-object-fn
   [add-new-object! view-entity outer-table group-by-property value]
