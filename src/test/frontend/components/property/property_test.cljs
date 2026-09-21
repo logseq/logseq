@@ -103,22 +103,23 @@
                           block (atom nil) (atom nil) nil
                           {:remove-property? true
                            :view-parent {:db/ident :logseq.class/Task}})]
-           (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved status-property))
-                           property-value/batch-operation? (constantly false)
-                           property-value/get-operating-blocks (fn [_] [block])
-                           property-handler/batch-remove-block-property!
-                           (fn [& args] (swap! calls* conj args))
-                           shui/popup-hide! (constantly nil)]
-             (-> (on-chosen {:value :logseq.property/status
-                             :property status-property})
-                 (p/then (fn []
-                           (is (= [[[block-id]
-                                   :logseq.property/status
-                                   {:preserve-task-tag? true}]]
-                                  @calls*))))
-                 (p/catch (fn [error]
-                            (is false (str error))))
-                 (p/finally done))))))
+           (-> (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved status-property))
+                               property-value/batch-operation? (constantly false)
+                               property-value/get-operating-blocks (fn [_] [block])
+                               property-handler/batch-remove-block-property!
+                               (fn [& args] (swap! calls* conj args))
+                               shui/popup-hide! (constantly nil)]
+                 (on-chosen {:value :logseq.property/status
+                             :property status-property}))
+               (p/then (fn []
+                         (is (= [[[block-id]
+                                 :logseq.property/status
+                                 {:preserve-task-tag? true}]]
+                                @calls*))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (deftest choosing-existing-closed-value-property-reuses-picker-data-test
   (async done
          (let [block {:block/uuid (random-uuid)}
@@ -135,20 +136,20 @@
                on-chosen (#'property-component/property-input-on-chosen
                           block *property *property-key
                           *show-new-property-config? {})]
-           (p/with-redefs [db-async/<get-block
-                           (fn [& _]
-                             (throw (js/Error. "Picker data must avoid a second block fetch")))
-                           property-value/batch-operation? (constantly false)]
-             (-> (on-chosen {:value (:block/uuid property)
+           (-> (p/with-redefs [db-async/<get-block
+                               (fn [& _]
+                                 (throw (js/Error. "Picker data must avoid a second block fetch")))
+                               property-value/batch-operation? (constantly false)]
+                 (on-chosen {:value (:block/uuid property)
                              :label "Priority"
-                             :property property})
-                 (p/then (fn []
-                           (is (= property @*property))
-                           (is (= "Priority" @*property-key))
-                           (is (false? @*show-new-property-config?))))
-                 (p/catch (fn [error]
-                            (is false (str error))))
-                 (p/finally done))))))
+                             :property property}))
+               (p/then (fn []
+                         (is (= property @*property))
+                         (is (= "Priority" @*property-key))
+                         (is (false? @*show-new-property-config?))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest toggle-hidden-properties-visibility-test
   (let [block-uuid (random-uuid)]
