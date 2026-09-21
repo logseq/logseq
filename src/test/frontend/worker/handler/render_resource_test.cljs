@@ -807,6 +807,7 @@
        @conn
        [:favorites]
        #{[:children favorite-page-uuid]
+         [:attr :block/link]
          [:entity first-page-uuid]}
        [{:db/id first-page-id
          :block/uuid first-page-uuid
@@ -818,7 +819,8 @@
       (assert-resource-envelope
        @conn
        [:favorite-status first-page-uuid]
-       #{[:children favorite-page-uuid]}
+       #{[:children favorite-page-uuid]
+         [:attr :block/link]}
        true
        status-response)
       (assert-resource-envelope
