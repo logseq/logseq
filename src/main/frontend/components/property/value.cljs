@@ -927,6 +927,28 @@
                                             (= :logseq.class/Task
                                                (:db/ident (:view-parent opts)))}))
 
+(defn- date-property-value-present?
+  "True when a date/datetime property has a real value, not an empty placeholder."
+  [value]
+  (boolean
+   (and (some? value)
+        (not (empty-placeholder-value? value)))))
+
+(defn- clear-date-property-value!
+  "Clear a date/datetime value while keeping the property on the node."
+  [block property]
+  (let [blocks (get-operating-blocks block)]
+    (property-handler/batch-set-block-property! (operating-block-ids blocks)
+                                                (:db/ident property)
+                                                :logseq.property/empty-placeholder)))
+
+(defn- date-picker-handle-delete!
+  "Backspace/Delete clears a set date; an already-empty value removes the property."
+  [e {:keys [block property on-delete del-btn?] :as opts}]
+  (if (and del-btn? (fn? on-delete))
+    (on-delete e)
+    (delete-block-property! block property opts)))
+
 (defn- prevent-bottom-property-edit-pointer-dismiss
   [^js e]
   (when (some-> (.-target e) (.closest ".bottom-property-edit-icon"))
@@ -967,7 +989,11 @@
           :on-click open-popup!
           :on-key-down (fn [e]
                          (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                           (delete-block-property! block property opts)))}
+                           (date-picker-handle-delete! e (assoc opts
+                                                                :block block
+                                                                :property property
+                                                                :on-delete on-delete
+                                                                :del-btn? del-btn?))))}
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
@@ -978,7 +1004,11 @@
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
-                           (delete-block-property! block property opts)
+                           (date-picker-handle-delete! e (assoc opts
+                                                                :block block
+                                                                :property property
+                                                                :on-delete on-delete
+                                                                :del-btn? del-btn?))
                            (" " "Enter")
                            (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
@@ -987,6 +1017,9 @@
           (when repeated-task?
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
           (cond
+            (not (date-property-value-present? value))
+            (property-empty-btn-value nil {:property-position property-position})
+
             (map? value)
             (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
                   compare-value (some-> date
@@ -1029,13 +1062,10 @@
                                                                                     (if datetime?
                                                                                       value
                                                                                       (:db/id value)))))
-                         :del-btn? (some? value)
+                         :del-btn? (date-property-value-present? value)
                          :on-delete (fn [e]
                                       (util/stop-propagation e)
-                                      (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! (operating-block-ids blocks)
-                                                                                    (:db/ident property)
-                                                                                    nil))
+                                      (clear-date-property-value! block property)
                                       (shui/popup-hide!))}))))
 
 (def ^:private broad-scoped-node-class-idents
