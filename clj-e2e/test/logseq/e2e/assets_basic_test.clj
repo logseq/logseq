@@ -27,15 +27,14 @@
           files [(asset-path "assets/icon.png")
                  (asset-path "assets/splash.png")
                  (asset-path "resources/img/logo.png")]
-          pending-files (atom files)]
-      (.onFileChooser
-       page
-       (reify Consumer
-         (accept [_ chooser]
-           (let [file (first @pending-files)]
-             (swap! pending-files rest)
-             (.setFiles chooser
-                        (into-array java.nio.file.Path [file]))))))
+          pending-files (atom files)
+          chooser-handler (reify Consumer
+                            (accept [_ chooser]
+                              (let [file (first @pending-files)]
+                                (swap! pending-files rest)
+                                (.setFiles chooser
+                                           (into-array java.nio.file.Path [file])))))]
+      (.onFileChooser page chooser-handler)
       (b/new-block "image uploads")
       (doseq [expected-count (range 1 (inc (count files)))]
         (util/input-command "Upload an asset")
@@ -43,6 +42,8 @@
          ".ls-page-blocks .asset-container img"
          expected-count))
       (assert/assert-have-count ".ls-page-blocks .asset-container img" 3)
+      ;; the page is shared by every test in this namespace
+      (.offFileChooser page chooser-handler)
       (doseq [image (.all (w/-query ".ls-page-blocks .asset-container img"))]
         (is (not (string/blank? (.getAttribute image "src"))))
         (is (pos? (.evaluate image "image => image.naturalWidth"))))
@@ -76,3 +77,27 @@
        ".ls-table-header-cell:has-text('File')")
       (assert/assert-is-hidden
        ".ls-table-header-cell:has-text('checksum')"))))
+
+(deftest image-action-menu-delete-test
+  (testing "the image action menu opens on a mouse click and deletes the image"
+    (let [page (w/get-page)
+          chooser-handler (reify Consumer
+                            (accept [_ chooser]
+                              (.setFiles chooser
+                                         ;; a file the upload test above has not added: a
+                                         ;; second upload of the same bytes is refused as a duplicate
+                                         (into-array java.nio.file.Path [(asset-path "resources/icons/logseq.png")]))))]
+      (.onFileChooser page chooser-handler)
+      (b/new-block "image to delete")
+      (util/input-command "Upload an asset")
+      (assert/assert-have-count ".ls-page-blocks .asset-container img" 1)
+      (.offFileChooser page chooser-handler)
+      (util/double-esc)
+      (let [container (.first (w/-query ".ls-page-blocks .asset-container"))]
+        (.hover container)
+        (w/click (.first (w/-query ".ls-page-blocks .asset-action-bar button")))
+        (assert/assert-is-visible "[role=menu]")
+        (w/click (w/get-by-text "Delete image"))
+        (assert/assert-is-visible (w/get-by-text "Are you sure you want to delete this image?"))
+        (w/click (w/get-by-text "Confirm"))
+        (assert/assert-have-count ".ls-page-blocks .asset-container img" 0)))))
