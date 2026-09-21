@@ -1,7 +1,9 @@
 (ns frontend.components.property.property-test
-  (:require ["react" :as react]
+  (:require ["fs" :as fs]
+            ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
             [frontend.components.property.default-value :as property-default-value]
@@ -184,3 +186,18 @@
        (#'property-component/show-property-panel-bullet?
         {:logseq.property/type :default}
         {:db/id 1}))))
+
+(deftest url-property-wrapping-rule-must-not-target-the-bullet-test
+  (let [css (str (fs/readFileSync "src/main/frontend/components/property.css" "utf8"))
+        rule (->> (string/split-lines css)
+                  (filter #(and (string/includes? % "[data-property-type=url]")
+                                (string/includes? % ".property-value-panel a")))
+                  first)]
+    (is (some? rule)
+        "The URL value-panel wrapping rule should still exist in property.css")
+    (is (string/includes? rule ":not(.bullet-link-wrap)")
+        (str "The URL wrapping rule must exclude the block bullet's anchor. It applies "
+             "min-width:0, which lets the inline-flex bullet collapse and pulls it out of "
+             "line with the other properties (db-test#1239)."))
+    (is (string/includes? rule ":not(.block-control)")
+        "The same rule must exclude the block control anchor for the same reason")))
