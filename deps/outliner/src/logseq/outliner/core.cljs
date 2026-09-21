@@ -844,6 +844,15 @@
       (default-value-block? target-block)
       (and sibling? (default-value-block? (:block/parent target-block)))))
 
+(defn- resolve-created-from-property
+  [db created-from-property]
+  (cond
+    (de/entity? created-from-property)
+    created-from-property
+
+    (some? created-from-property)
+    (d/entity db created-from-property)))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -862,13 +871,15 @@
                     Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
+      `created-from-property`: property ident/ref used to restore a deleted property
+                               value as a property value instead of a child block.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
   [db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
                                   outliner-op outliner-real-op replace-empty-target? update-timestamps?
-                                  insert-template?]
+                                  insert-template? created-from-property]
                            :as opts
                            :or {update-timestamps? true}}]
   {:pre [(seq blocks)]}
@@ -937,20 +948,27 @@
                                (remove old-db-id-blocks)
                                (remove nil?)
                                (map (fn [uuid'] {:block/uuid uuid'})))
-                from-property (:logseq.property/created-from-property target-block)
+                from-property (when sibling?
+                                 (:logseq.property/created-from-property target-block))
                 many? (= :db.cardinality/many (:db/cardinality from-property))
-                property-values-tx (when (and sibling? from-property many?)
-                                      (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
+                restore-from-property (or (when many? from-property)
+                                          (resolve-created-from-property db created-from-property))
+                property-values-tx (when restore-from-property
+                                      (let [owner-id (if sibling?
+                                                       (:db/id (:block/parent target-block))
+                                                       (:db/id target-block))
+                                            top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                         (mapcat (fn [block]
                                                   (when-let [new-id (or (id->new-uuid (:db/id block))
                                                                         (uuid->new-uuid (:block/uuid block))
                                                                         (:block/uuid block))]
                                                     [{:block/uuid new-id
-                                                      :logseq.property/created-from-property (:db/id from-property)}
+                                                      :logseq.property/created-from-property (:db/id restore-from-property)}
                                                      [:db/add
-                                                      (:db/id (:block/parent target-block))
-                                                      (:db/ident (d/entity db (:db/id from-property)))
-                                                      [:block/uuid new-id]]])) top-level-blocks)))
+                                                      owner-id
+                                                      (:db/ident (d/entity db (:db/id restore-from-property)))
+                                                      [:block/uuid new-id]]]))
+                                                top-level-blocks)))
                  full-tx (common-util/concat-without-nil page-txs
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
@@ -1108,7 +1126,7 @@
            (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
 (defn- move-block
-  [db block target-block sibling?]
+  [db block target-block sibling? {:keys [created-from-property]}]
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
@@ -1144,14 +1162,20 @@
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            target-from-property (:logseq.property/created-from-property target-block)
+            target-from-property (when sibling?
+                                   (:logseq.property/created-from-property target-block))
             block-from-property (:logseq.property/created-from-property block)
+            restore-from-property (or target-from-property
+                                      (resolve-created-from-property db created-from-property))
             property-tx (let [retract-property-tx (when block-from-property
                                                     [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
                                                      [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when (and sibling? target-from-property)
-                                                [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
-                                                 [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
+                              add-property-tx (when restore-from-property
+                                                (let [owner-id (if sibling?
+                                                                 (:db/id (:block/parent target-block))
+                                                                 (:db/id target-block))]
+                                                  [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
+                                                   [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
                           (concat retract-property-tx add-property-tx))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
 
@@ -1171,7 +1195,7 @@
                               (d/entity @conn (:db/id (nth blocks (dec idx)))))
              block (d/entity @conn (:db/id block))]
          (when-not (move-to-original-position? [block] target-block sibling? false)
-           (let [tx-data (move-block @conn block target-block sibling?)]
+           (let [tx-data (move-block @conn block target-block sibling? opts)]
              ;; FIXME: move-blocks should be pure fn
              ;; (prn "==>> move blocks tx:" tx-data)
              (ldb/transact! conn tx-data {:sibling? sibling?
