@@ -11,10 +11,6 @@
   "js files from publishing release build"
   ["main.js" "code-editor.js"])
 
-(def ^:api required-js-runtime-files
-  "Worker/wasm/fs files a hosted export must copy from static/js"
-  publish-runtime/required-js-runtime-files)
-
 (def ^:api static-dirs
   "dirs under static dir to copy over"
   ["css" "icons" "img" "js"])
@@ -54,7 +50,7 @@
 (defn- assert-required-runtime-files!
   [output-static-dir]
   (let [js-dir (node-path/join output-static-dir "js")]
-    (doseq [file (concat js-files required-js-runtime-files)]
+    (doseq [file (concat js-files publish-runtime/required-js-runtime-files)]
       (let [file-path (node-path/join js-dir file)]
         (when-not (fs/existsSync file-path)
           (throw (ex-info (str "Missing publishing runtime file: " file)

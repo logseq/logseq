@@ -66,7 +66,7 @@
   (publish-page/index-html "{}" "{}" {:title "t" :name "n"}))
 
 (defn- create-static-dir
-  ([dir] (create-static-dir dir {:runtime-files publish-export/required-js-runtime-files}))
+  ([dir] (create-static-dir dir {:runtime-files publish-runtime/required-js-runtime-files}))
   ([dir {:keys [runtime-files]}]
    (fs/mkdirSync (path/join dir) #js {:recursive true})
    (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
@@ -178,7 +178,7 @@
                  (str "script src is relative: " src))
              (is (fs/existsSync (path/join "tmp/published-graph" src))
                  (str "exported index.html script exists on disk: " src)))
-           (doseq [file publish-export/required-js-runtime-files]
+           (doseq [file publish-runtime/required-js-runtime-files]
              (is (fs/existsSync (path/join "tmp/published-graph" "static" "js" file))
                  (str "required hosted runtime file is copied: " file)))
            (is (fs/existsSync "tmp/published-graph/static/js/main.js"))
@@ -187,7 +187,7 @@
            (is (fs/existsSync "tmp/published-graph/static/js/sqlite3.wasm")))))
 
 (deftest-async create-export-fails-when-sqlite-wasm-is-missing
-  (create-static-dir "tmp/static" {:runtime-files (remove #{"sqlite3.wasm"} publish-export/required-js-runtime-files)})
+  (create-static-dir "tmp/static" {:runtime-files (remove #{"sqlite3.wasm"} publish-runtime/required-js-runtime-files)})
   (fs/rmSync "tmp/static/js/sqlite3.wasm" #js {:force true})
   (create-logseq-graph "tmp/test-graph")
   (-> (create-export "tmp/static" "tmp/test-graph" "tmp/published-graph" {:html (published-html)})
