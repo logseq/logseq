@@ -2159,11 +2159,13 @@
                         (assoc :ref-query-child? true)
                         (integer? (:block-level config))
                         (update :block-level inc))]
-          (render-children config' child-uuids))]])))
+          ;; Element form so render-children keeps its own hooks scope.
+          [render-children config' child-uuids])]])))
 
 (hsx/defc subscribed-block-children
   [config block collapsed? render-children]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))]
+  (let [child-uuids (db-hooks/use-children
+                     (when-not collapsed? (:block/uuid block)))]
     (block-children config block child-uuids collapsed? render-children)))
 
 (defn- block-content-empty?
@@ -2407,9 +2409,13 @@
 
 (hsx/defc subscribed-block-control
   [config block opts]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))
+  (let [collapsed? (:collapsed? config)
+        child-uuids (db-hooks/use-children
+                     (when-not collapsed? (:block/uuid block)))
         has-children? (and (not (entity/leaf-property-value? block))
-                           (boolean (seq child-uuids)))
+                           (boolean (if collapsed?
+                                      (:block.temp/has-children? block)
+                                      (seq child-uuids))))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
 
@@ -4132,6 +4138,28 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
+(defn- block-collapsed?
+  "Collapsed state combining transient UI overrides with the persisted flag.
+   Row-level children subscriptions gate on the same predicate so collapsed
+   rows never trigger a [:children] load."
+  [config block temp-collapsed?]
+  (cond
+    (:ignore-block-collapsed? config)
+    false
+
+    (or (:ref? config)
+        (boolean (:custom-query? config))
+        (:view? config)
+        (root-block? config block)
+        (and (or (entity/class? block) (entity/property? block))
+             (:page-title? config)))
+    temp-collapsed?
+
+    :else
+    (if (some? temp-collapsed?)
+      temp-collapsed?
+      (util/collapsed? block))))
+
 (defn- build-config
   [config block {:keys [navigating-block navigated?]}]
   (cond-> config
@@ -4371,29 +4399,16 @@
         table? (:table? config*)
         property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
-        ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
-        db-collapsed? (util/collapsed? block)
         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
                                       (state/get-current-repo)
                                       (state/resolve-container-id container-id)
                                       uuid])
-        collapsed? (cond
-                     (:ignore-block-collapsed? config)
-                     false
-
-                     (or ref-or-custom-query?
-                         (:view? config)
-                         (root-block? config block)
-                         (and (or (entity/class? block) (entity/property? block)) (:page-title? config)))
-                     temp-collapsed?
-
-                     :else
-                     (if (some? temp-collapsed?) temp-collapsed? db-collapsed?))
+        collapsed? (block-collapsed? config block temp-collapsed?)
         config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         doc-mode? (:document/mode? config)
@@ -4401,7 +4416,8 @@
         page-embed? (:page-embed? config)
         reference? (:reference? config)
         block-id (str "ls-block-" uuid)
-        has-child? (boolean (seq child-uuids))
+        has-child? (boolean (or (seq child-uuids)
+                                (:block.temp/has-children? block)))
         top? (:top? config)
         original-block (:original-block config)
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
@@ -5222,62 +5238,9 @@
   (react-core/createElement memoized-loaded-block-row
                             #js {:args [config block child-uuids render-children opts]}))
 
-(hsx/defc linked-block-row
-  [config original-block original-child-uuids linked-uuid opts]
-  (let [linked-block (db-hooks/use-block linked-uuid)
-        linked-child-uuids (db-hooks/use-children linked-uuid)]
-    (if-not linked-block
-      (unloaded-block-placeholder)
-      (let [loop-linked? (or (contains? (:links config) (:db/id linked-block))
-                             (= (:reference-view-parent-uuid config)
-                                (:block/uuid linked-block)))
-            block (if loop-linked? original-block linked-block)
-            child-uuids (if loop-linked?
-                          original-child-uuids
-                          linked-child-uuids)
-            config' (-> config
-                        (assoc :loop-linked? loop-linked?
-                               :original-block original-block)
-                        (update :links (fnil conj #{}) (:db/id linked-block)))]
-        (render-loaded-block-row config'
-                                 block
-                                 child-uuids
-                                 plain-block-list
-                                 opts)))))
-
-(hsx/defc subscribed-block-row
-  [config block-uuid & {:as opts}]
-  (let [block (db-hooks/use-block block-uuid)
-        child-uuids (db-hooks/use-children block-uuid)
-        linked-uuid (get-in block [:block/link :block/uuid])]
-    (cond
-      (nil? block)
-      (unloaded-block-placeholder)
-
-      linked-uuid
-      (linked-block-row config block child-uuids linked-uuid opts)
-
-      :else
-      (render-loaded-block-row config block child-uuids plain-block-list opts))))
-
-(hsx/defc plain-block-list
-  [config block-uuids]
-  (let [block-uuids (vec block-uuids)
-        blocks-count (count block-uuids)]
-    (when (seq block-uuids)
-      [:div.blocks-list-wrap
-       {:data-level (or (:level config) 0)}
-       (map-indexed
-        (fn [idx block-uuid]
-          ^{:key (str (:container-id config) "-" block-uuid)}
-          [subscribed-block-row
-           config
-           block-uuid
-           {:top? (zero? idx)
-            :bottom? (= (dec blocks-count) idx)}])
-        block-uuids)])))
-
-(hsx/defc page-root-virtual-list
+(defn- use-virtual-list-opts
+  "Shared virtualized-list wiring for flat block-uuid lists: scroll container,
+   item identity, overscan, and selection-range bookkeeping."
   [config block-uuids]
   (let [disable-virtualized? (util/rtc-test-without-virtualization?)
         block-uuids (vec block-uuids)
@@ -5308,14 +5271,14 @@
                       (fn [^js rendered-items]
                         (when (pos? (alength rendered-items))
                           (let [previous-start (.-current *last-rendered-start)
-                              current-start (.-index (aget rendered-items 0))
-                              current-end (.-index (aget rendered-items
+                                current-start (.-index (aget rendered-items 0))
+                                current-end (.-index (aget rendered-items
                                                         (dec (alength rendered-items))))
-                              direction (cond
-                                          (or (nil? previous-start)
-                                              (= previous-start current-start)) nil
-                                          (< previous-start current-start) :down
-                                          :else :up)]
+                                direction (cond
+                                            (or (nil? previous-start)
+                                                (= previous-start current-start)) nil
+                                            (< previous-start current-start) :down
+                                            :else :up)]
                             (set! (.-current *last-rendered-start) current-start)
                             (when (and direction
                                        (block-selection/pointer-down?))
@@ -5335,6 +5298,91 @@
                                        {:top? (zero? idx)
                                         :bottom? (= (dec blocks-count) idx)}))}]
     (set! (.-current *block-uuids-ref) block-uuids)
+    {:virtualized? virtualized?
+     :virtual-opts virtual-opts
+     :*virtualized-ref *virtualized-ref
+     :*block-uuids-ref *block-uuids-ref}))
+
+(hsx/defc virtualizable-block-list
+  "Flat block list that switches to windowed rendering for large lists; used by
+   page roots and by nested children."
+  [config block-uuids]
+  (let [{:keys [virtualized? virtual-opts]} (use-virtual-list-opts config block-uuids)]
+    (when (seq block-uuids)
+      (if virtualized?
+        [:div.blocks-list-wrap
+         {:data-level (or (:level config) 0)
+          :data-virtuoso-scroller true}
+         (ui/virtualized-list virtual-opts)]
+        (plain-block-list config block-uuids)))))
+
+(hsx/defc linked-block-row
+  [config original-block original-child-uuids linked-uuid opts]
+  (let [linked-block (db-hooks/use-block linked-uuid)
+        linked-child-uuids (db-hooks/use-children
+                            (when-not (:collapsed? opts) linked-uuid))]
+    (if-not linked-block
+      (unloaded-block-placeholder)
+      (let [loop-linked? (or (contains? (:links config) (:db/id linked-block))
+                             (= (:reference-view-parent-uuid config)
+                                (:block/uuid linked-block)))
+            block (if loop-linked? original-block linked-block)
+            child-uuids (if loop-linked?
+                          original-child-uuids
+                          linked-child-uuids)
+            config' (-> config
+                        (assoc :loop-linked? loop-linked?
+                               :original-block original-block)
+                        (update :links (fnil conj #{}) (:db/id linked-block)))]
+        (render-loaded-block-row config'
+                                 block
+                                 child-uuids
+                                 virtualizable-block-list
+                                 opts)))))
+
+(hsx/defc subscribed-block-row
+  [config block-uuid & {:as opts}]
+  (let [block (db-hooks/use-block block-uuid)
+        temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                      (state/get-current-repo)
+                                      (state/resolve-container-id (:container-id config))
+                                      block-uuid])
+        collapsed? (and block (block-collapsed? config block temp-collapsed?))
+        ;; Collapsed rows do not load children; expanding re-subscribes.
+        child-uuids (db-hooks/use-children (when-not collapsed? block-uuid))
+        linked-uuid (get-in block [:block/link :block/uuid])]
+    (cond
+      (nil? block)
+      (unloaded-block-placeholder)
+
+      linked-uuid
+      (linked-block-row config block child-uuids linked-uuid
+                        (assoc opts :collapsed? collapsed?))
+
+      :else
+      (render-loaded-block-row config block child-uuids virtualizable-block-list opts))))
+
+(hsx/defc plain-block-list
+  [config block-uuids]
+  (let [block-uuids (vec block-uuids)
+        blocks-count (count block-uuids)]
+    (when (seq block-uuids)
+      [:div.blocks-list-wrap
+       {:data-level (or (:level config) 0)}
+       (map-indexed
+        (fn [idx block-uuid]
+          ^{:key (str (:container-id config) "-" block-uuid)}
+          [subscribed-block-row
+           config
+           block-uuid
+           {:top? (zero? idx)
+            :bottom? (= (dec blocks-count) idx)}])
+        block-uuids)])))
+
+(hsx/defc page-root-virtual-list
+  [config block-uuids]
+  (let [{:keys [virtualized? virtual-opts *virtualized-ref *block-uuids-ref]}
+        (use-virtual-list-opts config block-uuids)]
     (hooks/use-effect!
      (fn []
        (when (and virtualized?

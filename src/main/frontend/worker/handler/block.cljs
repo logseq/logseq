@@ -208,6 +208,8 @@
                      :block/tx-id block-tx-id
                      :block.temp/refs-count
                      (block-refs-count db entity-id)
+                     :block.temp/has-children?
+                     (block-has-children? db entity-id)
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
         (and (:logseq.property/view-for block)
@@ -346,34 +348,43 @@
      :items (mapv (juxt :block/uuid :block/order) rows)}))
 
 (defn open-children-tree
-  "Membership for every expanded node in the subtree. Only [:children] slots are
-   produced; descendant blocks hydrate lazily through [:block uuid] slots."
-  [db root-uuid]
-  (when-not (uuid? root-uuid)
-    (fail-render-read! "Invalid direct-children parent UUID"
-                       {:parent-uuid root-uuid}))
-  (let [root-id (resolve-parent-id db root-uuid)]
-    (loop [pending [[root-id root-uuid (recycled-chain? db root-id)]]
-           seen #{}
-           children {}]
-      (if-let [[parent-id parent-uuid parent-recycled?] (peek pending)]
-        (let [pending (pop pending)]
-          (if (contains? seen parent-uuid)
-            (recur pending seen children)
-            (let [{:keys [parent-tx-id rows]}
-                  (parent-membership db parent-uuid parent-id parent-recycled?)
-                  ;; Rows enqueued here passed every membership filter, so their
-                  ;; ancestry is already known to be recycled-free.
-                  open-children
-                  (into [] (comp (remove :block/collapsed?)
-                                 (map (fn [row] [(:db/id row) (:block/uuid row) false])))
-                        rows)]
-              (recur (into pending open-children)
-                     (conj seen parent-uuid)
-                     (assoc children parent-uuid
-                            {:parent-tx-id parent-tx-id
-                             :items (mapv (juxt :block/uuid :block/order) rows)})))))
-        children))))
+  "Membership for expanded nodes of the subtree, visited in document order (a
+   node's children come before its following siblings) and bounded to at most
+   `node-limit` expanded nodes. Nodes beyond the limit produce no [:children]
+   slot; the renderer loads them on demand when their rows mount."
+  ([db root-uuid]
+   (open-children-tree db root-uuid nil))
+  ([db root-uuid node-limit]
+   (when-not (uuid? root-uuid)
+     (fail-render-read! "Invalid direct-children parent UUID"
+                        {:parent-uuid root-uuid}))
+   (let [root-id (resolve-parent-id db root-uuid)
+         remaining0 (or node-limit ##Inf)]
+     (loop [pending [[root-id root-uuid (recycled-chain? db root-id)]]
+            seen #{}
+            remaining remaining0
+            children {}]
+       (if-let [[parent-id parent-uuid parent-recycled?] (when (pos? remaining)
+                                                           (peek pending))]
+         (let [pending (pop pending)]
+           (if (contains? seen parent-uuid)
+             (recur pending seen remaining children)
+             (let [{:keys [parent-tx-id rows]}
+                   (parent-membership db parent-uuid parent-id parent-recycled?)
+                   ;; Rows enqueued here passed every membership filter, so their
+                   ;; ancestry is already known to be recycled-free. Reverse so
+                   ;; the stack pops the first child first (document order).
+                   open-children
+                   (into [] (comp (remove :block/collapsed?)
+                                  (map (fn [row] [(:db/id row) (:block/uuid row) false])))
+                         (rseq rows))]
+               (recur (into pending open-children)
+                      (conj seen parent-uuid)
+                      (dec remaining)
+                      (assoc children parent-uuid
+                             {:parent-tx-id parent-tx-id
+                              :items (mapv (juxt :block/uuid :block/order) rows)})))))
+         children)))))
 
 (defn document-order-uuids
   "First `limit` uuids in render order: a node's expanded children come before
