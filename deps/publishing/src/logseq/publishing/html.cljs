@@ -167,4 +167,6 @@ generated index.html string and assets used by the html"
         raw-html-str (publishing-html state html-options (when inline-db? db-str))]
     {:html raw-html-str
      :asset-filenames asset-filenames
-     :db-transit db-str}))
+     ;; The transit payload is only needed as a separate artifact when it is
+     ;; not already inlined in the html.
+     :db-transit (when-not inline-db? db-str)}))

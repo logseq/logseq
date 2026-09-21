@@ -45,5 +45,5 @@
         "Inline download must not point at a missing external transit file")
     (is (string/includes? html "hello export")
         "Inline HTML must include the transit graph payload")
-    (is (string? db-transit))
-    (is (pos? (count db-transit)))))
+    (is (nil? db-transit)
+        "Inline export must not duplicate the transit payload as a separate artifact")))
