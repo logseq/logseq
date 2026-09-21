@@ -856,8 +856,6 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when mouse-down?
-                          ;; Flush editor buffer before clear-edit/navigate so text typed
-                          ;; within the autosave idle window is not discarded (db-test#1250).
                           (editor-handler/save-current-block!)
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
