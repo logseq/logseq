@@ -117,7 +117,7 @@
     @apply items-center;
   }
 
-  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a,
+  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
   .property-pair.property-panel-row[data-property-type=url] .asset-image-fallback {
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -660,6 +660,14 @@ a.control-link {
 
 .ls-property-ui-position-sub-pane {
   @apply w-[240px] p-0;
+}
+
+.ls-property-default-value-pane {
+  @apply min-w-[300px] p-1;
+
+  .property-block-container {
+    @apply ml-0;
+  }
 }
 
 .ls-property-key {

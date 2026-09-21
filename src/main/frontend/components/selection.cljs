@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -20,6 +21,12 @@
    (and outliner?
         (seq comment-targets))))
 
+(defn- restore-action-bar
+  "Hide the action bar, then re-show it if blocks are still selected."
+  []
+  (state/pub-event! [:editor/hide-action-bar])
+  (editor-handler/show-action-bar! {:delay 50}))
+
 (defn- unset-property-event
   [target selected-blocks view-parent]
   [:editor/new-property {:target target
@@ -27,7 +34,7 @@
                          :view-parent view-parent
                          :remove-property? true
                          :select-opts {:show-new-when-not-exact-match? false}
-                         :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])
+                         :on-dialog-close restore-action-bar}])
 
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
@@ -39,7 +46,7 @@
                              (keep #(when (number? %) %) selected-blocks)
                              (state/get-selection-block-ids))
         direct-selected-blocks (when (seq selected-blocks)
-                                 (remove number? selected-blocks))
+                                 (mapv entity/as-block-map (remove number? selected-blocks)))
         [loaded-selected-blocks set-loaded-selected-blocks!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
@@ -51,7 +58,7 @@
     (let [selected-blocks (seq (concat direct-selected-blocks loaded-selected-blocks))
           comment-targets (comments-model/comment-target-blocks selected-blocks)
           on-copy (if (and selected-blocks (nil? on-copy))
-                    #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
+                    #(editor-handler/copy-selection-blocks true :selected-blocks selected-blocks)
                     (or on-copy #(editor-handler/copy-selection-blocks true)))
           button-opts {:variant :outline
                        :size :sm
@@ -68,7 +75,7 @@
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
                                                                             :property-key "Tags"
-                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+                                                                            :on-dialog-close restore-action-bar}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
         (when (show-comment-action? outliner? comment-targets)
@@ -93,7 +100,7 @@
                                    (util/stop e)
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
-                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+                                                                            :on-dialog-close restore-action-bar}])))
          (t :property/set-property))
         (shui/toolbar-button
          (assoc button-opts

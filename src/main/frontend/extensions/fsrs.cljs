@@ -15,6 +15,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.entity :as entity]
+            [logseq.db.frontend.content :as db-content]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
@@ -310,8 +311,9 @@
                                         (if-not (string/blank? (:block/title block))
                                           block
                                           (when-let [query-block-id (:logseq.property/query-id block)]
-                                            (p/let [query-block (db-async/<get-block repo query-block-id)]
-                                              (assoc block :block/title (:block/title query-block))))))
+                                            (p/let [query-block (db-async/<get-block repo query-block-id {:children? false})]
+                                              (assoc block :block/title
+                                                     (db-content/recur-replace-uuid-in-block-title query-block))))))
                                       cards))]
              (reset! *cards-list (concat [{:db/id :global
                                            :block/title (t :flashcard/all-cards)}]

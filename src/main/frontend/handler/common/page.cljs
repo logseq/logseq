@@ -135,7 +135,9 @@
 
          :else
          (when-not (string/blank? title')
-           (p/let [existing-page (when-not class? (<page-for-create title'))]
+           ;; With explicit tags, the worker finds an existing page by title and tags
+           (p/let [existing-page (when-not (or class? (seq (:tags options)))
+                                   (<page-for-create title'))]
              (if (and existing-page (not (ldb/recycled? existing-page)))
                (do
                  (when redirect?

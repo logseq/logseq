@@ -1955,9 +1955,9 @@
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 
- :view.gallery/asset-property "Asset property"
  :view.gallery/card-size "Card size"
  :view.gallery/compact-size "Compact"
+ :view.gallery/cover-property "Cover property"
  :view.gallery/custom-size "Custom"
  :view.gallery/default-size "Default"
  :view.gallery/display-properties "Display properties"
