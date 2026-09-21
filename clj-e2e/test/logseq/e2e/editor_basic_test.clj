@@ -1162,6 +1162,9 @@
       (is (contains? contents "Outline Child"))
       (is (not (contains? contents "hello")))
       (is (not (contains? contents "world"))))
+    (assert/assert-have-count
+     (loc/filter ".ls-page-blocks .page-blocks-inner .ls-new-property" :has-text "Add property")
+     0)
     (p/goto-page "Outline Child")
     (assert/assert-is-visible
      (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "hello")))))

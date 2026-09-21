@@ -201,3 +201,13 @@
              "line with the other properties (db-test#1239)."))
     (is (string/includes? rule ":not(.block-control)")
         "The same rule must exclude the block control anchor for the same reason")))
+
+(deftest page-title-property-surface-hides-outliner-add-property-test
+  (is (true? (#'property-component/page-title-property-surface? {:page-title? true}))
+      "The current page title can add properties")
+  (is (true? (#'property-component/page-title-property-surface? {:sidebar-properties? true}))
+      "Sidebar page properties can add properties")
+  (is (true? (#'property-component/page-title-property-surface? {:tag-dialog? true}))
+      "Tag dialog can add properties")
+  (is (false? (#'property-component/page-title-property-surface? {:in-block-container? true}))
+      "A page nested in the outliner cannot add properties"))

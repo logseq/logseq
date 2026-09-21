@@ -3283,10 +3283,9 @@
                                              config block page? has-hidden-properties?)
         show-hidden-properties-control? (and has-hidden-properties?
                                              page?)
-        show-page-add-property? (and (entity/page? block)
-                                     (not (entity/class? block))
-                                     (not config/publishing?))
-        show-add-property-button? show-page-add-property?]
+        ;; Page title / sidebar still expose Add property. Nested outliner
+        ;; pages only show properties they already have.
+        show-add-property-button? false]
     (case position
         :block-below
         [block-below-positioned-properties-gate
