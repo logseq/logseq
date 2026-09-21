@@ -89,8 +89,9 @@
                                           :value 2026
                                           :onChange (fn [_])}))]
     (is (string/includes? html "ls-date-year-input"))
-    (is (string/includes? html "4.5rem"))
+    (is (string/includes? html "3.25rem"))
     (is (not (string/includes? html "ml-2")))
+    (is (not (string/includes? html "4.5rem")))
     (is (not (string/includes? html "5.75rem")))))
 
 (deftest date-month-select-uses-closable-menu-items-test
@@ -123,7 +124,11 @@
                                      :today (js/Date. 2026 8 16)}))]
       (is (string/includes? html "del-date-btn")
           "Trash control must render for a date that can be cleared")
-      (is (string/includes? html "has-del-btn")))))
+      (is (string/includes? html "has-del-btn"))
+      (is (re-find #"<nav[^>]*>(?:(?!</nav>).)*del-date-btn" html)
+          "Delete button renders inside the nav row next to prev/next")
+      (is (re-find #"del-date-btn h-8 w-9" html)
+          "Delete button matches the h-8 w-9 nav button size"))))
 
 (deftest single-calendar-hides-delete-button-when-empty-test
   (with-redefs [state/get-start-of-week (constantly 6)

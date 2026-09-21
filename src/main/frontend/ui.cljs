@@ -1000,8 +1000,18 @@
 
 (hsx/defc DelDateButton
   [on-delete]
-  (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
-               (shui/tabler-icon "trash" {:size 15})))
+  (shui/button {:variant :outline
+                :class "del-date-btn h-8 w-9 bg-transparent !p-0 !px-0 !py-0 opacity-80 hover:opacity-100"
+                :on-click on-delete}
+               (shui/tabler-icon "trash" {:size 16})))
+
+(defn- next-month-button-with-del
+  "The next-month nav button followed by the delete button, both compact items
+   in the calendar's nav row."
+  [^js props on-delete]
+  (react/createElement react/Fragment nil
+                       (react/createElement "button" props)
+                       (DelDateButton on-delete)))
 
 (defonce month-values
   [:January :February :March :April :May
@@ -1047,7 +1057,7 @@
          :on-blur (fn [_]
                     (when-not (re-matches #"\d{4}" year-value)
                       (set-year-value! (str value))))
-         :class "ls-date-year-input h-8 !w-[4.5rem] !px-2 !py-0"
+         :class "ls-date-year-input h-8 !w-[3.25rem] !px-2 !py-0"
          :value year-value
          :type "number"
          :min 1
@@ -1081,15 +1091,16 @@
      :toYear 3000
      :formatters {:formatWeekdayName (fn [weekday _]
                                        (i18n/locale-format-date weekday {:weekday "short"}))}
-     :components {:Dropdown #(date-year-month-select (bean/bean %))}
-     :class-names {:root (when del-btn? "has-del-btn")}
+     :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
+                   del-btn? (assoc :NextMonthButton #(next-month-button-with-del % on-delete)))
+     :class-names (when del-btn?
+                    ;; three h-8 w-9 nav buttons + gap-1 need 116px inside the 276px caption
+                    {:root "has-del-btn"
+                     :nav "absolute left-[160px] top-1 z-10 flex items-center gap-1"})
      :on-day-key-down (fn [^js d _ ^js e]
                         (when (= "Enter" (.-key e))
                           (let [on-select' (or on-select on-day-click)]
                             (on-select' d))))}
-    (when del-btn?
-      ;; react-day-picker v9 no longer has a Head slot; footer still mounts inside the root.
-      {:footer (DelDateButton on-delete)})
     opts)))
 
 (defn- get-current-hh-mm
