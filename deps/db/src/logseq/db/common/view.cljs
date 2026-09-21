@@ -381,8 +381,50 @@
 
 (defn- ref-value-content
   [db value-eid]
-  (or (indexed-attr-value db value-eid :block/title)
-      (indexed-attr-value db value-eid :logseq.property/value)))
+  (or (indexed-attr-value db value-eid :logseq.property/value)
+      (indexed-attr-value db value-eid :block/title)))
+
+(defn- view-sort-groups-desc?
+  [view]
+  (if (nil? (:logseq.property.view/sort-groups-desc? view))
+    true
+    (boolean (:logseq.property.view/sort-groups-desc? view))))
+
+(defn- comparable-ref-content
+  [db value]
+  (cond
+    (de/entity? value)
+    (or (:logseq.property/value value)
+        (ref-value-content db (:db/id value))
+        (:block/title value)
+        (:db/ident value)
+        (:db/id value))
+
+    (and (map? value) (:db/id value))
+    (or (:logseq.property/value value)
+        (ref-value-content db (:db/id value))
+        (:block/title value)
+        (:db/ident value)
+        (:db/id value))
+
+    (integer? value)
+    value
+
+    :else
+    value))
+
+(defn- comparable-sort-value
+  [db value]
+  (cond
+    (and (coll? value) (not (string? value)) (not (map? value)))
+    (->> value
+         (map #(comparable-ref-content db %))
+         (remove nil?)
+         (sort-by str)
+         (string/join ", "))
+
+    :else
+    (comparable-ref-content db value)))
 
 (defn- match-item->id
   [db v]
@@ -613,23 +655,19 @@
   (or (not (string/blank? input))
       (seq (or (:filters filters) []))))
 
-(defn- avet-slice-count
-  "Datascript AVET slices are Iters. `count` walked 41111 :block/name
-  datoms in 72ms. BTSet est-count is a tree distance. nbb-logseq does
-  not load that ns, so tests fall back to `count` on small fixtures."
-  [datoms]
-  (cond
-    (nil? datoms) 0
-    (counted? datoms) (count datoms)
-    (exists? js/me.tonsky.persistent_sorted_set.est_count)
-    (js/me.tonsky.persistent_sorted_set.est_count datoms)
-    :else (count datoms)))
-
 (defn- count-all-page-ids
+  "Exact visible-page count. BTSet est-count is a tree distance; on a
+  56-page graph compiled ClojureScript reported 98 first-window rows
+  and the table painted empty placeholders. Walk :block/name once; do
+  not allocate the id vector. nbb has no est-count, so nbb tests cannot
+  catch this."
   [db exclude-ids]
-  (- (avet-slice-count (d/datoms db :avet :block/name))
-     (count (keep #(when (indexed-attr-value db % :block/name) %)
-                  exclude-ids))))
+  (reduce (fn [n datom]
+            (if (contains? exclude-ids (:e datom))
+              n
+              (inc n)))
+          0
+          (d/datoms db :avet :block/name)))
 
 (defn- all-pages-eid?
   [db exclude-ids eid]
@@ -1056,7 +1094,7 @@
   [view entities-result entities]
   (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
                                           :block/journal-day)
-        desc? (:logseq.property.view/sort-groups-desc? view)
+        desc? (view-sort-groups-desc? view)
         page-sort-value (fn [page]
                           (let [v (get page groups-sort-by-property-ident)]
                             (if (and (= groups-sort-by-property-ident :block/journal-day)
@@ -1103,9 +1141,12 @@
         :data index})
      :else
      (let [view (d/entity db view-id)
-           group-by-property (:logseq.property.view/group-by-property view)
+           group-by-property-ident (or (:db/ident (:logseq.property.view/group-by-property view))
+                                       group-by-property-ident)
+           group-by-property (or (:logseq.property.view/group-by-property view)
+                                 (when group-by-property-ident
+                                   (d/entity db group-by-property-ident)))
            list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
            group-by-closed-values? (some? (:property/closed-values group-by-property))
            ref-property? (= (:db/valueType group-by-property) :db.type/ref)
            filters (or (:logseq.property.table/filters view) filters)
@@ -1172,7 +1213,7 @@
                         (if group-by-property-ident
                         (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
                                                                 :block/journal-day)
-                              desc? (:logseq.property.view/sort-groups-desc? view)
+                              desc? (view-sort-groups-desc? view)
                               result (->> filtered-entities
                                           (reduce (fn [groups ent]
                                                     (reduce
@@ -1186,7 +1227,7 @@
                                       (fn [[by-value _]]
                                         (cond
                                           group-by-page?
-                                          (let [v (get by-value groups-sort-by-property-ident)]
+                                          (let [v (comparable-sort-value db (get by-value groups-sort-by-property-ident))]
                                             (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
                                                      (nil? (:block/journal-day by-value)))
                                               ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
@@ -1199,11 +1240,9 @@
                                           ;; For value-ref types (e.g. :number), group-values has already
                                           ;; extracted the scalar content, so by-value is no longer an entity.
                                           ;; Only re-extract for entity group keys (e.g. :node/:class).
-                                          (if (de/entity? by-value)
-                                            (db-property/property-value-content by-value)
-                                            by-value)
+                                          (comparable-sort-value db by-value)
                                           :else
-                                          by-value)))]
+                                          (comparable-sort-value db by-value))))]
                           (sort (common-util/by-sorting
                                  (cond->
                                    [{:get-value (keyfn groups-sort-by-property-ident)

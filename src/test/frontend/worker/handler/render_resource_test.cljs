@@ -2135,6 +2135,7 @@
           (is (not (contains? (:watch-keys response)
                               [:attr :block/page]))))))))
 
+
 (deftest query-resource-executes-dsl-with-only-serialized-context-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)
