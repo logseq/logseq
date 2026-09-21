@@ -1375,14 +1375,12 @@
                                    before-errors)]
     (keep (fn [error]
             (let [before-entity-errors (get before-errors-by-eid (-> error :entity :db/id))
-                  introduced (if (nil? before-entity-errors)
-                               (:errors error)
-                               (not-empty
-                                (into {}
-                                      (remove (fn [[attr error-val]]
-                                                (= error-val (get before-entity-errors attr))))
-                                      (:errors error))))]
-              (when (seq introduced)
+                  introduced (not-empty
+                              (into {}
+                                    (remove (fn [[attr error-val]]
+                                              (= error-val (get before-entity-errors attr))))
+                                    (:errors error)))]
+              (when introduced
                 (assoc error :errors introduced))))
           after-errors)))
 
