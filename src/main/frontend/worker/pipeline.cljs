@@ -255,15 +255,26 @@
                                      (:added datom))]
            (when (or page-tag-update? move-to-library?)
              (let [block-before (d/entity db-before id)
-                   block-after (d/entity db-after id)]
+                   block-after (d/entity db-after id)
+                   ;; When a block becomes a page its descendant blocks still point
+                   ;; :block/page at the old page; re-point them at the new page.
+                   children-page-tx (fn []
+                                      (keep (fn [child-id]
+                                              (let [child (d/entity db-after child-id)]
+                                                (when (and child (not (ldb/page? child)))
+                                                  {:db/id child-id
+                                                   :block/page id})))
+                                            (ldb/get-block-full-children-ids db-after id)))]
                (when block-after
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
-                   [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
-                     :block/tags :logseq.class/Page}
-                    [:db/retract id :block/page]]
+                   (concat
+                    [{:db/id id
+                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                      :block/tags :logseq.class/Page}
+                     [:db/retract id :block/page]]
+                    (children-page-tx))
 
                    ;; block->page
                    (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
@@ -288,7 +299,7 @@
                                                      [{:db/id (:db/id block-parent)
                                                        :block/parent (:db/id (ldb/get-library-page db-after))
                                                        :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                     (concat ->page-tx move-parent-to-library-tx (children-page-tx)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
