@@ -2040,3 +2040,128 @@
                               "An unrelated newer graph revision does not stale the result.")]
                   (is (= 1 @calls))
                   (unsubscribe))))))))
+
+(deftest positioned-property-metadata-refreshes-mounted-and-warm-blocks-test
+  (async done
+         (let [mounted-uuid (random-uuid)
+               warm-uuid (random-uuid)
+               property-uuid (random-uuid)
+               calls (atom [])
+               revision (atom 1)
+               position (atom :block-left)
+               title (atom "Status")
+               row (fn [id]
+                     (block id 1 "Task"
+                            {:block.temp/positioned-properties
+                             {@position [{:block/uuid property-uuid :block/title @title}]}}))]
+           (finish-async! done
+                          (p/with-redefs [subs/<load-block
+                                          (fn [_ id]
+                                            (swap! calls conj id)
+                                            (p/resolved (block-patch @revision {id (row id)})))]
+                            (let [unsub-mounted (subs/subscribe-block! mounted-uuid (fn []))
+                                  unsub-warm (subs/subscribe-block! warm-uuid (fn []))]
+                              (p/let [_ (p/delay 0)
+                                      _ (unsub-warm)
+                                      _ (p/delay 0)
+                                      _ (reset! revision 2)
+                                      _ (reset! position :block-right)
+                                      _ (subs/apply-delta! (delta 2 {:affected-keys #{[:property-config]}}))
+                                      _ (p/delay 0)]
+                                (is (= 2 (count (filter #{mounted-uuid} @calls))))
+                                (is (= 1 (count (filter #{warm-uuid} @calls))) "Unmounted rows are invalidated without fetching.")
+                                (is (seq (get-in (subs/block-snapshot mounted-uuid)
+                                                 [:value :block.temp/positioned-properties :block-right])))
+                                (let [unsub-warm-again (subs/subscribe-block! warm-uuid (fn []))]
+                                  (p/let [_ (p/delay 0)
+                                          _ (is (= 2 (count (filter #{warm-uuid} @calls))))
+                                          _ (reset! revision 3)
+                                          _ (reset! title "Renamed")
+                                          _ (subs/apply-delta! (delta 3 {:affected-keys #{[:entity property-uuid]}}))
+                                          _ (p/delay 0)]
+                                    (is (= "Renamed" (get-in (subs/block-snapshot mounted-uuid)
+                                                             [:value :block.temp/positioned-properties :block-right 0 :block/title])))
+                                    (unsub-mounted)
+                                    (unsub-warm-again))))))))))
+
+(deftest property-change-during-block-load-rejects-old-projection-test
+  (async done
+         (let [id (random-uuid)
+               property-uuid (random-uuid)
+               pending (p/deferred)
+               calls (atom 0)
+               row (fn [title] (block id 1 "Task"
+                                      {:block.temp/positioned-properties
+                                       {:block-left [{:block/uuid property-uuid :block/title title}]}}))]
+           (finish-async! done
+                          (p/with-redefs [subs/<load-block
+                                          (fn [_ _]
+                                            (if (= 1 (swap! calls inc)) pending
+                                                (p/resolved (block-patch 2 {id (row "New")}))))]
+                            (let [unsubscribe (subs/subscribe-block! id (fn []))]
+                              (p/let [_ (subs/apply-delta! (delta 2 {:affected-keys #{[:entity property-uuid]}}))
+                                      _ (p/resolve! pending (block-patch 1 {id (row "Old")}))
+                                      _ (p/delay 0)
+                                      _ (p/delay 0)]
+                                (is (= 2 @calls))
+                                (is (= "New" (get-in (subs/block-snapshot id)
+                                                     [:value :block.temp/positioned-properties :block-left 0 :block/title])))
+                                (unsubscribe))))))))
+
+(deftest property-change-during-children-load-rejects-old-hydrated-projection-test
+  (async done
+         (let [parent-id (random-uuid)
+               id (random-uuid)
+               property-uuid (random-uuid)
+               pending (p/deferred)
+               calls (atom 0)
+               patch (fn [rev title]
+                       (subtree-patch
+                        rev {id (block id 1 "Task"
+                                       {:block.temp/positioned-properties
+                                        {:block-left [{:block/uuid property-uuid :block/title title}]}})}
+                        {parent-id {:parent-tx-id 1 :items [[id "a"]]}}))]
+           (finish-async! done
+                          (p/with-redefs [subs/<load-children
+                                          (fn [_ _]
+                                            (if (= 1 (swap! calls inc)) pending
+                                                (p/resolved (patch 2 "New"))))]
+                            (let [unsubscribe (subs/subscribe-children! parent-id (fn []))]
+                              (p/let [_ (subs/apply-delta! (delta 2 {:affected-keys #{[:property-config]}}))
+                                      _ (p/resolve! pending (patch 1 "Old"))
+                                      _ (p/delay 0)
+                                      _ (p/delay 0)]
+                                (is (= 2 @calls))
+                                (is (= "New" (get-in (subs/block-snapshot id)
+                                                     [:value :block.temp/positioned-properties :block-left 0 :block/title])))
+                                (unsubscribe))))))))
+
+(deftest property-change-during-resource-load-rejects-old-hydrated-projection-test
+  (async done
+         (let [resource-key [:test-hydrated-properties]
+               id (random-uuid)
+               property-uuid (random-uuid)
+               pending (p/deferred)
+               calls (atom 0)
+               patch (fn [rev title]
+                       (update (exact-resource-patch rev resource-key #{} [id])
+                               :slots merge
+                               (:slots (block-patch
+                                        rev {id (block id 1 "Task"
+                                                       {:block.temp/positioned-properties
+                                                        {:block-left [{:block/uuid property-uuid
+                                                                       :block/title title}]}})}))))]
+           (finish-async! done
+                          (p/with-redefs [subs/<load-resource
+                                          (fn [_ _]
+                                            (if (= 1 (swap! calls inc)) pending
+                                                (p/resolved (patch 2 "New"))))]
+                            (let [unsubscribe (subs/subscribe-resource! resource-key (fn []))]
+                              (p/let [_ (subs/apply-delta! (delta 2 {:affected-keys #{[:property-config]}}))
+                                      _ (p/resolve! pending (patch 1 "Old"))
+                                      _ (p/delay 0)
+                                      _ (p/delay 0)]
+                                (is (= 2 @calls))
+                                (is (= "New" (get-in (subs/block-snapshot id)
+                                                     [:value :block.temp/positioned-properties :block-left 0 :block/title])))
+                                (unsubscribe))))))))

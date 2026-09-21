@@ -1,6 +1,8 @@
 (ns frontend.components.shortcut-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.shortcut :as shortcut]
+            [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.state :as state]
             [frontend.util :as util]))
 
 (deftest test-persisted-binding-value
@@ -22,3 +24,15 @@
 
     (testing "rows without an action id are not editable"
       (is (false? (customizable-shortcut-row? nil false))))))
+
+(deftest test-compute-reset-plan
+  (with-redefs [state/custom-shortcuts (fn [] {:editor/backspace []
+                                           :editor/bold ["backspace"]})]
+    (is (= {:conflict-updates [{:action-id :editor/bold :new-binding []}]
+            :undo-entries [{:action-id :editor/backspace :previous-binding []}
+                           {:action-id :editor/bold :previous-binding ["backspace"]}]}
+           (#'shortcut/compute-reset-plan :editor/backspace
+                                         (dh/get-group :editor/backspace)
+                                         ["backspace"]
+                                         []))
+        "Reset preserves shared defaults and records only changed bindings for undo")))

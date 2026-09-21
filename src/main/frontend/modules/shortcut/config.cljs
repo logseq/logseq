@@ -34,11 +34,6 @@
     (js/setTimeout #(route-handler/go-to-search! mode) 128)
     (route-handler/go-to-search! mode)))
 
-(defn- publish-open-dialog-default-binding
-  "macOS Command+M minimizes the window; do not steal it for publish."
-  [macos?]
-  (if macos? [] "mod+m"))
-
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but
 ;; almost everywhere else they are not which could cause needless conflicts
@@ -279,12 +274,12 @@
    :editor/add-property-status              {:binding "p s"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Status"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/status}]))}
 
    :editor/add-property-priority            {:binding "p p"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/priority}]))}
 
    :editor/add-property-icon                {:binding "p i"
                                              :selection? true
@@ -382,7 +377,8 @@
                                              :inactive (not (util/electron?))
                                              :binding "mod+s"}
 
-   :publish/open-dialog                     {:binding (publish-open-dialog-default-binding mac?)
+   ;; Command+M minimizes the window on macOS; leave it unbound for publish
+   :publish/open-dialog                     {:binding (if mac? false "mod+m")
                                              :inactive config/publishing?
                                              :fn      #(state/pub-event! [:publish/open-dialog])}
 

@@ -1,5 +1,5 @@
 (ns logseq.e2e.property-config-basic-test
-  (:require [clojure.test :refer [deftest use-fixtures]]
+  (:require [clojure.test :refer [deftest is use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -104,3 +104,38 @@
     (page/goto-page property-name)
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
     (assert/assert-have-count ".ls-view-body .ls-table-header-cell:text('#')" 0)))
+
+(deftest available-choices-list-is-scrollable-test
+  (let [property-name "many-choices-scroll"
+        choices (mapv #(str "Choice " %) (range 1 16))]
+    (add-text-property property-name)
+    (open-choices-pane property-name)
+    (doseq [choice choices]
+      (add-choice choice))
+    (let [scrolled? (w/eval-js
+                     "() => { const el = document.querySelector('.ls-property-choices-sub-pane .choices-list'); if (!el || el.scrollHeight <= el.clientHeight) return false; el.scrollTop = el.scrollHeight; return el.scrollTop > 0; }")]
+      (is (true? scrolled?)
+          "A long available-choices list must overflow and accept scrollTop"))
+    (assert/assert-is-visible
+     (loc/filter ".choices-list li" :has-text "Choice 15"))))
+
+(deftest text-property-default-value-can-be-set-from-config-menu-test
+  (let [property-name "ui-default-value"
+        default-text "shipped default"
+        default-pane ".ls-property-default-value-pane"]
+    (add-text-property property-name)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (w/click (loc/filter "div[role='menuitem']" :has-text "Default value"))
+    (assert/assert-is-visible default-pane)
+    (assert/assert-is-visible
+     (loc/filter default-pane :has-text "Set default value"))
+    (w/click (loc/filter default-pane :has-text "Set default value"))
+    (util/wait-timeout 500)
+    (when (w/visible? (str default-pane " .editor-wrapper textarea"))
+      (util/input default-text)
+      (k/enter)
+      (assert/assert-have-count (str default-pane " .ls-block") 1))
+    (util/double-esc)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (assert/assert-is-visible
+     (loc/filter "div[role='menuitem']" :has-text "Default value"))))

@@ -78,8 +78,7 @@
   (-> (p/do!
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
          (reset! root-dir root-dir'))
-       ;; Create first: restore reads the file and fails (aborting start)
-       ;; on a fresh install when config/config.edn does not exist yet.
+       ;; restore reads the file; create it first on fresh installs
        (create-global-config-file-if-not-exists repo)
        (restore-global-config!))
       (p/timeout 6000)

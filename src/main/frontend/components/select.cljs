@@ -111,7 +111,6 @@
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           choose-first-on-enter?
            clear-input-on-chosen?]
     :or {limit 100
          prompt-key :select/default-prompt
@@ -204,24 +203,12 @@
                                (when on-chosen
                                  (on-chosen chosen true @*selected-choices e))))))
         input-opts* (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
-        input-opts' (if choose-first-on-enter?
-                      (let [on-key-down (:on-key-down input-opts*)]
-                        (assoc input-opts*
-                               :on-key-down
-                               (fn [e]
-                                 (if (and (= "Enter" (util/ekey e)) (seq search-result))
-                                   (do
-                                     (util/stop e)
-                                     (choose-result! (first search-result) e))
-                                   (when on-key-down
-                                     (on-key-down e))))))
-                      input-opts*)
         input-container (or
                          input-container
                          (search-input *input
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
-                                        :input-opts input-opts'
+                                        :input-opts input-opts*
                                         :on-input on-input}))
         results-container-f (fn []
                               (if loading?
