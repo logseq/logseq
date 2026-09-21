@@ -220,8 +220,8 @@
           (fn [{:keys [fetch-calls removed-properties notifications]}]
             (p/let [_ (publish-handler/unpublish-page!
                        {:db/id 42
-                        :block/uuid (uuid current-page-uuid)}
-                       {:published-url (str "https://logseq.io/page/" stored-graph-uuid "/" current-page-uuid)})]
+                        :block/uuid (uuid current-page-uuid)
+                        :logseq.property.publish/published-url (str "https://logseq.io/page/" stored-graph-uuid "/" current-page-uuid)})]
               (is (= 2 (count @fetch-calls)))
               (is (string/includes? (ffirst @fetch-calls)
                                     (str "/pages/" current-graph-uuid "/" current-page-uuid)))
@@ -299,8 +299,8 @@
           (fn [{:keys [removed-properties notifications]}]
             (p/let [_ (publish-handler/unpublish-page!
                        {:db/id 42
-                        :block/uuid (uuid current-page-uuid)}
-                       {:published-url "https://logseq.io/p/abc123"})]
+                        :block/uuid (uuid current-page-uuid)
+                        :logseq.property.publish/published-url "https://logseq.io/p/abc123"})]
               (is (empty? @removed-properties))
               (is (= :error (second (first @notifications)))))))
         (p/catch
