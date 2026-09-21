@@ -468,10 +468,14 @@
                     (mapcat
                      (fn [[class-name {:build/keys [class-properties] :as class-m}]]
                        (let [db-ident (get-ident all-idents class-name)
+                             ;; User tags use a random ident suffix. Name the page from the
+                             ;; human title when present, matching in-app tag creation and
+                             ;; build-new-property. Ident-only classes still fall back to the ident name.
+                             title (or (:block/title class-m) (name class-name))
                              new-block
                              (sqlite-util/build-new-class
-                              {:block/name (common-util/page-name-sanity-lc (name class-name))
-                               :block/title (name class-name)
+                              {:block/name (common-util/page-name-sanity-lc title)
+                               :block/title title
                                :block/uuid (or (:block/uuid class-m)
                                                (common-uuid/gen-uuid :db-ident-block-uuid db-ident))
                                :db/ident db-ident

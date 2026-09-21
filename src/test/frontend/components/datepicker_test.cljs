@@ -10,7 +10,19 @@
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [goog.object :as gobj]
             [logseq.shui.ui :as shui]))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest date-picker-day-focus-updates-selected-date-without-insert-test
   (let [selected-date (js/Date. 2026 8 16)
@@ -77,8 +89,9 @@
                                           :value 2026
                                           :onChange (fn [_])}))]
     (is (string/includes? html "ls-date-year-input"))
-    (is (string/includes? html "4.5rem"))
+    (is (string/includes? html "3.25rem"))
     (is (not (string/includes? html "ml-2")))
+    (is (not (string/includes? html "4.5rem")))
     (is (not (string/includes? html "5.75rem")))))
 
 (deftest date-month-select-uses-closable-menu-items-test
@@ -100,6 +113,31 @@
                                   (when (some hits
                                               (map string/trim (string/split sel #",")))
                                     #js {:getAttribute (fn [k] (get attrs k))}))}}))
+
+(deftest single-calendar-renders-delete-button-when-requested-test
+  (with-redefs [state/get-start-of-week (constantly 6)
+                state/get-state (constantly {:preferred-language "en"})]
+    (let [html (render-static
+                (ui/single-calendar {:del-btn? true
+                                     :on-delete (fn [_])
+                                     :selected (js/Date. 2026 8 16)
+                                     :today (js/Date. 2026 8 16)}))]
+      (is (string/includes? html "del-date-btn")
+          "Trash control must render for a date that can be cleared")
+      (is (string/includes? html "has-del-btn"))
+      (is (re-find #"<nav[^>]*>(?:(?!</nav>).)*del-date-btn" html)
+          "Delete button renders inside the nav row next to prev/next")
+      (is (re-find #"del-date-btn h-8 w-9" html)
+          "Delete button matches the h-8 w-9 nav button size"))))
+
+(deftest single-calendar-hides-delete-button-when-empty-test
+  (with-redefs [state/get-start-of-week (constantly 6)
+                state/get-state (constantly {:preferred-language "en"})]
+    (let [html (render-static
+                (ui/single-calendar {:del-btn? false
+                                     :selected (js/Date. 2026 8 16)
+                                     :today (js/Date. 2026 8 16)}))]
+      (is (not (string/includes? html "del-date-btn"))))))
 
 (deftest date-picker-form-target-ignores-enter-in-inputs-test
   (is (true? (ui/date-picker-form-target?

@@ -59,7 +59,7 @@ for (const mode of ['after-admission', 'before-publication']) {
       assert.deepEqual(lifecycle.snapshot(storage, 'demo').workers, []);
       const directory = operation === 'stop' ? ctx.graphDir : result.destination;
       assert.equal(fs.readFileSync(path.join(directory, 'sentinel'), 'utf8'), 'existing graph');
-      assert.equal(fs.existsSync(path.join(directory, 'db-worker.lock')), false);
+      assert.ok(fs.existsSync(lifecycle.ownershipPath(ctx)));
       if (operation === 'delete') {
         assert.equal((await lifecycle.deleteGraph(storage, 'demo')).existed, false);
         await lifecycle.createGraph(storage, 'demo');
@@ -106,7 +106,7 @@ for (const mode of ['after-admission', 'before-publication']) {
       assert.equal(fs.readFileSync(path.join(root, 'server-list'), 'utf8'), '');
       const directory = operation === 'delete' ? result.destination : ctx.graphDir;
       assert.equal(fs.readFileSync(path.join(directory, 'sentinel'), 'utf8'), 'existing graph');
-      assert.equal(fs.existsSync(path.join(directory, 'db-worker.lock')), false);
+      assert.ok(fs.existsSync(lifecycle.ownershipPath(ctx)));
       if (operation === 'delete') await lifecycle.createGraph(storage, 'demo');
       const replacement = await start('normal');
       await starting;
@@ -151,12 +151,11 @@ test('publication rejects a revoked admission without exposing readiness', async
   const current = lifecycle.snapshot(storage, 'demo');
   current.workers = [];
   fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
-  const lock = { repo: 'demo', pid: process.pid, 'lock-id': 'revoked', 'owner-source': 'cli',
-    ticket: runtime.ticket, generation: runtime.generation, storage };
+  t.after(() => lifecycle.releaseOwnership(runtime));
   let exposed = false;
-  await assert.rejects(async () => lifecycle.publish(runtime, lock, 12345, () => { exposed = true; }), /admission|registration/);
+  await assert.rejects(async () => lifecycle.publish(runtime, 12345, () => { exposed = true; }), /admission|registration/);
   assert.equal(exposed, false);
-  assert.equal(fs.readdirSync(ctx.dir).some(file => file.startsWith('runtime-')), false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ctx.dir, `runtime-${runtime.ticket}.json`))).phase, 'initializing');
 });
 
 test('startup reports both the endpoint failure and incomplete cleanup', async t => {
