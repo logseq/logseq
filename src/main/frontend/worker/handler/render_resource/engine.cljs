@@ -110,9 +110,9 @@
   [db parent-uuids]
   (into {}
         (map (fn [parent-uuid]
-               (let [tree (block-handler/open-block-tree db parent-uuid)]
+               (let [children (block-handler/open-children-tree db parent-uuid)]
                  [[:children parent-uuid]
-                  (common/block-bundle-slots tree)])))
+                  (common/children-slots children)])))
         parent-uuids))
 
 (defn render-snapshots
