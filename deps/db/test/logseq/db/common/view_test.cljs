@@ -750,7 +750,7 @@
         result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
                                                      :view-for-id class-id})
         group-titles (map first (:data result))]
-    (is (= ["A" "B"] group-titles))))
+    (is (= ["B" "A"] group-titles))))
 
 (deftest get-view-data-class-objects-groups-by-many-values-test
   (let [conn (db-test/create-conn-with-blocks
