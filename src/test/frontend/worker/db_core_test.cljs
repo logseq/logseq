@@ -445,24 +445,16 @@
            (swap! listener-snapshots conj
                   {:repo listener-repo
                    :entities entities
-                   :missing-revisions
-                   (into #{}
-                         (keep (fn [entity]
-                                 (when-not (nat-int? (:block/tx-id entity))
-                                   (:block/uuid entity))))
-                         entities)})))]
+                   :blocks (mapv #(block-handler/canonical-block @conn %) entities)})))]
       (p/let [_ ((get-thread-api :thread-api/create-or-open-db) repo opts)
-              conn (worker-state/get-datascript-conn repo)
-              {:keys [entities missing-revisions]} (first @listener-snapshots)]
+              {:keys [entities blocks]} (first @listener-snapshots)]
         (is (= 1 (count @listener-snapshots)))
         (is (= repo (:repo (first @listener-snapshots))))
         (is (seq entities))
-        (is (empty? missing-revisions)
-            "Every UUID entity must have a local revision before the renderer listener is installed.")
-        (when (empty? missing-revisions)
-          (doseq [entity entities]
-            (is (= (:block/uuid entity)
-                   (:block/uuid (block-handler/canonical-block @conn entity))))))
+        (doseq [[entity block] (map vector entities blocks)]
+          (is (= (:block/uuid entity) (:block/uuid block)))
+          (is (= (get entity :block/tx-id 0) (:block/tx-id block)))
+          (is (nat-int? (:block/tx-id block))))
         (is (empty? @broadcasts)
             "Bootstrap transactions must not publish incremental renderer deltas.")
         (db-core/close-db! repo)))))
@@ -1911,6 +1903,33 @@
          (is (= [latest-uuid] (mapv :block/uuid result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
+
+(deftest get-latest-journals-bounded-scan
+  (restoring-worker-state
+   (fn []
+     (let [conn (d/create-conn task-spent-time-schema)
+           journal-count 50]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn (mapv (fn [i]
+                                 {:block/uuid (random-uuid)
+                                  :block/title (str "journal " i)
+                                  :block/name (str "journal " i)
+                                  :block/journal-day (+ 20240101 i)
+                                  :block/tags :logseq.class/Journal})
+                               (range journal-count)))
+       (let [scanned (volatile! 0)
+             wrap-scan (fn [f]
+                         (fn [db index c & cs]
+                           (let [s (apply f db index c cs)]
+                             (if (= :block/journal-day c)
+                               (map (fn [d] (vswap! scanned inc) d) s)
+                               s))))
+             realized (with-redefs [d/datoms (wrap-scan d/datoms)
+                                    d/rseek-datoms (wrap-scan d/rseek-datoms)]
+                        (doall (take 1 (ldb/get-latest-journals @conn))))]
+         (is (= 1 (count realized)))
+         ;; bounded request: realizes O(requested) datoms, not O(total journals)
+         (is (< @scanned journal-count)))))))
 
 ;; ---- q / datoms / pull thread-api tests ----
 

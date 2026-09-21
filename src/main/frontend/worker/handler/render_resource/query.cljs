@@ -1,6 +1,7 @@
 (ns frontend.worker.handler.render-resource.query
   "DSL and Datalog query execution and result normalization."
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.render-resource.common :as common]
@@ -9,6 +10,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.datalog :as datalog-util]
             [logseq.outliner.tree :as otree]
             [sci.core :as sci]))
 
@@ -19,8 +21,15 @@
          (uuid? (:block/uuid cell)))
     (:block/uuid cell)
 
-    (or (map? cell) (de/entity? cell))
-    (common/fail! "Renderer query result map has no UUID" {:value cell})
+    ;; Partial pull maps are valid query cells. Keep them transit-safe
+    ;; instead of failing the whole get-render-snapshots batch.
+    (de/entity? cell)
+    (cond-> {:db/id (:db/id cell)}
+      (keyword? (:db/ident cell))
+      (assoc :db/ident (:db/ident cell)))
+
+    (map? cell)
+    (update-vals cell normalize-query-cell)
 
     (fn? cell)
     (common/fail! "Renderer query result contains a function" {})
@@ -115,6 +124,23 @@
       (when (and (string? value) (not (string/blank? value)))
         (string/trim value)))))
 
+(defn- with-block-pull-identity
+  [query-spec]
+  (let [{find-expressions :find} (datalog-util/query-vec->map (:query query-spec))
+        expression (first find-expressions)
+        pattern (when (seq? expression) (last expression))]
+    (if (and (= 1 (count find-expressions))
+             (seq? expression)
+             (= 'pull (first expression))
+             (vector? pattern)
+             (not-any? #{'* :block/uuid} pattern))
+      ;; A single pull renders as block views even when its visible columns
+      ;; omit the UUID. Keep the original query for column selection.
+      (assoc-in query-spec [:query 1]
+                (apply list (concat (butlast expression)
+                                    [(conj pattern :block/uuid)])))
+      query-spec)))
+
 (defn- execute-query-spec
   [db query-spec {:keys [repo]}]
   (case (:kind query-spec)
@@ -146,7 +172,8 @@
 
     :datalog
     (query-handler/execute-custom-query
-     db query-spec (assoc query-spec :require-today-day? true))))
+     db (with-block-pull-identity query-spec)
+     (assoc query-spec :require-today-day? true))))
 
 (defn- query-tuples
   [result]
@@ -169,9 +196,9 @@
                tuples)))
 
 (defn- filter-block-query-result
-  [blocks {:keys [current-block-uuid remove-block-children?]}]
+  [db blocks {:keys [current-block-uuid remove-block-children?]}]
   (let [blocks (->> blocks
-                    (remove ldb/hidden?)
+                    (remove #(ldb/hidden? (d/entity db [:block/uuid (:block/uuid %)])))
                     (remove #(= current-block-uuid (:block/uuid %))))]
     (if (or (false? remove-block-children?)
             (not-every? #(integer? (:db/id %)) blocks))
@@ -193,10 +220,10 @@
     rows))
 
 (defn- query-result-rows
-  [result query-spec]
+  [db result query-spec]
   (let [tuples (query-tuples result)
         rows (if (block-query-result? tuples)
-               (filter-block-query-result (map first tuples) query-spec)
+               (filter-block-query-result db (map first tuples) query-spec)
                tuples)
         rows (apply-result-transform rows (:result-transform-edn query-spec))]
     (mapv normalize-query-row rows)))
@@ -214,10 +241,15 @@
 
 (defn- query-watch-keys
   [db query-spec]
-  (dependency-watch
-   (if (= :datalog (:kind query-spec))
-     (query-handler/custom-query-watch-dependencies query-spec)
-     (query-dsl/query-watch-dependencies (:query query-spec) db query-spec))))
+  (let [watch (dependency-watch
+               (if (= :datalog (:kind query-spec))
+                 (query-handler/custom-query-watch-dependencies query-spec)
+                 (query-dsl/query-watch-dependencies (:query query-spec) db query-spec)))]
+    (if (= common/watch-all watch)
+      watch
+      (into watch #{[:attr :logseq.property/hide?]
+                    [:attr :logseq.property/deleted-at]
+                    [:attr :block/parent]}))))
 
 (defn- query-error-value
   [error]
@@ -235,7 +267,7 @@
   (let [query-spec (require-query-spec! (second resource-key))
         watch (query-watch-keys db query-spec)]
     (try
-      [watch {:rows (query-result-rows (execute-query-spec db query-spec runtime)
+      [watch {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
                                        query-spec)}]
       (catch :default error
         (if (syntax-error? error)

@@ -22,7 +22,8 @@
       (is (= ["markdown"
               {:html "<p>html</p>"
                :graph "logseq_db_common"
-               :blocks [(assoc block :block/title "raw title")]}]
+               :blocks [(assoc block :block/title "raw title")]
+               :op nil}]
              @copy-call)))))
 
 (deftest copy-to-clipboard-keeps-title-when-raw-title-is-missing-test
@@ -39,7 +40,8 @@
       (is (= ["markdown"
               {:html nil
                :graph "logseq_db_common"
-               :blocks [block]}]
+               :blocks [block]
+               :op nil}]
              @copy-call)))))
 
 (deftest copy-to-clipboard-forwards-copy-op-test
