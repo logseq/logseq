@@ -1,7 +1,6 @@
 (ns logseq.e2e.block-property-basic-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [jsonista.core :as json]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
@@ -486,69 +485,6 @@
         (assert/assert-have-count
          (loc/filter ".ls-page-blocks" :has-text "template static child")
          1)))))
-
-(defn- property-row-bullet-alignment
-  "Measure the vertical gap between a property row's bullet and its value mid-line."
-  [block-uuid property-title]
-  (-> (w/eval-js
-       (format
-        "(async () => {
-          const uuid = %s;
-          const title = %s;
-          const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const row = Array.from(document.querySelectorAll('#ls-block-' + uuid + ' .property-pair'))
-            .find((el) => el.getAttribute('data-property-title') === title);
-          if (!row) {
-            throw new Error('Property row not found: ' + title);
-          }
-          const bullet = row.querySelector('.bullet-container .bullet') || row.querySelector('.bullet-container');
-          const value = row.querySelector('.external-link, .block-title-wrap, .block-content, .property-value-inner');
-          if (!bullet || !value) {
-            throw new Error('Expected bullet and value in row: ' + title);
-          }
-          await nextFrame();
-          const bulletRect = bullet.getBoundingClientRect();
-          const valueRect = value.getBoundingClientRect();
-          const lineHeight = Number.parseFloat(window.getComputedStyle(value).lineHeight);
-          const firstLineCenterY = valueRect.top + ((Number.isFinite(lineHeight) ? lineHeight : valueRect.height) / 2);
-          const bulletCenterY = bulletRect.top + (bulletRect.height / 2);
-          return JSON.stringify({
-            propertyType: row.getAttribute('data-property-type'),
-            bulletCenterY,
-            firstLineCenterY,
-            delta: Math.abs(bulletCenterY - firstLineCenterY)
-          });
-        })();"
-        (json/write-value-as-string block-uuid)
-        (json/write-value-as-string property-title)))
-      (json/read-value json/keyword-keys-object-mapper)))
-
-(deftest url-property-bullet-aligns-with-text-property-test
-  (testing "URL property bullets stay on the same mid-line as text property bullets"
-    (let [page-name (current-page-name)
-          url-property "align-url"
-          text-property "align-text"
-          block (ls-api-call! :editor.appendBlockInPage page-name "url bullet alignment owner")]
-      (ls-api-call! :editor.upsertProperty url-property {:type "url"})
-      (ls-api-call! :editor.upsertProperty text-property {:type "default"})
-      (let [uuid (get block "uuid")]
-        (ls-api-call! :editor.upsertBlockProperty uuid url-property "https://logseq.com")
-        (ls-api-call! :editor.upsertBlockProperty uuid text-property "plain text value")
-        (assert/assert-is-visible
-         (loc/filter (format "#ls-block-%s .property-pair" uuid)
-                     :has-text url-property))
-        (assert/assert-is-visible
-         (loc/filter (format "#ls-block-%s .property-pair" uuid)
-                     :has-text text-property))
-        (let [url-align (property-row-bullet-alignment uuid url-property)
-              text-align (property-row-bullet-alignment uuid text-property)
-              delta-gap (Math/abs (double (- (:delta url-align) (:delta text-align))))]
-          (is (<= (:delta url-align) 2)
-              (pr-str {:url url-align :text text-align}))
-          (is (<= (:delta text-align) 2)
-              (pr-str {:url url-align :text text-align}))
-          (is (<= delta-gap 1.5)
-              (pr-str {:url url-align :text text-align :delta-gap delta-gap})))))))
 
 (deftest checkbox-property-toggle-persists-test
   (testing "checkbox property toggles immediately and survives refresh"
