@@ -17,6 +17,17 @@
        :title title}
       title]]))
 
+(hsx/defc page-refs-count-cell
+  "Backlinks count cell. Rows whose count exceeded the worker's bounded scan
+   arrive without :block.temp/refs-count; those fetch the exact count through
+   the shared :block-ref-count resource only while the cell is mounted."
+  [row]
+  (let [bundled (:block.temp/refs-count row)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid row))
+                           [:block-ref-count (:block/uuid row)])))]
+    (or bundled fetched 0)))
+
 (defn- columns
   []
   (->> [{:id :block/title
@@ -26,7 +37,7 @@
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column]
-                 (or (:block.temp/refs-count row) 0))
+                 [page-refs-count-cell row])
          :type :number}]
        (remove nil?)
        vec))

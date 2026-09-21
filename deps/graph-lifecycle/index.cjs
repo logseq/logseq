@@ -7,6 +7,10 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
 const http = require('node:http');
+const { ownershipPath, acquireOwnership } = require('./ownership.cjs');
+const PROTOCOL = 'sqlite-v1';
+const ownership = new WeakMap();
+const children = new Map();
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // One readiness poll is a 50ms sleep plus a health request capped at 1s; anything longer is a clock jump.
@@ -34,6 +38,14 @@ function graphName(repo) {
 }
 function encodeGraph(repo) {
   return encodeURIComponent(graphName(repo)).replace(/%20/g, ' ').replace(/~/g, '%7E').replace(/%/g, '~');
+}
+function canonicalGraphDirectory(name) {
+  let decoded;
+  try { decoded = decodeURIComponent(name.replace(/~/g, '%')); }
+  catch (error) { if (error instanceof URIError) return null; throw error; }
+  if (!decoded.trim() || decoded === 'Unlinked graphs' || decoded === 'backup'
+      || decoded.startsWith('logseq_db_') || decoded.startsWith('logseq_local_')) return null;
+  return encodeGraph(decoded) === name ? decoded : null;
 }
 function canonicalRoot(root) {
   if (typeof root !== 'string' || !root) fail('root-dir is required', 'missing-root-dir');
@@ -81,13 +93,14 @@ function signalProcess(pid, signal) {
   catch (error) { if (error.code !== 'ESRCH') throw error; }
 }
 
-async function acquireLease(ctx, operation) {
+async function acquireLease(ctx, operation, checkWaiting) {
   const { DatabaseSync } = require('node:sqlite');
   const db = new DatabaseSync(path.join(ctx.dir, 'lease.sqlite'));
   const deadline = Date.now() + 30000;
   let acquired = false;
   try {
     for (;;) {
+      if (checkWaiting) checkWaiting();
       try { db.exec('BEGIN IMMEDIATE'); acquired = true; break; }
       catch (error) {
         if (error.errcode !== 5 || Date.now() >= deadline) throw error;
@@ -95,8 +108,6 @@ async function acquireLease(ctx, operation) {
       }
     }
     const current = state(ctx);
-    const previous = current.owner;
-    if (previous && pidExists(previous.pid)) fail('Lifecycle owner remains alive');
     const owner = { id: id(), pid: process.pid, operation };
     current.owner = owner;
     writeJSON(ctx.stateFile, current);
@@ -120,34 +131,46 @@ async function acquireLease(ctx, operation) {
     throw error;
   }
 }
-async function withLease(ctx, operation, action) {
-  const release = await acquireLease(ctx, operation);
+async function withLease(ctx, operation, action, checkWaiting) {
+  const release = await acquireLease(ctx, operation, checkWaiting);
   try { return await action(); } finally { release(); }
 }
 function state(ctx) {
   let value = readJSON(ctx.stateFile);
-  if (!value) {
+  if (value === null && !fs.existsSync(ctx.stateFile)) {
     value = { generation: id(), phase: fs.existsSync(ctx.graphDir) ? 'available' : 'absent', workers: [] };
     writeJSON(ctx.stateFile, value);
   }
+  if (!value || !Array.isArray(value.workers) || typeof value.generation !== 'string' || typeof value.phase !== 'string')
+    fail('Invalid lifecycle state');
   return value;
 }
 function requireAvailable(ctx, current, generation) {
   if (generation && generation !== current.generation) fail('Graph generation changed', 'graph-not-exists');
   if (current.phase !== 'available' || !fs.existsSync(ctx.graphDir)) fail('Graph is absent or stopped by deletion', 'graph-not-exists');
 }
+function ownershipAvailable(ctx) {
+  let handle;
+  try { handle = acquireOwnership(ctx); }
+  catch (error) { if (error.code === 'repo-locked') return false; throw error; }
+  handle.release();
+  return true;
+}
 async function createGraph(storage, repo) {
   const ctx = context(storage, repo);
-  return withLease(ctx, 'create', () => {
+  return withLease(ctx, 'create', async () => {
     const current = state(ctx);
     if (current.phase === 'available' && fs.existsSync(ctx.graphDir)) return current.generation;
     if (current.deletion && !current.deletion.moved && fs.existsSync(ctx.graphDir))
       fail('Graph deletion must finish before recreation');
-    if (current.workers.some(worker => pidExists(worker.pid))) fail('Graph still has a live worker');
-    fs.mkdirSync(ctx.graphDir, { recursive: true });
-    const next = { generation: id(), phase: 'available', workers: [], owner: current.owner };
-    writeJSON(ctx.stateFile, next);
-    return next.generation;
+    await stopUnderLease(ctx, current, true);
+    const handle = acquireOwnership(ctx);
+    try {
+      fs.mkdirSync(ctx.graphDir, { recursive: true });
+      const next = { generation: id(), phase: 'available', workers: [], owner: current.owner };
+      writeJSON(ctx.stateFile, next);
+      return next.generation;
+    } finally { handle.release(); }
   });
 }
 function runtimeFile(ctx, ticket) {
@@ -157,40 +180,72 @@ function runtimeFile(ctx, ticket) {
 async function admit({ storage, repo, ticket, generation, owner }) {
   const ctx = context(storage, repo);
   if (!owner) fail('Worker owner is required');
-  return withLease(ctx, 'admit', () => {
+  return withLease(ctx, 'admit', async () => {
     const current = state(ctx);
     requireAvailable(ctx, current, generation);
+    await legacy.retireGraph(ctx, current);
     let record;
     if (ticket) {
       record = current.workers.find(worker => worker.ticket === ticket);
       if (!record || record.owner !== owner || record.pid !== process.pid)
         fail('Worker admission generation or process identity changed');
       validateRegistration(ctx, current, record);
-    } else {
-      record = runtimeRecord({ ...ctx, ticket: id(), generation: current.generation, pid: process.pid, owner });
-      current.workers.push(record);
-      writeJSON(ctx.stateFile, current);
     }
-    return { ...ctx, ...record };
-  });
+    const previous = ticket ? [] : (await discover(ctx, current)).targets;
+    if (previous.some(pending)) fail('Graph ownership admission is pending', 'repo-locked');
+    const handle = acquireOwnership(ctx);
+    try {
+      if (!record) {
+        await cleanup(ctx, current, previous);
+        record = runtimeRecord({ ...ctx, ticket: id(), generation: current.generation, pid: process.pid, owner,
+          'ownership-protocol': PROTOCOL });
+        current.workers = [record];
+        writeJSON(ctx.stateFile, current);
+      }
+      const runtime = { ...ctx, ...record };
+      writeJSON(runtimeFile(ctx, runtime.ticket), { ...record, phase: 'initializing' });
+      ownership.set(runtime, handle);
+      return runtime;
+    } catch (error) { handle.release(); throw error; }
+  }, ticket ? () => {
+    const current = readJSON(ctx.stateFile);
+    if (current?.generation !== generation || !current.workers.some(record => record.ticket === ticket && record.pid === process.pid))
+      fail('Worker admission registration was revoked', 'server-start-failed');
+  } : undefined);
 }
-async function publish(runtime, lock, port, exposeReady) {
+function assertOwnership(runtime) {
+  const handle = ownership.get(runtime);
+  if (!handle) fail('Graph ownership handle is missing', 'repo-locked');
+  handle.assert();
+  const current = readJSON(runtime.stateFile);
+  if (current.generation !== runtime.generation || !registered(current, runtime))
+    fail('Graph ownership admission changed', 'repo-locked');
+}
+function releaseOwnership(runtime) {
+  const handle = ownership.get(runtime);
+  if (!handle) fail('Graph ownership handle is missing', 'repo-locked');
+  handle.release();
+}
+async function publish(runtime, port, exposeReady) {
   return withLease(runtime, 'publish', () => {
     checkAdmission(runtime);
-    validateLock(runtime, lock, runtime);
-    writeJSON(runtimeFile(runtime, runtime.ticket), { ...runtimeRecord(runtime), lock, port, phase: 'ready' });
-    // Publish the endpoint and readiness within the same admission check.
+    assertOwnership(runtime);
+    writeJSON(runtimeFile(runtime, runtime.ticket), { ...runtimeRecord(runtime), port, phase: 'ready' });
     exposeReady();
   });
 }
 function runtimeRecord(runtime) {
   const { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo } = runtime;
-  return { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo };
+  return { ticket, generation, pid, owner, root, graphsDir, lifecycleDir, repo,
+    'ownership-protocol': runtime['ownership-protocol'] };
 }
 function checkAdmission(runtime) {
   const current = readJSON(runtime.stateFile);
   requireAvailable(runtime, current, runtime.generation);
   if (!registered(current, runtime)) fail('Worker admission registration changed', 'server-start-failed');
+}
+function pending(target) {
+  return !target.phase && target.expires > Date.now() && pidExists(target.parent);
 }
 function registered(current, runtime) {
   return current.workers.some(record => Object.entries(runtimeRecord(runtime))
@@ -232,11 +287,15 @@ function request(port, endpoint, method = 'GET', headers = {}) {
 function validateRegistration(ctx, current, record) {
   if (!Number.isSafeInteger(record.pid) || record.pid <= 0 || !record.ticket || !record.owner
       || !record.root || record.generation !== current.generation || record.repo !== ctx.repo
+      || record['ownership-protocol'] !== PROTOCOL
       || record.graphsDir !== ctx.graphsDir || record.lifecycleDir !== ctx.lifecycleDir)
     fail('Invalid worker registration');
 }
 function readRuntime(ctx, record) {
-  const runtime = readJSON(runtimeFile(ctx, record.ticket));
+  const file = runtimeFile(ctx, record.ticket);
+  const runtime = readJSON(file);
+  if (fs.existsSync(file) && (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)))
+    fail('Invalid worker runtime metadata');
   if (runtime && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
     fail('Worker runtime identity differs from registration');
   return runtime;
@@ -246,66 +305,110 @@ async function health(ctx, target, port) {
   const value = JSON.parse(response.body);
   if (![200, 503].includes(response.status) || value.pid !== target.pid || value.port !== port
       || !sameStorage(ctx, value.storage) || graphName(value.repo) !== ctx.repo
+      || typeof value['root-dir'] !== 'string' || canonicalRoot(value['root-dir']) !== canonicalRoot(target.root)
+      || typeof value.revision !== 'string' || !value.revision
       || value.host !== '127.0.0.1' || value.ticket !== target.ticket
       || value.generation !== target.generation || value['owner-source'] !== target.owner
-      || !target.lock || value['lock-id'] !== target.lock['lock-id']) fail('Worker endpoint identity mismatch');
+      || target['ownership-protocol'] !== PROTOCOL || value['ownership-protocol'] !== PROTOCOL) fail('Worker endpoint identity mismatch');
   return value;
 }
-function validateLock(ctx, lock, target) {
-  if (graphName(lock.repo) !== ctx.repo || lock.pid !== target.pid
-      || !lock['lock-id'] || !sameStorage(ctx, lock.storage)
-      || lock['owner-source'] !== target.owner || lock.ticket !== target.ticket
-      || lock.generation !== target.generation
-      || (target.lock && lock['lock-id'] !== target.lock['lock-id'])) fail('Graph lock identity mismatch');
+function ignorableDiscoveryError(error) {
+  return error instanceof SyntaxError || ['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
+    || error.message === 'Worker request timeout';
 }
-async function discover(ctx, current) {
+// Routing observations live for one upgrade scan only. Shutdown still validates
+// the current registration and endpoint under the graph's lease.
+function publicationScan() {
+  const roots = new Map();
+  const probes = new Map();
+  const grouped = new Map();
+  const read = root => {
+    if (!roots.has(root)) {
+      const publications = entries(root);
+      const byPid = new Map();
+      for (const publication of publications) {
+        if (!byPid.has(publication.pid)) byPid.set(publication.pid, []);
+        byPid.get(publication.pid).push(publication);
+      }
+      roots.set(root, { publications, byPid });
+    }
+    return roots.get(root);
+  };
+  const probe = publication => {
+    const key = `${publication.pid}:${publication.port}`;
+    if (!probes.has(key)) probes.set(key, request(publication.port, '/healthz').then(response => JSON.parse(response.body)));
+    return probes.get(key);
+  };
+  return {
+    entries: root => read(root).publications,
+    matching: (root, pid) => read(root).byPid.get(pid) || [],
+    probe,
+    async forGraph(root, repo) {
+      if (!grouped.has(root)) grouped.set(root, (async () => {
+        const groups = new Map();
+        const results = await Promise.allSettled(read(root).publications.map(async candidate => {
+          if (!pidExists(candidate.pid)) return;
+          let value;
+          try { value = await probe(candidate); }
+          catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
+          if (value?.repo) {
+            const name = graphName(value.repo);
+            if (!groups.has(name)) groups.set(name, []);
+            groups.get(name).push({ candidate, value });
+          }
+        }));
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
+        return groups;
+      })());
+      return (await grouped.get(root)).get(repo) || [];
+    },
+  };
+}
+async function discover(ctx, current, scan, registeredOnly = false) {
   const targets = new Map();
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
     if (targets.has(record.pid)) fail('Duplicate worker registration');
     const target = { ...record, ...readRuntime(ctx, record) };
-    if (target.lock) validateLock(ctx, target.lock, target);
     targets.set(record.pid, target);
   }
-  const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
-  const attachLock = candidate => {
-    const target = targets.get(candidate.pid);
-    if (target) { validateLock(ctx, candidate, target); target.lock = candidate; }
-    else if (pidExists(candidate.pid)) fail('Graph lock has an unregistered live owner');
+  const attach = (target, candidate) => {
+    if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
+    target.port = candidate.port;
   };
-  if (lock) attachLock(lock);
-  const unlinked = path.join(ctx.graphsDir, 'Unlinked graphs');
-  if (fs.existsSync(unlinked) && fs.statSync(unlinked).isDirectory()) {
-    for (const directory of fs.readdirSync(unlinked, { withFileTypes: true })) {
-      if (!directory.isDirectory()) continue;
-      const moved = readJSON(path.join(unlinked, directory.name, 'db-worker.lock'));
-      if (moved && graphName(moved.repo) === ctx.repo) attachLock(moved);
-    }
-  }
+  const checkUnregistered = value => {
+    if (value?.repo && graphName(value.repo) === ctx.repo
+        && (value.storage ? sameStorage(ctx, value.storage)
+          : (!value['root-dir'] || canonicalRoot(value['root-dir']) === ctx.root)))
+      fail('Published graph worker is unregistered');
+  };
   const probes = [];
   for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
-    for (const candidate of entries(root)) {
-      if (!pidExists(candidate.pid)) continue;
-      const target = targets.get(candidate.pid);
-      if (target) {
-        if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
-        target.port = candidate.port;
-      } else probes.push(async () => {
-        let value;
-        try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
-        catch (error) {
-          if (!(error instanceof SyntaxError) && !['ECONNREFUSED', 'ECONNRESET'].includes(error.code)
-              && error.message !== 'Worker request timeout') throw error;
-        }
-        if (value?.repo && graphName(value.repo) === ctx.repo
-            && (!value.storage || sameStorage(ctx, value.storage)))
-          fail('Published graph worker is unregistered');
+    if (scan) {
+      for (const target of targets.values()) {
+        if (pidExists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
+      }
+      if (!registeredOnly) probes.push(async () => {
+        for (const { candidate, value } of await scan.forGraph(root, ctx.repo))
+          if (pidExists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
       });
+    } else {
+      for (const candidate of entries(root)) {
+        if (!pidExists(candidate.pid)) continue;
+        const target = targets.get(candidate.pid);
+        if (target) attach(target, candidate);
+        else probes.push(async () => {
+          let value;
+          try { value = JSON.parse((await request(candidate.port, '/healthz')).body); }
+          catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
+          checkUnregistered(value);
+        });
+      }
     }
   }
   const results = await Promise.allSettled(probes.map(probe => probe()));
   for (const result of results) if (result.status === 'rejected') throw result.reason;
-  return { targets: [...targets.values()], lock };
+  return { targets: [...targets.values()] };
 }
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
@@ -346,13 +449,41 @@ async function waitExit(pid, milliseconds) {
 }
 async function terminate(ctx, target, deleting) {
   if (!pidExists(target.pid)) return;
+  if (ownershipAvailable(ctx)) {
+    // Free ownership fences abandoned tickets, but a verified endpoint still has
+    // to exit before management can complete a stop or filesystem mutation.
+    if (target.port) {
+      let responsive = false;
+      try { await health(ctx, target, target.port); responsive = true; }
+      catch (error) {
+        if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
+      }
+      if (responsive) {
+        await shutdownAndWait(ctx, target, deleting, true);
+        return;
+      }
+    }
+    const waiting = pending(target);
+    if (waiting) {
+      const latest = state(ctx);
+      latest.workers = latest.workers.filter(record => record.ticket !== target.ticket);
+      writeJSON(ctx.stateFile, latest);
+    }
+    const child = children.get(target.ticket);
+    if (child && child.pid === target.pid) {
+      signalProcess(target.pid, 'SIGTERM');
+      if (!await waitExit(target.pid, 1000)) signalProcess(target.pid, 'SIGKILL');
+      if (!await waitExit(target.pid, 2000)) fail('Startup worker did not exit');
+    } else if (waiting && !await waitExit(target.pid, 5000)) {
+      fail('Revoked startup worker did not exit', 'server-stop-timeout');
+    }
+    return;
+  }
   if (target.pid === process.pid) fail('Cannot stop the calling process');
   let responsive = false;
   if (target.port) {
-    try {
-      await health(ctx, target, target.port);
-      responsive = true;
-    } catch (error) {
+    try { await health(ctx, target, target.port); responsive = true; }
+    catch (error) {
       if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.message !== 'Worker request timeout') throw error;
     }
   }
@@ -380,87 +511,50 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
   fail(`Timed out stopping worker ${target.pid}`, 'server-stop-timeout');
 }
 
-// Upgrade cleanup validates the running HTTP endpoint against its graph lock.
-// It never admits an older worker into the current lifecycle protocol.
+const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
+  sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
+
 async function stopOutdatedWorkers(storage, revision, repo) {
   if (typeof revision !== 'string' || !revision) fail('Build revision is required');
-  const scoped = repo === undefined ? null : context(storage, repo);
-  const targetLock = scoped && readJSON(path.join(scoped.graphDir, 'db-worker.lock'));
-  const candidates = entries(storage.root).filter(target => !scoped || target.pid === targetLock?.pid);
-  const results = await Promise.allSettled(candidates.map(async target => {
-    if (!pidExists(target.pid)) {
-      await removeEntries(storage.root, [target]);
-      return;
-    }
-    const probe = async () => {
-      const response = await request(target.port, '/healthz');
-      const value = JSON.parse(response.body);
-      if (![200, 503].includes(response.status) || value.pid !== target.pid
-          || value.port !== target.port || value.host !== '127.0.0.1'
-          || typeof value.revision !== 'string' || !value.revision
-          || !['cli', 'electron'].includes(value['owner-source'])
-          || typeof value.repo !== 'string' || !value.repo)
-        fail('Outdated worker endpoint identity mismatch');
-      return value;
-    };
-    const value = await probe();
-    if (scoped && graphName(value.repo) !== scoped.repo) fail('Outdated worker target graph mismatch');
-    if (canonicalRoot(value['root-dir']) !== storage.root
-        || (value.storage && !sameStorage(storage, value.storage))) return;
-    if (value.revision === revision) return;
-    const ctx = context(storage, value.repo);
+  const names = repo === undefined
+    ? fs.readdirSync(storage.graphsDir, { withFileTypes: true }).filter(entry => entry.isDirectory())
+      .map(entry => canonicalGraphDirectory(entry.name)).filter(name => name !== null)
+    : [repo];
+  const scan = publicationScan();
+  const results = await Promise.allSettled(names.map(name => {
+    const ctx = context(storage, name);
     return withLease(ctx, 'upgrade', async () => {
-      if (!pidExists(target.pid)) return;
-      const confirmed = await probe();
-      for (const key of ['pid', 'port', 'host', 'repo', 'root-dir', 'lock-id', 'owner-source', 'revision']) {
-        if (confirmed[key] !== value[key]) fail('Outdated worker identity changed before shutdown');
-      }
-      const lockFile = path.join(ctx.graphDir, 'db-worker.lock');
-      const lock = readJSON(lockFile);
-      if (!lock || lock.pid !== target.pid || lock.repo !== value.repo
-          || !lock['lock-id'] || lock['owner-source'] !== value['owner-source']
-          || (value['lock-id'] !== undefined && lock['lock-id'] !== value['lock-id']))
-        fail('Outdated worker graph lock identity mismatch');
-      await shutdownAndWait(ctx, { ...target, ticket: value.ticket, generation: value.generation }, false, true);
-      removeMatchingLock(lockFile, lock);
-      await removeEntries(storage.root, [target]);
       const current = state(ctx);
-      for (const record of current.workers.filter(record => record.pid === target.pid)) {
-        const runtime = readRuntime(ctx, record);
-        if (runtime?.error) fail(`Worker close failed: ${runtime.error}`);
-        fs.rmSync(runtimeFile(ctx, record.ticket), { force: true });
+      const retired = await legacy.retireGraph(ctx, current, scan);
+      const { targets } = await discover(ctx, current, scan, repo !== undefined);
+      const available = ownershipAvailable(ctx);
+      for (const target of targets) {
+        if (available && !pending(target)) {
+          await terminate(ctx, target, false);
+          await cleanup(ctx, current, [target]);
+          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+          writeJSON(ctx.stateFile, current);
+          continue;
+        }
+        if (!pidExists(target.pid)) continue;
+        if (!target.port) fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
+        const value = await health(ctx, target, target.port);
+        if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
+        if (value.revision === revision) continue;
+        await terminate(ctx, target, false);
+        await cleanup(ctx, current, [target]);
+        current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+        writeJSON(ctx.stateFile, current);
+        retired.push(target);
       }
-      current.workers = current.workers.filter(record => record.pid !== target.pid);
-      writeJSON(ctx.stateFile, current);
-      return target;
+      return retired;
     });
   }));
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
-  return results.map(result => result.value).filter(Boolean);
+  return results.flatMap(result => result.value);
 }
-function removeMatchingLock(file, lock) {
-  const actual = readJSON(file);
-  if (!actual) return;
-  if (actual.pid !== lock.pid || actual['lock-id'] !== lock['lock-id'] || actual.repo !== lock.repo)
-    fail('Graph lock identity changed during cleanup');
-  if (pidExists(actual.pid)) fail('Cannot remove a live graph lock');
-  fs.unlinkSync(file);
-}
-async function cleanup(ctx, current, targets, lock) {
-  for (const target of targets) if (pidExists(target.pid)) fail('Worker remains alive during cleanup');
-  if (lock) removeMatchingLock(path.join(ctx.graphDir, 'db-worker.lock'), lock);
-  else if (readJSON(path.join(ctx.graphDir, 'db-worker.lock'))) fail('Unexpected graph lock appeared during cleanup');
-  const unlinked = path.join(ctx.graphsDir, 'Unlinked graphs');
-  if (fs.existsSync(unlinked) && fs.statSync(unlinked).isDirectory()) {
-    for (const directory of fs.readdirSync(unlinked, { withFileTypes: true })) {
-      if (!directory.isDirectory()) continue;
-      const file = path.join(unlinked, directory.name, 'db-worker.lock');
-      const moved = readJSON(file);
-      if (moved && graphName(moved.repo) === ctx.repo && targets.some(target => target.pid === moved.pid
-          && target.lock?.['lock-id'] === moved['lock-id'])) removeMatchingLock(file, moved);
-    }
-  }
+async function cleanup(ctx, current, targets) {
   for (const root of new Set([ctx.root, ...targets.map(target => target.root)]))
     await removeEntries(root, targets);
   for (const target of targets) {
@@ -474,20 +568,24 @@ async function cleanup(ctx, current, targets, lock) {
   for (const target of targets) fs.rmSync(runtimeFile(ctx, target.ticket), { force: true });
 }
 async function stopUnderLease(ctx, current, deleting, owner) {
-  const { targets, lock } = await discover(ctx, current);
+  const retired = await legacy.retireGraph(ctx, current);
+  const { targets } = await discover(ctx, current);
+  const available = ownershipAvailable(ctx);
   if (!deleting) {
     for (const target of targets) {
-      if (!pidExists(target.pid)) continue;
+      if (!pidExists(target.pid) || (available && !pending(target))) continue;
       const source = target.owner;
       if (source !== owner && !(owner === 'cli' && source === 'unknown'))
         fail('Server is owned by another process', 'server-owned-by-other');
     }
   }
   for (const target of targets) await terminate(ctx, target, deleting);
-  await cleanup(ctx, current, targets, lock);
+  const probe = acquireOwnership(ctx);
+  probe.release();
+  await cleanup(ctx, current, targets);
   current.workers = [];
   writeJSON(ctx.stateFile, current);
-  return targets.length > 0 || !!lock;
+  return retired.length > 0 || targets.length > 0;
 }
 async function stopGraph(storage, repo, owner) {
   const ctx = context(storage, repo);
@@ -522,7 +620,10 @@ async function deleteGraph(storage, repo, commit) {
     if (operation.generation !== current.generation) fail('Graph deletion generation changed', 'graph-not-exists');
     current.phase = 'deleting';
     writeJSON(ctx.stateFile, current);
+    let mutationOwnership;
     try {
+      await stopUnderLease(ctx, current, true);
+      mutationOwnership = acquireOwnership(ctx);
       // The persisted move intent closes the crash window between rename and state publication.
       if (operation.destination && !operation.moved) {
         const source = directoryIdentity(ctx.graphDir);
@@ -535,7 +636,6 @@ async function deleteGraph(storage, repo, commit) {
         if (fs.existsSync(ctx.graphDir) || !sameDirectory(operation.source, directoryIdentity(operation.destination)))
           fail('Graph directory identity changed', 'graph-not-exists');
       } else {
-        await stopUnderLease(ctx, current, true);
         const source = directoryIdentity(ctx.graphDir);
         operation.existed = !!source;
         if (source) {
@@ -566,7 +666,7 @@ async function deleteGraph(storage, repo, commit) {
       current.error = String(error.message || error);
       writeJSON(ctx.stateFile, current);
       throw error;
-    }
+    } finally { if (mutationOwnership) mutationOwnership.release(); }
   });
 }
 async function cancelStartup(ctx, record) {
@@ -576,11 +676,10 @@ async function cancelStartup(ctx, record) {
       if (pidExists(record.pid)) fail('Startup registration changed while its worker remains alive');
       return;
     }
-    const { targets, lock } = await discover(ctx, current);
+    const { targets } = await discover(ctx, current);
     const target = targets.find(candidate => candidate.ticket === record.ticket);
-    if (lock && lock.pid !== record.pid) fail('Startup lock belongs to another worker');
     await terminate(ctx, target, false);
-    await cleanup(ctx, current, [target], lock);
+    await cleanup(ctx, current, [target]);
     current.workers = current.workers.filter(candidate => candidate.ticket !== record.ticket);
     writeJSON(ctx.stateFile, current);
   });
@@ -594,16 +693,15 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
     const record = await withLease(ctx, 'start', async () => {
       const current = state(ctx);
       requireAvailable(ctx, current, generation || observed);
-      const { targets, lock } = await discover(ctx, current);
-      const live = targets.filter(target => pidExists(target.pid));
+      await legacy.retireGraph(ctx, current);
+      const { targets } = await discover(ctx, current);
+      const available = ownershipAvailable(ctx);
+      const live = targets.filter(target => pidExists(target.pid) && (!available || pending(target)));
+      if (!available && !live.length) fail('Graph ownership is locked without a registered worker', 'repo-locked');
       if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
-      if (live.length) {
-        const target = live[0];
-        if (!lock && target.port) fail('Ready worker has no canonical graph lock', 'server-start-failed');
-        if (lock) validateLock(ctx, lock, target);
-        return target;
-      }
-      await cleanup(ctx, current, targets, lock);
+      if (live.length) return live[0];
+      for (const target of targets) await terminate(ctx, target, false);
+      await cleanup(ctx, current, targets);
       const ticket = id();
       const args = [script, '--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
         '--admission-ticket', ticket, '--graph-generation', current.generation];
@@ -617,7 +715,9 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       const pid = child.pid;
       if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');
       child.unref();
-      const spawned = runtimeRecord({ ...ctx, ticket, generation: current.generation, pid, owner });
+      children.set(ticket, child);
+      child.once('exit', () => children.delete(ticket));
+      const spawned = { ...runtimeRecord({ ...ctx, ticket, generation: current.generation, pid, owner, 'ownership-protocol': PROTOCOL }), parent: process.pid, expires: Date.now() + 30000 };
       current.workers = [spawned];
       try { writeJSON(ctx.stateFile, current); }
       catch (error) {
@@ -638,10 +738,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       const runtime = readRuntime(ctx, record);
       const port = runtime?.port || record.port;
       if (port) {
-        const lock = readJSON(path.join(ctx.graphDir, 'db-worker.lock'));
-        if (!lock) fail('Worker has no canonical graph lock', 'server-start-failed');
-        validateLock(ctx, lock, { ...record, lock: runtime?.lock || record.lock });
-        const value = await health(ctx, { ...record, lock }, port);
+        const value = await health(ctx, record, port);
         if (value.status === 'ready') return { ...value, generation: record.generation };
       }
       if (budget <= 0) fail('Worker failed to become ready', 'server-start-failed');
@@ -683,5 +780,5 @@ function observe(storage, repo, generation, onChange) {
   return close;
 }
 
-module.exports = { resolveStorage, context, snapshot, pidExists, withLease, createGraph, admit, publish,
+module.exports = { ownershipPath, acquireOwnership, assertOwnership, releaseOwnership, resolveStorage, context, snapshot, pidExists, withLease, createGraph, admit, publish,
   checkAdmission, recordStop, abortAdmission, startGraph, stopGraph, deleteGraph, observe, stopOutdatedWorkers };
