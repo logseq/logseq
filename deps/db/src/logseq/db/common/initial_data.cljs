@@ -334,6 +334,7 @@
   [db]
   (let [today (date-time-util/date->int (js/Date.))]
     (->> (d/rseek-datoms db :avet :block/journal-day today)
+         (take-while #(= :block/journal-day (:a %)))
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]
