@@ -633,6 +633,28 @@
    ;; target-block is a page itself
    (:db/id target-block)))
 
+(defn- build-insert-block-tx
+  [db block result* {:keys [uuid' parent order target-page outliner-op]}]
+  (let [page? (or (ldb/page? block) (:block/name block))
+        ;; :block/name is not unique, so pasting a copied page entity
+        ;; would create a duplicate page; link to the existing page instead
+        existing-page (when (and page?
+                                 (= :paste outliner-op)
+                                 (:block/name block))
+                        (ldb/get-page db (:block/name block)))]
+    (if existing-page
+      {:block/uuid uuid'
+       :block/parent parent
+       :block/order order
+       :block/page target-page
+       :block/title ""
+       :block/created-at (:block/created-at block)
+       :block/updated-at (:block/updated-at block)
+       :block/link (:db/id existing-page)}
+      (cond-> result*
+        (not page?) (assoc :block/page target-page)
+        page? (dissoc :block/page)))))
+
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
@@ -675,25 +697,12 @@
                 result* (if (:block.temp/use-old-db-id? result*)
                           result*
                           (dissoc result* :db/id))
-                page? (or (ldb/page? block) (:block/name block))
-                ;; :block/name is not unique, so pasting a copied page entity
-                ;; would create a duplicate page; link to the existing page instead
-                existing-page (when (and page?
-                                         (= :paste outliner-op)
-                                         (:block/name block))
-                                (ldb/get-page db (:block/name block)))
-                result (if existing-page
-                         {:block/uuid uuid'
-                          :block/parent parent
-                          :block/order order
-                          :block/page target-page
-                          :block/title ""
-                          :block/created-at (:block/created-at block)
-                          :block/updated-at (:block/updated-at block)
-                          :block/link (:db/id existing-page)}
-                         (cond-> result*
-                           (not page?) (assoc :block/page target-page)
-                           page? (dissoc :block/page)))
+                result (build-insert-block-tx db block result*
+                                              {:uuid' uuid'
+                                               :parent parent
+                                               :order order
+                                               :target-page target-page
+                                               :outliner-op outliner-op})
                 db' (if (seq page-txs)
                       (:db-after (d/with db page-txs))
                       db)]
