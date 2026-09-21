@@ -924,6 +924,12 @@
     (when property
       (property-key-cp block property {}))))
 
+(defn- page-title-property-surface?
+  "Add property belongs on the page itself (title, sidebar, tag dialog), not
+  on a page nested in an outline."
+  [{:keys [page-title? sidebar-properties? tag-dialog?]}]
+  (boolean (or page-title? sidebar-properties? tag-dialog?)))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
@@ -967,10 +973,7 @@
                                           (= property-ident :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity/page? block)
-               page-properties-area? (and page?
-                                          (or (:page-title? opts)
-                                              sidebar-properties?
-                                              tag-dialog?))
+               page-properties-area? (and page? (page-title-property-surface? opts))
                opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [{:keys [property-ident]}]
@@ -1040,7 +1043,7 @@
                                                    :description-property-uuid
                                                    description-property-uuid))])])
 
-                (when (and page? (not class?))
+                (when (and page-properties-area? (not class?))
                   ^{:key (str id "-add-property")}
                   [new-property block opts'])
 

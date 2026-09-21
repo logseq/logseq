@@ -69,9 +69,9 @@
                 {:value block}]))
         blocks))
 
-(defn block-bundle-slots
-  [{:keys [blocks children]}]
-  (into (block-slots blocks)
+(defn children-slots
+  [children]
+  (into {}
         (map (fn [[parent-uuid membership]]
                [[:children parent-uuid]
                 {:tx-id (:parent-tx-id membership)

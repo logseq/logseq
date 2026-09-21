@@ -186,6 +186,35 @@
     (is (not (string/includes? (name link-tag) "page-reference"))
         "All Pages cells use a plain page link, not page-cp preview DOM.")))
 
+
+(deftest groups-sort-order-selection-only-writes-selected-choice-test
+  (is (true? (#'views/effective-groups-sort-desc? nil))
+      "The sort-groups-desc? property defaults to descending.")
+  (is (true? (#'views/effective-groups-sort-desc? true)))
+  (is (false? (#'views/effective-groups-sort-desc? false)))
+  (is (true? (#'views/selected-groups-sort-desc true true)))
+  (is (false? (#'views/selected-groups-sort-desc false true)))
+  (is (nil? (#'views/selected-groups-sort-desc true false))
+      "Unchecking the previous menu item must not overwrite the newly selected group order.")
+  (is (nil? (#'views/selected-groups-sort-desc false false))))
+
+(deftest filters-include-properties-and-supported-db-attributes-test
+  (let [property-column {:id :user.property/status
+                         :name "Status"
+                         :property {:db/id 1
+                                    :db/ident :user.property/status}}
+        created-at-column {:id :block/created-at}
+        updated-at-column {:id :block/updated-at}
+        title-column {:id :block/title}
+        synthetic-backlinks-column (some #(when (= :block.temp/refs-count (:id %)) %)
+                                         (#'all-pages/columns))]
+    (is (true? (#'views/filterable-column? property-column)))
+    (is (true? (#'views/filterable-column? created-at-column)))
+    (is (true? (#'views/filterable-column? updated-at-column)))
+    (is (true? (#'views/filterable-column? title-column)))
+    (is (false? (#'views/filterable-column? synthetic-backlinks-column))
+        "Synthetic columns are not property entities or supported DB attributes and must not appear in the filter picker.")))
+
 (deftest all-pages-first-window-preview-uses-worker-display-title-test
   (let [page-uuid (random-uuid)
         entity {:db/id 42 :block/uuid page-uuid}
@@ -490,7 +519,19 @@
              :groups [{:value {:kind :scalar :value "A"}
                        :rows [row-a row-b]}
                       {:value {:kind :scalar :value "B"}
-                       :rows [row-b row-c]}]})))))
+                       :rows [row-b row-c]}]})))
+    (is (= [row-a]
+           (views/grouped-gallery-row-ids
+            {:partition :grouped-list
+             :count 1
+             :groups [{:value {:kind :entity :uuid (random-uuid)}
+                       :partitions [{:breadcrumb-uuid row-a
+                                     :rows [[row-a [row-a]]]}]}]}))
+        "Gallery row IDs must flatten raw [breadcrumb row-uuids] partitions before use-block.")
+    (is (= [row-a row-b]
+           (vec (#'views/grouped-list-partition-row-ids
+                 [row-c [row-a row-b]])))
+        "Grouped-list gallery groups render cards for row UUIDs, not partition tuples.")))
 
 (deftest grouped-table-prefetch-uses-group-uuids-not-group-values-test
   (let [row-a (random-uuid)
@@ -668,7 +709,15 @@
         "Without titles, an empty table still waits for hydrate.")
     (is (= 3883 (#'views/table-total-count (range 26) 3883))
         "The first window already has the full count. Do not wait for remaining ids.")
-    (is (= 26 (#'views/table-total-count (range 26) nil)))))
+    (is (= 26 (#'views/table-total-count (range 26) nil)))
+    (is (= 56 (#'views/windowed-items-count 431 (range 56)))
+        "After the full id list arrives, drop the first-window estimate so delete/filter does not leave empty rows.")
+    (is (= 46 (#'views/windowed-items-count 46 (range 56)))
+        "A newer first-window count after delete wins over a stale full list.")
+    (is (= 0 (#'views/windowed-items-count 431 []))
+        "A filter that matches nothing must not keep the unfiltered placeholder rows.")
+    (is (= 431 (#'views/windowed-items-count 431 nil))
+        "While the full id list is still loading, keep the first-window count.")))
 
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
@@ -695,6 +744,30 @@
     (is (= [:view-data view-uuid full-context] (:full-key plan)))
     (is (= [:view-data view-uuid (:full-context single)] (:resource-key single)))
     (is (nil? (:full-key single)))))
+
+(deftest all-pages-drops-unsupported-backlinks-filter-context-test
+  (let [view-uuid (random-uuid)
+        filters {:or? false
+                 :filters [[nil :is-not :empty]
+                           [:block.temp/refs-count :is-not :empty]
+                           [:block/title :text-contains "Alpha"]]}
+        plan (#'views/loaded-view-resource-plan
+              view-uuid :all-pages [{:id :block/title :asc? true}]
+              filters "" :block/tags nil 990)
+        expected-filters {:or? false
+                          :filters [[:block/title :text-contains "Alpha"]]}]
+    (is (= expected-filters
+           (#'views/view-resource-filters :all-pages filters)))
+    (is (= expected-filters
+           (get-in plan [:resource-key 2 :filters])))
+    (is (nil? (:full-key plan))
+        "Grouped All Pages uses one full resource key.")
+    (is (= filters
+           (get-in (#'views/loaded-view-resource-plan
+                    view-uuid :class-objects [{:id :block/title :asc? true}]
+                    filters "" :block/tags nil 990)
+                   [:resource-key 2 :filters]))
+        "Only All Pages drops stale synthetic Backlinks filters.")))
 
 (deftest table-virtualization-uses-fixed-row-height
   (is (= {:item-height 33 :overscan-px 66}
@@ -1110,6 +1183,38 @@
         (is (string/includes? markup "Entity group"))
         (is (= [entity-uuid] @block-calls)
             "Entity-valued group metadata hydrates at its UUID boundary.")))))
+
+(deftest grouped-table-body-drops-outer-window-count-test
+  (let [captured (atom nil)
+        group [(random-uuid) (random-uuid)]]
+    (with-redefs [util/mobile? (constantly true)
+                  views/view-cp
+                  (fn [_view-entity table option _view-opts]
+                    (reset! captured {:table table
+                                      :option option})
+                    nil)]
+      (render-static
+       (views/group-item
+        {:block/uuid (random-uuid)}
+        {}
+        group
+        {:db/ident :block/tags
+         :block/title "Tags"}
+        {:kind :scalar :value "tag1"}
+        {:items-count 22
+         :all-row-ids (repeat 22 (random-uuid))
+         :offset-rows [(random-uuid)]
+         :row-offset 10}
+        {}
+        {:list-view? false
+         :gallery? false
+         :group-by-page? false
+         :readable-property-value str}))
+      (is (= group (get-in @captured [:table :rows])))
+      (is (not (contains? (:option @captured) :items-count))
+          "A grouped table must render only the rows in that group, not placeholder rows from the outer All Pages count.")
+      (is (not (contains? (:option @captured) :all-row-ids)))
+      (is (true? (get-in @captured [:option :disable-virtualized?]))))))
 
 (deftest entity-group-items-keep-a-nonzero-shell-while-loading-test
   (let [entity-uuid (random-uuid)]

@@ -122,6 +122,7 @@ jobs:
           - shard: outliner-rtc
             namespaces: >-
               logseq.e2e.outliner-basic-test
+              logseq.e2e.library-basic-test
               logseq.e2e.rtc-basic-test
               logseq.e2e.assets-basic-test
           - shard: graph-properties
