@@ -704,27 +704,14 @@
 
     :class-objects
     (when class-id
-      (let [class-ids (into #{class-id} (db-class/get-structured-children db class-id))
-            property-tag-eid (ident-eid db :logseq.class/Property)
-            eid-visible? (fn [eid]
-                           (db-class/class-object-eid-visible?
-                            db eid
-                            (indexed-attr-values db eid :block/tags)
-                            property-tag-eid))
-            member-visible? (fn [eid]
-                              (and (some class-ids
-                                         (indexed-attr-values db eid :block/tags))
-                                   (eid-visible? eid)))
-            ;; The data window walks the sort index and stops once it has enough
-            ;; visible members; only the total count still enumerates membership.
-            data (sort-eids-from-avet db member-visible? sorting row-limit nil row-offset)]
-        (when data
-          {:count (count
-                   (db-class/filter-visible-class-object-ids
-                    db
-                    (mapcat (fn [id] (map :e (d/datoms db :avet :block/tags id)))
-                            class-ids)))
-           :data data})))
+      (let [class-ids (cons class-id (db-class/get-structured-children db class-id))
+            tag-eids (db-class/filter-visible-class-object-ids
+                      db
+                      (mapcat (fn [id]
+                                (map :e (d/datoms db :avet :block/tags id)))
+                              class-ids))]
+        {:count (count tag-eids)
+         :data (take-sorted-eids db tag-eids sorting row-limit row-offset)}))
 
     nil))
 
@@ -1004,8 +991,8 @@
   [db]
   (let [today (date-time-util/date->int (js/Date.))
         journal-tag-eid (ident-eid db :logseq.class/Journal)]
-    (->> (d/rseek-datoms db :avet :block/journal-day)
-         (filter (fn [d] (<= (:v d) today)))
+    (->> (d/rseek-datoms db :avet :block/journal-day today)
+         (take-while #(= :block/journal-day (:a %)))
          (common-util/distinct-by :e)
          (filter (fn [d]
                    (let [eid (:e d)]

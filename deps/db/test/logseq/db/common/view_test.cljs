@@ -55,6 +55,46 @@
     (is (= 2 (:count result)))
     (is (= ["Beta" "Alpha"] titles))))
 
+(deftest journal-window-excludes-future-journals-with-aliases-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:build/journal 20240101}}
+                                  {:page {:build/journal 29990101}}
+                                  {:page {:block/title "Alias target"}}]})
+        future-id (:e (first (d/datoms @conn :avet :block/journal-day 29990101)))
+        alias-id (:db/id (db-test/find-page-by-title @conn "Alias target"))]
+    (d/transact! conn [[:db/add future-id :block/alias alias-id]])
+    (doseq [options [{:journals? true} {:journals? true :row-limit 26}]]
+      (let [result (db-view/get-view-data @conn nil options)]
+        (is (= 1 (:count result)))
+        (is (= [20240101] (mapv :block/journal-day (:data result))))))))
+
+(deftest small-class-window-does-not-scan-unrelated-sort-values-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "Tagged" :build/tags [:Topic]}}
+                {:page {:block/title "Unrelated"}
+                 :blocks (mapv (fn [i] {:block/title (str "Unrelated " i)}) (range 1000))}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        scanned (atom 0)
+        instrument (fn [scan]
+                     (fn [db index & components]
+                       (let [datoms (apply scan db index components)]
+                         (if (and (= :avet index) (= :block/updated-at (first components)))
+                           (map (fn [datom] (swap! scanned inc) datom) datoms)
+                           datoms))))
+        result (with-redefs [d/datoms (instrument d/datoms)
+                             d/rseek-datoms (instrument d/rseek-datoms)]
+                 (db-view/get-view-data @conn view-id
+                                       {:view-feature-type :class-objects
+                                        :view-for-id class-id
+                                        :sorting [{:id :block/updated-at :asc? false}]
+                                        :row-limit 26}))]
+    (is (= 1 (:count result)))
+    (is (= ["Tagged"] (mapv #(:block/title (d/entity @conn %)) (:data result))))
+    (is (< @scanned 26) "A class that fits its window must not scan unrelated rows.")))
+
 (deftest get-view-data-all-pages-title-sort-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
