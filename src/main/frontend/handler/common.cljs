@@ -7,7 +7,7 @@
             [goog.object :as gobj]))
 
 (defn copy-to-clipboard-without-id-property!
-  [repo raw-text html blocks]
+  [repo raw-text html blocks & {:keys [op]}]
   (let [blocks' (map (fn [block]
                        (assoc block :block/title (or (:block/raw-title block)
                                                      (:block/title block))))
@@ -15,7 +15,8 @@
     (util/copy-to-clipboard! raw-text
                              :html html
                              :graph repo
-                             :blocks blocks')))
+                             :blocks blocks'
+                             :op op)))
 
 (defn safe-read-string
   [content error-message-or-handler]

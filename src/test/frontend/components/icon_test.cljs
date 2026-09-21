@@ -2,6 +2,24 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.icon :as icon]))
 
+(deftest icon-search-keeps-horizontal-arrows-inside-picker
+  (doseq [key ["ArrowLeft" "ArrowRight"]]
+    (testing key
+      (let [event (js/Event. "keydown" #js {:bubbles true :cancelable true})]
+        (set! (.-key event) key)
+        (#'icon/icon-search-keydown event)
+        (is (.-cancelBubble event)
+            "Horizontal arrows must not reach editor navigation")
+        (is (not (.-defaultPrevented event))
+            "Search input caret movement must retain its native behavior"))))
+  (doseq [key ["Escape" "Enter" "Tab" "a"]]
+    (testing key
+      (let [event (js/Event. "keydown" #js {:bubbles true :cancelable true})]
+        (set! (.-key event) key)
+        (#'icon/icon-search-keydown event)
+        (is (not (.-cancelBubble event)))
+        (is (not (.-defaultPrevented event)))))))
+
 (deftest node-icon-precedence-matches-sidebar-and-command-results-test
   (let [own-icon {:type :emoji :id "sparkles"}
         tag-icon {:type :tabler-icon :id "rocket" :color "#ff0000"}

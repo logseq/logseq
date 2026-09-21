@@ -1,17 +1,14 @@
 (ns logseq.db-worker.daemon
-  "Shared db-worker-node lifecycle helpers for CLI and Electron."
-  (:require ["child_process" :as child-process]
-            ["fs" :as fs]
-            ["http" :as http]
+  "Shared db-worker-node health and discovery helpers."
+  (:require ["http" :as http]
             [clojure.string :as string]
-            [lambdaisland.glogi :as log]
-            [logseq.db-worker.log :as db-worker-log]
+            [logseq.common.defkeywords :refer [defkeyword]]
             [promesa.core :as p]))
+
+(defkeyword :ownership-protocol "The graph ownership protocol published by a Node worker.")
 
 (def ^:private valid-owner-sources
   #{:cli :electron :unknown})
-
-(def ^:private embedding-url-env "LOGSEQ_EMBEDDINGS_URL")
 
 (defn normalize-owner-source
   [owner-source]
@@ -34,18 +31,6 @@
           "ESRCH" :not-found
           "EPERM" :no-permission
           :error)))))
-
-(defn read-lock
-  [path]
-  (when (and (seq path) (fs/existsSync path))
-    (let [lock (js->clj (js/JSON.parse (.toString (fs/readFileSync path) "utf8"))
-                        :keywordize-keys true)]
-      (assoc lock :owner-source (normalize-owner-source (:owner-source lock))))))
-
-(defn remove-lock!
-  [path]
-  (when (and (seq path) (fs/existsSync path))
-    (fs/unlinkSync path)))
 
 (defn http-request
   [{:keys [method host port path headers body timeout-ms]}]
@@ -92,167 +77,3 @@
                                               :timeout-ms 1000})]
         (= 200 status))
       (p/catch (fn [_] false))))
-
-(defn healthy?
-  [{:keys [host port]}]
-  (-> (p/let [{:keys [status]} (http-request {:method "GET"
-                                              :host host
-                                              :port port
-                                              :path "/healthz"
-                                              :timeout-ms 1000})]
-        (contains? #{200 503} status))
-      (p/catch (fn [_] false))))
-
-(defn valid-lock?
-  [lock]
-  (and (seq (:repo lock))
-       (number? (:pid lock))
-       (seq (:lock-id lock))))
-
-(declare wait-for)
-
-(defn- process-stopped?
-  [pid]
-  (not (contains? #{:alive :no-permission} (pid-status pid))))
-
-(defn- terminate-process!
-  [pid force?]
-  (if (= "win32" (.-platform js/process))
-    (let [args (cond-> ["/PID" (str pid) "/T"]
-                 force? (conj "/F"))]
-      (try
-        (let [result (.spawnSync child-process "taskkill" (clj->js args)
-                                 #js {:windowsHide true
-                                      :stdio "ignore"})]
-          (if (or (= 0 (.-status result))
-                  (process-stopped? pid))
-            (p/resolved nil)
-            (p/rejected (ex-info "taskkill failed"
-                                 {:code :taskkill-failed
-                                  :pid pid
-                                  :force? force?}))))
-        (catch :default e
-          (p/rejected e))))
-    (try
-      (.kill js/process pid (if force? "SIGKILL" "SIGTERM"))
-      (p/resolved nil)
-      (catch :default e
-        (p/rejected e)))))
-
-(defn- wait-for-process-stop!
-  [pid timeout-ms]
-  (wait-for (fn [] (p/resolved (process-stopped? pid)))
-            {:timeout-ms timeout-ms
-             :interval-ms 100}))
-
-(defn- stop-stale-process!
-  [{:keys [pid]}]
-  (cond
-    (not (number? pid))
-    (p/resolved nil)
-
-    (= pid (.-pid js/process))
-    (p/resolved nil)
-
-    (process-stopped? pid)
-    (p/resolved nil)
-
-    :else
-    (-> (p/do!
-         (-> (terminate-process! pid false)
-             (p/catch (fn [e]
-                        (log/warn :db-worker-daemon/stale-process-stop-failed
-                                  {:pid pid :force? false :error e})
-                        (p/resolved nil))))
-         (wait-for-process-stop! pid 5000))
-        (p/catch (fn [_]
-                   (-> (terminate-process! pid true)
-                       (p/catch (fn [e]
-                                  (log/warn :db-worker-daemon/stale-process-stop-failed
-                                            {:pid pid :force? true :error e})
-                                  (p/resolved nil))))
-                   (-> (wait-for-process-stop! pid 1000)
-                       (p/catch (fn [_] nil))))))))
-
-(defn cleanup-stale-lock!
-  [path lock]
-  (cond
-    (nil? lock)
-    (p/resolved nil)
-
-    (= :not-found (pid-status (:pid lock)))
-    (do
-      (remove-lock! path)
-      (p/resolved nil))
-
-    (not (valid-lock? lock))
-    (-> (stop-stale-process! lock)
-        (p/then (fn [_]
-                  (remove-lock! path)
-                  nil)))
-
-    :else
-    (p/resolved nil)))
-
-(defn wait-for
-  [pred-fn {:keys [timeout-ms interval-ms]
-            :or {timeout-ms 8000
-                 interval-ms 50}}]
-  (p/create
-   (fn [resolve reject]
-     (let [start (js/Date.now)
-           tick (fn tick []
-                  (p/let [ok? (pred-fn)]
-                    (if ok?
-                      (resolve true)
-                      (if (> (- (js/Date.now) start) timeout-ms)
-                        (reject (ex-info "timeout" {:code :timeout}))
-                        (js/setTimeout tick interval-ms)))))]
-       (tick)))))
-
-(defn wait-for-lock
-  [path]
-  (wait-for (fn []
-              (p/resolved (fs/existsSync path)))
-            {:timeout-ms 8000
-             :interval-ms 50}))
-
-(defn wait-for-ready
-  [lock]
-  (wait-for (fn [] (ready? lock))
-            {:timeout-ms 8000
-             :interval-ms 50}))
-
-(defn spawn-server!
-  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
-  (let [owner-source (normalize-owner-source owner-source)
-        detached? (not= owner-source :electron)
-        args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
-                        create-empty-db? (conj "--create-empty-db")
-                        (seq embedding-endpoint) (conj "--embedding-endpoint" embedding-endpoint)
-                        (seq embedding-model-id) (conj "--embedding-model-id" embedding-model-id)))
-        env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
-    (when (and (= :electron owner-source)
-               (not (seq embedding-endpoint)))
-      (js-delete env embedding-url-env))
-    (if-not script
-      (do
-        (log/warn :db-worker-daemon/missing-script {:repo repo :root-dir root-dir})
-        nil)
-      (let [stdio-config (when detached?
-                           (db-worker-log/child-stdio! {:root-dir root-dir
-                                                        :repo repo}))
-            _ (when detached?
-                (aset env db-worker-log/stdio-redirected-env "1"))
-            child (try
-                    (.spawn child-process (.-execPath js/process) args #js {:detached detached?
-                                                                            :stdio (if detached?
-                                                                                     (:stdio stdio-config)
-                                                                                     "inherit")
-                                                                            :env env})
-                    (finally
-                      (when-let [close! (:close! stdio-config)]
-                        (close!))))]
-        (when detached?
-          (.unref child))
-        child))))

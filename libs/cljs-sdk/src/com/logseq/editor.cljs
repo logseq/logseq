@@ -249,6 +249,12 @@
         args [page-name]]
     (core/call-method api-proxy method args)))
 
+(defn delete-recycled-page-permanently
+  [page]
+  (let [method (aget api-proxy "deleteRecycledPagePermanently")
+        args [page]]
+    (core/call-method api-proxy method args)))
+
 (defn rename-page
   [old-name new-name]
   (let [method (aget api-proxy "renamePage")

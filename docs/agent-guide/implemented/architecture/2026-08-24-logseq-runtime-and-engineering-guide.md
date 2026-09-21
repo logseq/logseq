@@ -135,29 +135,37 @@ stale metadata.
 
 #### Graph lock and ownership
 
-The three discovery records have deliberately different scopes:
+Graph ownership and discovery have separate responsibilities:
 
-- `db-worker.lock` records `repo`, `pid`, `lock-id`, and `owner-source`.
-- `server-list` records only `pid` and `port` pairs.
-- `/healthz` reports `repo`, readiness status, host, port, pid, owner source,
-  root directory, and runtime revision.
+- A private `node:sqlite` connection holds `BEGIN IMMEDIATE` on the per-user,
+  canonical-graph-path `lock.sqlite` until graph resources finish closing.
+- Registration and runtime records correlate the graph generation, admission
+  ticket, PID, storage, owner source, and `ownership-protocol: sqlite-v1`.
+- `server-list` records only PID/port pairs. `/healthz` reports the correlated
+  identity, readiness, root directory, and runtime revision.
 
-Neither the graph lock nor `server-list` is a readiness or revision authority.
+The ownership database has no application tables or persistent locked flag.
+File existence does not establish ownership, and the file remains after stop,
+deletion, or same-path recreation. SQLite contention enforces exclusion.
 
 Lifecycle behavior:
 
-1. Resolve and validate the graph directory under the configured root.
-2. Read the graph lock and remove it only when its owner process is absent.
-3. Read `server-list`, discard entries whose pid is absent, and probe remaining
-   entries through `/healthz`.
-4. Spawn only when neither a discovered graph server nor a graph lock exists.
-5. Require both a graph lock and a discovered server, then wait for readiness.
-6. Reuse the daemon only when its reported revision matches the requester.
-7. On revision mismatch, stop that exact server, start once, and verify the new
-   revision; fail if stop, startup, or the second revision check fails.
+1. Resolve canonical storage and serialize admission under the management lease.
+2. Classify legacy evidence through the bounded sequential-upgrade adapter;
+   retire only verified old workers and preserve unverifiable evidence.
+3. Acquire ownership before initializing any graph resources. Correlate new
+   workers using registration, runtime, and health protocol identities.
+4. Retain ownership across import, backup, data connection close/reopen, and
+   accepted asynchronous writes.
+5. Stop accepting work, drain requests and background writes, close resources,
+   then release ownership. Management still establishes verified worker exit.
+6. Hold ownership separately during management filesystem mutations. Never
+   unlink or replace the ownership database as a recovery operation.
+7. Retire mismatched SQLite-protocol revisions through normal identity checks;
+   revision mismatch alone never selects the legacy adapter.
 
-A discovered process without the expected usable lock is not adopted as a valid
-runtime; startup fails instead of returning an unowned endpoint.
+The detailed replacement contract is recorded in
+`docs/agent-guide/implemented/architecture/2026-09-18-replace-db-worker-lock-with-sqlite.md`.
 
 Normal stop and restart operations respect owner boundaries. A proven revision
 mismatch may replace the exact stale daemon across owner sources because the
@@ -429,32 +437,6 @@ Investigation sequence:
 Snapshot upload may initialize a missing checksum only before transaction history
 has advanced. It must not overwrite an existing different checksum.
 
-#### Cycle repair utility
-
-`logseq.db-sync.cycle` implements and tests reference-cycle repair for:
-
-- :block/parent, cardinality one;
-- :logseq.property.class/extends, cardinality many.
-
-Its algorithm:
-
-1. Collect entities touched by remote and local transaction reports.
-2. Detect a reachable cycle with DFS across the configured attribute.
-3. Prefer an edge whose current value differs from the corresponding value in
-   the remote transaction report.
-4. Retract one edge on the cycle.
-5. For block parent, add a safe remote parent or page root when possible.
-6. For class extension, prefer the remote reference set or Root fallback.
-7. Repeat until stable, with a 16-iteration safety cap.
-
-Repair transactions use `:outliner-op :fix-cycle`, disable undo generation, and
-set `:persist-op? false`.
-
-Current integration boundary: the client remote-apply path in
-`frontend.worker.sync.apply-txs` repairs duplicate outliner orders but does not
-call `logseq.db-sync.cycle/fix-cycle!`. The utility and its unit tests therefore
-must not be described as active client-side cycle repair.
-
 #### Schema and failure policy
 
 D1 schema changes require SQL migrations in deps/db-sync/worker/migrations.
@@ -677,12 +659,12 @@ Implemented routing constraints:
 - an ancestor task session id is passed to the master as inherited routing
   context for descendant tasks.
 
-Prompt templates from the AgentBridge registry are loaded and validated at
-startup, and invalid custom templates are replaced with defaults. The current
-dispatch path discards that returned template set and constructs hard-coded
-master prompts instead. Custom registry templates therefore must not be
-documented as affecting dispatched prompts until the dispatch path consumes
-them.
+The per-agent `AgentBridge master prompt` wrapper supplies the prompt for a new
+master session. Startup reads and validates its code block, creates the default
+when absent, and repairs a wrapper with missing code. Task and comment dispatch
+text comes solely from `build_master_task_dispatch_prompt` and
+`build_master_comment_dispatch_prompt`. Registry Task/Comment template blocks
+are not read.
 
 The generated master instructions say that only the master may write graph
 results, subagents are read-only, and a launched child session id must be saved

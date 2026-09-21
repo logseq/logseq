@@ -67,6 +67,321 @@ let spawn_cli_from entrypoint ?(env = [||]) args =
     (Array.append [| entrypoint |] args)
     [%obj { encoding = "utf8"; env = clone_env env }]
 
+let with_password_fixture scenario run =
+  let root = temp_dir "logseq-cli-password-" in
+  let config_path = Node.Path.join [| root; "cli.edn" |] in
+  let auth_path = Node.Path.join [| root; "private"; "auth.json" |] in
+  let calls_path = Node.Path.join [| root; "calls" |] in
+  let preload = Node.Path.join [| root; "fixture.cjs" |] in
+  mkdir_p (Filename.dirname auth_path);
+  write_file auth_path "existing-auth-file";
+  write_file config_path
+    (Printf.sprintf
+       "{:auth-path %S :oauth-client-id \"fixture-client\" :http-base \
+        \"https://sync.invalid\" :login-timeout-ms 1}"
+       auth_path);
+  write_file preload
+    ("const scenario = "
+    ^ Js.Json.stringify (Js.Json.string scenario)
+    ^ ";\n" ^ "const callsPath = "
+    ^ Js.Json.stringify (Js.Json.string calls_path)
+    ^ ";\n"
+    ^ {fixture|
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const record = text => fs.appendFileSync(callsPath, text + '\n');
+const forbidden = () => { record('forbidden-side-effect'); throw Error('forbidden'); };
+require('node:http').createServer = forbidden;
+for (const name of ['spawn', 'spawnSync', 'exec', 'execSync']) {
+  require('node:child_process')[name] = forbidden;
+}
+globalThis.fetch = async (url, init) => {
+  record('request');
+  assert.equal(url, 'https://cognito-idp.us-east-1.amazonaws.com/');
+  assert.equal(init.method, 'POST');
+  const headers = new Headers(init.headers);
+  assert.equal(headers.get('Content-Type'), 'application/x-amz-json-1.1');
+  assert.equal(headers.get('X-Amz-Target'), 'AWSCognitoIdentityProviderService.InitiateAuth');
+  assert.deepEqual(JSON.parse(init.body), {
+    ClientId: 'fixture-client', AuthFlow: 'USER_PASSWORD_AUTH',
+    AuthParameters: {USERNAME: 'private-user', PASSWORD: '  secret-password  '}
+  });
+  record('validated');
+  if (scenario === 'transport') throw Error('secret-password secret-access secret-refresh');
+  if (scenario === 'timeout') return new Promise((resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(new DOMException('secret-password', 'AbortError')));
+  });
+  if (scenario === 'rejected') return new Response(JSON.stringify({
+    __type: 'NotAuthorizedException', message: 'secret-password secret-access'
+  }), {status: 400});
+  if (scenario === 'disabled') return new Response(JSON.stringify({
+    __type: 'InvalidParameterException', message: 'USER_PASSWORD_AUTH flow not enabled for this client secret-password'
+  }), {status: 400});
+  if (scenario === 'server-error') return new Response('secret-password secret-refresh', {status: 503});
+  if (scenario.startsWith('challenge:')) return Response.json({
+    ChallengeName: scenario.slice(10), Session: 'secret-session',
+    ChallengeParameters: {secret: 'secret-password'}
+  });
+  if (scenario === 'invalid-json') return new Response('secret-password {');
+  if (scenario === 'null') return Response.json(null);
+  if (scenario === 'empty') return Response.json({});
+  const claims = {sub: 'fixture-sub', email: 'fixture@example.com', exp: 4102444800};
+  if (scenario === 'missing-sub') delete claims.sub;
+  if (scenario === 'empty-sub') claims.sub = '';
+  if (scenario === 'wrong-sub') claims.sub = 123;
+  if (scenario === 'missing-exp') delete claims.exp;
+  if (scenario === 'string-exp') claims.exp = '4102444800';
+  if (scenario === 'fraction-exp') claims.exp = 4102444800.5;
+  if (scenario === 'expired') claims.exp = 1;
+  if (scenario === 'overflow-exp') claims.exp = 9007199254740991;
+  if (scenario === 'no-email') delete claims.email;
+  const jwt = 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature';
+  const result = {IdToken: jwt, AccessToken: 'secret-access', RefreshToken: 'secret-refresh'};
+  if (scenario === 'invalid-jwt') result.IdToken = 'secret-id-token';
+  if (scenario === 'invalid-payload') result.IdToken = 'header.c2VjcmV0LWlkLXRva2Vu.signature';
+  for (const field of ['IdToken', 'AccessToken', 'RefreshToken']) {
+    if (scenario === 'missing-' + field) delete result[field];
+    if (scenario === 'empty-' + field) result[field] = '';
+    if (scenario === 'wrong-' + field) result[field] = 42;
+  }
+  return Response.json({AuthenticationResult: result});
+};
+|fixture}
+    );
+  let spawn args =
+    spawn_sync Node.Process.argv.(0)
+      (Array.concat
+         [
+           [|
+             "--require";
+             preload;
+             entrypoint;
+             "--root-dir";
+             root;
+             "--config";
+             config_path;
+             "--timeout-ms";
+             "20";
+             "--verbose";
+           |];
+           args;
+         ])
+      [%obj { encoding = "utf8"; env = clone_env [||] }]
+  in
+  try
+    let result = run spawn auth_path calls_path in
+    remove_tree root;
+    result
+  with exn ->
+    remove_tree root;
+    raise exn
+
+let password_login_args output =
+  [|
+    "--output";
+    output;
+    "login";
+    "--username";
+    "private-user";
+    "--password";
+    "  secret-password  ";
+  |]
+
+let expect_no_login_secrets result =
+  Array.iter
+    (fun secret ->
+      expect_named_not_contains "stdout secret" result##stdout secret;
+      expect_named_not_contains "stderr secret" result##stderr secret)
+    [|
+      "private-user";
+      "secret-password";
+      "secret-access";
+      "secret-refresh";
+      "secret-session";
+      "secret-id-token";
+      "header.";
+    |]
+
+let () =
+  test "password login help exposes login-only options" (fun () ->
+      let login = run_cli [| "login"; "--help" |] in
+      expect_named_contains "username help" login "--username";
+      expect_named_contains "password help" login "--password";
+      Array.iter
+        (fun command ->
+          let help = run_cli [| command; "--help" |] in
+          expect_named_not_contains "login-only username" help "--username";
+          expect_named_not_contains "login-only password" help "--password")
+        [| "logout"; "graph" |]);
+
+  Array.iter
+    (fun output ->
+      test
+        ("password login persists private auth and safe " ^ output ^ " output")
+        (fun () ->
+          with_password_fixture "success" (fun spawn auth_path calls_path ->
+              let result = spawn (password_login_args output) in
+              expect_exit_zero "password login" result;
+              expect_no_login_secrets result;
+              expect_named_contains "identity" result##stdout
+                "fixture@example.com";
+              expect_named_contains "auth path" result##stdout auth_path;
+              expect_named_not_contains "no browser url" result##stdout
+                "authorize-url";
+              expect_named_not_contains "no opened placeholder" result##stdout
+                "opened";
+              expect_named_contains "one validated request"
+                (read_file calls_path) "request\nvalidated\n";
+              assert_true "one request"
+                (read_file calls_path = "request\nvalidated\n")
+                "unexpected external side effects";
+              let saved = read_file auth_path in
+              expect_named_contains "stored refresh token" saved
+                "secret-refresh";
+              expect_named_contains "stored id token" saved "header.";
+              expect_named_contains "stored expiry" saved "4102444800000";
+              expect_named_not_contains "no saved username" saved "private-user";
+              expect_named_not_contains "no saved password" saved
+                "secret-password";
+              let check =
+                spawn_sync Node.Process.argv.(0)
+                  [|
+                    "-e";
+                    "if ((require('fs').statSync(process.argv[1]).mode & \
+                     0o777) !== 0o600) process.exit(1)";
+                    auth_path;
+                  |]
+                  [%obj { encoding = "utf8"; env = clone_env [||] }]
+              in
+              expect_exit_zero "private permissions" check)))
+    [| "human"; "json"; "edn" |];
+
+  test "password login accepts ID claims without optional email" (fun () ->
+      with_password_fixture "no-email" (fun spawn _ _ ->
+          let result = spawn (password_login_args "json") in
+          expect_exit_zero "optional email" result;
+          expect_named_contains "subject" result##stdout "fixture-sub"));
+
+  Array.iter
+    (fun (scenario, code) ->
+      test
+        ("password login rejects " ^ scenario ^ " without replacing auth")
+        (fun () ->
+          with_password_fixture scenario (fun spawn auth_path calls_path ->
+              let result = spawn (password_login_args "json") in
+              expect_exit_non_zero scenario result;
+              expect_named_contains "structured error" result##stdout code;
+              expect_no_login_secrets result;
+              assert_true "auth preserved"
+                (read_file auth_path = "existing-auth-file")
+                "authentication failure replaced auth";
+              assert_true "one request"
+                (read_file calls_path = "request\nvalidated\n")
+                "unexpected external side effects")))
+    (Array.concat
+       [
+         [|
+           ("rejected", "password-auth-rejected");
+           ("disabled", "password-auth-disabled");
+           ("transport", "password-auth-failed");
+           ("timeout", "login-timeout");
+           ("server-error", "password-auth-failed");
+           ("challenge:SMS_MFA", "SMS_MFA");
+           ("challenge:NEW_PASSWORD_REQUIRED", "NEW_PASSWORD_REQUIRED");
+           ("challenge:SOFTWARE_TOKEN_MFA", "SOFTWARE_TOKEN_MFA");
+           ("challenge:secret-password", "invalid-auth-response");
+         |];
+         Array.map
+           (fun scenario -> (scenario, "invalid-auth-response"))
+           [|
+             "invalid-json";
+             "null";
+             "empty";
+             "invalid-jwt";
+             "invalid-payload";
+             "missing-sub";
+             "empty-sub";
+             "wrong-sub";
+             "missing-exp";
+             "string-exp";
+             "fraction-exp";
+             "expired";
+             "overflow-exp";
+             "missing-IdToken";
+             "empty-IdToken";
+             "wrong-IdToken";
+             "missing-AccessToken";
+             "empty-AccessToken";
+             "wrong-AccessToken";
+             "missing-RefreshToken";
+             "empty-RefreshToken";
+             "wrong-RefreshToken";
+           |];
+       ]);
+
+  test "password login invalid pairs fail before external side effects"
+    (fun () ->
+      Array.iter
+        (fun args ->
+          with_password_fixture "success" (fun spawn auth_path calls_path ->
+              let result = spawn args in
+              expect_exit_non_zero "invalid pair" result;
+              expect_named_contains "invalid options"
+                (result##stdout ^ result##stderr)
+                "invalid-options";
+              expect_no_login_secrets result;
+              assert_false "no network or browser"
+                (Cli_unix.file_exists calls_path)
+                "invalid credentials caused external side effects";
+              assert_true "auth preserved"
+                (read_file auth_path = "existing-auth-file")
+                "invalid pair replaced auth"))
+        [|
+          [|
+            "login";
+            "--username";
+            "private-user";
+            "--password";
+            "-secret-password";
+          |];
+          [|
+            "login";
+            "--username=private-user";
+            "--password=secret-password";
+            "private-user";
+          |];
+          [|
+            "login";
+            "--username";
+            "--username";
+            "private-user";
+            "--password";
+            "  secret-password  ";
+          |];
+          [|
+            "login";
+            "--username";
+            "private-user";
+            "--password";
+            "  secret-password  ";
+            "--password=";
+          |];
+          [| "login"; "--username"; "private-user" |];
+          [| "login"; "--password"; "secret-password" |];
+          [| "login"; "--username"; "--password" |];
+          [| "login"; "--username"; "private-user"; "--password" |];
+          [| "login"; "--username="; "--password=secret-password" |];
+          [| "login"; "--username=private-user"; "--password=" |];
+          [|
+            "logout";
+            "--username";
+            "private-user";
+            "--password";
+            "secret-password";
+          |];
+          [| "login"; "--user"; "private-user"; "--pass"; "secret-password" |];
+        |])
+
 let doctor_args root = [| "--root-dir"; root; "--output"; "json"; "doctor" |]
 
 let () =
@@ -678,8 +993,7 @@ let () =
               (Printf.sprintf "expected two graph info requests, got %d"
                  !request_count)));
 
-  test_promise "graph info reuses an existing db-worker from health json"
-    (fun () ->
+  test_promise "graph info rejects an unverified published endpoint" (fun () ->
       let root = temp_dir "logseq-cli-graph-info-existing-server-" in
       let request_count = ref 0 in
       let result_transit =
@@ -723,15 +1037,10 @@ let () =
               [| "--root-dir"; root; "--graph"; "alpha"; "graph"; "info" |]
           in
           remove_tree root;
-          ignore (expect_cli_exit_zero "graph info existing server" result);
-          ignore
-            (expect_named_contains "existing server schema" result.stdout
-               "logseq.kv/schema-version  77");
-          if !request_count = 1 then Js.Promise.resolve pass
-          else
-            fail_promise
-              (Printf.sprintf "expected one graph info request, got %d"
-                 !request_count)));
+          if result.code <> 1 then
+            fail_test "unverified server must be rejected";
+          if !request_count = 0 then Js.Promise.resolve pass
+          else fail_promise "unverified endpoint received graph requests"));
 
   test_promise "list page human output formats timestamps for large result sets"
     (fun () ->
