@@ -2302,7 +2302,7 @@ let () =
       let action =
         expect_ok "search block action"
           (Search.build (config ~repo:"demo" ()) (Global_opts.create ())
-             (Search.Parsed_block { content = "  Alpha Beta  " }))
+             (Search.Parsed_block { content = "  Alpha Beta  "; include_hidden = false }))
       in
       expect_bool "search block scope" true (action.Search.scope = Search.Block);
       expect_equal "search block command" "search-block"
@@ -2314,10 +2314,10 @@ let () =
       expect_equal "search query trim" "Alpha Beta" action.query;
       expect_error_code "search requires repo" "missing-repo"
         (Search.build (config ()) (Global_opts.create ())
-           (Search.Parsed_page { content = "Home" }));
+           (Search.Parsed_page { content = "Home"; include_hidden = false }));
       expect_error_code "search rejects blank content" "missing-query-text"
         (Search.build (config ~repo:"demo" ()) (Global_opts.create ())
-           (Search.Parsed_tag { content = "   " })));
+           (Search.Parsed_tag { content = "   "; include_hidden = false })));
 
   test_promise "CLI parity search execute sorts scopes and strips raw fields"
     (fun () ->
@@ -2347,6 +2347,7 @@ let () =
                 repo;
                 graph = Cli_config.repo_to_graph repo;
                 query;
+                include_hidden = false;
               }
               cfg Output.Mode.Human
           in
@@ -2437,6 +2438,7 @@ let () =
                 repo;
                 graph = Cli_config.repo_to_graph repo;
                 query;
+                include_hidden = false;
               }
               cfg Output.Mode.Human
           in
@@ -2497,6 +2499,7 @@ let () =
                    repo;
                    graph = Cli_config.repo_to_graph repo;
                    query = "foo";
+                   include_hidden = false;
                  }
                  cfg Output.Mode.Human)
           in
