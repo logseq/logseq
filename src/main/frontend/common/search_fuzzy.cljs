@@ -114,8 +114,7 @@
   [q s]
   (let [s (search-normalize (clean-str s) true)]
     (boolean
-     (and (seq q)
-          (seq s)
+     (and (seq s)
           (or (string/includes? s q)
               (subsequence? q s))))))
 

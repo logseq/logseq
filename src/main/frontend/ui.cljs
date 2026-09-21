@@ -474,8 +474,7 @@
                       (on-shift-chosen item)
                       (on-chosen item e))))]
     [:div.menu-link-wrap
-     {:key react-key
-      :on-mouse-move #(reset! *current-idx idx)
+     {:on-mouse-move #(reset! *current-idx idx)
       :on-click choose!}
      (menu-link
       {:id (str "ac-" react-key)
@@ -519,11 +518,12 @@
                          (>= (count matched) auto-complete-virtualize-threshold))
         render-f (fn [matched]
                    (for [[idx item] matched]
-                     (let [item-cp [auto-complete-item idx item item-opts]
+                     (let [item-cp ^{:key (str idx)} [auto-complete-item idx item item-opts]
                            group-name (and (fn? get-group-name) (get-group-name item))]
                        (if (and group-name (not (contains? @*groups group-name)))
                          (do
                            (swap! *groups conj group-name)
+                           ^{:key (str idx)}
                            [:div
                             [:div.ui__ac-group-name group-name]
                             item-cp])
