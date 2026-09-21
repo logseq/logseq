@@ -171,7 +171,8 @@
   [db value]
   (let [parent-ids (vec (->entity-ids db value))
         parent-ids' (remove (class-ancestor-ids db parent-ids) parent-ids)
-        without-root (remove #(= % (root-class-eid db)) parent-ids')]
+        root-id (root-class-eid db)
+        without-root (remove #(= % root-id) parent-ids')]
     ;; Root is the implicit default parent, never a co-parent of another class.
     (if (seq without-root)
       without-root
