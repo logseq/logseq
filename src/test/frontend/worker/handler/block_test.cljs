@@ -247,7 +247,8 @@
                           (= "block.temp" (namespace %)))
                     (remove #{:block.temp/positioned-properties
                               :block.temp/order-list-index
-                              :block.temp/refs-count}
+                              :block.temp/refs-count
+                              :block.temp/has-children?}
                             (keys block)))))))
 
 (deftest canonical-block-numbers-ref-typed-list-siblings-test
