@@ -10,6 +10,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.common.util :as common-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -26,14 +27,8 @@
                                     (string/includes? (string/lower-case (or (:label item) ""))
                                                       (string/lower-case query)))
                                   member-items))]
-    (second
-     (reduce (fn [[seen acc] item]
-               (let [value (:value item)]
-                 (if (contains? seen value)
-                   [seen acc]
-                   [(conj seen value) (conj acc item)])))
-             [#{} []]
-             (concat visible-members search-items)))))
+    (vec (common-util/distinct-by :value
+                                  (concat visible-members search-items)))))
 
 (hsx/defc select-pages
   [library-page]

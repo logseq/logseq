@@ -12,13 +12,6 @@
   (is (= (common-uuid/gen-uuid :builtin-block-uuid common-config/library-page-name)
          (library-handler/page-uuid))))
 
-(deftest member-ids-use-direct-children
-  (is (= #{10 11}
-         (library-handler/member-ids
-          {:block/_parent [{:db/id 10 :block/title "A"}
-                           {:db/id 11 :block/title "B"}]})))
-  (is (= #{} (library-handler/member-ids {}))))
-
 (deftest unfile-pages-tx-clears-parent-and-order
   (is (= [[:db/retract 10 :block/parent]
           [:db/retract 10 :block/order]

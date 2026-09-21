@@ -12,11 +12,6 @@
   []
   (common-uuid/gen-uuid :builtin-block-uuid common-config/library-page-name))
 
-(defn member-ids
-  "Direct Library child entity ids."
-  [library-page]
-  (into #{} (keep :db/id) (:block/_parent library-page)))
-
 (defn member-items
   "Select items for current direct Library children."
   [members]
