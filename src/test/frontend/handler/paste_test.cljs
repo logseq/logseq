@@ -174,6 +174,44 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
+(deftest-async editor-on-paste-copy-clipboard-does-not-keep-uuid-when-editor-op-is-cut
+  (let [pasted (atom nil)
+        expected-blocks [{:block/title "Copied parent"}]]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      state/get-block-op-type (constantly :cut)
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :op :copy
+                                                               :blocks expected-blocks}))
+      editor-handler/paste-blocks (fn [blocks opts]
+                                    (reset! pasted {:blocks blocks :opts opts}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "copied")}})]
+        (is (= expected-blocks (:blocks @pasted)))
+        (is (false? (get-in @pasted [:opts :keep-uuid?]))
+            "Clipboard copy payload must duplicate, even if this window last cut.")))))
+
+(deftest-async editor-on-paste-cut-clipboard-keeps-uuid
+  (let [pasted (atom nil)
+        expected-blocks [{:block/title "Cut parent"}]]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      state/get-block-op-type (constantly :copy)
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :op :cut
+                                                               :blocks expected-blocks}))
+      editor-handler/paste-blocks (fn [blocks opts]
+                                    (reset! pasted {:blocks blocks :opts opts}))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "cut")}})]
+        (is (= expected-blocks (:blocks @pasted)))
+        (is (true? (get-in @pasted [:opts :keep-uuid?]))
+            "Clipboard cut payload must keep uuids even if this window last copied.")))))
+
 (deftest-async editor-on-paste-embed-block-uses-worker-loaded-link
   (let [linked-block-id #uuid "11111111-1111-1111-1111-111111111111"
         current-block-id #uuid "22222222-2222-2222-2222-222222222222"

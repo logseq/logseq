@@ -1480,6 +1480,27 @@
              @edited)
           "Deleting an empty predecessor must not restore the erased mounted title."))))
 
+(deftest library-enter-inserts-sibling-for-page-blocks-test
+  (let [library-page {:db/id 10
+                      :block/title "Library"
+                      :logseq.property/built-in? true
+                      :block/children [{:db/id 1}]}
+        library-page-block {:db/id 1
+                            :block/title "Library Parent"
+                            :block/children [{:db/id 2 :block/title "nested"}]}
+        tagged-page-block (assoc library-page-block
+                                 :block/tags [{:db/ident :logseq.class/Page}])]
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block nil))
+        "Enter on a Library page block creates a sibling even after tags are retracted")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} tagged-page-block nil))
+        "Enter on a tagged Library page block still creates a sibling")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block false))
+        "Library page blocks stay siblings even when the caller passes sibling? false")
+    (is (false? (#'editor/insert-as-sibling? {:library? true} library-page nil))
+        "Inserting against the Library page itself still nests a child")
+    (is (false? (#'editor/insert-as-sibling? {} library-page-block nil))
+        "Outside Library, an expanded block with children still nests")))
+
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"
@@ -1971,14 +1992,14 @@
               (p/let [_ (p/delay 0)
                       _ (is (= [:selection-captured
                                 [:copy-started
-                                 [true :selected-ids selected-ids]]]
+                                 [true :selected-ids selected-ids :op :cut]]]
                                @calls)
                             "Cut must not delete blocks while the structured copy is pending.")
                       _ (p/resolve! copy-finished nil)
                       _ cut-request]
                 (is (= [:selection-captured
                         [:copy-started
-                         [true :selected-ids selected-ids]]
+                         [true :selected-ids selected-ids :op :cut]]
                         :cut]
                        @calls)))))
           (p/finally done)))))
@@ -1999,6 +2020,129 @@
     (is (= #{:db/id :block/uuid :block/title :block/parent}
            (set (keys block))))
     (is (= parent-uuid (get-in block [:block/parent :block/uuid])))))
+
+(defn- mock-ls-block
+  [{:keys [blockid class-name inner]}]
+  (let [class-name (or class-name "ls-block")
+        classes (set (.split class-name " "))]
+    #js {:className class-name
+         :classList #js {:contains (fn [class] (contains? classes class))}
+         :getAttribute (fn [attr]
+                         (case attr
+                           "blockid" blockid
+                           "id" (when blockid (str "ls-block-" blockid))
+                           "data-query" nil
+                           "data-transclude" nil
+                           nil))
+         :querySelector (fn [_] inner)}))
+
+(deftest selection-node-block-id-accepts-block-id-strings-test
+  (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        inner (mock-ls-block {:blockid (str value-uuid)})]
+    (is (= value-uuid (#'editor/selection-node-block-id inner)))
+    (is (= value-uuid (#'editor/selection-node-block-id (str "ls-block-" value-uuid)))
+        "Selection nodes may be \"ls-block-<uuid>\" id strings from get-selection-start-block-or-first")
+    (is (= value-uuid (#'editor/selection-node-block-id (str value-uuid)))
+        "Virtualized selection passes bare uuid strings for unmounted blocks")))
+
+(deftest cut-selection-blocks-uses-inner-text-property-value-test
+  (async done
+    (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          value-block {:db/id 1
+                       :block/uuid value-uuid
+                       :block/title "value"}
+          inner (mock-ls-block {:blockid (str value-uuid)})
+          wrapper (mock-ls-block {:class-name "ls-block property-value-container"
+                                  :inner inner})
+          requested-ids (atom nil)
+          deleted-uuids (atom nil)]
+      (-> (p/with-redefs [editor/copy-selection-blocks
+                          (fn [& _] (p/resolved nil))
+                          editor/get-selected-blocks (constantly [wrapper])
+                          state/get-selection-block-ids (constantly [value-uuid])
+                          state/set-block-op-type! (fn [_])
+                          db-async/<get-blocks
+                          (fn [_repo ids _opts]
+                            (reset! requested-ids ids)
+                            (p/resolved [{:block value-block}]))
+                          db-async/<get-block-with-children
+                          (fn [_repo _id _opts]
+                            (p/resolved {:block value-block :children []}))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
+            (editor/cut-selection-blocks true))
+          (p/then (fn [_]
+                    (is (= [value-uuid] @requested-ids)
+                        "Cut must load the inner text property-value block, not drop the wrapper.")
+                    (is (= [value-uuid] @deleted-uuids)
+                        "Cut must delete the inner text property-value block.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest selection-copy-ids-use-view-row-uuids-test
+  (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        editor-ids [#uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]]
+    (with-redefs [state/get-selection-block-ids (constantly editor-ids)]
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [page-a page-b] nil))
+          "All pages rows are UUIDs; copy must use those instead of editor selection.")
+      (is (= [page-a page-b]
+             (#'editor/selection-copy-ids [{:block/uuid page-a} {:uuid page-b}] nil))
+          "Toolbar rows wrapped as block maps still copy their UUIDs.")
+      (is (= [page-a]
+             (#'editor/selection-copy-ids nil [page-a]))
+          ":selected-ids still work for cut and other callers.")
+      (is (= editor-ids
+             (#'editor/selection-copy-ids nil nil))
+          "Editor selection is used when the toolbar has no selected-blocks."))))
+
+(deftest top-level-blocks-include-pages-without-parent-test
+  (let [page-a (random-uuid)
+        page-b (random-uuid)
+        summaries [{:db/id 1
+                    :block/uuid page-a
+                    :block/title "Sep 15th, 2026"}
+                   {:db/id 2
+                    :block/uuid page-b
+                    :block/title "Apr 15th, 2027"}]]
+    (is (= [page-a page-b]
+           (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
+        "Pages and journals have no :block/parent; copy still treats them as top-level.")))
+
+(deftest compose-copied-blocks-contents-skips-empty-summaries-test
+  (async done
+         (-> (p/with-redefs [db-async/<get-block-summaries
+                             (fn [_repo _ids]
+                               (p/resolved []))]
+               (#'editor/compose-copied-blocks-contents "repo" [(random-uuid)]))
+             (p/then (fn [result]
+                       (is (= [[] "" []] result))))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
+
+(deftest copy-selection-blocks-loads-summaries-for-view-uuids-test
+  (async done
+         (let [page-a #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               page-b #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+               seen-ids (atom nil)]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [(random-uuid)])
+                               db-subs/block-snapshot (constantly {:status :missing})
+                               db-async/<get-block-summaries
+                               (fn [_repo ids]
+                                 (reset! seen-ids ids)
+                                 (p/resolved []))]
+                 (editor/copy-selection-blocks true :selected-blocks [page-a page-b]))
+               (p/then (fn [_]
+                         (is (= [page-a page-b] @seen-ids)
+                             "Copy from All pages must load the selected page UUIDs.")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
@@ -2114,9 +2258,9 @@
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
-  [{:keys [value cursor-pos editor-config]}]
+  [{:keys [value cursor-pos editor-config action]}]
   ;; Reset editor action in order to test result
-  (state/set-editor-action! nil)
+  (state/set-editor-action! action)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))]
     (with-redefs [state/get-input (constantly #js {:value value})
@@ -2200,6 +2344,60 @@
         "No tag search in comment editors"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest handle-last-input-org-directive-test
+  (handle-last-input-handler {:value "#+"
+                              :cursor-pos 2})
+  (is (= nil (state/get-editor-action))
+      "No page search for org keyword prefix #+")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+BEGIN_NOTE directive")
+
+  (handle-last-input-handler {:value "#+END_QUOTE"
+                              :cursor-pos (count "#+END_QUOTE")})
+  (is (= nil (state/get-editor-action))
+      "No page search for org #+END_QUOTE directive")
+
+  (handle-last-input-handler {:value "foo #+"
+                              :cursor-pos 6})
+  (is (= nil (state/get-editor-action))
+      "No page search when #+ is typed after a word")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos (count "#+BEGIN_NOTE")
+                              :action :page-search-hashtag})
+  (is (= nil (state/get-editor-action))
+      "Closes hashtag search when # is part of an org directive")
+
+  (handle-last-input-handler {:value "#+BEGIN_NOTE"
+                              :cursor-pos 1})
+  (is (= nil (state/get-editor-action))
+      "Does not open hashtag search when inserting # before + in an org directive")
+  (state/set-editor-action! nil))
+
+(deftest org-directive-hashtag-query-test
+  (is (true? (editor/org-directive-hashtag-query? "+BEGIN_NOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "#+END_QUOTE")))
+  (is (true? (editor/org-directive-hashtag-query? "+TITLE")))
+  (is (false? (editor/org-directive-hashtag-query? "BEGIN_NOTE")))
+  (is (false? (editor/org-directive-hashtag-query? "foo")))
+  (is (false? (editor/org-directive-hashtag-query? "#foo")))
+  (is (false? (editor/org-directive-hashtag-query? nil))))
+
+(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
+  (let [prev-action (state/get-editor-action)
+        event #js {:preventDefault (fn [])
+                   :stopPropagation (fn [])}]
+    (try
+      (state/set-editor-action! :commands)
+      (#'editor-component/editor-on-hide {:config {}} :click event true)
+      (is (nil? (state/get-editor-action))
+          "Slash commands should close when leaving the original block to edit another")
+      (finally
+        (state/set-editor-action! prev-action)))))
 
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
@@ -2489,6 +2687,23 @@
               {:ignore-block-collapsed? true
                :default-collapsed? true}))
       "Ignore flag should not disable other default-collapsed rules"))
+
+(deftest block-default-collapsed-nested-pages
+  (let [child-page {:block/tags [{:db/ident :logseq.class/Page}]}]
+    (is (true? (editor/block-default-collapsed? child-page {}))
+        "Child pages are collapsed by default on a parent page")
+    (is (not (editor/block-default-collapsed? child-page {:library? true}))
+        "Library keeps child pages expanded so the page tree is visible")
+    (is (not (editor/block-default-collapsed? child-page {:page-title? true}))
+        "The current page title is not collapsed")
+    (is (not (editor/block-default-collapsed?
+              child-page
+              {:original-block {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}))
+        "Embedded pages stay expanded so their blocks remain visible")
+    (is (not (editor/block-default-collapsed? child-page {:embed? true}))
+        "Embed config keeps the target page expanded")
+    (is (not (editor/block-default-collapsed? {:block/title "hello"} {}))
+        "Normal blocks stay expanded by default")))
 
 (deftest load-children-respects-ignore-block-collapsed-flag
   (is (false? (#'editor/load-children?

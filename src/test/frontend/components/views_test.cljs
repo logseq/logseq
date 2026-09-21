@@ -8,8 +8,11 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
@@ -182,6 +185,35 @@
         "All Pages title cells render the worker-provided display title directly.")
     (is (not (string/includes? (name link-tag) "page-reference"))
         "All Pages cells use a plain page link, not page-cp preview DOM.")))
+
+
+(deftest groups-sort-order-selection-only-writes-selected-choice-test
+  (is (true? (#'views/effective-groups-sort-desc? nil))
+      "The sort-groups-desc? property defaults to descending.")
+  (is (true? (#'views/effective-groups-sort-desc? true)))
+  (is (false? (#'views/effective-groups-sort-desc? false)))
+  (is (true? (#'views/selected-groups-sort-desc true true)))
+  (is (false? (#'views/selected-groups-sort-desc false true)))
+  (is (nil? (#'views/selected-groups-sort-desc true false))
+      "Unchecking the previous menu item must not overwrite the newly selected group order.")
+  (is (nil? (#'views/selected-groups-sort-desc false false))))
+
+(deftest filters-include-properties-and-supported-db-attributes-test
+  (let [property-column {:id :user.property/status
+                         :name "Status"
+                         :property {:db/id 1
+                                    :db/ident :user.property/status}}
+        created-at-column {:id :block/created-at}
+        updated-at-column {:id :block/updated-at}
+        title-column {:id :block/title}
+        synthetic-backlinks-column (some #(when (= :block.temp/refs-count (:id %)) %)
+                                         (#'all-pages/columns))]
+    (is (true? (#'views/filterable-column? property-column)))
+    (is (true? (#'views/filterable-column? created-at-column)))
+    (is (true? (#'views/filterable-column? updated-at-column)))
+    (is (true? (#'views/filterable-column? title-column)))
+    (is (false? (#'views/filterable-column? synthetic-backlinks-column))
+        "Synthetic columns are not property entities or supported DB attributes and must not appear in the filter picker.")))
 
 (deftest all-pages-first-window-preview-uses-worker-display-title-test
   (let [page-uuid (random-uuid)
@@ -487,7 +519,19 @@
              :groups [{:value {:kind :scalar :value "A"}
                        :rows [row-a row-b]}
                       {:value {:kind :scalar :value "B"}
-                       :rows [row-b row-c]}]})))))
+                       :rows [row-b row-c]}]})))
+    (is (= [row-a]
+           (views/grouped-gallery-row-ids
+            {:partition :grouped-list
+             :count 1
+             :groups [{:value {:kind :entity :uuid (random-uuid)}
+                       :partitions [{:breadcrumb-uuid row-a
+                                     :rows [[row-a [row-a]]]}]}]}))
+        "Gallery row IDs must flatten raw [breadcrumb row-uuids] partitions before use-block.")
+    (is (= [row-a row-b]
+           (vec (#'views/grouped-list-partition-row-ids
+                 [row-c [row-a row-b]])))
+        "Grouped-list gallery groups render cards for row UUIDs, not partition tuples.")))
 
 (deftest grouped-table-prefetch-uses-group-uuids-not-group-values-test
   (let [row-a (random-uuid)
@@ -665,7 +709,15 @@
         "Without titles, an empty table still waits for hydrate.")
     (is (= 3883 (#'views/table-total-count (range 26) 3883))
         "The first window already has the full count. Do not wait for remaining ids.")
-    (is (= 26 (#'views/table-total-count (range 26) nil)))))
+    (is (= 26 (#'views/table-total-count (range 26) nil)))
+    (is (= 56 (#'views/windowed-items-count 431 (range 56)))
+        "After the full id list arrives, drop the first-window estimate so delete/filter does not leave empty rows.")
+    (is (= 46 (#'views/windowed-items-count 46 (range 56)))
+        "A newer first-window count after delete wins over a stale full list.")
+    (is (= 0 (#'views/windowed-items-count 431 []))
+        "A filter that matches nothing must not keep the unfiltered placeholder rows.")
+    (is (= 431 (#'views/windowed-items-count 431 nil))
+        "While the full id list is still loading, keep the first-window count.")))
 
 (deftest windowed-view-feature-covers-tags-and-all-pages-test
   (is (true? (#'views/windowed-view-feature? :all-pages nil)))
@@ -692,6 +744,30 @@
     (is (= [:view-data view-uuid full-context] (:full-key plan)))
     (is (= [:view-data view-uuid (:full-context single)] (:resource-key single)))
     (is (nil? (:full-key single)))))
+
+(deftest all-pages-drops-unsupported-backlinks-filter-context-test
+  (let [view-uuid (random-uuid)
+        filters {:or? false
+                 :filters [[nil :is-not :empty]
+                           [:block.temp/refs-count :is-not :empty]
+                           [:block/title :text-contains "Alpha"]]}
+        plan (#'views/loaded-view-resource-plan
+              view-uuid :all-pages [{:id :block/title :asc? true}]
+              filters "" :block/tags nil 990)
+        expected-filters {:or? false
+                          :filters [[:block/title :text-contains "Alpha"]]}]
+    (is (= expected-filters
+           (#'views/view-resource-filters :all-pages filters)))
+    (is (= expected-filters
+           (get-in plan [:resource-key 2 :filters])))
+    (is (nil? (:full-key plan))
+        "Grouped All Pages uses one full resource key.")
+    (is (= filters
+           (get-in (#'views/loaded-view-resource-plan
+                    view-uuid :class-objects [{:id :block/title :asc? true}]
+                    filters "" :block/tags nil 990)
+                   [:resource-key 2 :filters]))
+        "Only All Pages drops stale synthetic Backlinks filters.")))
 
 (deftest table-virtualization-uses-fixed-row-height
   (is (= {:item-height 33 :overscan-px 66}
@@ -1108,6 +1184,38 @@
         (is (= [entity-uuid] @block-calls)
             "Entity-valued group metadata hydrates at its UUID boundary.")))))
 
+(deftest grouped-table-body-drops-outer-window-count-test
+  (let [captured (atom nil)
+        group [(random-uuid) (random-uuid)]]
+    (with-redefs [util/mobile? (constantly true)
+                  views/view-cp
+                  (fn [_view-entity table option _view-opts]
+                    (reset! captured {:table table
+                                      :option option})
+                    nil)]
+      (render-static
+       (views/group-item
+        {:block/uuid (random-uuid)}
+        {}
+        group
+        {:db/ident :block/tags
+         :block/title "Tags"}
+        {:kind :scalar :value "tag1"}
+        {:items-count 22
+         :all-row-ids (repeat 22 (random-uuid))
+         :offset-rows [(random-uuid)]
+         :row-offset 10}
+        {}
+        {:list-view? false
+         :gallery? false
+         :group-by-page? false
+         :readable-property-value str}))
+      (is (= group (get-in @captured [:table :rows])))
+      (is (not (contains? (:option @captured) :items-count))
+          "A grouped table must render only the rows in that group, not placeholder rows from the outer All Pages count.")
+      (is (not (contains? (:option @captured) :all-row-ids)))
+      (is (true? (get-in @captured [:option :disable-virtualized?]))))))
+
 (deftest entity-group-items-keep-a-nonzero-shell-while-loading-test
   (let [entity-uuid (random-uuid)]
     (with-redefs [db-hooks/use-block (constantly nil)
@@ -1242,3 +1350,96 @@
   (is (views/group-by-column? {:id :block/tags
                                :property {:logseq.property/type :class
                                           :db/cardinality :db.cardinality/many}})))
+
+(deftest table-tag-cell-click-is-noop-on-current-page-test
+  (let [tag-uuid (random-uuid)
+        tag {:block/uuid tag-uuid
+             :block/title "Book"
+             :block/name "book"}
+        popup-calls (atom [])
+        redirect-calls (atom [])]
+    (is (= :noop
+           (#'property-value/page-ref-cell-click
+            {:entity tag
+             :current-page (str tag-uuid)
+             :open-popup! #(swap! popup-calls conj :popup)
+             :redirect! #(swap! redirect-calls conj :redirect)}))
+        "Clicking the current tag page's own tag value should not open a popup or navigate.")
+    (is (empty? @popup-calls))
+    (is (empty? @redirect-calls))))
+
+(deftest table-tag-cell-click-opens-popup-for-other-tags-test
+  (let [current-page (str (random-uuid))
+        other-tag {:block/uuid (random-uuid)
+                   :block/title "Movie"
+                   :block/name "movie"}
+        popup-calls (atom [])
+        redirect-calls (atom [])]
+    (is (= :open
+           (#'property-value/page-ref-cell-click
+            {:entity other-tag
+             :current-page current-page
+             :open-popup! #(swap! popup-calls conj :popup)
+             :redirect! #(swap! redirect-calls conj :redirect)}))
+        "A different tag still opens the popup and navigates.")
+    (is (= [:popup] @popup-calls))
+    (is (= [:redirect] @redirect-calls))))
+
+(deftest delete-pages-needs-confirm-covers-every-destructive-view
+  (let [pages [{:db/id 1 :block/uuid (random-uuid)}]
+        tag-parent {:db/ident :user.class/MyTag}
+        page-class-parent {:db/ident :logseq.class/Page}]
+    (is (true? (views/delete-pages-needs-confirm? tag-parent :class-objects pages))
+        "A tag page's trash action deleted pages instantly before this fix (db-test#1211)")
+    (is (true? (views/delete-pages-needs-confirm? nil :query-result pages))
+        "A query result's trash action deleted pages instantly before this fix")
+    (is (true? (views/delete-pages-needs-confirm? nil :all-pages pages))
+        "All Pages already confirmed and must keep doing so")
+    (is (false? (views/delete-pages-needs-confirm? page-class-parent :class-objects pages))
+        "The built-in Page class never deletes its rows, so nothing needs confirming")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :property-objects pages))
+        "Property objects only retract a property value, they delete no page")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :unknown-feature pages))
+        "An unrecognised view must not be treated as destructive")
+    (is (false? (views/delete-pages-needs-confirm? tag-parent :class-objects []))
+        "A block-only selection must delete at once, with no page dialog")))
+
+(deftest on-delete-rows-confirms-instead-of-deleting-pages-inline
+  (async done
+    (let [on-delete-rows #'views/on-delete-rows
+          page {:db/id 1
+                :block/uuid (random-uuid)
+                :block/title "Alpha"
+                :block/tags [:logseq.class/Page]}
+          deleted-pages (atom [])
+          events (atom [])
+          cleared (atom 0)
+          table {:data-fns {:set-row-selection! (fn [_] (swap! cleared inc))}}
+          original-repo state/get-current-repo
+          original-get-blocks db-async/<get-blocks
+          original-delete-page! outliner-op/delete-page!
+          original-pub-event! state/pub-event!]
+      (set! state/get-current-repo (fn [] "views-delete-test"))
+      (set! db-async/<get-blocks (fn [_repo _ids _opts] (p/resolved [{:block page}])))
+      (set! outliner-op/delete-page! (fn [id] (swap! deleted-pages conj id) nil))
+      (set! state/pub-event! (fn [event] (swap! events conj event) nil))
+      (-> (p/let [_ (on-delete-rows {:db/ident :user.class/MyTag} :class-objects table [1])]
+            (is (empty? @deleted-pages)
+                "A tag page must not delete pages inline any more (db-test#1211)")
+            (is (= 1 (count @events))
+                "The trash action raises exactly one event")
+            (let [[event-name event-pages] (first @events)]
+              (is (= :page/show-delete-dialog event-name)
+                  "That event is the page confirmation dialog")
+              (is (= [(:block/uuid page)] (mapv :block/uuid event-pages))
+                  "The dialog is handed the selected pages"))
+            (is (zero? @cleared)
+                "The selection is cleared by the dialog's callback, never before it"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! state/get-current-repo original-repo)
+                       (set! db-async/<get-blocks original-get-blocks)
+                       (set! outliner-op/delete-page! original-delete-page!)
+                       (set! state/pub-event! original-pub-event!)
+                       (done)))))))

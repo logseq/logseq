@@ -209,12 +209,12 @@
   (let [repo (state/get-current-repo)
         copied-blocks-from-memory (get-copied-blocks-from-memory text)]
     (->
-     (p/let [{:keys [graph blocks embed-block?]} (or copied-blocks-from-memory
-                                                      (get-copied-blocks))]
-       (if (and (seq blocks) (= graph repo))
+     (p/let [{:keys [graph blocks embed-block? op]} (or copied-blocks-from-memory
+                                                        (get-copied-blocks))]
+      (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
-               keep-uuid? (= (state/get-block-op-type) :cut)
+               keep-uuid? (= :cut (or op (state/get-block-op-type)))
                blocks (map (fn [b] (dissoc b :block/properties)) blocks)]
            (if embed-block?
              (when-let [block-id (:block/uuid (first blocks))]

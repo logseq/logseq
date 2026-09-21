@@ -29,6 +29,8 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.entity :as entity]
+            [frontend.util.page :as page-util]
+            [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
@@ -155,6 +157,32 @@
     (not (or (d/has-class? node "page-ref")
              (d/has-class? node "tag")))))
 
+(defn- page-ref-entity-from-event-target
+  [target]
+  (when-let [node (some-> target (.closest "a"))]
+    (when (or (d/has-class? node "page-ref")
+              (d/has-class? node "tag"))
+      (let [uuid-str (not-empty (.getAttribute node "data-uuid"))
+            page-name (not-empty (.getAttribute node "data-ref"))]
+        (when (or uuid-str page-name)
+          (cond-> {}
+            uuid-str (assoc :block/uuid (or (parse-uuid uuid-str) uuid-str))
+            page-name (assoc :block/name page-name)))))))
+
+(defn- page-ref-cell-click
+  "Handle a table tag/page-ref cell click.
+   Returns :noop when the entity is the current page so we don't flash a popup
+   or re-navigate to the page the user is already on."
+  [{:keys [entity current-page open-popup! redirect!]}]
+  (if (page-util/entity-is-current-page? entity current-page)
+    :noop
+    (do
+      (when (fn? open-popup!)
+        (open-popup!))
+      (when (fn? redirect!)
+        (redirect!))
+      :open)))
+
 (defn- alias-value-on-pointer-down
   [property show-popup!]
   (when (and (= (:db/ident property) :block/alias)
@@ -190,14 +218,30 @@
            block-handler/get-top-level-blocks
            (remove entity/property?)))
 
+(defn- operating-block-id
+  [block-or-id]
+  (let [id (cond
+             (uuid? block-or-id) block-or-id
+             (integer? block-or-id) block-or-id
+             (map? block-or-id) (or (:block/uuid block-or-id)
+                                    (:uuid block-or-id)
+                                    (:db/id block-or-id)))]
+    (assert (or (uuid? id) (integer? id))
+            (str "operating block is missing an id: " (pr-str block-or-id)))
+    id))
+
+(defn- operating-block-ids
+  [blocks]
+  (mapv operating-block-id blocks))
+
 (defn get-operating-blocks
   [block]
   (let [selected-blocks (get-selected-blocks)
-        view-selected-blocks (state/get-state :view/selected-blocks)]
+        view-selected-blocks (mapv entity/as-block-map (state/get-state :view/selected-blocks))]
     (or (seq view-selected-blocks)
         (when (> (count selected-blocks) 1)
           (seq selected-blocks))
-        [block])))
+        [(entity/as-block-map block)])))
 
 (defn batch-operation?
   []
@@ -219,7 +263,7 @@
         on-chosen! (fn [_e icon]
                      (let [blocks (get-operating-blocks block)]
                        (property-handler/batch-set-block-property!
-                        (map :db/id blocks)
+                        (operating-block-ids blocks)
                         :logseq.property/icon
                         (when icon (select-keys icon [:type :id :color]))))
                      (clear-overlay!)
@@ -303,14 +347,14 @@
                                                    (db-property/property-value-content default-value)
                                                    value)]
                                       (db-property-handler/create-property-text-block!
-                                       (:db/id block)
+                                       (operating-block-id block)
                                        property-id
                                        value'
                                        {:new-block-id new-block-id}))]
                             (db-async/<get-block (state/get-current-repo) new-block-id {:children? false}))
                           (p/let [new-block-id (ldb/new-block-id)
                                   _ (db-property-handler/create-property-text-block!
-                                     (:db/id block)
+                                     (operating-block-id block)
                                      property-id
                                      value
                                      {:new-block-id new-block-id})]
@@ -343,7 +387,7 @@
        (p/do!
         (if (and class? class-schema?)
           (db-property-handler/class-add-property! (:db/id block) property-id)
-          (let [block-ids (map :block/uuid blocks)
+          (let [block-ids (operating-block-ids blocks)
                 set-query-list-view? (and (:logseq.property/query block)
                                           (= property-id :logseq.property.view/type)
                                           (= property-value (:db/id list-view-type)))]
@@ -377,9 +421,7 @@
                        (and (= :db.type/ref (:db/valueType property))
                             (integer? value)))
         blocks (get-operating-blocks block)
-        current-block-ref (or (:block/uuid (first blocks))
-                              (:db/id (first blocks))
-                              (:db/id block))
+        current-block-ref (operating-block-id (or (first blocks) block))
         repo (state/get-current-repo)]
     (p/let [current-block (db-async/<get-block repo current-block-ref {:children? false})
             selected? (if many?
@@ -387,7 +429,7 @@
                         selected?)]
      (if selected?
        (if many?
-         (db-property-handler/batch-set-property! (map :block/uuid blocks)
+         (db-property-handler/batch-set-property! (operating-block-ids blocks)
                                                   (:db/ident property)
                                                   value
                                                   {:entity-id? entity-id?})
@@ -396,7 +438,7 @@
                           :entity-id? entity-id?
                           :exit-edit? (if (some? (:exit-edit? opts)) (:exit-edit? opts) (not many?))}))
        (p/do!
-        (db-property-handler/batch-delete-property-value! (map :block/uuid blocks) (:db/ident property) value)
+        (db-property-handler/batch-delete-property-value! (operating-block-ids blocks) (:db/ident property) value)
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
@@ -885,6 +927,28 @@
                                             (= :logseq.class/Task
                                                (:db/ident (:view-parent opts)))}))
 
+(defn- date-property-value-present?
+  "True when a date/datetime property has a real value, not an empty placeholder."
+  [value]
+  (boolean
+   (and (some? value)
+        (not (empty-placeholder-value? value)))))
+
+(defn- clear-date-property-value!
+  "Clear a date/datetime value while keeping the property on the node."
+  [block property]
+  (let [blocks (get-operating-blocks block)]
+    (property-handler/batch-set-block-property! (operating-block-ids blocks)
+                                                (:db/ident property)
+                                                :logseq.property/empty-placeholder)))
+
+(defn- date-picker-handle-delete!
+  "Backspace/Delete clears a set date; an already-empty value removes the property."
+  [e {:keys [block property on-delete del-btn?] :as opts}]
+  (if (and del-btn? (fn? on-delete))
+    (on-delete e)
+    (delete-block-property! block property opts)))
+
 (defn- prevent-bottom-property-edit-pointer-dismiss
   [^js e]
   (when (some-> (.-target e) (.closest ".bottom-property-edit-icon"))
@@ -925,7 +989,11 @@
           :on-click open-popup!
           :on-key-down (fn [e]
                          (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                           (delete-block-property! block property opts)))}
+                           (date-picker-handle-delete! e (assoc opts
+                                                                :block block
+                                                                :property property
+                                                                :on-delete on-delete
+                                                                :del-btn? del-btn?))))}
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
@@ -936,7 +1004,11 @@
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
-                           (delete-block-property! block property opts)
+                           (date-picker-handle-delete! e (assoc opts
+                                                                :block block
+                                                                :property property
+                                                                :on-delete on-delete
+                                                                :del-btn? del-btn?))
                            (" " "Enter")
                            (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
@@ -945,6 +1017,9 @@
           (when repeated-task?
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
           (cond
+            (not (date-property-value-present? value))
+            (property-empty-btn-value nil {:property-position property-position})
+
             (map? value)
             (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
                   compare-value (some-> date
@@ -982,22 +1057,49 @@
 	                         :multiple-values? multiple-values?
 	                         :on-change (fn [value]
 	                                      (let [blocks (get-operating-blocks block)]
-	                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
+	                                        (property-handler/batch-set-block-property! (operating-block-ids blocks)
 	                                                                                    (:db/ident property)
                                                                                     (if datetime?
                                                                                       value
                                                                                       (:db/id value)))))
-                         :del-btn? (some? value)
+                         :del-btn? (date-property-value-present? value)
                          :on-delete (fn [e]
                                       (util/stop-propagation e)
-                                      (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
-                                                                                    (:db/ident property)
-                                                                                    nil))
+                                      (clear-date-property-value! block property)
                                       (shui/popup-hide!))}))))
 
+(def ^:private broad-scoped-node-class-idents
+  #{:logseq.class/Page})
+
+(defn- broad-scoped-node-property?
+  [property classes]
+  (and (= :node (:logseq.property/type property))
+       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
+
+(defn- scoped-class-ids
+  [classes structured-children-by-class-id]
+  (->> classes
+       (mapcat (fn [class]
+                 (cons (:db/id class)
+                       (get structured-children-by-class-id (:db/id class)))))
+       set))
+
+(defn- <get-scoped-page-id
+  "Returns the oldest page named `page-name` that is tagged with one of `class-ids`"
+  [repo page-name class-ids]
+  (p/let [ids (db-async/<q repo {}
+                           '[:find [?p ...]
+                             :in $ ?name [?class ...]
+                             :where
+                             [?p :block/name ?name]
+                             [?p :block/tags ?class]
+                             (not [?p :logseq.property/deleted-at])]
+                           (util/page-name-sanity-lc page-name)
+                           (vec class-ids))]
+    (first (sort ids))))
+
 (defn- <create-page-if-not-exists!
-  [block property classes extends-by-class-id page]
+  [block property classes {:keys [extends-by-class-id structured-children-by-class-id]} page]
   (p/let [repo (state/get-current-repo)
           page* (string/trim page)
           ;; inline-class is only for input from :transform-fn
@@ -1005,8 +1107,6 @@
                                 (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
                                     [page* nil])
                                 [page* nil])
-          page-entity (db-async/<get-block repo page {:children? false})
-          id (:db/id page-entity)
           class? (or (= :block/tags (:db/ident property))
                      (and (= :logseq.property.class/extends (:db/ident property))
                           (entity/class? block))
@@ -1019,6 +1119,16 @@
                                                (= :logseq.class/Tag (:db/ident e)))
                                              (get extends-by-class-id (:db/id class)))))
                                     classes))))
+          ;; A class-scoped property only reuses a same-name page that has one of its classes
+          scope-class-ids (when (and (seq classes)
+                                     (not class?)
+                                     (not (broad-scoped-node-property? property classes)))
+                            (scoped-class-ids classes structured-children-by-class-id))
+          page-entity (when-not scope-class-ids
+                        (db-async/<get-block repo page {:children? false}))
+          id (if scope-class-ids
+               (<get-scoped-page-id repo page scope-class-ids)
+               (:db/id page-entity))
           ;; Note: property and other types shouldn't be converted to class
           page? (entity/internal-page? page-entity)]
     (cond
@@ -1097,7 +1207,7 @@
                      (and multiple-choices? (= chosen [clear-value])))
                (p/do!
                 (let [blocks (get-operating-blocks block)
-                      block-ids (map :block/uuid blocks)]
+                      block-ids (operating-block-ids blocks)]
                   (property-handler/batch-remove-block-property!
                    block-ids
                    (:db/ident property)))
@@ -1125,22 +1235,6 @@
     (if (some node-choice-match? initial-choices')
       initial-choices'
       (conj initial-choices' new-choice))))
-
-(def ^:private broad-scoped-node-class-idents
-  #{:logseq.class/Page})
-
-(defn- broad-scoped-node-property?
-  [property classes]
-  (and (= :node (:logseq.property/type property))
-       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
-
-(defn- scoped-class-ids
-  [classes structured-children-by-class-id]
-  (->> classes
-       (mapcat (fn [class]
-                 (cons (:db/id class)
-                       (get structured-children-by-class-id (:db/id class)))))
-       set))
 
 (defn- node-matches-scoped-classes?
   [class-ids node]
@@ -1354,7 +1448,7 @@
                                                                                           :property-key chosen
                                                                                           :target target}]))
                                                (<create-page-if-not-exists! block property classes'
-                                                                            extends-by-class-id chosen))))
+                                                                            (:class-data opts) chosen))))
                                       entity (when (integer? id)
                                                (db-async/<get-block (state/get-current-repo) id {:children? false}))]
                                 (if id
@@ -1856,7 +1950,10 @@
                                     (util/shift-key? e)
                                     (util/meta-key? e)
                                     (property-value-popup-blocked-link? target))
-                        (show-popup! target))))]
+                        (page-ref-cell-click
+                         {:entity (page-ref-entity-from-event-target target)
+                          :current-page (state/get-current-page)
+                          :open-popup! #(show-popup! target)}))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
          {:ref *el
@@ -2485,11 +2582,15 @@
                           (let [target (.-target e)]
                             (when-not (or config/publishing?
                                           (property-value-popup-blocked-link? target))
-                              (shui/popup-show! (hooks/deref *el)
-                                                (fn [opts]
-                                                  (content-fn opts target))
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))]
+                              (page-ref-cell-click
+                               {:entity (page-ref-entity-from-event-target target)
+                                :current-page (state/get-current-page)
+                                :open-popup! (fn []
+                                               (shui/popup-show! (hooks/deref *el)
+                                                                 (fn [opts]
+                                                                   (content-fn opts target))
+                                                                 {:as-dropdown? true :as-content? false
+                                                                  :align "start" :auto-focus? true}))}))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el

@@ -22,7 +22,8 @@
       (is (= ["markdown"
               {:html "<p>html</p>"
                :graph "logseq_db_common"
-               :blocks [(assoc block :block/title "raw title")]}]
+               :blocks [(assoc block :block/title "raw title")]
+               :op nil}]
              @copy-call)))))
 
 (deftest copy-to-clipboard-keeps-title-when-raw-title-is-missing-test
@@ -39,5 +40,20 @@
       (is (= ["markdown"
               {:html nil
                :graph "logseq_db_common"
-               :blocks [block]}]
+               :blocks [block]
+               :op nil}]
              @copy-call)))))
+
+(deftest copy-to-clipboard-forwards-copy-op-test
+  (let [copy-call (atom nil)
+        block {:db/id 1
+               :block/title "plain title"}]
+    (with-redefs [util/copy-to-clipboard! (fn [raw-text & {:as opts}]
+                                            (reset! copy-call [raw-text opts]))]
+      (common-handler/copy-to-clipboard-without-id-property!
+       "logseq_db_common"
+       "markdown"
+       nil
+       [block]
+       :op :copy)
+      (is (= :copy (get-in @copy-call [1 :op]))))))

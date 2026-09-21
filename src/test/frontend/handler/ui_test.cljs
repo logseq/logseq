@@ -180,7 +180,7 @@
             (p/then
              (fn []
                (is (= [[:thread-api/pull repo [:db/id :block/uuid] [:block/uuid anchor-uuid]]
-                       [:thread-api/get-block-parents repo 42 3]]
+                       [:thread-api/get-block-parents repo 42 100]]
                       @worker-calls))
                (is (= [1] @scroll-calls))))
             (p/catch

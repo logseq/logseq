@@ -474,7 +474,7 @@
                               (db-worker/ensure-window-stopped! mgr :window-2)])]
               (is (false? (lifecycle/pidExists (:pid first-runtime))))
               (is (empty? (:repos @(:state mgr))))
-              (is (not (fs/existsSync (node-path/join root "graphs/demo/db-worker.lock"))))
+              (is (fs/existsSync (lifecycle/ownershipPath (lifecycle/context (lifecycle/resolveStorage root (node-path/join root "graphs")) repo))))
               (p/let [reopened (db-worker/ensure-runtime! repo :window-3)]
                 (is (not= (:pid first-runtime) (:pid reopened)))
                 (is (true? (lifecycle/pidExists (:pid reopened)))))))

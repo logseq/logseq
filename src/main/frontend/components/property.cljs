@@ -878,6 +878,18 @@
         {:keys [hidden-properties]} (use-display-properties block opts enabled? show-empty-and-hidden?)]
     (boolean (seq hidden-properties))))
 
+(defn block-below-pill-owns-hidden-toggle?
+  "True when the block-below pill row already renders the hidden-properties
+  toggle: an outliner zoom-in root with block-below positioned properties.
+  The properties area must not render a second toggle in that case."
+  [block opts]
+  (boolean
+   (and (not config/publishing?)
+        (not (entity/page? block))
+        (:block? opts)
+        (= (:id opts) (str (:block/uuid block)))
+        (seq (get-in block [:block.temp/positioned-properties :block-below])))))
+
 (hsx/defc hidden-properties-toggle-button
   [block {:keys [icon-only? tab-index bottom-row-nav? bottom-pill?] :as _opts}]
   (let [block-uuid (:block/uuid block)
@@ -948,6 +960,12 @@
     (when property
       (property-key-cp block property {}))))
 
+(defn- page-title-property-surface?
+  "Add property belongs on the page itself (title, sidebar, tag dialog), not
+  on a page nested in an outline."
+  [{:keys [page-title? sidebar-properties? tag-dialog?]}]
+  (boolean (or page-title? sidebar-properties? tag-dialog?)))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
@@ -968,7 +986,8 @@
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
         show-hidden-properties-toggle-button? (and (seq hidden-properties)
                                                    (or current-route-page?
-                                                       root-block?))]
+                                                       root-block?)
+                                                   (not (block-below-pill-owns-hidden-toggle? target-block opts)))]
     [:<>
      (cond
        (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
@@ -990,10 +1009,7 @@
                                           (= property-ident :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity/page? block)
-               page-properties-area? (and page?
-                                          (or (:page-title? opts)
-                                              sidebar-properties?
-                                              tag-dialog?))
+               page-properties-area? (and page? (page-title-property-surface? opts))
                opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [{:keys [property-ident]}]
@@ -1063,7 +1079,7 @@
                                                    :description-property-uuid
                                                    description-property-uuid))])])
 
-                (when (and page? (not class?))
+                (when (and page-properties-area? (not class?))
                   ^{:key (str id "-add-property")}
                   [new-property block opts'])
 

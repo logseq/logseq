@@ -1,7 +1,9 @@
 (ns frontend.components.property.property-test
-  (:require ["react" :as react]
+  (:require ["fs" :as fs]
+            ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
             [frontend.components.property.default-value :as property-default-value]
@@ -103,22 +105,23 @@
                           block (atom nil) (atom nil) nil
                           {:remove-property? true
                            :view-parent {:db/ident :logseq.class/Task}})]
-           (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved status-property))
-                           property-value/batch-operation? (constantly false)
-                           property-value/get-operating-blocks (fn [_] [block])
-                           property-handler/batch-remove-block-property!
-                           (fn [& args] (swap! calls* conj args))
-                           shui/popup-hide! (constantly nil)]
-             (-> (on-chosen {:value :logseq.property/status
-                             :property status-property})
-                 (p/then (fn []
-                           (is (= [[[block-id]
-                                   :logseq.property/status
-                                   {:preserve-task-tag? true}]]
-                                  @calls*))))
-                 (p/catch (fn [error]
-                            (is false (str error))))
-                 (p/finally done))))))
+           (-> (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved status-property))
+                               property-value/batch-operation? (constantly false)
+                               property-value/get-operating-blocks (fn [_] [block])
+                               property-handler/batch-remove-block-property!
+                               (fn [& args] (swap! calls* conj args))
+                               shui/popup-hide! (constantly nil)]
+                 (on-chosen {:value :logseq.property/status
+                             :property status-property}))
+               (p/then (fn []
+                         (is (= [[[block-id]
+                                 :logseq.property/status
+                                 {:preserve-task-tag? true}]]
+                                @calls*))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (deftest choosing-existing-closed-value-property-reuses-picker-data-test
   (async done
          (let [block {:block/uuid (random-uuid)}
@@ -135,20 +138,20 @@
                on-chosen (#'property-component/property-input-on-chosen
                           block *property *property-key
                           *show-new-property-config? {})]
-           (p/with-redefs [db-async/<get-block
-                           (fn [& _]
-                             (throw (js/Error. "Picker data must avoid a second block fetch")))
-                           property-value/batch-operation? (constantly false)]
-             (-> (on-chosen {:value (:block/uuid property)
+           (-> (p/with-redefs [db-async/<get-block
+                               (fn [& _]
+                                 (throw (js/Error. "Picker data must avoid a second block fetch")))
+                               property-value/batch-operation? (constantly false)]
+                 (on-chosen {:value (:block/uuid property)
                              :label "Priority"
-                             :property property})
-                 (p/then (fn []
-                           (is (= property @*property))
-                           (is (= "Priority" @*property-key))
-                           (is (false? @*show-new-property-config?))))
-                 (p/catch (fn [error]
-                            (is false (str error))))
-                 (p/finally done))))))
+                             :property property}))
+               (p/then (fn []
+                         (is (= property @*property))
+                         (is (= "Priority" @*property-key))
+                         (is (false? @*show-new-property-config?))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest choosing-existing-property-without-label-opens-value-setter-test
   (let [input-key #'property-component/chosen-property-input-key
@@ -198,3 +201,28 @@
        (#'property-component/show-property-panel-bullet?
         {:logseq.property/type :default}
         {:db/id 1}))))
+
+(deftest url-property-wrapping-rule-must-not-target-the-bullet-test
+  (let [css (str (fs/readFileSync "src/main/frontend/components/property.css" "utf8"))
+        rule (->> (string/split-lines css)
+                  (filter #(and (string/includes? % "[data-property-type=url]")
+                                (string/includes? % ".property-value-panel a")))
+                  first)]
+    (is (some? rule)
+        "The URL value-panel wrapping rule should still exist in property.css")
+    (is (string/includes? rule ":not(.bullet-link-wrap)")
+        (str "The URL wrapping rule must exclude the block bullet's anchor. It applies "
+             "min-width:0, which lets the inline-flex bullet collapse and pulls it out of "
+             "line with the other properties (db-test#1239)."))
+    (is (string/includes? rule ":not(.block-control)")
+        "The same rule must exclude the block control anchor for the same reason")))
+
+(deftest page-title-property-surface-hides-outliner-add-property-test
+  (is (true? (#'property-component/page-title-property-surface? {:page-title? true}))
+      "The current page title can add properties")
+  (is (true? (#'property-component/page-title-property-surface? {:sidebar-properties? true}))
+      "Sidebar page properties can add properties")
+  (is (true? (#'property-component/page-title-property-surface? {:tag-dialog? true}))
+      "Tag dialog can add properties")
+  (is (false? (#'property-component/page-title-property-surface? {:in-block-container? true}))
+      "A page nested in the outliner cannot add properties"))

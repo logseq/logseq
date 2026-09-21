@@ -310,6 +310,40 @@ let run_cli_lifecycle ?(env = [||]) argv =
 
 let stdout_text name output = expect_some name output.stdout
 
+let expect_graph_list_output root expected =
+  Vec.iter
+    (fun (Output.Mode.Packed mode) ->
+      let output = Output.Mode.to_string mode in
+      let cfg = config ~root_dir:root ~graph:"alpha" () in
+      let result =
+        run_cli_lifecycle
+          [|
+            "--root-dir";
+            root;
+            "--graph";
+            "alpha";
+            "--output";
+            output;
+            "graph";
+            "list";
+          |]
+      in
+      expect_int (output ^ " exit") 0 result.exit_code;
+      expect_string_vec (output ^ " stderr") [||] result.stderr;
+      expect_equal
+        (output ^ " directory listing")
+        (Format_types.format_result
+           (Cli_result.ok ~command:Command_id.Graph_list mode
+              (Cli_result.Raw expected))
+           (config_with_output cfg mode))
+        (string_trim_end (stdout_text output result)))
+    (Vec.of_array
+       [|
+         Output.Mode.Packed Output.Mode.Human;
+         Output.Mode.Packed Output.Mode.Json;
+         Output.Mode.Packed Output.Mode.Edn;
+       |])
+
 let invoke_args body =
   match Json_util.object_of_json_string body with
   | Some object_ -> (
@@ -504,23 +538,62 @@ let () =
       expect_error_code "non numeric id" ":invalid-options"
         (Id_parse.parse_id_string "abc"));
 
-  test
-    "CLI parity graph directory names preserve canonical and old-format \
-     encoding" (fun () ->
-      expect_equal "space graph dir" "space name"
-        (Graph_dir.encode_graph_dir_name "space name");
-      expect_equal "slash graph dir" "old~2Fname"
-        (Graph_dir.encode_graph_dir_name "old/name");
-      expect_equal "tilde graph dir" "tilde~7Ename"
-        (Graph_dir.encode_graph_dir_name "tilde~name");
-      expect_equal "decode canonical" "old/name"
-        (expect_some "canonical"
-           (Graph_dir.canonical_graph_name_of_dir "old~2Fname"));
-      expect_none "old-format dir is not canonical"
-        (Graph_dir.canonical_graph_name_of_dir "old++name");
-      expect_equal "decode old-format slash" "old/name"
-        (expect_some "old-format"
-           (Graph_dir.decode_legacy_graph_dir_name "old++name")));
+  test "CLI parity graph directory names use only standard encoding" (fun () ->
+      let padded =
+        unicode_text [| 0x00a0 |] ^ "space name" ^ unicode_text [| 0x3000 |]
+      in
+      expect_equal "encoding trims graph names" "space name~2Fchild"
+        (Graph_dir.encode_graph_dir_name " \tspace name/child\n ");
+      expect_equal "encoding trims Unicode whitespace" "space name"
+        (Graph_dir.encode_graph_dir_name padded);
+      expect_equal "graph identity trims Unicode whitespace" "space name"
+        (Cli_primitive.create_graph padded |> Cli_primitive.string_of_graph);
+      expect_equal "repo identity trims prefixed graph name"
+        "logseq_db_space name"
+        (Cli_primitive.create_repo (" logseq_db_ " ^ padded)
+        |> Cli_primitive.string_of_repo);
+      Vec.iter
+        (fun (graph, dir) ->
+          expect_equal "standard encoding" dir
+            (Graph_dir.encode_graph_dir_name graph);
+          expect_equal "standard decoding" graph
+            (expect_some "canonical name"
+               (Graph_dir.canonical_graph_name_of_dir dir)))
+        (Vec.of_array
+           [|
+             ("space name", "space name");
+             ("old/name", "old~2Fname");
+             ("colon:name", "colon~3Aname");
+             ("plus+name", "plus~2Bname");
+             ("percent%name", "percent~25name");
+             ("tilde~name", "tilde~7Ename");
+             (unicode_text [| 0x4e2d; 0x6587 |], "~E4~B8~AD~E6~96~87");
+           |]);
+      Vec.iter
+        (fun dir ->
+          expect_none
+            ("nonstandard directory " ^ dir)
+            (Graph_dir.canonical_graph_name_of_dir dir))
+        (Vec.of_array
+           [|
+             "";
+             "old++name";
+             "c+3A+name";
+             "yy%20y";
+             "yy~20y";
+             "old~2fname";
+             "mix%20~2Fname";
+             "bad%ZZname";
+             "foo~2G";
+             "trailing~";
+             " alpha ";
+             "   ";
+             "~20alpha";
+             "alpha~20";
+             "~C2~A0alpha";
+             "alpha~E3~80~80";
+             "invalid~FF";
+           |]));
 
   test_promise
     "CLI parity unlink graph moves canonical encoded dir to unlinked dir"
@@ -965,7 +1038,9 @@ let () =
     (fun () ->
       let login_request = expect_parse_ok "login parse" [| "login" |] in
       (match login_request.command with
-      | Cli_request.Auth Auth_command.Parsed_login -> pass
+      | Cli_request.Auth
+          (Auth_command.Parsed_login { username = None; password = None }) ->
+          pass
       | _ -> fail_test "login parse: expected auth login");
       let logout_request = expect_parse_ok "logout parse" [| "logout" |] in
       (match logout_request.command with
@@ -973,9 +1048,9 @@ let () =
       | _ -> fail_test "logout parse: expected auth logout");
       (match
          Auth_command.build (config ()) (Global_opts.create ())
-           Auth_command.Parsed_login
+           (Auth_command.Parsed_login { username = None; password = None })
        with
-      | Ok Auth_command.Login -> pass
+      | Ok (Auth_command.Login Auth_state.Browser_login) -> pass
       | Ok _ -> fail_test "login build: expected Login"
       | Error err -> fail_test ("login build: " ^ err.Error.message));
       match
@@ -2227,7 +2302,7 @@ let () =
       let action =
         expect_ok "search block action"
           (Search.build (config ~repo:"demo" ()) (Global_opts.create ())
-             (Search.Parsed_block { content = "  Alpha Beta  " }))
+             (Search.Parsed_block { content = "  Alpha Beta  "; include_hidden = false }))
       in
       expect_bool "search block scope" true (action.Search.scope = Search.Block);
       expect_equal "search block command" "search-block"
@@ -2239,10 +2314,10 @@ let () =
       expect_equal "search query trim" "Alpha Beta" action.query;
       expect_error_code "search requires repo" "missing-repo"
         (Search.build (config ()) (Global_opts.create ())
-           (Search.Parsed_page { content = "Home" }));
+           (Search.Parsed_page { content = "Home"; include_hidden = false }));
       expect_error_code "search rejects blank content" "missing-query-text"
         (Search.build (config ~repo:"demo" ()) (Global_opts.create ())
-           (Search.Parsed_tag { content = "   " })));
+           (Search.Parsed_tag { content = "   "; include_hidden = false })));
 
   test_promise "CLI parity search execute sorts scopes and strips raw fields"
     (fun () ->
@@ -2272,6 +2347,7 @@ let () =
                 repo;
                 graph = Cli_config.repo_to_graph repo;
                 query;
+                include_hidden = false;
               }
               cfg Output.Mode.Human
           in
@@ -2362,6 +2438,7 @@ let () =
                 repo;
                 graph = Cli_config.repo_to_graph repo;
                 query;
+                include_hidden = false;
               }
               cfg Output.Mode.Human
           in
@@ -2422,6 +2499,7 @@ let () =
                    repo;
                    graph = Cli_config.repo_to_graph repo;
                    query = "foo";
+                   include_hidden = false;
                  }
                  cfg Output.Mode.Human)
           in
@@ -5125,7 +5203,8 @@ let () =
             "--file";
             "/tmp/export.edn";
             "--edn-options";
-            "{:export-type :graph :include-timestamps? true}";
+            "{:export-type :graph-human :graph-options {:include-timestamps? \
+             true}}";
             "--pretty-print";
           |]
       in
@@ -5273,7 +5352,8 @@ let () =
                   edn_options =
                     Some
                       (edn_of_string
-                         "{:export-type :graph :include-timestamps? true}");
+                         "{:export-type :graph-human :graph-options \
+                          {:include-timestamps? true}}");
                   pretty_print = true;
                   include_timestamps = false;
                   exclude_built_in_pages = false;
@@ -5290,6 +5370,297 @@ let () =
           expect_bool "export pretty" true opts.pretty_print;
           expect_some "export edn options" opts.edn_options |> ignore
       | _ -> fail_test "expected Graph_export action");
+
+  let build_edn_export options =
+    let request =
+      expect_parse_ok "EDN export request"
+        [|
+          "graph";
+          "export";
+          "--type";
+          "edn";
+          "--file";
+          "/tmp/export.edn";
+          "--edn-options";
+          options;
+        |]
+    in
+    effect_result "build export"
+      (Cli_action.build (config ~graph:"demo" ()) request)
+  in
+  let invalid_edn_export options fragments =
+    test ("CLI parity EDN export rejects " ^ options) (fun () ->
+        match build_edn_export options with
+        | Ok _ -> fail_test "expected invalid-options before worker setup"
+        | Error err ->
+            expect_equal "error code" "invalid-options"
+              (Error.code_to_string err.Error.code);
+            List.iter
+              (expect_named_contains "actionable diagnostic" err.message)
+              fragments)
+  in
+  List.iter
+    (fun (options, fragments) -> invalid_edn_export options fragments)
+    [
+      ( "{:export-type :graph-human :include-timestamps? true}",
+        [
+          ":include-timestamps?";
+          "{:export-type :graph-human :graph-options {:include-timestamps? \
+           true}}";
+        ] );
+      ( "{:export-type :graph-human :include-timestamps? false :graph-options \
+         {:include-timestamps? true}}",
+        [ ":include-timestamps?" ] );
+      ( "{:no-such-option true}",
+        [ ":no-such-option"; "Allowed keys"; ":graph-options" ] );
+      ( "{:export-type :graph-human :graph-options {:no-such-option true}}",
+        [
+          "[:graph-options :no-such-option]";
+          "Allowed keys";
+          ":include-timestamps?";
+        ] );
+      ("{\"export-type\" :graph-human}", [ "\"export-type\"" ]);
+      ( "{:export-type :graph-human :graph-options {\"include-timestamps?\" \
+         true}}",
+        [ "[:graph-options \"include-timestamps?\"]" ] );
+      ("{1 true}", [ "1"; "Allowed keys" ]);
+      ("{:export-type :other}", [ ":export-type"; ":graph-human" ]);
+      ("{:export-type nil}", [ ":export-type" ]);
+      ("{:export-type \"graph-human\"}", [ ":export-type" ]);
+      ( "{:graph-options {:graph-options {}}}",
+        [ "[:graph-options :graph-options]"; "top level" ] );
+      ("{:graph-options nil}", [ ":graph-options"; "map" ]);
+      ("{:graph-options []}", [ ":graph-options"; "map" ]);
+      ("{:block-id 42}", [ ":block-id"; ":block" ]);
+      ("{:export-type :block :block-id 42 :page-id 1}", [ ":page-id"; ":page" ]);
+      ( "{:graph-options {:include-timestamps? false}}",
+        [ "[:graph-options :include-timestamps?]"; ":graph-human"; ":graph" ] );
+      ( "{:export-type :graph-human :graph-options {:catch-validation-errors? \
+         true :typo true}}",
+        [ "[:graph-options :typo]" ] );
+      ( "{:export-type :view-nodes :rows [] :group-by? nil}",
+        [ ":group-by?"; "boolean" ] );
+      ( "{:export-type :view-nodes :rows [] :group-by? 1}",
+        [ ":group-by?"; "boolean" ] );
+      ("{:export-type :block}", [ ":block-id"; "required" ]);
+      ("{:export-type :page}", [ ":page-id"; "required" ]);
+      ("{:export-type :selected-nodes}", [ ":node-ids"; "required" ]);
+      ("{:export-type :view-nodes}", [ ":rows"; "required" ]);
+      ("{:export-type :block :block-id nil}", [ ":block-id"; "entity" ]);
+      ("{:export-type :block :block-id true}", [ ":block-id"; "entity" ]);
+      ("{:export-type :page :page-id \"Home\"}", [ ":page-id"; "entity" ]);
+      ("{:export-type :page :page-id [:block/name]}", [ ":page-id"; "lookup" ]);
+      ("{:export-type :page :page-id [42 \"Home\"]}", [ ":page-id"; "lookup" ]);
+      ( "{:export-type :page :page-id #uuid \
+         \"13071000-0000-4000-8000-000000000001\"}",
+        [ ":page-id" ] );
+      ( "{:export-type :selected-nodes :node-ids nil}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids 42}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids {}}",
+        [ ":node-ids"; "collection" ] );
+      ( "{:export-type :selected-nodes :node-ids [nil]}",
+        [ "[:node-ids 0]"; "entity" ] );
+      ( "{:export-type :selected-nodes :node-ids [#uuid \
+         \"13071000-0000-4000-8000-000000000001\"]}",
+        [ "[:node-ids 0]" ] );
+      ("{:export-type :view-nodes :rows nil}", [ ":rows"; "collection" ]);
+      ("{:export-type :view-nodes :rows {}}", [ ":rows"; "collection" ]);
+      ("{:export-type :view-nodes :rows [true]}", [ "[:rows 0]" ]);
+      ( "{:export-type :view-nodes :group-by? true :rows [42]}",
+        [ "[:rows 0]"; "group" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows [[\"label\" [42] \
+         :extra]]}",
+        [ "[:rows 0]" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows {\"label\" nil}}",
+        [ ":rows"; "collection" ] );
+      ( "{:export-type :view-nodes :group-by? true :rows [[nil [false]]]}",
+        [ "[:rows 0 1 0]" ] );
+    ];
+  List.iter
+    (fun key ->
+      invalid_edn_export ("{" ^ key ^ " false}") [ key; ":graph-options" ];
+      List.iter
+        (fun value ->
+          invalid_edn_export
+            ("{:export-type :graph-human :graph-options {" ^ key ^ " " ^ value
+           ^ "}}")
+            [ "[:graph-options " ^ key ^ "]"; "boolean" ])
+        [ "nil"; "1"; "\"false\"" ])
+    [
+      ":include-timestamps?";
+      ":exclude-built-in-pages?";
+      ":exclude-files?";
+      ":catch-validation-errors?";
+    ];
+  List.iter
+    (fun value ->
+      invalid_edn_export
+        ("{:export-type :graph-human :graph-options {:exclude-namespaces "
+       ^ value ^ "}}")
+        [ "[:graph-options :exclude-namespaces]"; "set" ])
+    [ "nil"; "[:schema]"; "#{1}"; "#{nil}"; "\"schema\"" ];
+  List.iter
+    (fun key ->
+      invalid_edn_export
+        ("{:export-type :graph-human :graph-options {" ^ key ^ " true}}")
+        [ "[:graph-options " ^ key ^ "]"; "Allowed keys" ])
+    [ ":include-uuid?"; ":shallow-copy?"; ":include-children?" ];
+  let partial_exports =
+    [
+      (":graph", "");
+      (":graph-ontology", "");
+      (":block", ":block-id 42");
+      (":page", ":page-id 42");
+      (":selected-nodes", ":node-ids []");
+      (":view-nodes", ":rows []");
+    ]
+  in
+  List.iter
+    (fun (kind, selectors) ->
+      List.iter
+        (fun key ->
+          invalid_edn_export
+            ("{:export-type " ^ kind ^ " " ^ selectors ^ " :graph-options {"
+           ^ key ^ " false}}")
+            [ "[:graph-options " ^ key ^ "]"; ":graph-human"; kind ])
+        [
+          ":include-timestamps?";
+          ":exclude-built-in-pages?";
+          ":exclude-files?";
+          ":exclude-namespaces";
+        ])
+    partial_exports;
+  List.iter
+    (fun options ->
+      test ("CLI parity EDN export accepts " ^ options) (fun () ->
+          ignore (expect_ok "valid export" (build_edn_export options))))
+    ([
+       "{}";
+       "{:graph-options {}}";
+       "{:export-type :graph-human :graph-options {:include-timestamps? false \
+        :exclude-files? false :exclude-built-in-pages? false \
+        :catch-validation-errors? false :exclude-namespaces #{:schema \
+        \"user\"}}}";
+       "{:export-type :block :block-id [:block/uuid #uuid \
+        \"13071000-0000-4000-8000-000000000001\"]}";
+       "{:export-type :page :page-id (:block/name \"home\")}";
+       "{:export-type :page :page-id [\"unique-attribute\" {:arbitrary [nil \
+        true]}]}";
+       "{:export-type :page :page-id :logseq.class/Page}";
+       "{:export-type :selected-nodes :node-ids (42 :logseq.class/Page \
+        [:block/name \"home\"])}";
+       "{:export-type :selected-nodes :node-ids #{}}";
+       "{:export-type :view-nodes :rows [#uuid \
+        \"13071000-0000-4000-8000-000000000001\" [:block/name \"home\"]] \
+        :group-by? false}";
+       "{:export-type :view-nodes :rows {nil [42] {:arbitrary-key true} []} \
+        :group-by? true}";
+       "{:export-type :view-nodes :rows [[{:arbitrary-key true} #{42}] [nil \
+        []]] :group-by? true}";
+       "{:export-type :view-nodes :rows {} :group-by? true}";
+     ]
+    @ List.map
+        (fun (kind, selectors) ->
+          "{:export-type " ^ kind ^ " " ^ selectors
+          ^ " :graph-options {:catch-validation-errors? false}}")
+        partial_exports);
+  test "CLI parity EDN export diagnostics have stable key ordering" (fun () ->
+      let message options =
+        match build_edn_export options with
+        | Error err -> err.Error.message
+        | Ok _ ->
+            fail_test "expected invalid export";
+            ""
+      in
+      let first =
+        message "{:z true :a true :graph-options {:z true :a true}}"
+      in
+      expect_named_contains "top-level first key" first ":a";
+      expect_named_contains "top-level second key" first ":z";
+      expect_named_contains "nested first key" first "[:graph-options :a]";
+      expect_named_contains "nested second key" first "[:graph-options :z]";
+      expect_equal "same diagnostics regardless of insertion order" first
+        (message "{:graph-options {:a true :z true} :a true :z true}"));
+  List.iter
+    (fun mode ->
+      test ("CLI parity EDN export rejection protects files in " ^ mode)
+        (fun () ->
+          let root = temp_dir "logseq-edn-validation-" in
+          let file = Node.Path.join [| root; "export.edn" |] in
+          let run () =
+            run_cli_lifecycle
+              [|
+                "--root-dir";
+                root;
+                "--graph";
+                "missing";
+                "--output";
+                mode;
+                "graph";
+                "export";
+                "--type";
+                "edn";
+                "--file";
+                file;
+                "--edn-options";
+                "{:export-type :graph-human :include-timestamps? true}";
+              |]
+          in
+          let missing = run () in
+          expect_int "nonzero exit" 1 missing.exit_code;
+          expect_named_contains "invalid options"
+            (stdout_text "error" missing)
+            "invalid-options";
+          expect_bool "no output created" false (Node.Fs.existsSync file);
+          write_file file "existing export\n";
+          let existing = run () in
+          expect_int "nonzero exit" 1 existing.exit_code;
+          expect_equal "existing output untouched" "existing export\n"
+            (read_file file);
+          expect_bool "worker never creates graph" false
+            (Node.Fs.existsSync
+               (Node.Path.join [| root; "graphs"; "missing" |]));
+          remove_tree root))
+    [ "human"; "json"; "edn" ];
+
+  test_promise "CLI parity EDN export rejects before any worker RPC" (fun () ->
+      let calls = ref 0 in
+      let server =
+        invoke_server (fun _ ->
+            incr calls;
+            "null")
+      in
+      with_server server (fun base_url ->
+          let root = temp_dir "logseq-edn-no-rpc-" in
+          let* result =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--root-dir";
+                root;
+                "--graph";
+                "demo";
+                "--output";
+                "json";
+                "graph";
+                "export";
+                "--type";
+                "edn";
+                "--file";
+                Node.Path.join [| root; "export.edn" |];
+                "--edn-options";
+                "{:export-type :graph-human :graph-options \
+                 {:catch-validation-errors? true :typo true}}";
+              |]
+          in
+          remove_tree root;
+          expect_int "no worker RPC" 0 !calls;
+          expect_int "failure exit" 1 result.code;
+          expect_named_contains "invalid options" result.stdout
+            "invalid-options";
+          Js.Promise.resolve pass));
 
   test_promise "CLI parity graph validate result reports ok and error states"
     (fun () ->
@@ -7315,17 +7686,6 @@ let () =
           expect_bool "subscription closed" true !closed;
           Js.Promise.resolve pass));
 
-  test "CLI parity server lock paths use canonical graph directory names"
-    (fun () ->
-      expect_equal "plain lock path"
-        "/tmp/logseq-root/graphs/demo/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_demo"));
-      expect_equal "encoded lock path"
-        "/tmp/logseq-root/graphs/foo~2Fbar/db-worker.lock"
-        (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
-           (Cli_primitive.create_repo "logseq_db_foo/bar")));
-
   test_promise
     "CLI parity server start rejects a spawn without process identity"
     (fun () ->
@@ -7423,94 +7783,127 @@ let () =
       | Error err -> fail_test ("server restart: " ^ err.Error.message));
       pass);
 
-  test
-    "CLI parity server graph item listing ignores non-graphs and marks old dir \
-     conflicts" (fun () ->
-      let root = temp_dir "logseq-cli-parity-graph-items-" in
+  test "CLI parity graph list discovers directories through the command path"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-list-discovery-" in
       let graphs = Node.Path.join [| root; "graphs" |] in
       try
         Vec.iter
           (fun dir -> mkdir_p (Node.Path.join [| graphs; dir |]))
           (Vec.of_array
              [|
-               "alpha";
-               "backup";
-               "foo~2G";
-               "Unlinked graphs";
-               "logseq_local_1";
-               "old++name";
-               "old~2Fname";
-               "yy y";
-               "yy~20y";
                "yy%20y";
+               "old~2Fname";
+               "colon~3Aname";
+               "percent~25name";
+               "plus~2Bname";
+               "tilde~7Ename";
+               "~E4~B8~AD~E6~96~87";
+               "alpha";
+               " alpha ";
+               " padded-only ";
+               "   ";
+               "~20encoded-leading";
+               "encoded-trailing~20";
+               "old++name";
+               "c+3A+name";
+               "yy y";
                "bad%ZZname";
+               "logseq_local_1";
+               "backup";
+               "Unlinked graphs";
+               "file-version-test";
+               "logseq_db_hidden";
+               "logseq_db_old++name";
+               "yy~20y";
+               "lower~2fname";
+               "mix%20~2Fname";
+               "foo~2G";
              |]);
-        let items =
-          Server_runtime.list_graph_items (config ~root_dir:root ())
+        write_file (Node.Path.join [| graphs; "ordinary-file" |]) "";
+        let expected =
+          edn_of_string
+            (Ustring.to_string
+               (Ustring.of_string
+                  {|{:graphs ["alpha" "colon:name" "logseq_local_1" "old/name"
+                          "percent%name" "plus+name" "tilde~name" "yy y" "中文"]
+                 :graph-items
+                 [{:kind :canonical :graph-name "alpha" :graph-dir "alpha"}
+                  {:kind :canonical :graph-name "colon:name" :graph-dir "colon~3Aname"}
+                  {:kind :canonical :graph-name "logseq_local_1" :graph-dir "logseq_local_1"}
+                  {:kind :canonical :graph-name "old/name" :graph-dir "old~2Fname"}
+                  {:kind :canonical :graph-name "percent%name" :graph-dir "percent~25name"}
+                  {:kind :canonical :graph-name "plus+name" :graph-dir "plus~2Bname"}
+                  {:kind :canonical :graph-name "tilde~name" :graph-dir "tilde~7Ename"}
+                  {:kind :canonical :graph-name "yy y" :graph-dir "yy y"}
+                  {:kind :canonical :graph-name "中文" :graph-dir "~E4~B8~AD~E6~96~87"}]}|}))
         in
-        let canonical =
-          Vec.filter
-            (fun item -> item.Graph_types.kind = Graph_types.Canonical)
-            items
+        expect_graph_list_output root expected;
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "CLI parity padded graph arguments use the canonical directory"
+    (fun () ->
+      let root = temp_dir "logseq-cli-trim-graph-" in
+      let graphs = Node.Path.join [| root; "graphs" |] in
+      let padded = Node.Path.join [| graphs; " alpha " |] in
+      let run args =
+        run_cli_lifecycle
+          (Array.append [| "--root-dir"; root; "--output"; "json" |] args)
+      in
+      try
+        mkdir_p padded;
+        write_file (Node.Path.join [| padded; "sentinel" |]) "untouched";
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        let created = run [| "graph"; "create"; "--graph"; " \talpha\n " |] in
+        expect_int "create trimmed graph" 0 created.exit_code;
+        expect_graph_list_output root
+          (edn_of_string
+             {|{:graphs ["alpha"] :graph-items [{:kind :canonical :graph-name "alpha" :graph-dir "alpha"}]}|});
+        let input = Node.Path.join [| root; "unused.sqlite" |] in
+        write_file input "";
+        let imported =
+          run
+            [|
+              "graph";
+              "import";
+              "--graph";
+              " alpha ";
+              "--type";
+              "sqlite";
+              "--input";
+              input;
+            |]
         in
-        expect_bool "has alpha canonical" true
-          (Vec.exists
-             (fun item ->
-               Option.equal String.equal
-                 (Option.map Cli_primitive.string_of_graph
-                    item.Graph_types.graph_name)
-                 (Some "alpha")
-               && item.Graph_types.graph_dir = Some "alpha")
-             canonical);
-        expect_bool "ignores backup" false
-          (Vec.exists
-             (fun item -> item.Graph_types.graph_dir = Some "backup")
-             items);
-        let old_item =
-          expect_some "old format item"
-            (Vec.find_opt
-               (fun item -> item.Graph_types.legacy_dir = Some "old++name")
-               items)
+        expect_int "import rejects existing trimmed graph" 1 imported.exit_code;
+        expect_named_contains "existing graph error"
+          (stdout_text "import" imported)
+          "graph-exists";
+        let padded_argument =
+          unicode_text [| 0x00a0 |] ^ "alpha" ^ unicode_text [| 0x3000 |]
         in
-        expect_bool "old item kind" true
-          (old_item.Graph_types.kind = Graph_types.Legacy);
-        expect_equal "old graph name" "old/name"
-          (Cli_primitive.string_of_graph
-             (expect_some "old graph name" old_item.Graph_types.graph_name));
-        expect_equal "old target dir" "old~2Fname"
-          (expect_some "target dir" old_item.Graph_types.target_graph_dir);
-        expect_bool "old conflict" true old_item.Graph_types.conflict;
-        let percent_encoded_old_dirs =
-          items
-          |> Vec.filter (fun item ->
-              match item.Graph_types.legacy_dir with
-              | Some ("yy~20y" | "yy%20y") -> true
-              | _ -> false)
-        in
-        expect_int "percent encoded old dir count" 1
-          (Vec.length percent_encoded_old_dirs);
-        Vec.iter
-          (fun item ->
-            expect_bool "percent encoded item kind" true
-              (item.Graph_types.kind = Graph_types.Legacy);
-            expect_equal "percent encoded graph name" "yy y"
-              (Cli_primitive.string_of_graph
-                 (expect_some "percent encoded graph name"
-                    item.Graph_types.graph_name));
-            expect_equal "percent encoded target dir" "yy y"
-              (expect_some "percent encoded target"
-                 item.Graph_types.target_graph_dir);
-            expect_bool "percent encoded conflict" true
-              item.Graph_types.conflict)
-          percent_encoded_old_dirs;
-        let undecodable =
-          expect_some "undecodable item"
-            (Vec.find_opt
-               (fun item -> item.Graph_types.legacy_dir = Some "bad%ZZname")
-               items)
-        in
-        expect_bool "undecodable kind" true
-          (undecodable.Graph_types.kind = Graph_types.Legacy_undecodable);
+        let removed = run [| "graph"; "remove"; "--graph"; padded_argument |] in
+        expect_int "remove trimmed graph" 0 removed.exit_code;
+        expect_graph_list_output root
+          (edn_of_string "{:graphs [] :graph-items []}");
+        expect_equal "padded directory remains untouched" "untouched"
+          (read_file (Node.Path.join [| padded; "sentinel" |]));
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "CLI parity graph list accepts missing and empty graph directories"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-list-empty-" in
+      try
+        let expected = edn_of_string "{:graphs [] :graph-items []}" in
+        expect_graph_list_output root expected;
+        mkdir_p (Node.Path.join [| root; "graphs" |]);
+        expect_graph_list_output root expected;
         remove_tree root
       with exn ->
         remove_tree root;
@@ -7555,47 +7948,10 @@ let () =
       expect_equal "default table header order" "updated-at,title,created-at"
         (headers_from output |> Vec.of_array |> Vec.string_concat ","));
 
-  test "CLI parity format graph list marks current graph and old graph dirs"
+  test "CLI parity format graph list marks the current graph and shows count"
     (fun () ->
       let graph_list_data =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "graphs",
-              Edn_util.vector
-                [
-                  Edn_util.string "alpha";
-                  Edn_util.string "old/name";
-                  Edn_util.string "mystery";
-                ] );
-            ( Edn_util.keyword "graph-items",
-              Edn_util.vector
-                [
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "kind", Edn_util.keyword "canonical");
-                      (Edn_util.keyword "graph-name", Edn_util.string "alpha");
-                      (Edn_util.keyword "graph-dir", Edn_util.string "alpha");
-                    ];
-                  Edn_util.map
-                    [
-                      (Edn_util.keyword "kind", Edn_util.keyword "legacy");
-                      ( Edn_util.keyword "legacy-dir",
-                        Edn_util.string "old++name" );
-                      ( Edn_util.keyword "legacy-graph-name",
-                        Edn_util.string "old/name" );
-                      ( Edn_util.keyword "target-graph-dir",
-                        Edn_util.string "old~2Fname" );
-                      (Edn_util.keyword "conflict?", Edn_util.bool false);
-                    ];
-                  Edn_util.map
-                    [
-                      ( Edn_util.keyword "kind",
-                        Edn_util.keyword "legacy-undecodable" );
-                      (Edn_util.keyword "legacy-dir", Edn_util.string "mystery");
-                      (Edn_util.keyword "reason", Edn_util.keyword "undecodable");
-                    ];
-                ] );
-          ]
+        edn_of_string {|{:graphs ["alpha" "old/name" "mystery"]}|}
       in
       let output =
         Format_types.format_result
@@ -7604,10 +7960,7 @@ let () =
           (config ~graph:"old/name" ~root_dir:"/tmp/logseq-root" ())
       in
       expect_named_contains "current graph marker" output "* old/name";
-      expect_named_not_contains "old graph marker" output "old/name [legacy]";
-      expect_named_not_contains "old graph warning" output
-        "legacy graph directories detected";
-      expect_named_not_contains "rename guidance" output "old++name");
+      expect_named_contains "graph count" output "Count: 3");
 
   test "CLI parity format list and search table outputs keep count footer"
     (fun () ->

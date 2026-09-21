@@ -1,5 +1,20 @@
 (ns frontend.util.entity
-  "Plain-map entity predicates for renderer code.")
+  "Plain-map entity helpers for renderer code.")
+
+(defn as-block-map
+  "View rows are UUIDs. Callers that read :block/uuid need a map."
+  [block-or-id]
+  (cond
+    (uuid? block-or-id)
+    {:block/uuid block-or-id}
+
+    (and (map? block-or-id)
+         (nil? (:block/uuid block-or-id))
+         (uuid? (:uuid block-or-id)))
+    (assoc block-or-id :block/uuid (:uuid block-or-id))
+
+    :else
+    block-or-id))
 
 (defn- tag-ident
   [tag]
@@ -37,6 +52,15 @@
       (journal? entity)
       (class? entity)
       (property? entity)))
+
+(defn library-outline-child-uuids
+  "Library outlines nested pages, not normal blocks."
+  [child-blocks]
+  (into []
+        (keep (fn [block]
+                (when (and block (page? block))
+                  (:block/uuid block))))
+        child-blocks))
 
 (defn url-property-value?
   "URL-type property values are leaves. They must not have child blocks

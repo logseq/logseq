@@ -312,13 +312,14 @@
      (send-to-renderer win kind payload))))
 
 (defn get-graph-dir
-  "required by all internal state in the electron section"
+  "Resolve a trimmed DB graph name to its directory for Electron state."
   [graph-name]
-  (when (and (string? graph-name)
-             (string/starts-with? graph-name common-config/db-version-prefix))
-    (let [repo (common-config/canonicalize-db-version-repo graph-name)]
-      (node-path/join (common-graph/get-db-graphs-dir)
-                      (graph-dir/repo->encoded-graph-dir-name repo)))))
+  (when (string? graph-name)
+    (let [trimmed (string/trim graph-name)]
+      (when (string/starts-with? trimmed common-config/db-version-prefix)
+        (when-let [repo (common-config/canonicalize-db-version-repo trimmed)]
+          (node-path/join (common-graph/get-db-graphs-dir)
+                          (graph-dir/repo->encoded-graph-dir-name repo)))))))
 
 (comment
   (defn get-graph-name
