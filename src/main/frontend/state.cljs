@@ -696,8 +696,7 @@ should be done through this fn in order to get global config and config defaults
   [blocks]
   (->> blocks
        (remove nil?)
-       (keep #(when-let [id (dom/attr % "blockid")]
-                (uuid id)))
+       (keep util/selection-node-block-id)
        (distinct)))
 
 (defn block-content-max-length
