@@ -1348,3 +1348,37 @@
           "The recomputed attributes are cached again")
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest move-block-to-library-then-delete-clears-stale-namespace-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1244
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "Block 1"
+                          :build/children [{:block/title "Block 2"}]}]}])
+        library (ldb/get-library-page @conn)
+        _ (assert library "Library page exists")]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [block1 (db-test/find-block-by-content @conn "Block 1")]
+        ;; Move Block 1 to the Library page (mod+shift+m "Move to")
+        (outliner-core/move-blocks! conn [block1] library {:sibling? false})
+        (let [block1' (d/entity @conn (:db/id block1))
+              block2 (db-test/find-block-by-content @conn "Block 2")]
+          (is (ldb/page? block1') "Moved block becomes a page")
+          (is (= (:db/id library) (:db/id (:block/parent block1')))
+              "New page is a namespace child of Library")
+          (is (= (:db/id block1') (:db/id (:block/page block2)))
+              "Child block's :block/page points to the new page")
+
+          ;; Delete Block 1 from the Library page: un-parents the page
+          (outliner-core/delete-blocks! conn [block1'] {})
+          (let [block1'' (d/entity @conn (:db/id block1'))
+                block2' (d/entity @conn (:db/id block2))]
+            (is (nil? (:block/parent block1''))
+                "Library/Block 1 namespace is removed")
+            (is (= (:db/id block1'') (:db/id (:block/page block2')))
+                "Child block's :block/page still points to its own page, not Library")
+            (is (not= (:db/id library) (:db/id (:block/page block2')))
+                "Stale Library :block/page is cleared"))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
