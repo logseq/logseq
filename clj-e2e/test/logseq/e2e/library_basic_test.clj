@@ -85,4 +85,4 @@
       (is (> (:nested layout) (:parent layout))
           (str "Enter Nested stays indented under the parent: " (pr-str layout)))
       (is (< (abs (- (:sibling layout) (:parent layout))) 8)
-          (str "Enter Sibling is aligned with the parent, not nested: " (pr-str layout)))))))
+          (str "Enter Sibling is aligned with the parent, not nested: " (pr-str layout))))))
