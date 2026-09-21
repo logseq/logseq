@@ -107,6 +107,12 @@
   (or (:property column)
       (built-in-property (or (:id column) (:db/ident column)))))
 
+(defn- filterable-column?
+  [column]
+  (let [property (column-property column)]
+    (or (boolean (:db/id property))
+        (contains? db-property/db-attribute-properties (:db/ident property)))))
+
 (defn- get-table-row-selection
   [table]
   (if (table-selection-id table)
@@ -1008,24 +1014,33 @@
           :onSelect (fn [e] (.preventDefault e))}
          (t option-key)))))))
 
+(defn- selected-groups-sort-desc
+  [option-desc? checked?]
+  (when checked?
+    option-desc?))
+
+(defn- effective-groups-sort-desc?
+  [desc?]
+  (if (nil? desc?) true (boolean desc?)))
+
 (hsx/defc groups-sort-order
   [view-entity desc?]
-  (let [descending-label (t :view.table/descending)
-        ascending-label (t :view.table/ascending)]
+  (let [desc? (effective-groups-sort-desc? desc?)
+        options [[true (t :view.table/descending)]
+                 [false (t :view.table/ascending)]]]
     (shui/dropdown-menu-sub
      (shui/dropdown-menu-sub-trigger
       (t :view.table/sort-groups-order))
      (shui/dropdown-menu-sub-content
-      (for [option [descending-label ascending-label]]
+      (for [[option-desc? label] options]
         (shui/dropdown-menu-checkbox-item
-         {:key option
-          :checked (= option (if desc? descending-label ascending-label))
+         {:key (str option-desc?)
+          :checked (= option-desc? desc?)
           :onCheckedChange (fn [checked?]
-                             (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-desc?
-                                                                      (or (and checked? (= descending-label option))
-                                                                          (and (not checked?) (not= descending-label option)))))
+                             (when-some [desc? (selected-groups-sort-desc option-desc? checked?)]
+                               (set-view-property! view-entity :logseq.property.view/sort-groups-desc? desc?)))
           :onSelect (fn [e] (.preventDefault e))}
-         option))))))
+         label))))))
 
 (hsx/defc more-actions
   [view-entity columns {:keys [column-visible? column-toggle-visibility
@@ -1059,7 +1074,8 @@
            (t :view.table/columns-visibility))
           (shui/dropdown-menu-sub-content
            (for [column (remove #(or (false? (:column-list? %))
-                                     (:disable-hide? %)) columns)]
+                                     (:disable-hide? %)
+                                     (= (:id %) :id)) columns)]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
@@ -1706,8 +1722,9 @@
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
-        columns (remove #(or (false? (:column-list? %))
-                             (= :id (:id %))) columns)
+        columns (filter filterable-column?
+                        (remove #(or (false? (:column-list? %))
+                                     (= :id (:id %))) columns))
         items (map (fn [column]
                      {:label (:name column)
                       :value column}) columns)
@@ -2364,6 +2381,20 @@
   (max (count rows)
        (if (number? items-count) items-count 0)))
 
+(defn- windowed-items-count
+  "First-window All Pages used an estimated count. After delete or
+  filter the full id list is smaller; never paint extra empty rows."
+  [items-count full-rows]
+  (cond
+    (nil? full-rows)
+    items-count
+
+    (number? items-count)
+    (min items-count (count full-rows))
+
+    :else
+    (count full-rows)))
+
 (defn- windowed-view-total-count
   [rows {:keys [all-row-ids items-count]}]
   (if (seq all-row-ids)
@@ -2992,18 +3023,52 @@
   [option]
   (select-keys option [:properties]))
 
+(defn- grouped-list-partition-row?
+  [row]
+  (and (vector? row)
+       (= 2 (count row))
+       (uuid? (first row))
+       (sequential? (second row))))
+
+(defn- row-uuid-seq
+  [row]
+  (cond
+    (uuid? row)
+    [row]
+
+    (grouped-list-partition-row? row)
+    (filter uuid? (second row))
+
+    :else
+    []))
+
+(defn- grouped-list-partition-row-ids
+  [grouped-list-partition]
+  (let [rows (cond
+               (map? grouped-list-partition)
+               (:rows grouped-list-partition)
+
+               (grouped-list-partition-row? grouped-list-partition)
+               (second grouped-list-partition)
+
+               :else
+               [])]
+    (mapcat row-uuid-seq rows)))
+
 (defn view-row-ids
   [{view-partition :partition :keys [rows groups] :as view-data}]
   (case view-partition
     :flat
-    rows
+    (mapcat row-uuid-seq rows)
 
     :grouped
-    (mapcat :rows groups)
+    (mapcat (fn [{:keys [rows]}]
+              (mapcat row-uuid-seq rows))
+            groups)
 
     :grouped-list
     (mapcat (fn [{:keys [partitions]}]
-              (mapcat :rows partitions))
+              (mapcat grouped-list-partition-row-ids partitions))
             groups)
 
     (throw (ex-info "Invalid view data partition"
@@ -3118,7 +3183,10 @@
 (defn- gallery-group-content
   [view-entity option row-selection *scroller-ref table-map group-by-page?
    group-by-property value group]
-  (let [table' (shui/table-option (assoc table-map :data group))
+  (let [group-rows (if (= :grouped-list (:partition option))
+                     (vec (mapcat grouped-list-partition-row-ids group))
+                     group)
+        table' (shui/table-option (assoc table-map :data group-rows))
         title (cond
                 (and group-by-page? (nil? value))
                 [:div.text-muted-foreground.text-sm
@@ -3136,7 +3204,7 @@
                           :hide-action-bar? true)
                    table'
                    view-entity
-                   group
+                   group-rows
                    row-selection
                    *scroller-ref)]))
 
@@ -3556,7 +3624,8 @@
                                         (assoc group-table :rows group)
                                         (-> option
                                             (dissoc :all-row-ids :offset-rows :row-offset
-                                                    :stale-offset-rows :stale-row-offset)
+                                                    :stale-offset-rows :stale-row-offset
+                                                    :items-count)
                                             (assoc :disable-virtualized? true
                                                    :hide-action-bar? gallery?))
                                         view-opts)]
@@ -3832,14 +3901,27 @@
     (throw (ex-info "Invalid view data partition"
                     {:view-data view-data}))))
 
+(defn- unsupported-view-filter-clause?
+  [view-feature-type clause]
+  (and (= view-feature-type :all-pages)
+       (vector? clause)
+       (contains? #{nil :block.temp/refs-count} (first clause))))
+
+(defn- view-resource-filters
+  [view-feature-type filters]
+  (some-> filters
+          (update :filters (fn [clauses]
+                             (into [] (remove #(unsupported-view-filter-clause? view-feature-type %)) clauses)))))
+
 (defn- view-resource-context
   [view-feature-type sorting filters input group-by-property-ident
    query-row-uuids initial-row-count]
-  (cond-> {:feature-type view-feature-type
-           :sorting sorting
-           :input input}
-    (some? filters)
-    (assoc :filters filters)
+  (let [filters (view-resource-filters view-feature-type filters)]
+    (cond-> {:feature-type view-feature-type
+             :sorting sorting
+             :input input}
+      (some? filters)
+      (assoc :filters filters)
 
     group-by-property-ident
     (assoc :group-by-property-ident group-by-property-ident)
@@ -3847,8 +3929,8 @@
     initial-row-count
     (assoc :initial-row-count initial-row-count)
 
-    (= :query-result view-feature-type)
-    (assoc :query-row-uuids query-row-uuids)))
+      (= :query-result view-feature-type)
+      (assoc :query-row-uuids query-row-uuids))))
 
 (defn- loaded-view-resource-plan
   [view-uuid view-feature-type sorting filters input group-by-property-ident
@@ -3901,7 +3983,7 @@
                                     (when (and list-view? (nil? group-by-property))
                                       :block/page))
         sorting (effective-view-sorting view-entity)
-        filters (:logseq.property.table/filters view-entity)
+        filters (view-resource-filters view-feature-type (:logseq.property.table/filters view-entity))
         debounced-input (hooks/use-debounced-value input 300)
         viewport-height (measured-viewport-height
                          (some-> (get-scroll-parent config) .-clientHeight)
@@ -3993,6 +4075,9 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
+       ;; Keep previous paint only for same-context refetches (delete).
+       ;; A new filter/sort/input key must not keep the old 431-row table.
+       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
     (hooks/use-effect!
@@ -4040,7 +4125,12 @@
                                             :set-data! ignore!
                                             :set-input! set-input!
                                             :input input
-                                            :items-count (:items-count paint)
+                                            :items-count (if (and (:full-key plan)
+                                                                  (= :flat (:partition paint)))
+                                                           (windowed-items-count
+                                                            (:items-count paint)
+                                                            full-rows)
+                                                           (:items-count paint))
                                             :group-by-property-ident group-by-property-ident
                                             :ref-pages-count (:ref-pages-count view-data)
                                             :ref-matched-children-ids
