@@ -404,7 +404,6 @@
                (dec n)
                (conj result uuid)))
       result)))
->>>>>>> origin/master
 
 (defn open-block-tree
   [db root-uuid]
