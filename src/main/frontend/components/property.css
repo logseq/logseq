@@ -117,7 +117,7 @@
     @apply items-center;
   }
 
-  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a,
+  .property-pair.property-panel-row[data-property-type=url] .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
   .property-pair.property-panel-row[data-property-type=url] .asset-image-fallback {
     overflow-wrap: anywhere;
     word-break: break-word;
