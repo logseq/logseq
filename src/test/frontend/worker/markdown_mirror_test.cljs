@@ -62,6 +62,42 @@
     (apply f args)
     (p/resolved ::missing-mirror-repo-fn)))
 
+(deftest replacing-graph-keeps-colliding-mirror-paths-distinct-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          first-uuid #uuid "11111111-1111-4111-8111-111111111111"
+          second-uuid #uuid "22222222-2222-4222-8222-222222222222"
+          old-conn (db-test/create-conn-with-blocks
+                    [{:page {:block/title "A:B" :block/uuid second-uuid}
+                      :blocks [{:block/title "old body"}]}])
+          new-conn (db-test/create-conn-with-blocks
+                    [{:page {:block/title "A/B" :block/uuid first-uuid}
+                      :blocks [{:block/title "first body"}]}
+                     {:page {:block/title "A:B" :block/uuid second-uuid}
+                      :blocks [{:block/title "second body"}]}])
+          edit (fn [conn title]
+                 (let [page (d/entity @conn [:block/uuid second-uuid])]
+                   (d/transact! conn [[:db/add (:db/id (first-block page)) :block/title title]])))]
+      (markdown-mirror/set-enabled! test-repo false)
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (p/let [_ (markdown-mirror/<handle-tx-report!
+                    test-repo old-conn (edit old-conn "warm index") {:platform platform})
+                  _ (markdown-mirror/<mirror-page!
+                     test-repo @new-conn (:db/id (d/entity @new-conn [:block/uuid first-uuid]))
+                     {:platform platform})
+                  first-content (get @files (page-path "pages/A_B.md"))
+                  _ (markdown-mirror/<handle-tx-report!
+                     test-repo new-conn (edit new-conn "updated second body")
+                     {:platform platform :defer? true})
+                  _ (markdown-mirror/<flush-repo! test-repo {:platform platform})]
+            (is (= first-content (get @files (page-path "pages/A_B.md")))
+                "Replacing the graph must not overwrite the other colliding page.")
+            (is (some? (get @files (page-path "pages/A_B (2).md")))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (markdown-mirror/set-enabled! test-repo false)
+                       (done)))))))
+
 (deftest repo-mirror-dir-is-under-mirror-markdown-test
   (is (= "graph-xxx/mirror/markdown"
          (markdown-mirror/repo-mirror-dir test-repo))))
