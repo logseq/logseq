@@ -510,42 +510,40 @@
       (notification/show! (t :publish/invalid-page-error) :error))))
 
 (defn unpublish-page!
-  ([page]
-   (unpublish-page! page nil))
-  ([page {:keys [published-url]}]
-   (let [repo (state/get-current-repo)
-         token (state/get-auth-id-token)
-         headers (cond-> {}
-                   token (assoc "authorization" (str "Bearer " token)))
-         published-url (or published-url (published-url-of-page page))]
-     (p/let [graph-uuid (<get-graph-uuid repo)
-             page-uuid (some-> (:block/uuid page) str)
-             targets (unpublish-targets graph-uuid page-uuid published-url)]
-       (if (seq targets)
-         (-> (p/let [results (<try-unpublish-targets targets headers)]
-               (cond
-                 (some :ok? results)
-                 (do
-                   (clear-local-published-url! page)
-                   (notification/show! (t :publish/unpublished) :success false))
+  [page]
+  (let [repo (state/get-current-repo)
+        token (state/get-auth-id-token)
+        headers (cond-> {}
+                  token (assoc "authorization" (str "Bearer " token)))
+        published-url (published-url-of-page page)]
+    (p/let [graph-uuid (<get-graph-uuid repo)
+            page-uuid (some-> (:block/uuid page) str)
+            targets (unpublish-targets graph-uuid page-uuid published-url)]
+      (if (seq targets)
+        (-> (p/let [results (<try-unpublish-targets targets headers)]
+              (cond
+                (some :ok? results)
+                (do
+                  (clear-local-published-url! page)
+                  (notification/show! (t :publish/unpublished) :success false))
 
-                 (some #(contains? #{401 403} (:status %)) results)
-                 (notification/show! (t :publish/unpublish-error) :error)
+                (some #(contains? #{401 403} (:status %)) results)
+                (notification/show! (t :publish/unpublish-error) :error)
 
-                 (every? #(= 404 (:status %)) results)
-                 (p/let [short-id (:short-id (parse-published-url published-url))
-                         gone? (if short-id
-                                 (<published-short-gone? short-id)
-                                 true)]
-                   (if gone?
-                     (do
-                       (clear-local-published-url! page)
-                       (notification/show! (t :publish/unpublished-already-gone) :success false))
-                     (notification/show! (t :publish/unpublish-error) :error)))
+                (every? #(= 404 (:status %)) results)
+                (p/let [short-id (:short-id (parse-published-url published-url))
+                        gone? (if short-id
+                                (<published-short-gone? short-id)
+                                true)]
+                  (if gone?
+                    (do
+                      (clear-local-published-url! page)
+                      (notification/show! (t :publish/unpublished-already-gone) :success false))
+                    (notification/show! (t :publish/unpublish-error) :error)))
 
-                 :else
-                 (notification/show! (t :publish/unpublish-error) :error)))
-             (p/catch (fn [error]
-                        (js/console.error error)
-                        (notification/show! (t :publish/unpublish-error) :error))))
-         (notification/show! (t :publish/unpublish-missing-page-id) :error))))))
+                :else
+                (notification/show! (t :publish/unpublish-error) :error)))
+            (p/catch (fn [error]
+                       (js/console.error error)
+                       (notification/show! (t :publish/unpublish-error) :error))))
+        (notification/show! (t :publish/unpublish-missing-page-id) :error)))))
