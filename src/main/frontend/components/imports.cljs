@@ -499,15 +499,19 @@
     (shui/dialog-open!
      #(import-file-graph-dialog original-graph-name
                                 (fn [{:keys [graph-name] :as user-inputs}]
-                                  (cond
-                                    (repo/invalid-graph-name? graph-name)
-                                    (repo/invalid-graph-name-warning)
+                                  (let [trimmed-graph-name (string/trim graph-name)]
+                                    (cond
+                                      (string/blank? trimmed-graph-name)
+                                      (notification/show! (t :import/empty-graph-name) :error)
 
-                                    (repo-handler/graph-already-exists? graph-name)
-                                    (notification/show! (t :import/graph-name-conflict) :error)
+                                      (repo/invalid-graph-name? trimmed-graph-name)
+                                      (repo/invalid-graph-name-warning)
 
-                                    :else
-                                    (import-graph-fn user-inputs)))))))
+                                      (repo-handler/graph-already-exists? trimmed-graph-name)
+                                      (notification/show! (t :import/graph-name-conflict) :error)
+
+                                      :else
+                                      (import-graph-fn (assoc user-inputs :graph-name trimmed-graph-name)))))))))
 
 (hsx/defc indicator-progress
   []

@@ -21,6 +21,40 @@
              second
              int)})
 
+(defn- mock-text-el
+  "The .mock-text mirror that belongs to `input`: the one inside the same
+   .editor-inner, so two mounted editors each keep their own. Nil without an
+   input: the comments UI mounts several editors at once, and another
+   editor's mirror holds another block's text in a box of another width, so a
+   caret measured against it lands on the wrong row and column."
+  [input]
+  (some-> input (.closest ".editor-inner") (.querySelector ".mock-text")))
+
+(defn build-mock-text!
+  "Fills the input's .mock-text mirror (the hidden copy of the editing
+   textarea) with one span per grapheme of the input's value plus a trailing
+   \"0\", ids mock-text_<char index>, a newline rendered as \"0\" followed by
+   <br>. The caret helpers below read this DOM. Built on demand, and only when
+   the value changed since the last build, so a keystroke runs none of this."
+  [input]
+  (when-let [el (mock-text-el input)]
+    (let [value (str (.-value input) "0")]
+      (when-not (= value (gobj/get el "__mockValue"))
+        (let [frag (js/document.createDocumentFragment)]
+          (loop [idx 0
+                 graphemes (seq (util/split-graphemes value))]
+            (when-let [c (first graphemes)]
+              (let [span (js/document.createElement "span")]
+                (set! (.-id span) (str "mock-text_" idx))
+                (set! (.-textContent span) (if (= c "\n") "0" c))
+                (when (= c "\n")
+                  (.appendChild span (js/document.createElement "br")))
+                (.appendChild frag span))
+              (recur (+ idx (count c)) (rest graphemes))))
+          (set! (.-textContent el) "")
+          (.appendChild el frag)
+          (gobj/set el "__mockValue" value))))))
+
 (defn get-caret-pos
   "Get caret offset position as well as input element rect.
 
@@ -33,11 +67,11 @@
    (when input
      (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))
            grapheme-pos (util/get-graphemes-pos (.-value input) pos)]
+       (build-mock-text! input)
        (try
-         (some-> (gdom/getElement "mock-text")
-                 gdom/getChildren
-                 array-seq
-                 (util/nth-safe grapheme-pos)
+         (some-> (mock-text-el input)
+                 (.-children)
+                 (.item grapheme-pos)
                  mock-char-pos
                  (assoc :rect rect))
          (catch :default e
@@ -166,61 +200,63 @@
                    inc))]
     (move-cursor-to input idx)))
 
-(defn textarea-cursor-rect-first-row? [cursor]
-  (let [elms   (some-> (gdom/getElement "mock-text")
-                       gdom/getChildren
-                       array-seq)
-        tops   (->> elms
-                    (map mock-char-pos)
-                    (map :top)
-                    (distinct))]
-    (= (first tops) (:top cursor))))
+(defn textarea-cursor-rect-first-row?
+  ;; The mirror's spans are in document order, so the first span is on the
+  ;; first row: one offsetTop read instead of one per character. The caret
+  ;; rect and the span must come from the same mirror, hence the input.
+  [cursor input]
+  (let [first-elm (some-> (mock-text-el input) .-firstElementChild)]
+    (and first-elm
+         (= (.-offsetTop first-elm) (:top cursor)))))
 
 (defn textarea-cursor-first-row? [input]
-  (textarea-cursor-rect-first-row? (get-caret-pos input)))
+  (textarea-cursor-rect-first-row? (get-caret-pos input) input))
 
-(defn textarea-cursor-rect-last-row? [cursor]
-  (let [elms   (some-> (gdom/getElement "mock-text")
-                       gdom/getChildren
-                       array-seq)
-        tops   (->> elms
-                    (map mock-char-pos)
-                    (map :top)
-                    (distinct))]
-    (= (last tops) (:top cursor))))
+(defn textarea-cursor-rect-last-row?
+  [cursor input]
+  (let [last-elm (some-> (mock-text-el input) .-lastElementChild)]
+    (and last-elm
+         (= (.-offsetTop last-elm) (:top cursor)))))
 
 (defn textarea-cursor-last-row? [input]
-  (textarea-cursor-rect-last-row? (get-caret-pos input)))
+  (textarea-cursor-rect-last-row? (get-caret-pos input) input))
 
-(defn- next-cursor-pos-up-down [direction cursor]
-  (when-let [mock-text (gdom/getElement "mock-text")]
+(defn- next-cursor-pos-up-down
+  "The caret offset one visual row above or below `cursor`, read from the
+   input's own mirror, which both callers have already built through
+   get-caret-pos. Nil when the mirror is gone or when `cursor` sits on no row
+   of it: the row arithmetic below reads a caret on an unknown row as one
+   partition and would then move the caret to the far end of the block."
+  [input direction cursor]
+  (when-let [mock-text (mock-text-el input)]
     (let [elms  (-> mock-text
                     gdom/getChildren
                     array-seq)
           chars' (->> elms
                       (map mock-char-pos)
                       (group-by :top))
-          tops  (sort (keys chars'))
-          tops-p (partition-by #(== (:top cursor) %) tops)
-          line-next
-          (if (= :up direction)
-            (-> tops-p first last)
-            (-> tops-p last first))
-          lefts
-          (->> (get chars' line-next)
-               (partition-by (fn [char-pos]
-                               (<= (:left char-pos) (:left cursor)))))
-          left-a (-> lefts first last)
-          left-c (-> lefts last first)
-          closer'
-          (if (> 2 (count lefts))
-            left-a
-            (closer left-a cursor left-c))]
-      (:pos closer'))))
+          tops  (sort (keys chars'))]
+      (when (contains? chars' (:top cursor))
+        (let [tops-p (partition-by #(== (:top cursor) %) tops)
+              line-next
+              (if (= :up direction)
+                (-> tops-p first last)
+                (-> tops-p last first))
+              lefts
+              (->> (get chars' line-next)
+                   (partition-by (fn [char-pos]
+                                   (<= (:left char-pos) (:left cursor)))))
+              left-a (-> lefts first last)
+              left-c (-> lefts last first)
+              closer'
+              (if (> 2 (count lefts))
+                left-a
+                (closer left-a cursor left-c))]
+          (:pos closer'))))))
 
 (defn- move-cursor-up-down
   [input direction]
-  (move-cursor-to input (next-cursor-pos-up-down direction (get-caret-pos input))))
+  (move-cursor-to input (next-cursor-pos-up-down input direction (get-caret-pos input))))
 
 (defn move-cursor-up [input]
   (move-cursor-up-down input :up))
@@ -229,7 +265,7 @@
   (move-cursor-up-down input :down))
 
 (defn select-up-down [input direction anchor cursor-rect]
-  (let [next-cursor (next-cursor-pos-up-down direction cursor-rect)]
+  (when-let [next-cursor (next-cursor-pos-up-down input direction cursor-rect)]
     (if (<= anchor next-cursor)
       (.setSelectionRange input anchor next-cursor "forward")
       (.setSelectionRange input next-cursor anchor "backward"))))
