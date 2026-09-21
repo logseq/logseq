@@ -2184,24 +2184,34 @@
   (let [*ref (hooks/use-ref nil)
         height-key [(state/resolve-container-id (:container-id config'))
                     (:block/uuid block)]
+        forced? (rfx/use-sub [:ui/anchor-mount (:block/uuid block)])
         [near? set-near!] (hooks/use-state false)]
     (hooks/use-layout-effect!
      (fn []
        (when-not near?
-         (if-let [el (hooks/deref *ref)]
-           (if (near-block-viewport? el)
-             (set-near! true)
-             (if (exists? js/IntersectionObserver)
-               (let [observer (js/IntersectionObserver.
-                               (fn [^js entries]
-                                 (when (some #(.-isIntersecting %) (array-seq entries))
-                                   (set-near! true)))
-                               #js {:rootMargin (str lazy-children-margin "px 0px")})]
-                 (.observe observer el)
-                 #(.disconnect observer))
-               (set-near! true)))
+         (cond
+           forced?
+           (set-near! true)
+
+           (nil? (hooks/deref *ref))
+           (set-near! true)
+
+           (near-block-viewport? (hooks/deref *ref))
+           (set-near! true)
+
+           (exists? js/IntersectionObserver)
+           (let [el (hooks/deref *ref)
+                 observer (js/IntersectionObserver.
+                           (fn [^js entries]
+                             (when (some #(.-isIntersecting %) (array-seq entries))
+                               (set-near! true)))
+                           #js {:rootMargin (str lazy-children-margin "px 0px")})]
+             (.observe observer el)
+             #(.disconnect observer))
+
+           :else
            (set-near! true))))
-     [near?])
+     [near? forced?])
     (hooks/use-effect!
      (fn []
        (when (and near? (exists? js/ResizeObserver))
