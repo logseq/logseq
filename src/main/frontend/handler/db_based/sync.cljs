@@ -153,7 +153,7 @@
   [repo]
   (p/let [graphs (db-persist/get-all-graphs)]
     (boolean (some (fn [graph]
-                     (= (some-> (or (:url graph) (:name graph)) string/lower-case)
+                     (= (some-> (:name graph) string/lower-case)
                         (string/lower-case repo)))
                    graphs))))
 
@@ -344,34 +344,28 @@
                    :message "Preparing graph snapshot download"}])
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
              base (http-base)
-             graph (str config/db-version-prefix graph-name)
-             existed-before?* (atom true)
-             snapshot-imported?* (atom false)]
+             graph (str config/db-version-prefix graph-name)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       graph-existed-before? (<local-download-graph-exists? graph)
-                       _ (reset! existed-before?* graph-existed-before?)
-                       _ (<ensure-download-runtime-bound! graph)
-                       _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                                 graph graph-uuid graph-e2ee?)
-                       _ (reset! snapshot-imported?* true)
+                       existed-before? (<local-download-graph-exists? graph)
+                       _ (-> (p/let [_ (<ensure-download-runtime-bound! graph)
+                                     _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
+                                                                graph graph-uuid graph-e2ee?)]
+                               true)
+                             (p/catch (fn [error]
+                                        (-> (if existed-before?
+                                              (p/resolved nil)
+                                              (<remove-created-download-graph! graph))
+                                            (p/then (fn [_]
+                                                      (throw error)))))))
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
-                                                   graph graph-uuid))]
+                                                    graph graph-uuid))]
                  true)
                (p/rejected (ex-info "db-sync missing graph info"
                                     {:type :db-sync/invalid-graph
                                      :graph-uuid graph-uuid
                                      :base base})))
-             (p/catch (fn [error]
-                        (let [created-in-this-attempt? (and (false? @existed-before?*)
-                                                           (false? @snapshot-imported?*))]
-                          (reset! existed-before?* true)
-                          (-> (if created-in-this-attempt?
-                                (<remove-created-download-graph! graph)
-                                (p/resolved nil))
-                              (p/then (fn [_]
-                                        (throw error)))))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))

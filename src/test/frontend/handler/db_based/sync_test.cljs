@@ -778,7 +778,6 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               state/get-repos (fn [] [])
                                db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
@@ -842,7 +841,6 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
-                               state/get-repos (fn [] [])
                                db-persist/get-all-graphs (fn [] (p/resolved [{:name (string/upper-case repo)}]))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
@@ -873,7 +871,6 @@
                                user-handler/<ensure-id&access-token! (fn []
                                                                        (p/rejected (ex-info "missing auth"
                                                                                             {:code :missing-auth})))
-                               state/get-repos (fn [] [])
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
                                db-persist/delete-graph! (fn [repo]
