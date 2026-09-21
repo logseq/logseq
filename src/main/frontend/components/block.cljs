@@ -2265,11 +2265,13 @@
          :fallback-props {:style {:font-size 9}}})])))
 
 (defn- block-control-with-icon?
-  "Replace the bullet with a node icon. Pages keep the page icon in Library."
+  "Replace the bullet with a node icon. In Library, pages only show their own
+   icon or a tag icon — the default page icon stays a bullet."
   [block config icon link?]
   (and (some? icon)
        (not (:hide-block-icon? config))
-       (or (entity/page? block)
+       (or (and (entity/page? block)
+                (not (:library? config)))
            (:logseq.property/icon block)
            link?
            (some :logseq.property/icon (:block/tags block))

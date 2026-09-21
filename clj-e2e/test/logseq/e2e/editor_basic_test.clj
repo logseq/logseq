@@ -1138,22 +1138,28 @@
     (b/new-block "another nested child")
     (b/indent)))
 
-(deftest page-icon-visible-in-library
-  (testing "Library page entries show the same page icon as on-page"
+(deftest page-icon-in-library
+  (testing "Library page entries show an icon only for the page's own or a tag icon"
     (b/new-block "library icon source")
     (util/set-tag "Page" {:hidden? true})
     (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
     (p/goto-page "Library")
+    ;; a page with only the default icon stays a bullet in Library
+    (assert/assert-have-count
+     (-> ".ls-page-blocks .ls-block"
+         (loc/filter :has-text "library icon source")
+         (loc/filter :has ".ls-icon-file"))
+     0)
+    ;; a page's own icon still shows in Library
+    (p/goto-page "library icon source")
+    (w/click "button:text('Add icon')")
+    (w/fill ".cp__emoji-icon-picker input" "books")
+    (w/click ".cp__emoji-icon-picker button:has(em-emoji[id='books'])")
+    (p/goto-page "Library")
     (assert/assert-is-visible
      (-> ".ls-page-blocks .ls-block"
          (loc/filter :has-text "library icon source")
-         (loc/filter :has ".ls-icon-file")))
-    (b/new-block "library created page")
-    (util/exit-edit)
-    (assert/assert-is-visible
-     (-> ".ls-page-blocks .ls-block"
-         (loc/filter :has-text "library created page")
-         (loc/filter :has ".ls-icon-file")))))
+         (loc/filter :has "em-emoji[id='books']")))))
 
 (defn- selection-range
   []
