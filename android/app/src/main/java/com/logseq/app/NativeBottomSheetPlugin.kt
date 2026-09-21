@@ -20,6 +20,7 @@ class NativeBottomSheetPlugin : Plugin() {
     private val snapshotTag = "bottom-sheet"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dialog: BottomSheetDialog? = null
+    private var pendingPresentation: (() -> Unit)? = null
     private var awaitingContentReady = false
     private var previousParent: ViewGroup? = null
     private var previousIndex: Int = -1
@@ -42,7 +43,7 @@ class NativeBottomSheetPlugin : Plugin() {
 
         activity.runOnUiThread {
             WebViewSnapshotManager.registerWindow(activity.window)
-            if (dialog != null || awaitingContentReady) {
+            if (dialog != null || pendingPresentation != null || awaitingContentReady) {
                 call.resolve()
                 return@runOnUiThread
             }
@@ -76,16 +77,6 @@ class NativeBottomSheetPlugin : Plugin() {
             }
 
             WebViewSnapshotManager.showSnapshot(snapshotTag, webView)
-
-            // Move the WebView into the BottomSheet container
-            detachWebView(webView, ctx)
-            container!!.addView(
-                webView,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
 
             val behavior = sheet.behavior
             val defaultHeight = call.getInt("defaultHeight", null)
@@ -122,17 +113,42 @@ class NativeBottomSheetPlugin : Plugin() {
                 container = null
             }
 
+            pendingPresentation = {
+                detachWebView(webView, ctx)
+                container!!.addView(
+                    webView,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+                sheet.show()
+                notifyListeners("state", JSObject().put("presented", true))
+                dialog = sheet
+                call.resolve()
+            }
             notifyListeners("state", JSObject().put("presenting", true))
-            sheet.show()
-            notifyListeners("state", JSObject().put("presented", true))
-            dialog = sheet
-            call.resolve()
         }
     }
 
     @PluginMethod
     fun dismiss(call: PluginCall) {
         activity?.runOnUiThread {
+            if (pendingPresentation != null) {
+                pendingPresentation = null
+                container = null
+                WebViewSnapshotManager.clearSnapshot(snapshotTag)
+                notifyListeners("state", JSObject().put("dismissing", true))
+                notifyListeners(
+                    "state",
+                    JSObject()
+                        .put("presented", false)
+                        .put("dismissing", false)
+                )
+                call.resolve()
+                return@runOnUiThread
+            }
+
             if (dialog == null) {
                 pendingRestoreWebView?.let { finishDismissal(it) }
                     ?: WebViewSnapshotManager.clearSnapshot(snapshotTag)
@@ -148,6 +164,13 @@ class NativeBottomSheetPlugin : Plugin() {
     @PluginMethod
     fun contentReady(call: PluginCall) {
         activity?.runOnUiThread {
+            pendingPresentation?.let { presentation ->
+                pendingPresentation = null
+                presentation()
+                call.resolve()
+                return@runOnUiThread
+            }
+
             val webView = pendingRestoreWebView
             if (!awaitingContentReady || webView == null) {
                 call.resolve()

@@ -8,7 +8,6 @@
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
@@ -28,6 +27,20 @@
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn default-home-if-valid
+  "Keep :page when it is a usable start page. The app waits for page-identity;
+  publishing trusts a non-blank configured page because that lookup is not
+  ready on first paint."
+  [default-home {:keys [publishing? page-identity-status page-identity-value]}]
+  (when default-home
+    (let [page (:page default-home)
+          valid-page? (and (string? page)
+                           (not (string/blank? page)))]
+      (if (or (and publishing? valid-page?)
+              (and (= :ready page-identity-status) page-identity-value))
+        default-home
+        (dissoc default-home :page)))))
+
 (defn use-default-home-if-valid
   []
   (let [default-home (state/get-default-home)
@@ -37,10 +50,10 @@
         {:keys [status value]}
         (db-hooks/use-resource-snapshot
          (when valid-page? [:page-identity page]))]
-    (when default-home
-      (if (and (= :ready status) value)
-        default-home
-        (dissoc default-home :page)))))
+    (default-home-if-valid default-home
+                           {:publishing? config/publishing?
+                            :page-identity-status status
+                            :page-identity-value value})))
 
 (hsx/defc page-title-content
   [page-id display-title tooltip-title untitled? left-sidebar-resized-at]
@@ -218,11 +231,19 @@
         ^{:key (str (or class "group") "-body")}
         [sidebar-content-group-body child])]]))
 
-(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
+(defn <load-nav-class-uuids
+  [repo db-worker-ready?]
+  (when (and repo db-worker-ready?)
+    (p/all (map (fn [class-ident]
+                  (state/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
+                [:logseq.class/Asset :logseq.class/Task]))))
+
+(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations-loaded
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
         repo (state/get-current-repo)
+        db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)
         [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
@@ -234,13 +255,19 @@
 	     [checked-navs])
     (hooks/use-effect!
      (fn []
-       (p/let [classes (p/all (map (fn [class-ident]
-                                     (db-async/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
-                                   [:logseq.class/Asset :logseq.class/Task]))]
-         (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
-                                         (map :block/uuid classes))))
-       nil)
-     [repo])
+       (if-let [classes-request (<load-nav-class-uuids repo db-worker-ready?)]
+         (let [cancelled? (atom false)]
+           (-> classes-request
+               (p/then (fn [classes]
+                         (when-not @cancelled?
+                           (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
+                                                           (map :block/uuid classes))))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         (do
+           (set-class-ident->uuid! {})
+           nil)))
+     [repo db-worker-ready?])
 
     (sidebar-content-group
       [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]
@@ -324,6 +351,12 @@
                 :href (rfe/href :page {:name tag-uuid})
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
+
+(hsx/defc sidebar-navigations
+  [opts]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
+    (when-not db-restoring?
+      (sidebar-navigations-loaded opts))))
 
 (hsx/defc sidebar-favorites-loaded
   []

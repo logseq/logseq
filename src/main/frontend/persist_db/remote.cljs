@@ -51,6 +51,13 @@
     (string? code) (keyword code)
     :else :invoke-failed))
 
+(defn- decode-invoke-result
+  [result-transit]
+  (if (string? result-transit)
+    (ldb/read-transit-str result-transit)
+    (throw (ex-info "db-worker invoke returned no transit result"
+                    {:code :invoke-result-missing}))))
+
 (defn- decode-event
   [{:keys [type payload]}]
   (let [decoded (when (some? payload)
@@ -94,6 +101,8 @@
                       (when on-error
                         (on-error event))))
               {:close! (fn []
+                         (set! (.-onmessage es) nil)
+                         (set! (.-onerror es) nil)
                          (.close es))})
             {:close! (fn [] nil)}))]
     (assoc opts
@@ -116,10 +125,16 @@
                         :body payload})
              parsed (parse-response-body body)]
        (if (<= 200 status 299)
-         (let [result (ldb/read-transit-str (:resultTransit parsed))]
-           (when on-invoke-success
-             (on-invoke-success method args result))
-           result)
+         (if (false? (:ok parsed))
+           (let [error (:error parsed)]
+             (throw (ex-info (or (:message error) "db-worker invoke failed")
+                             (cond-> {:status status
+                                      :code (normalize-code (:code error))}
+                               error (assoc :error error)))))
+           (let [result (decode-invoke-result (:resultTransit parsed))]
+             (when on-invoke-success
+               (on-invoke-success method args result))
+             result))
          (let [error (:error parsed)]
            (throw (ex-info (or (:message error) "db-worker invoke failed")
                            (cond-> {:status status
@@ -157,10 +172,15 @@
                 (throw error))))))
 
 (defn connect-events!
-  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms on-event-error]} wrapped-worker]
+  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms on-event-error still-active?]} wrapped-worker]
   (let [connected? (atom true)
         buffer (atom "")
         subscription (atom nil)
+        live? (fn []
+                (and @connected?
+                     (if still-active?
+                       (still-active?)
+                       true)))
         close-subscription! (fn []
                               (when-let [close! (:close! @subscription)]
                                 (close!))
@@ -172,13 +192,13 @@
                         (when (and event-handler event-type)
                           (event-handler event-type wrapped-worker payload)))))]
     (letfn [(open! []
-              (when @connected?
+              (when (live?)
                 (reset! subscription
                         (open-sse-fn
                          {:url (events-url base-url)
                           :headers (base-headers auth-token)
                           :on-message (fn [chunk]
-                                        (when @connected?
+                                        (when (live?)
                                           (swap! buffer str chunk)
                                           (loop []
                                             (when-let [idx (string/index-of @buffer "\n\n")]
@@ -190,10 +210,13 @@
                           :on-error (fn [error]
                                       (when @connected?
                                         (close-subscription!)
-                                        (when on-event-error
-                                          (on-event-error error))
-                                        (when @connected?
-                                          (schedule-fn open! reconnect-delay-ms))))}))))]
+                                        (if (live?)
+                                          (do
+                                            (when on-event-error
+                                              (on-event-error error))
+                                            (when (live?)
+                                              (schedule-fn open! reconnect-delay-ms)))
+                                          (reset! connected? false))))}))))]
       (open!)
       {:disconnect! (fn []
                       (reset! connected? false)
@@ -232,13 +255,14 @@
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
 
 (defn start!
-  [{:keys [base-url auth-token event-handler] :as opts}]
+  [{:keys [base-url auth-token event-handler still-active?] :as opts}]
   (let [client (create-client (assoc opts :base-url base-url :auth-token auth-token))
         wrapped-worker (fn [qkw & args]
                          (invoke! client (method->str qkw) args))
         {:keys [disconnect!]} (connect-events! (assoc client
                                                       :event-handler event-handler
-                                                      :auth-token auth-token)
+                                                      :auth-token auth-token
+                                                      :still-active? still-active?)
                                                wrapped-worker)]
     (->InRemote client wrapped-worker disconnect!)))
 

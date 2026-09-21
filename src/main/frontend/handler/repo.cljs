@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
@@ -55,7 +56,6 @@
                           :repo url}))
     (let [current-repo (state/get-current-repo)]
       (p/do!
-       (persist-db/<close-db url)
        (db-persist/delete-graph! url)
        (search/remove-db! url)
        (state/delete-repo! repo)
@@ -77,7 +77,8 @@
   conn, or replace the conn in state with a new one."
   [repo & {:as opts}]
   (p/do!
-   (state/set-db-restoring! true)
+   (when-not (true? (:file-graph-import? opts))
+     (state/set-db-restoring! true))
    (db-restore/restore-graph! repo opts)
    (p/let [date-formatter (db-async/<get-date-formatter repo)]
      (state/set-date-formatter! repo date-formatter))
@@ -87,7 +88,8 @@
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
    (when-not (true? (:ignore-style? opts))
      (ui-handler/add-style-if-exists!))
-   (when-not config/publishing?
+   (when-not (or config/publishing?
+                 (true? (:file-graph-import? opts)))
      (state/set-db-restoring! false))))
 
 (defn get-repos
@@ -150,7 +152,7 @@
 (defn graph-already-exists?
   "Checks to see if given db graph name already exists"
   [graph-name]
-  (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
+  (let [full-graph-name (string/lower-case (str config/db-version-prefix (string/trim graph-name)))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
@@ -169,23 +171,27 @@
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
      (state/pub-event! [:shortcut/refresh])
-     (route-handler/redirect-to-home!)
-     (ui-handler/re-render-root!)
+     (when-not file-graph-import?
+       (route-handler/redirect-to-home!)
+       (ui-handler/re-render-root!))
      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
      (prn "New db created: " full-graph-name)
      full-graph-name)
    (p/catch (fn [error]
               (notification/show! (t :graph/create-error) :error)
-              (js/console.error error)))))
+              (log/error :graph-create-failed {:error error})
+              (when file-graph-import?
+                (throw error))))))
 
 (defn new-db!
   "Handler for creating a new database graph"
   ([graph] (new-db! graph {}))
   ([graph opts]
-   (let [full-graph-name (str config/db-version-prefix graph)]
-     (if (graph-already-exists? graph)
+   (let [trimmed-graph (string/trim graph)
+         full-graph-name (str config/db-version-prefix trimmed-graph)]
+     (if (graph-already-exists? trimmed-graph)
        (state/pub-event! [:notification/show
-                          {:content (t :graph/already-exists-error graph)
+                          {:content (t :graph/already-exists-error trimmed-graph)
                            :status :error}])
        (create-db full-graph-name opts)))))
 

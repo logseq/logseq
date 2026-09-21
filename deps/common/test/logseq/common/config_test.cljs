@@ -32,3 +32,9 @@
     (is (not (common-config/local-relative-asset? nil))))
   (testing "Windows backslash paths"
     (is (common-config/local-relative-asset? "assets\\test.png"))))
+
+(deftest graph-repo-names-trim-surrounding-whitespace
+  (doseq [repo ["  demo  " "  logseq_db_demo  " "logseq_db_ demo "]]
+    (is (= "demo" (common-config/strip-leading-db-version-prefix repo)))
+    (is (= "logseq_db_demo" (common-config/canonicalize-db-version-repo repo))))
+  (is (nil? (common-config/canonicalize-db-version-repo "   "))))

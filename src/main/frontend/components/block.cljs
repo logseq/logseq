@@ -71,6 +71,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.entity :as entity]
+            [frontend.util.page :as page-util]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
@@ -79,6 +80,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -226,10 +228,15 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
-        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        [load-failed? set-load-failed!] (hooks/use-state false)
+        *prev-src (hooks/use-ref src)]
+    (when (not= (hooks/deref *prev-src) src)
+      (hooks/set-ref! *prev-src src)
+      (set-load-failed! false))
     (hooks/use-effect!
      (fn []
-       (when (and (seq src) (:block/uuid asset-block))
+       (when (and (seq src) (:block/uuid asset-block) (not load-failed?))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -239,7 +246,7 @@
                                                         {:logseq.property.asset/width width
                                                          :logseq.property.asset/height height}))))))
        (fn []))
-     [])
+     [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
           image-src (when (seq src)
                       (fs/asset-path-normalize src))
@@ -251,21 +258,26 @@
           get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
-        :on-pointer-down util/stop
+        :on-pointer-down (fn [e]
+                           (when-not (block-image/asset-fallback-link-event? e)
+                             (util/stop e)))
         :on-click (fn [e]
-                    (util/stop e)
-                    (when (= "IMG" (some-> (.-target e) (.-nodeName)))
-                      (open-lightbox! e)))
+                    (when-not (block-image/asset-fallback-link-event? e)
+                      (util/stop e)
+                      (when (= "IMG" (some-> (.-target e) (.-nodeName)))
+                        (open-lightbox! e))))
         :ref *el-ref}
-       [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         (cond-> {:loading "lazy"
-                  :referrerPolicy "no-referrer"
-                  :src src'}
-           (not gallery-view?)
-           (assoc :title title))
-         metadata)]
-       (when (and (not breadcrumb?)
+       (block-image/image-or-fallback
+        {:src src'
+         :title title
+         :gallery-view? gallery-view?
+         :metadata metadata
+         :load-failed? load-failed?
+         :on-error (fn [_]
+                     (when (block-image/remote-image-url? src')
+                       (set-load-failed! true)))})
+       (when (and (not load-failed?)
+                  (not breadcrumb?)
                   (not positioned?))
          [:<>
           (let [handle-copy!
@@ -282,7 +294,8 @@
                                      "webp" "image/webp"
                                      "bmp" "image/bmp"
                                      "svg" "image/svg+xml"
-                                     "ico" "image/x-icon"}
+                                     "ico" "image/x-icon"
+                                     "jxl" "image/jxl"}
                           mime (get ext->mime ext)]
                       (if-not mime
                         (notification/show! (t :asset/copy-image-unsupported-extension (str "." ext)) :warning)
@@ -757,10 +770,12 @@
         ((:on-pointer-down config) e)
 
         :else
-        (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
-          (when-not (and (util/mobile?) @block-handler/*swiped?)
-            (f (or (:block/uuid page) (:block/name page))
-               {:ignore-alias? ignore-alias?}))))))
+        (when-not (or (page-util/entity-is-current-page? page)
+                      (page-util/entity-is-current-page? page-entity))
+          (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
+            (when-not (and (util/mobile?) @block-handler/*swiped?)
+              (f (or (:block/uuid page) (:block/name page))
+                 {:ignore-alias? ignore-alias?})))))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -801,6 +816,7 @@
                 recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
+       :data-uuid (some-> (:block/uuid page-entity) str)
        :title (when recycled? (t :ui/deleted))
        :draggable true
        :on-drag-start (fn [e]
@@ -1058,9 +1074,15 @@
   (let [page-uuid (if (uuid? page) page (:block/uuid page))
         page-name (:block/name page)]
     ^{:key (str (or page-uuid page-name))}
-    (if page-uuid
+    (if (and page-uuid
+             (not (and (:skip-async-load? config)
+                       (or (:block/title page)
+                           (true? (:block.temp/first-window-preview? page))))))
       [subscribed-page-cp config page-uuid]
-      [page-cp-inner config page])))
+      [page-cp-inner config (if (map? page)
+                              page
+                              {:block/uuid page-uuid
+                               :block/name page-name})])))
 
 (hsx/defc asset-reference
   [config title path]
@@ -1850,6 +1872,9 @@
   (let [macro-content (or
                        (get (state/get-macros) name)
                        (get (state/get-macros) (keyword name)))
+        macro-content (if (and (seq arguments) macro-content)
+                        (macro-util/macro-subs macro-content arguments)
+                        macro-content)
         format (get-in config [:block :block/format] :markdown)]
     (render-macro config name arguments macro-content format)))
 
@@ -1980,7 +2005,7 @@
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         (if (common-util/uuid-string? s)
-          (page-cp (assoc config :tag? true) {:block/name s})
+          (page-cp (assoc config :tag? true) {:block/uuid (uuid s)})
           [:span (str "#" s)])))
 
     ["Emphasis" [[kind] data]]
@@ -2117,6 +2142,102 @@
 
 (declare plain-block-list)
 
+;; Measured heights of mounted children subtrees, keyed by
+;; [container-id parent-uuid]. Feeds the placeholders rendered for subtrees
+;; that haven't mounted yet, keeping scroll geometry approximately stable.
+(defonce ^:private *lazy-children-heights (atom {}))
+
+(def ^:private lazy-children-margin 1200)
+
+(def ^:private lazy-children-row-height 32)
+
+(defn- estimate-children-height
+  "Rough rendered height of an unmounted subtree: a fixed row height per
+   descendant, counting nested children through already-loaded children
+   slots."
+  [child-uuids depth]
+  (reduce (fn [height uuid]
+            (+ height lazy-children-row-height
+               (if (< depth 8)
+                 (if-let [nested (db-hooks/peek-children uuid)]
+                   (estimate-children-height nested (inc depth))
+                   0)
+                 0)))
+          0
+          child-uuids))
+
+(defn- near-block-viewport?
+  [^js el]
+  (when el
+    (let [rect (.getBoundingClientRect el)
+          viewport-height (or (.-innerHeight js/window)
+                              (some-> js/document .-documentElement .-clientHeight))]
+      (and (< (.-top rect) (+ viewport-height lazy-children-margin))
+           (> (.-bottom rect) (- lazy-children-margin))))))
+
+(hsx/defc lazy-block-children
+  "Mounts a block's children rows only once the subtree approaches the viewport.
+   Offscreen subtrees render an estimated-height placeholder instead, so
+   revisiting a long scrolled page doesn't synchronously mount thousands of
+   rows."
+  [config' block child-uuids collapsed? render-children]
+  (let [*ref (hooks/use-ref nil)
+        height-key [(state/resolve-container-id (:container-id config'))
+                    (:block/uuid block)]
+        forced? (rfx/use-sub [:ui/anchor-mount (:block/uuid block)])
+        ;; Lazy mounting only applies inside the standalone page outliner;
+        ;; embedded containers mount children eagerly.
+        [near? set-near!] (hooks/use-state (not (:virtualize? config')))]
+    (hooks/use-layout-effect!
+     (fn []
+       (when-not near?
+         (cond
+           forced?
+           (set-near! true)
+
+           (nil? (hooks/deref *ref))
+           (set-near! true)
+
+           (near-block-viewport? (hooks/deref *ref))
+           (set-near! true)
+
+           (exists? js/IntersectionObserver)
+           (let [el (hooks/deref *ref)
+                 observer (js/IntersectionObserver.
+                           (fn [^js entries]
+                             (when (some #(.-isIntersecting %) (array-seq entries))
+                               (set-near! true)))
+                           #js {:rootMargin (str lazy-children-margin "px 0px")})]
+             (.observe observer el)
+             #(.disconnect observer))
+
+           :else
+           (set-near! true))))
+     [near? forced?])
+    (hooks/use-effect!
+     (fn []
+       (when (and near? (exists? js/ResizeObserver))
+         (if-let [el (hooks/deref *ref)]
+           (let [observer (js/ResizeObserver.
+                           (fn [^js entries]
+                             (when-let [height (some-> entries (aget 0) .-contentRect .-height)]
+                               (when (pos? height)
+                                 (swap! *lazy-children-heights assoc height-key height)))))]
+             (.observe observer el)
+             #(.disconnect observer))
+           nil)))
+     [near? height-key])
+    [:div.block-children.w-full
+     {:ref *ref
+      :style (cond-> {}
+               collapsed? (assoc :display "none")
+               (not near?) (assoc :min-height
+                                  (str (or (get @*lazy-children-heights height-key)
+                                           (estimate-children-height child-uuids 0))
+                                       "px")))}
+     (when near?
+       [render-children config' child-uuids])]))
+
 (hsx/defc block-children
   [config block child-uuids collapsed? render-children]
   (let [ref? (:ref? config)
@@ -2128,18 +2249,26 @@
        [:div.block-children-left-border
         {:on-click (fn [_]
                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
-       [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
-        (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
-                        (or ref? query?)
-                        (assoc :ref-query-child? true)
-                        (integer? (:block-level config))
-                        (update :block-level inc))]
-          (render-children config' child-uuids))]])))
+       (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
+                       (or ref? query?)
+                       (assoc :ref-query-child? true)
+                       (integer? (:block-level config))
+                       (update :block-level inc))]
+         [lazy-block-children config' block child-uuids collapsed? render-children])])))
 
-(hsx/defc subscribed-block-children
-  [config block collapsed? render-children]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))]
-    (block-children config block child-uuids collapsed? render-children)))
+(hsx/defc library-child-uuids
+  [child-uuids then]
+  (let [blocks (db-hooks/use-blocks (vec child-uuids))]
+    (then (if (nil? blocks)
+            []
+            (entity/library-outline-child-uuids blocks)))))
+
+(defn with-library-child-uuids
+  "Library shows nested pages only; other pages keep every child."
+  [config child-uuids then]
+  (if (:library? config)
+    (library-child-uuids child-uuids then)
+    (then child-uuids)))
 
 (defn- block-content-empty?
   [block]
@@ -2239,6 +2368,19 @@
          :uuid uuid
          :fallback-props {:style {:font-size 9}}})])))
 
+(defn- block-control-with-icon?
+  "Replace the bullet with a node icon. In Library, pages only show their own
+   icon or a tag icon — the default page icon stays a bullet."
+  [block config icon link?]
+  (and (some? icon)
+       (not (:hide-block-icon? config))
+       (or (and (entity/page? block)
+                (not (:library? config)))
+           (:logseq.property/icon block)
+           link?
+           (some :logseq.property/icon (:block/tags block))
+           (= "pdf" (:logseq.property.asset/type block)))))
+
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? has-children? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
@@ -2254,21 +2396,15 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :block block
-                                                        :ignore-children? page-title?
-                                                        :page-title? collapsable-page-title?})
+        collapsable? (and (not (entity/leaf-property-value? block))
+                          (editor-handler/collapsable? uuid {:semantic? true
+                                                            :block block
+                                                            :ignore-children? page-title?
+                                                            :page-title? collapsable-page-title?}))
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
-        with-icon? (and (some? icon)
-                        (not (:hide-block-icon? config))
-                                (or (and (entity/page? block)
-                                         (not (:library? config)))
-                            (:logseq.property/icon block)
-                            link?
-                            (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        with-icon? (block-control-with-icon? block config icon link?)
         movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:data-has-children (boolean has-children?)
@@ -2366,12 +2502,30 @@
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
-(hsx/defc subscribed-block-control
-  [config block opts]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (boolean (seq child-uuids))
+(defn- url-property-validation-effect-deps
+  "Re-validate URL property values when the title changes so the error icon updates."
+  [block]
+  [(:db/id block)
+   (some-> (:logseq.property/created-from-property block) :db/id)
+   (:block/title block)])
+
+(defn- block-control-with-children
+  [config block opts child-uuids]
+  (let [collapsed? (:collapsed? config)
+        has-children? (and (not (entity/leaf-property-value? block))
+                           (boolean (if collapsed?
+                                      (:block.temp/has-children? block)
+                                      (seq child-uuids))))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
+
+(hsx/defc subscribed-block-control
+  [config block opts]
+  (with-library-child-uuids
+   config
+   (:child-uuids opts)
+   (fn [visible-uuids]
+     (block-control-with-children config block opts visible-uuids))))
 
 (hsx/defc dnd-separator
   [move-to]
@@ -2397,6 +2551,18 @@
                    (editor-handler/toggle-list-checkbox block item-content)))}))
 
 (declare src-cp)
+
+(defn- ast-displayed-math-formula
+  [ast]
+  (some (fn [form]
+          (when (and (vector? form)
+                     (= "Displayed_Math" (first form)))
+            (not-empty (string/trim (second form)))))
+        (tree-seq coll? seq ast)))
+
+(defn- page-ref-math-cp
+  [formula]
+  (latex/latex formula false true))
 
 (hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
@@ -2466,8 +2632,16 @@
                          (assoc :node-ref-link-only? true)
                          (integer? heading)
                          (assoc :parent-heading heading))]
-           (if video-title?
+           (cond
+             video-title?
              (video-inline-segments-cp config' block-ast-title)
+
+             (and (:page-ref? config) (empty? block-ast-title))
+             (if-let [formula (ast-displayed-math-formula (:block.temp/ast-body block))]
+               [(page-ref-math-cp formula)]
+               (map-inline config' block-ast-title))
+
+             :else
              (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
@@ -2504,8 +2678,7 @@
            (set-property-validation-message! nil))
          (set-property-validation-message! nil))
        nil)
-     [(:db/id block)
-      (some-> (:logseq.property/created-from-property block) :db/id)])
+     (url-property-validation-effect-deps block))
     [:div
      (merge
       {:class (if query?
@@ -2572,8 +2745,10 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      [:div.math-block
-       (latex/latex (:block/title block) true true)]
+      (if (:page-ref? config)
+        (page-ref-math-cp (:block/title block))
+        [:div.math-block
+         (latex/latex (:block/title block) true true)])
 
       (:logseq.property/query-block? block)
       (query-builder-component/builder block {})
@@ -2815,7 +2990,8 @@
      (if (util/mobile?)
        (page-cp (assoc config
                        :disable-preview? true
-                       :tag? true)
+                       :tag? true
+                       :skip-async-load? true)
                 tag)
        [:div.flex.items-center
         {:on-mouse-over #(reset! *hover? true)
@@ -2858,6 +3034,7 @@
         (page-cp (assoc config
                         :disable-preview? true
                         :tag? true
+                        :skip-async-load? true
                         :hide-tag-symbol? true)
                  tag)])]))
 
@@ -2901,6 +3078,7 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
+                                                                      :skip-async-load? true
                                                                       :disable-preview? true) tag)]))
                                                  popup-opts))}
           (for [tag (take 2 block-tags)]
@@ -2908,6 +3086,7 @@
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
                               :tag? true
+                              :skip-async-load? true
                               :disable-preview? true
                               :disable-click? true) tag)])
           [:div.text-sm.opacity-50.ml-1
@@ -3051,21 +3230,47 @@
                             trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
+(defn- hidden-block-below-property?
+  "Icon is rendered on the block itself, never as a bottom pill."
+  [property]
+  (= :logseq.property/icon (:db/ident property)))
+
+(defn- zoom-in-root-block?
+  "True when this block is the focused block-route root (bullet zoom-in)."
+  [config block]
+  (and (:block? config)
+       (= (:id config) (str (:block/uuid block)))))
+
+(defn- show-block-below-hidden-properties-pill-toggle?
+  "Outliner blocks only show this control on the zoom-in root."
+  [config block page? has-hidden-properties?]
+  (and has-hidden-properties?
+       (not page?)
+       (zoom-in-root-block? config block)))
+
+(defn- show-block-below-properties-row?
+  [visible-property-uuids {:keys [show-hidden-properties-pill-toggle?
+                                  show-hidden-properties-control?
+                                  show-add-property-button?]}]
+  (boolean
+   (or (seq visible-property-uuids)
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?)))
+
 (hsx/defc positioned-property-row
-  [block property-uuid opts]
-  (let [property (db-hooks/use-block property-uuid)]
-    (when (and property
-               (not (and (= :block-below (:property-position opts))
-                         (= :logseq.property/icon (:db/ident property)))))
-      (if (= :block-below (:property-position opts))
-        (bottom-property-pill-cp block property opts)
-        (pv/property-value block property (assoc opts :show-tooltip? true))))))
+  [block property opts]
+  (when-not (and (= :block-below (:property-position opts))
+                 (hidden-block-below-property? property))
+    (if (= :block-below (:property-position opts))
+      (bottom-property-pill-cp block property opts)
+      (pv/property-value block property (assoc opts :show-tooltip? true)))))
 
 (defn- bottom-property-pill-items
-  [block property-uuids opts]
-  (mapv (fn [property-uuid]
-          (positioned-property-row block property-uuid opts))
-        property-uuids))
+  [block properties opts]
+  (mapv (fn [property]
+          (positioned-property-row block property opts))
+        properties))
 
 (defn- measure-bottom-pills-overflow!
   [^js el *overflow?]
@@ -3095,9 +3300,9 @@
      label)))
 
 (hsx/defc block-below-positioned-properties-cp
-  [block property-uuids opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count property-uuids)])
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
@@ -3114,7 +3319,7 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) property-uuids show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3123,7 +3328,7 @@
                   "flex-wrap overflow-x-hidden"
                   "flex-nowrap overflow-x-hidden")])
        :data-expanded (str expanded?)
-       :data-bottom-properties-row (:block/uuid block)
+       :data-bottom-properties-row (str (:block/uuid block))
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
       [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.min-w-0.flex-1.basis-0
@@ -3131,7 +3336,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block property-uuids (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
@@ -3149,8 +3354,23 @@
                                                      :icon-only? true
                                                      :tab-index 0)))]]))
 
+(hsx/defc block-below-positioned-properties-gate
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [visible-properties (into [] (remove hidden-block-below-property?) properties)]
+    (when (show-block-below-properties-row?
+           visible-properties
+           {:show-hidden-properties-pill-toggle? show-hidden-properties-pill-toggle?
+            :show-hidden-properties-control? show-hidden-properties-control?
+            :show-add-property-button? show-add-property-button?})
+      [block-below-positioned-properties-cp block
+       visible-properties
+       opts
+       show-hidden-properties-pill-toggle?
+       show-hidden-properties-control?
+       show-add-property-button?])))
+
 (hsx/defc positioned-properties-content
-  [config block position property-uuids]
+  [config block position properties]
   (let [opts (merge config
                     {:icon? true
                      :page-cp page-cp
@@ -3163,18 +3383,18 @@
                                 config
                                 (not config/publishing?))
         page? (entity/page? block)
-        show-hidden-properties-pill-toggle? (and has-hidden-properties?
-                                                 (not page?))
+        show-hidden-properties-pill-toggle? (show-block-below-hidden-properties-pill-toggle?
+                                             config block page? has-hidden-properties?)
         show-hidden-properties-control? (and has-hidden-properties?
                                              page?)
-        show-page-add-property? (and (entity/page? block)
-                                     (not (entity/class? block))
-                                     (not config/publishing?))
-        show-add-property-button? show-page-add-property?]
+        ;; Page title / sidebar still expose Add property. Nested outliner
+        ;; pages only show properties they already have.
+        show-add-property-button? false]
     (case position
         :block-below
-        [block-below-positioned-properties-cp block
-         property-uuids
+        [block-below-positioned-properties-gate
+         block
+         properties
          opts
          show-hidden-properties-pill-toggle?
          show-hidden-properties-control?
@@ -3182,15 +3402,14 @@
 
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
-         (for [property-uuid property-uuids]
-           ^{:key (str (:block/uuid block) "-" property-uuid)}
-           (positioned-property-row block property-uuid opts))])))
+         (for [property properties]
+           ^{:key (str (:block/uuid block) "-" (:block/uuid property))}
+           (positioned-property-row block property opts))])))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (when-let [property-uuids
-             (seq (get (:block.temp/positioned-properties block) position))]
-    [positioned-properties-content config block position property-uuids]))
+  (when-let [properties (seq (get-in block [:block.temp/positioned-properties position]))]
+    [positioned-properties-content config block position properties]))
 
 (hsx/defc loaded-block-reactions
   [block]
@@ -3454,7 +3673,11 @@
 
 (hsx/defc block-refs-count
   [block *hide-block-refs?]
-  (let [block-refs-count' (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        block-refs-count' (or bundled fetched)]
     (when (and block-refs-count' (pos? block-refs-count'))
     [:div.h-6
      (shui/button {:variant :ghost
@@ -3472,7 +3695,11 @@
 
 (hsx/defc block-linked-references
   [block]
-  (let [refs-count (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        refs-count (or bundled fetched)]
     (when (and refs-count (pos? refs-count))
       (when-let [refs-cp (state/get-component :block/linked-references)]
         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
@@ -3747,7 +3974,8 @@
   [config block opts effective-variant]
   (let [block-id (or (:block/uuid block) (:db/id block))
         loaded-block (db-hooks/use-block block-id)
-        block' (or loaded-block block)
+        block' (breadcrumb-model/with-breadcrumb-ref-titles
+                (or loaded-block block) (:ref-titles opts))
         segment (breadcrumb-model/block->breadcrumb-segment block')]
     (when segment
       (let [label (breadcrumb-segment-label segment block')]
@@ -3790,7 +4018,7 @@
        {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
        (for [block-uuid hidden-uuids]
          ^{:key (str block-uuid)}
-         (breadcrumb-dropdown-row config block-uuid ref-titles opts))))))
+         [:<> (breadcrumb-dropdown-row config block-uuid ref-titles opts)])))))
 
 (hsx/defc breadcrumb-overflow-dropdown
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
@@ -3873,10 +4101,12 @@
 
 (hsx/defc subscribed-breadcrumb
   [config block-id opts]
-  (let [block (db-hooks/use-block block-id)
-        breadcrumb-ancestors (:block.temp/breadcrumb block)]
-    (when (seq breadcrumb-ancestors)
-      (breadcrumb-aux config block-id opts breadcrumb-ancestors))))
+  (when-let [breadcrumb-data (db-hooks/use-resource [:block-breadcrumb block-id 16])]
+    (let [breadcrumb-ancestors (breadcrumb-model/resource-ancestors breadcrumb-data)]
+      (when (seq breadcrumb-ancestors)
+        (breadcrumb-aux config block-id
+                        (assoc opts :ref-titles (:ref-titles breadcrumb-data))
+                        breadcrumb-ancestors)))))
 
 (defn breadcrumb
   [config _repo block-id {:keys [block] :as opts}]
@@ -4014,6 +4244,28 @@
        (util/collapsed? block)
        (= (:id config)
           (str (:block/uuid block)))))
+
+(defn- block-collapsed?
+  "Collapsed state combining transient UI overrides with the persisted flag.
+   Row-level children subscriptions gate on the same predicate so collapsed
+   rows never trigger a [:children] load."
+  [config block temp-collapsed?]
+  (cond
+    (:ignore-block-collapsed? config)
+    false
+
+    (or (:ref? config)
+        (boolean (:custom-query? config))
+        (:view? config)
+        (root-block? config block)
+        (and (or (entity/class? block) (entity/property? block))
+             (:page-title? config)))
+    temp-collapsed?
+
+    :else
+    (if (some? temp-collapsed?)
+      temp-collapsed?
+      (boolean (editor-handler/block-default-collapsed? block config)))))
 
 (defn- build-config
   [config block {:keys [navigating-block navigated?]}]
@@ -4190,7 +4442,8 @@
 
    (when (and (not collapsed?)
               (not (or table? property?))
-              (not (:page-title? config)))
+              (not (:page-title? config))
+              (not (:library? config)))
      (block-positioned-properties config block :block-below))
 
    (when-not (or (:table? config) (:property? config))
@@ -4254,29 +4507,16 @@
         table? (:table? config*)
         property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
-        ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
-        db-collapsed? (util/collapsed? block)
         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
                                       (state/get-current-repo)
                                       (state/resolve-container-id container-id)
                                       uuid])
-        collapsed? (cond
-                     (:ignore-block-collapsed? config)
-                     false
-
-                     (or ref-or-custom-query?
-                         (:view? config)
-                         (root-block? config block)
-                         (and (or (entity/class? block) (entity/property? block)) (:page-title? config)))
-                     temp-collapsed?
-
-                     :else
-                     (if (some? temp-collapsed?) temp-collapsed? db-collapsed?))
+        collapsed? (block-collapsed? config block temp-collapsed?)
         config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         doc-mode? (:document/mode? config)
@@ -4284,7 +4524,8 @@
         page-embed? (:page-embed? config)
         reference? (:reference? config)
         block-id (str "ls-block-" uuid)
-        has-child? (boolean (seq child-uuids))
+        has-child? (boolean (or (seq child-uuids)
+                                (:block.temp/has-children? block)))
         top? (:top? config)
         original-block (:original-block config)
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
@@ -4564,6 +4805,7 @@
            (query-result config block query-block))))
 
      (when-not (or (:hide-children? config)
+                   (entity/leaf-property-value? block)
                    table?
                    property?
                    comments-area?
@@ -4572,7 +4814,7 @@
                     {:matched-block-renderer matched-block-renderer}))
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data))]
-         (subscribed-block-children config' block collapsed? render-children)))
+         (block-children config' block child-uuids collapsed? render-children)))
 
      (when-not (or table? property?)
        (dnd-separator-wrapper block block-id false))
@@ -4603,7 +4845,8 @@
   [block-id v container-id]
   (if (false? v)
     (do
-      (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
+      (editor-handler/expand-block! block-id {:skip-db-collpsing? true
+                                              :container-id container-id})
       (state/set-collapsed-block! block-id v container-id))
     (state/set-collapsed-block! block-id v container-id)))
 
@@ -4689,7 +4932,9 @@
   [config block & {:as opts}]
   (let [block-uuid (if (uuid? block) block (:block/uuid block))]
     (when block-uuid
-      (subscribed-block-row config block-uuid opts))))
+      ;; An embedded block render (view row, query result, property value, ...)
+      ;; is its own container, not the standalone page outliner.
+      (subscribed-block-row (dissoc config :virtualize?) block-uuid opts))))
 
 (defn divide-lists
   [[f & l]]
@@ -5103,69 +5348,20 @@
   (react-core/createElement memoized-loaded-block-row
                             #js {:args [config block child-uuids render-children opts]}))
 
-(hsx/defc linked-block-row
-  [config original-block original-child-uuids linked-uuid opts]
-  (let [linked-block (db-hooks/use-block linked-uuid)
-        linked-child-uuids (db-hooks/use-children linked-uuid)]
-    (if-not linked-block
-      (unloaded-block-placeholder)
-      (let [loop-linked? (or (contains? (:links config) (:db/id linked-block))
-                             (= (:reference-view-parent-uuid config)
-                                (:block/uuid linked-block)))
-            block (if loop-linked? original-block linked-block)
-            child-uuids (if loop-linked?
-                          original-child-uuids
-                          linked-child-uuids)
-            config' (-> config
-                        (assoc :loop-linked? loop-linked?
-                               :original-block original-block)
-                        (update :links (fnil conj #{}) (:db/id linked-block)))]
-        (render-loaded-block-row config'
-                                 block
-                                 child-uuids
-                                 plain-block-list
-                                 opts)))))
-
-(hsx/defc subscribed-block-row
-  [config block-uuid & {:as opts}]
-  (let [block (db-hooks/use-block block-uuid)
-        child-uuids (db-hooks/use-children block-uuid)
-        linked-uuid (get-in block [:block/link :block/uuid])]
-    (cond
-      (nil? block)
-      (unloaded-block-placeholder)
-
-      linked-uuid
-      (linked-block-row config block child-uuids linked-uuid opts)
-
-      :else
-      (render-loaded-block-row config block child-uuids plain-block-list opts))))
-
-(hsx/defc plain-block-list
-  [config block-uuids]
-  (let [block-uuids (vec block-uuids)
-        blocks-count (count block-uuids)]
-    (when (seq block-uuids)
-      [:div.blocks-list-wrap
-       {:data-level (or (:level config) 0)}
-       (map-indexed
-        (fn [idx block-uuid]
-          ^{:key (str (:container-id config) "-" block-uuid)}
-          [subscribed-block-row
-           config
-           block-uuid
-           {:top? (zero? idx)
-            :bottom? (= (dec blocks-count) idx)}])
-        block-uuids)])))
-
-(hsx/defc page-root-virtual-list
+(defn- use-virtual-list-opts
+  "Shared virtualized-list wiring for flat block-uuid lists: scroll container,
+   item identity, overscan, and selection-range bookkeeping. Only the
+   standalone page outliner (config :virtualize?) window-renders; pages shown
+   inside other containers (views, journals, references, sidebar, previews)
+   always render their block lists in full."
   [config block-uuids]
   (let [disable-virtualized? (util/rtc-test-without-virtualization?)
         block-uuids (vec block-uuids)
         blocks-count (count block-uuids)
         virtualized? (and (not disable-virtualized?)
                           (or (util/force-virtualization?)
-                              (>= blocks-count 1000)))
+                              (and (:virtualize? config)
+                                   (>= blocks-count 64))))
         selection-block-ids (or (:selection/block-ids config) block-uuids)
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
@@ -5189,14 +5385,14 @@
                       (fn [^js rendered-items]
                         (when (pos? (alength rendered-items))
                           (let [previous-start (.-current *last-rendered-start)
-                              current-start (.-index (aget rendered-items 0))
-                              current-end (.-index (aget rendered-items
+                                current-start (.-index (aget rendered-items 0))
+                                current-end (.-index (aget rendered-items
                                                         (dec (alength rendered-items))))
-                              direction (cond
-                                          (or (nil? previous-start)
-                                              (= previous-start current-start)) nil
-                                          (< previous-start current-start) :down
-                                          :else :up)]
+                                direction (cond
+                                            (or (nil? previous-start)
+                                                (= previous-start current-start)) nil
+                                            (< previous-start current-start) :down
+                                            :else :up)]
                             (set! (.-current *last-rendered-start) current-start)
                             (when (and direction
                                        (block-selection/pointer-down?))
@@ -5216,6 +5412,102 @@
                                        {:top? (zero? idx)
                                         :bottom? (= (dec blocks-count) idx)}))}]
     (set! (.-current *block-uuids-ref) block-uuids)
+    {:virtualized? virtualized?
+     :virtual-opts virtual-opts
+     :*virtualized-ref *virtualized-ref
+     :*block-uuids-ref *block-uuids-ref}))
+
+(hsx/defc virtualizable-block-list
+  "Flat block list that switches to windowed rendering for large lists; used by
+   page roots and by nested children."
+  [config block-uuids]
+  (let [{:keys [virtualized? virtual-opts]} (use-virtual-list-opts config block-uuids)]
+    (when (seq block-uuids)
+      (if virtualized?
+        [:div.blocks-list-wrap
+         {:data-level (or (:level config) 0)
+          :data-virtuoso-scroller true}
+         (ui/virtualized-list virtual-opts)]
+        (plain-block-list config block-uuids)))))
+
+(hsx/defc linked-block-row
+  [config original-block original-child-uuids linked-uuid opts]
+  (let [linked-block (db-hooks/use-block linked-uuid)
+        linked-child-uuids (db-hooks/use-children
+                            (when-not (:collapsed? opts) linked-uuid))]
+    (if-not linked-block
+      (unloaded-block-placeholder)
+      (let [loop-linked? (or (contains? (:links config) (:db/id linked-block))
+                             (= (:reference-view-parent-uuid config)
+                                (:block/uuid linked-block)))
+            block (if loop-linked? original-block linked-block)
+            child-uuids (if loop-linked?
+                          original-child-uuids
+                          linked-child-uuids)
+            config' (-> config
+                        (assoc :loop-linked? loop-linked?
+                               :original-block original-block)
+                        (update :links (fnil conj #{}) (:db/id linked-block)))]
+        (with-library-child-uuids
+         config'
+         child-uuids
+         (fn [visible-uuids]
+           (render-loaded-block-row config'
+                                    block
+                                    visible-uuids
+                                    virtualizable-block-list
+                                    opts)))))))
+
+(hsx/defc subscribed-block-row
+  [config block-uuid & {:as opts}]
+  (let [block (db-hooks/use-block block-uuid)
+        temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                      (state/get-current-repo)
+                                      (state/resolve-container-id (:container-id config))
+                                      block-uuid])
+        collapsed? (and block (block-collapsed? config block temp-collapsed?))
+        ;; Collapsed rows do not load children; expanding re-subscribes.
+        child-uuids (db-hooks/use-children (when-not collapsed? block-uuid))
+        linked-uuid (get-in block [:block/link :block/uuid])]
+    (cond
+      (nil? block)
+      (unloaded-block-placeholder)
+
+      (and (:library? config) (not (entity/page? block)))
+      nil
+
+      linked-uuid
+      (linked-block-row config block child-uuids linked-uuid
+                        (assoc opts :collapsed? collapsed?))
+
+      :else
+      (with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         (render-loaded-block-row config block visible-uuids virtualizable-block-list opts))))))
+
+(hsx/defc plain-block-list
+  [config block-uuids]
+  (let [block-uuids (vec block-uuids)
+        blocks-count (count block-uuids)]
+    (when (seq block-uuids)
+      [:div.blocks-list-wrap
+       {:data-level (or (:level config) 0)}
+       (map-indexed
+        (fn [idx block-uuid]
+          ^{:key (str (:container-id config) "-" block-uuid)}
+          [subscribed-block-row
+           config
+           block-uuid
+           {:top? (zero? idx)
+            :bottom? (= (dec blocks-count) idx)}])
+        block-uuids)])))
+
+(hsx/defc page-root-virtual-list
+  [config block-uuids]
+  (let [{:keys [virtualized? virtual-opts *virtualized-ref *block-uuids-ref]}
+        (use-virtual-list-opts config block-uuids)]
     (hooks/use-effect!
      (fn []
        (when (and virtualized?
@@ -5259,9 +5551,10 @@
        {:id id
         :class (when doc-mode? "document-mode")
         :containerid container-id}
-       (plain-block-list (assoc config
-                                :blocks-node-id id
-                                :container-id container-id)
+       (plain-block-list (-> config
+                             (dissoc :virtualize?)
+                             (assoc :blocks-node-id id
+                                    :container-id container-id))
                          block-uuids)])))
 
 (defn- grouped-blocks-container

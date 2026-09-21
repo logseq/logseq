@@ -154,27 +154,108 @@
               (ldb/transact! conn tx-data tx-meta'))
             true))))))
 
+(defn- throw-private-create-page-tag
+  [tag-title]
+  (throw (ex-info (str "New page can't set built-in tags: " (pr-str tag-title))
+                  {:type :notification
+                   :payload {:message (str "New page can't set built-in tags: " (pr-str tag-title))
+                             :i18n-key :page.validation/cant-set-built-in-tags
+                             :i18n-args [(pr-str tag-title)]
+                             :type :error}})))
+
+(defn- disallowed-private-create-page-tag?
+  "Private tags cannot be applied to a new page. #Page is allowed because new
+  pages already have it as their type tag."
+  [ent]
+  (contains? (disj ldb/private-tags :logseq.class/Page) (:db/ident ent)))
+
+(defn- existing-class-for-title
+  [db title]
+  (when (string? title)
+    (some->> (ldb/page-exists? db title #{:logseq.class/Tag})
+             first
+             (d/entity db))))
+
+(defn- resolve-create-page-tag
+  "Resolve a tag passed to page create.
+
+  Ctrl-K `Foo #Tag` parses the tag without a db, so the tag map has a new uuid
+  and no :db/ident. Creating a user class from that map would duplicate the
+  built-in Tag class and fail graph validation. Look up an existing class by
+  uuid or ident first; fall back to title only when ident is missing; reject
+  private built-in tags; reuse public classes."
+  [db tag]
+  (let [v (cond
+            (uuid? tag) (d/entity db [:block/uuid tag])
+            (keyword? tag) (d/entity db tag)
+            :else tag)]
+    (cond
+      (de/entity? v)
+      (do
+        (when (disallowed-private-create-page-tag? v)
+          (throw-private-create-page-tag (:block/title v)))
+        (:db/id v))
+
+      (map? v)
+      (let [by-uuid (when (:block/uuid v)
+                      (d/entity db [:block/uuid (:block/uuid v)]))
+            by-ident (when-let [ident (:db/ident v)]
+                       (d/entity db ident))
+            existing (or by-uuid
+                         by-ident
+                         (when (nil? (:db/ident v))
+                           (existing-class-for-title db (:block/title v))))]
+        (cond
+          existing
+          (do
+            (when (disallowed-private-create-page-tag? existing)
+              (throw-private-create-page-tag (:block/title existing)))
+            (if by-uuid v (:db/id existing)))
+
+          :else
+          ;; Parsed tags from a db-less frontend parse can carry file-graph
+          ;; :block/type, which is invalid on a class page.
+          (db-class/build-new-class db (dissoc v :block/type))))
+
+      :else
+      v)))
+
+(defn- resolved-tag-ident
+  [db tag]
+  (cond
+    (keyword? tag)
+    tag
+
+    (integer? tag)
+    (:db/ident (d/entity db tag))
+
+    (map? tag)
+    (or (:db/ident tag)
+        (:db/ident (d/entity db (:db/id tag)))
+        (when-let [block-uuid (:block/uuid tag)]
+          (:db/ident (d/entity db [:block/uuid block-uuid]))))
+
+    :else
+    nil))
+
+(defn- resolve-create-page-tags
+  [db tags]
+  (let [normalized-tags (cond
+                          (nil? tags) []
+                          (and (seq tags) (every? uuid? tags))
+                          (mapv (fn [id] (d/entity db [:block/uuid id])) tags)
+                          :else (vec tags))]
+    (mapv #(resolve-create-page-tag db %) normalized-tags)))
+
 (defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
   (when (:block/uuid page)
     (let [type-tag (if class? :logseq.class/Tag :logseq.class/Page)
-          tags' (if (:block/journal-day page) tags (conj tags type-tag))
+          tags' (if (:block/journal-day page)
+                  (or tags [])
+                  (conj (vec (or tags [])) type-tag))
           page' (update page :block/tags
                         (fnil into [])
-                        (mapv (fn [tag]
-                                (let [v (if (uuid? tag)
-                                          (d/entity db [:block/uuid tag])
-                                          tag)]
-                                  (cond (de/entity? v)
-                                        (:db/id v)
-                                        ;; tx map
-                                        (map? v)
-                                        ;; Handle adding :db/ident if a new tag
-                                        (if (d/entity db [:block/uuid (:block/uuid v)])
-                                          v
-                                          (db-class/build-new-class db v))
-                                        :else
-                                        v)))
-                              tags'))
+                        tags')
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
           (db-property-build/build-property-values-tx-m
@@ -309,10 +390,8 @@
            persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
-        tags (if (every? uuid? tags)
-               (map (fn [id] (d/entity db [:block/uuid id])) tags)
-               tags)
-        class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
+        resolved-tags (resolve-create-page-tags db tags)
+        class? (or class? (some (fn [t] (= :logseq.class/Tag (resolved-tag-ident db t))) resolved-tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
         _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
@@ -320,8 +399,8 @@
                     #{:logseq.class/Tag}
                     (or journal? today-journal?)
                     #{:logseq.class/Journal}
-                    (seq tags)
-                    (set (map :db/ident tags))
+                    (seq resolved-tags)
+                    (set (keep #(resolved-tag-ident db %) resolved-tags))
                     :else
                     #{:logseq.class/Page})
         existing-names-page (ldb/page-exists? db title types)
@@ -402,7 +481,10 @@
                             (common-uuid/gen-uuid :journal-page-uuid journal-day)
                             (:block/uuid page))
                 page (assoc page :block/uuid page-uuid)
-                page-txs (build-page-tx db properties page (select-keys options [:class? :tags :class-ident-namespace]))
+                page-txs (build-page-tx db properties page
+                                        {:class? class?
+                                         :tags resolved-tags
+                                         :class-ident-namespace class-ident-namespace})
                 txs (concat
                      ;; transact doesn't support entities
                      (remove de/entity? parents')

@@ -28,6 +28,14 @@ cljs-test-runner-out
 .lein-*
 .nrepl-*
 .DS_Store
+__pycache__/
+*.pyc
+*.pyo
+nul
+.Rhistory
+.RData
+.Rproj.user/
+.ipynb_checkpoints/
 report.html
 strings.csv
 ssl/

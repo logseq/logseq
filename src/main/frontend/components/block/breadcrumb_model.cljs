@@ -208,6 +208,15 @@
                  refs))
     entity))
 
+(defn resource-ancestors
+  "Ancestor entity maps from a breadcrumb resource payload.
+   Prefers inline :ancestors so the first paint does not wait for use-block."
+  [breadcrumb-data]
+  (if (contains? breadcrumb-data :ancestors)
+    (:ancestors breadcrumb-data)
+    (mapv (fn [ancestor-uuid] {:block/uuid ancestor-uuid})
+          (:ancestor-uuids breadcrumb-data))))
+
 (defn block->breadcrumb-segment
   "Converts a page or block entity map to a breadcrumb segment map.
 

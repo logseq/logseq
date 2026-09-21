@@ -1,6 +1,6 @@
 (** Shared primitive aliases used by every layer. *)
 
-type keyword = Melange_edn_melange.(keyword t)
+type keyword = Melange_edn_melange.keyword Melange_edn_melange.t
 type graph = private string
 type repo = private string
 type db_id = int64

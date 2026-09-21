@@ -16,6 +16,7 @@
             [logseq.e2e.graph-navigation-basic-test]
             [logseq.e2e.import-basic-test]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.library-basic-test]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.multi-tabs-basic-test]
             [logseq.e2e.outliner-basic-test]
@@ -24,6 +25,7 @@
             [logseq.e2e.property-basic-test]
             [logseq.e2e.property-config-basic-test]
             [logseq.e2e.property-scoped-choices-test]
+            [logseq.e2e.query-builder-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.right-sidebar-basic-test]
             [logseq.e2e.rtc-basic-test]
@@ -139,11 +141,13 @@
              'logseq.e2e.flashcards-basic-test
              'logseq.e2e.graph-navigation-basic-test
              'logseq.e2e.import-basic-test
+             'logseq.e2e.library-basic-test
              'logseq.e2e.multi-tabs-basic-test
              'logseq.e2e.outliner-basic-test
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.property-basic-test
              'logseq.e2e.property-config-basic-test
+             'logseq.e2e.query-builder-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.right-sidebar-basic-test
              'logseq.e2e.rtc-basic-test
