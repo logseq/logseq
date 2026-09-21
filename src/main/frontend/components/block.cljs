@@ -345,9 +345,12 @@
                                                           :logseq.property.asset/align
                                                           align)))]
             (when asset-block
-              [:.asset-action-bar {:aria-hidden "true"}
+              ;; Only stop propagation here: the container's pointerdown
+              ;; handler calls preventDefault, which suppresses the mousedown
+              ;; the menu trigger opens on, so the menu never opened.
+              [:.asset-action-bar {:aria-hidden "true"
+                                   :on-pointer-down (fn [^js e] (.stopPropagation e))}
                (shui/dropdown-menu
-                {:on-pointer-down util/stop}
                 (shui/dropdown-menu-trigger
                  {:as-child true}
                  (shui/button
