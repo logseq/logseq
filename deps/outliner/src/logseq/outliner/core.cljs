@@ -844,6 +844,15 @@
       (default-value-block? target-block)
       (and sibling? (default-value-block? (:block/parent target-block)))))
 
+(defn- resolve-created-from-property
+  [db created-from-property]
+  (cond
+    (de/entity? created-from-property)
+    created-from-property
+
+    (some? created-from-property)
+    (d/entity db created-from-property)))
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -859,15 +868,18 @@
                     need to be changed, but there's no need for internal cut or drag & drop.
                     On paste, live (non-recycled) uuids are still reminted so
                     copied trees cannot move existing blocks.
+                    Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
+      `created-from-property`: property ident/ref used to restore a deleted property
+                               value as a property value instead of a child block.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
   [db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
                                   outliner-op outliner-real-op replace-empty-target? update-timestamps?
-                                  insert-template?]
+                                  insert-template? created-from-property]
                            :as opts
                            :or {update-timestamps? true}}]
   {:pre [(seq blocks)]}
@@ -908,12 +920,21 @@
                                       (> (count blocks) 1)))]
      (when (and (seq blocks)
                 (not (leaf-property-value-forbidden-target? target-block sibling?)))
-       (let [blocks' (let [blocks' (blocks-with-level blocks)]
+       (let [from-property (:logseq.property/created-from-property target-block)
+             paste-as-property-values? (and sibling?
+                                            from-property
+                                            (= :db.cardinality/many (:db/cardinality from-property)))
+             blocks' (let [blocks' (blocks-with-level blocks)]
                        (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                          update-timestamps?
                          (mapv #(dissoc % :block/created-at :block/updated-at))
                          true
-                         (mapv block-with-timestamps)))
+                         (mapv block-with-timestamps)
+                         (and (= outliner-op :paste) (not paste-as-property-values?))
+                         (mapv (fn [block]
+                                 (if (= 1 (:block/level block))
+                                   (dissoc block :logseq.property/created-from-property)
+                                   block)))))
              insert-opts {:sibling? sibling?
                           :replace-empty-target? replace-empty-target?
                           :keep-uuid? keep-uuid?
@@ -936,20 +957,24 @@
                                (remove old-db-id-blocks)
                                (remove nil?)
                                (map (fn [uuid'] {:block/uuid uuid'})))
-                from-property (:logseq.property/created-from-property target-block)
-                many? (= :db.cardinality/many (:db/cardinality from-property))
-                property-values-tx (when (and sibling? from-property many?)
-                                      (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
+                restore-from-property (or (when paste-as-property-values? from-property)
+                                          (resolve-created-from-property db created-from-property))
+                property-values-tx (when restore-from-property
+                                      (let [owner-id (if sibling?
+                                                       (:db/id (:block/parent target-block))
+                                                       (:db/id target-block))
+                                            top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                         (mapcat (fn [block]
                                                   (when-let [new-id (or (id->new-uuid (:db/id block))
                                                                         (uuid->new-uuid (:block/uuid block))
                                                                         (:block/uuid block))]
                                                     [{:block/uuid new-id
-                                                      :logseq.property/created-from-property (:db/id from-property)}
+                                                      :logseq.property/created-from-property (:db/id restore-from-property)}
                                                      [:db/add
-                                                      (:db/id (:block/parent target-block))
-                                                      (:db/ident (d/entity db (:db/id from-property)))
-                                                      [:block/uuid new-id]]])) top-level-blocks)))
+                                                      owner-id
+                                                      (:db/ident (d/entity db (:db/id restore-from-property)))
+                                                      [:block/uuid new-id]]]))
+                                                top-level-blocks)))
                  full-tx (common-util/concat-without-nil page-txs
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
@@ -1037,30 +1062,23 @@
 
 (defn- orphaned-range-comments-areas
   [db deleted-block-ids]
-  (let [comments-area-target-ids
-        (->> (d/datoms db :aevt comments-blocks-property)
-             (mapcat (fn [datom]
-                       (map (fn [target-id] [(:e datom) target-id])
-                            (datom-value-ids (:v datom)))))
-             (group-by first)
-             (map (fn [[comments-area-id entries]]
-                    [comments-area-id (set (map second entries))]))
-             (into {}))
-        candidate-comments-areas
-        (->> comments-area-target-ids
-             (filter (fn [[_comments-area-id target-ids]]
-                       (seq (set/intersection deleted-block-ids target-ids))))
-             (map first)
-             (keep #(d/entity db %))
-             (filter comments-area?)
-             (remove #(contains? deleted-block-ids (:db/id %)))
-             (common-util/distinct-by :db/id))]
-    (filter
-     (fn [comments-area]
-       (let [targets (seq (get comments-area-target-ids (:db/id comments-area)))]
-         (and targets
-              (every? #(contains? deleted-block-ids %) targets))))
-     candidate-comments-areas)))
+  ;; The property is indexed only when it exists in the db schema as a ref
+  ;; attribute; graphs without it (e.g. bare schema conns) have no comments.
+  (when (= :db.type/ref (get-in (:schema db) [comments-blocks-property :db/valueType]))
+    (let [candidate-comments-areas
+          (->> deleted-block-ids
+               (mapcat (fn [id] (d/datoms db :avet comments-blocks-property id)))
+               (map :e)
+               (distinct)
+               (keep #(d/entity db %))
+               (filter comments-area?)
+               (remove #(contains? deleted-block-ids (:db/id %))))]
+      (filter
+       (fn [comments-area]
+         (let [targets (seq (map :db/id (datom-value-ids (get comments-area comments-blocks-property))))]
+           (and targets
+                (every? #(contains? deleted-block-ids %) targets))))
+       candidate-comments-areas))))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
@@ -1114,7 +1132,7 @@
            (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
 (defn- move-block
-  [db block target-block sibling?]
+  [db block target-block sibling? {:keys [created-from-property]}]
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
@@ -1150,14 +1168,20 @@
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            target-from-property (:logseq.property/created-from-property target-block)
+            target-from-property (when sibling?
+                                   (:logseq.property/created-from-property target-block))
             block-from-property (:logseq.property/created-from-property block)
+            restore-from-property (or target-from-property
+                                      (resolve-created-from-property db created-from-property))
             property-tx (let [retract-property-tx (when block-from-property
                                                     [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
                                                      [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when (and sibling? target-from-property)
-                                                [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
-                                                 [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
+                              add-property-tx (when restore-from-property
+                                                (let [owner-id (if sibling?
+                                                                 (:db/id (:block/parent target-block))
+                                                                 (:db/id target-block))]
+                                                  [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
+                                                   [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
                           (concat retract-property-tx add-property-tx))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
 
@@ -1177,7 +1201,7 @@
                               (d/entity @conn (:db/id (nth blocks (dec idx)))))
              block (d/entity @conn (:db/id block))]
          (when-not (move-to-original-position? [block] target-block sibling? false)
-           (let [tx-data (move-block @conn block target-block sibling?)]
+           (let [tx-data (move-block @conn block target-block sibling? opts)]
              ;; FIXME: move-blocks should be pure fn
              ;; (prn "==>> move blocks tx:" tx-data)
              (ldb/transact! conn tx-data {:sibling? sibling?

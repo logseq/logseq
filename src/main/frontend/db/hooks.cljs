@@ -83,6 +83,17 @@
       (:loading :missing) nil
       :error (throw error))))
 
+(defn- subscribe-nothing!
+  [_key _listener]
+  (fn []))
+
+(def ^:private nil-snapshot-value
+  {:status :ready :value nil})
+
+(defn- nil-snapshot
+  [_key]
+  nil-snapshot-value)
+
 (defn use-block
   [block-uuid]
   (use-external-store subs/subscribe-block! subs/block-snapshot block-uuid))
@@ -125,23 +136,23 @@
                                  block-uuid project))
 
 (defn use-children
+  "Children ids for `parent-uuid`. A nil uuid subscribes to nothing and reads
+   as nil — collapsed rows pass nil so children load only when expanded."
   [parent-uuid]
-  (use-external-store subs/subscribe-children! subs/children-snapshot parent-uuid))
+  (let [subscribe! (if parent-uuid subs/subscribe-children! subscribe-nothing!)
+        snapshot (if parent-uuid subs/children-snapshot nil-snapshot)]
+    (use-external-store subscribe! snapshot parent-uuid)))
+
+(defn peek-children
+  "Synchronous read of a children slot's ordered uuid vector without
+   subscribing. Returns nil while the slot is unloaded."
+  [parent-uuid]
+  (let [{:keys [status value]} (subs/children-snapshot parent-uuid)]
+    (when (= :ready status) value)))
 
 (defn use-resource
   [resource-key]
   (use-external-store subs/subscribe-resource! subs/resource-snapshot resource-key))
-
-(defn- subscribe-nothing!
-  [_key _listener]
-  (fn []))
-
-(def ^:private nil-snapshot-value
-  {:status :ready :value nil})
-
-(defn- nil-snapshot
-  [_key]
-  nil-snapshot-value)
 
 (defn use-block-projection-snapshot
   "Status-aware `use-block-projection`. A nil uuid reads as a ready nil value

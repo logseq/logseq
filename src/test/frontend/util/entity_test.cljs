@@ -27,6 +27,22 @@
     (is (not (entity/page? 1)))
     (is (not (entity/page? nil)))))
 
+(deftest library-outline-child-uuids-keeps-pages-only
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        journal-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        block-uuid #uuid "33333333-3333-3333-3333-333333333333"]
+    (is (= [page-uuid journal-uuid]
+           (entity/library-outline-child-uuids
+            [{:block/uuid page-uuid
+              :block/tags [{:db/ident :logseq.class/Page}]}
+             {:block/uuid block-uuid
+              :block/title "hello"}
+             nil
+             {:block/uuid journal-uuid
+              :block/tags [:logseq.class/Journal]}])))
+    (is (= [] (entity/library-outline-child-uuids
+               [{:block/uuid block-uuid :block/title "world"}])))))
+
 (deftest url-property-value-predicate-test
   (testing "URL-type property values are identified from created-from-property"
     (is (entity/url-property-value?

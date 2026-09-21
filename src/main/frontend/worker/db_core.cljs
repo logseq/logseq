@@ -571,20 +571,24 @@
                                      {:sqlite @*sqlite
                                       :pool pool
                                       :path db-path})
+            _ (swap! *sqlite-conns assoc-in [repo :db] db)
             _ (log/info :db-worker/get-dbs-open {:repo repo :search-path search-path})
             search-db (platform/sqlite-open (platform/current)
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
+            _ (swap! *sqlite-conns assoc-in [repo :search] search-db)
             vector-index (when (get-in current-platform [:vector :open-index])
                            (platform/vector-open current-platform
                                                  {:path vector-path
                                                   :dimension (platform/embedding-dimension current-platform)}))
+            _ (when vector-index (swap! *vector-indexes assoc repo vector-index))
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
                                                  :pool pool
                                                  :path client-ops-path})]
+      (swap! *sqlite-conns assoc-in [repo :client-ops] client-ops-db)
       [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!
@@ -711,18 +715,6 @@
   (when (seq tx-data)
     (d/transact! conn tx-data {:initial-db? true})))
 
-(defn- ensure-canonical-revisions!
-  [conn]
-  (let [db @conn
-        tx-id (inc (:max-tx db))
-        tx-data (keep (fn [datom]
-                        (let [entity (d/entity db (:e datom))]
-                          (when-not (nat-int? (:block/tx-id entity))
-                            {:db/id (:db/id entity)
-                             :block/tx-id tx-id})))
-                      (d/datoms db :avet :block/uuid))]
-    (bootstrap-transact! conn tx-data)))
-
 (defn- <create-or-open-db!
   [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
   (let [datoms (or datoms
@@ -797,8 +789,6 @@
                   (handle-migrate-result-local-txs! repo migrate-result)
                   (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
               (transaction-handler/maybe-run-recycle-gc! conn))
-
-            (ensure-canonical-revisions! conn)
 
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
