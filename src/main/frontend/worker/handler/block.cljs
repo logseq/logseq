@@ -95,6 +95,11 @@
   (when-let [datom (first (d/datoms db :eavt eid attr))]
     (:v datom)))
 
+(defn- block-revision
+  [db eid]
+  (let [revision (eavt-scalar db eid :block/tx-id)]
+    (if (nil? revision) 0 revision)))
+
 (defn- tagged-with-ident?
   [db eid tag-ident]
   (some (fn [datom]
@@ -161,7 +166,7 @@
   (let [entity-id (:db/id entity)
         block-uuid (or (:block/uuid entity)
                        (eavt-scalar db entity-id :block/uuid))
-        block-tx-id (eavt-scalar db entity-id :block/tx-id)
+        block-tx-id (block-revision db entity-id)
         stored-title (eavt-scalar db entity-id :block/title)
         ;; Entity :block/title walks every :block/refs target to replace
         ;; id-refs. Table rows (All Pages / Movies / journals) have plain
@@ -200,10 +205,15 @@
            {:db/id entity-id}
            (d/datoms db :eavt entity-id))]
       (cond-> (assoc block
+                     :block/tx-id block-tx-id
                      :block.temp/refs-count
                      (block-refs-count db entity-id)
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
+        (and (:logseq.property/view-for block)
+             (not (contains? block :logseq.property.view/sort-groups-desc?)))
+        (assoc :logseq.property.view/sort-groups-desc? true)
+
         (property-entity? db entity-id)
         (assoc :property/closed-values
                (:property/closed-values
@@ -258,7 +268,7 @@
                        {:parent-uuid parent-uuid}))
   (let [parent (d/entity db [:block/uuid parent-uuid])
         parent-id (:db/id parent)
-        parent-tx-id (:block/tx-id parent)]
+        parent-tx-id (when parent (block-revision db parent-id))]
     (when-not parent
       (fail-render-read! "Missing direct-children parent"
                          {:parent-uuid parent-uuid}))
@@ -319,24 +329,18 @@
 
 (def ^:private block-children-limit 100)
 
+(def ^:private block-refs-count-scan-limit 500)
+
 (defn- direct-child-blocks
   ([db block-id]
    (direct-child-blocks db block-id false false))
   ([db block-id reverse?]
    (direct-child-blocks db block-id reverse? false))
   ([db block-id reverse? include-property-block?]
-   (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
-                        (map :e)
-                        set)
-         blocks (if (>= (count child-ids) block-children-limit)
-                  (->> ((if reverse? d/rseek-datoms d/datoms) db :avet :block/order)
-                       (keep (fn [datom]
-                               (when (contains? child-ids (:e datom))
-                                 (d/entity db (:e datom))))))
-                  (cond->> child-ids
-                    true (keep #(d/entity db %))
-                    true ldb/sort-by-order
-                    reverse? reverse))]
+   (let [blocks (cond->> (d/datoms db :avet :block/parent block-id)
+                  true (keep #(d/entity db (:e %)))
+                  true ldb/sort-by-order
+                  reverse? reverse)]
      (cond->> blocks
        (not include-property-block?)
        (remove :logseq.property/created-from-property)
@@ -424,7 +428,11 @@
     0
 
     :else
-    (common-initial-data/get-block-refs-count db block-id)))
+    ;; Beyond the limit the exact count is deferred: the renderer fetches it
+    ;; through the on-demand [:block-ref-count uuid] resource when the value
+    ;; is actually displayed, instead of stalling block snapshots on a scan
+    ;; proportional to a heavily referenced page's inbound refs.
+    (common-initial-data/get-block-refs-count db block-id block-refs-count-scan-limit)))
 
 (defn- assoc-render-property-data
   [db block block-map]
