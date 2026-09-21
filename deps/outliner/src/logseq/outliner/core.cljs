@@ -920,12 +920,21 @@
                                       (> (count blocks) 1)))]
      (when (and (seq blocks)
                 (not (leaf-property-value-forbidden-target? target-block sibling?)))
-       (let [blocks' (let [blocks' (blocks-with-level blocks)]
+       (let [from-property (:logseq.property/created-from-property target-block)
+             paste-as-property-values? (and sibling?
+                                            from-property
+                                            (= :db.cardinality/many (:db/cardinality from-property)))
+             blocks' (let [blocks' (blocks-with-level blocks)]
                        (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                          update-timestamps?
                          (mapv #(dissoc % :block/created-at :block/updated-at))
                          true
-                         (mapv block-with-timestamps)))
+                         (mapv block-with-timestamps)
+                         (and (= outliner-op :paste) (not paste-as-property-values?))
+                         (mapv (fn [block]
+                                 (if (= 1 (:block/level block))
+                                   (dissoc block :logseq.property/created-from-property)
+                                   block)))))
              insert-opts {:sibling? sibling?
                           :replace-empty-target? replace-empty-target?
                           :keep-uuid? keep-uuid?
@@ -948,10 +957,7 @@
                                (remove old-db-id-blocks)
                                (remove nil?)
                                (map (fn [uuid'] {:block/uuid uuid'})))
-                from-property (when sibling?
-                                 (:logseq.property/created-from-property target-block))
-                many? (= :db.cardinality/many (:db/cardinality from-property))
-                restore-from-property (or (when many? from-property)
+                restore-from-property (or (when paste-as-property-values? from-property)
                                           (resolve-created-from-property db created-from-property))
                 property-values-tx (when restore-from-property
                                       (let [owner-id (if sibling?
