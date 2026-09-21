@@ -39,4 +39,3 @@
     (is (= :logseq.property/deadline
            (published-property-key :editor/add-property-deadline))
         "p d remains the working keyword-ident baseline")))
->>>>>>> origin/master
