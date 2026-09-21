@@ -106,13 +106,29 @@
                              #{[:block block-uuid]})]))
                    block-uuids)}))
 
+(def ^:private children-eager-block-limit
+  "Canonical blocks shipped with a [:children] snapshot, in document order, so
+   the visible prefix renders without per-row placeholder loads."
+  200)
+
+(def ^:private children-subtree-node-limit
+  "Upper bound on expanded nodes whose membership is included in a [:children]
+   response. Memberships beyond this document-order prefix are fetched lazily
+   per node when rows mount or expand."
+  500)
+
 (defn- children-snapshot-groups
   [db parent-uuids]
   (into {}
         (map (fn [parent-uuid]
-               (let [tree (block-handler/open-block-tree db parent-uuid)]
+               (let [children (block-handler/open-children-tree
+                               db parent-uuid children-subtree-node-limit)
+                     eager-uuids (block-handler/document-order-uuids
+                                  children parent-uuid children-eager-block-limit)
+                     {:keys [blocks]} (block-handler/canonical-blocks db eager-uuids)]
                  [[:children parent-uuid]
-                  (common/block-bundle-slots tree)])))
+                  (merge (common/children-slots children)
+                         (common/block-slots blocks))])))
         parent-uuids))
 
 (defn render-snapshots

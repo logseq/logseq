@@ -499,7 +499,11 @@
 (defn- assert-resource-envelope
   [db resource-key watch-keys value response]
   (let [watch-all? (contains? watch-keys [:graph])
-        watch-keys (disj watch-keys [:graph])]
+        watch-keys (cond-> (disj watch-keys [:graph])
+                     (and (= :query (first resource-key)) (not watch-all?))
+                     (into #{[:attr :logseq.property/hide?]
+                             [:attr :logseq.property/deleted-at]
+                             [:attr :block/parent]}))]
     (is (= #{:basis-rev :key :watch-keys :watch-all? :value :slots}
            (set (keys response))))
     (is (= (:max-tx db) (:basis-rev response)))
@@ -521,7 +525,8 @@
   (is (not (contains? block :block/properties-text-values)))
   (is (every? #{:block.temp/positioned-properties
                 :block.temp/refs-count
-                :block.temp/order-list-index}
+                :block.temp/order-list-index
+                :block.temp/has-children?}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
@@ -802,6 +807,7 @@
        @conn
        [:favorites]
        #{[:children favorite-page-uuid]
+         [:attr :block/link]
          [:entity first-page-uuid]}
        [{:db/id first-page-id
          :block/uuid first-page-uuid
@@ -813,7 +819,8 @@
       (assert-resource-envelope
        @conn
        [:favorite-status first-page-uuid]
-       #{[:children favorite-page-uuid]}
+       #{[:children favorite-page-uuid]
+         [:attr :block/link]}
        true
        status-response)
       (assert-resource-envelope
@@ -1818,6 +1825,22 @@
       (is (= #{"Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"}
              (set (map :block/title (:property/closed-values status))))))))
 
+(deftest query-view-data-keeps-projected-columns-even-without-values-test
+  (let [{:keys [conn view-row]} (render-resource-fixture)
+        query-uuid (random-uuid)
+        query-view (add-view! conn :query-result)
+        resource-key [:view-data query-view
+                      {:feature-type :query-result :query-row-uuids [view-row]}]]
+    (d/transact! conn [{:block/uuid query-uuid
+                        :block/title "{:query [:find (pull ?b [:logseq.property/priority]) :where [?b :block/title]]}"
+                        :logseq.property.node/display-type :code}
+                       {:block/uuid query-view
+                        :logseq.property/query [:block/uuid query-uuid]}])
+    (let [response (call-resource (render-resource-api) conn resource-key)]
+      (is (= [:logseq.property/priority]
+             (mapv :db/ident (get-in response [:value :properties]))))
+      (is (contains? (:watch-keys response) [:entity query-uuid])))))
+
 (deftest view-data-resource-returns-empty-rows-after-the-view-is-deleted-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-owner view-a view-b]}
@@ -2115,6 +2138,7 @@
           (is (not (contains? (:watch-keys response)
                               [:attr :block/page]))))))))
 
+
 (deftest query-resource-executes-dsl-with-only-serialized-context-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)
@@ -2280,6 +2304,40 @@
                                 {:rows [["Jan 1st, 2020" 20200101]]}
                                 response))))
 
+(deftest query-resource-renders-partial-block-pulls-as-blocks-test
+  (let [{:keys [conn journal-a journal-b]} (render-resource-fixture)]
+    (doseq [query ['[:find (pull ?p [:block/journal-day])
+                    :in $ ?start ?end
+                    :where [?p :block/journal-day ?day]
+                    [(>= ?day ?start)] [(<= ?day ?end)]]
+                   '[:find (pull $ ?p [:block/journal-day])
+                     :in $ ?start ?end
+                     :where [?p :block/journal-day ?day]
+                     [(>= ?day ?start)] [(<= ?day ?end)]]]]
+      (let [resource-key [:query {:kind :datalog :query query
+                                  :inputs [20200101 20200102]}]
+            response (call-resource (render-resource-api) conn resource-key)]
+        (is (= #{journal-a journal-b} (set (get-in response [:value :rows]))))
+        (testing "transforms can still read the requested properties"
+          (let [transformed-key
+                (update resource-key 1 assoc :result-transform-edn
+                        "(fn [rows] (filter #(= 20200101 (:block/journal-day %)) rows))")]
+            (is (= [journal-a]
+                   (get-in (call-resource (render-resource-api) conn transformed-key)
+                           [:value :rows])))))))))
+
+(deftest partial-block-pull-filters-hidden-and-deleted-results-test
+  (let [{:keys [conn journal-a journal-b]} (render-resource-fixture)
+        resource-key [:query {:kind :datalog
+                              :query '[:find (pull ?p [:block/journal-day])
+                                       :where [?p :block/journal-day]]}]]
+    (d/transact! conn [{:block/uuid journal-a :logseq.property/hide? true}
+                       {:block/uuid journal-b :logseq.property/deleted-at 1000}])
+    (let [response (call-resource (render-resource-api) conn resource-key)]
+      (is (empty? (get-in response [:value :rows])))
+      (is (contains? (:watch-keys response) [:attr :logseq.property/hide?]))
+      (is (contains? (:watch-keys response) [:attr :logseq.property/deleted-at])))))
+
 (deftest query-resource-keeps-pull-maps-without-uuid-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-a]} (render-resource-fixture)
@@ -2360,6 +2418,9 @@
           [:query {:kind :dsl
                    :query "\"needle\""
                    :current-block-uuid view-row}]]
+      (d/transact! conn [{:block/uuid hidden-uuid
+                         :block/title "needle hidden"
+                         :logseq.property/hide? true}])
       (with-redefs [search-handler/search-blocks
                     (fn [repo query-text options]
                       (swap! calls conj [repo query-text options])

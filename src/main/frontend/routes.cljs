@@ -55,7 +55,7 @@
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block
-     :view page/page-cp}]
+     :view page-route}]
 
    ["/all-pages"
     {:name :all-pages
