@@ -154,13 +154,17 @@
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
-      [:div.page-blocks-inner.relative
-       (when (or (seq child-uuids) (:current-page? config))
-         (block/page-root-virtual-list config child-uuids))
-       (when (and (not config/publishing?)
-                  (or (empty? child-uuids)
-                      (not hide-add-button?)))
-         (add-button page child-uuids config))])))
+      (block/with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         [:div.page-blocks-inner.relative
+          (when (or (seq visible-uuids) (:current-page? config))
+            (block/page-root-virtual-list config visible-uuids))
+          (when (and (not config/publishing?)
+                     (or (empty? visible-uuids)
+                         (not hide-add-button?)))
+            (add-button page visible-uuids config))])))))
 
 (hsx/defc special-page-root
   [page-uuid membership-kind user-uuid config hide-add-button?]
@@ -185,7 +189,7 @@
   [block-uuid block config hide-add-button?]
   (let [child-uuids (db-hooks/use-children block-uuid)]
     [:div.page-blocks-inner.relative
-     (block/plain-block-list config [block-uuid])
+     (block/page-root-virtual-list config [block-uuid])
      (when-not (hide-block-route-add-button? block hide-add-button?)
        (add-button block child-uuids config))]))
 
@@ -196,7 +200,12 @@
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
   (let [document-mode? (rfx/use-sub [:document/mode?])
-        config (page-render-config page option document-mode?)
+        config (cond-> (page-render-config page option document-mode?)
+                 ;; Only the standalone page route window-renders its outliner;
+                 ;; pages embedded in views, journals, sidebar, or previews
+                 ;; render their blocks in full.
+                 (:current-page? option)
+                 (assoc :virtualize? true))
         page-uuid (:block/uuid page)
         user-uuid-string (user-handler/user-uuid)
         user-uuid (when (and (string? user-uuid-string)
@@ -446,6 +455,15 @@
     (after-first-paint content)
     content))
 
+(defn- page-inner-key
+  "React key for the page inner wrap, which owns the child block tree."
+  [page]
+  (str (:block/uuid page)))
+
+(defn- page-references-key
+  [page]
+  (str (:block/uuid page) "-refs"))
+
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
@@ -485,7 +503,7 @@
                         {:data-page-tags (text-util/build-data-value page-names)}))
                     {})
 
-                  {:key title
+                  {:key (page-inner-key page)
                    :class (util/classnames [{:is-journals (or journal? fmt-journal?)
                                              :is-today-page (and (not home?) (boolean today?))
                                              :is-node-page (or class-page? property-page?)}])})
@@ -560,7 +578,7 @@
                (when (and (not tag-dialog?)
                           (not linked-refs?))
                  [:div.fade-in.delay {:key "page-references"}
-                  ^{:key (str title "-refs")}
+                  ^{:key (page-references-key page)}
                   [reference/references (:block/uuid page) {:sidebar? sidebar?
                                               :journals? journals?
                                               :refs-count (:refs-count option)
@@ -619,6 +637,16 @@
   (assoc option :page-name (or (:page-name option)
                                (get-page-name option))))
 
+(defn- page-component-key
+  "React key for the page tree. Prefer a stable entity id over the route title."
+  [option paint]
+  (str (state/get-current-repo)
+       "-"
+       (or (:block/uuid option)
+           (:db/id option)
+           (get-in paint [:page :block/uuid])
+           (:page-name option))))
+
 (defn use-page-paint
   "Everything a page needs before its first paint: the resolved page uuid,
    the page itself and, for a zoomed block, its breadcrumb ancestors.
@@ -662,10 +690,7 @@
   [option]
   (let [option (page-cp-option option)
         paint (use-page-paint option)]
-    ^{:key (str
-            (state/get-current-repo)
-            "-"
-            (or (:block/uuid option) (:db/id option) (:page-name option)))}
+    ^{:key (page-component-key option paint)}
     [page-aux option paint]))
 
 (hsx/defc page-container

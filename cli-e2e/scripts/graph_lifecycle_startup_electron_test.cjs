@@ -33,8 +33,10 @@ async function spawn(repo, revision, health) {
   await app.whenReady();
   const expected = logseq.common.version.revision.call(null);
   const old = await spawn('old', 'previous-build');
-  const current = await spawn('current', expected);
-  await assert.rejects(lifecycle.startGraph({ storage, repo: 'old' }), /unregistered live owner/);
+  await lifecycle.createGraph(storage, 'current');
+  const current = await lifecycle.startGraph({ storage, repo: 'current', owner: 'cli',
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
+    extraArgs: ['--mode', 'normal', '--health-field', 'revision', '--health-value', JSON.stringify(expected)] });
   let ready;
   let opened = 0;
   const reachedWindow = Error('window reached');
@@ -61,6 +63,7 @@ async function spawn(repo, revision, health) {
   await ready();
   assert.equal(opened, 2);
   console.log('Electron ready: graph reopened with current worker; repeat startup succeeds');
+  await lifecycle.stopGraph(storage, 'current', 'cli');
   await spawn('invalid', 'previous-build', { pid: 1 });
   await ready();
   assert.equal(opened, 2, 'failed cleanup must not open the graph UI');

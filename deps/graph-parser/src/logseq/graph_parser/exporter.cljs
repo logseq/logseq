@@ -532,6 +532,27 @@
           (dissoc :block/priority)))
     block))
 
+(defn- markdown-heading-level
+  [title]
+  (when (string? title)
+    (when-let [heading (re-find #"^(#{1,6})\s+" (string/triml title))]
+      (count (second heading)))))
+
+(defn- update-block-heading
+  "Strip markdown heading markers from imported titles and store the level as
+   :logseq.property/heading, matching native DB headings."
+  [block]
+  (if (or (contains? #{:code :math :quote} (:logseq.property.node/display-type block))
+          (not (string? (:block/title block))))
+    block
+    (let [title (:block/title block)
+          heading-level (markdown-heading-level title)]
+      (cond-> block
+        (or heading-level (some? (:logseq.property/heading block)))
+        (assoc :block/title (common-util/clear-markdown-heading (string/triml title)))
+        heading-level
+        (assoc :logseq.property/heading heading-level)))))
+
 (defn- get-date-formatter
   [config]
   (or
@@ -2180,6 +2201,7 @@
                    (handle-math)
                    (update-block-marker db options)
                    (update-block-priority options)
+                   (update-block-heading)
                    (add-missing-timestamps options)
                    (dissoc :block/format :block.temp/ast-blocks))
         [final-block code-children-tx] (handle-code-blocks block' options)]
