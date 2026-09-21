@@ -683,13 +683,21 @@
                              (:db/id (:block/page ent)))]
       [parent-id false])))
 
+(defn- created-from-property-ref
+  [db-before root]
+  (when-let [prop (:logseq.property/created-from-property root)]
+    (or (:db/ident prop)
+        (stable-entity-ref db-before prop))))
+
 (defn- to-insert-op
-  [db-before {:keys [blocks target-id sibling?]}]
+  [db-before {:keys [blocks target-id sibling? created-from-property]}]
   [:insert-blocks [blocks
                    (stable-entity-ref db-before target-id)
-                   {:sibling? (boolean sibling?)
-                    :keep-uuid? true
-                    :keep-block-order? true}]])
+                   (cond-> {:sibling? (boolean sibling?)
+                            :keep-uuid? true
+                            :keep-block-order? true}
+                     created-from-property
+                     (assoc :created-from-property created-from-property))]])
 
 (defn- delete-root->restore-plan
   [db-before root]
@@ -705,11 +713,14 @@
                                [(or (:db/id (:block/parent root))
                                     (:db/id (:block/page root)))
                                 false]
-                               [target-id sibling?])]
+                               [target-id sibling?])
+        created-from-property (created-from-property-ref db-before root)]
     (when (and (seq blocks) (some? target-id))
-      {:blocks blocks
-       :target-id (stable-entity-ref db-before target-id)
-       :sibling? sibling?})))
+      (cond-> {:blocks blocks
+               :target-id (stable-entity-ref db-before target-id)
+               :sibling? sibling?}
+        created-from-property
+        (assoc :created-from-property created-from-property)))))
 
 (defn- build-inverse-delete-blocks
   [db-before ids]
@@ -721,12 +732,6 @@
       (->> plans
            (mapv #(to-insert-op db-before %))
            seq))))
-
-(defn- created-from-property-ref
-  [db-before root]
-  (when-let [prop (:logseq.property/created-from-property root)]
-    (or (:db/ident prop)
-        (stable-entity-ref db-before prop))))
 
 (defn- move-root->restore-op
   [db-before root]
