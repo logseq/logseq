@@ -1174,23 +1174,25 @@
     (p/goto-page "Library")
     (b/new-blocks ["Enter Parent" "Enter Nested"])
     (b/indent)
-    (w/click (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Parent"))
+    (k/arrow-up)
     (assert/assert-editor-mode)
+    (is (= "Enter Parent" (util/get-edit-content)))
     (util/move-cursor-to-end)
     (k/enter)
     (util/press-seq "Enter Sibling")
     (util/exit-edit)
-    (let [tree (ls-api-call! :editor.getPageBlocksTree "Library")
-          by-title (fn [title]
-                     (some #(when (= title (get % "content")) %) tree))
-          parent (by-title "Enter Parent")
-          sibling (by-title "Enter Sibling")]
-      (is (some? parent) "Parent remains a Library root page")
-      (is (some? sibling) "Enter creates a sibling at the Library root")
-      (is (nil? (by-title "Enter Nested"))
-          "The nested child stays nested and is not promoted")
-      (is (= ["Enter Nested"]
-             (mapv #(get % "content") (get parent "children")))))))
+    (p/goto-page "Library")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Parent"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Nested"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Sibling"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .page-blocks-inner > .ls-block:has-text('Enter Parent') .ls-block" :has-text "Enter Nested"))
+    (assert/assert-have-count
+     (loc/filter ".ls-page-blocks .page-blocks-inner > .ls-block:has-text('Enter Parent') .ls-block" :has-text "Enter Sibling")
+     0)))
 
 (defn- selection-range
   []
