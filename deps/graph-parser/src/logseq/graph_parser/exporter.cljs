@@ -212,9 +212,7 @@
         (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
                                            (get-in block [:block/namespace :block/name])
-                                           {:block block :block/namespace (:block/namespace block)})})
-        (cond-> (= :block/parent parent-k)
-          (assoc :block/order (db-order/gen-key))))
+                                           {:block block :block/namespace (:block/namespace block)})}))
     block))
 
 (defn- build-class-ident-name
@@ -1111,18 +1109,19 @@
 
 (defn- property-text-with-id-refs
   [content refs page-names-to-uuids]
-  (let [page-refs (->> refs
+  (if (string? content)
+    (let [page-refs (->> refs
                        (filter :block/name)
-                       ;; refs also includes property pages intentionally removed
-                       ;; by property-to-tag conversion; only imported pages have IDs.
+                       ;; refs not imported as pages (e.g. dead links) have no uuid
                        (keep (fn [ref]
                                (let [page-name ((some-fn ::original-name :block/name) ref)]
                                  (when-let [page-uuid (get @page-names-to-uuids page-name)]
                                    (assoc ref :block/uuid page-uuid
                                               :block/title ((some-fn ::original-title :block/title) ref)))))))]
-    (-> (db-content/title-ref->id-ref content page-refs {:replace-tag? false})
-        (string/replace block-ref/block-ref-re
-                        (fn [[_ id]] (page-ref/->page-ref id))))))
+      (-> (db-content/title-ref->id-ref content page-refs {:replace-tag? false})
+          (string/replace block-ref/block-ref-re
+                          (fn [[_ id]] (page-ref/->page-ref id)))))
+    content))
 
 (defn- handle-page-and-block-properties
   "Returns a map of :block with updated block and :properties-tx with any properties tx.
@@ -2415,7 +2414,7 @@
                    :block/updated-at (or file-updated-at file-created-at)))
         ;; These attributes are ignored by default because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
-                               :block/created-at :block/updated-at :block/order]
+                               :block/created-at :block/updated-at]
         allowed-attributes (cond-> (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                         (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                               m))

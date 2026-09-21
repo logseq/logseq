@@ -2123,16 +2123,16 @@ abc
       (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/participants)))
           "template values cause participants to remain a :default property")
-      (is (= #{"[[Feb 7th, 2024]]"}
+      (is (= #{(page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Feb 7th, 2024")))}
              (:user.property/participants (db-test/readable-properties (db-test/find-block-by-content @conn #"test :node -> :date"))))
-          ":default participants property keeps the imported text value")
+          ":default participants property keeps the imported value as a page ref")
 
       (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/description)))
           ":default property to :node (or any non :default value) remains :default")
-      (is (= "[[Jakob]]"
+      (is (= (page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Jakob")))
              (:user.property/description (db-test/readable-properties (db-test/find-block-by-content @conn #":default to :node"))))
-          ":default to :node property saves :default property value default with full text")
+          ":default to :node property saves :default property value as a page ref")
 
       (testing "with changes to upstream/existing property value"
         (is (= :default
@@ -2149,12 +2149,16 @@ abc
         (is (= {:logseq.property/type :default :db/cardinality :db.cardinality/many}
                (select-keys (d/entity @conn :user.property/people) [:logseq.property/type :db/cardinality]))
             ":node property to :default value changes to :default and keeps existing cardinality")
-        (is (= #{"[[Jakob]] [[Gabriel]]"}
+        (is (= #{(str (page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Jakob")))
+                      " "
+                      (page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Gabriel"))))}
                (:user.property/people (db-test/readable-properties (db-test/find-block-by-content @conn ":node people"))))
-            "existing :node property value correctly saved as :default with full text")
-        (is (= #{"[[Gabriel]] [[Jakob]]"}
+            "existing :node property value correctly saved as :default with page refs")
+        (is (= #{(str (page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Gabriel")))
+                      " "
+                      (page-ref/->page-ref (:block/uuid (db-test/find-page-by-title @conn "Jakob"))))}
                (:user.property/people (db-test/readable-properties (db-test/find-block-by-content @conn #"pending block for :node"))))
-            "pending :node property value correctly saved as :default with full text")
+            "pending :node property value correctly saved as :default with page refs")
         (is (some? (db-test/find-page-by-title @conn "Jakob"))
             "Previous :node property value still exists")
         (is (= 3 (count (find-block-by-property @conn :user.property/people)))
@@ -2501,7 +2505,7 @@ abc
                             ["third" child-ref]]]
       (let [page (db-test/find-page-by-title @conn title)
             value (first (:user.property/related-items page))]
-        (is (= expected (:block/raw-title value))
+        (is (= expected (:block/title value))
             "Text properties must use DB references, including values converted from node properties.")))))
 
 (deftest-async import-tags-do-not-overwrite-properties
