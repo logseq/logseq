@@ -676,9 +676,24 @@
                           result*
                           (dissoc result* :db/id))
                 page? (or (ldb/page? block) (:block/name block))
-                result (cond-> result*
-                         (not page?) (assoc :block/page target-page)
-                         page? (dissoc :block/page))
+                ;; :block/name is not unique, so pasting a copied page entity
+                ;; would create a duplicate page; link to the existing page instead
+                existing-page (when (and page?
+                                         (= :paste outliner-op)
+                                         (:block/name block))
+                                (ldb/get-page db (:block/name block)))
+                result (if existing-page
+                         {:block/uuid uuid'
+                          :block/parent parent
+                          :block/order order
+                          :block/page target-page
+                          :block/title ""
+                          :block/created-at (:block/created-at block)
+                          :block/updated-at (:block/updated-at block)
+                          :block/link (:db/id existing-page)}
+                         (cond-> result*
+                           (not page?) (assoc :block/page target-page)
+                           page? (dissoc :block/page)))
                 db' (if (seq page-txs)
                       (:db-after (d/with db page-txs))
                       db)]
