@@ -1904,6 +1904,33 @@
          (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
 
+(deftest get-latest-journals-bounded-scan
+  (restoring-worker-state
+   (fn []
+     (let [conn (d/create-conn task-spent-time-schema)
+           journal-count 50]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn (mapv (fn [i]
+                                 {:block/uuid (random-uuid)
+                                  :block/title (str "journal " i)
+                                  :block/name (str "journal " i)
+                                  :block/journal-day (+ 20240101 i)
+                                  :block/tags :logseq.class/Journal})
+                               (range journal-count)))
+       (let [scanned (volatile! 0)
+             wrap-scan (fn [f]
+                         (fn [db index c & cs]
+                           (let [s (apply f db index c cs)]
+                             (if (= :block/journal-day c)
+                               (map (fn [d] (vswap! scanned inc) d) s)
+                               s))))
+             realized (with-redefs [d/datoms (wrap-scan d/datoms)
+                                    d/rseek-datoms (wrap-scan d/rseek-datoms)]
+                        (doall (take 1 (ldb/get-latest-journals @conn))))]
+         (is (= 1 (count realized)))
+         ;; bounded request: realizes O(requested) datoms, not O(total journals)
+         (is (< @scanned journal-count)))))))
+
 ;; ---- q / datoms / pull thread-api tests ----
 
 (deftest q-executes-datascript-query
