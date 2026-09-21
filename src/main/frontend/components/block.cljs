@@ -3554,7 +3554,11 @@
 
 (hsx/defc block-refs-count
   [block *hide-block-refs?]
-  (let [block-refs-count' (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        block-refs-count' (or bundled fetched)]
     (when (and block-refs-count' (pos? block-refs-count'))
     [:div.h-6
      (shui/button {:variant :ghost
@@ -3572,7 +3576,11 @@
 
 (hsx/defc block-linked-references
   [block]
-  (let [refs-count (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        refs-count (or bundled fetched)]
     (when (and refs-count (pos? refs-count))
       (when-let [refs-cp (state/get-component :block/linked-references)]
         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}

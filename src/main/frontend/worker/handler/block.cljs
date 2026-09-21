@@ -325,24 +325,18 @@
 
 (def ^:private block-children-limit 100)
 
+(def ^:private block-refs-count-scan-limit 500)
+
 (defn- direct-child-blocks
   ([db block-id]
    (direct-child-blocks db block-id false false))
   ([db block-id reverse?]
    (direct-child-blocks db block-id reverse? false))
   ([db block-id reverse? include-property-block?]
-   (let [child-ids (->> (d/datoms db :avet :block/parent block-id)
-                        (map :e)
-                        set)
-         blocks (if (>= (count child-ids) block-children-limit)
-                  (->> ((if reverse? d/rseek-datoms d/datoms) db :avet :block/order)
-                       (keep (fn [datom]
-                               (when (contains? child-ids (:e datom))
-                                 (d/entity db (:e datom))))))
-                  (cond->> child-ids
-                    true (keep #(d/entity db %))
-                    true ldb/sort-by-order
-                    reverse? reverse))]
+   (let [blocks (cond->> (d/datoms db :avet :block/parent block-id)
+                  true (keep #(d/entity db (:e %)))
+                  true ldb/sort-by-order
+                  reverse? reverse)]
      (cond->> blocks
        (not include-property-block?)
        (remove :logseq.property/created-from-property)
@@ -430,7 +424,11 @@
     0
 
     :else
-    (common-initial-data/get-block-refs-count db block-id)))
+    ;; Beyond the limit the exact count is deferred: the renderer fetches it
+    ;; through the on-demand [:block-ref-count uuid] resource when the value
+    ;; is actually displayed, instead of stalling block snapshots on a scan
+    ;; proportional to a heavily referenced page's inbound refs.
+    (common-initial-data/get-block-refs-count db block-id block-refs-count-scan-limit)))
 
 (defn- assoc-render-property-data
   [db block block-map]
