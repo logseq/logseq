@@ -206,17 +206,23 @@
                   (ref-tags ref))))
 
 (defn- new-page-ref?
-  [ref]
+  [db ref]
   (and (map? ref)
        (nil? (:db/id ref))
-       (nil? (:db/ident ref))
-       (or (contains? #{"page" "journal"} (:block/type ref))
-           (seq (set/intersection (ref-tag-idents ref)
-                                  #{:logseq.class/Page :logseq.class/Journal})))))
+       (or (and (nil? (:db/ident ref))
+                (or (contains? #{"page" "journal"} (:block/type ref))
+                    (seq (set/intersection (ref-tag-idents ref)
+                                           #{:logseq.class/Page :logseq.class/Journal}))))
+           ;; Refs parsed without a db carry generated ident/uuid that still
+           ;; need resolving by name
+           (and (:db/ident ref)
+                (not (d/entity db (:db/ident ref)))
+                (not (and (:block/uuid ref)
+                          (d/entity db [:block/uuid (:block/uuid ref)])))))))
 
 (defn- resolve-page-ref
   [db ref tag-names]
-  (if (new-page-ref? ref)
+  (if (new-page-ref? db ref)
     (let [class? (contains? tag-names (:block/name ref))]
       (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])

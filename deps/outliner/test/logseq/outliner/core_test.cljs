@@ -149,6 +149,27 @@
         (is (qualified-keyword? (:db/ident tag))
             (str "#" tag-title " has a class ident"))))))
 
+(deftest typed-hashtag-resolves-existing-class
+  (testing "A hashtag typed for an existing class references that class, not a duplicate"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks [{:block/title "seed"}]}])
+          class-uuid (random-uuid)
+          _ (d/transact! conn [{:db/ident :user.class/Sample-x1
+                                :block/name "sample"
+                                :block/title "Sample"
+                                :block/uuid class-uuid
+                                :block/tags :logseq.class/Tag}])
+          {:keys [parsed id-title]} (parse-typed-hashtag "object #Sample")
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title id-title
+            :block/refs (:block/refs parsed)
+            :block/tags (:block/tags parsed)})]
+      (is (empty? page-txs))
+      (is (= class-uuid (-> block :block/tags first :block/uuid)))
+      (is (string/includes? (:block/title block) (str class-uuid))))))
+
 (defn- page-uuids-named
   [db title]
   (d/q '[:find [?uuid ...]
