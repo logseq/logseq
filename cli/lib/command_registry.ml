@@ -216,7 +216,11 @@ let property_update_options =
     |]
 
 let content_search_options =
-  Vec.singleton (value "content" "text" "Content search text")
+  Vec.of_array
+    [|
+      value "content" "text" "Content search text";
+      flag "include-hidden" "Include hidden results";
+    |]
 
 let e2ee_password_option = value "e2ee-password" "password" "E2EE password"
 

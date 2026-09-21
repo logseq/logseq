@@ -53,6 +53,15 @@
       (class? entity)
       (property? entity)))
 
+(defn library-outline-child-uuids
+  "Library outlines nested pages, not normal blocks."
+  [child-blocks]
+  (into []
+        (keep (fn [block]
+                (when (and block (page? block))
+                  (:block/uuid block))))
+        child-blocks))
+
 (defn url-property-value?
   "URL-type property values are leaves. They must not have child blocks
   or expose sub-block UX when zoomed."

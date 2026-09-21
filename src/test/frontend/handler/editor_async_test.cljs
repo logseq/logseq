@@ -1,6 +1,7 @@
 (ns frontend.handler.editor-async-test
   (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -384,6 +385,71 @@
                         @edit-call)
                      "Deletion should restore focus from the renderer callback")))))
         (p/finally (fn [] nil)))))
+
+(defn- selection-block-dom
+  [block]
+  #js {:getAttribute (fn [attr]
+                       (when (= attr "blockid")
+                         (str (:block/uuid block))))})
+
+(defn- <delete-selected-blocks!
+  [blocks]
+  (p/with-redefs [state/<invoke-db-worker <test-db-worker
+                  db-transact/apply-outliner-ops apply-test-outliner-ops!
+                  editor/get-selected-blocks (fn [] (mapv selection-block-dom blocks))
+                  dom/has-class? (constantly false)
+                  dom/attr (fn [node attr]
+                             (when node
+                               (.getAttribute node attr)))
+                  util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                  editor/edit-block! (constantly nil)]
+    (editor/cut-selection-blocks false)))
+
+(deftest-async delete-selected-child-page-unlinks-namespace-and-keeps-content
+  (load-test-files
+   [{:page {:block/title "Parent page"}
+     :blocks [{:block/title "sibling"}]}
+    {:page {:block/title "Child page"}
+     :blocks [{:block/title "keep this content"}
+              {:block/title "and this too"}]}])
+  (let [conn (conn/get-db test-helper/test-db false)
+        parent (ldb/get-page @conn "parent page")
+        child (ldb/get-page @conn "child page")]
+    (d/transact! conn [{:db/id (:db/id child)
+                        :block/parent (:db/id parent)
+                        :block/order "a1"}])
+    (p/let [_ (<delete-selected-blocks! [(d/entity @conn (:db/id child))])
+            child' (ldb/get-page @conn "child page")
+            parent' (ldb/get-page @conn "parent page")
+            child-titles (->> (d/q '[:find [?title ...]
+                                     :in $ ?page
+                                     :where
+                                     [?b :block/page ?page]
+                                     [?b :block/title ?title]
+                                     [(missing? $ ?b :logseq.property/deleted-at)]]
+                                   @conn
+                                   (:db/id child'))
+                              set)
+            parent-children (map :block/title (ldb/sort-by-order (:block/_parent parent')))]
+      (is (some? child')
+          "The child page entity must remain after selection delete")
+      (is (nil? (:block/parent child'))
+          "Selection delete must only remove the namespace relationship")
+      (is (= #{"keep this content" "and this too"} child-titles)
+          "Child page content must stay intact")
+      (is (= ["sibling"] parent-children)
+          "The parent page must keep its own blocks and lose the child page"))))
+
+(deftest-async delete-selected-block-still-removes-its-children
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "parent"
+               :build/children [{:block/title "nested child"}]}]}])
+  (p/let [parent (test-helper/find-block-by-content "parent")
+          _ (<delete-selected-blocks! [parent])]
+    (is (nil? (test-helper/find-block-by-content "parent")))
+    (is (nil? (test-helper/find-block-by-content "nested child"))
+        "Selection delete of a regular block must still retract its subtree")))
 
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
