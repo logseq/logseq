@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
@@ -11,6 +12,7 @@
 
 (defonce *last-popup? (atom nil))
 (defonce *last-popup-data (atom nil))
+(defonce *pending-native-sheet-data (atom nil))
 
 (defn- popup-min-height
   [default-height]
@@ -42,6 +44,19 @@
   (when-let [^js plugin mobile-util/native-bottom-sheet]
     (.dismiss plugin #js {})))
 
+(defn present-native-sheet-after-render!
+  [data]
+  (.requestAnimationFrame
+   js/window
+   (fn []
+     (.requestAnimationFrame
+      js/window
+      (fn []
+        (when (and (identical? data @*pending-native-sheet-data)
+                   (identical? data @mobile-state/*popup-data))
+          (reset! *pending-native-sheet-data nil)
+          (present-native-sheet! data)))))))
+
 (defn- notify-native-sheet-content-ready!
   []
   (when-let [^js plugin mobile-util/native-bottom-sheet]
@@ -55,8 +70,14 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [dismissing? (.-dismissing data)]
+  (let [presenting? (.-presenting data)
+        dismissing? (.-dismissing data)]
     (cond
+      presenting?
+      (do
+       (mobile-state/set-popup-presenting! true)
+       (notify-native-sheet-content-ready!))
+
       dismissing?
       (p/do!
        (when (some? @mobile-state/*popup-data)
@@ -64,8 +85,10 @@
          (mobile-state/set-popup! nil)
          (when-let [plugin ^js mobile-util/native-editor-toolbar]
            (.dismiss plugin)))
+       (mobile-state/set-popup-presenting! false)
        (reset! *last-popup? false)
        (reset! *last-popup-data nil)
+       (reset! *pending-native-sheet-data nil)
        (notify-native-sheet-content-ready!))
 
       :else
@@ -112,10 +135,16 @@
     (when content-fn
       (reset! *last-popup? true)
       (when-let [_plugin ^js mobile-util/native-bottom-sheet]
-        (let [data {:open? true
+        (let [replace-presented? @mobile-state/*popup-presenting?
+              data {:open? true
                     :content-fn content-fn
-                    :opts opts}]
-          (present-native-sheet! data)
+                    :opts opts
+                    :replace-presented? replace-presented?}]
+          (if replace-presented?
+            (reset! *pending-native-sheet-data nil)
+            (do
+              (reset! *pending-native-sheet-data data)
+              (mobile-state/set-popup-presenting! false)))
           (mobile-state/set-popup! data))))))
 
 (defn popup-hide!
@@ -128,14 +157,27 @@
 
     :else
     (if (and @*last-popup? (not (= (first args) :editor.commands/commands)))
-      (dismiss-native-sheet!)
+      (if (some? @*pending-native-sheet-data)
+        (do
+          (reset! *pending-native-sheet-data nil)
+          (reset! *last-popup? false)
+          (reset! *last-popup-data nil)
+          (mobile-state/set-popup-presenting! false)
+          (mobile-state/set-popup! nil))
+        (dismiss-native-sheet!))
       (apply shui-popup/hide! args))))
 
 (set! shui/popup-show! popup-show!)
 (set! shui/popup-hide! popup-hide!)
 
 (hsx/defc popup
-  [opts content-fn]
+  [{:keys [opts content-fn replace-presented?] :as data}]
+  (hooks/use-effect!
+   (fn []
+     (when-not replace-presented?
+       (present-native-sheet-after-render! data))
+     nil)
+   [data replace-presented?])
   (let [title (or (:title opts) (when (string? content-fn) content-fn))
         content (if (fn? content-fn)
                   (content-fn)

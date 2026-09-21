@@ -22,6 +22,7 @@
     "postinstall": "install-app-deps"
   },
   "dependencies": {
+    "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
     "@fastify/cors": "11.2.0",
     "@js-joda/core": "3.2.0",
     "@modelcontextprotocol/sdk": "^1.27.1",

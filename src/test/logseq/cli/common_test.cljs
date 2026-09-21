@@ -1,76 +1,43 @@
 (ns logseq.cli.common-test
   (:require ["fs-extra" :as fs]
             ["path" :as node-path]
-            [cljs.test :refer [deftest is]]
+            [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.common :as cli-common]
-            [logseq.common.graph :as common-graph]
-            [logseq.common.config :as common-config]))
+            [logseq.common.graph-dir :as graph-dir]
+            [promesa.core :as p]))
 
-(deftest unlink-graph-moves-to-unlinked-dir
-  (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph")
-        graph-name "foo/bar"
-        repo (str common-config/db-version-prefix graph-name)
-        encoded-graph-dir "foo~2Fbar"
-        graph-path (node-path/join graphs-dir encoded-graph-dir)
-        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir encoded-graph-dir)]
-    (fs/mkdirSync graph-path #js {:recursive true})
-    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
-    (with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)]
-      (cli-common/unlink-graph! repo)
-      (is (not (fs/existsSync graph-path))
-          "Original graph directory should no longer exist")
-      (is (fs/existsSync unlinked-path)
-          "Graph directory should be moved to Unlinked graphs")
-      (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
-          "Graph contents should be preserved after move"))))
+(deftest unlink-preserves-data-and-uses-canonical-graph-identity
+  (async done
+         (let [root (node-helper/create-tmp-dir "unlink-graph")
+               graphs (node-path/join root "graphs")]
+           (-> (p/run! (fn [name]
+                         (let [encoded (graph-dir/encode-graph-dir-name name)
+                               source (node-path/join graphs encoded)
+                               destination (node-path/join graphs "Unlinked graphs" encoded)]
+                           (fs/mkdirSync source #js {:recursive true})
+                           (fs/writeFileSync (node-path/join source "db.sqlite") "saved data")
+                           (p/let [moved (cli-common/<unlink-graph! graphs (str "logseq_db_" name))]
+                             (is (= (node-path/resolve destination) moved))
+                             (is (not (fs/existsSync source)))
+                             (is (= "saved data" (fs/readFileSync (node-path/join moved "db.sqlite") "utf8"))))))
+                       ["foo/bar" "space name" "副本"])
+               (p/catch #(is false (str %)))
+               (p/finally (fn [] (fs/removeSync root) (done)))))))
 
-(deftest unlink-graph-moves-space-preserving-canonical-dir
-  (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph-space")
-        graph-name "space name"
-        repo (str common-config/db-version-prefix graph-name)
-        encoded-graph-dir "space name"
-        graph-path (node-path/join graphs-dir encoded-graph-dir)
-        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir encoded-graph-dir)]
-    (fs/mkdirSync graph-path #js {:recursive true})
-    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
-    (with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)]
-      (cli-common/unlink-graph! repo)
-      (is (not (fs/existsSync graph-path))
-          "Original space-preserving graph directory should no longer exist")
-      (is (fs/existsSync unlinked-path)
-          "Space-preserving graph directory should be moved to Unlinked graphs")
-      (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
-          "Graph contents should be preserved after move"))))
-
-(deftest unlink-graph-moves-unencoded-unicode-dir
-  (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph-unicode")
-        graph-name "副本"
-        repo (str common-config/db-version-prefix graph-name)
-        graph-path (node-path/join graphs-dir graph-name)
-        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir graph-name)]
-    (fs/mkdirSync graph-path #js {:recursive true})
-    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
-    (with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)]
-      (cli-common/unlink-graph! repo)
-      (is (not (fs/existsSync graph-path))
-          "Original unencoded Unicode graph directory should no longer exist")
-      (is (fs/existsSync unlinked-path)
-          "Unencoded Unicode graph directory should be moved to Unlinked graphs")
-      (is (fs/existsSync (node-path/join unlinked-path "db.sqlite"))
-          "Graph contents should be preserved after move"))))
-
-(deftest remove-graph-dir-deletes-canonical-dir-and-lock
-  (let [graphs-dir (node-helper/create-tmp-dir "remove-graph")
-        graph-name "foo/bar"
-        repo (str common-config/db-version-prefix graph-name)
-        encoded-graph-dir "foo~2Fbar"
-        graph-path (node-path/join graphs-dir encoded-graph-dir)]
-    (fs/mkdirSync graph-path #js {:recursive true})
-    (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
-    (fs/writeFileSync (node-path/join graph-path "db-worker.lock") "lock")
-    (is (= graph-path (cli-common/remove-graph-dir! graphs-dir repo)))
-    (is (not (fs/existsSync graph-path))
-        "Graph directory should be deleted")
-    (is (not (fs/existsSync (node-path/join graphs-dir common-config/unlinked-graphs-dir encoded-graph-dir)))
-        "Failed-download leftovers should not be moved to Unlinked graphs")))
+(deftest unlink-custom-storage-preserves-standard-sibling
+  (async done
+         (let [root (node-helper/create-tmp-dir "unlink-custom")
+               standard (node-path/join root "graphs" "demo")
+               custom (node-path/join root "custom-graphs" "demo")]
+           (doseq [[directory marker] [[standard "standard"] [custom "custom"]]]
+             (fs/mkdirSync directory #js {:recursive true})
+             (fs/writeFileSync (node-path/join directory "marker") marker))
+           (-> (cli-common/<unlink-graph! (node-path/dirname custom) "logseq_db_demo")
+               (p/then (fn [moved]
+                         (is (= (node-path/resolve root "custom-graphs" "Unlinked graphs" "demo") moved))
+                         (is (= "custom" (fs/readFileSync (node-path/join moved "marker") "utf8")))
+                         (is (not (fs/existsSync custom)))
+                         (is (fs/existsSync standard))))
+               (p/catch #(is false (str %)))
+               (p/finally (fn [] (fs/removeSync root) (done)))))))

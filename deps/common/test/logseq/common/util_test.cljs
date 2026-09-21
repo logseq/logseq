@@ -1,5 +1,5 @@
 (ns logseq.common.util-test
-  (:require [clojure.test :refer [deftest are testing]]
+  (:require [clojure.test :refer [deftest are testing is]]
             [logseq.common.util :as common-util]))
 
 (deftest valid-edn-keyword?
@@ -45,3 +45,38 @@
       "[[page-name]]"
       "end-with-backslash\\"
       "\\[]{}().+*?|$^")))
+
+(deftest safe-subs
+  (testing "behaves like subs for in-range indices"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      ["hello" 1 3] "el"
+      ["hello" 2]   "llo"
+      ["hello" 0 5] "hello"))
+  (testing "clamps out-of-range indices instead of throwing"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      ["hello" 0 99]  "hello"
+      ["hello" 99 99] ""
+      ["hello" 99]    ""))
+  (testing "returns \"\" for a non-string instead of throwing"
+    (are [args y]
+         (= (apply common-util/safe-subs args) y)
+      [nil 0 0] ""
+      [nil 0 5] ""
+      [nil 0]   ""
+      [42 0 1]  "")))
+
+(deftest timestamp-ms
+  (testing "keeps positive epoch-ms numbers"
+    (is (= 1577934245000 (common-util/timestamp-ms 1577934245000))))
+  (testing "reads Date.getTime"
+    (is (= 1577934245000 (common-util/timestamp-ms (js/Date. "2020-01-02T03:04:05.000Z")))))
+  (testing "treats missing and non-positive values as absent"
+    (are [x] (nil? (common-util/timestamp-ms x))
+      nil
+      0
+      -1
+      (js/Date. 0)
+      "2020-01-02T03:04:05.000Z"
+      js/NaN)))

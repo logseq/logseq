@@ -122,23 +122,34 @@
 
 (defonce sidebar-inited? (atom false))
 
+(defn home-redirect-target
+  "Home-route start page. Prefer :default-home; publishing with no journals
+  falls back to all-pages."
+  [{:keys [default-home current-route route-has-p? publishing? latest-journals]}]
+  (cond
+    (and default-home
+         (= :home current-route)
+         (not route-has-p?)
+         (:page default-home))
+    [:page (:page default-home)]
+
+    (and publishing?
+         (not default-home)
+         (some? latest-journals)
+         (empty? latest-journals))
+    [:route :all-pages]))
+
 (hsx/defc main-content
   []
   (let [default-home (app-left-sidebar/use-default-home-if-valid)
         current-repo (rfx/use-sub [:git/current-repo])
         [latest-journals set-latest-journals!] (hooks/use-state nil)
-        redirect-target (cond
-                          (and default-home
-                               (= :home (state/get-current-route))
-                               (not (state/route-has-p?))
-                               (:page default-home))
-                          [:page (:page default-home)]
-
-                          (and config/publishing?
-                               (not default-home)
-                               (some? latest-journals)
-                               (empty? latest-journals))
-                          [:route :all-pages])]
+        redirect-target (home-redirect-target
+                         {:default-home default-home
+                          :current-route (state/get-current-route)
+                          :route-has-p? (state/route-has-p?)
+                          :publishing? config/publishing?
+                          :latest-journals latest-journals})]
        (hooks/use-effect!
         (fn []
           (if (and config/publishing? current-repo (not default-home))

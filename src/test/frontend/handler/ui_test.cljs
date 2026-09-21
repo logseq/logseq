@@ -1,5 +1,5 @@
 (ns frontend.handler.ui-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.config :as config]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.ui :as ui-handler]
@@ -7,6 +7,84 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
+
+(deftest auto-complete-scroll-geometry-test
+  (testing "normalizes focused-item geometry from container and target DOM data"
+    (let [container #js {:scrollTop 100
+                         :clientHeight 240
+                         :getBoundingClientRect (fn [] #js {:top 40 :height 240})}
+          element #js {:getBoundingClientRect (fn [] #js {:top 90 :height 30})}]
+      (is (= {:scroll-top 100
+              :viewport-height 240
+              :item-top 150
+              :item-height 30}
+             (#'ui-handler/auto-complete-scroll-geometry container element)))))
+  (testing "includes the preceding group heading in the focused cluster"
+    (let [heading #js {:classList #js {:contains (fn [class-name]
+                                                   (= class-name "ui__ac-group-name"))}
+                       :getBoundingClientRect (fn [] #js {:top 40 :height 32})}
+          wrap #js {:previousElementSibling heading}
+          container #js {:scrollTop 100
+                         :clientHeight 240
+                         :getBoundingClientRect (fn [] #js {:top 40 :height 240})}
+          element #js {:parentElement wrap
+                       :getBoundingClientRect (fn [] #js {:top 72 :height 30})}]
+      (is (= {:scroll-top 100
+              :viewport-height 240
+              :item-top 100
+              :item-height 62}
+             (#'ui-handler/auto-complete-scroll-geometry container element)))))
+  (testing "scrolls the group heading back into view with the first command"
+    (let [heading #js {:classList #js {:contains (fn [class-name]
+                                                   (= class-name "ui__ac-group-name"))}
+                       :getBoundingClientRect (fn [] #js {:top 8 :height 32})}
+          wrap #js {:previousElementSibling heading}
+          container #js {:scrollTop 32
+                         :clientHeight 240
+                         :getBoundingClientRect (fn [] #js {:top 40 :height 240})}
+          element #js {:parentElement wrap
+                       :getBoundingClientRect (fn [] #js {:top 40 :height 30})}]
+      (is (zero? (#'ui-handler/auto-complete-keep-visible-scroll-top
+                  (#'ui-handler/auto-complete-scroll-geometry container element))))))
+  (testing "returns nil when container or element is missing"
+    (is (nil? (#'ui-handler/auto-complete-scroll-geometry nil #js {})))
+    (is (nil? (#'ui-handler/auto-complete-scroll-geometry #js {} nil)))))
+
+(deftest auto-complete-keep-visible-scroll-top-test
+  (testing "scrolls down when the focused item is below the viewport"
+    (is (= 170
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 0
+             :viewport-height 200
+             :item-top 350
+             :item-height 20}))))
+  (testing "scrolls up when the focused item is above the viewport"
+    (is (= 40
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 200
+             :viewport-height 200
+             :item-top 40
+             :item-height 20}))))
+  (testing "scrolls back to 0 when the first grouped command is above the viewport"
+    (is (zero? (#'ui-handler/auto-complete-keep-visible-scroll-top
+                {:scroll-top 400
+                 :viewport-height 200
+                 :item-top 0
+                 :item-height 52}))))
+  (testing "keeps scroll-top when the focused item is already visible"
+    (is (= 100
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 100
+             :viewport-height 200
+             :item-top 140
+             :item-height 20}))))
+  (testing "keeps a partially clipped item fully visible at the bottom edge"
+    (is (= 20
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 0
+             :viewport-height 200
+             :item-top 190
+             :item-height 30})))))
 
 (deftest ui-file-loaders-read-local-files-through-worker-test
   (async done
@@ -87,7 +165,7 @@
             (p/then
              (fn []
                (is (= [[:thread-api/pull repo [:db/id :block/uuid] [:block/uuid anchor-uuid]]
-                       [:thread-api/get-block-parents repo 42 3]]
+                       [:thread-api/get-block-parents repo 42 100]]
                       @worker-calls))
                (is (= [1] @scroll-calls))))
             (p/catch
@@ -97,3 +175,13 @@
              (fn []
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest get-file-content-skips-when-db-worker-not-ready-test
+  (let [previous @state/*db-worker]
+    (try
+      (reset! state/*db-worker nil)
+      (is (nil? (ui-handler/<get-file-content "repo" "logseq/custom.css")))
+      (reset! state/*db-worker (fn [& _] :content))
+      (is (some? (ui-handler/<get-file-content "repo" "logseq/custom.css")))
+      (finally
+        (reset! state/*db-worker previous)))))

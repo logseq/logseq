@@ -12,9 +12,11 @@
 (defonce ^:private transports
   (atom {}))
 
+(declare create-mcp-api-server)
+
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
 ;; for how to respond to different MCP requests
-(defn handle-post-request [mcp-server {:keys [port host]} req res]
+(defn handle-post-request [api-fn {:keys [port host]} req res]
   (let [session-id (aget (.-headers req) "mcp-session-id")]
     (js/console.log "POST /mcp request" session-id (pr-str (.-body req)))
     (cond
@@ -27,7 +29,8 @@
       (let [transport (StreamableHTTPServerTransport.
                        #js {:sessionIdGenerator (comp str random-uuid)
                             :enableDnsRebindingProtection true
-                            :allowedHosts #js [(str host ":" port)]})]
+                            :allowedHosts #js [(str host ":" port)]})
+            mcp-server (create-mcp-api-server api-fn)]
         (set! (.-onclose transport)
               (fn []
                 (js/console.log "Transport closed" (.-sessionId transport))

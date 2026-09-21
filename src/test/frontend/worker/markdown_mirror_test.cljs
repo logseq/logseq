@@ -48,11 +48,55 @@
 (defn- first-block [page]
   (-> page :block/_page first))
 
+(defn- add-child-block!
+  [conn page title]
+  (d/transact! conn [{:block/uuid (random-uuid)
+                      :block/title title
+                      :block/page (:db/id page)
+                      :block/parent (:db/id page)
+                      :block/order "a0"}]))
+
 (defn- <mirror-repo!
   [& args]
   (if-let [f (resolve 'frontend.worker.markdown-mirror/<mirror-repo!)]
     (apply f args)
     (p/resolved ::missing-mirror-repo-fn)))
+
+(deftest replacing-graph-keeps-colliding-mirror-paths-distinct-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          first-uuid #uuid "11111111-1111-4111-8111-111111111111"
+          second-uuid #uuid "22222222-2222-4222-8222-222222222222"
+          old-conn (db-test/create-conn-with-blocks
+                    [{:page {:block/title "A:B" :block/uuid second-uuid}
+                      :blocks [{:block/title "old body"}]}])
+          new-conn (db-test/create-conn-with-blocks
+                    [{:page {:block/title "A/B" :block/uuid first-uuid}
+                      :blocks [{:block/title "first body"}]}
+                     {:page {:block/title "A:B" :block/uuid second-uuid}
+                      :blocks [{:block/title "second body"}]}])
+          edit (fn [conn title]
+                 (let [page (d/entity @conn [:block/uuid second-uuid])]
+                   (d/transact! conn [[:db/add (:db/id (first-block page)) :block/title title]])))]
+      (markdown-mirror/set-enabled! test-repo false)
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (p/let [_ (markdown-mirror/<handle-tx-report!
+                    test-repo old-conn (edit old-conn "warm index") {:platform platform})
+                  _ (markdown-mirror/<mirror-page!
+                     test-repo @new-conn (:db/id (d/entity @new-conn [:block/uuid first-uuid]))
+                     {:platform platform})
+                  first-content (get @files (page-path "pages/A_B.md"))
+                  _ (markdown-mirror/<handle-tx-report!
+                     test-repo new-conn (edit new-conn "updated second body")
+                     {:platform platform :defer? true})
+                  _ (markdown-mirror/<flush-repo! test-repo {:platform platform})]
+            (is (= first-content (get @files (page-path "pages/A_B.md")))
+                "Replacing the graph must not overwrite the other colliding page.")
+            (is (some? (get @files (page-path "pages/A_B (2).md")))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (markdown-mirror/set-enabled! test-repo false)
+                       (done)))))))
 
 (deftest repo-mirror-dir-is-under-mirror-markdown-test
   (is (= "graph-xxx/mirror/markdown"
@@ -140,6 +184,22 @@
         tx-report (d/with @conn [{:db/id (:db/id block)
                                   :block/title "after"}])]
     (is (= #{(:db/id page)}
+           (markdown-mirror/affected-page-ids tx-report)))))
+
+(deftest affected-page-ids-includes-linking-pages-on-page-rename-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "TargetOld"}
+                                   :blocks [{:block/title "target"}]}
+                                  {:page {:block/title "Source"}
+                                   :blocks [{:block/title "See [[TargetOld]]"}]}]})
+        target (db-test/find-page-by-title @conn "TargetOld")
+        source (db-test/find-page-by-title @conn "Source")
+        tx-report (d/with @conn [{:db/id (:db/id target)
+                                  :block/title "TargetNew"
+                                  :block/name "targetnew"}])]
+    (is (contains? (set (map :db/id (:block/refs (first-block source))))
+                   (:db/id target)))
+    (is (= #{(:db/id target) (:db/id source)}
            (markdown-mirror/affected-page-ids tx-report)))))
 
 (deftest block-db-id-comments-are-not-written-to-block-lines-test
@@ -418,6 +478,29 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-does-not-encode-background-color-as-highlight-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Highlighted"}
+                   :blocks [{:block/title "Highlighted block"
+                             :build/properties {:logseq.property/background-color "red"}}]}]})
+          page (db-test/find-page-by-title @conn "Highlighted")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Highlighted.md"))]
+                      ;; The :encode-highlight-as-mark? behaviour added for the
+                      ;; "Export page" feature must not leak into the
+                      ;; markdown-mirror, which shares the same underlying
+                      ;; logseq.common.export.file code.
+                      (is (not (re-find #"\^\^" content)))
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- Highlighted block")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-preserves-markdown-semantic-block-formatting-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -445,6 +528,55 @@
                                   "  (+ 1 2)\n"
                                   "  ```")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-emits-todo-for-task-with-default-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Tasks"}
+                                     :blocks [{:block/title "default todo"
+                                               :build/tags [:logseq.class/Task]}
+                                              {:block/title "doing task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                                              {:block/title "done task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.done}}
+                                              {:block/title "canceled task"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.canceled}}]}]})
+          page (db-test/find-page-by-title @conn "Tasks")
+          default-block (db-test/find-block-by-content @conn "default todo")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (empty? (d/datoms @conn :eavt (:db/id default-block) :logseq.property/status)))
+                    (is (= :logseq.property/status.todo
+                           (:db/ident (:logseq.property/status default-block))))
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- TODO default todo\n"
+                                "- DOING doing task\n"
+                                "- DONE done task\n"
+                                "- CANCELED canceled task")
+                           (get @files (page-path "pages/Tasks.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-skips-empty-placeholder-status-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Cleared"}
+                                     :blocks [{:block/title "cleared status"
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/empty-placeholder}}]}]})
+          page (db-test/find-page-by-title @conn "Cleared")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- cleared status")
+                           (get @files (page-path "pages/Cleared.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -527,6 +659,73 @@
                                   "- Target #Project\n"
                                   "  - Target child")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-default-property-value-children-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333342"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "Text Prop Children"
+                                             :block/uuid page-uuid
+                                             :build/properties
+                                             {:user.property/notes
+                                              {:build/property-value :block
+                                               :block/title "page value"
+                                               :build/children [{:block/title "page value child"}]}}}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/notes
+                                                {:build/property-value :block
+                                                 :block/title "block value"
+                                                 :build/children
+                                                 [{:block/title "child of value"
+                                                   :build/children [{:block/title "grandchild"}]}]}}}
+                                              {:block/title "after"}]}]})
+          page (db-test/find-page-by-title @conn "Text Prop Children")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n"
+                                "* notes::\n"
+                                "  - page value\n"
+                                "    - page value child\n\n"
+                                "- body\n"
+                                "  * notes::\n"
+                                "    - block value\n"
+                                "      - child of value\n"
+                                "        - grandchild\n"
+                                "- after")
+                           (get @files (page-path "pages/Text Prop Children.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-does-not-export-url-property-value-children-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333343"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/website {:logseq.property/type :url}}
+                 :pages-and-blocks [{:page {:block/title "Url Prop Children"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/website
+                                                {:build/property-value :block
+                                                 :block/title "https://example.com"
+                                                 :build/children [{:block/title "should not appear"}]}}}
+                                              {:block/title "after"}]}]})
+          page (db-test/find-page-by-title @conn "Url Prop Children")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Url Prop Children.md"))]
+                      (is (= (str (page-marker page-uuid) "\n\n"
+                                  "- body\n"
+                                  "  * website:: https://example.com\n"
+                                  "- after")
+                             content))
+                      (is (not (re-find #"should not appear" content))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -648,7 +847,12 @@
                                   "- class")
                              (get @files (page-path "pages/Project.md")))))
                     (is (nil? (get @files (page-path "pages/Built In.md"))))
-                    (is (nil? (get @files (page-path "pages/rating.md"))))))
+                    (is (nil? (get @files (page-path "pages/rating.md"))))
+                    (is (nil? (get @files (page-path "pages/Library.md"))))
+                    (is (nil? (get @files (page-path "pages/Quick add.md"))))
+                    (let [contents (db-test/find-page-by-title @conn "Contents")]
+                      (is (true? (ldb/built-in? contents)))
+                      (is (some? (get @files (page-path "pages/Contents.md")))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -817,6 +1021,36 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest rename-updates-linking-page-mirror-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "TargetOld"}
+                                     :blocks [{:block/title "target"}]}
+                                    {:page {:block/title "Source"}
+                                     :blocks [{:block/title "See [[TargetOld]]"}]}]})
+          source (db-test/find-page-by-title @conn "Source")
+          target (db-test/find-page-by-title @conn "TargetOld")]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id source) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid source)) "\n\n"
+                                "- See [[TargetOld]]")
+                           (get @files (page-path "pages/Source.md"))))
+                    (let [tx-report (d/with @conn [{:db/id (:db/id target)
+                                                    :block/title "TargetNew"
+                                                    :block/name "targetnew"}])
+                          _ (d/reset-conn! conn (:db-after tx-report))]
+                      (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform}))))
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Source.md"))]
+                      (is (= (str (page-marker (:block/uuid source)) "\n\n"
+                                  "- See [[TargetNew]]")
+                             content))
+                      (is (not (re-find #"\[\[TargetOld\]\]" content))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest rename-with-unchanged-content-removes-old-mirror-path-test
   (async done
     (let [{:keys [platform files deletes]} (fake-platform)
@@ -929,5 +1163,112 @@
                     (is (= :error (:status result)))
                     (is (= :duplicate-journal-day (:reason result)))
                     (is (empty? @writes))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest contents-page-is-mirrored-despite-built-in-flag-test
+  (async done
+    (let [{:keys [platform files writes]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"}
+                                     :blocks [{:block/title "alpha"}]}]})
+          contents (db-test/find-page-by-title @conn "Contents")
+          _ (add-child-block! conn contents "sidebar notes")]
+      (is (true? (ldb/built-in? contents)))
+      (is (false? (ldb/hidden? contents)))
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id contents) {:platform platform})
+          (p/then (fn [result]
+                    (let [path (page-path "pages/Contents.md")
+                          content (str (page-marker (:block/uuid contents)) "\n\n"
+                                       "- sidebar notes")]
+                      (is (= :written (:status result)))
+                      (is (= content (get @files path)))
+                      (is (= [[path content]] @writes)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest internal-built-in-and-hidden-pages-are-not-mirrored-test
+  (async done
+    (let [{:keys [platform files writes]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:rating {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "Hidden User"
+                                            :build/properties {:logseq.property/hide? true}}
+                                     :blocks [{:block/title "secret"}]}]})
+          library (db-test/find-page-by-title @conn "Library")
+          quick-add (db-test/find-page-by-title @conn "Quick add")
+          recycle (db-test/find-page-by-title @conn "Recycle")
+          hidden-user (db-test/find-page-by-title @conn "Hidden User")
+          rating (db-test/find-page-by-title @conn "rating")]
+      (is (true? (ldb/built-in? library)))
+      (is (true? (ldb/built-in? quick-add)))
+      (is (true? (ldb/hidden? quick-add)))
+      (is (true? (ldb/hidden? recycle)))
+      (is (true? (ldb/hidden? hidden-user)))
+      (is (true? (ldb/property? rating)))
+      (-> (p/all [(markdown-mirror/<mirror-page! test-repo @conn (:db/id library) {:platform platform})
+                  (markdown-mirror/<mirror-page! test-repo @conn (:db/id quick-add) {:platform platform})
+                  (markdown-mirror/<mirror-page! test-repo @conn (:db/id recycle) {:platform platform})
+                  (markdown-mirror/<mirror-page! test-repo @conn (:db/id hidden-user) {:platform platform})
+                  (markdown-mirror/<mirror-page! test-repo @conn (:db/id rating) {:platform platform})])
+          (p/then (fn [results]
+                    (is (every? (fn [result]
+                                  (and (= :skipped (:status result))
+                                       (= :excluded-page (:reason result))))
+                                results))
+                    (is (empty? @writes))
+                    (is (nil? (get @files (page-path "pages/Library.md"))))
+                    (is (nil? (get @files (page-path "pages/Quick add.md"))))
+                    (is (nil? (get @files (page-path "pages/Recycle.md"))))
+                    (is (nil? (get @files (page-path "pages/Hidden User.md"))))
+                    (is (nil? (get @files (page-path "pages/rating.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest contents-page-edit-updates-mirror-without-deleting-test
+  (async done
+    (let [{:keys [platform files deletes]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"}
+                                     :blocks [{:block/title "alpha"}]}]})
+          contents (db-test/find-page-by-title @conn "Contents")
+          _ (add-child-block! conn contents "before")
+          block (db-test/find-block-by-content @conn "before")
+          path (page-path "pages/Contents.md")
+          _ (swap! files assoc path (str (page-marker (:block/uuid contents)) "\n\n"
+                                         "- before"))
+          tx-report (d/with @conn [{:db/id (:db/id block)
+                                    :block/title "after"}])
+          _ (d/reset-conn! conn (:db-after tx-report))]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
+          (p/then (fn [_]
+                    (is (empty? @deletes))
+                    (is (= (str (page-marker (:block/uuid contents)) "\n\n"
+                                "- after")
+                           (get @files path)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest unrelated-page-tx-does-not-delete-contents-mirror-test
+  (async done
+    (let [{:keys [platform files deletes]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"}
+                                     :blocks [{:block/title "before"}]}]})
+          contents (db-test/find-page-by-title @conn "Contents")
+          page (db-test/find-page-by-title @conn "Page A")
+          block (first-block page)
+          contents-path (page-path "pages/Contents.md")
+          contents-content (str (page-marker (:block/uuid contents)) "\n\n"
+                                "- sidebar notes")
+          _ (swap! files assoc contents-path contents-content)
+          tx-report (d/with @conn [{:db/id (:db/id block)
+                                    :block/title "after"}])]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
+          (p/then (fn [_]
+                    (is (not (some #{contents-path} @deletes)))
+                    (is (= contents-content (get @files contents-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))

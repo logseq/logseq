@@ -288,7 +288,8 @@
 
 (hsx/defc switch-spell-check-row
   [t]
-  (let [enabled? (rfx/use-sub [:electron/user-cfgs :spell-check])]
+  ;; Match electron.spell-check/session-spellcheck-enabled?: nil defaults to on.
+  (let [enabled? (not= false (rfx/use-sub [:electron/user-cfgs :spell-check]))]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -312,6 +313,20 @@
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
+(defn language-select-content-props
+  "Keep the language popup clickable over Electron's custom title-bar drag region."
+  ([]
+   (language-select-content-props nil))
+  ([container]
+   (let [no-drag-style {:app-region "no-drag"
+                        :-webkit-app-region "no-drag"}]
+     (cond-> {:class "z-[99999] ls-app-no-drag"
+              :style no-drag-style
+              :positioner-props {:className "ls-app-no-drag"
+                                 :style (assoc no-drag-style :z-index 99999)}}
+       (some? container)
+       (assoc :container container)))))
+
 (defn language-row [t preferred-language]
   (let [selected-language (some-> preferred-language name)
         language-items (mapv (fn [language]
@@ -334,9 +349,7 @@
                   (fn [value]
                     (get language-labels value value))))
                 (shui/select-content
-                 {:container (.-body js/document)
-                  :class "z-[99999]"
-                  :positioner-props {:style {:z-index 99999}}}
+                 (language-select-content-props (.-body js/document))
                  (shui/select-group
                   (for [{:keys [value label]} language-items]
                     (shui/select-item {:key value :value value} label)))))]
@@ -346,7 +359,8 @@
 
 (hsx/defc theme-modes-row
   [t]
-  (let [theme (rfx/use-sub [:ui/theme])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        theme (rfx/use-sub [:ui/theme])
         dark? (= "dark" theme)
         system-theme? (rfx/use-sub [:ui/system-theme?])
         switch-theme (if dark? "light" "dark")
@@ -371,7 +385,8 @@
 
 (hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (rfx/use-sub [:ui/radix-color])
+  (let [_preferred-language (rfx/use-sub [:preferred-language])
+        color-accent (rfx/use-sub [:ui/radix-color])
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -1445,6 +1460,7 @@
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
   (let [current-repo (rfx/use-sub [:git/current-repo])
+        _preferred-language (rfx/use-sub [:preferred-language])
         _installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])

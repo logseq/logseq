@@ -93,6 +93,26 @@ html.is-mobile .ls-block-content-indent {
   .block-title-wrap.as-heading {
     @apply inline text-[length:inherit];
   }
+
+  .katex-display {
+    display: inline;
+    margin: 0;
+  }
+
+  .katex-display > .katex {
+    display: inline-block;
+    text-align: initial;
+  }
+
+  .katex-display > .katex > .katex-html > .tag {
+    position: static;
+    margin-left: 0.5em;
+  }
+
+  .katex svg {
+    width: 100%;
+    height: inherit;
+  }
 }
 
 .breadcrumb {
@@ -2004,6 +2024,14 @@ html.is-mac {
   .as-plain-image-link {
     .ls-resize-image {
       max-width: 80px;
+    }
+
+    .asset-image-fallback {
+      display: inline-block;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
     }
 
     .image-resize {

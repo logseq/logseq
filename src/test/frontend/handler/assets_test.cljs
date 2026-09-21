@@ -1,8 +1,9 @@
 (ns frontend.handler.assets-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets]
+            [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
 
@@ -131,3 +132,26 @@
     (let [url "assets:///C/logseq__colon/Users/charlie/graph/assets/test.mp3"]
       (is (= url
              (assets/asset-protocol-url->media-url url))))))
+
+(deftest local-file-iframe-src->assets-url-test
+  (with-redefs [state/get-current-repo (constantly "example")
+                config/get-repo-dir (constantly "C:/graph")]
+    (doseq [[src expected]
+            [["file:///C:/docs/example.html?mode=dark#section"
+              "assets:///C/logseq__colon/docs/example.html?mode=dark#section"]
+             ["FILE:///tmp/a%23b%3Fc.html" "assets:///tmp/a%23b%3Fc.html"]
+             ["file:///tmp/a&b.html" "assets:///tmp/a%26b.html"]
+             ["file:///tmp/a%2523b.html" "assets:///tmp/a%2523b.html"]
+             ["file://server/share/example.html" "assets://server/share/example.html"]
+             ["../assets/100%20done%.html?mode=dark#section"
+              "assets:///C/logseq__colon/graph/assets/100%20done%25.html?mode=dark#section"]
+             ["assets/%FF.html" "assets:///C/logseq__colon/graph/assets/%25FF.html"]
+             ["./assets/example.html" "assets:///C/logseq__colon/graph/assets/example.html"]
+             ["https://example.com/example.html" nil]
+             ["//example.com/example.html" nil]
+             ["javascript:alert(1)" nil]
+             ["assets:///tmp/example.html" nil]
+             ["assets-other/example.html" nil]
+             ["file://[invalid" nil]]]
+      (testing src
+        (is (= expected (assets/local-file-iframe-src->assets-url src)))))))

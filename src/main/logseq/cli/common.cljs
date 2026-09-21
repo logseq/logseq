@@ -1,51 +1,21 @@
 (ns logseq.cli.common
-  "Common fns between CLI and electron"
-  (:require ["fs-extra" :as fs]
+  "Shared local graph deletion entry point."
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
             ["path" :as node-path]
-            [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
-            [logseq.common.graph-dir :as graph-dir]))
+            [promesa.core :as p]))
 
-(defn- existing-graph-dir-name
-  [graphs-dir repo]
-  (let [graph-dir-key (graph-dir/repo->graph-dir-key repo)
-        encoded-name (graph-dir/repo->encoded-graph-dir-name repo)]
-    (or
-     (when (fs/existsSync (node-path/join graphs-dir encoded-name))
-       encoded-name)
-     (when (fs/existsSync graphs-dir)
-       (->> (common-graph/read-directories graphs-dir)
-            (remove #(= % common-config/unlinked-graphs-dir))
-            (some #(when (= graph-dir-key (graph-dir/decode-graph-dir-name %))
-                     %)))))))
-
-(defn unlink-graph!
-  "Unlinks the given repo by moving it to the 'Unlinked graphs' dir.
-   Returns path of unlinked dir if move is successful or nil if not"
+(defn <unlink-graph!
+  "Stops graph workers and preserves `repo` under Unlinked graphs."
   ([repo]
-   (unlink-graph! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
+   (<unlink-graph! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
   ([graphs-dir repo]
-   (let [graphs-dir (common-graph/expand-home graphs-dir)]
-     (when-let [graph-dir-name (existing-graph-dir-name graphs-dir repo)]
-       (let [path (node-path/join graphs-dir graph-dir-name)
-             unlinked (node-path/join graphs-dir common-config/unlinked-graphs-dir)
-             new-path (node-path/join unlinked graph-dir-name)
-             new-path-exists? (fs/existsSync new-path)
-             new-path' (if new-path-exists?
-                         (node-path/join unlinked (str graph-dir-name "-" (random-uuid)))
-                         new-path)]
-         (fs/ensureDirSync unlinked)
-         (fs/moveSync path new-path')
-         new-path')))))
-
-(defn remove-graph-dir!
-  "Deletes the graph directory from disk, including worker lock files.
-   Returns the removed path if a directory was deleted, otherwise nil."
-  ([repo]
-   (remove-graph-dir! (common-graph/expand-home (common-graph/get-default-graphs-dir)) repo))
-  ([graphs-dir repo]
-   (let [graphs-dir (common-graph/expand-home graphs-dir)]
-     (when-let [graph-dir-name (existing-graph-dir-name graphs-dir repo)]
-       (let [path (node-path/join graphs-dir graph-dir-name)]
-         (fs/removeSync path)
-         path)))))
+   (<unlink-graph! graphs-dir repo nil))
+  ([graphs-dir repo commit]
+   (p/let [result (lifecycle/deleteGraph
+                  (lifecycle/resolveStorage
+                   (node-path/dirname (common-graph/expand-home graphs-dir))
+                   (common-graph/expand-home graphs-dir)) repo commit)]
+     (when-not (.-existed ^js result)
+       (throw (ex-info "Graph does not exist" {:code :graph-not-exists :repo repo})))
+     (.-destination ^js result))))
