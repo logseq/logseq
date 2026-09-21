@@ -154,13 +154,17 @@
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
-      [:div.page-blocks-inner.relative
-       (when (or (seq child-uuids) (:current-page? config))
-         (block/page-root-virtual-list config child-uuids))
-       (when (and (not config/publishing?)
-                  (or (empty? child-uuids)
-                      (not hide-add-button?)))
-         (add-button page child-uuids config))])))
+      (block/with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         [:div.page-blocks-inner.relative
+          (when (or (seq visible-uuids) (:current-page? config))
+            (block/page-root-virtual-list config visible-uuids))
+          (when (and (not config/publishing?)
+                     (or (empty? visible-uuids)
+                         (not hide-add-button?)))
+            (add-button page visible-uuids config))])))))
 
 (hsx/defc special-page-root
   [page-uuid membership-kind user-uuid config hide-add-button?]
@@ -185,7 +189,7 @@
   [block-uuid block config hide-add-button?]
   (let [child-uuids (db-hooks/use-children block-uuid)]
     [:div.page-blocks-inner.relative
-     (block/plain-block-list config [block-uuid])
+     (block/page-root-virtual-list config [block-uuid])
      (when-not (hide-block-route-add-button? block hide-add-button?)
        (add-button block child-uuids config))]))
 
@@ -196,7 +200,12 @@
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
   (let [document-mode? (rfx/use-sub [:document/mode?])
-        config (page-render-config page option document-mode?)
+        config (cond-> (page-render-config page option document-mode?)
+                 ;; Only the standalone page route window-renders its outliner;
+                 ;; pages embedded in views, journals, sidebar, or previews
+                 ;; render their blocks in full.
+                 (:current-page? option)
+                 (assoc :virtualize? true))
         page-uuid (:block/uuid page)
         user-uuid-string (user-handler/user-uuid)
         user-uuid (when (and (string? user-uuid-string)

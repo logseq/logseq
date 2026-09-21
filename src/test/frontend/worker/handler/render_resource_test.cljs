@@ -525,7 +525,8 @@
   (is (not (contains? block :block/properties-text-values)))
   (is (every? #{:block.temp/positioned-properties
                 :block.temp/refs-count
-                :block.temp/order-list-index}
+                :block.temp/order-list-index
+                :block.temp/has-children?}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
                             (:block/refs block)
@@ -806,6 +807,7 @@
        @conn
        [:favorites]
        #{[:children favorite-page-uuid]
+         [:attr :block/link]
          [:entity first-page-uuid]}
        [{:db/id first-page-id
          :block/uuid first-page-uuid
@@ -817,7 +819,8 @@
       (assert-resource-envelope
        @conn
        [:favorite-status first-page-uuid]
-       #{[:children favorite-page-uuid]}
+       #{[:children favorite-page-uuid]
+         [:attr :block/link]}
        true
        status-response)
       (assert-resource-envelope
