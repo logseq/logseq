@@ -16,6 +16,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
 (use-fixtures :each
@@ -90,6 +91,33 @@
         (is (= [[:thread-api/pull "test" page-selector [:block/name "existing page"]]
                 [:redirect page-uuid]]
                @calls))))))
+
+(deftest-async create-page-with-tags-does-not-reuse-same-title-page-with-other-tags-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Kestrel {} :Lantern {}}
+               :pages-and-blocks [{:page {:block/title "Juniper" :build/tags [:Lantern]}}]})
+        lantern-page (db-test/find-page-by-title @conn "Juniper")
+        kestrel (db-test/find-page-by-title @conn "Kestrel")]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/<invoke-db-worker
+                    (fn [api _repo selector lookup-ref]
+                      (is (= :thread-api/pull api))
+                      (let [entity-id (if (= :block/name (first lookup-ref))
+                                        (:db/id (ldb/get-page @conn (second lookup-ref)))
+                                        lookup-ref)]
+                        (p/resolved (some->> entity-id (d/pull @conn selector)))))
+                    db-transact/apply-outliner-ops
+                    (fn [_conn ops _opts]
+                      (let [[op [title create-options]] (first ops)]
+                        (is (= :create-page op))
+                        (p/resolved (outliner-page/create! conn title create-options))))]
+      (p/let [result (page-common-handler/<create! "Juniper" {:redirect? false
+                                                              :tags [(:block/uuid kestrel)]})
+              tag-titles (set (map :block/title (:block/tags (d/entity @conn (:db/id result)))))]
+        (is (not= (:db/id lantern-page) (:db/id result))
+            "A page with the same title but other tags is not reused")
+        (is (contains? tag-titles "Kestrel"))
+        (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Juniper"]] @conn))))))))
 
 (deftest-async favorite-mutations-use-atomic-worker-commands-test
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
