@@ -32,6 +32,7 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.shell :as shell-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
@@ -125,6 +126,8 @@
   [graph]
   (state/set-current-repo! graph)
   (page-handler/init-commands!)
+  ;; Reset tabs when switching graphs
+  (tabs-handler/close-all-tabs!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
   (st/refresh!)

@@ -36,6 +36,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
+            [frontend.state.tabs :as tabs-state]
             [frontend.util :as util]
             [frontend.util.url :as url-util]
             [goog.object :as gobj]
@@ -157,6 +158,8 @@
 
       (i18n/start)
       (instrument/init)
+
+      (tabs-state/init-tabs!)
 
       (events/run!)
 

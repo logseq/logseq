@@ -59,3 +59,4 @@
 (defn toggle-preferred-pasting-file! []
   (let [preferred-pasting-file? (state/preferred-pasting-file?)]
     (set-config! :editor/preferred-pasting-file? (not preferred-pasting-file?))))
+
