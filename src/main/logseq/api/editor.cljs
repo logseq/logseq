@@ -172,6 +172,12 @@
   [name]
   (page-handler/<delete! name nil))
 
+(defn delete_recycled_page_permanently
+  [id-or-page-name]
+  (p/let [page (<get-block id-or-page-name {:children? false})]
+    (when (and page (ldb/recycled? page))
+      (page-handler/delete-recycled-permanently! (:block/uuid page)))))
+
 (defn restore_page
   [id-or-page-name]
   (p/let [page (<get-block id-or-page-name {:children? false})]
@@ -448,23 +454,21 @@
 (defn upsert_block_property
   [id key ^js value ^js options]
   (this-as this
-           (p/let [key' (api-block/sanitize-user-property-name key)
-                   opts (bean/->clj options)
+           (p/let [opts (bean/->clj options)
                    block (<get-block id {:children? false})
                    value (bean/->clj value)
                    opts (cond-> opts
                           (boolean? (:reset opts))
                           (assoc :reset-property-values (:reset opts)))]
              (when block
-               (db-based-api/upsert-block-property this block key' value opts)))))
+               (db-based-api/upsert-block-property this block key value opts)))))
 
 (defn remove_block_property
   [id key]
   (this-as this
            (p/let [block (<get-block id {:children? false})]
              (when-let [block-uuid (:block/uuid block)]
-               (let [key (api-block/sanitize-user-property-name key)
-                     key (api-block/get-db-ident-from-property-name key this)]
+               (let [key (api-block/get-db-ident-from-property-name key this)]
                  (property-handler/remove-block-property! block-uuid key))))))
 
 (defn- get-block-classes-properties-has-default-value
@@ -493,7 +497,7 @@
     (p/let [properties (get-all-block-properties id)]
       (when (seq properties)
         (let [property-name (api-block/sanitize-user-property-name key)
-              ident (api-block/get-db-ident-from-property-name property-name this)
+              ident (api-block/get-db-ident-from-property-name key this)
               property-value (or (get properties property-name)
                                  (get properties (keyword property-name))
                                  (get properties ident))

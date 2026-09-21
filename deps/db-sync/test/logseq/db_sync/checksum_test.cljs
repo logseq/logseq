@@ -545,3 +545,26 @@
       (is (= checksum0 incremental1))
       (is (= checksum0 full2))
       (is (= full2 incremental2)))))
+
+(deftest derived-import-attributes-do-not-rescan-entities
+  (let [db (sample-db)
+        checksum-before (checksum/recompute-checksum db)
+        tx [[:db/add 3 :block/tx-id 100]
+            [:db/add 3 :block/refs 2]
+            [:db/add 4 :block/tx-id 100]]
+        report (d/with db tx)
+        entity-fn d/entity]
+    (doseq [tx-data [(:tx-data report) tx]]
+      (let [entity-reads (atom 0)
+            actual (with-redefs [d/entity (fn [db eid]
+                                            (when (int? eid) (swap! entity-reads inc))
+                                            (entity-fn db eid))]
+                     (checksum/update-checksum checksum-before (assoc report :tx-data tx-data)))]
+        (is (= checksum-before actual))
+        (is (zero? @entity-reads)
+            "Derived import attributes cannot change the checksum or require entity scans")))
+    (is (= (checksum/recompute-checksum (:db-after report))
+           (checksum/update-checksum nil report))
+        "An invalid initial checksum is still repaired")
+    (assert-incremental=full! db checksum-before
+                              (conj tx [:db/add 3 :block/title "Changed title"]))))

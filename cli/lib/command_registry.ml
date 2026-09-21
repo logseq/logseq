@@ -216,7 +216,11 @@ let property_update_options =
     |]
 
 let content_search_options =
-  Vec.singleton (value "content" "text" "Content search text")
+  Vec.of_array
+    [|
+      value "content" "text" "Content search text";
+      flag "include-hidden" "Include hidden results";
+    |]
 
 let e2ee_password_option = value "e2ee-password" "password" "E2EE password"
 
@@ -249,8 +253,9 @@ let options_for_command =
           option_of_array
             [| "-e"; "--edn-options" |]
             (Required_value "edn")
-            "EDN map of export options; :export-type overrides the default \
-             :graph";
+            "EDN export options; :export-type defaults to :graph. Nest graph \
+             content controls under :graph-options with :export-type \
+             :graph-human. Unknown or inapplicable keys are rejected";
           option_of_array
             [| "-p"; "--pretty-print" |]
             Flag "Pretty-print the exported EDN file";
@@ -412,10 +417,17 @@ let options_for_command =
           optional_value "ref-id-footer" "bool" "Show reference id footer";
           value "level" "n" "Tree depth";
         |]
+  | Login ->
+      Vec.of_array
+        [|
+          value "username" "username"
+            "Cognito sign-in identifier (requires --password)";
+          value "password" "password" "Account password (requires --username)";
+        |]
   | Server_list | Server_cleanup | Server_start | Server_stop | Server_restart
   | Sync_status | Sync_stop | Sync_remote_graphs | Sync_config_get
-  | Sync_config_unset | Sync_config_set | Login | Logout | Agent_bridge
-  | Example | Skill_show ->
+  | Sync_config_unset | Sync_config_set | Logout | Agent_bridge | Example
+  | Skill_show ->
       empty
   | Sync_start | Sync_upload -> Vec.singleton e2ee_password_option
   | Sync_download ->

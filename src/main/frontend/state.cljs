@@ -76,6 +76,14 @@
         (p/rejected result)
         result))))
 
+(defn <invoke-db-worker-when-ready
+  "Skip the thread-api request when db-worker is not initialized.
+  Returns nil in that case. UI effects that need the result should
+  depend on `db-worker-ready?` so they re-run after the worker starts."
+  [qkw & args]
+  (when @db-worker-ready?
+    (apply <invoke-db-worker qkw args)))
+
 (def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
 
 (def ^:private legacy-export-block-text-indent-styles
@@ -157,6 +165,9 @@
       ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
+      ;; block uuids whose lazy children must mount regardless of viewport
+      ;; distance (set while scrolling to an anchor target inside them)
+      :ui/anchor-mount                       {}
       :ui/file-component                     nil
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)
@@ -688,8 +699,7 @@ should be done through this fn in order to get global config and config defaults
   [blocks]
   (->> blocks
        (remove nil?)
-       (keep #(when-let [id (dom/attr % "blockid")]
-                (uuid id)))
+       (keep util/selection-node-block-id)
        (distinct)))
 
 (defn block-content-max-length
@@ -1868,10 +1878,6 @@ should be done through this fn in order to get global config and config defaults
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))
-
-(defn get-last-key-code
-  []
-  (get-state :editor/last-key-code))
 
 (defn set-ui-last-key-code!
   [key-code]

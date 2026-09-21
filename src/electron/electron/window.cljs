@@ -33,6 +33,10 @@
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
          url (if graph (str url "#/?graph=" graph) url)
+         spell-check-cfg (cfgs/get-item :spell-check)
+         spell-check-enabled? (spell-check/session-spellcheck-enabled? spell-check-cfg)
+         [initial-spell-check-enabled? ready-spell-check-enabled?]
+         (spell-check/startup-spellcheck-states linux? spell-check-enabled?)
          win-opts  (cond->
                     {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
                      :width                (.-width win-state)
@@ -60,9 +64,8 @@
 
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
-         win       (BrowserWindow. (clj->js win-opts))
-         spell-check-enabled? (spell-check/session-spellcheck-enabled? (cfgs/get-item :spell-check))]
-     (spell-check/apply-window-spellcheck! win spell-check-enabled?)
+         win       (BrowserWindow. (clj->js win-opts))]
+     (spell-check/apply-window-spellcheck! win initial-spell-check-enabled?)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
@@ -74,8 +77,12 @@
                                (callback (bean/->js
                                           {:cancel         false
                                            :requestHeaders headers})))))
-     ;; Show window as soon as it's ready
-     (.once win "ready-to-show" #(.show win))
+     ;; Keep spellcheck disabled until ready-to-show on Linux to avoid the
+     ;; Electron 40+ cached dictionary initialization race (#50327).
+     (.once win "ready-to-show"
+            (fn []
+              (spell-check/apply-window-spellcheck! win ready-spell-check-enabled?)
+              (.show win)))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
