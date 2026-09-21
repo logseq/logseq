@@ -135,7 +135,7 @@
                                              (p/resolved nil))]
             (p/do!
              (commands/handle-step [:editor/toggle-own-number-list])
-             (is (= [[:editor/toggle-own-number-list [block-uuid sibling-uuid]]]
+             (is (= [[:editor/toggle-own-number-list [block sibling]]]
                     @events)
                  "Number list should toggle the current block's list siblings")))
           (p/catch (fn [error]

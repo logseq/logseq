@@ -725,7 +725,7 @@
                                      i))
                                  siblings))]
     (if (nil? idx)
-      (cond-> [] block (conj block))
+      [block]
       (let [current (nth siblings idx)
             list-type (db-property/order-list-type current)
             same-type? (fn [sibling]
@@ -757,7 +757,7 @@
             siblings (when parent-uuid
                        (db-async/<get-block-immediate-children repo parent-uuid))]
       (if (seq siblings)
-        (mapv :block/uuid (contiguous-same-list-type-siblings siblings block))
+        (contiguous-same-list-type-siblings siblings block)
         block))))
 
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
