@@ -638,8 +638,7 @@
   (let [page? (or (ldb/page? block) (:block/name block))
         ;; :block/name is not unique, so pasting a copied page entity
         ;; would create a duplicate page; link to the existing page instead
-        existing-page (when (and page?
-                                 (= :paste outliner-op)
+        existing-page (when (and (= :paste outliner-op)
                                  (:block/name block))
                         (ldb/get-page db (:block/name block)))]
     (if existing-page
