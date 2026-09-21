@@ -269,13 +269,19 @@
   (when-let [datom (first (d/datoms db :avet :db/ident ident))]
     (:e datom)))
 
+(defonce ^:private class-object-hidden-index-cache (js/WeakMap.))
+
 (defn- class-object-hidden-index
+  "Cached per immutable db value: the index only changes with the snapshot."
   [db]
-  (let [property-tag-id (ident-eid db :logseq.class/Property)]
-    {:property-eids (eids-with-attr-value db :block/tags property-tag-id)
-     :hide-eids (eids-with-attr-value db :logseq.property/hide? true)
-     :deleted-eids (eids-with-attr db :logseq.property/deleted-at)
-     :built-in-eids (eids-with-attr-value db :logseq.property/built-in? true)}))
+  (or (.get class-object-hidden-index-cache db)
+      (let [property-tag-id (ident-eid db :logseq.class/Property)
+            index {:property-eids (eids-with-attr-value db :block/tags property-tag-id)
+                   :hide-eids (eids-with-attr-value db :logseq.property/hide? true)
+                   :deleted-eids (eids-with-attr db :logseq.property/deleted-at)
+                   :built-in-eids (eids-with-attr-value db :logseq.property/built-in? true)}]
+        (.set class-object-hidden-index-cache db index)
+        index)))
 
 (defn- hidden-class-object-eid?
   [db eid {:keys [property-eids hide-eids deleted-eids built-in-eids]}]
