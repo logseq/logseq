@@ -1,10 +1,14 @@
 (ns frontend.worker.sync.download-test
   (:require [cljs.test :refer [async deftest is]]
+            [datascript.core :as d]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
+            [logseq.db-sync.checksum :as checksum]
             [logseq.db-sync.snapshot :as snapshot]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (defn- frame-bytes
@@ -22,6 +26,50 @@
    #js {:start (fn [controller]
                  (.enqueue controller payload)
                  (.close controller))}))
+
+(deftest download-checksum-matches-imported-snapshot-not-earlier-pull-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Downloaded page"}
+                  :blocks [{:block/title "before remote edit"}]}])
+          block-id (:db/id (db-test/find-block-by-content @conn "before remote edit"))
+          pull-checksum (checksum/recompute-checksum @conn)
+          saved-checksum (atom nil)
+          config-prev @worker-state/*db-sync-config
+          fetch-prev js/fetch
+          graph-id (str (random-uuid))]
+      (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+      (set! js/fetch (fn [_url _opts] (p/resolved #js {:ok true})))
+      (-> (p/with-redefs [sync-download/fetch-json
+                          (fn [_url _opts schema]
+                            (p/resolved
+                             (case schema
+                               :sync/pull {:t 42 :checksum pull-checksum}
+                               :sync/snapshot-download {:url "https://sync.example.test/snapshot"})))
+                          sync-download/<stream-snapshot-row-batches!
+                          (fn [_resp _batch-size on-batch] (on-batch [[1 "snapshot" nil]]))
+                          sync-download/prepare-import!
+                          (fn [& _] (p/resolved {:import-id "test-import"}))
+                          sync-download/import-rows-chunk!
+                          (fn [& _] (p/resolved true))
+                          sync-download/finalize-import!
+                          (fn [& _]
+                            ;; The downloaded snapshot includes an edit made after /pull.
+                            (d/transact! conn [[:db/add block-id :block/title "after remote edit"]])
+                            (p/resolved true))
+                          worker-state/get-datascript-conn (fn [_] conn)
+                          client-op/update-local-checksum
+                          (fn [_ value] (reset! saved-checksum value))]
+            (sync-download/download-graph-by-id! "download-checksum-test" graph-id false))
+          (p/then (fn [_]
+                    (let [expected (checksum/recompute-checksum @conn)]
+                      (is (not= pull-checksum expected))
+                      (is (= expected @saved-checksum)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (set! js/fetch fetch-prev)
+                       (reset! worker-state/*db-sync-config config-prev)
+                       (done)))))))
 
 (deftest stream-snapshot-row-batches-ignores-stale-gzip-header-test
   (async done

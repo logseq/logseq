@@ -15,6 +15,7 @@
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
    [lambdaisland.glogi :as log]
+   [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
@@ -535,12 +536,9 @@
                             (reset! stage* :finalize-import)
                             (finalize-import! repo graph-id remote-tx import-id))]
                   (when-let [conn (worker-state/get-datascript-conn repo)]
-                    (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?))
-                  ;; Seed the local incremental checksum from the snapshot's
-                  ;; authoritative remote checksum so normal txs never need a
-                  ;; full-graph scan to initialize it.
-                  (when-let [remote-checksum (:checksum pull-resp)]
-                    (client-op/update-local-checksum repo remote-checksum))
+                    (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?)
+                    ;; /pull precedes the snapshot request and may describe an older DB.
+                    (client-op/update-local-checksum repo (sync-checksum/recompute-checksum @conn)))
                   {:repo repo
                    :graph-id graph-id
                    :remote-tx remote-tx
