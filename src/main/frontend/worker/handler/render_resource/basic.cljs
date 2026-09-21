@@ -50,7 +50,8 @@
   [db _resource-key _runtime]
   (let [favorites-page-uuid (:block/uuid (favorites-page db))
         targets (favorite-targets db)]
-    [(into #{[:children favorites-page-uuid]}
+    [(into #{[:children favorites-page-uuid]
+             [:attr :block/link]}
            (map (fn [page] [:entity (:block/uuid page)]))
            targets)
      (mapv sidebar-page-summary targets)]))
@@ -59,7 +60,8 @@
   [db resource-key _runtime]
   (let [page-uuid (common/require-uuid! :page-uuid (second resource-key))
         favorites-page-uuid (:block/uuid (favorites-page db))]
-    [#{[:children favorites-page-uuid]}
+    [#{[:children favorites-page-uuid]
+       [:attr :block/link]}
      (boolean (some #(= page-uuid (:block/uuid %))
                     (favorite-targets db)))]))
 
