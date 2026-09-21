@@ -463,6 +463,11 @@ kbd.shui-shortcut-key-pressed,
   background-color: var(--lx-accent-08-alpha, var(--color-level-4));
 }
 
+.ui__select-content,
+.ui__select-item {
+  -webkit-app-region: no-drag;
+}
+
 .ui__dropdown-menu-content, div[data-radix-menu-content],
 .ui__select-content {
   @apply overflow-y-auto;
@@ -518,12 +523,44 @@ kbd.shui-shortcut-key-pressed,
 
 .ui__calendar {
   .del-date-btn {
-    @apply absolute right-[4px] top-[17px] px-1 opacity-70 hover:opacity-100
-    active:opacity-80 hover:text-red-rx-09 rounded-md !h-6 !w-6;
+    @apply active:opacity-80 hover:text-red-rx-09;
+  }
+
+  /* Day highlight must win over ghost-button focus rings. */
+  [role="gridcell"] > button:focus,
+  [role="gridcell"] > button:focus-visible {
+    box-shadow: none;
+    outline: none;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-shadow: 0 0 #0000;
+  }
+
+  [role="gridcell"][data-today="true"] > button {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+
+  [role="gridcell"][data-selected="true"] > button,
+  [role="gridcell"][data-focused="true"] > button,
+  [role="gridcell"][data-selected="true"] > button:hover,
+  [role="gridcell"][data-selected="true"] > button:focus,
+  [role="gridcell"][data-selected="true"] > button:focus-visible,
+  [role="gridcell"][data-focused="true"] > button:hover,
+  [role="gridcell"][data-focused="true"] > button:focus,
+  [role="gridcell"][data-focused="true"] > button:focus-visible {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
   }
 
   input[type=number] {
-    appearance: initial;
+    appearance: textfield;
+    -moz-appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
+    }
   }
 }
 
@@ -540,6 +577,10 @@ kbd.shui-shortcut-key-pressed,
   }
 }
 
+.ui__toaster-viewport:has(.ls-wrap-widen) {
+  width: min(680px, calc(100vw - 2rem));
+}
+
 .ui__toast-content {
   &.untitled {
     .ui__toast-header {
@@ -547,15 +588,15 @@ kbd.shui-shortcut-key-pressed,
     }
 
     .ui__toast-body {
-      @apply flex-initial py-2;
+      @apply min-h-0 flex-1 overflow-y-auto overscroll-contain py-2;
     }
 
     .ui__toast-text {
-      @apply flex flex-row items-center gap-2 overflow-auto;
+      @apply flex min-h-0 min-w-0 flex-1 flex-row items-start gap-2 overflow-y-auto overscroll-contain;
     }
 
     .ui__toast-description {
-      @apply max-w-full overflow-auto;
+      @apply max-h-full max-w-full min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain select-text;
     }
   }
 }

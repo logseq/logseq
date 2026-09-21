@@ -1,5 +1,6 @@
 (ns frontend.worker.db-worker-node-test
-  (:require ["fs" :as fs]
+  (:require ["@logseq/graph-lifecycle" :as lifecycle]
+            ["fs" :as fs]
             ["http" :as http]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is use-fixtures]]
@@ -7,13 +8,16 @@
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node :as db-worker-node]
-            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
+            [logseq.cli.root-dir :as cli-root]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.path :as path]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.db-worker.log :as db-worker-log]
@@ -78,6 +82,53 @@
       (is (:ok parsed))
       (ldb/read-transit-str (:resultTransit parsed)))))
 
+(defn- open-sse-events
+  [host port]
+  (let [events (atom [])
+        buffer (atom "")
+        *req (atom nil)]
+    (p/create
+     (fn [resolve reject]
+       (let [req (.request http #js {:hostname host
+                                     :port port
+                                     :path "/v1/events"
+                                     :method "GET"}
+                           (fn [^js res]
+                             (.on res "data"
+                                  (fn [chunk]
+                                    (swap! buffer str (.toString chunk "utf8"))
+                                    (loop []
+                                      (when-let [idx (string/index-of @buffer "\n\n")]
+                                        (let [event-str (subs @buffer 0 idx)]
+                                          (reset! buffer (subs @buffer (+ idx 2)))
+                                          (when-let [line (some (fn [l]
+                                                                  (when (string/starts-with? l "data: ")
+                                                                    (subs l 6)))
+                                                                (string/split-lines event-str))]
+                                            (let [parsed (js->clj (js/JSON.parse line) :keywordize-keys true)
+                                                  payload (when (string? (:payload parsed))
+                                                            (ldb/read-transit-str (:payload parsed)))]
+                                              (swap! events conj {:type (keyword (:type parsed))
+                                                                  :payload payload}))))
+                                        (recur)))))
+                             (resolve {:events events
+                                       :close! (fn []
+                                                 (when-let [^js r @*req]
+                                                   (try (.destroy r)
+                                                        (catch :default _))))})))]
+         (reset! *req req)
+         (.on req "error" reject)
+         (.end req))))))
+
+(defn- wait-for-sse!
+  [events pred max-tries]
+  (p/loop [remaining max-tries]
+    (if (or (pred @events)
+            (zero? remaining))
+      nil
+      (p/let [_ (p/delay 50)]
+        (p/recur (dec remaining))))))
+
 (defn- invoke-raw
   [host port method args]
   (let [payload (js/JSON.stringify
@@ -101,16 +152,18 @@
 
 (defn- lock-path
   [root-dir repo]
-  (db-lock/lock-path root-dir repo))
+  (lifecycle/ownershipPath (lifecycle/context (lifecycle/resolveStorage root-dir (node-path/join root-dir "graphs")) repo)))
 
 (defn- log-path
   [root-dir repo]
   (db-worker-log/log-path root-dir repo))
 
 (defn- start-daemon!
-  "Start daemon with quiet logging by default"
+  "Creates the test graph explicitly before starting an embedded daemon."
   [opts]
-  (db-worker-node/start-daemon! (update opts :log-level #(or % "error"))))
+  (p/let [root (cli-root/ensure-root-dir! (:root-dir opts))
+          _ (lifecycle/createGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) (:repo opts))]
+    (db-worker-node/start-daemon! (update opts :log-level #(or % "error")))))
 
 (defn- semantic-search-integration-enabled?
   []
@@ -143,7 +196,6 @@
   []
   (reset! @#'db-worker-node/*ready? false)
   (reset! @#'db-worker-node/*sse-clients #{})
-  (reset! @#'db-worker-node/*lock-info nil)
   (db-worker-log/uninstall!))
 
 (defn- normalize-db-worker-state-before
@@ -362,7 +414,7 @@
 (deftest db-worker-node-log-retention
   (let [data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
         repo (str "logseq_db_log_retention_" (subs (str (random-uuid)) 0 8))
-        repo-dir (db-lock/repo-dir data-dir repo)
+        repo-dir (node-path/join data-dir (graph-dir/repo->encoded-graph-dir-name repo))
         days ["20240101" "20240102" "20240103" "20240104" "20240105"
               "20240106" "20240107" "20240108" "20240109"]
         make-log (fn [day]
@@ -527,18 +579,18 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest db-worker-node-owner-source-cli-is-written-into-lock
+(deftest db-worker-node-owner-source-cli-is-published
   (async done
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-owner-source-cli")
-               repo (str "logseq_db_owner_cli_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [stop!]}
+               repo (str "logseq_db_owner_cli_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :owner-source :cli})
                        _ (reset! daemon {:stop! stop!})
-                       lock-json (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))]
+                       health (http-get host port "/healthz")
+                       lock-json (js/JSON.parse (:body health))]
                  (is (= "cli" (gobj/get lock-json "owner-source"))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -547,18 +599,18 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
-(deftest db-worker-node-owner-source-electron-is-written-into-lock
+(deftest db-worker-node-owner-source-electron-is-published
   (async done
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-owner-source-electron")
-               repo (str "logseq_db_owner_electron_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [stop!]}
+               repo (str "logseq_db_owner_electron_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :owner-source :electron})
                        _ (reset! daemon {:stop! stop!})
-                       lock-json (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))]
+                       health (http-get host port "/healthz")
+                       lock-json (js/JSON.parse (:body health))]
                  (is (= "electron" (gobj/get lock-json "owner-source"))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -627,7 +679,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-create-empty-start")
                repo (str "logseq_db_create_empty_start_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -635,19 +686,11 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "create-empty-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :create-empty-db? true
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :create-empty-db? true
+                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
                          _ (is (= ["thread-api/create-or-open-db" [repo {:datoms []
@@ -663,7 +706,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-default-start")
                repo (str "logseq_db_default_start_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -671,18 +713,10 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "default-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
                          _ (is (= ["thread-api/create-or-open-db" [repo {}]]
@@ -697,7 +731,6 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-stop-close-db")
                repo (str "logseq_db_stop_close_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
@@ -705,56 +738,39 @@
                                                                          (swap! invoke-calls conj
                                                                                 [method
                                                                                  (ldb/read-transit-str args-transit)])
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :host "127.0.0.1"
-                                                                          :port 0
-                                                                          :lock-id "stop-close-lock"}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                        :repo repo
-                                                                        :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :log-level "error"})
                          _ (stop!)]
                    (is (= ["thread-api/init" []]
                           (first @invoke-calls)))
                    (is (= ["thread-api/create-or-open-db" [repo {}]]
                           (second @invoke-calls)))
                    (is (= ["thread-api/close-db" [repo]]
-                          (nth @invoke-calls 2)))))
+                          (last @invoke-calls)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest db-worker-node-start-daemon-registers-and-unregisters-derived-server-list-entry
+(deftest db-worker-node-stop-retains-publication-until-process-exit
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
                repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
-               lock-file-path (lock-path data-dir repo)
                server-list-file (server-list/path data-dir)]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [_method _args-transit]
-                                                                         (p/resolved (ldb/write-transit-str nil)))})
-                               db-lock/ensure-lock! (fn [_]
-                                                      (p/resolved {:path lock-file-path
-                                                                   :lock {:repo repo
-                                                                          :pid (.-pid js/process)
-                                                                          :lock-id "server-list-lock"
-                                                                          :owner-source :cli}}))
-                               db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
-                                                                             :repo repo
-                                                                             :log-level "error"})
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [port stop!]} (start-daemon! {:root-dir data-dir
+                                                              :repo repo
+                                                              :log-level "error"})
                          contents-after-start (.toString (fs/readFileSync server-list-file) "utf8")
                          _ (is (string/includes? contents-after-start (str (.-pid js/process) " " port)))
                          _ (stop!)
                          contents-after-stop (when (fs/existsSync server-list-file)
                                                (.toString (fs/readFileSync server-list-file) "utf8"))]
-                   (is (or (nil? contents-after-stop)
-                           (not (string/includes? contents-after-stop (str (.-pid js/process) " " port)))))))
+                   (is (string/includes? contents-after-stop (str (.-pid js/process) " " port)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -921,6 +937,8 @@
                            (is (= (.-pid js/process) (:pid health-body)))
                            (is (= (node-path/resolve data-dir) (:root-dir health-body)))
                            (is (contains? health-body :owner-source))
+                           (is (string? (:ticket health-body)))
+                           (is (string? (:generation health-body)))
                            (is (contains? health-body :revision))
                            (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -928,10 +946,8 @@
                        _ (is (some #(= repo (:name %)) dbs))
                        lock-file (lock-path data-dir repo)
                        _ (is (fs/existsSync lock-file))
-                       lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                       _ (is (= repo (gobj/get lock-contents "repo")))
-                       _ (is (nil? (gobj/get lock-contents "host")))
-                       _ (is (nil? (gobj/get lock-contents "port")))
+                       _ (is (= "sqlite-v1" (:ownership-protocol health-body)))
+                       _ (is (nil? (:lock-id health-body)))
                        _ (invoke host port "thread-api/transact"
                                  [repo
                                   [{:block/uuid page-uuid
@@ -963,11 +979,11 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!)
                                   (p/finally (fn []
-                                               (is (not (fs/existsSync (lock-path data-dir repo))))
+                                               (is (fs/existsSync (lock-path data-dir repo))
+                                                   "Retain the ownership database after release")
                                                (let [contents (when (fs/existsSync server-list-file)
                                                                 (.toString (fs/readFileSync server-list-file) "utf8"))]
-                                                 (is (or (nil? contents)
-                                                         (not (string/includes? contents (str (.-pid js/process) " ")))))
+                                                 (is (string/includes? contents (str (.-pid js/process) " ")))
                                                  (done)))))
                               (done))))))))
 
@@ -1106,6 +1122,128 @@
 
                                 :else
                                 (done)))))))))
+
+(deftest db-worker-node-import-file-graph-posts-progress-over-sse
+  (async done
+         (let [daemon (atom nil)
+               sse (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-file-graph")
+               repo (str "logseq_db_import_file_" (subs (str (random-uuid)) 0 8))
+               config-file {:path "logseq/config.edn"
+                            :file/content "{}"}
+               files [config-file
+                      {:path "pages/Home.md"
+                       :file/content "- imported from desktop"}]]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       sse-client (open-sse-events host port)
+                       _ (reset! sse sse-client)
+                       result (invoke host port "thread-api/import-file-graph"
+                                      [repo config-file files {:user-options {}}])
+                       _ (wait-for-sse!
+                          (:events sse-client)
+                          (fn [events]
+                            (some (fn [{:keys [type payload]}]
+                                    (and (= type :thread-api/set-ui-state)
+                                         (= [:graph/importing-state :label] (first payload))
+                                         (= :import/validating-graph (second payload))))
+                                  events))
+                          80)
+                       ui-state (->> @(:events sse-client)
+                                     (keep (fn [{:keys [type payload]}]
+                                             (when (= type :thread-api/set-ui-state)
+                                               payload))))
+                       current-pages (->> ui-state
+                                          (filter #(= [:graph/importing-state :current-page] (first %)))
+                                          (map second)
+                                          set)
+                       page-result (invoke host port "thread-api/q"
+                                           [repo
+                                            ['[:find ?e
+                                               :in $ ?title
+                                               :where [?e :block/title ?title]]
+                                             "imported from desktop"]])]
+                 (is (map? result)
+                     "Desktop import-file-graph replies with the terminal contract.")
+                 (is (true? (:persisted? result)))
+                 (is (contains? #{:completed :completed-with-errors} (:status result)))
+                 (is (nat-int? (:issue-count result)))
+                 (is (contains? current-pages "pages/Home.md")
+                     "Desktop import progress is delivered over SSE.")
+                 (is (some #{:import/finishing}
+                           (->> ui-state
+                                (filter #(= [:graph/importing-state :label] (first %)))
+                                (map second)))
+                     "Desktop import shows Finishing graph import after files are written.")
+                 (is (seq page-result)
+                     "The new graph is created before import and contains imported pages."))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] import-file-graph error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (when-let [close! (:close! @sse)]
+                              (close!))
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
+
+(defn- electron-lazy-import-files
+  [graph-dir]
+  (mapv (fn [abs-path]
+          {:path (path/trim-dir-prefix graph-dir abs-path)
+           :fs-path abs-path})
+        (common-graph/get-files graph-dir)))
+
+(defn- write-electron-lazy-file-graph
+  []
+  (let [graph-dir (node-helper/create-tmp-dir "electron-lazy-file-graph")
+        logseq-dir (node-path/join graph-dir "logseq")
+        pages-dir (node-path/join graph-dir "pages")]
+    (fs/mkdirSync logseq-dir #js {:recursive true})
+    (fs/mkdirSync pages-dir #js {:recursive true})
+    (fs/writeFileSync (node-path/join logseq-dir "config.edn") "{}")
+    (fs/writeFileSync (node-path/join pages-dir "Home.md") "- imported via fs-path\n")
+    graph-dir))
+
+(deftest db-worker-node-import-file-graph-electron-lazy-fs-path
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-electron-lazy")
+               graph-dir (write-electron-lazy-file-graph)
+               repo (str "logseq_db_import_lazy_" (subs (str (random-uuid)) 0 8))
+               files (electron-lazy-import-files graph-dir)
+               config-file (first (filter #(= "logseq/config.edn" (:path %)) files))]
+           (is (some? config-file))
+           (is (every? #(and (string? (:fs-path %)) (nil? (:file/content %))) files)
+               "Electron lazy import sends filesystem paths without file contents.")
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       result (invoke host port "thread-api/import-file-graph"
+                                      [repo config-file files {:user-options {}}])
+                       page-result (invoke host port "thread-api/q"
+                                           [repo
+                                            ['[:find ?e
+                                               :in $ ?title
+                                               :where [?e :block/title ?title]]
+                                             "imported via fs-path"]])]
+                 (is (map? result))
+                 (is (true? (:persisted? result)))
+                 (is (contains? #{:completed :completed-with-errors} (:status result)))
+                 (is (seq page-result)
+                     "Worker reads markdown from fs-path during Electron lazy import."))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] electron lazy import error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally done))
+                              (done))))))))
 
 (deftest db-worker-node-import-db-binary
   (async done
@@ -1377,7 +1515,7 @@
                      (p/then (fn [_]
                                (is false "expected lock error")))
                      (p/catch (fn [e]
-                                (is (= :repo-locked (-> (ex-data e) :code)))))))
+                                (is (= "repo-locked" (.-code e)))))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
@@ -1385,175 +1523,59 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
-(deftest db-worker-node-write-mutation-fails-for-non-owner-pid
+(deftest db-worker-node-ownership-covers-import-backup-and-reopen
   (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-pid")
-               repo (str "logseq_db_write_lease_pid_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:root-dir data-dir
-                                       :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
-                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                                              :keywordize-keys true)
-                       tampered-lock (assoc lock-contents
-                                            :pid (inc (:pid lock-contents))
-                                            :lock-id "non-owner-lock")
-                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
-                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                 (is (= 409 status))
-                 (is (= false (:ok parsed)))
-                 (is (= "repo-locked" (get-in parsed [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!) (p/finally (fn [] (done))))
-                              (done))))))))
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-ownership-import")
+          repo "logseq_db_demo"
+          storage (lifecycle/resolveStorage data-dir (node-path/join data-dir "graphs"))
+          ctx (lifecycle/context storage repo)]
+      (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir :repo repo})
+                  _ (reset! daemon {:stop! stop!})
+                  binary (invoke host port "thread-api/export-db-binary" [repo])
+                  _ (invoke host port "thread-api/import-db-binary" [repo binary])
+                  _ (invoke host port "thread-api/backup-db-sqlite" [repo (node-path/join data-dir "backup.sqlite")])
+                  _ (invoke host port "thread-api/close-db" [repo])
+                  _ (is (= "repo-locked" (try (lifecycle/acquireOwnership ctx) nil
+                                               (catch :default error (.-code error)))))
+                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])]
+            (is (= "repo-locked" (try (lifecycle/acquireOwnership ctx) nil
+                                               (catch :default error (.-code error)))))
+            (is (fs/existsSync (lock-path data-dir repo))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!)
+                             (p/then (fn [_]
+                                       (let [^js handle (lifecycle/acquireOwnership ctx)]
+                                         (.release handle))))
+                             (p/finally done))
+                         (done))))))))
 
-(deftest db-worker-node-backup-write-mutation-fails-for-non-owner-pid
+(deftest db-worker-node-mutations-require-retained-ownership
   (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-backup-write-lease-pid")
-               repo (str "logseq_db_backup_write_lease_pid_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)
-               backup-path (node-path/join data-dir "backup" "non-owner.sqlite")]
-           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir
-                                                                 :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                                              :keywordize-keys true)
-                       tampered-lock (assoc lock-contents
-                                            :pid (inc (:pid lock-contents))
-                                            :lock-id "non-owner-lock")
-                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
-                       {:keys [status body]} (invoke-raw host port "thread-api/backup-db-sqlite" [repo backup-path])
-                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                 (is (= 409 status))
-                 (is (= false (:ok parsed)))
-                 (is (= "repo-locked" (get-in parsed [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!) (p/finally (fn [] (done))))
-                              (done))))))))
-
-(deftest db-worker-node-write-mutation-succeeds-for-active-owner
-  (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-owner")
-               repo (str "logseq_db_write_lease_owner_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:root-dir data-dir
-                                       :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                       lock-id (gobj/get lock-contents "lock-id")
-                       _ (is (string? lock-id))
-                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
-                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                 (is (= 200 status))
-                 (is (= true (:ok parsed))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!) (p/finally (fn [] (done))))
-                              (done))))))))
-
-(deftest db-worker-node-write-mutation-rejects-stale-lock-after-replacement
-  (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-replaced")
-               repo (str "logseq_db_write_lease_replaced_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:root-dir data-dir
-                                       :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
-                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                                              :keywordize-keys true)
-                       replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
-                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
-                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                 (is (= 409 status))
-                 (is (= false (:ok parsed)))
-                 (is (= "repo-locked" (get-in parsed [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!) (p/finally (fn [] (done))))
-                              (done))))))))
-
-(deftest db-worker-node-outliner-mutation-rejects-stale-lock-test
-  (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-outliner-write-lease")
-               repo (str "logseq_db_outliner_write_lease_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)]
-           (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:root-dir data-dir :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       lock-contents (js->clj
-                                      (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                                      :keywordize-keys true)
-                       replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
-                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
-                       {:keys [status body]}
-                       (invoke-raw host port "thread-api/apply-outliner-ops" [repo [] {}])
-                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                 (is (= 409 status))
-                 (is (= false (:ok parsed)))
-                 (is (= "repo-locked" (get-in parsed [:error :code]))))
-               (p/catch (fn [error]
-                          (is false (str "unexpected error: " error))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!) (p/finally done))
-                              (done))))))))
-
-(deftest db-worker-node-start-recovers-stale-lock-before-acquire
-  (async done
-         (let [daemon (atom nil)
-               data-dir (node-helper/create-tmp-dir "db-worker-stale-lock-recover")
-               repo (str "logseq_db_stale_lock_" (subs (str (random-uuid)) 0 8))
-               lock-file (lock-path data-dir repo)
-               stale-lock {:repo repo
-                           :pid 999999
-                           :host "127.0.0.1"
-                           :port 6553
-                           :lock-id "stale-lock-id"}]
-           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
-           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js stale-lock)))
-           (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:root-dir data-dir
-                                       :repo repo})
-                       _ (reset! daemon {:stop! stop!})
-                       lock' (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                                      :keywordize-keys true)]
-                 (is (not= 999999 (:pid lock')))
-                 (is (not= "stale-lock-id" (:lock-id lock'))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (if-let [stop! (:stop! @daemon)]
-                              (-> (stop!)
-                                  (p/finally (fn [] (done))))
-                              (done))))))))
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-ownership-guard")
+          repo "logseq_db_demo"
+          original lifecycle/assertOwnership]
+      (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir :repo repo})
+                  _ (reset! daemon {:stop! stop!})
+                  binary (invoke host port "thread-api/export-db-binary" [repo])]
+            (set! lifecycle/assertOwnership
+                  (fn [_] (throw (ex-info "Graph ownership transaction was lost" {:code :repo-locked}))))
+            (p/loop [calls [["thread-api/import-db-binary" [repo binary]]
+                            ["thread-api/backup-db-sqlite" [repo (node-path/join data-dir "backup.sqlite")]]
+                            ["thread-api/apply-outliner-ops" [repo [] {}]]]]
+              (when-let [[method args] (first calls)]
+                (p/let [{:keys [status]} (invoke-raw host port method args)]
+                  (is (= 409 status))
+                  (p/recur (rest calls))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (set! lifecycle/assertOwnership original)
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!) (p/finally done))
+                         (done))))))))
 
 (deftest db-worker-node-desktop-and-cli-share-same-graph-daemon
   (async done
@@ -1710,3 +1732,18 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
+
+(deftest close-bound-repo-releases-db-after-sync-stop-fails
+  (async done
+         (let [calls (atom [])
+               proxy #js {:remoteInvoke (fn [method _]
+                                          (swap! calls conj method)
+                                          (if (= method "thread-api/db-sync-stop")
+                                            (p/rejected (js/Error. "sync close failed"))
+                                            (p/resolved (ldb/write-transit-str nil))))}]
+           (-> (#'db-worker-node/<close-bound-repo! proxy "demo")
+               (p/then (fn [_] (is false "shutdown failure must propagate")))
+               (p/catch (fn [error]
+                          (is (= "sync close failed" (.-message error)))
+                          (is (= ["thread-api/db-sync-stop" "thread-api/close-db"] @calls))))
+               (p/finally done)))))

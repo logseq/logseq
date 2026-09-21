@@ -564,10 +564,10 @@
                              :month "rdp-month w-max space-y-3"
                              :month_caption "flex justify-start pt-1 relative items-center w-[276px]"
                              :caption_label "text-sm font-medium"
-                             :dropdowns "flex items-center justify-start gap-2"
+                             :dropdowns "flex items-center justify-start gap-2 min-w-0"
                              :months_dropdown "rdp-dropdown_month"
                              :years_dropdown "rdp-dropdown_year"
-                             :dropdown_root "relative flex h-8 items-center rounded-md border border-input bg-background px-2"
+                             :dropdown_root "relative flex h-8 items-center"
                              :dropdown "absolute inset-0 z-[2] w-full opacity-0 cursor-pointer"
                              :nav "absolute left-[200px] top-1 z-10 flex items-center gap-1"
                              :button_previous (cn (with-button-classes #js {:variant "outline"})
@@ -580,9 +580,10 @@
                              :week "flex w-max mt-1 gap-1"
                              :day "h-9 w-9 flex shrink-0 items-center justify-center text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-transparent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20"
                              :day_button (cn (with-button-classes #js {:variant "ghost"})
-                                             "h-9 w-9 p-0 font-normal aria-selected:opacity-100")
+                                             "h-9 w-9 p-0 font-normal aria-selected:opacity-100 focus-visible:!ring-0 focus-visible:!ring-offset-0")
                              :range_end "day-range-end"
-                             :selected "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button:hover]:bg-primary [&>button:hover]:text-primary-foreground [&>button:focus]:bg-primary [&>button:focus]:text-primary-foreground"
+                             :selected "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button:hover]:bg-primary [&>button:hover]:text-primary-foreground [&>button:focus]:bg-primary [&>button:focus]:text-primary-foreground [&>button:focus-visible]:bg-primary [&>button:focus-visible]:text-primary-foreground"
+                             :focused "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button:hover]:bg-primary [&>button:hover]:text-primary-foreground [&>button:focus]:bg-primary [&>button:focus]:text-primary-foreground [&>button:focus-visible]:bg-primary [&>button:focus-visible]:text-primary-foreground"
                              :today "[&>button]:bg-accent [&>button]:text-accent-foreground"
                              :outside "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30"
                              :disabled "text-muted-foreground opacity-50"

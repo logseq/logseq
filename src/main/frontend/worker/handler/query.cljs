@@ -60,12 +60,10 @@
              :block/created-at created-at
              :logseq.property.history/property-ident (:db/ident property)}
       (:block/uuid property)
-      (assoc :logseq.property.history/property-uuid (:block/uuid property)
-             :logseq.property.history/property-title (:block/title property))
+      (assoc :logseq.property.history/property-uuid (:block/uuid property))
       ref-value
       (assoc :logseq.property.history/ref-value-ident (:db/ident ref-value)
-             :logseq.property.history/ref-value-uuid (:block/uuid ref-value)
-             :logseq.property.history/ref-value-title (:block/title ref-value))
+             :logseq.property.history/ref-value-uuid (:block/uuid ref-value))
       (some? scalar-value)
       (assoc :logseq.property.history/scalar-value scalar-value))))
 
@@ -130,13 +128,23 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (task-spent-time @conn block-id (common-util/time-ms))))
 
+(defn- reader-character-literal?
+  "cljs.reader treats \\\\X as a character, which is a 1-char string in CLJS."
+  [input value]
+  (and (string? input)
+       (string/starts-with? input "\\")
+       (char? value)))
+
 (defn- query-input-value
+  "Parse stringified EDN query inputs from plugin/JSON callers (e.g. \":today\").
+  Keep the original string when cljs.reader reads a symbol or character literal, so regex
+  patterns such as \"\\\\(uuid\\\\)\" are not reduced to \"(\"."
   [input]
   (if (and (string? input)
            (not (page-ref/page-ref? input)))
     (try
       (let [value (cljs.reader/read-string input)]
-        (if (symbol? value)
+        (if (or (symbol? value) (reader-character-literal? input value))
           input
           value))
       (catch :default _

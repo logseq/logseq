@@ -21,6 +21,12 @@
 (def ^:private date-picker-day-selector
   ".ui__calendar [role='gridcell'] button, .ui__calendar button[role='gridcell']")
 
+(defn- opaque-color?
+  [color]
+  (boolean
+   (and (string? color)
+        (not (re-find #"(?i)^(transparent|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0(?:\.0+)?\s*\))$" color)))))
+
 (defn- focused-date-picker-day
   []
   (json/read-value
@@ -29,10 +35,12 @@
      "(() => {
        const active = document.activeElement;
        const dayButton = active?.closest?.(%s);
+       const cs = dayButton ? getComputedStyle(dayButton) : null;
        return JSON.stringify({
          focused: !!dayButton,
          text: dayButton?.textContent ?? null,
-         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null
+         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null,
+         bg: cs?.backgroundColor ?? null
        });
      })()"
      (json/write-value-as-string date-picker-day-selector)))
@@ -46,15 +54,22 @@
   (let [initial (focused-date-picker-day)]
     (is (:focused initial)
         (str command " should focus a calendar day when opened."))
+    (is (opaque-color? (:bg initial))
+        (str command " should highlight the focused calendar day when opened."))
     (k/arrow-right)
     (let [right (focused-date-picker-day)]
       (is (:focused right)
           (str command " should keep calendar focus after ArrowRight."))
       (is (not= (:label initial) (:label right))
           (str command " should move focused date with ArrowRight."))
+      (is (opaque-color? (:bg right))
+          (str command " should keep the highlight on the focused day after ArrowRight."))
       (k/arrow-left)
-      (is (= (:label initial) (:label (focused-date-picker-day)))
-          (str command " should move focused date back with ArrowLeft.")))
+      (let [back (focused-date-picker-day)]
+        (is (= (:label initial) (:label back))
+            (str command " should move focused date back with ArrowLeft."))
+        (is (opaque-color? (:bg back))
+            (str command " should keep the highlight on the focused day after ArrowLeft."))))
     (k/arrow-down)
     (let [down (focused-date-picker-day)]
       (is (:focused down)
@@ -76,6 +91,51 @@
     (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
+
+(defn- chosen-slash-command-visibility
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const container = document.getElementById('ui__ac-inner');
+       const chosen = document.querySelector('a.menu-link.chosen');
+       if (!container || !chosen) {
+         return JSON.stringify({visible: false, chosenText: null, scrollTop: 0});
+       }
+       const c = container.getBoundingClientRect();
+       const e = chosen.getBoundingClientRect();
+       return JSON.stringify({
+         visible: e.top >= c.top - 1 && e.bottom <= c.bottom + 1,
+         chosenText: (chosen.textContent || '').trim(),
+         scrollTop: container.scrollTop
+       });
+     })()")
+   json/keyword-keys-object-mapper))
+
+(deftest slash-command-arrow-scroll-test
+  (testing "arrow down/up keeps the chosen slash command in view"
+    (b/new-block "slash-scroll")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (dotimes [_ 20]
+      (k/arrow-down))
+    (let [after-down (chosen-slash-command-visibility)]
+      (is (seq (:chosenText after-down))
+          "arrow down should keep a slash command chosen")
+      (is (not= "Node reference" (:chosenText after-down))
+          "arrow down should move slash-command focus past the first item")
+      (is (true? (:visible after-down))
+          "chosen slash command should stay visible after arrow down")
+      (is (pos? (:scrollTop after-down))
+          "slash-command list should auto-scroll when focus moves out of view"))
+    (dotimes [_ 20]
+      (k/arrow-up))
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (let [after-up (chosen-slash-command-visibility)]
+      (is (true? (:visible after-up))
+          "chosen slash command should stay visible after arrow up")
+      (is (zero? (:scrollTop after-up))
+          "slash-command list should scroll back when focus returns to the top"))))
 
 (deftest page-reference-test
   (testing "Page reference"
@@ -230,6 +290,7 @@
       (let [text (str command " test ")]
         (b/new-block text)
         (util/input-command command)
+        (w/wait-for date-picker-day-selector)
         (k/enter)
         (assert/assert-editor-mode)
         (util/exit-edit)
@@ -241,6 +302,23 @@
     (doseq [command ["date picker" "Scheduled" "Deadline"]]
       (fixtures/create-page)
       (assert-date-picker-keyboard-navigation command))))
+
+(deftest date-picker-month-select-test
+  (testing "date picker month dropdown changes the visible month and closes"
+    (b/new-block "date picker month select test")
+    (util/input-command "date picker")
+    (w/wait-for date-picker-day-selector)
+    (w/wait-for ".ls-date-month-select")
+    (let [current (string/trim (util/get-text ".ls-date-month-select"))
+          target (if (= current "August") "March" "August")]
+      (w/click ".ls-date-month-select")
+      (w/wait-for ".ls-date-month-option")
+      (w/click (format ".ls-date-month-option:has-text('%s')" target))
+      (w/wait-for-not-visible "[role='menu']")
+      (is (= target (string/trim (util/get-text ".ls-date-month-select")))
+          "Month trigger should show the selected month.")
+      (is (string/includes? (util/get-text ".ui__calendar") target)
+          "Calendar caption should switch to the selected month."))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test

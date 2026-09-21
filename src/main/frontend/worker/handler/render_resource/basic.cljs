@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.reaction :as reaction]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.block-breadcrumb :as block-breadcrumb-handler]
             [frontend.worker.handler.comments :as comments-handler]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.property :as property-handler]
@@ -49,7 +50,8 @@
   [db _resource-key _runtime]
   (let [favorites-page-uuid (:block/uuid (favorites-page db))
         targets (favorite-targets db)]
-    [(into #{[:children favorites-page-uuid]}
+    [(into #{[:children favorites-page-uuid]
+             [:attr :block/link]}
            (map (fn [page] [:entity (:block/uuid page)]))
            targets)
      (mapv sidebar-page-summary targets)]))
@@ -58,7 +60,8 @@
   [db resource-key _runtime]
   (let [page-uuid (common/require-uuid! :page-uuid (second resource-key))
         favorites-page-uuid (:block/uuid (favorites-page db))]
-    [#{[:children favorites-page-uuid]}
+    [#{[:children favorites-page-uuid]
+       [:attr :block/link]}
      (boolean (some #(= page-uuid (:block/uuid %))
                     (favorite-targets db)))]))
 
@@ -117,36 +120,40 @@
                      [ref-uuid title])))))
         entities))
 
+(defn- empty-block-breadcrumb
+  [block-uuid]
+  {:target-uuid block-uuid
+   :ancestor-uuids []
+   :ancestors []
+   :ref-titles {}})
+
 (defn- block-breadcrumb
   [db resource-key _runtime]
-  (let [[_ block-uuid load-depth] resource-key
-        block (common/entity-by-uuid! db :block-uuid block-uuid)]
+  (let [[_ block-uuid load-depth] resource-key]
+    (common/require-uuid! :block-uuid block-uuid)
     (when-not (and (integer? load-depth) (pos? load-depth))
       (common/fail! "Invalid breadcrumb load depth" {:load-depth load-depth}))
-    (let [parents (vec (ldb/get-block-parents db block-uuid {:depth load-depth}))
-          page (:block/page block)
-          ancestor-blocks (if (and page
-                                   (not= (:db/id page) (:db/id (first parents))))
-                            (into [page] parents)
-                            parents)
-          from-property (:logseq.property/created-from-property block)
-          ancestor-blocks (cond-> ancestor-blocks
-                                 from-property
-                                 (conj from-property))
-          ancestor-uuids (mapv (fn [ancestor]
-                                 (common/entity-uuid! db (:db/id ancestor)))
-                               ancestor-blocks)
-          ref-titles (breadcrumb-ref-titles (into [block] ancestor-blocks))
-          watch-uuids (into (conj (set ancestor-uuids) block-uuid)
-                            (keys ref-titles))
-          watch-keys (into #{}
-                           (map (fn [watch-uuid]
-                                  [:entity watch-uuid]))
-                           watch-uuids)]
-      [watch-keys
-       {:target-uuid block-uuid
-        :ancestor-uuids ancestor-uuids
-        :ref-titles ref-titles}])))
+    (if-let [block (d/entity db [:block/uuid block-uuid])]
+      (let [breadcrumb-ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
+            ancestor-uuids (mapv :block/uuid breadcrumb-ancestors)
+            ref-titles (breadcrumb-ref-titles (into [block] breadcrumb-ancestors))
+            watch-uuids (into (conj (set ancestor-uuids) block-uuid)
+                              (keys ref-titles))
+            watch-keys (into #{}
+                             (map (fn [watch-uuid]
+                                    [:entity watch-uuid]))
+                             watch-uuids)]
+        (when-not (every? uuid? ancestor-uuids)
+          (common/fail! "Invalid breadcrumb ancestor UUID"
+                        {:block-uuid block-uuid
+                         :ancestor-uuids ancestor-uuids}))
+        [watch-keys
+         {:target-uuid block-uuid
+          :ancestor-uuids ancestor-uuids
+          :ancestors breadcrumb-ancestors
+          :ref-titles ref-titles}])
+      [#{[:entity block-uuid]}
+       (empty-block-breadcrumb block-uuid)])))
 
 (defn- journals
   [db _resource-key _runtime]
@@ -200,7 +207,10 @@
   (let [block-uuid (second resource-key)
         block (common/entity-by-uuid! db :block-uuid block-uuid)]
     [#{[:refs block-uuid]}
-     (ldb/get-block-refs-count db (:db/id block))]))
+     (if (or (ldb/property? block)
+             (ldb/class? block))
+       0
+       (ldb/get-block-refs-count db (:db/id block)))]))
 
 (defn- block-unlinked-ref-exists
   [db resource-key {:keys [repo]}]

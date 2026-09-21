@@ -1,5 +1,6 @@
 (ns logseq.e2e.property-basic-test
-  (:require [clojure.test :refer [deftest use-fixtures]]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -93,3 +94,28 @@
     (assert/assert-have-count
      (loc/filter ".ls-view-body" :has-text target-title)
      0)))
+
+(defn- picker-chosen-label
+  []
+  (string/trim
+   (or (util/get-text ".ls-property-dialog .cp__select-results a.menu-link.chosen strong")
+       "")))
+
+(deftest keyboard-highlight-selects-property-test
+  (testing "Enter applies the highlighted property, not the first visible item"
+    (b/new-blocks ["picker target"])
+    (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
+    (w/wait-for ".ls-property-dialog .cp__select-results a.menu-link.chosen")
+    (let [first-label (picker-chosen-label)
+          _ (k/arrow-down)
+          _ (util/wait-timeout 100)
+          highlighted (picker-chosen-label)]
+      (is (not (string/blank? first-label)))
+      (is (not= first-label highlighted)
+          "arrow down should move the property highlight")
+      (k/enter)
+      (assert/assert-is-visible
+       (format ".ls-property-dialog input[placeholder='Set %s']" highlighted))
+      (assert/assert-have-count
+       (format ".ls-property-dialog input[placeholder='Set %s']" first-label)
+       0))))

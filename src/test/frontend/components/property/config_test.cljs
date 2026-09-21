@@ -1,6 +1,23 @@
 (ns frontend.components.property.config-test
-  (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.property.config :as property-config]))
+  (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
+            [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
+            [frontend.components.property.config :as property-config]
+            [frontend.components.views :as views]
+            [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]))
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (deftest closed-choice-scope-opts-test
   (let [owner-class {:db/id 123 :block/tags [{:db/ident :logseq.class/Tag}]}
@@ -113,3 +130,27 @@
            :global-choice? false
            :scoped-choice-from-other-tags? true
            :choice {:db/id 11 :block/title ""}})))))
+
+(deftest property-dropdown-renders-sort-actions-for-built-in-table-columns-test
+  (testing "Name/Created/Updated table columns are stubs without :block/uuid"
+    (doseq [column-id [:block/title :block/created-at :block/updated-at]]
+      (let [property (#'views/column-property {:id column-id})]
+        (is (some? property)
+            (str column-id " should resolve to a built-in property stub"))
+        (is (nil? (:block/uuid property))
+            (str column-id " stubs are not worker block entities")))))
+
+  (testing "Opening a table column menu must not subscribe to a missing property uuid"
+    (let [property (#'views/column-property {:id :block/title})
+          markup (render-static
+                  (hsx/create-element
+                   (property-config/property-dropdown
+                    property
+                    nil
+                    {:with-title? false
+                     :more-options [[:div.ls-table-sort-asc "Sort ascending"]
+                                    [:div.ls-table-sort-desc "Sort descending"]]})))]
+      (is (string/includes? markup "Sort ascending"))
+      (is (string/includes? markup "Sort descending"))
+      (is (nil? (:db/id property))
+          "Stub columns have no db/id, so table headers omit pin"))))
