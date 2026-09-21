@@ -60,10 +60,12 @@
              :block/created-at created-at
              :logseq.property.history/property-ident (:db/ident property)}
       (:block/uuid property)
-      (assoc :logseq.property.history/property-uuid (:block/uuid property))
+      (assoc :logseq.property.history/property-uuid (:block/uuid property)
+             :logseq.property.history/property-title (:block/title property))
       ref-value
       (assoc :logseq.property.history/ref-value-ident (:db/ident ref-value)
-             :logseq.property.history/ref-value-uuid (:block/uuid ref-value))
+             :logseq.property.history/ref-value-uuid (:block/uuid ref-value)
+             :logseq.property.history/ref-value-title (:block/title ref-value))
       (some? scalar-value)
       (assoc :logseq.property.history/scalar-value scalar-value))))
 
