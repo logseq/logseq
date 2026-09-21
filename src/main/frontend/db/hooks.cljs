@@ -143,6 +143,13 @@
         snapshot (if parent-uuid subs/children-snapshot nil-snapshot)]
     (use-external-store subscribe! snapshot parent-uuid)))
 
+(defn peek-children
+  "Synchronous read of a children slot's ordered uuid vector without
+   subscribing. Returns nil while the slot is unloaded."
+  [parent-uuid]
+  (let [{:keys [status value]} (subs/children-snapshot parent-uuid)]
+    (when (= :ready status) value)))
+
 (defn use-resource
   [resource-key]
   (use-external-store subs/subscribe-resource! subs/resource-snapshot resource-key))

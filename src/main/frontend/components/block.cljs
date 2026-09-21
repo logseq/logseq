@@ -2142,6 +2142,90 @@
 
 (declare plain-block-list)
 
+;; Measured heights of mounted children subtrees, keyed by
+;; [container-id parent-uuid]. Feeds the placeholders rendered for subtrees
+;; that haven't mounted yet, keeping scroll geometry approximately stable.
+(defonce ^:private *lazy-children-heights (atom {}))
+
+(def ^:private lazy-children-margin 1200)
+
+(def ^:private lazy-children-row-height 32)
+
+(defn- estimate-children-height
+  "Rough rendered height of an unmounted subtree: a fixed row height per
+   descendant, counting nested children through already-loaded children
+   slots."
+  [child-uuids depth]
+  (reduce (fn [height uuid]
+            (+ height lazy-children-row-height
+               (if (< depth 8)
+                 (if-let [nested (db-hooks/peek-children uuid)]
+                   (estimate-children-height nested (inc depth))
+                   0)
+                 0)))
+          0
+          child-uuids))
+
+(defn- near-block-viewport?
+  [^js el]
+  (when el
+    (let [rect (.getBoundingClientRect el)
+          viewport-height (or (.-innerHeight js/window)
+                              (some-> js/document .-documentElement .-clientHeight))]
+      (and (< (.-top rect) (+ viewport-height lazy-children-margin))
+           (> (.-bottom rect) (- lazy-children-margin))))))
+
+(hsx/defc lazy-block-children
+  "Mounts a block's children rows only once the subtree approaches the viewport.
+   Offscreen subtrees render an estimated-height placeholder instead, so
+   revisiting a long scrolled page doesn't synchronously mount thousands of
+   rows."
+  [config' block child-uuids collapsed? render-children]
+  (let [*ref (hooks/use-ref nil)
+        height-key [(state/resolve-container-id (:container-id config'))
+                    (:block/uuid block)]
+        [near? set-near!] (hooks/use-state false)]
+    (hooks/use-layout-effect!
+     (fn []
+       (when-not near?
+         (if-let [el (hooks/deref *ref)]
+           (if (near-block-viewport? el)
+             (set-near! true)
+             (if (exists? js/IntersectionObserver)
+               (let [observer (js/IntersectionObserver.
+                               (fn [^js entries]
+                                 (when (some #(.-isIntersecting %) (array-seq entries))
+                                   (set-near! true)))
+                               #js {:rootMargin (str lazy-children-margin "px 0px")})]
+                 (.observe observer el)
+                 #(.disconnect observer))
+               (set-near! true)))
+           (set-near! true))))
+     [near?])
+    (hooks/use-effect!
+     (fn []
+       (when (and near? (exists? js/ResizeObserver))
+         (if-let [el (hooks/deref *ref)]
+           (let [observer (js/ResizeObserver.
+                           (fn [^js entries]
+                             (when-let [height (some-> entries (aget 0) .-contentRect .-height)]
+                               (when (pos? height)
+                                 (swap! *lazy-children-heights assoc height-key height)))))]
+             (.observe observer el)
+             #(.disconnect observer))
+           nil)))
+     [near? height-key])
+    [:div.block-children.w-full
+     {:ref *ref
+      :style (cond-> {}
+               collapsed? (assoc :display "none")
+               (not near?) (assoc :min-height
+                                  (str (or (get @*lazy-children-heights height-key)
+                                           (estimate-children-height child-uuids 0))
+                                       "px")))}
+     (when near?
+       [render-children config' child-uuids])]))
+
 (hsx/defc block-children
   [config block child-uuids collapsed? render-children]
   (let [ref? (:ref? config)
@@ -2153,14 +2237,12 @@
        [:div.block-children-left-border
         {:on-click (fn [_]
                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
-       [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
-        (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
-                        (or ref? query?)
-                        (assoc :ref-query-child? true)
-                        (integer? (:block-level config))
-                        (update :block-level inc))]
-          ;; Element form so render-children keeps its own hooks scope.
-          [render-children config' child-uuids])]])))
+       (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
+                       (or ref? query?)
+                       (assoc :ref-query-child? true)
+                       (integer? (:block-level config))
+                       (update :block-level inc))]
+         [lazy-block-children config' block child-uuids collapsed? render-children])])))
 
 (hsx/defc subscribed-block-children
   [config block collapsed? render-children]
@@ -5247,7 +5329,7 @@
         blocks-count (count block-uuids)
         virtualized? (and (not disable-virtualized?)
                           (or (util/force-virtualization?)
-                              (>= blocks-count 1000)))
+                              (>= blocks-count 64)))
         selection-block-ids (or (:selection/block-ids config) block-uuids)
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
