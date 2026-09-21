@@ -871,7 +871,7 @@
   [db blocks target-block sibling? keep-uuid?]
   (let [parent-ids (cond-> (into #{(:db/id target-block)}
                                 (map :db/id)
-                                (ldb/get-block-parents db (:block/uuid target-block) {}))
+                                (ldb/get-block-parents db (:block/uuid target-block)))
                      sibling? (disj (:db/id target-block)))]
     (loop [remaining (blocks-with-level blocks)
            embedded-level nil
