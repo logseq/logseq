@@ -2607,6 +2607,17 @@
                :default-collapsed? true}))
       "Ignore flag should not disable other default-collapsed rules"))
 
+(deftest block-default-collapsed-nested-pages
+  (let [child-page {:block/tags [{:db/ident :logseq.class/Page}]}]
+    (is (true? (editor/block-default-collapsed? child-page {}))
+        "Child pages are collapsed by default on a parent page")
+    (is (not (editor/block-default-collapsed? child-page {:library? true}))
+        "Library keeps child pages expanded so the page tree is visible")
+    (is (not (editor/block-default-collapsed? child-page {:page-title? true}))
+        "The current page title is not collapsed")
+    (is (not (editor/block-default-collapsed? {:block/title "hello"} {}))
+        "Normal blocks stay expanded by default")))
+
 (deftest load-children-respects-ignore-block-collapsed-flag
   (is (false? (#'editor/load-children?
                {:block/collapsed? true}

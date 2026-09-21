@@ -2161,10 +2161,19 @@
                         (update :block-level inc))]
           (render-children config' child-uuids))]])))
 
-(hsx/defc subscribed-block-children
-  [config block collapsed? render-children]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))]
-    (block-children config block child-uuids collapsed? render-children)))
+(hsx/defc library-child-uuids
+  [child-uuids then]
+  (let [blocks (db-hooks/use-blocks (vec child-uuids))]
+    (then (if (nil? blocks)
+            []
+            (entity/library-outline-child-uuids blocks)))))
+
+(defn with-library-child-uuids
+  "Library shows nested pages only; other pages keep every child."
+  [config child-uuids then]
+  (if (:library? config)
+    (library-child-uuids child-uuids then)
+    (then child-uuids)))
 
 (defn- block-content-empty?
   [block]
@@ -2399,13 +2408,20 @@
    (some-> (:logseq.property/created-from-property block) :db/id)
    (:block/title block)])
 
-(hsx/defc subscribed-block-control
-  [config block opts]
-  (let [child-uuids (db-hooks/use-children (:block/uuid block))
-        has-children? (and (not (entity/leaf-property-value? block))
+(defn- block-control-with-children
+  [config block opts child-uuids]
+  (let [has-children? (and (not (entity/leaf-property-value? block))
                            (boolean (seq child-uuids)))
         block' (assoc block :block.temp/has-children? has-children?)]
     (block-control config block' (assoc opts :has-children? has-children?))))
+
+(hsx/defc subscribed-block-control
+  [config block opts]
+  (with-library-child-uuids
+   config
+   (:child-uuids opts)
+   (fn [visible-uuids]
+     (block-control-with-children config block opts visible-uuids))))
 
 (hsx/defc dnd-separator
   [move-to]
@@ -4301,7 +4317,8 @@
 
    (when (and (not collapsed?)
               (not (or table? property?))
-              (not (:page-title? config)))
+              (not (:page-title? config))
+              (not (:library? config)))
      (block-positioned-properties config block :block-below))
 
    (when-not (or (:table? config) (:property? config))
@@ -4371,7 +4388,6 @@
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
-        db-collapsed? (util/collapsed? block)
         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
                                       (state/get-current-repo)
                                       (state/resolve-container-id container-id)
@@ -4387,7 +4403,9 @@
                      temp-collapsed?
 
                      :else
-                     (if (some? temp-collapsed?) temp-collapsed? db-collapsed?))
+                     (if (some? temp-collapsed?)
+                       temp-collapsed?
+                       (boolean (editor-handler/block-default-collapsed? block config))))
         config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         doc-mode? (:document/mode? config)
@@ -4684,7 +4702,7 @@
                     {:matched-block-renderer matched-block-renderer}))
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data))]
-         (subscribed-block-children config' block collapsed? render-children)))
+         (block-children config' block child-uuids collapsed? render-children)))
 
      (when-not (or table? property?)
        (dnd-separator-wrapper block block-id false))
@@ -5233,11 +5251,15 @@
                         (assoc :loop-linked? loop-linked?
                                :original-block original-block)
                         (update :links (fnil conj #{}) (:db/id linked-block)))]
-        (render-loaded-block-row config'
-                                 block
-                                 child-uuids
-                                 plain-block-list
-                                 opts)))))
+        (with-library-child-uuids
+         config'
+         child-uuids
+         (fn [visible-uuids]
+           (render-loaded-block-row config'
+                                    block
+                                    visible-uuids
+                                    plain-block-list
+                                    opts)))))))
 
 (hsx/defc subscribed-block-row
   [config block-uuid & {:as opts}]
@@ -5248,11 +5270,18 @@
       (nil? block)
       (unloaded-block-placeholder)
 
+      (and (:library? config) (not (entity/page? block)))
+      nil
+
       linked-uuid
       (linked-block-row config block child-uuids linked-uuid opts)
 
       :else
-      (render-loaded-block-row config block child-uuids plain-block-list opts))))
+      (with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         (render-loaded-block-row config block visible-uuids plain-block-list opts)))))
 
 (hsx/defc plain-block-list
   [config block-uuids]

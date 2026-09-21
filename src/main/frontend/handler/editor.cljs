@@ -4445,7 +4445,12 @@
        (:default-collapsed? config)
        (and (or (:view? config) (:popup? config))
             (or (entity/page? block)
-                (:table-block-title? config)))))))
+                (:table-block-title? config)))
+       ;; Nested pages stay collapsed on a parent page so their blocks do not
+       ;; dump into the outline. Library is the page tree, so keep those expanded.
+       (and (entity/page? block)
+            (not (:library? config))
+            (not (:page-title? config)))))))
 
 (defn load-children?
   [block temporary-collapsed-state ignore-block-collapsed?]
