@@ -254,8 +254,8 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:block/uuid (:block/uuid block)
-               :block/title value}
+  (let [block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
+                     :block/title value)
         block' (-> (wrap-parse-block block)
                    ;; :block/uuid might be changed when backspace/delete
                    ;; a block that has been refed
@@ -1393,10 +1393,11 @@
                      top-level-blocks (block-handler/get-top-level-blocks blocks)]
                  (when-not (every? ldb/recycled? top-level-blocks)
                    (when (seq top-level-blocks)
-                     (p/let [sorted-blocks* (p/all (map #(<sorted-block-and-children repo %) top-level-blocks))
-                             sorted-blocks (mapcat identity sorted-blocks*)]
-                       (when (seq sorted-blocks)
-                         (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks mobile-action-bar?))))))))))))))
+                     ;; Delete the selected nodes only. Page nodes unlink their
+                     ;; namespace parent in INode/-del; expanding a page to its
+                     ;; content would wipe the child page (db-test#1242).
+                     ;; Regular blocks still retract their subtree there.
+                     (delete-blocks! repo (map :block/uuid top-level-blocks) top-level-blocks dom-blocks mobile-action-bar?))))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -3680,11 +3681,28 @@
           (when-not editor-action
             (util/scroll-editor-cursor input)))))))
 
+(defn- context-menu-popup?
+  [popup]
+  (let [class (some-> popup :content-props :class)]
+    (and (string? class)
+         (string/includes? class "ls-context-menu-content"))))
+
+(defn- hide-block-context-popup!
+  "Close the block context menu after cut/delete so it cannot act on a removed block."
+  []
+  (state/hide-custom-context-menu!)
+  (doseq [{:keys [id] :as popup} (shui-popup/get-popups)]
+    (when (context-menu-popup? popup)
+      (shui/popup-hide! id))))
+
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (when-not (:active? (state/get-state :ui/find-in-page))
-    (p/do! (cut-selection-blocks copy?)
-           (clear-selection!))))
+    ;; Capture selection first; hiding the context menu also clears selection.
+    (let [cut-p (cut-selection-blocks copy?)]
+      (hide-block-context-popup!)
+      (p/do! cut-p
+             (clear-selection!)))))
 
 (defn shortcut-copy-selection
   [e]

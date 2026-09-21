@@ -2264,6 +2264,19 @@
          :uuid uuid
          :fallback-props {:style {:font-size 9}}})])))
 
+(defn- block-control-with-icon?
+  "Replace the bullet with a node icon. In Library, pages only show their own
+   icon or a tag icon — the default page icon stays a bullet."
+  [block config icon link?]
+  (and (some? icon)
+       (not (:hide-block-icon? config))
+       (or (and (entity/page? block)
+                (not (:library? config)))
+           (:logseq.property/icon block)
+           link?
+           (some :logseq.property/icon (:block/tags block))
+           (= "pdf" (:logseq.property.asset/type block)))))
+
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? has-children? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
@@ -2287,14 +2300,7 @@
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
-        with-icon? (and (some? icon)
-                        (not (:hide-block-icon? config))
-                                (or (and (entity/page? block)
-                                         (not (:library? config)))
-                            (:logseq.property/icon block)
-                            link?
-                            (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        with-icon? (block-control-with-icon? block config icon link?)
         movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:data-has-children (boolean has-children?)
@@ -3554,7 +3560,11 @@
 
 (hsx/defc block-refs-count
   [block *hide-block-refs?]
-  (let [block-refs-count' (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        block-refs-count' (or bundled fetched)]
     (when (and block-refs-count' (pos? block-refs-count'))
     [:div.h-6
      (shui/button {:variant :ghost
@@ -3572,7 +3582,11 @@
 
 (hsx/defc block-linked-references
   [block]
-  (let [refs-count (:block.temp/refs-count block)]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        refs-count (or bundled fetched)]
     (when (and refs-count (pos? refs-count))
       (when-let [refs-cp (state/get-component :block/linked-references)]
         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}

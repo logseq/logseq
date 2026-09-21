@@ -334,6 +334,43 @@
                          (canonical-block @conn (d/entity @conn [:block/uuid block-uuid])))))
           "The dashed chip matches on :db/ident after shallow-ref-identity."))))
 
+(deftest canonical-view-block-includes-default-groups-sort-order-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          default-view-uuid (random-uuid)
+          asc-view-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Page"
+                     :block/name "page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid default-view-uuid
+                     :block/tx-id 1
+                     :block/title "All"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table}
+                    {:db/id -3
+                     :block/uuid asc-view-uuid
+                     :block/tx-id 1
+                     :block/title "Ascending"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table
+                     :logseq.property.view/sort-groups-desc? false}])
+      (is (true? (:logseq.property.view/sort-groups-desc?
+                  (canonical-block @conn
+                                   (d/entity @conn [:block/uuid default-view-uuid]))))
+          "The renderer receives the default descending group order on view blocks.")
+      (is (false? (:logseq.property.view/sort-groups-desc?
+                   (canonical-block @conn
+                                    (d/entity @conn [:block/uuid asc-view-uuid]))))
+          "An explicit ascending selection must not be overwritten."))))
+
 (deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)
@@ -529,11 +566,12 @@
                      (canonical-block
                       @conn
                       (d/entity @conn [:block/uuid "not-a-uuid"])))))
-      (testing "missing transaction ID"
-        (is (thrown? js/Error
-                     (canonical-block
-                      @conn
-                      (d/entity @conn [:block/uuid missing-tx-id-uuid])))))
+      (testing "missing transaction ID defaults to zero without updating the database"
+        (let [db @conn]
+          (is (= 0 (:block/tx-id
+                    (canonical-block db (d/entity db [:block/uuid missing-tx-id-uuid])))))
+          (is (identical? db @conn))
+          (is (nil? (:block/tx-id (d/entity @conn [:block/uuid missing-tx-id-uuid]))))))
       (testing "non-numeric transaction ID"
         (let [entity-id (ffirst
                          (d/q '[:find ?e
@@ -542,6 +580,34 @@
                               @conn))]
           (is (thrown? js/Error
                        (canonical-block @conn (d/entity @conn entity-id)))))))))
+
+(deftest missing-revisions-render-as-zero-without-writing-test
+  (let [conn (db-test/create-conn)
+        parent-uuid (random-uuid)
+        child-uuid (random-uuid)]
+    (d/transact! conn [{:db/id -1 :block/uuid parent-uuid :block/title "Parent"}
+                      {:block/uuid child-uuid :block/title "Child"
+                       :block/parent -1 :block/page -1 :block/order "a0"}])
+    (let [db @conn
+          blocks (:blocks (block-handler/canonical-blocks db [parent-uuid child-uuid]))
+          membership (block-handler/direct-children-membership db parent-uuid)]
+      (is (= [0 0] (mapv #(get-in blocks [% :block/tx-id]) [parent-uuid child-uuid])))
+      (is (= 0 (:parent-tx-id membership)))
+      (is (= [[child-uuid "a0"]] (:items membership)))
+      (is (map? (block-handler/open-block-tree db parent-uuid)))
+      (is (identical? db @conn))
+      (is (every? #(nil? (:block/tx-id (d/entity @conn [:block/uuid %])))
+                  [parent-uuid child-uuid])))
+    (doseq [revision [0 12]]
+      (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/tx-id revision]])
+      (is (= revision (:block/tx-id (block-handler/canonical-block
+                                    @conn (d/entity @conn [:block/uuid parent-uuid])))))
+      (is (= revision (:parent-tx-id (block-handler/direct-children-membership @conn parent-uuid)))))
+    (doseq [revision [-1 1.5 false "invalid"]]
+      (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/tx-id revision]])
+      (is (thrown? js/Error (block-handler/canonical-block
+                            @conn (d/entity @conn [:block/uuid parent-uuid]))))
+      (is (thrown? js/Error (block-handler/direct-children-membership @conn parent-uuid))))))
 
 (deftest canonical-blocks-returns-uuid-keyed-replacements-at-one-basis-test
   (let [canonical-block (canonical-block-api)
@@ -778,7 +844,7 @@
         (is (= [[open-grandchild-uuid "a0"]]
                (get-in children [open-child-uuid :items])))))))
 
-(deftest direct-children-membership-requires-parent-transaction-id-test
+(deftest direct-children-membership-defaults-missing-parent-transaction-id-test
   (when-let [direct-children-membership
              (direct-children-membership-api)]
     (let [conn (db-test/create-conn)
@@ -795,8 +861,9 @@
                      :block/page -1
                      :block/parent -1
                      :block/order "a0"}])
+      (is (= 0 (:parent-tx-id (direct-children-membership @conn page-uuid))))
       (is (thrown? js/Error
-                   (direct-children-membership @conn page-uuid))))))
+                   (direct-children-membership @conn (random-uuid)))))))
 
 (deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
