@@ -6,10 +6,6 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
-(defn- operation-error-label?
-  [value]
-  (= "OperationError" value))
-
 (defn expected-crypto-operation-error?
   "WebCrypto AES-GCM/RSA-OAEP failures surface as DOMException OperationError.
   Some runtimes put that string on `.name`; others only on `.message` or the cause.
@@ -18,9 +14,9 @@
   [e]
   (boolean
    (when e
-     (or (operation-error-label? (some-> e .-name))
-         (operation-error-label? (some-> e .-message))
-         (operation-error-label? (ex-message e))
+     (or (= "OperationError" (.-name e))
+         (= "OperationError" (.-message e))
+         (= "OperationError" (ex-message e))
          (expected-crypto-operation-error? (ex-cause e))))))
 
 (defn <export-aes-key

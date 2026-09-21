@@ -35,5 +35,5 @@
   [error]
   (boolean
    (or (some e2ee-decrypt-error-codes (error-codes error))
-       (some #{"decrypt-aes-key" "decrypt-private-key" "invalid-e2ee-password"}
+       (some #{"decrypt-aes-key" "decrypt-private-key"}
              (error-texts error)))))
