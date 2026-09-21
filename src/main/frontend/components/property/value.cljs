@@ -2009,7 +2009,7 @@
             :class "text-xs"
             :on-click (fn [e]
                         (util/stop e)
-                        (publish-handler/unpublish-page! block {:published-url (:block/title value)}))}
+                        (publish-handler/unpublish-page! block))}
            (t :publish/unpublish)))]
 
        text-ref-type?
