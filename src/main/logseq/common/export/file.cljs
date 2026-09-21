@@ -163,11 +163,6 @@
     (some :block/closed-value-property value)
     (:block/closed-value-property value)))
 
-(defn- property-value-entity
-  [db v]
-  (when-let [id (:db/id v)]
-    (d/entity db id)))
-
 (defn- exportable-property-ident?
   [db property-ident context]
   (not (or (contains? db-property/db-attribute-properties property-ident)
@@ -177,10 +172,11 @@
 (defn- property-value-has-nested-content?
   [db value context]
   (some (fn [v]
-          (when-let [entity (property-value-entity db v)]
-            (or (seq (:block/_parent entity))
-                (some #(exportable-property-ident? db % context)
-                      (keys (db-property/properties entity))))))
+          (when-let [id (:db/id v)]
+            (let [entity (d/entity db id)]
+              (or (seq (:block/_parent entity))
+                  (some #(exportable-property-ident? db % context)
+                        (keys (db-property/properties entity)))))))
         (if (set? value) value [value])))
 
 (defn- default-property-values-as-blocks?
@@ -202,11 +198,7 @@
                   block)
         properties (->> (db-property/properties block)
                         (remove (fn [[k _]]
-                                  (contains? db-property/db-attribute-properties k)))
-                        (remove (fn [[k _]]
-                                  (contains? (:excluded-properties context) k)))
-                        (remove (fn [[k _]]
-                                  (:logseq.property/hide? (d/entity db k))))
+                                  (not (exportable-property-ident? db k context))))
                         (into {}))]
     (when (seq properties)
       (let [sorted-properties (->> (keys properties)
