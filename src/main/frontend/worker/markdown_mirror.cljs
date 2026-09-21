@@ -40,6 +40,7 @@
 (defonce ^:private *repo->enabled? (atom {}))
 (defonce ^:private *repo->queued-page-jobs (atom {}))
 (defonce ^:private *repo->flush-timeout (atom {}))
+(defonce ^:private stem-index-cache (js/WeakMap.))
 
 (defn- normalize-unicode
   [s]
@@ -79,12 +80,50 @@
   (and (ldb/page? page)
        (not (ldb/journal? page))))
 
+(defn- build-stem-index
+  "One-time build of normalized file stem -> non-journal page uuids.
+  Kept current incrementally by update-stem-index on each tx-report."
+  [db]
+  (reduce (fn [m datom]
+            (let [page (d/entity db (:e datom))]
+              (if-let [stem (when (non-journal-page? page)
+                              (normalize-file-stem (:block/title page)))]
+                (update m stem (fnil conj #{}) (:block/uuid page))
+                m)))
+          {}
+          (d/datoms db :avet :block/name)))
+
+(defn- stem-index
+  [db]
+  (or (.get stem-index-cache db)
+      (let [index (build-stem-index db)]
+        (.set stem-index-cache db index)
+        index)))
+
+(defn- update-stem-index
+  "Recomputes index membership only for `page-ids` touched by a tx."
+  [index db-before db-after page-ids]
+  (reduce (fn [m page-id]
+            (let [before (d/entity db-before page-id)
+                  after (d/entity db-after page-id)
+                  m (if-let [old-stem (when (non-journal-page? before)
+                                        (normalize-file-stem (:block/title before)))]
+                      (let [uuids (disj (get m old-stem) (:block/uuid before))]
+                        (if (empty? uuids)
+                          (dissoc m old-stem)
+                          (assoc m old-stem uuids)))
+                      m)]
+              (if-let [new-stem (when (non-journal-page? after)
+                                  (normalize-file-stem (:block/title after)))]
+                (update m new-stem (fnil conj #{}) (:block/uuid after))
+                m)))
+          index
+          page-ids))
+
 (defn- pages-with-file-stem
   [db stem]
-  (->> (d/datoms db :avet :block/name)
-       (map #(d/entity db (:e %)))
-       (filter #(and (non-journal-page? %)
-                     (= stem (normalize-file-stem (:block/title %)))))
+  (->> (get (stem-index db) stem)
+       (keep #(d/entity db [:block/uuid %]))
        (sort-by (comp str :block/uuid))))
 
 (defn page-relative-path
@@ -122,14 +161,25 @@
       (and (:block/parent entity) (ldb/page? (:block/parent entity))) (:db/id (:block/parent entity))
       (some-> entity :block/parent :block/page) (:db/id (:block/page (:block/parent entity))))))
 
+(defn- referring-page-ids
+  "Page ids of blocks that reference `page-eid` via :block/refs."
+  [db page-eid]
+  (keep (fn [ref-block]
+          (page-id-for-entity db (:db/id ref-block)))
+        (:block/_refs (d/entity db page-eid))))
+
 (defn affected-page-ids
   [{:keys [db-before db-after tx-data]}]
   (->> tx-data
-       (mapcat (fn [{:keys [e a v]}]
+       (mapcat (fn [{:keys [e a v added]}]
                  (cond-> [(page-id-for-entity db-before e)
                           (page-id-for-entity db-after e)]
                    (= a :block/page)
-                   (conj v))))
+                   (conj v)
+                   (and added
+                        (#{:block/title :block/name} a)
+                        (some-> (d/entity db-after e) ldb/page?))
+                   (into (referring-page-ids db-after e)))))
        (remove nil?)
        set))
 
@@ -661,7 +711,7 @@
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
 (defn- <run-job!
-  [platform* {:keys [repo db page-id old-path new-path delete?] :as _job} opts]
+  [platform* {:keys [repo db page-id old-path new-path delete?]} opts]
   (cond
     delete?
     (if old-path
@@ -683,20 +733,27 @@
       result)))
 
 (defn <handle-tx-report!
-  [repo _conn tx-report {:keys [platform defer?] :as opts}]
+  [repo _conn {:keys [db-before db-after] :as tx-report} {:keys [platform defer?] :as opts}]
   (let [platform* (or platform (platform/current))]
     (if (and (enabled? repo)
-             (supported-runtime? platform*)
-             (not (get-in tx-report [:tx-meta :from-disk?])))
-      (let [jobs (map #(page-job repo tx-report % opts)
-                      (affected-page-ids tx-report))]
-        (if defer?
-          (do
-            (doseq [job jobs] (queue-job! repo job))
-            (schedule-flush! repo (assoc opts :platform platform*))
-            (p/resolved {:status :queued
-                         :count (count jobs)}))
-          (p/all (map #(<run-job! platform* % opts) jobs))))
+             (supported-runtime? platform*))
+      (let [affected-ids (affected-page-ids tx-report)
+            index-before (stem-index db-before)
+            index-after (update-stem-index index-before db-before db-after affected-ids)]
+        (.set stem-index-cache db-after index-after)
+        (if (get-in tx-report [:tx-meta :from-disk?])
+          (p/resolved {:status :skipped
+                       :reason :from-disk})
+          (let [opts' (assoc opts :platform platform*)
+                jobs (map #(page-job repo tx-report % opts')
+                          affected-ids)]
+            (if defer?
+              (do
+                (doseq [job jobs] (queue-job! repo job))
+                (schedule-flush! repo opts')
+                (p/resolved {:status :queued
+                             :count (count jobs)}))
+              (p/all (map #(<run-job! platform* % opts') jobs))))))
       (p/resolved {:status :skipped
                    :reason :disabled-or-unsupported}))))
 

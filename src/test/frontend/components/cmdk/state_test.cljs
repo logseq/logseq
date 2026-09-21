@@ -137,7 +137,7 @@
             :include-breadcrumb? true
             :include-matched-count? true
             :code-only? true}
-           (state/cmdk-block-search-options {:filter-group :code :dev? true})))))
+           (state/cmdk-block-search-options {:filter-group :codes :dev? true})))))
 
 (deftest cmdk-block-search-options-current-page-and-move-blocks
   (testing "current-page adds page and move-blocks adds page-only flag"

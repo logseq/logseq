@@ -38,6 +38,7 @@
                    [:span.ui__icon
                     [:em-emoji (merge {:id (:id icon')
                                        :style {:line-height 1}}
+                                      (select-keys icon' [:skin])
                                       opts)]]
 
                    (and (= :tabler-icon (:type icon')) (:id icon'))

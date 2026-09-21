@@ -62,9 +62,8 @@
 (defn- build-journal-refs-for-datetime-properties
   "For a given property pair, builds a coll of journal refs for select built-in
   :datetime properties and all user :datetime properties. Otherwise returns nil"
-  [db property v]
-  (let [property-ent (d/entity db property)
-        allowed-datetime? (and (= :datetime (:logseq.property/type property-ent))
+  [db property-ent v]
+  (let [allowed-datetime? (and (= :datetime (:logseq.property/type property-ent))
                                ;; Only allow a few built-in properties as some built-in properties
                                ;; can create undesirable refs
                                (if (db-property/internal-property? (:db/ident property-ent))
@@ -96,20 +95,13 @@
   (set/union private-built-in-props
              #{:logseq.property/query :logseq.property.publish/published-url :logseq.property/exclude-from-graph-view}))
 
-(defn db-rebuild-block-refs
-  "Rebuild block refs for DB graphs, should returns ids"
-  [db block & {:keys [page-or-object?-memoized]}]
+(defn- block-refs
+  [db block properties page-or-object? property-entity]
   (let [block-db-id (:db/id block)
-        ;; explicit lookup in order to be nbb compatible
-        properties (->>
-                    (entity-plus/lookup-kv-then-entity (d/entity db block-db-id) :block/properties)
-                    (remove (fn [[k _v]]
-                              (non-ref-properties k)))
-                    (into {}))
+        alias-ids (into #{} (map :db/id) (:block/alias block))
         property-key-refs (->> (keys properties)
                                (keep (fn [ident]
-                                       (:db/id (d/entity db ident)))))
-        page-or-object? (or page-or-object?-memoized page-or-object?-helper)
+                                       (:db/id (property-entity ident)))))
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
                                            (cond
@@ -120,7 +112,7 @@
                                              [(:db/id v)]
 
                                              :else
-                                             (build-journal-refs-for-datetime-properties db property v)))))
+                                             (build-journal-refs-for-datetime-properties db (property-entity property) v)))))
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))
@@ -129,11 +121,54 @@
                  property-refs content-refs)
          distinct
          ;; Remove self-ref to avoid recursive bugs
-         (remove #(or (identical? block-db-id %)
-                      (identical? block-db-id (:db/id (d/entity db %)))))
-         ;; Remove alias ref to avoid recursive display bugs
-         (remove #(some (fn [alias-id] (identical? alias-id %)) (map :db/id (:block/alias block))))
-         (remove nil?))))
+         (remove #(or (nil? %)
+                      (identical? block-db-id %)
+                      (and (not (int? %))
+                           (identical? block-db-id (:db/id (d/entity db %))))
+                      ;; Remove alias refs to avoid recursive display bugs.
+                      (contains? alias-ids %))))))
+
+(defn db-rebuild-block-refs
+  "Rebuild block refs for DB graphs, should returns ids"
+  [db block & {:keys [page-or-object?-memoized]}]
+  (let [properties (into {}
+                         (remove (fn [[k _]] (non-ref-properties k)))
+                         (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties))]
+    (block-refs db block properties
+                (or page-or-object?-memoized page-or-object?-helper)
+                #(d/entity db %))))
+
+(defn db-rebuild-block-refs-fn
+  "Returns a ref builder for a bulk pass over the immutable `db`.
+  Reads ref-producing properties once and shares entity lookups within the pass."
+  [db]
+  (let [entity (memoize #(d/entity db %))
+        property-entities (into {}
+                                (keep (fn [datom]
+                                        (let [ident (:v datom)]
+                                          (when (and (db-property/property? ident)
+                                                     (not (non-ref-properties ident)))
+                                            [ident (entity (:e datom))]))))
+                                (d/datoms db :avet :db/ident))
+        properties-by-id
+        (reduce-kv
+         (fn [result ident _]
+           (let [schema (get (:schema db) ident)
+                 many? (= :db.cardinality/many (:db/cardinality schema))
+                 ref? (= :db.type/ref (:db/valueType schema))]
+             (reduce (fn [result datom]
+                       (let [v (if ref? (entity (:v datom)) (:v datom))]
+                         (if many?
+                           (update-in result [(:e datom) ident] (fnil conj #{}) v)
+                           (assoc-in result [(:e datom) ident] v))))
+                     result
+                     (d/datoms db :aevt ident))))
+         {}
+         property-entities)
+        page-or-object? (memoize page-or-object?-helper)]
+    (fn [block]
+      (block-refs db block (get properties-by-id (:db/id block))
+                  page-or-object? property-entities))))
 
 (defn- rebuild-block-refs-tx
   [{:keys [db-after]} blocks]

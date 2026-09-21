@@ -191,13 +191,28 @@
                           default-value)])))
              (into {}))))))
 
+(declare property-closed-values)
+
+(defn ^:api property-plain-map
+  "Plain property map with its closed values, as table columns expect."
+  [db property]
+  (let [m (worker-plain/entity-forward-map db property {})
+        closed-values (property-closed-values db property)]
+    (cond-> m
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))))
+
+(defn ^:api get-class-properties
+  [db class]
+  (mapv #(property-plain-map db %)
+        (outliner-property/get-class-properties class)))
+
 (def-thread-api :thread-api/get-class-properties
   [repo class-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (when-let [class (d/entity db class-id)]
-        (mapv #(worker-plain/entity-forward-map db % {})
-              (outliner-property/get-class-properties class))))))
+        (get-class-properties db class)))))
 
 (def-thread-api :thread-api/get-alias-source-page
   [repo page-id]
@@ -209,13 +224,7 @@
   [repo property-ident]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (when-let [property (d/entity @conn property-ident)]
-      (mapv (fn [entity]
-              (select-keys (entity-util/entity->map entity)
-                           [:db/id :block/uuid :block/title :block/order
-                            :logseq.property/value
-                            :logseq.property/icon
-                            :logseq.property/choice-checkbox-state]))
-            (:block/_closed-value-property property)))))
+      (property-closed-values @conn property))))
 
 (def-thread-api :thread-api/get-property-node-selector-data
   [repo option]
@@ -407,6 +416,8 @@
    :block/tags
    :db/cardinality
    :logseq.property/type
+   :logseq.property/classes
+   :logseq.property/icon
    :logseq.property/public?
    :logseq.property/built-in?
    :logseq.property/hide?
@@ -452,21 +463,20 @@
     (when-let [description (d/entity db description-id)]
       (entity-direct-map db description [:db/id :block/title :block/uuid]))))
 
-(defn- display-property-closed-values
+(defn ^:api property-closed-values
+  "All closed values for a property, as plain maps the UI can render.
+  Uses the reverse ref (`:block/_closed-value-property`) rather than AVET:
+  `:block/closed-value-property` is not in the static indexed schema, so AVET
+  can miss choices that VAET still has."
   [db property]
-  (->> (d/datoms db :avet :block/closed-value-property (:db/id property))
-       (keep (fn [datom]
-               (when-let [value (d/entity db (:e datom))]
-                 (when-not (ldb/recycled? value)
-                   value))))
-       (sort-by :block/order)
+  (->> (db-property/get-closed-property-values db (or (:db/id property) property))
        (mapv #(entity-direct-map db % display-property-value-keys))))
 
 (defn- display-property-map*
   [db property-id]
   (when-let [entity (d/entity db property-id)]
     (let [description (display-property-description db entity)
-          closed-values (display-property-closed-values db entity)]
+          closed-values (property-closed-values db entity)]
       (cond-> (entity-direct-map db entity display-property-keys)
         description
         (assoc :logseq.property/description description)
@@ -474,9 +484,17 @@
         (seq closed-values)
         (assoc :property/closed-values closed-values)))))
 
+(def ^:dynamic *display-property-cache* nil)
+
 (defn display-property-map
   [db property-id]
-  (display-property-map* db property-id))
+  (let [cache *display-property-cache*]
+    (if (and cache (contains? @cache property-id))
+      (get @cache property-id)
+      (let [property (display-property-map* db property-id)]
+        (when cache
+          (vswap! cache assoc property-id property))
+        property))))
 
 (defn- display-property-value
   [db property-id value]
@@ -488,10 +506,40 @@
           (= tag-ident (:db/ident (d/entity db (:v datom)))))
         (d/datoms db :eavt (:db/id entity) :block/tags)))
 
+(def ^:dynamic *block-class-properties-cache* nil)
+(def ^:dynamic *positioned-property-meta-cache* nil)
+
+(declare render-property-position)
+
+(defn- positioned-property-meta
+  [db property-id]
+  (let [cache *positioned-property-meta-cache*]
+    (if-let [hit (and cache (get @cache property-id))]
+      hit
+      (let [property (d/entity db property-id)
+            meta (when property
+                   {:property property
+                    :position (render-property-position db property)
+                    :public? (not (false? (:logseq.property/public? property)))
+                    :hide? (boolean (:logseq.property/hide? property))
+                    :hide-empty? (boolean (:logseq.property/hide-empty-value property))
+                    :default? (or (some? (:logseq.property/default-value property))
+                                  (some? (:logseq.property/scalar-default-value property)))})]
+        (when (and cache meta)
+          (vswap! cache assoc property-id meta))
+        meta))))
+
 (defn- block-class-properties
   [db block]
   (if-let [block-id (:db/id block)]
-    (outliner-property/get-block-classes-properties db block-id)
+    (let [tag-ids (mapv :v (d/datoms db :eavt block-id :block/tags))
+          cache *block-class-properties-cache*]
+      (if-let [hit (and cache (get @cache tag-ids))]
+        hit
+        (let [result (outliner-property/get-block-classes-properties db block-id)]
+          (when cache
+            (vswap! cache assoc tag-ids result))
+          result)))
     (let [classes (->> (:block/tags block)
                        (keep (fn [tag]
                                (d/entity db (if (map? tag)
@@ -748,7 +796,7 @@
 
 (defn- property-has-closed-values?
   [db property]
-  (boolean (seq (d/datoms db :avet :block/closed-value-property (:db/id property)))))
+  (boolean (seq (db-property/get-closed-property-values db (:db/id property)))))
 
 (defn- render-bottom-position-property?
   [db property]
@@ -781,23 +829,26 @@
 
 (defn- render-positioned-property?
   [db block-id property-id position {:keys [allow-empty-block-below?]}]
-  (when-let [property (d/entity db property-id)]
-    (let [property-position (render-property-position db property)
-          property-value (block-direct-property-value db block-id property-id)]
+  (when-let [{:keys [public? hide? hide-empty? default?]
+              property-position :position}
+             (positioned-property-meta db property-id)]
+    (let [property-value (block-direct-property-value db block-id property-id)
+          empty-value? (and (nil? property-value) (not default?))]
       (and
-       (not (false? (:logseq.property/public? property)))
+       public?
        (= property-position position)
-       (not (and (:logseq.property/hide-empty-value property)
-                 (nil? property-value)))
-       (not (:logseq.property/hide? property))
+       (not (and hide-empty? empty-value?))
+       (not hide?)
        (not (and
              (= property-position :block-below)
              (nil? property-value)
              (not allow-empty-block-below?)
              (not (render-tag-class-page? db (d/entity db block-id)))))))))
 
-(defn- block-positioned-property-ids
-  [db block-id position]
+(defn block-positioned-property-idents-by-position
+  "All visible positioned property idents for a block, grouped once.
+  Callers that need one position should use block-positioned-property-idents."
+  [db block-id]
   (let [block (d/entity db block-id)
         class-page? (render-tag-class-page? db block)
         own-property-ids (direct-block-property-ids db block-id)
@@ -809,19 +860,38 @@
                        (->> classes-properties
                             (map :db/ident)
                             (concat own-property-ids)
-                            distinct))]
-    (->> property-ids
-         (filter (fn [property-id]
-                   (render-positioned-property? db block-id property-id position
-                                                {:allow-empty-block-below?
-                                                 (contains? classes-property-ids-set property-id)})))
-         (keep #(d/entity db %))
-         db-property/sort-properties
-         (map :db/ident))))
+                            distinct))
+        grouped (group-by
+                 (fn [property-id]
+                   (some (fn [position]
+                           (when (render-positioned-property?
+                                  db block-id property-id position
+                                  {:allow-empty-block-below?
+                                   (contains? classes-property-ids-set property-id)})
+                             position))
+                         render-property-positions))
+                 property-ids)]
+    (into {}
+          (keep (fn [[position idents]]
+                  (when (and position (seq idents))
+                    [position
+                     (->> idents
+                          (keep #(d/entity db %))
+                          db-property/sort-properties
+                          (mapv :db/ident))])))
+          grouped)))
+
+(defn block-positioned-property-idents
+  "Property idents visible at a render position. Table snapshots only need
+  these idents plus UUIDs; they must not build display-property maps."
+  [db block-id position]
+  (vec (get (block-positioned-property-idents-by-position db block-id)
+            position
+            [])))
 
 (defn block-positioned-properties
   [db block-id position]
-  (->> (block-positioned-property-ids db block-id position)
+  (->> (block-positioned-property-idents db block-id position)
        (keep #(display-property-map* db %))
        vec))
 

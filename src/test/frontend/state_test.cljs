@@ -275,3 +275,15 @@
                 state/get-selection-block-ids (constantly nil)
                 state/get-selection-direction (constantly nil)]
     (is (nil? (state/get-editor-info)))))
+
+(deftest invoke-db-worker-when-ready-skips-uninitialized-worker-test
+  (let [previous @state/*db-worker]
+    (try
+      (reset! state/*db-worker nil)
+      (is (false? @state/db-worker-ready?))
+      (is (nil? (state/<invoke-db-worker-when-ready :thread-api/pull "repo")))
+      (reset! state/*db-worker (fn [& _] :ok))
+      (is (true? @state/db-worker-ready?))
+      (is (some? (state/<invoke-db-worker-when-ready :thread-api/pull "repo" [:db/id] 1)))
+      (finally
+        (reset! state/*db-worker previous)))))

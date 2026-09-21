@@ -97,3 +97,15 @@
       (w/wait-for-not-visible
        (format "#ls-block-%s .block-title-wrap:text('%s')"
                block-uuid initial-title)))))
+
+(deftest contents-open-as-page-navigates-to-contents
+  (testing "Contents sidebar more menu opens the Contents page"
+    (let [source-page (p/get-page-name)]
+      (w/click ".toggle-right-sidebar")
+      (assert/assert-is-visible ".cp__right-sidebar.open .sidebar-item.item-type-contents")
+      (w/click ".cp__right-sidebar .item-type-contents [data-testid='sidebar-item-more']")
+      (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "Open as page"))
+      (w/click (loc/filter "[role='menuitem']" :has-text "Open as page"))
+      (w/wait-for "div[data-testid='page title'] .block-title-wrap:text('Contents')")
+      (is (= "Contents" (p/get-page-name)))
+      (is (not= source-page (p/get-page-name))))))
