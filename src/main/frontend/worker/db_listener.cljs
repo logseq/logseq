@@ -89,8 +89,15 @@
                           (comp
                            (filter #(and (:added %) (= :block/tx-id (:a %))))
                            (keep #(some-> (d/entity db-after (:e %)) :block/uuid)))
-                          tx-data)]
-    (:blocks (block-handler/canonical-blocks db-after block-uuids))))
+                          tx-data)
+        ;; Parents of membership changes: their :block.temp/has-children?
+        ;; snapshot field must refresh even when their own datoms are untouched.
+        parent-uuids (into []
+                           (comp
+                            (filter #(= :block/parent (:a %)))
+                            (keep #(some-> (d/entity db-after (:v %)) :block/uuid)))
+                           tx-data)]
+    (:blocks (block-handler/canonical-blocks db-after (into block-uuids parent-uuids)))))
 
 (defn- build-render-delta
   [repo {:keys [db-after tx-meta] :as tx-report}

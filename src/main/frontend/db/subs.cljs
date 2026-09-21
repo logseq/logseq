@@ -7,7 +7,7 @@
             [promesa.core :as p]))
 
 (def ^:private loading-snapshot {:status :loading})
-(def ^:private warm-cache-size 5000)
+(def ^:private warm-cache-size 20000)
 
 (defn require-uuid!
   [label value]
@@ -134,9 +134,11 @@
   (and (:tx-id current)
        (= (:tx-id current) (:tx-id next-slot))
        (= (select-keys (get-in current [:snapshot :value])
-                       [:block.temp/positioned-properties :property/closed-values])
+                       [:block.temp/positioned-properties :property/closed-values
+                        :block.temp/has-children?])
           (select-keys (get-in next-slot [:snapshot :value])
-                       [:block.temp/positioned-properties :property/closed-values]))))
+                       [:block.temp/positioned-properties :property/closed-values
+                        :block.temp/has-children?]))))
 
 (defn- wire-slot
   [basis-rev [kind key :as slot-key] wire]
