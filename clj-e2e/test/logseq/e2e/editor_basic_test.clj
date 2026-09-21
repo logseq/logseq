@@ -1188,11 +1188,21 @@
      (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Nested"))
     (assert/assert-is-visible
      (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Enter Sibling"))
-    (assert/assert-is-visible
-     (loc/filter ".ls-page-blocks .page-blocks-inner > .ls-block:has-text('Enter Parent') .ls-block" :has-text "Enter Nested"))
-    (assert/assert-have-count
-     (loc/filter ".ls-page-blocks .page-blocks-inner > .ls-block:has-text('Enter Parent') .ls-block" :has-text "Enter Sibling")
-     0)))
+    (let [layout (js-json
+                  "() => {
+                     const title = (t) => [...document.querySelectorAll('.ls-page-blocks .block-title-wrap')]
+                       .find(el => el.textContent.trim() === t);
+                     const x = (t) => title(t).getBoundingClientRect().x;
+                     return JSON.stringify({
+                       parent: x('Enter Parent'),
+                       nested: x('Enter Nested'),
+                       sibling: x('Enter Sibling')
+                     });
+                   }")]
+      (is (> (:nested layout) (:parent layout))
+          (str "Enter Nested stays indented under the parent: " (pr-str layout)))
+      (is (< (abs (- (:sibling layout) (:parent layout))) 8)
+          (str "Enter Sibling is aligned with the parent, not nested: " (pr-str layout))))))
 
 (defn- selection-range
   []
