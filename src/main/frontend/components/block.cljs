@@ -3576,10 +3576,11 @@
 
 (hsx/defc block-linked-references
   [block]
-  (let [refs-count (or (:block.temp/refs-count block)
-                       (:value (db-hooks/use-resource-snapshot
-                                (when (:block/uuid block)
-                                  [:block-ref-count (:block/uuid block)]))))]
+  (let [bundled (:block.temp/refs-count block)
+        fetched (:value (db-hooks/use-resource-snapshot
+                         (when (and (nil? bundled) (:block/uuid block))
+                           [:block-ref-count (:block/uuid block)])))
+        refs-count (or bundled fetched)]
     (when (and refs-count (pos? refs-count))
       (when-let [refs-cp (state/get-component :block/linked-references)]
         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
