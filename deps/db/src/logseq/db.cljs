@@ -366,6 +366,8 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def private-tag-titles db-class/private-tag-titles)
+(def private-create-page-tag? db-class/private-create-page-tag?)
 (def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
@@ -444,8 +446,8 @@
                         child-order (some-> (d/datoms db :eavt child-id :block/order) first :v)]
                     (if (and child-order
                              (eligible? (compare child-order block-order))
-                             (not (seq (d/datoms db :avet :logseq.property/created-from-property child-id)))
-                             (not (seq (d/datoms db :avet :block/closed-value-property child-id)))
+                             (not (seq (d/datoms db :eavt child-id :logseq.property/created-from-property)))
+                             (not (seq (d/datoms db :eavt child-id :block/closed-value-property)))
                              (or (nil? best-order)
                                  (closer? (compare child-order best-order))))
                       [child-id child-order]
@@ -683,28 +685,56 @@
 (def get-block-children-ids common-initial-data/get-block-children-ids)
 (def get-block-full-children-ids common-initial-data/get-block-full-children-ids)
 
-(defn- get-sorted-page-block-ids
-  [db page-id]
-  (let [root (d/entity db page-id)]
-    (loop [result []
-           children (sort-by-order (:block/_parent root))]
-      (if (seq children)
-        (let [child (first children)]
-          (recur (conj result (:db/id child))
-                 (concat
-                  (sort-by-order (:block/_parent child))
-                  (rest children))))
-        result))))
+(defn- block-order-path
+  "The :block/order keys from the page's top-level children down to `block`,
+   sorted root-first. Comparing two paths lexicographically gives the same
+   relative order as a full preorder traversal of the page.
+   Returns nil when `block` isn't reachable from the page through :block/_parent
+   (e.g. property-created blocks)."
+  [page-id block]
+  (loop [block block
+         path ()]
+    (if (or (:logseq.property/created-from-property block)
+            (:block/closed-value-property block))
+      nil
+      (let [parent (:block/parent block)
+            path (cons (:block/order block) path)]
+        (cond
+          (nil? parent)
+          nil
+
+          (= page-id (:db/id parent))
+          (vec path)
+
+          :else
+          (recur parent path))))))
+
+(defn- compare-order-paths
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
 
 (defn sort-page-random-blocks
   "Blocks could be non consecutive."
-  [db blocks]
+  [_db blocks]
   (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
-  (let [page-id (:db/id (:block/page (first blocks)))
-        ;; TODO: there's no need to sort all the blocks
-        sorted-ids (get-sorted-page-block-ids db page-id)
-        blocks-map (zipmap (map :db/id blocks) blocks)]
-    (keep blocks-map sorted-ids)))
+  (let [page-id (:db/id (:block/page (first blocks)))]
+    (->> blocks
+         (keep (fn [block]
+                 (when-let [path (block-order-path page-id block)]
+                   [path block])))
+         (sort (fn [[path-1 _] [path-2 _]]
+                 (compare-order-paths path-1 path-2)))
+         (map second)
+         (distinct))))
 
 (defn last-child-block?
   "The child block could be collapsed."

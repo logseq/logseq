@@ -476,32 +476,37 @@
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
-  (when-let [timer (get @*wal-checkpoint-timers repo)]
-    (js/clearTimeout timer))
-  (swap! *wal-checkpoint-timers dissoc repo)
-  (checkpoint-db! repo db)
-  (checkpoint-db! repo search)
-  (checkpoint-db! repo client-ops)
-  (sync-download/close-import-state-for-repo! repo)
-  (when-let [timer (get @*client-ops-cleanup-timers repo)]
-    (js/clearInterval timer))
-  (swap! *client-ops-cleanup-timers dissoc repo)
-  (swap! *sqlite-conns dissoc repo)
-  (when-let [vector-index (worker-state/get-vector-index repo)]
-    (when-let [close-fn (:close! vector-index)]
-      (close-fn)))
-  (swap! *vector-indexes dissoc repo)
-  (swap! *datascript-conns dissoc repo)
-  (swap! *client-ops-conns dissoc repo)
-  (swap! client-op/*repo->pending-local-tx-count dissoc repo)
-  (search-handler/clear-search-index-builds! repo)
-  (when db (.close db))
-  (when search (.close search))
-  (when client-ops (.close client-ops))
-  (when-let [^js pool (get-storage-pool repo)]
-    (when (exists? (.-pauseVfs pool))
-      (.pauseVfs pool)))
-  (forget-storage-pool! repo))
+  (let [errors (atom [])
+        attempt! (fn [f]
+                   (try (f) (catch :default error (swap! errors conj error))))]
+    (when-let [timer (get @*wal-checkpoint-timers repo)]
+      (js/clearTimeout timer))
+    (swap! *wal-checkpoint-timers dissoc repo)
+    (doseq [^js handle [db search client-ops]]
+      (when (and handle (fn? (.-exec handle)))
+        (attempt! #(.exec handle wal-checkpoint-sql))))
+    (attempt! #(sync-download/close-import-state-for-repo! repo))
+    (when-let [timer (get @*client-ops-cleanup-timers repo)]
+      (js/clearInterval timer))
+    (swap! *client-ops-cleanup-timers dissoc repo)
+    (swap! *sqlite-conns dissoc repo)
+    (when-let [vector-index (worker-state/get-vector-index repo)]
+      (when-let [close-fn (:close! vector-index)]
+        (attempt! close-fn)))
+    (swap! *vector-indexes dissoc repo)
+    (swap! *datascript-conns dissoc repo)
+    (swap! *client-ops-conns dissoc repo)
+    (swap! client-op/*repo->pending-local-tx-count dissoc repo)
+    (search-handler/clear-search-index-builds! repo)
+    (when db (attempt! #(.close db)))
+    (when search (attempt! #(.close search)))
+    (when client-ops (attempt! #(.close client-ops)))
+    (when-let [^js pool (get-storage-pool repo)]
+      (when (exists? (.-pauseVfs pool))
+        (attempt! #(.pauseVfs pool))))
+    (forget-storage-pool! repo)
+    (when (seq @errors)
+      (throw (js/AggregateError. (to-array @errors) "Graph resources failed to close")))))
 
 (defn- close-other-dbs!
   [repo]
@@ -566,20 +571,24 @@
                                      {:sqlite @*sqlite
                                       :pool pool
                                       :path db-path})
+            _ (swap! *sqlite-conns assoc-in [repo :db] db)
             _ (log/info :db-worker/get-dbs-open {:repo repo :search-path search-path})
             search-db (platform/sqlite-open (platform/current)
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
+            _ (swap! *sqlite-conns assoc-in [repo :search] search-db)
             vector-index (when (get-in current-platform [:vector :open-index])
                            (platform/vector-open current-platform
                                                  {:path vector-path
                                                   :dimension (platform/embedding-dimension current-platform)}))
+            _ (when vector-index (swap! *vector-indexes assoc repo vector-index))
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
                                                  :pool pool
                                                  :path client-ops-path})]
+      (swap! *sqlite-conns assoc-in [repo :client-ops] client-ops-db)
       [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!
@@ -706,18 +715,6 @@
   (when (seq tx-data)
     (d/transact! conn tx-data {:initial-db? true})))
 
-(defn- ensure-canonical-revisions!
-  [conn]
-  (let [db @conn
-        tx-id (inc (:max-tx db))
-        tx-data (keep (fn [datom]
-                        (let [entity (d/entity db (:e datom))]
-                          (when-not (nat-int? (:block/tx-id entity))
-                            {:db/id (:db/id entity)
-                             :block/tx-id tx-id})))
-                      (d/datoms db :avet :block/uuid))]
-    (bootstrap-transact! conn tx-data)))
-
 (defn- <create-or-open-db!
   [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
   (let [datoms (or datoms
@@ -792,8 +789,6 @@
                   (handle-migrate-result-local-txs! repo migrate-result)
                   (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
               (transaction-handler/maybe-run-recycle-gc! conn))
-
-            (ensure-canonical-revisions! conn)
 
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
@@ -912,12 +907,6 @@
 (def-thread-api :thread-api/db-sync-invalidate-search-db
   [repo]
   (<invalidate-search-db! repo))
-
-(def-thread-api :thread-api/db-sync-recreate-lock
-  [repo]
-  (if-let [recreate-lock-fn (get-in (platform/current) [:env :recreate-lock-fn])]
-    (recreate-lock-fn repo)
-    nil))
 
 (def-thread-api :thread-api/db-sync-rehydrate-large-titles
   [repo graph-id]

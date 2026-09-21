@@ -714,6 +714,30 @@
           (remove (fn [b] (d/has-class? b "property-value-container"))))))
 
 #?(:cljs
+   (defn property-value-inner-block
+     "The real `.ls-block[blockid]` inside a property-value wrapper, if any."
+     [node]
+     (when (and node (d/has-class? node "property-value-container"))
+       (.querySelector node ".ls-block[blockid]"))))
+
+#?(:cljs
+   (defn unwrap-property-value-container
+     "Map a selected property-value wrapper to its inner block."
+     [node]
+     (or (property-value-inner-block node) node)))
+
+#?(:cljs
+   (defn selection-node-block-id
+     "Block UUID for a selected node, including text property-value wrappers."
+     [node]
+     (when (some-> node .-getAttribute)
+       (when-let [id (or (d/attr node "blockid")
+                         (some-> (property-value-inner-block node)
+                                 (d/attr "blockid")))]
+         (when (uuid-string? (str id))
+           (uuid id))))))
+
+#?(:cljs
    (defn get-selected-text
      []
      (utils/getSelectionText)))
@@ -730,7 +754,7 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     [text & {:keys [graph html blocks embed-block? owner-window]}]
+     [text & {:keys [graph html blocks embed-block? owner-window op]}]
      (let [blocks (map identity blocks)
            data (clj->js
                  (common-util/remove-nils-non-nested
@@ -740,6 +764,7 @@
                              (pr-str
                                {:graph graph
                                :embed-block? embed-block?
+                               :op op
                                :blocks (vec blocks)}))}))]
        (if owner-window
          (write-clipboard data owner-window)
@@ -1119,30 +1144,15 @@
        [] (breakpoint? 640))))
 
 #?(:cljs
-   (do
-     (defn goog-event?
-       [^js e]
-       (and e (fn? (gobj/get e "getBrowserEvent"))))
-
-     (defn goog-event-is-composing?
-       "Check if keydown event is a composing (IME) event.
-        Ignore the IME process by default."
-       ([^js e]
-        (goog-event-is-composing? e false))
-       ([^js e include-process?]
-        (when (goog-event? e)
-          (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
-            (if include-process?
-              (or event-composing?
-                  (= (gobj/get e "keyCode") 229)
-                  (= (gobj/get e "key") "Process"))
-              event-composing?)))))))
+   (defn goog-event?
+     [^js e]
+     (and e (fn? (gobj/get e "getBrowserEvent")))))
 
 #?(:cljs
    (defn native-event-is-composing?
      "Check if a KeyboardEvent (native, React synthetic, or goog-wrapped) is an
-      IME composing event. Always ignore the IME process by default (keyCode 229 /
-      key Process), matching the include-process?=true path of goog-event-is-composing?."
+      IME composing event. IME process keys (keyCode 229 / key \"Process\") count
+      as composing unless include-process? is false."
      ([^js e]
       (native-event-is-composing? e true))
      ([^js e include-process?]

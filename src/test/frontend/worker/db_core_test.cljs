@@ -68,7 +68,7 @@
           :thread-api/build-publishing-html :thread-api/reset-db
           :thread-api/get-file-content :thread-api/get-all-properties :thread-api/get-date-scheduled-or-deadlines
           :thread-api/unsafe-unlink-db :thread-api/close-db
-          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
+          :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
           :thread-api/export-db-binary :thread-api/import-file-graph
@@ -445,24 +445,16 @@
            (swap! listener-snapshots conj
                   {:repo listener-repo
                    :entities entities
-                   :missing-revisions
-                   (into #{}
-                         (keep (fn [entity]
-                                 (when-not (nat-int? (:block/tx-id entity))
-                                   (:block/uuid entity))))
-                         entities)})))]
+                   :blocks (mapv #(block-handler/canonical-block @conn %) entities)})))]
       (p/let [_ ((get-thread-api :thread-api/create-or-open-db) repo opts)
-              conn (worker-state/get-datascript-conn repo)
-              {:keys [entities missing-revisions]} (first @listener-snapshots)]
+              {:keys [entities blocks]} (first @listener-snapshots)]
         (is (= 1 (count @listener-snapshots)))
         (is (= repo (:repo (first @listener-snapshots))))
         (is (seq entities))
-        (is (empty? missing-revisions)
-            "Every UUID entity must have a local revision before the renderer listener is installed.")
-        (when (empty? missing-revisions)
-          (doseq [entity entities]
-            (is (= (:block/uuid entity)
-                   (:block/uuid (block-handler/canonical-block @conn entity))))))
+        (doseq [[entity block] (map vector entities blocks)]
+          (is (= (:block/uuid entity) (:block/uuid block)))
+          (is (= (get entity :block/tx-id 0) (:block/tx-id block)))
+          (is (nat-int? (:block/tx-id block))))
         (is (empty? @broadcasts)
             "Bootstrap transactions must not publish incremental renderer deltas.")
         (db-core/close-db! repo)))))
@@ -1593,7 +1585,13 @@
    (fn []
      (let [conn (d/create-conn db-schema/schema)
            block-uuid #uuid "11111111-2222-3333-4444-555555555555"]
-       (d/transact! conn [{:db/ident :logseq.class/Page
+       (d/transact! conn [{:db/ident :logseq.property/hide?
+                           :db/index true}
+                          {:db/ident :logseq.property/deleted-at
+                           :db/index true}
+                          {:db/ident :logseq.property/built-in?
+                           :db/index true}
+                          {:db/ident :logseq.class/Page
                            :block/title "Page"}
                           {:block/uuid block-uuid
                            :block/title "Tagged page"
@@ -1905,6 +1903,33 @@
          (is (= [latest-uuid] (mapv :block/uuid result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
          (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
+
+(deftest get-latest-journals-bounded-scan
+  (restoring-worker-state
+   (fn []
+     (let [conn (d/create-conn task-spent-time-schema)
+           journal-count 50]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn (mapv (fn [i]
+                                 {:block/uuid (random-uuid)
+                                  :block/title (str "journal " i)
+                                  :block/name (str "journal " i)
+                                  :block/journal-day (+ 20240101 i)
+                                  :block/tags :logseq.class/Journal})
+                               (range journal-count)))
+       (let [scanned (volatile! 0)
+             wrap-scan (fn [f]
+                         (fn [db index c & cs]
+                           (let [s (apply f db index c cs)]
+                             (if (= :block/journal-day c)
+                               (map (fn [d] (vswap! scanned inc) d) s)
+                               s))))
+             realized (with-redefs [d/datoms (wrap-scan d/datoms)
+                                    d/rseek-datoms (wrap-scan d/rseek-datoms)]
+                        (doall (take 1 (ldb/get-latest-journals @conn))))]
+         (is (= 1 (count realized)))
+         ;; bounded request: realizes O(requested) datoms, not O(total journals)
+         (is (< @scanned journal-count)))))))
 
 ;; ---- q / datoms / pull thread-api tests ----
 
@@ -3868,3 +3893,16 @@
          (is (string? (:error result)))
          (is (= page-class-id (:db/id (d/entity @dest-conn :logseq.class/Page)))
              "Invalid datom import should not replace the existing graph"))))))
+
+(deftest close-db-attempts-remaining-handles-on-failure
+  (restoring-worker-state
+   (fn []
+     (let [closed (atom [])
+           failing (fake-db {})
+           search-db (fake-db {:close-calls closed :close-label :search})
+           client-db (fake-db {:close-calls closed :close-label :client-ops})]
+       (set! (.-close failing) (fn [] (throw (js/Error. "close failed"))))
+       (reset! worker-state/*sqlite-conns
+               {test-repo {:db failing :search search-db :client-ops client-db}})
+       (is (thrown? js/Error (db-core/close-db! test-repo)))
+       (is (= [:search :client-ops] @closed))))))
