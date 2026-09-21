@@ -59,5 +59,5 @@
     (is (= "日本語" (db-ident/normalize-ident-name-part "日本語")))
     (is (= "über" (db-ident/normalize-ident-name-part "über")))
     (is (= "café" (db-ident/normalize-ident-name-part "café")))
-    (is (= "u" (db-ident/normalize-ident-name-part "!!"))
-        "Names with no allowed characters still produce a non-empty ident part"))))
+    (is (= "u" (db-ident/normalize-ident-name-part "@#%"))
+        "Names with no allowed characters still produce a non-empty ident part")))
