@@ -1040,7 +1040,7 @@
   [db deleted-block-ids]
   ;; The property is indexed only when it exists in the db schema as a ref
   ;; attribute; graphs without it (e.g. bare schema conns) have no comments.
-  (when (= :db.type/ref (get-in (d/schema db) [comments-blocks-property :db/valueType]))
+  (when (= :db.type/ref (get-in (:schema db) [comments-blocks-property :db/valueType]))
     (let [candidate-comments-areas
           (->> deleted-block-ids
                (mapcat (fn [id] (d/datoms db :avet comments-blocks-property id)))
