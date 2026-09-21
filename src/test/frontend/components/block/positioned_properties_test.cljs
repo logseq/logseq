@@ -149,6 +149,24 @@
     (is (false? (owns? (assoc (with-block-below root) :block/tags [{:db/ident :logseq.class/Page}]) zoom-in-config))
         "Pages keep the properties area toggle")))
 
+(deftest outliner-page-omits-add-property-button-test
+  (let [property-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        property {:block/uuid property-uuid
+                  :db/ident :user.property/p1
+                  :block/title "p1"
+                  :logseq.property/type :default}
+        markup (render-block-below
+                {:block/uuid page-uuid
+                 :block/title "Dance"
+                 :block/tags [{:db/ident :logseq.class/Page}]}
+                [property-uuid]
+                {property-uuid property})]
+    (is (string/includes? markup "p1")
+        "Existing properties still render on a nested page")
+    (is (not (string/includes? markup "ls-new-property"))
+        "Add property is not shown when a page is rendered in the outliner")))
+
 (deftest nested-outliner-block-omits-hidden-properties-pill-test
   (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
         root-uuid #uuid "88888888-8888-8888-8888-888888888888"
