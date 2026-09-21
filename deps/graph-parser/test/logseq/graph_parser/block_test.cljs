@@ -1,6 +1,5 @@
 (ns logseq.graph-parser.block-test
   (:require [cljs.test :refer [deftest are testing is]]
-            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.test.helper :as db-test]

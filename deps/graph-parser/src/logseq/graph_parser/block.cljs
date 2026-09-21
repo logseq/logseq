@@ -496,8 +496,8 @@
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags db-graph-mode?]
                                                                                :or {structured-tags #{}}}]
-  (let [db-based? (or (and (entity-plus/db-based-graph? db) (not @*export-to-db-graph?))
-                      (and db-graph-mode? (not @*export-to-db-graph?)))
+  (let [db-based? (and (not @*export-to-db-graph?)
+                       (or db-graph-mode? (entity-plus/db-based-graph? db)))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -721,9 +721,8 @@
         block (-> block
                   (assoc :body body)
                   (with-page-block-refs db date-formatter
-                    (cond-> {}
-                      (seq block-tags) (assoc :structured-tags block-tags)
-                      db-graph-mode? (assoc :db-graph-mode? true))))
+                    {:structured-tags block-tags
+                     :db-graph-mode? db-graph-mode?}))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
