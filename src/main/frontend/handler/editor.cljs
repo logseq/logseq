@@ -23,7 +23,6 @@
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
@@ -73,22 +72,7 @@
 
 (defn get-block-own-order-list-type
   [block]
-  (let [val (get block :logseq.property/order-list-type)
-        label (cond
-                (string? val)
-                val
-
-                (keyword? val)
-                (name val)
-
-                (map? val)
-                (or (:block/title val)
-                    (:logseq.property/value val)
-                    (some-> (:db/ident val) name))
-
-                :else
-                (pu/lookup block :logseq.property/order-list-type))]
-    (some-> label str string/lower-case)))
+  (db-property/order-list-type block))
 
 (defn set-block-own-order-list-type!
   [block type]
@@ -118,28 +102,13 @@
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
         (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))
 
-(defn- number-list-items
-  [block-or-blocks]
-  (cond
-    (nil? block-or-blocks)
-    []
-
-    (or (uuid? block-or-blocks)
-        (string? block-or-blocks)
-        (map? block-or-blocks))
-    [block-or-blocks]
-
-    (sequential? block-or-blocks)
-    (vec block-or-blocks)
-
-    :else
-    [block-or-blocks]))
-
 (defn toggle-own-number-list!
   "Toggle numbered-list type on one block or a sequence of blocks/ids.
   Slash commands pass the current edit block; the t n shortcut passes selected ids."
   [block-or-blocks]
-  (let [items (number-list-items block-or-blocks)
+  (let [items (if (sequential? block-or-blocks)
+                block-or-blocks
+                [block-or-blocks])
         repo (state/get-current-repo)]
     (p/let [resolved (p/all
                       (map (fn [item]

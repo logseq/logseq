@@ -714,22 +714,6 @@
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
 
-(defn- block-order-list-type
-  [block]
-  (let [val (get block :logseq.property/order-list-type)
-        label (cond
-                (string? val)
-                val
-
-                (keyword? val)
-                (name val)
-
-                (map? val)
-                (or (:block/title val)
-                    (:logseq.property/value val)
-                    (some-> (:db/ident val) name)))]
-    (some-> label str string/lower-case)))
-
 (defn contiguous-same-list-type-siblings
   "Return the contiguous same-list-type run containing `block` among ordered `siblings`.
   Immediate children are already same-indent; a different list type breaks the run."
@@ -743,9 +727,9 @@
     (if (nil? idx)
       (cond-> [] block (conj block))
       (let [current (nth siblings idx)
-            list-type (block-order-list-type current)
+            list-type (db-property/order-list-type current)
             same-type? (fn [sibling]
-                         (= list-type (block-order-list-type sibling)))
+                         (= list-type (db-property/order-list-type sibling)))
             start (loop [i idx]
                     (if (and (pos? i) (same-type? (nth siblings (dec i))))
                       (recur (dec i))
