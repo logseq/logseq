@@ -469,9 +469,11 @@
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]
-  ;; Push auth state first: a freshly-spawned worker for a new repo has no
-  ;; :auth/static-sync-token yet, so its first call would fail auth.
-  (p/let [_ (<sync-auth-state-to-db-worker!)
+  ;; Push auth state first in local mode: a freshly-spawned worker for a new
+  ;; repo has no :auth/static-sync-token yet, so its first call would fail auth.
+  (p/let [_ (if (config/local-sync-token)
+              (<sync-auth-state-to-db-worker!)
+              (p/resolved nil))
           graph-id (<rtc-create-graph! repo graph-e2ee? true)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))

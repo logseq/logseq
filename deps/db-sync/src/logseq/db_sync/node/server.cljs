@@ -4,7 +4,6 @@
             ["http" :as http]
             ["os" :as node-os]
             ["path" :as node-path]
-            ["qrcode-terminal" :as qrcode]
             ["ws" :as ws]
             [goog.object :as gobj]
             [clojure.string :as string]
@@ -86,7 +85,9 @@
       ;; string-based access: survives Closure property renaming
       (when (gobj/getValueByKeys js/process "stdout" "isTTY")
         (println "or scan:")
-        (qrcode/generate pair-url #js {:small true})))))
+        ;; lazy require: keeps qrcode-terminal out of builds that only need
+        ;; the namespace (e.g. the repo-root test build) but never print a QR
+        (.generate (js/require "qrcode-terminal") pair-url #js {:small true})))))
 
 (defn- make-env [cfg index-db assets-bucket]
   (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
