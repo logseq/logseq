@@ -1038,20 +1038,23 @@
 
 (defn- orphaned-range-comments-areas
   [db deleted-block-ids]
-  (let [candidate-comments-areas
-        (->> deleted-block-ids
-             (mapcat (fn [id] (d/datoms db :avet comments-blocks-property id)))
-             (map :e)
-             (distinct)
-             (keep #(d/entity db %))
-             (filter comments-area?)
-             (remove #(contains? deleted-block-ids (:db/id %))))]
-    (filter
-     (fn [comments-area]
-       (let [targets (seq (map :db/id (datom-value-ids (get comments-area comments-blocks-property))))]
-         (and targets
-              (every? #(contains? deleted-block-ids %) targets))))
-     candidate-comments-areas)))
+  ;; The property is indexed only when it exists in the db schema as a ref
+  ;; attribute; graphs without it (e.g. bare schema conns) have no comments.
+  (when (= :db.type/ref (get-in (d/schema db) [comments-blocks-property :db/valueType]))
+    (let [candidate-comments-areas
+          (->> deleted-block-ids
+               (mapcat (fn [id] (d/datoms db :avet comments-blocks-property id)))
+               (map :e)
+               (distinct)
+               (keep #(d/entity db %))
+               (filter comments-area?)
+               (remove #(contains? deleted-block-ids (:db/id %))))]
+      (filter
+       (fn [comments-area]
+         (let [targets (seq (map :db/id (datom-value-ids (get comments-area comments-blocks-property))))]
+           (and targets
+                (every? #(contains? deleted-block-ids %) targets))))
+       candidate-comments-areas))))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
