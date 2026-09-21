@@ -22,6 +22,7 @@
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
+           promesa.core/doseq clojure.core/doseq
            logseq.graph-parser.test.helper/deftest-async clojure.test/deftest}
  :skip-comments true
  :output {:progress true}}

@@ -192,12 +192,11 @@
           (into (entids db-before db-after value))))
       #{})))
 
-(defn- block-uuid-tx-item?
+(defn- tx-item-attr
   [tx-item]
-  (= :block/uuid
-     (if (vector? tx-item)
-       (nth tx-item 2 nil)
-       (:a tx-item))))
+  (if (vector? tx-item)
+    (nth tx-item 2 nil)
+    (:a tx-item)))
 
 (defn- touched-base-eids
   [db-before db-after tx-data]
@@ -210,7 +209,7 @@
                                (vswap! cache assoc eid eligible?)
                                eligible?)))]
     (reduce (fn [result tx-item]
-              (let [block-uuid-change? (block-uuid-tx-item? tx-item)]
+              (let [block-uuid-change? (= :block/uuid (tx-item-attr tx-item))]
                 (reduce (fn [eids eid]
                           (cond-> eids
                             (or block-uuid-change?
@@ -299,7 +298,10 @@
 
 (defn- net-tuple-delta
   [db-before db-after e2ee? tx-data]
-  (let [base-eids (touched-base-eids db-before db-after tx-data)]
+  ;; These derived attributes affect neither checksum tuples nor entity eligibility.
+  ;; Import finalization can write them for every block in the graph.
+  (let [tx-data (remove #(contains? #{:block/tx-id :block/refs} (tx-item-attr %)) tx-data)
+        base-eids (touched-base-eids db-before db-after tx-data)]
     (if (empty? base-eids)
       {:removed {}
        :added {}}

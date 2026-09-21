@@ -28,13 +28,8 @@ function gitOutput(args) {
 }
 
 function gitRevision() {
-  const commit = gitOutput(["rev-parse", "--short", "HEAD"]);
-  if (!commit) {
-    return "dev";
-  }
-
-  const clean = gitOutput(["diff-index", "--quiet", "HEAD", "--"]) === "";
-  return `${commit}${clean ? "" : "-dirty"}`;
+  // Match Shadow's build-metadata-hook: revision equality governs worker reuse.
+  return gitOutput(["describe", "--long", "--always", "--dirty"]) ?? "dev";
 }
 
 const buildTime = process.env.LOGSEQ_BUILD_TIME ?? new Date().toISOString();
@@ -56,7 +51,7 @@ export default defineConfig({
     sourcemap: false,
     target: "node22",
     rollupOptions: {
-      external: nodeBuiltins,
+      external: (id) => id.startsWith("node:") || nodeBuiltins.includes(id),
       output: {
         exports: "auto",
         codeSplitting: false,

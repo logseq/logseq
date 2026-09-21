@@ -19,6 +19,39 @@
   []
   (conn/get-db test-helper/test-db))
 
+(defn- with-history
+  [history f]
+  (let [original-history (.-history js/window)]
+    (set! (.-history js/window) history)
+    (try
+      (f)
+      (finally
+        (set! (.-history js/window) original-history)))))
+
+(deftest redirect-to-previous-uses-history-when-available-test
+  (let [calls (atom [])]
+    (with-history
+      #js {:length 3
+           :back (fn [] (swap! calls conj :back))}
+      (fn []
+        (with-redefs [route-handler/redirect! (fn [route]
+                                                (swap! calls conj [:redirect route]))]
+          (route-handler/redirect-to-previous!)
+          (is (= [:back] @calls)
+              "A previous history entry is restored instead of sending the user home."))))))
+
+(deftest redirect-to-previous-falls-back-to-home-without-history-test
+  (let [calls (atom [])]
+    (with-history
+      #js {:length 1
+           :back (fn [] (swap! calls conj :back))}
+      (fn []
+        (with-redefs [route-handler/redirect! (fn [route]
+                                                (swap! calls conj [:redirect route]))]
+          (route-handler/redirect-to-previous!)
+          (is (= [[:redirect {:to :home :push false}]] @calls)
+              "With no previous history entry, replace the deleted page with home."))))))
+
 (deftest default-page-route
   (let [journal-uuid (random-uuid)]
     (load-test-files

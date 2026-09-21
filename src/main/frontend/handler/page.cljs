@@ -315,7 +315,11 @@
            (when (> (count edit-content) current-pos)
              (common-util/safe-subs edit-content pos current-pos)))]
     (if hashtag?
-      (tag-on-chosen-handler input id pos format current-pos edit-content q)
+      (if (editor-handler/org-directive-hashtag-query? q)
+        (fn [_chosen-result e]
+          (util/stop e)
+          (state/clear-editor-action!))
+        (tag-on-chosen-handler input id pos format current-pos edit-content q))
       (page-on-chosen-handler id format q))))
 
 (defn create-today-journal!

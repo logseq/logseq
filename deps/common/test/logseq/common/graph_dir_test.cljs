@@ -1,6 +1,6 @@
-(ns frontend.worker.graph-dir-test
+(ns logseq.common.graph-dir-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.worker.graph-dir :as graph-dir]))
+            [logseq.common.graph-dir :as graph-dir]))
 
 (deftest repo->graph-dir-key-strips-db-prefix
   (testing "db-prefixed repo is mapped to prefix-free graph dir key"
@@ -37,3 +37,17 @@
   (testing "invalid or canonical names are ignored"
     (is (nil? (graph-dir/decode-legacy-graph-dir-name "foo~2Fbar")))
     (is (nil? (graph-dir/decode-legacy-graph-dir-name "bad%ZZname")))))
+
+(deftest graph-name-whitespace-boundaries
+  (testing "logical names are trimmed before encoding and identity comparison"
+    (doseq [repo ["  demo  " "  logseq_db_demo  " "logseq_db_ demo "]]
+      (is (= "demo" (graph-dir/repo->graph-dir-key repo)))
+      (is (= "demo" (graph-dir/repo->encoded-graph-dir-name repo)))
+      (is (graph-dir/same-repo? "demo" repo)))
+    (is (= "space name~2Fchild" (graph-dir/encode-graph-dir-name " \tspace name/child\n ")))
+    (is (nil? (graph-dir/repo->graph-dir-key "   "))))
+  (testing "physical directories that change identity after trimming are ignored"
+    (doseq [dir [" alpha " "   " "~20alpha" "alpha~20" "%20alpha" "alpha%20"]]
+      (is (nil? (graph-dir/decode-graph-dir-name dir)) dir)))
+  (testing "legacy diagnostic names are normalized"
+    (is (= "old/name" (graph-dir/decode-legacy-graph-dir-name "%20old++name%20")))))
