@@ -1480,6 +1480,27 @@
              @edited)
           "Deleting an empty predecessor must not restore the erased mounted title."))))
 
+(deftest library-enter-inserts-sibling-for-page-blocks-test
+  (let [library-page {:db/id 10
+                      :block/title "Library"
+                      :logseq.property/built-in? true
+                      :block/children [{:db/id 1}]}
+        library-page-block {:db/id 1
+                            :block/title "Library Parent"
+                            :block/children [{:db/id 2 :block/title "nested"}]}
+        tagged-page-block (assoc library-page-block
+                                 :block/tags [{:db/ident :logseq.class/Page}])]
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block nil))
+        "Enter on a Library page block creates a sibling even after tags are retracted")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} tagged-page-block nil))
+        "Enter on a tagged Library page block still creates a sibling")
+    (is (true? (#'editor/insert-as-sibling? {:library? true} library-page-block false))
+        "Library page blocks stay siblings even when the caller passes sibling? false")
+    (is (false? (#'editor/insert-as-sibling? {:library? true} library-page nil))
+        "Inserting against the Library page itself still nests a child")
+    (is (false? (#'editor/insert-as-sibling? {} library-page-block nil))
+        "Outside Library, an expanded block with children still nests")))
+
 (deftest insert-block-saves-current-block-before-switching-editor-test
   (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
         next-id #uuid "22222222-2222-2222-2222-222222222222"

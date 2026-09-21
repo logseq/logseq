@@ -377,29 +377,36 @@
 
 (declare save-block-aux! save-current-block! <left-sibling-or-parent escape-editing)
 
-(defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
-                                          replace-empty-target? outliner-op]}]
+(defn- insert-as-sibling?
+  "Library Enter always creates a sibling of the current page block. Do not
+  use entity/page? here: insert-new-block-aux! retracts :block/tags first."
+  [config current-block sibling?]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
         has-children? (block-map-has-children? current-block)
-        library? (:library? config)
-        sibling? (cond
-                   ref-query-top-block?
-                   false
+        library? (:library? config)]
+    (cond
+      ref-query-top-block?
+      false
 
-                   (and library? (entity/page? current-block))
-                   true
+      (and library? (not (ldb/library? current-block)))
+      true
 
-                   (boolean? sibling?)
-                   sibling?
+      (boolean? sibling?)
+      sibling?
 
-                   (util/collapsed? current-block)
-                   true
+      (util/collapsed? current-block)
+      true
 
-                   :else
-                   (not has-children?))
+      :else
+      (not has-children?))))
+
+(defn outliner-insert-block!
+  [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
+                                          replace-empty-target? outliner-op]}]
+  (let [library? (:library? config)
+        sibling? (insert-as-sibling? config current-block sibling?)
         new-block' (if library?
                      (-> new-block
                          (-> (assoc :block/tags #{:logseq.class/Page}
