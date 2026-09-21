@@ -158,6 +158,66 @@
       "A snapshot that only has the current choice still reloads all choices.")
   (is (not (#'property-value/closed-values-need-worker-load? {}))))
 
+(deftest date-property-value-present-test
+  (is (true? (#'property-value/date-property-value-present?
+              {:db/id 1 :block/journal-day 20250101})))
+  (is (true? (#'property-value/date-property-value-present? 1700000000000)))
+  (is (false? (#'property-value/date-property-value-present? nil)))
+  (is (false? (#'property-value/date-property-value-present?
+               :logseq.property/empty-placeholder)))
+  (is (false? (#'property-value/date-property-value-present?
+               {:db/id 9 :db/ident :logseq.property/empty-placeholder}))))
+
+(deftest clear-date-property-value-keeps-property-test
+  (let [calls* (atom [])
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        property {:db/ident :user.property/due
+                  :logseq.property/type :date}]
+    (with-redefs [state/get-selection-block-ids (constantly [])
+                  state/get-selection-blocks (constantly [])
+                  state/get-state (constantly nil)
+                  property-handler/batch-set-block-property!
+                  (fn [ids ident value]
+                    (swap! calls* conj [ids ident value]))]
+      (#'property-value/clear-date-property-value! block property)
+      (is (= [[[(:block/uuid block)]
+               :user.property/due
+               :logseq.property/empty-placeholder]]
+             @calls*)
+          "Clearing a date writes empty-placeholder so the property stays on the node."))))
+
+(deftest date-picker-delete-clears-value-instead-of-removing-property-test
+  (let [cleared?* (atom false)
+        event #js {}]
+    (#'property-value/date-picker-handle-delete!
+     event
+     {:block {:db/id 1}
+      :property {:db/ident :user.property/due}
+      :del-btn? true
+      :on-delete (fn [_] (reset! cleared?* true))})
+    (is (true? @cleared?*)
+        "Backspace on a set date must clear the value, not drop the property.")))
+
+(deftest date-picker-delete-on-empty-value-removes-property-test
+  (let [cleared?* (atom false)
+        removed-args* (atom nil)
+        event #js {}
+        block {:db/id 1}
+        property {:db/ident :user.property/due}
+        opts {:block block
+              :property property
+              :del-btn? false
+              :on-delete (fn [_] (reset! cleared?* true))
+              :view-parent {:db/ident :logseq.class/Task}}]
+    (with-redefs [editor-handler/move-cross-boundary-up-down (constantly nil)
+                  property-handler/remove-block-property!
+                  (fn [& args] (reset! removed-args* args))]
+      (#'property-value/date-picker-handle-delete! event opts)
+      (is (false? @cleared?*))
+      (is (= [1 :user.property/due {:preserve-task-tag? true}]
+             @removed-args*)))))
+
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])
         block {:db/id 1}
