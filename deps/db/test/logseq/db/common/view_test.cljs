@@ -17,6 +17,10 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
+(defn- result-titles
+  [conn result]
+  (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
+
 (deftest get-view-data-journals-returns-ordered-compact-index-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -50,6 +54,46 @@
         titles (map (fn [id] (:block/title (d/entity @conn id))) ids)]
     (is (= 2 (:count result)))
     (is (= ["Beta" "Alpha"] titles))))
+
+(deftest journal-window-excludes-future-journals-with-aliases-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:build/journal 20240101}}
+                                  {:page {:build/journal 29990101}}
+                                  {:page {:block/title "Alias target"}}]})
+        future-id (:e (first (d/datoms @conn :avet :block/journal-day 29990101)))
+        alias-id (:db/id (db-test/find-page-by-title @conn "Alias target"))]
+    (d/transact! conn [[:db/add future-id :block/alias alias-id]])
+    (doseq [options [{:journals? true} {:journals? true :row-limit 26}]]
+      (let [result (db-view/get-view-data @conn nil options)]
+        (is (= 1 (:count result)))
+        (is (= [20240101] (mapv :block/journal-day (:data result))))))))
+
+(deftest small-class-window-does-not-scan-unrelated-sort-values-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "Tagged" :build/tags [:Topic]}}
+                {:page {:block/title "Unrelated"}
+                 :blocks (mapv (fn [i] {:block/title (str "Unrelated " i)}) (range 1000))}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        scanned (atom 0)
+        instrument (fn [scan]
+                     (fn [db index & components]
+                       (let [datoms (apply scan db index components)]
+                         (if (and (= :avet index) (= :block/updated-at (first components)))
+                           (map (fn [datom] (swap! scanned inc) datom) datoms)
+                           datoms))))
+        result (with-redefs [d/datoms (instrument d/datoms)
+                             d/rseek-datoms (instrument d/rseek-datoms)]
+                 (db-view/get-view-data @conn view-id
+                                       {:view-feature-type :class-objects
+                                        :view-for-id class-id
+                                        :sorting [{:id :block/updated-at :asc? false}]
+                                        :row-limit 26}))]
+    (is (= 1 (:count result)))
+    (is (= ["Tagged"] (mapv #(:block/title (d/entity @conn %)) (:data result))))
+    (is (< @scanned 26) "A class that fits its window must not scan unrelated rows.")))
 
 (deftest get-view-data-all-pages-title-sort-test
   (let [conn (db-test/create-conn-with-blocks
@@ -272,6 +316,48 @@
     (is (= 2 (:count window)))
     (is (= (take 10 (:data full)) (:data window)))))
 
+(deftest get-view-data-all-pages-count-drops-after-delete-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Alpha" :block/updated-at 10}}
+                {:page {:block/title "Beta" :block/updated-at 20}}
+                {:page {:block/title "Gamma" :block/updated-at 30}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/updated-at :asc? false}]}
+        before (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        gamma (db-test/find-page-by-title @conn "Gamma")
+        _ (d/transact! conn [{:db/id (:db/id gamma)
+                              :logseq.property/deleted-at 1}])
+        after (db-view/get-view-data @conn view-id (assoc option :row-limit 10))]
+    (is (= 3 (:count before)))
+    (is (= ["Gamma" "Beta" "Alpha"] (result-titles conn before)))
+    (is (= 2 (:count after))
+        "Deleting a page must shrink All Pages. A leftover estimate left empty rows.")
+    (is (= ["Beta" "Alpha"] (result-titles conn after)))
+    (is (= (:count after) (count (:data after))))))
+
+(deftest get-view-data-all-pages-filter-count-matches-rows-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "alpha" :block/updated-at 1}}
+                {:page {:block/title "alpine" :block/updated-at 2}}
+                {:page {:block/title "beta" :block/updated-at 3}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/title :asc? true}]}
+        unfiltered (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        filtered (db-view/get-view-data
+                  @conn view-id
+                  (assoc option
+                         :row-limit 10
+                         :filters {:or? false
+                                   :filters [[:block/title :text-contains "alp"]]}))]
+    (is (= 3 (:count unfiltered)))
+    (is (= 2 (:count filtered) (count (:data filtered)))
+        "A title filter must not keep the unfiltered All Pages count.")
+    (is (= ["alpha" "alpine"] (result-titles conn filtered)))))
+
 (deftest get-view-data-all-pages-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Page " idx)
@@ -338,10 +424,6 @@
     (is (< elapsed-ms 150)
         (str "A 2500-page first window must not sort every page, took "
              elapsed-ms "ms"))))
-
-(defn- result-titles
-  [conn result]
-  (mapv (fn [id] (:block/title (d/entity @conn id))) (:data result)))
 
 (deftest get-view-data-class-objects-first-window-filters-hidden-objects-test
   (let [conn (db-test/create-conn-with-blocks
@@ -741,7 +823,7 @@
         result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
                                                      :view-for-id class-id})
         group-titles (map first (:data result))]
-    (is (= ["A" "B"] group-titles))))
+    (is (= ["B" "A"] group-titles))))
 
 (deftest get-view-data-class-objects-groups-by-many-values-test
   (let [conn (db-test/create-conn-with-blocks
@@ -763,6 +845,71 @@
                             (:data result))]
     (is (= #{"Movie A" "Movie B"} (get group->titles "Sci-Fi")))
     (is (= #{"Movie A"} (get group->titles "Drama")))))
+
+(deftest get-view-data-all-pages-groups-by-context-tags-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}
+                         :Project {:block/title "Project"}}
+               :pages-and-blocks
+               [{:page {:block/title "Alpha" :build/tags [:Topic]}}
+                {:page {:block/title "Beta" :build/tags [:Topic]}}
+                {:page {:block/title "Gamma" :build/tags [:Project]}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :group-by-property-ident :block/tags}
+        result (db-view/get-view-data @conn view-id option)
+        group->titles (fn [result]
+                        (into {}
+                              (map (fn [[group rows]]
+                                     [(:block/title group)
+                                      (set (map (fn [id]
+                                                  (:block/title (d/entity @conn id)))
+                                                rows))]))
+                              (:data result)))]
+    (is (= #{"Alpha" "Beta"} (get (group->titles result) "Topic"))
+        "A context-only Tags group must sort by readable tag values, not compare raw entity maps.")
+    (is (= #{"Gamma"} (get (group->titles result) "Project")))
+    (is (= ["Topic" "Project"]
+           (filter #{"Project" "Topic"}
+                   (mapv (fn [[group _rows]] (:block/title group))
+                         (:data result))))
+        "Groups sort descending by default because sort-groups-desc? defaults to true.")
+    (d/transact! conn [[:db/add view-id :logseq.property.view/sort-groups-desc? false]])
+    (is (= ["Project" "Topic"]
+           (filter #{"Project" "Topic"}
+                   (mapv (fn [[group _rows]] (:block/title group))
+                         (:data (db-view/get-view-data @conn view-id option)))))
+        "Ascending group order must use readable tag-title order.")))
+
+(deftest get-view-data-group-sort-ref-values-use-readable-keys-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}
+                         :Project {:block/title "Project"}
+                         :Item {:block/title "Item"}}
+               :pages-and-blocks
+               [{:page {:block/title "Alpha" :build/tags [:Topic]}
+                 :blocks [{:block/title "Alpha item"
+                           :build/tags [:Item]}]}
+                {:page {:block/title "Beta" :build/tags [:Project]}
+                 :blocks [{:block/title "Beta item"
+                           :build/tags [:Item]}]}]})
+        class-id (:db/id (d/entity @conn :user.class/Item))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        page-property (:db/id (d/entity @conn :block/page))
+        tags-property (:db/id (d/entity @conn :block/tags))
+        _ (d/transact! conn [[:db/add view-id
+                              :logseq.property.view/group-by-property
+                              page-property]
+                             [:db/add view-id
+                              :logseq.property.view/sort-groups-by-property
+                              tags-property]])
+        result (db-view/get-view-data @conn view-id
+                                      {:view-feature-type :class-objects
+                                       :view-for-id class-id})]
+    (is (= ["Alpha" "Beta"]
+           (mapv (fn [[group _rows]] (:block/title group))
+                 (:data result)))
+        "Ref-valued group sort keys must be rendered to scalar keys before compare.")))
 
 (deftest get-view-data-list-view-keeps-one-row-shape-for-pages-and-blocks-test
   (let [conn (db-test/create-conn-with-blocks
@@ -914,14 +1061,14 @@
         class-id (:db/id (d/entity @conn :user.class/Topic))
         view-id (create-view-id conn :class-objects :view-for-id class-id)
         _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :user.property/score]])
-        asc-groups (map first (:data (db-view/get-view-data @conn view-id
-                                                            {:view-feature-type :class-objects
-                                                             :view-for-id class-id})))
-        _ (d/transact! conn [[:db/add view-id :logseq.property.view/sort-groups-desc? true]])
         desc-groups (map first (:data (db-view/get-view-data @conn view-id
                                                              {:view-feature-type :class-objects
-                                                              :view-for-id class-id})))]
-    ;; Number groups must sort numerically (1 2 10), not lexicographically (1 10 2)
-    (is (= [1 2 10] asc-groups))
-    ;; "Sort groups order" (desc?) must reverse the numeric order
-    (is (= [10 2 1] desc-groups))))
+                                                              :view-for-id class-id})))
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/sort-groups-desc? false]])
+        asc-groups (map first (:data (db-view/get-view-data @conn view-id
+                                                            {:view-feature-type :class-objects
+                                                             :view-for-id class-id})))]
+    ;; Number groups must sort numerically (10 2 1), not lexicographically (2 10 1)
+    (is (= [10 2 1] desc-groups))
+    ;; Explicit ascending order must reverse the default descending order.
+    (is (= [1 2 10] asc-groups))))

@@ -118,3 +118,24 @@
           "A long available-choices list must overflow and accept scrollTop"))
     (assert/assert-is-visible
      (loc/filter ".choices-list li" :has-text "Choice 15"))))
+
+(deftest text-property-default-value-can-be-set-from-config-menu-test
+  (let [property-name "ui-default-value"
+        default-text "shipped default"
+        default-pane ".ls-property-default-value-pane"]
+    (add-text-property property-name)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (w/click (loc/filter "div[role='menuitem']" :has-text "Default value"))
+    (assert/assert-is-visible default-pane)
+    (assert/assert-is-visible
+     (loc/filter default-pane :has-text "Set default value"))
+    (w/click (loc/filter default-pane :has-text "Set default value"))
+    (util/wait-timeout 500)
+    (when (w/visible? (str default-pane " .editor-wrapper textarea"))
+      (util/input default-text)
+      (k/enter)
+      (assert/assert-have-count (str default-pane " .ls-block") 1))
+    (util/double-esc)
+    (w/click (loc/filter ".property-k" :has-text property-name))
+    (assert/assert-is-visible
+     (loc/filter "div[role='menuitem']" :has-text "Default value"))))

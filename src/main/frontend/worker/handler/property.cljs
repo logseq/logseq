@@ -193,14 +193,18 @@
 
 (declare property-closed-values)
 
+(defn ^:api property-plain-map
+  "Plain property map with its closed values, as table columns expect."
+  [db property]
+  (let [m (worker-plain/entity-forward-map db property {})
+        closed-values (property-closed-values db property)]
+    (cond-> m
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))))
+
 (defn ^:api get-class-properties
   [db class]
-  (mapv (fn [property]
-          (let [m (worker-plain/entity-forward-map db property {})
-                closed-values (property-closed-values db property)]
-            (cond-> m
-              (seq closed-values)
-              (assoc :property/closed-values closed-values))))
+  (mapv #(property-plain-map db %)
         (outliner-property/get-class-properties class)))
 
 (def-thread-api :thread-api/get-class-properties

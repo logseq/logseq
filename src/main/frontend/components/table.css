@@ -143,6 +143,17 @@
     .asset-image-fallback {
       @apply inline-block;
     }
+
+    /* inline-block + overflow:hidden makes an anchor's baseline the box
+       bottom (CSS 2.1 §10.8.1), so [[page]] link text sits above its
+       brackets in Name cells. Title clipping stays on .table-block-title. */
+    .table-block-title a,
+    .page-reference a,
+    .page-reference .bracket {
+      @apply inline overflow-visible max-w-none;
+      text-overflow: clip;
+      vertical-align: baseline;
+    }
   }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;

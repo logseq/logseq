@@ -36,10 +36,6 @@ type cleanup_result = {
 
 val resolve_root_dir : Cli_config.t -> Cli_primitive.path
 val graphs_dir : Cli_config.t -> Cli_primitive.path
-
-val lock_path :
-  root_dir:Cli_primitive.path -> Cli_primitive.repo -> Cli_primitive.path
-
 val db_worker_runtime_script_path : unit -> Cli_primitive.path
 
 val ensure_server :

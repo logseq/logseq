@@ -19,6 +19,33 @@
               :item-top 150
               :item-height 30}
              (#'ui-handler/auto-complete-scroll-geometry container element)))))
+  (testing "includes the preceding group heading in the focused cluster"
+    (let [heading #js {:classList #js {:contains (fn [class-name]
+                                                   (= class-name "ui__ac-group-name"))}
+                       :getBoundingClientRect (fn [] #js {:top 40 :height 32})}
+          wrap #js {:previousElementSibling heading}
+          container #js {:scrollTop 100
+                         :clientHeight 240
+                         :getBoundingClientRect (fn [] #js {:top 40 :height 240})}
+          element #js {:parentElement wrap
+                       :getBoundingClientRect (fn [] #js {:top 72 :height 30})}]
+      (is (= {:scroll-top 100
+              :viewport-height 240
+              :item-top 100
+              :item-height 62}
+             (#'ui-handler/auto-complete-scroll-geometry container element)))))
+  (testing "scrolls the group heading back into view with the first command"
+    (let [heading #js {:classList #js {:contains (fn [class-name]
+                                                   (= class-name "ui__ac-group-name"))}
+                       :getBoundingClientRect (fn [] #js {:top 8 :height 32})}
+          wrap #js {:previousElementSibling heading}
+          container #js {:scrollTop 32
+                         :clientHeight 240
+                         :getBoundingClientRect (fn [] #js {:top 40 :height 240})}
+          element #js {:parentElement wrap
+                       :getBoundingClientRect (fn [] #js {:top 40 :height 30})}]
+      (is (zero? (#'ui-handler/auto-complete-keep-visible-scroll-top
+                  (#'ui-handler/auto-complete-scroll-geometry container element))))))
   (testing "returns nil when container or element is missing"
     (is (nil? (#'ui-handler/auto-complete-scroll-geometry nil #js {})))
     (is (nil? (#'ui-handler/auto-complete-scroll-geometry #js {} nil)))))
@@ -38,6 +65,12 @@
              :viewport-height 200
              :item-top 40
              :item-height 20}))))
+  (testing "scrolls back to 0 when the first grouped command is above the viewport"
+    (is (zero? (#'ui-handler/auto-complete-keep-visible-scroll-top
+                {:scroll-top 400
+                 :viewport-height 200
+                 :item-top 0
+                 :item-height 52}))))
   (testing "keeps scroll-top when the focused item is already visible"
     (is (= 100
            (#'ui-handler/auto-complete-keep-visible-scroll-top
@@ -132,7 +165,7 @@
             (p/then
              (fn []
                (is (= [[:thread-api/pull repo [:db/id :block/uuid] [:block/uuid anchor-uuid]]
-                       [:thread-api/get-block-parents repo 42 3]]
+                       [:thread-api/get-block-parents repo 42 100]]
                       @worker-calls))
                (is (= [1] @scroll-calls))))
             (p/catch

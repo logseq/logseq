@@ -5,6 +5,8 @@
             [frontend.config :as config]
             [frontend.handler.assets :as assets-handler]
             [frontend.loader :refer [load]]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -107,7 +109,32 @@
 
 (defn- <get-block-parents
   [repo db-id]
-  (<invoke-db-worker :thread-api/get-block-parents repo db-id 3))
+  (<invoke-db-worker :thread-api/get-block-parents repo db-id 100))
+
+(defn- expand-collapsed-ancestor!
+  "Expands a collapsed ancestor so an anchor target inside it can render.
+   Mirrors editor's expand without depending on handler.editor."
+  [parent]
+  (let [uuid (:block/uuid parent)]
+    (when (and uuid
+               (or (:block/collapsed? parent)
+                   (state/get-block-collapsed uuid)))
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :collapse-expand-blocks}
+        (outliner-op/collapse-expand-blocks! [uuid] false))
+       (state/set-collapsed-block! uuid false)))))
+
+(defn- wait-for-anchor-element!
+  "Polls until the anchor block's row is mounted (lazy children mount
+   asynchronously), then scrolls to it and highlights it."
+  [anchor attempt]
+  (let [id (subs anchor 9)]
+    (if (or (not (exists? js/document))
+            (seq (util/get-blocks-by-id id)))
+      (highlight-element! anchor)
+      (when (< attempt 120)
+        (js/setTimeout #(wait-for-anchor-element! anchor (inc attempt)) 50)))))
 
 (defn add-style-if-exists!
   []
@@ -184,20 +211,40 @@
          (apply concat)))
       matched)))
 
+(defn- auto-complete-group-heading
+  "Returns the `.ui__ac-group-name` immediately above `element`, if any.
+
+  Slash-command groups render that heading as the previous sibling of the
+  focused item's `.menu-link-wrap`."
+  [element]
+  (when-let [heading (some-> element .-parentElement .-previousElementSibling)]
+    (when (some-> heading .-classList (.contains "ui__ac-group-name"))
+      heading)))
+
 (defn- auto-complete-scroll-geometry
   "Builds focused-item geometry from `container` and `element` DOM nodes.
 
   `item-top` is in container scroll coordinates so callers can compute a
-  corrected `scrollTop` without depending on `offsetParent`."
+  corrected `scrollTop` without depending on `offsetParent`.
+
+  When the focused item starts a group, `item-top` includes the group heading
+  so arrowing back to the first command also reveals the label above it."
   [container element]
   (when (and container element)
     (let [container-rect (.getBoundingClientRect container)
           element-rect (.getBoundingClientRect element)
-          scroll-top (.-scrollTop container)]
+          heading (auto-complete-group-heading element)
+          heading-rect (when heading (.getBoundingClientRect heading))
+          scroll-top (.-scrollTop container)
+          container-top (.-top container-rect)
+          element-top (+ scroll-top (- (.-top element-rect) container-top))
+          cluster-top (if heading-rect
+                        (+ scroll-top (- (.-top heading-rect) container-top))
+                        element-top)]
       {:scroll-top scroll-top
        :viewport-height (.-clientHeight container)
-       :item-top (+ scroll-top (- (.-top element-rect) (.-top container-rect)))
-       :item-height (.-height element-rect)})))
+       :item-top cluster-top
+       :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
 
 (defn- auto-complete-keep-visible-scroll-top
   "Returns a `scrollTop` that keeps the focused item inside the viewport."
@@ -344,7 +391,7 @@
                                 (fn []
                                   (.scrollToIndex ref #js {:index idx})
                                   ;; wait until this block has been rendered.
-                                  (js/setTimeout #(highlight-element! anchor) 200))
+                                  (wait-for-anchor-element! anchor 0))
                                 ;; BUG: grid scrollToIndex not working in useEffect on first render
                                 ;; https://github.com/petyosi/react-virtuoso/issues/757
                                 (if gallery? 100 0)))]
@@ -354,5 +401,11 @@
               (p/let [block (<pull-anchor-block repo anchor-id)
                       parents (when-let [db-id (:db/id block)]
                                 (<get-block-parents repo db-id))]
+                ;; Mount the anchor's ancestor chain through lazy children and
+                ;; expand collapsed ancestors so the target row can render.
+                (doseq [parent parents]
+                  (when (:block/uuid parent)
+                    (state/set-state! [:ui/anchor-mount (:block/uuid parent)] true)
+                    (expand-collapsed-ancestor! parent)))
                 (when-let [idx (some find-idx (map :block/uuid parents))]
                   (scroll-to-idx! idx))))))))))
