@@ -31,14 +31,11 @@
                    {:data-bottom-pill (boolean (:bottom-pill? opts))}
                    "Show hidden properties"])
                 db-hooks/use-resource-snapshot
-                (fn [resource-key]
-                  (is (= [:block-positioned-properties (:block/uuid block) :block-below]
-                         resource-key))
-                  {:status :ready :value properties})
-                db-hooks/use-blocks (fn [property-uuids]
-                                      (mapv property-by-uuid property-uuids))
-                db-hooks/use-block (fn [property-uuid]
-                                     (property-by-uuid property-uuid))
+                (fn [key]
+                  (is false (str "Positioned properties must not load another resource: " key))
+                  {:status :loading})
+                db-hooks/use-blocks (fn [_] (is false "Property definitions must arrive with the block") nil)
+                db-hooks/use-block (fn [_] (is false "First paint must not load another block") nil)
                 property-component/property-key-cp (fn [_block property _opts]
                                                      [:span.property-key (:block/title property)])
                 property-value/property-value (fn [_block property _opts]
@@ -51,7 +48,8 @@
     (render-static
      (block/block-positioned-properties
       config
-      block
+      (assoc block :block.temp/positioned-properties
+             {:block-below (mapv property-by-uuid properties)})
       :block-below))))
 
 (deftest icon-only-block-does-not-emit-bottom-properties-row
@@ -121,6 +119,54 @@
                  zoom-in-config root false false))
         "No pill when there are no hidden properties")))
 
+(deftest properties-area-suppresses-hidden-toggle-when-pill-renders-test
+  (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        root-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        child-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        scheduled {:block/uuid scheduled-uuid
+                   :db/ident :logseq.property/scheduled
+                   :block/title "Scheduled"}
+        with-block-below (fn [block]
+                           (assoc block :block.temp/positioned-properties
+                                  {:block-below [scheduled]}))
+        root {:block/uuid root-uuid :block/title "zoom-in root"}
+        child {:block/uuid child-uuid :block/title "nested block"}
+        zoom-in-config {:block? true :id (str root-uuid)}
+        owns? property-component/block-below-pill-owns-hidden-toggle?]
+    (is (true? (owns? (with-block-below root) zoom-in-config))
+        "Zoom-in root with a block-below property shows the pill, so the properties area must not add a second toggle")
+    (is (true? (#'block/show-block-below-hidden-properties-pill-toggle?
+                zoom-in-config (with-block-below root) false true))
+        "The pill really renders whenever the properties area suppresses its toggle")
+    (is (false? (owns? root zoom-in-config))
+        "Zoom-in root without block-below properties has no pill row, the properties area keeps its toggle")
+    (is (false? (owns? (assoc root :block.temp/positioned-properties {}) zoom-in-config))
+        "Empty positioned properties keep the properties area toggle")
+    (is (false? (owns? (with-block-below child) zoom-in-config))
+        "Nested blocks never show the pill, the properties area keeps its toggle")
+    (is (false? (owns? (with-block-below root) {:block? false :id (str root-uuid)}))
+        "Only the block route root hands the toggle to the pill")
+    (is (false? (owns? (assoc (with-block-below root) :block/tags [{:db/ident :logseq.class/Page}]) zoom-in-config))
+        "Pages keep the properties area toggle")))
+
+(deftest outliner-page-omits-add-property-button-test
+  (let [property-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        property {:block/uuid property-uuid
+                  :db/ident :user.property/p1
+                  :block/title "p1"
+                  :logseq.property/type :default}
+        markup (render-block-below
+                {:block/uuid page-uuid
+                 :block/title "Dance"
+                 :block/tags [{:db/ident :logseq.class/Page}]}
+                [property-uuid]
+                {property-uuid property})]
+    (is (string/includes? markup "p1")
+        "Existing properties still render on a nested page")
+    (is (not (string/includes? markup "ls-new-property"))
+        "Add property is not shown when a page is rendered in the outliner")))
+
 (deftest nested-outliner-block-omits-hidden-properties-pill-test
   (let [scheduled-uuid #uuid "55555555-5555-5555-5555-555555555555"
         root-uuid #uuid "88888888-8888-8888-8888-888888888888"
@@ -148,3 +194,17 @@
         "Nested outliner blocks do not render Show hidden properties")
     (is (string/includes? root-markup "bottom-property-hidden-toggle-btn")
         "Zoom-in root still renders Show hidden properties")))
+
+(deftest tags-render-on-first-paint-without-loading-tag-blocks-test
+  (let [tag {:db/id 1 :block/uuid (random-uuid) :db/ident :user.class/Visible
+             :block/title "Visible tag" :block/name "visible tag"}
+        hidden (assoc tag :db/id 2 :block/uuid (random-uuid)
+                      :block/title "Hidden tag" :logseq.property.class/hide-from-node true)]
+    (with-redefs [db-hooks/use-block (fn [_] nil)
+                  block/page-inner (fn [_ page _children _label] [:span (:block/title page)])
+                  hooks/use-memo (fn [f _] (f))
+                  hooks/use-atom (fn [a] [@a (fn [_])])]
+      (let [markup (render-static (block/tags-cp {} {:block/raw-title "Block"
+                                                    :block/tags [tag hidden]}))]
+        (is (string/includes? markup "Visible tag"))
+        (is (not (string/includes? markup "Hidden tag")))))))

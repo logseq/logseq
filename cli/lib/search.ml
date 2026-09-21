@@ -1,5 +1,5 @@
 type scope = Block | Page | Property | Tag
-type opts = { content : string }
+type opts = { content : string; include_hidden : bool }
 
 type parsed =
   | Parsed_block of opts
@@ -13,6 +13,7 @@ type action = {
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
   query : string;
+  include_hidden : bool;
 }
 
 let scope_of_parsed = function
@@ -57,6 +58,7 @@ let build ?registry:_ config _globals parsed =
             repo;
             graph = Cli_config.repo_to_graph repo;
             query;
+            include_hidden = (opts_of_parsed parsed).include_hidden;
           }
 
 let items_value items =
@@ -82,8 +84,24 @@ let pull_attrs = function
           kw "db/id";
           kw "db/ident";
           kw "block/title";
+          kw "logseq.property/hide?";
           kw "logseq.property/deleted-at";
           Edn_util.map_vec (Vec.of_array [| (kw "block/parent", sym "...") |]);
+          Edn_util.map_vec
+            (Vec.of_array
+               [|
+                 ( kw "block/page",
+                   vector
+                     (Vec.of_array
+                        [|
+                          kw "db/id";
+                          kw "block/title";
+                          kw "logseq.property/hide?";
+                          kw "logseq.property/deleted-at";
+                          Edn_util.map_vec
+                            (Vec.of_array [| (kw "block/parent", sym "...") |]);
+                        |]) );
+               |]);
         |]
   | Page ->
       Vec.of_array
@@ -91,7 +109,9 @@ let pull_attrs = function
           kw "db/id";
           kw "db/ident";
           kw "block/title";
+          kw "logseq.property/hide?";
           kw "logseq.property/deleted-at";
+          Edn_util.map_vec (Vec.of_array [| (kw "block/parent", sym "...") |]);
         |]
   | Property | Tag ->
       Vec.of_array [| kw "db/id"; kw "db/ident"; kw "block/title" |]
@@ -183,6 +203,28 @@ let rec recycled item =
       | None -> false)
   | None -> false
 
+let rec hidden item =
+  match Edn_util.as_map item with
+  | Some _ -> (
+      Edn_util.get_bool item "logseq.property/hide?" = Some true
+      || Option.is_some (Edn_util.get item "logseq.property/deleted-at")
+      ||
+      match Edn_util.get item "block/parent" with
+      | Some parent -> hidden parent
+      | None -> false)
+  | None -> false
+
+let quick_add_page_name = "Quick add"
+
+let hidden_search_item item =
+  hidden item
+  ||
+  match Edn_util.get item "block/page" with
+  | Some page ->
+      hidden page
+      && Edn_util.get_string page "block/title" <> Some quick_add_page_name
+  | None -> false
+
 let compare_search_item a b =
   let title item =
     Edn_util.get_string item "block/title"
@@ -194,10 +236,12 @@ let compare_search_item a b =
   let title_cmp = String.compare (title a) (title b) in
   if title_cmp <> 0 then title_cmp else Int64.compare (id a) (id b)
 
-let normalize_items scope items =
+let normalize_items scope include_hidden items =
   let items =
     match scope with
-    | Block | Page -> Vec.filter (fun item -> not (recycled item)) items
+    | Block | Page ->
+        Vec.filter (fun item -> not (recycled item)) items
+        |> Vec.filter (fun item -> include_hidden || not (hidden_search_item item))
     | Property | Tag -> items
   in
   items
@@ -243,7 +287,7 @@ let execute_with_mode action config mode =
               | _ when Edn_util.is_null value -> Vec.empty
               | _ -> Vec.singleton value
             in
-            let items = normalize_items action.scope items in
+            let items = normalize_items action.scope action.include_hidden items in
             bind (normalize_uuid_refs config action.repo items) (fun items ->
                 pure
                   (Cli_result.ok ~command:action.command mode

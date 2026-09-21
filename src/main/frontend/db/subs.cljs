@@ -7,7 +7,7 @@
             [promesa.core :as p]))
 
 (def ^:private loading-snapshot {:status :loading})
-(def ^:private warm-cache-size 5000)
+(def ^:private warm-cache-size 20000)
 
 (defn require-uuid!
   [label value]
@@ -112,6 +112,34 @@
        (sort-by second)
        vec))
 
+(defn- block-render-watch-keys
+  [block]
+  (when (contains? block :block.temp/positioned-properties)
+    (let [properties (mapcat val (:block.temp/positioned-properties block))]
+      (into #{[:property-config]
+              [:class-tree]
+              [:property-membership :block/closed-value-property]}
+            (comp (mapcat #(cons % (:property/closed-values %)))
+                  (keep :block/uuid)
+                  (map #(vector :entity %)))
+            properties))))
+
+(defn- block-slot
+  [rev block]
+  (ready-slot rev block {:tx-id (:block/tx-id block)
+                        :watch {:keys (block-render-watch-keys block)}}))
+
+(defn- same-block-projection?
+  [current next-slot]
+  (and (:tx-id current)
+       (= (:tx-id current) (:tx-id next-slot))
+       (= (select-keys (get-in current [:snapshot :value])
+                       [:block.temp/positioned-properties :property/closed-values
+                        :block.temp/has-children?])
+          (select-keys (get-in next-slot [:snapshot :value])
+                       [:block.temp/positioned-properties :property/closed-values
+                        :block.temp/has-children?]))))
+
 (defn- wire-slot
   [basis-rev [kind key :as slot-key] wire]
   (case kind
@@ -119,7 +147,7 @@
     (if (:missing? wire)
       {:rev basis-rev :snapshot {:status :missing}}
       (let [block (require-block! key (:value wire))]
-        (ready-slot basis-rev block {:tx-id (:block/tx-id block)})))
+        (block-slot basis-rev block)))
 
     :children
     (let [tx-id (require-revision! :block/tx-id (:tx-id wire))
@@ -136,23 +164,30 @@
 
     (throw (ex-info "Invalid renderer snapshot slot" {:slot-key slot-key}))))
 
-(defn- resource-response-stale?
+(defn- response-stale?
   [slot-key patch]
   (let [dirty-keys (get-in @*in-flight [slot-key :dirty-keys])
         dirty-slots (get-in @*in-flight [slot-key :dirty-slots])
         hydrated-slots (disj (set (keys (:slots patch))) slot-key)
-        {:keys [keys all?]} (get-in patch [:slots slot-key :watch])]
+        {:keys [all?] resource-keys :keys} (get-in patch [:slots slot-key :watch])]
     (or (and all? (contains? dirty-keys ::changed))
-        (seq (set/intersection dirty-keys keys))
-        (seq (set/intersection dirty-slots hydrated-slots)))))
+        (seq (set/intersection dirty-keys resource-keys))
+        (seq (set/intersection dirty-slots hydrated-slots))
+        (some (fn [[[kind _] wire]]
+                (and (= :block kind)
+                     (seq (set/intersection
+                           dirty-keys (block-render-watch-keys (:value wire))))))
+              (:slots patch)))))
 
 (defn- loaded-slot
   [slot-key current next-slot]
   (let [selected (cond
                    (> (slot-revision current) (slot-revision next-slot)) current
                    (and (= :block (first slot-key))
-                        (:tx-id current)
-                        (= (:tx-id current) (:tx-id next-slot))) current
+                        (same-block-projection? current next-slot))
+                   (if (:stale? current)
+                     (assoc next-slot :snapshot (:snapshot current))
+                     current)
                    (= current next-slot) current
                    :else next-slot)]
     (if (= (:snapshot current) (:snapshot selected))
@@ -163,15 +198,14 @@
   [generation requested-slot-key response]
   (let [{:keys [basis-rev slots] :as patch} response
         _ (require-revision! :basis-rev basis-rev)
-        stale-resource? (and (= :resource (first requested-slot-key))
-                             (resource-response-stale? requested-slot-key patch))
+        stale-response? (response-stale? requested-slot-key patch)
         changed (volatile! #{})]
     (when-not (map? slots)
       (throw (ex-info "Invalid renderer snapshot slots" {:slots slots})))
-    (when-not (or stale-resource? (contains? slots requested-slot-key))
+    (when-not (or stale-response? (contains? slots requested-slot-key))
       (throw (ex-info "Missing requested renderer snapshot slot"
                       {:slot-key requested-slot-key})))
-    (when-not stale-resource?
+    (when-not stale-response?
       (swap! *store
              (fn [store]
                (if (not= generation (:generation store))
@@ -196,7 +230,7 @@
                   slots))))
       (doseq [slot-key @changed]
         (notify! slot-key)))
-    stale-resource?))
+    stale-response?))
 
 (declare start-load! schedule-resource-reload!)
 
@@ -366,8 +400,7 @@
   (let [current (store-slot store slot-key)]
     (if (or (> (slot-revision current) (:rev store))
             (and (= :block (first slot-key))
-                 (:tx-id current)
-                 (= (:tx-id current) (:tx-id next-slot))))
+                 (same-block-projection? current next-slot)))
       [store false]
       [(if (mounted? slot-key)
          (assoc-in store [:slots slot-key] next-slot)
@@ -396,6 +429,22 @@
          (sort-by second)
          vec)))
 
+(defn- invalidate-render-blocks
+  [store rev blocks affected-keys reload]
+  (reduce
+   (fn [store [slot-key slot]]
+     (if (and (= :block (first slot-key))
+              (not (contains? blocks (second slot-key)))
+              (seq (set/intersection affected-keys (get-in slot [:watch :keys]))))
+       (if (mounted? slot-key)
+         (do (vswap! reload conj slot-key)
+             (assoc-in store [:slots slot-key]
+                       (assoc slot :rev rev :stale? true)))
+         (update store :warm cache/evict slot-key))
+       store))
+   store
+   (concat (:slots store) (:warm store))))
+
 (defn- apply-delta-store
   [store {:keys [rev blocks deleted children affected-keys]}]
   (let [inserted (into #{} (mapcat #(map first (:upsert (second %)))) children)
@@ -410,7 +459,7 @@
                      (let [block (require-block! block-uuid block)]
                        (record-delta-slot
                         store changed slot-key
-                        (ready-slot rev block {:tx-id (:block/tx-id block)})))
+                        (block-slot rev block)))
                      store)))
                store blocks)
         store (reduce-kv
@@ -478,7 +527,8 @@
                          (assoc-in store [:slots slot-key :stale?] true))
 
                      :else store)))
-               store (:resource-slot-keys store))]
+               store (:resource-slot-keys store))
+        store (invalidate-render-blocks store rev blocks affected-keys reload)]
     [store {:changed @changed :reload @reload}]))
 
 (defn apply-delta!
@@ -505,19 +555,25 @@
                (fn [requests]
                  (reduce-kv
                   (fn [requests slot-key request]
-                    (if (= :resource (first slot-key))
+                    (case (first slot-key)
+                      :resource
                       (assoc requests slot-key
                              (-> request
                                  (update :dirty-keys into
                                          (conj affected-keys ::changed))
                                  (update :dirty-slots into dirty-slots)))
+                      (:block :children)
+                      (if (seq affected-keys)
+                        (assoc requests slot-key
+                               (update request :dirty-keys set/union affected-keys))
+                        requests)
                       requests))
                   requests requests))))
       (run! notify! changed)
       (run! (fn [slot-key]
               (when (= :resource (first slot-key))
                 (schedule-resource-reload! slot-key))
-              (when (= :children (first slot-key))
+              (when (contains? #{:block :children} (first slot-key))
                 (request-reload! slot-key)))
             reload)
       true)))

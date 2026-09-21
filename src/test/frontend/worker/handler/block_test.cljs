@@ -235,8 +235,8 @@
           "Property references retain the scalar content required to render their value.")
       (is (= 1 (:block.temp/order-list-index block))
           "Canonical blocks retain worker-derived ordered-list indexes.")
-      (is (not (contains? block :block.temp/positioned-properties))
-          "Positioned property chips load through their own resource.")
+      (is (map? (:block.temp/positioned-properties block))
+          "Positioned properties arrive with the canonical row.")
       (is (not (contains? block :block.temp/breadcrumb)))
       (is (integer? (:block.temp/refs-count block)))
       (is (not (contains? block :block.temp/property-keys))
@@ -245,8 +245,10 @@
       (is (not (contains? block :block/properties)))
       (is (not-any? #(and (keyword? %)
                           (= "block.temp" (namespace %)))
-                    (remove #{:block.temp/order-list-index
-                              :block.temp/refs-count}
+                    (remove #{:block.temp/positioned-properties
+                              :block.temp/order-list-index
+                              :block.temp/refs-count
+                              :block.temp/has-children?}
                             (keys block)))))))
 
 (deftest canonical-block-numbers-ref-typed-list-siblings-test
@@ -333,6 +335,43 @@
                          (canonical-block @conn (d/entity @conn [:block/uuid block-uuid])))))
           "The dashed chip matches on :db/ident after shallow-ref-identity."))))
 
+(deftest canonical-view-block-includes-default-groups-sort-order-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          default-view-uuid (random-uuid)
+          asc-view-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 1
+                     :block/title "Page"
+                     :block/name "page"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid default-view-uuid
+                     :block/tx-id 1
+                     :block/title "All"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table}
+                    {:db/id -3
+                     :block/uuid asc-view-uuid
+                     :block/tx-id 1
+                     :block/title "Ascending"
+                     :logseq.property/view-for -1
+                     :logseq.property.view/feature-type :all-pages
+                     :logseq.property.view/type :logseq.property.view/type.table
+                     :logseq.property.view/sort-groups-desc? false}])
+      (is (true? (:logseq.property.view/sort-groups-desc?
+                  (canonical-block @conn
+                                   (d/entity @conn [:block/uuid default-view-uuid]))))
+          "The renderer receives the default descending group order on view blocks.")
+      (is (false? (:logseq.property.view/sort-groups-desc?
+                   (canonical-block @conn
+                                    (d/entity @conn [:block/uuid asc-view-uuid]))))
+          "An explicit ascending selection must not be overwritten."))))
+
 (deftest canonical-block-skips-path-refs-and-plain-title-block-refs-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn)
@@ -376,7 +415,7 @@
         (is (= #{:db/id :block/uuid :block/title :block/name :block/tags}
                (set (keys (first (:user.property/actors block)))))
             "Page-valued cells are one eavt scan: uuid/title/name/tags. No property extras.")
-        (is (not (contains? block :block.temp/positioned-properties)))
+        (is (map? (:block.temp/positioned-properties block)))
         (is (not (contains? block :block.temp/property-keys)))))))
 
 (deftest canonical-block-uses-stored-journal-title-test
@@ -452,8 +491,9 @@
           display-property (property-handler/display-property-map @conn property-id)]
       (is (zero? (:block.temp/refs-count canonical-property))
           "Property column headers skip refs-count. Incoming refs are every user of the property.")
-      (is (not (contains? canonical-property :property/closed-values))
-          "Closed values stay off the row snapshot. Table columns only need ident/type.")
+      (is (= (:property/closed-values display-property)
+             (:property/closed-values canonical-property))
+          "Canonical property definitions carry every choice for pickers.")
       (is (seq (:property/closed-values display-property)))
       (is (every? :block/uuid (:property/closed-values display-property)))
       (is (= #{"Low" "Medium" "High" "Urgent"}
@@ -527,11 +567,12 @@
                      (canonical-block
                       @conn
                       (d/entity @conn [:block/uuid "not-a-uuid"])))))
-      (testing "missing transaction ID"
-        (is (thrown? js/Error
-                     (canonical-block
-                      @conn
-                      (d/entity @conn [:block/uuid missing-tx-id-uuid])))))
+      (testing "missing transaction ID defaults to zero without updating the database"
+        (let [db @conn]
+          (is (= 0 (:block/tx-id
+                    (canonical-block db (d/entity db [:block/uuid missing-tx-id-uuid])))))
+          (is (identical? db @conn))
+          (is (nil? (:block/tx-id (d/entity @conn [:block/uuid missing-tx-id-uuid]))))))
       (testing "non-numeric transaction ID"
         (let [entity-id (ffirst
                          (d/q '[:find ?e
@@ -540,6 +581,34 @@
                               @conn))]
           (is (thrown? js/Error
                        (canonical-block @conn (d/entity @conn entity-id)))))))))
+
+(deftest missing-revisions-render-as-zero-without-writing-test
+  (let [conn (db-test/create-conn)
+        parent-uuid (random-uuid)
+        child-uuid (random-uuid)]
+    (d/transact! conn [{:db/id -1 :block/uuid parent-uuid :block/title "Parent"}
+                      {:block/uuid child-uuid :block/title "Child"
+                       :block/parent -1 :block/page -1 :block/order "a0"}])
+    (let [db @conn
+          blocks (:blocks (block-handler/canonical-blocks db [parent-uuid child-uuid]))
+          membership (block-handler/direct-children-membership db parent-uuid)]
+      (is (= [0 0] (mapv #(get-in blocks [% :block/tx-id]) [parent-uuid child-uuid])))
+      (is (= 0 (:parent-tx-id membership)))
+      (is (= [[child-uuid "a0"]] (:items membership)))
+      (is (map? (block-handler/open-block-tree db parent-uuid)))
+      (is (identical? db @conn))
+      (is (every? #(nil? (:block/tx-id (d/entity @conn [:block/uuid %])))
+                  [parent-uuid child-uuid])))
+    (doseq [revision [0 12]]
+      (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/tx-id revision]])
+      (is (= revision (:block/tx-id (block-handler/canonical-block
+                                    @conn (d/entity @conn [:block/uuid parent-uuid])))))
+      (is (= revision (:parent-tx-id (block-handler/direct-children-membership @conn parent-uuid)))))
+    (doseq [revision [-1 1.5 false "invalid"]]
+      (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/tx-id revision]])
+      (is (thrown? js/Error (block-handler/canonical-block
+                            @conn (d/entity @conn [:block/uuid parent-uuid]))))
+      (is (thrown? js/Error (block-handler/direct-children-membership @conn parent-uuid))))))
 
 (deftest canonical-blocks-returns-uuid-keyed-replacements-at-one-basis-test
   (let [canonical-block (canonical-block-api)
@@ -562,7 +631,7 @@
                  (canonical-block db
                                   (d/entity db [:block/uuid block-uuid])))))))))
 
-(deftest canonical-blocks-does-not-hydrate-positioned-property-definitions-test
+(deftest canonical-blocks-inlines-positioned-property-definitions-test
   (when-let [canonical-blocks (canonical-blocks-api)]
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "Page"}
@@ -575,10 +644,11 @@
       (let [response (canonical-blocks @conn [(:block/uuid task)])
             block (get-in response [:blocks (:block/uuid task)])]
         (is (= #{(:block/uuid task)} (set (keys (:blocks response))))
-            "Property definitions stay off the snapshot. The row inlines their UUIDs.")
+            "Definitions are inlined on the row, without loading extra canonical blocks.")
         (is (not (contains? (set (keys (:blocks response))) status-uuid)))
-        (is (not (contains? block :block.temp/positioned-properties))
-            "Positioned chips are not part of the row snapshot.")
+        (is (= [status-uuid]
+               (mapv :block/uuid (get-in block [:block.temp/positioned-properties :block-left])))
+            "Positioned chips can render without another request.")
         (is (some? (:logseq.property/status block))
             "The written status value stays on the row for table cells.")))))
 
@@ -775,7 +845,7 @@
         (is (= [[open-grandchild-uuid "a0"]]
                (get-in children [open-child-uuid :items])))))))
 
-(deftest direct-children-membership-requires-parent-transaction-id-test
+(deftest direct-children-membership-defaults-missing-parent-transaction-id-test
   (when-let [direct-children-membership
              (direct-children-membership-api)]
     (let [conn (db-test/create-conn)
@@ -792,8 +862,9 @@
                      :block/page -1
                      :block/parent -1
                      :block/order "a0"}])
+      (is (= 0 (:parent-tx-id (direct-children-membership @conn page-uuid))))
       (is (thrown? js/Error
-                   (direct-children-membership @conn page-uuid))))))
+                   (direct-children-membership @conn (random-uuid)))))))
 
 (deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
@@ -864,15 +935,91 @@
                             @conn (:db/id task-only) :block-left))
             doing-left (set (property-handler/block-positioned-property-idents
                              @conn (:db/id task-doing) :block-left))]
-        (is (not (contains? only-block :block.temp/positioned-properties)))
+        (is (= [status-uuid]
+               (mapv :block/uuid (get-in only-block [:block.temp/positioned-properties :block-left]))))
         (is (contains? only-left :logseq.property/status)
-            "Tag-only #Task still exposes the default status icon via the property resource.")
+            "Tag-only #Task exposes the default status on its first render.")
         (is (not (contains? only-block :logseq.property/status))
             "Canonical row maps omit unset status so table/query cells stay empty.")
         (is (contains? doing-left :logseq.property/status)
             "Explicit status still positions.")
         (is (some? (:logseq.property/status doing-block)))
         (is (uuid? status-uuid))))))
+
+(deftest structured-copy-tree-keeps-property-children-and-skips-hidden-nodes-test
+  (let [conn (db-test/create-conn)
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        root-uuid (random-uuid)
+        visible-uuid (random-uuid)
+        property-value-uuid (random-uuid)
+        recycled-uuid (random-uuid)
+        closed-uuid (random-uuid)]
+    (d/transact! conn
+                 [{:db/id -1
+                   :block/uuid page-uuid
+                   :block/tx-id 1
+                   :block/title "Page"
+                   :block/name "page"
+                   :block/tags :logseq.class/Page}
+                  {:db/id -2
+                   :db/ident :user.property/Text
+                   :db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/one
+                   :block/uuid property-uuid
+                   :block/tx-id 1
+                   :block/title "Text"
+                   :block/tags :logseq.class/Property}
+                  {:db/id -3
+                   :block/uuid root-uuid
+                   :block/tx-id 1
+                   :block/title "Root"
+                   :block/page -1
+                   :block/parent -1
+                   :block/order "a0"
+                   :block/collapsed? true}
+                  {:db/id -4
+                   :block/uuid visible-uuid
+                   :block/tx-id 1
+                   :block/title "Visible child"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a0"}
+                  {:db/id -5
+                   :block/uuid property-value-uuid
+                   :block/tx-id 1
+                   :block/title "Property value"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a1"
+                   :logseq.property/created-from-property -2}
+                  {:db/id -6
+                   :block/uuid recycled-uuid
+                   :block/tx-id 1
+                   :block/title "Recycled child"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a2"
+                   :logseq.property/deleted-at 1}
+                  {:db/id -7
+                   :block/uuid closed-uuid
+                   :block/tx-id 1
+                   :block/title "Closed value"
+                   :block/page -1
+                   :block/parent -3
+                   :block/order "a3"
+                   :block/closed-value-property -2}])
+    (let [result (block-handler/get-block-and-children
+                  @conn root-uuid
+                  {:children? true
+                   :include-property-block? true
+                   :render-data? nil})
+          child-titles (mapv :block/title (:children result))]
+      (is (= "Root" (:block/title (:block result))))
+      (is (= ["Visible child" "Property value"] child-titles)
+          "Structured copies keep property-created children and omit recycled or closed values")
+      (is (not (contains? (:block result) :block/properties))
+          "Structured copies skip renderer display-property maps"))))
 
 (deftest get-block-and-children-positions-default-task-status-test
   (let [conn (db-test/create-conn-with-blocks
@@ -1012,3 +1159,98 @@
       (is (= "https://example.com/poster.webp"
              (:logseq.property.asset/external-url cover)))
       (assert-shallow-identity-ref cover))))
+
+(deftest canonical-task-snapshot-includes-complete-positioned-choices-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Tasks"}
+                :blocks [{:block/title "Task with status" :build/tags [:logseq.class/Task]
+                          :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                         {:block/title "Task with default" :build/tags [:logseq.class/Task]}
+                         {:block/title "Plain block"}]}])
+        tasks (mapv #(db-test/find-block-by-content @conn %)
+                    ["Task with status" "Task with default" "Plain block"])]
+    (d/transact! conn (conj (mapv #(hash-map :db/id (:db/id %) :block/tx-id 1) tasks)
+                            {:db/ident :logseq.property/status :block/tx-id 1}))
+    (let [blocks (:blocks (block-handler/canonical-blocks @conn (mapv :block/uuid tasks)))
+          status (d/entity @conn :logseq.property/status)
+          expected (property-handler/property-closed-values @conn status)]
+      (is (= 6 (count expected)))
+      (doseq [task (take 2 tasks)]
+        (let [properties (get-in blocks [(:block/uuid task) :block.temp/positioned-properties :block-left])
+              status-property (some #(when (= :logseq.property/status (:db/ident %)) %) properties)]
+          (is (= (set (map :db/ident expected))
+                 (set (map :db/ident (:property/closed-values status-property)))))
+          (is (every? :logseq.property/icon (:property/closed-values status-property)))))
+      (is (= {} (get-in blocks [(:block/uuid (last tasks)) :block.temp/positioned-properties])))
+      (is (= expected (:property/closed-values (block-handler/canonical-block @conn status)))
+          "Property pickers outside positioned chips also receive the complete choice set."))))
+
+(deftest canonical-block-batch-shares-positioned-property-work-test
+  (let [conn (db-test/create-conn)
+        ids (vec (repeatedly 50 random-uuid))
+        calls (atom [])
+        closed-values property-handler/property-closed-values]
+    (d/transact! conn
+                 (mapv (fn [id] {:block/uuid id :block/title "Task" :block/tx-id 1
+                                  :block/tags :logseq.class/Task}) ids))
+    (with-redefs [property-handler/property-closed-values
+                  (fn [db property]
+                    (swap! calls conj (:db/ident property))
+                    (closed-values db property))]
+      (let [result (block-handler/canonical-blocks @conn ids)]
+        (is (= 50 (count (:blocks result))))
+        (is (= 1 (count (filter #{:logseq.property/status} @calls)))
+            "A batch reads the shared status choices once, without retaining the database globally.")))))
+
+(deftest positioned-node-property-preserves-selector-and-icon-contract-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:owner {:logseq.property/type :node
+                                    :logseq.property/ui-position :block-left}}
+               :classes {:Work {:build/class-properties [:owner]}
+                         :Person {}}
+               :pages-and-blocks
+               [{:page {:block/title "Assignments"}
+                 :blocks [{:block/title "Assignment" :build/tags [:Work]}
+                          {:block/title "Alice" :build/tags [:Person]}
+                          {:block/title "Unrelated"}]}]})
+        icon {:type :tabler-icon :id "user"}
+        assignment (db-test/find-block-by-content @conn "Assignment")
+        person (d/entity @conn :user.class/Person)]
+    (d/transact! conn [{:db/ident :user.property/owner
+                       :logseq.property/classes [(:db/id person)]
+                       :logseq.property/icon icon}
+                      {:db/id (:db/id assignment) :block/tx-id 1}])
+    (let [block (block-handler/canonical-block @conn (d/entity @conn (:db/id assignment)))
+          property (first (get-in block [:block.temp/positioned-properties :block-left]))
+          selector (property-handler/property-node-selector-data
+                    @conn {:property property :block block})]
+      (is (= :user.property/owner (:db/ident property)))
+      (is (= [:user.class/Person] (mapv :db/ident (:logseq.property/classes property)))
+          "The picker retains class filtering and the tag for newly created values.")
+      (is (= [(:block/uuid person)] (mapv :block/uuid (:logseq.property/classes property))))
+      (is (= ["Alice"] (mapv :block/title (:initial-choices selector)))
+          "An unused positioned property offers existing nodes of its allowed class.")
+      (is (= icon (:logseq.property/icon property))
+          "Empty left/right values can render their configured icon immediately."))))
+
+(deftest get-block-and-children-respects-include-property-block
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:p1 {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "b1"
+                           :build/properties {:p1 "value"}
+                           :build/children [{:block/title "child"}]}]}]})
+        b1 (db-test/find-block-by-content @conn "b1")
+        excluded (:children (block-handler/get-block-and-children
+                             @conn (:block/uuid b1)
+                             {:children? true}))
+        included (:children (block-handler/get-block-and-children
+                             @conn (:block/uuid b1)
+                             {:children? true
+                              :include-property-block? true}))
+        titles (fn [children] (set (keep :block/title children)))]
+    (is (= #{"child"} (titles excluded))
+        "Default children omit property-value blocks")
+    (is (= #{"child" "value"} (titles included))
+        "include-property-block? true returns property-value children used by cut/copy")))

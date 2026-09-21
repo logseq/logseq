@@ -4,7 +4,9 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.handler.property :as property-handler]
             [frontend.worker.handler.render-resource.common :as common]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]))
@@ -347,6 +349,17 @@
                   partitions)})
          (:data result))})
 
+(defn- query-property-maps
+  "Resolves the attribute idents of query results to property maps so the
+  renderer can build table columns from them."
+  [db idents]
+  (into []
+        (keep (fn [ident]
+                (when (keyword? ident)
+                  (when-let [property (d/entity db ident)]
+                    (property-handler/property-plain-map db property)))))
+        idents))
+
 (defn- normalize-view-data
   [db result grouped?]
   (when-not (map? result)
@@ -370,7 +383,7 @@
              (into #{} (map #(common/entity-uuid! db %)) ids)))
 
       (contains? result :properties)
-      (assoc :properties (mapv identity (:properties result))))))
+      (assoc :properties (query-property-maps db (:properties result))))))
 
 (defn- missing-view-data
   "Delete still has an in-flight :view-data snapshot. Fail-fast here
@@ -405,6 +418,11 @@
                           {:feature-type feature-type
                            :query-row-uuids query-row-uuids})))
         (let [config (effective-view-config view context)
+              query-block (when (= :query-result feature-type)
+                            (:logseq.property/query view))
+              query (when (= :code (:logseq.property.node/display-type query-block))
+                      (:query (common-util/safe-read-string {:log-error? false}
+                                                            (:block/title query-block))))
               query-entity-ids (mapv (fn [block-uuid]
                                        (:db/id (common/entity-by-uuid! db
                                                                       :query-row-uuid
@@ -416,7 +434,7 @@
                                  (assoc :view-feature-type feature-type))
                        owner (assoc :view-for-id (:db/id owner))
                        (= :query-result feature-type)
-                       (assoc :query-entity-ids query-entity-ids)
+                       (assoc :query-entity-ids query-entity-ids :query query)
                        (:initial-row-count context)
                        (assoc :row-limit (:initial-row-count context))
                        (contains? context :row-offset)
@@ -431,6 +449,7 @@
                       (assoc :row-previews (first-window-row-previews db (:rows value))))
               value-partition (:partition value)]
           [(cond-> (view-watch-keys db view-uuid owner feature-type config value-partition)
+             query-block (conj [:entity (:block/uuid query-block)])
              include-row-previews? (conj [:attr :block/title]))
            value]))
       (missing-view-data view-uuid))))

@@ -255,15 +255,26 @@
                                      (:added datom))]
            (when (or page-tag-update? move-to-library?)
              (let [block-before (d/entity db-before id)
-                   block-after (d/entity db-after id)]
+                   block-after (d/entity db-after id)
+                   ;; When a block becomes a page its descendant blocks still point
+                   ;; :block/page at the old page; re-point them at the new page.
+                   children-page-tx (fn []
+                                      (keep (fn [child-id]
+                                              (let [child (d/entity db-after child-id)]
+                                                (when (and child (not (ldb/page? child)))
+                                                  {:db/id child-id
+                                                   :block/page id})))
+                                            (ldb/get-block-full-children-ids db-after id)))]
                (when block-after
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
-                   [{:db/id id
-                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
-                     :block/tags :logseq.class/Page}
-                    [:db/retract id :block/page]]
+                   (concat
+                    [{:db/id id
+                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                      :block/tags :logseq.class/Page}
+                     [:db/retract id :block/page]]
+                    (children-page-tx))
 
                    ;; block->page
                    (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
@@ -288,7 +299,7 @@
                                                      [{:db/id (:db/id block-parent)
                                                        :block/parent (:db/id (ldb/get-library-page db-after))
                                                        :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx))
+                     (concat ->page-tx move-parent-to-library-tx (children-page-tx)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
@@ -522,11 +533,16 @@
                                         ensure-query-tx-data
                                         ensure-comments-tx-data
                                         commands-tx)
-        template-db (if (seq before-template-tx-data)
-                      (:db-after (d/with db-after before-template-tx-data))
-                      db-after)
+        ;; insert-tag-templates keys off :tx-data tag additions, including
+        ;; pages created by commands (repeating-task reschedule).
+        template-result (when (seq before-template-tx-data)
+                          (d/with db-after before-template-tx-data))
+        template-db (or (:db-after template-result) db-after)
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
-                              (insert-tag-templates (assoc tx-report :db-after template-db)))
+                              (insert-tag-templates
+                               (cond-> (assoc tx-report :db-after template-db)
+                                 template-result
+                                 (update :tx-data concat (:tx-data template-result)))))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat before-template-tx-data
             insert-templates-tx
@@ -556,22 +572,18 @@
                    tx-data)]
     (throw (ex-info "journal page protected attr updated" violation))))
 
-(def ^:private timestamp-only-attrs
-  #{:block/tx-id :block/updated-at})
-
 (def ^:private property-display-config-attrs
   "Property display metadata. Changing these must not fan :block/tx-id out to
   every page/block that references the property (and revalidate those owners)."
   #{:logseq.property/hide?
     :logseq.property/hide-empty-value
     :logseq.property/ui-position
-    :logseq.property/view-context
-    :logseq.property/public?})
+    :logseq.property/view-context})
 
 (defn- local-revision-datom?
   "Datoms that should stamp :block/tx-id on the changed entity itself."
   [datom]
-  (not (contains? timestamp-only-attrs (:a datom))))
+  (not (contains? #{:block/tx-id :block/updated-at} (:a datom))))
 
 (defn- projected-reference-content-datom?
   "Datoms whose change should revise reference owners (pages/blocks that ref
@@ -609,6 +621,8 @@
     :block/tags
     :logseq.property/public?})
 
+(defonce ^:private reference-attrs-cache (js/WeakMap.))
+
 (defn- reference-owner-ids-at
   [db reference-attrs' target-id]
   (into #{}
@@ -618,20 +632,27 @@
 
 (defn- projected-reference-owner-ids
   [{:keys [db-before db-after tx-data]}]
-  (let [target-ids (into #{}
+  (let [reference-attrs-changed?
+        (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
+        target-ids (into #{}
                          (comp
                           (filter #(projected-reference-content-datom? db-before %))
                           (map :e)
                           (filter #(d/entity db-before %)))
                          tx-data)]
     (if (empty? target-ids)
-      #{}
-      (let [reference-attrs-changed?
-            (some #(contains? reference-attr-definition-attrs (:a %)) tx-data)
-            before-reference-attrs (reference-attrs db-before)
-            after-reference-attrs (if reference-attrs-changed?
-                                    (reference-attrs db-after)
-                                    before-reference-attrs)]
+      (do (when-not reference-attrs-changed?
+            (when-let [attrs (.get reference-attrs-cache db-before)]
+              (.set reference-attrs-cache db-after attrs)))
+          #{})
+      (let [before-reference-attrs (or (.get reference-attrs-cache db-before)
+                                     (reference-attrs db-before))
+            after-reference-attrs (or (.get reference-attrs-cache db-after)
+                                     (if reference-attrs-changed?
+                                       (reference-attrs db-after)
+                                       before-reference-attrs))]
+        (.set reference-attrs-cache db-before before-reference-attrs)
+        (.set reference-attrs-cache db-after after-reference-attrs)
         (into #{}
               (mapcat (fn [target-id]
                         (concat
@@ -698,6 +719,9 @@
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))
         tx-report' (or replace-tx-report tx-report*)
+        ;; Reference stamping does not change reference-attribute definitions.
+        _ (when-let [attrs (.get reference-attrs-cache (:db-after tx-report*))]
+            (.set reference-attrs-cache (:db-after tx-report') attrs))
         full-tx-data (concat (:tx-data tx-report*)
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
