@@ -31,9 +31,8 @@
 
       (contains? transfer-types "text/plain")
       (let [text (.getData data-transfer "text/plain")]
-        (when (app-url/privileged-renderer-url? text)
-          (util/stop event))
-        (when (app-url/insertable-block-content? text)
+        (if (app-url/privileged-renderer-url? text)
+          (util/stop event)
           (editor-handler/api-insert-new-block!
            text
            {:block-uuid uuid
