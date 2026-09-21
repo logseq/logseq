@@ -1167,7 +1167,7 @@
      0)
     (p/goto-page "Outline Child")
     (assert/assert-is-visible
-     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "hello")))))
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "hello"))))
 
 (deftest library-enter-on-page-creates-sibling
   (testing "Enter on a Library page block creates a sibling instead of a nested child"
