@@ -1138,6 +1138,31 @@
     (b/new-block "another nested child")
     (b/indent)))
 
+(deftest library-hides-normal-blocks-and-collapses-child-pages
+  (testing "Library shows nested pages without their blocks, and parent pages collapse child pages"
+    (p/goto-page "Library")
+    (b/new-blocks ["Outline Parent" "Outline Child"])
+    (b/indent)
+    (p/goto-page "Outline Child")
+    (b/new-blocks ["hello" "world"])
+    (p/goto-page "Library")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Outline Parent"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Outline Child"))
+    (let [contents (set (util/get-page-blocks-contents))]
+      (is (contains? contents "Outline Parent"))
+      (is (contains? contents "Outline Child"))
+      (is (not (contains? contents "hello")))
+      (is (not (contains? contents "world"))))
+    (p/goto-page "Outline Parent")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "Outline Child"))
+    (let [contents (set (util/get-page-blocks-contents))]
+      (is (contains? contents "Outline Child"))
+      (is (not (contains? contents "hello")))
+      (is (not (contains? contents "world"))))))
+
 (defn- selection-range
   []
   (w/eval-js
