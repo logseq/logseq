@@ -194,10 +194,7 @@
 
 (defn- property-value-ids
   [value]
-  (let [items (cond
-                (nil? value) []
-                (and (coll? value) (not (map? value))) value
-                :else [value])]
+  (let [items (if (and (coll? value) (not (map? value))) value [value])]
     (into #{} (keep (fn [item]
                       (cond
                         (de/entity? item) (:db/id item)
@@ -246,13 +243,13 @@
 (defn- replaced-generated-property-value-tx
   [db block property old-value new-value replace-all-values?]
   (when replace-all-values?
-    (retract-unreferenced-property-value-blocks-tx
-     db
-     property
-     (remove (fn [entity]
-               (contains? (property-value-ids new-value) (:db/id entity)))
-             (property-value-entities old-value))
-     #{(:db/id block)})))
+    (let [new-value-ids (property-value-ids new-value)]
+      (retract-unreferenced-property-value-blocks-tx
+       db
+       property
+       (remove #(contains? new-value-ids (:db/id %))
+               (property-value-entities old-value))
+       #{(:db/id block)}))))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
