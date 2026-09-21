@@ -1235,6 +1235,31 @@
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
 
+(deftest interleaved-graphs-reuse-their-own-reference-attrs-test
+  (let [conns (mapv (fn [title]
+                      (db-test/create-conn-with-blocks
+                       [{:page {:block/title title}
+                         :blocks [{:block/title "block"}]}]))
+                    ["first graph" "second graph"])
+        ids (mapv #(:db/id (db-test/find-block-by-content @% "block")) conns)
+        original-datoms d/datoms
+        scans (atom 0)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (doseq [[conn id] (map vector conns ids)]
+        (ldb/transact! conn [[:db/add id :block/title "warm cache"]]))
+      (with-redefs [d/datoms (fn [db index & components]
+                              (when (and (= :avet index)
+                                         (= :logseq.property/public? (first components)))
+                                (swap! scans inc))
+                              (apply original-datoms db index components))]
+        (doseq [[conn id] (map vector conns ids)]
+          (ldb/transact! conn [[:db/add id :block/title "after interleaving"]])
+          (is (= "after interleaving" (:block/title (d/entity @conn id))))))
+      (is (zero? @scans) "Switching connections must preserve each snapshot's cached attributes.")
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest ordinary-transactions-reuse-cached-reference-attrs-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

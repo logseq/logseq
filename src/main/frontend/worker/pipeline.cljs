@@ -587,12 +587,7 @@
     :block/tags
     :logseq.property/public?})
 
-(defonce ^:private *reference-attrs-cache
-  ;; Derived schema metadata: {:db <immutable db> :attrs <set of attr idents>}.
-  ;; :attrs is reused only for the exact db object it was computed on (db-before
-  ;; of a transaction is identical? to the db-after the pipeline returned for the
-  ;; previous transaction on the same conn) or when no definition attr changed.
-  (atom nil))
+(defonce ^:private reference-attrs-cache (js/WeakMap.))
 
 (defn- reference-owner-ids-at
   [db reference-attrs' target-id]
@@ -612,30 +607,18 @@
                           (filter #(d/entity db-before %)))
                          tx-data)]
     (if (empty? target-ids)
-      ;; Nothing to project. Keep the cache tracking the conn's db object so the
-      ;; next transaction's db-before still hits it — but only when db-before is
-      ;; the same object the attrs were computed on (a global cache could carry
-      ;; another conn's attrs onto this db). A definition change drops it.
-      (do (reset! *reference-attrs-cache
-                  (when-let [cached (and (not reference-attrs-changed?)
-                                         @*reference-attrs-cache)]
-                    (when (identical? db-before (:db cached))
-                      (assoc cached :db db-after))))
+      (do (when-not reference-attrs-changed?
+            (when-let [attrs (.get reference-attrs-cache db-before)]
+              (.set reference-attrs-cache db-after attrs)))
           #{})
-      (let [cached @*reference-attrs-cache
-            cached-db (:db cached)
-            before-reference-attrs (if (identical? db-before cached-db)
-                                     (:attrs cached)
+      (let [before-reference-attrs (or (.get reference-attrs-cache db-before)
                                      (reference-attrs db-before))
-            after-reference-attrs (cond
-                                    (identical? db-after cached-db)
-                                    (:attrs cached)
-                                    reference-attrs-changed?
-                                    (reference-attrs db-after)
-                                    :else
-                                    before-reference-attrs)]
-        (reset! *reference-attrs-cache
-                {:db db-after :attrs after-reference-attrs})
+            after-reference-attrs (or (.get reference-attrs-cache db-after)
+                                     (if reference-attrs-changed?
+                                       (reference-attrs db-after)
+                                       before-reference-attrs))]
+        (.set reference-attrs-cache db-before before-reference-attrs)
+        (.set reference-attrs-cache db-after after-reference-attrs)
         (into #{}
               (mapcat (fn [target-id]
                         (concat
@@ -702,13 +685,9 @@
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))
         tx-report' (or replace-tx-report tx-report*)
-        ;; The conn ends up holding (:db-after tx-report'), so re-point the
-        ;; cache at it: ref stamping only adds :block/refs/:block/tx-id and
-        ;; cannot change reference-attribute definitions.
-        _ (when-let [cached @*reference-attrs-cache]
-            (when (identical? (:db cached) (:db-after tx-report*))
-              (reset! *reference-attrs-cache
-                      (assoc cached :db (:db-after tx-report')))))
+        ;; Reference stamping does not change reference-attribute definitions.
+        _ (when-let [attrs (.get reference-attrs-cache (:db-after tx-report*))]
+            (.set reference-attrs-cache (:db-after tx-report') attrs))
         full-tx-data (concat (:tx-data tx-report*)
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
