@@ -2,15 +2,19 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
+            [datascript.core :as d]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
@@ -506,6 +510,80 @@
                (p/then (fn [result]
                          (is (= [10 11] @queried-classes*))
                          (is (= (concat topic-choices task-choices) result))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(defn- <create-scoped-page-value
+  "Runs <create-page-if-not-exists! for a node property scoped to #Kestrel
+   against `conn` and returns [chosen-id create-calls]"
+  [conn page-name]
+  (let [kestrel (db-test/find-page-by-title @conn "Kestrel")
+        heron (db-test/find-page-by-title @conn "Heron")
+        property {:db/ident :user.property/employer
+                  :logseq.property/type :node
+                  :logseq.property/classes [kestrel]}
+        create-calls* (atom [])]
+    (p/let [id (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/<invoke-db-worker
+                               (fn [api _repo [query & inputs]]
+                                 (is (= :thread-api/q api))
+                                 (p/resolved (apply d/q query @conn inputs)))
+                               db-async/<get-block
+                               (fn [_repo page-name' _opts]
+                                 (p/resolved (ldb/get-page @conn page-name')))
+                               page-handler/<create!
+                               (fn [title opts]
+                                 (swap! create-calls* conj [title opts])
+                                 (p/resolved {:db/id 999}))]
+                 (#'property-value/<create-page-if-not-exists!
+                  {:db/id 1} property [kestrel]
+                  {:extends-by-class-id {}
+                   :structured-children-by-class-id (if heron
+                                                      {(:db/id kestrel) [(:db/id heron)]}
+                                                      {})}
+                  page-name))]
+      [id @create-calls*])))
+
+(deftest create-page-value-skips-same-name-page-outside-property-classes-test
+  (async done
+         (let [conn (db-test/create-conn-with-blocks
+                     {:classes {:Kestrel {} :Lantern {}}
+                      :pages-and-blocks [{:page {:block/title "Juniper" :build/tags [:Lantern]}}]})
+               kestrel (db-test/find-page-by-title @conn "Kestrel")]
+           (-> (<create-scoped-page-value conn "Juniper")
+               (p/then (fn [[id create-calls]]
+                         (is (= 999 id)
+                             "A same-name page tagged with another class is not reused")
+                         (is (= [["Juniper" {:redirect? false
+                                             :tags [(:block/uuid kestrel)]}]]
+                                create-calls)
+                             "The new page is tagged with the property class")
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest create-page-value-reuses-same-name-page-with-property-class-test
+  (async done
+         (let [conn (db-test/create-conn-with-blocks
+                     {:classes {:Kestrel {}
+                                :Heron {:build/class-extends [:Kestrel]}
+                                :Lantern {}}
+                      :pages-and-blocks [{:page {:block/title "Juniper" :build/tags [:Lantern]}}
+                                         {:page {:block/title "Juniper" :build/tags [:Heron]}}]})
+               heron-page-id (d/q '[:find ?p .
+                                    :where
+                                    [?p :block/title "Juniper"]
+                                    [?p :block/tags ?t]
+                                    [?t :block/title "Heron"]]
+                                  @conn)]
+           (-> (<create-scoped-page-value conn "juniper")
+               (p/then (fn [[id create-calls]]
+                         (is (= heron-page-id id)
+                             "A same-name page tagged with a class extending the property class is reused")
+                         (is (empty? create-calls))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
