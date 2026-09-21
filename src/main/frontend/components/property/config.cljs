@@ -330,23 +330,6 @@
   (js/setTimeout
    #(some-> (gdom/getElement id) (.focus)) 32))
 
-(defn hide-by-default-value
-  "Resolve Hide by default from a switch callback.
-
-  Desktop Switch on-checked-change may pass a DOM event instead of the checked
-  boolean, so non-boolean payloads toggle the current flag."
-  [property checked]
-  (if (boolean? checked)
-    checked
-    (not (boolean (:logseq.property/hide? property)))))
-
-(defn set-hide-by-default!
-  [property checked]
-  (db-property-handler/set-block-property!
-   (:block/uuid property)
-   :logseq.property/hide?
-   (hide-by-default-value property checked)))
-
 (hsx/defc dropdown-editor-menuitem
   [{:keys [id icon title desc submenu-content item-props sub-content-props disabled? toggle-checked? on-toggle-checked-change checkbox?]}]
   (let [submenu-content (when-not disabled? submenu-content)
@@ -967,7 +950,10 @@
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
-                                                        :on-toggle-checked-change #(set-hide-by-default! property %)}))
+                                                        :on-toggle-checked-change (fn []
+                                                                                    (db-property-handler/set-block-property! (:block/uuid property)
+                                                                                                                             :logseq.property/hide?
+                                                                                                                             (not (boolean (:logseq.property/hide? property)))))}))
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem
                               {:icon :eye-off :title (t :property/hide-empty-value)

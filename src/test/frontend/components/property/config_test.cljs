@@ -154,13 +154,3 @@
       (is (string/includes? markup "Sort descending"))
       (is (nil? (:db/id property))
           "Stub columns have no db/id, so table headers omit pin"))))
-
-(deftest hide-by-default-value-test
-  (testing "Boolean switch payloads are used as-is"
-    (is (true? (property-config/hide-by-default-value {} true)))
-    (is (false? (property-config/hide-by-default-value {:logseq.property/hide? true} false))))
-
-  (testing "Non-boolean payloads (desktop events) toggle the current hide flag"
-    (is (true? (property-config/hide-by-default-value {} #js {:type "click"})))
-    (is (false? (property-config/hide-by-default-value {:logseq.property/hide? true} #js {:type "click"})))
-    (is (true? (property-config/hide-by-default-value {:logseq.property/hide? false} nil)))))

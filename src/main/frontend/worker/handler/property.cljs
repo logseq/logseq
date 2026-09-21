@@ -707,16 +707,10 @@
                                      true
                                      :else
                                      false))))
-        property-hide-f (cond
-                          publishing?
+        property-hide-f (if publishing?
                           (fn [[property-id property-value]]
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
-                          state-hide-empty-properties?
-                          (fn [[property-id property-value]]
-                            (or (hide-with-property-id property-id)
-                                (nil? property-value)))
-                          :else
                           (comp hide-with-property-id first))
         {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
