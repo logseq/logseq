@@ -1161,7 +1161,10 @@
     (let [contents (set (util/get-page-blocks-contents))]
       (is (contains? contents "Outline Child"))
       (is (not (contains? contents "hello")))
-      (is (not (contains? contents "world"))))))
+      (is (not (contains? contents "world"))))
+    (p/goto-page "Outline Child")
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "hello")))))
 
 (defn- selection-range
   []
