@@ -84,8 +84,29 @@
 
 (defonce textarea-autosize (gobj/get TextareaAutosize "default"))
 
-(hsx/defc textarea [opts & children]
-  (into [:> textarea-autosize opts] children))
+(defonce ^:private field-sizing-supported?
+  (boolean
+   (and (exists? js/CSS)
+        (.supports js/CSS "field-sizing" "content"))))
+
+(hsx/defc textarea
+  "A textarea whose height follows its content. Where the browser supports the
+   CSS `field-sizing: content` (Chromium 123, Safari 26.2, Firefox 152) this is
+   a plain textarea and no JavaScript measures it on any keystroke; `:minRows`
+   becomes a `min-height` in line-height units. Elsewhere it is the
+   react-textarea-autosize component as before, with its `:cacheMeasurements`
+   prop passed through."
+  [{:keys [minRows] :as opts} & children]
+  (if field-sizing-supported?
+    (let [opts (-> opts
+                   (dissoc :minRows :maxRows :cacheMeasurements :onHeightChange)
+                   ;; `rows` has no effect under field-sizing: content, so the
+                   ;; minimum is a min-height in line-height units.
+                   (update :style assoc
+                           :field-sizing "content"
+                           :min-height (str (or minRows 1) "lh")))]
+      (into [:textarea opts] children))
+    (into [:> textarea-autosize opts] children)))
 
 (hsx/defc virtualized-list [opts & children]
   (into [:> Virtuoso opts] children))
@@ -979,8 +1000,18 @@
 
 (hsx/defc DelDateButton
   [on-delete]
-  (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
-               (shui/tabler-icon "trash" {:size 15})))
+  (shui/button {:variant :outline
+                :class "del-date-btn h-8 w-9 bg-transparent !p-0 !px-0 !py-0 opacity-80 hover:opacity-100"
+                :on-click on-delete}
+               (shui/tabler-icon "trash" {:size 16})))
+
+(defn- next-month-button-with-del
+  "The next-month nav button followed by the delete button, both compact items
+   in the calendar's nav row."
+  [^js props on-delete]
+  (react/createElement react/Fragment nil
+                       (react/createElement "button" props)
+                       (DelDateButton on-delete)))
 
 (defonce month-values
   [:January :February :March :April :May
@@ -1026,7 +1057,7 @@
          :on-blur (fn [_]
                     (when-not (re-matches #"\d{4}" year-value)
                       (set-year-value! (str value))))
-         :class "ls-date-year-input h-8 !w-[4.5rem] !px-2 !py-0"
+         :class "ls-date-year-input h-8 !w-[3.25rem] !px-2 !py-0"
          :value year-value
          :type "number"
          :min 1
@@ -1061,8 +1092,11 @@
      :formatters {:formatWeekdayName (fn [weekday _]
                                        (i18n/locale-format-date weekday {:weekday "short"}))}
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
-                   del-btn? (assoc :Head #(DelDateButton on-delete)))
-     :class-names {:root (when del-btn? "has-del-btn")}
+                   del-btn? (assoc :NextMonthButton #(next-month-button-with-del % on-delete)))
+     :class-names (when del-btn?
+                    ;; three h-8 w-9 nav buttons + gap-1 need 116px inside the 276px caption
+                    {:root "has-del-btn"
+                     :nav "absolute left-[160px] top-1 z-10 flex items-center gap-1"})
      :on-day-key-down (fn [^js d _ ^js e]
                         (when (= "Enter" (.-key e))
                           (let [on-select' (or on-select on-day-click)]

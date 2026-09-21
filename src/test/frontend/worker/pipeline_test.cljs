@@ -1,5 +1,7 @@
 (ns frontend.worker.pipeline-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -1365,3 +1367,149 @@
             (is (ldb/page? draft)
                 "Filling the draft title keeps it a page")
             (is (= "library draft" (:block/title draft)))))))))
+
+(deftest journal-tag-template-applied-on-repeating-task-reschedule-test
+  (testing "Journal pages created by repeating-task reschedule receive the Journal tag template"
+    (let [now (t/date-time 2026 9 20 12 0 0)
+          scheduled-ms (tc/to-long now)
+          expected-next-day 20260926
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Inbox"}
+                   :blocks [{:block/title "repeating task"
+                             :build/tags [:logseq.class/Task]
+                             :build/properties
+                             {:logseq.property/status :logseq.property/status.todo
+                              :logseq.property/scheduled scheduled-ms
+                              :logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 6
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}}]}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "journal template"
+                             :build/tags [:logseq.class/Template]
+                             :build/children [{:block/title "journal template body"}]}]}]})
+          task (db-test/find-block-by-content @conn "repeating task")
+          template-root (db-test/find-block-by-content @conn "journal template")
+          journal-class (d/entity @conn :logseq.class/Journal)]
+      (d/transact! conn [[:db/add (:db/id task)
+                          :logseq.property.repeat/repeat-type
+                          :logseq.property.repeat/repeat-type.double-plus]
+                         [:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id journal-class)]])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (is (nil? (db-test/find-journal-by-journal-day @conn expected-next-day))
+            "The next occurrence has no journal page yet")
+        (with-redefs [t/now (fn [] now)]
+          (ldb/transact! conn [[:db/add (:db/id task)
+                                :logseq.property/status
+                                :logseq.property/status.done]]))
+        (let [next-journal (db-test/find-journal-by-journal-day @conn expected-next-day)
+              inserted (->> (:block/_parent next-journal)
+                            (filter #(= "journal template body" (:block/title %)))
+                            first)]
+          (is (some? next-journal)
+              "Reschedule creates the next journal page")
+          (is (contains? (set (map :db/ident (:block/tags next-journal))) :logseq.class/Journal))
+          (is (some? inserted)
+              "Journal tag template children are inserted on the reschedule-created page")
+          (is (= (:db/id template-root)
+                 (:db/id (:logseq.property/used-template inserted)))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest interleaved-graphs-reuse-their-own-reference-attrs-test
+  (let [conns (mapv (fn [title]
+                      (db-test/create-conn-with-blocks
+                       [{:page {:block/title title}
+                         :blocks [{:block/title "block"}]}]))
+                    ["first graph" "second graph"])
+        ids (mapv #(:db/id (db-test/find-block-by-content @% "block")) conns)
+        original-datoms d/datoms
+        scans (atom 0)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (doseq [[conn id] (map vector conns ids)]
+        (ldb/transact! conn [[:db/add id :block/title "warm cache"]]))
+      (with-redefs [d/datoms (fn [db index & components]
+                              (when (and (= :avet index)
+                                         (= :logseq.property/public? (first components)))
+                                (swap! scans inc))
+                              (apply original-datoms db index components))]
+        (doseq [[conn id] (map vector conns ids)]
+          (ldb/transact! conn [[:db/add id :block/title "after interleaving"]])
+          (is (= "after interleaving" (:block/title (d/entity @conn id))))))
+      (is (zero? @scans) "Switching connections must preserve each snapshot's cached attributes.")
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest ordinary-transactions-reuse-cached-reference-attrs-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "block"}]}])
+        block-id (:db/id (db-test/find-block-by-content @conn "block"))
+        property-class-id (d/entid @conn :logseq.class/Property)
+        orig-datoms d/datoms
+        scans (atom 0)
+        count-scans (fn [f]
+                      (reset! scans 0)
+                      (with-redefs [d/datoms
+                                    (fn [db index & components]
+                                      (when (and (= :avet index)
+                                                 (or (and (= :block/tags (first components))
+                                                          (= property-class-id (second components)))
+                                                     (= :logseq.property/public? (first components))))
+                                        (swap! scans inc))
+                                      (apply orig-datoms db index components))]
+                        (f))
+                      @scans)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (is (pos? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "one"]])))
+          "The first transaction discovers the reference attributes")
+      (is (zero? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "two"]])))
+          "An ordinary transaction reuses the cached reference attributes")
+      (let [property-id (d/entid @conn :logseq.property/publishing-public?)]
+        (is (pos? (count-scans
+                   #(ldb/transact! conn [[:db/add property-id
+                                          :logseq.property/public? false]])))
+            "A property-definition change recomputes the reference attributes"))
+      (is (zero? (count-scans #(ldb/transact! conn [[:db/add block-id :block/title "three"]])))
+          "The recomputed attributes are cached again")
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest move-block-to-library-then-delete-clears-stale-namespace-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1244
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "Block 1"
+                          :build/children [{:block/title "Block 2"}]}]}])
+        library (ldb/get-library-page @conn)
+        _ (assert library "Library page exists")]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [block1 (db-test/find-block-by-content @conn "Block 1")]
+        ;; Move Block 1 to the Library page (mod+shift+m "Move to")
+        (outliner-core/move-blocks! conn [block1] library {:sibling? false})
+        (let [block1' (d/entity @conn (:db/id block1))
+              block2 (db-test/find-block-by-content @conn "Block 2")]
+          (is (ldb/page? block1') "Moved block becomes a page")
+          (is (= (:db/id library) (:db/id (:block/parent block1')))
+              "New page is a namespace child of Library")
+          (is (= (:db/id block1') (:db/id (:block/page block2)))
+              "Child block's :block/page points to the new page")
+
+          ;; Delete Block 1 from the Library page: un-parents the page
+          (outliner-core/delete-blocks! conn [block1'] {})
+          (let [block1'' (d/entity @conn (:db/id block1'))
+                block2' (d/entity @conn (:db/id block2))]
+            (is (nil? (:block/parent block1''))
+                "Library/Block 1 namespace is removed")
+            (is (= (:db/id block1'') (:db/id (:block/page block2')))
+                "Child block's :block/page still points to its own page, not Library")
+            (is (not= (:db/id library) (:db/id (:block/page block2')))
+                "Stale Library :block/page is cleared"))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
