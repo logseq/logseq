@@ -99,32 +99,40 @@ for (const command of [['server', 'stop'], ['graph', 'remove']]) {
   });
 }
 
-test('CLI stops its registered worker before admission and restarts the graph', async t => {
+test('CLI fails pending retirement explicitly and succeeds after publication', async t => {
   const { root, storage, ok } = fixture(t);
   ok('demo', 'graph', 'create');
   const starting = lifecycle.startGraph({ storage, repo: 'demo',
-    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'), extraArgs: ['--mode', 'before-admission'] });
-  const rejected = assert.rejects(starting, /Worker/);
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'), extraArgs: ['--mode', 'before-publication'] });
   let pid;
   try {
     const deadline = Date.now() + 5000;
-    while (!fs.existsSync(path.join(root, 'before-admission'))) {
+    while (!fs.existsSync(path.join(root, 'before-publication'))) {
       assert.ok(Date.now() < deadline, 'Worker must reach the fixture barrier');
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    pid = Number(fs.readFileSync(path.join(root, 'before-admission')));
+    pid = Number(fs.readFileSync(path.join(root, 'before-publication')));
+    const ticket = lifecycle.snapshot(storage, 'demo').workers[0].ticket;
+    await assert.rejects(execFileAsync(process.execPath, [cli, 'server', 'stop', '--root-dir', root,
+      '--graph', 'demo', '--output', 'json'], { timeout: 45000 }), error => {
+      assert.match(JSON.parse(error.stdout).error.message, /endpoint.*retry/i);
+      return true;
+    });
+    assert.ok(lifecycle.pidExists(pid));
+    assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].ticket, ticket);
+    fs.writeFileSync(path.join(root, 'release-before-publication'), 'release');
+    await starting;
     // Let this parent's event loop reap the child while the separate CLI waits for exit.
     await execFileAsync(process.execPath, [cli, 'server', 'stop', '--root-dir', root,
       '--graph', 'demo', '--output', 'json'], { timeout: 45000 });
-    await rejected;
     assert.equal(lifecycle.pidExists(pid), false);
-    assert.ok(fs.existsSync(path.join(storage.graphsDir, 'demo')));
     ok('demo', 'server', 'restart');
     ok('demo', 'list', 'page', '--limit', '1');
     ok('demo', 'graph', 'remove');
   } finally {
+    fs.writeFileSync(path.join(root, 'release-before-publication'), 'release');
+    await starting;
     if (pid && lifecycle.pidExists(pid)) process.kill(pid, 'SIGKILL');
-    await rejected;
   }
 });
 
@@ -145,7 +153,7 @@ test('CLI target command remains responsive with three unrelated workers paused'
   const resumed = ok('demo', 'list', 'page', '--limit', '1', '--profile');
   assert.deepEqual(paused.json, baseline.json);
   assert.deepEqual(resumed.json, baseline.json);
-  assert.ok(paused.seconds < 2, `Unrelated timeouts accumulated: ${paused.seconds}s`);
+  assert.ok(paused.seconds < 2, `Unrelated timeouts accumulated: ${paused.seconds}s\n${paused.stderr}`);
   console.log(JSON.stringify({ baseline: baseline.seconds, paused: paused.seconds, resumed: resumed.seconds, equal: true }));
   for (const graph of ['demo', 'other1', 'other2', 'other3']) ok(graph, 'graph', 'remove');
 });

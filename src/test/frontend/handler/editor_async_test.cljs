@@ -1,6 +1,7 @@
 (ns frontend.handler.editor-async-test
   (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -9,13 +10,16 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
+            [frontend.worker.handler.block :as worker-block-handler]
             [frontend.worker.handler.comments :as worker-comments]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
@@ -398,7 +402,7 @@
     node))
 
 (defn- delete-last-selected-block-focus
-  [{:keys [page remaining-block]}]
+  [{:keys [page remaining-block nested-block foreign-block]}]
   (let [deleted-block {:db/id 2
                        :block/uuid (random-uuid)
                        :block/title "last"
@@ -406,8 +410,15 @@
                                     :block/uuid (:block/uuid page)}}
         deleted-dom #js {}
         page-title-node (page-title-dom page)
+        nested-dom (when nested-block
+                     (let [node (content-block-dom nested-block)]
+                       (aset node "parentNode" deleted-dom)
+                       node))
+        foreign-dom (when foreign-block
+                      (content-block-dom foreign-block))
         remaining-dom (when remaining-block
                         (content-block-dom remaining-block))
+        blocks-container #js {}
         tx-opts (atom nil)
         edit-call (atom nil)
         inserted (atom nil)]
@@ -415,12 +426,27 @@
                         (constantly page-title-node)
                         util/get-next-block-non-collapsed
                         (fn [node _opts]
-                          (when (identical? node deleted-dom)
-                            remaining-dom))
+                          (cond
+                            (identical? node deleted-dom)
+                            (or nested-dom remaining-dom foreign-dom)
+                            (identical? node nested-dom)
+                            (or remaining-dom foreign-dom)
+                            (identical? node remaining-dom)
+                            foreign-dom))
+                        util/rec-get-blocks-container
+                        (fn [node]
+                          (when (or (identical? node deleted-dom)
+                                    (identical? node nested-dom)
+                                    (identical? node remaining-dom))
+                            blocks-container))
                         util/rec-get-node
                         (fn [node class]
-                          (when (and (identical? node page-title-node)
-                                     (= class "ls-page-title"))
+                          (cond
+                            (and (identical? node page-title-node)
+                                 (= class "ls-page-title"))
+                            node
+                            (and (identical? node deleted-dom)
+                                 (= class "ls-block"))
                             node))
                         db-transact/apply-outliner-ops
                         (fn [_conn _ops opts]
@@ -455,7 +481,13 @@
               :block/tags [{:db/ident :logseq.class/Page}]}
         remaining {:db/id 3
                    :block/uuid (random-uuid)
-                   :block/title ""}]
+                   :block/title ""}
+        nested {:db/id 4
+                :block/uuid (random-uuid)
+                :block/title "nested"}
+        foreign {:db/id 5
+                 :block/uuid (random-uuid)
+                 :block/title "reference"}]
     (p/do!
      (testing "last remaining selected block inserts a default page block instead of the title"
        (p/let [{:keys [edit-call inserted edit-block-fn]}
@@ -475,7 +507,88 @@
              "A remaining empty block should be reused instead of inserting another default block")
          (is (= remaining (first edit-call))
              "Last-block delete should keep focus in the remaining empty block")
-         (is (not= page (first edit-call))))))))
+         (is (not= page (first edit-call)))))
+     (testing "blocks nested inside the deleted selection are skipped"
+       (p/let [{:keys [edit-call inserted]}
+               (delete-last-selected-block-focus {:page page
+                                                  :nested-block nested
+                                                  :remaining-block remaining})]
+         (is (nil? inserted))
+         (is (= remaining (first edit-call))
+             "Focus should skip children deleted with their parent")))
+     (testing "blocks outside the deleted block's container are not targeted"
+       (p/let [{:keys [edit-call inserted]}
+               (delete-last-selected-block-focus {:page page
+                                                  :foreign-block foreign})]
+         (is (some? inserted)
+             "No same-container block left means a default page block is inserted")
+         (is (not= foreign (first edit-call))
+             "Focus must not jump into references or sidebar blocks"))))))
+
+(defn- selection-block-dom
+  [block]
+  #js {:getAttribute (fn [attr]
+                       (when (= attr "blockid")
+                         (str (:block/uuid block))))})
+
+(defn- <delete-selected-blocks!
+  [blocks]
+  (p/with-redefs [state/<invoke-db-worker <test-db-worker
+                  db-transact/apply-outliner-ops apply-test-outliner-ops!
+                  editor/get-selected-blocks (fn [] (mapv selection-block-dom blocks))
+                  dom/has-class? (constantly false)
+                  dom/attr (fn [node attr]
+                             (when node
+                               (.getAttribute node attr)))
+                  util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                  editor/edit-block! (constantly nil)]
+    (editor/cut-selection-blocks false)))
+
+(deftest-async delete-selected-child-page-unlinks-namespace-and-keeps-content
+  (load-test-files
+   [{:page {:block/title "Parent page"}
+     :blocks [{:block/title "sibling"}]}
+    {:page {:block/title "Child page"}
+     :blocks [{:block/title "keep this content"}
+              {:block/title "and this too"}]}])
+  (let [conn (conn/get-db test-helper/test-db false)
+        parent (ldb/get-page @conn "parent page")
+        child (ldb/get-page @conn "child page")]
+    (d/transact! conn [{:db/id (:db/id child)
+                        :block/parent (:db/id parent)
+                        :block/order "a1"}])
+    (p/let [_ (<delete-selected-blocks! [(d/entity @conn (:db/id child))])
+            child' (ldb/get-page @conn "child page")
+            parent' (ldb/get-page @conn "parent page")
+            child-titles (->> (d/q '[:find [?title ...]
+                                     :in $ ?page
+                                     :where
+                                     [?b :block/page ?page]
+                                     [?b :block/title ?title]
+                                     [(missing? $ ?b :logseq.property/deleted-at)]]
+                                   @conn
+                                   (:db/id child'))
+                              set)
+            parent-children (map :block/title (ldb/sort-by-order (:block/_parent parent')))]
+      (is (some? child')
+          "The child page entity must remain after selection delete")
+      (is (nil? (:block/parent child'))
+          "Selection delete must only remove the namespace relationship")
+      (is (= #{"keep this content" "and this too"} child-titles)
+          "Child page content must stay intact")
+      (is (= ["sibling"] parent-children)
+          "The parent page must keep its own blocks and lose the child page"))))
+
+(deftest-async delete-selected-block-still-removes-its-children
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "parent"
+               :build/children [{:block/title "nested child"}]}]}])
+  (p/let [parent (test-helper/find-block-by-content "parent")
+          _ (<delete-selected-blocks! [parent])]
+    (is (nil? (test-helper/find-block-by-content "parent")))
+    (is (nil? (test-helper/find-block-by-content "nested child"))
+        "Selection delete of a regular block must still retract its subtree")))
 
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
@@ -1095,6 +1208,239 @@
         (p/then
          (fn []
            (is (= (:block/uuid comment-block) @resolved-block-ref)))))))
+
+;; Collapsed copy/cut/paste coverage for https://github.com/logseq/db-test/issues/1216
+(defn- <complete-tree-worker
+  [_api repo' requests]
+  (let [db' (conn/get-db repo')]
+    (p/resolved
+     (mapv (fn [{:keys [id opts]}]
+             (let [id' (if (string? id) (uuid id) id)]
+               (assoc (worker-block-handler/get-block-and-children db' id' opts)
+                      :id id)))
+           requests))))
+
+(defn- load-collapsed-clipboard-fixture!
+  [& {:keys [parent-collapsed? child-collapsed?]
+      :or {parent-collapsed? true
+           child-collapsed? false}}]
+  (load-test-files
+   [{:page {:block/title "Source"}
+     :blocks [{:block/title "Parent"
+               :block/collapsed? parent-collapsed?
+               :build/children
+               [{:block/title "Child"
+                 :block/collapsed? child-collapsed?
+                 :build/children [{:block/title "Grandchild"}]}
+                {:block/title "Sibling child"}]}]}
+    {:page {:block/title "Dest"}
+     :blocks [{:block/title "Target"}]}])
+  {:parent (test-helper/find-block-by-content "Parent")
+   :target (test-helper/find-block-by-content "Target")
+   :expected-titles ["Parent" "Child" "Grandchild" "Sibling child"]})
+
+(defn- page-block-by-title
+  [page-name title]
+  (d/q '[:find (pull ?b [:block/uuid :block/title]) .
+         :in $ ?page-name ?title
+         :where
+         [?p :block/name ?page-name]
+         [?b :block/page ?p]
+         [?b :block/title ?title]
+         [(missing? $ ?b :logseq.property/deleted-at)]]
+       (conn/get-db test-helper/test-db)
+       page-name
+       title))
+
+(defn- subtree-titles
+  [block-uuid]
+  (mapv :block/title
+        (ldb/get-block-and-children (conn/get-db test-helper/test-db) block-uuid)))
+
+(defn- <structured-clipboard-blocks
+  [block-uuid]
+  (p/let [blocks (#'editor/<get-all-blocks-by-ids test-helper/test-db [block-uuid])]
+    (#'editor/blocks-for-clipboard blocks)))
+
+(defn- <cut-collapsed-parent!
+  [parent]
+  (let [clipboard (atom nil)]
+    (p/with-redefs [state/<invoke-db-worker <complete-tree-worker
+                    editor/compose-copied-blocks-contents
+                    (fn [_repo ids & _]
+                      (p/resolved [ids (:block/title parent) [parent]]))
+                    export-html/export-blocks-as-html (fn [& _] (p/resolved ""))
+                    common-handler/copy-to-clipboard-without-id-property!
+                    (fn [_repo _text _html blocks & _opts]
+                      (reset! clipboard blocks))
+                    db-transact/apply-outliner-ops apply-test-outliner-ops!]
+      (p/let [_ (editor/cut-block! (:block/uuid parent))]
+        @clipboard))))
+
+(deftest-async ^:large-vars/cleanup-todo copied-selection-loads-the-complete-structured-tree
+  (let [repo test-helper/test-db
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        root-uuid (random-uuid)
+        collapsed-uuid (random-uuid)
+        collapsed-child-uuid (random-uuid)
+        query-uuid (random-uuid)
+        property-value-uuid (random-uuid)
+        independent-uuid (random-uuid)
+        chain-uuids (vec (repeatedly 101 random-uuid))
+        chain-blocks
+        (mapv (fn [index block-uuid]
+                {:db/id (- (+ 100 index))
+                 :block/uuid block-uuid
+                 :block/tx-id 1
+                 :block/title (str "Chain " index)
+                 :block/page -1
+                 :block/parent (if (zero? index) -3 (- (+ 99 index)))
+                 :block/order "a0"})
+              (range (count chain-uuids))
+              chain-uuids)]
+    (d/transact!
+     (conn/get-db repo false)
+     (concat
+      [{:db/id -1
+        :block/uuid page-uuid
+        :block/tx-id 1
+        :block/title "Page"
+        :block/name "page"
+        :block/tags :logseq.class/Page}
+       {:db/id -2
+        :db/ident :user.property/Text
+        :db/valueType :db.type/ref
+        :db/cardinality :db.cardinality/one
+        :block/uuid property-uuid
+        :block/tx-id 1
+        :block/title "Text"
+        :block/tags :logseq.class/Property}
+       {:db/id -3
+        :block/uuid root-uuid
+        :block/tx-id 1
+        :block/title "Root"
+        :block/page -1
+        :block/parent -1
+        :block/order "a0"}
+       {:db/id -4
+        :block/uuid collapsed-uuid
+        :block/tx-id 1
+        :block/title "Collapsed"
+        :block/page -1
+        :block/parent -3
+        :block/order "a1"
+        :block/collapsed? true}
+       {:db/id -5
+        :block/uuid collapsed-child-uuid
+        :block/tx-id 1
+        :block/title "Collapsed child"
+        :block/page -1
+        :block/parent -4
+        :block/order "a0"}
+       {:db/id -6
+        :block/uuid query-uuid
+        :block/tx-id 1
+        :block/title "Query"
+        :block/page -1
+        :block/order "a3"}
+       {:db/id -7
+        :block/uuid independent-uuid
+        :block/tx-id 1
+        :block/title "Independent"
+        :block/page -1
+        :block/parent -1
+        :block/order "a1"}
+       {:db/id -8
+        :block/uuid property-value-uuid
+        :block/tx-id 1
+        :block/title "Property value"
+        :block/page -1
+        :block/parent -3
+        :block/order "a2"
+        :logseq.property/created-from-property -2
+        :logseq.property/query -6}]
+      chain-blocks))
+    (let [db (conn/get-db repo)
+          expected-uuids
+          (conj (mapv :block/uuid
+                      (ldb/get-block-and-children
+                       db root-uuid {:include-property-block? true}))
+                independent-uuid)]
+      (p/with-redefs [state/<invoke-db-worker <complete-tree-worker]
+        (p/let [blocks (#'editor/<get-all-blocks-by-ids
+                         repo [root-uuid (nth chain-uuids 50) independent-uuid])]
+          (is (= expected-uuids (mapv :block/uuid blocks))))))))
+
+(deftest-async copied-collapsed-parent-includes-nested-children
+  (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!)]
+    (p/with-redefs [state/<invoke-db-worker <complete-tree-worker]
+      (p/let [blocks (#'editor/<get-all-blocks-by-ids
+                       test-helper/test-db [(:block/uuid parent)])]
+        (is (= expected-titles (mapv :block/title blocks)))
+        (is (= (:block/uuid parent) (:block/uuid (first blocks))))))))
+
+(deftest-async copied-expanded-parent-includes-nested-children
+  (testing "Non-collapsed control still copies the full subtree"
+    (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!
+                                            :parent-collapsed? false)]
+      (p/with-redefs [state/<invoke-db-worker <complete-tree-worker]
+        (p/let [blocks (#'editor/<get-all-blocks-by-ids
+                         test-helper/test-db [(:block/uuid parent)])]
+          (is (= expected-titles (mapv :block/title blocks))))))))
+
+(deftest-async copied-partially-collapsed-nested-levels-include-hidden-descendants
+  (testing "A collapsed nested child still contributes hidden descendants to the copy"
+    (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!
+                                            :parent-collapsed? false
+                                            :child-collapsed? true)]
+      (p/with-redefs [state/<invoke-db-worker <complete-tree-worker]
+        (p/let [blocks (#'editor/<get-all-blocks-by-ids
+                         test-helper/test-db [(:block/uuid parent)])]
+          (is (= expected-titles (mapv :block/title blocks)))
+          (is (some #(= "Grandchild" (:block/title %)) blocks)))))))
+
+(deftest-async cut-collapsed-parent-includes-nested-children-and-removes-source
+  (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!)]
+    (p/let [clipboard (<cut-collapsed-parent! parent)]
+      (is (= expected-titles (mapv :block/title clipboard)))
+      (is (nil? (page-block-by-title "source" "Parent")))
+      (is (nil? (page-block-by-title "source" "Child")))
+      (is (nil? (page-block-by-title "source" "Grandchild"))))))
+
+(deftest-async paste-after-copy-of-collapsed-parent-restores-full-tree
+  (let [{:keys [parent target expected-titles]} (load-collapsed-clipboard-fixture!)]
+    (p/with-redefs [state/<invoke-db-worker <complete-tree-worker
+                    db-transact/apply-outliner-ops apply-test-outliner-ops!]
+      (p/let [clipboard (<structured-clipboard-blocks (:block/uuid parent))
+              _ (editor/paste-blocks clipboard {:target-block target
+                                                :sibling? true
+                                                :keep-uuid? false
+                                                :ops-only? true})
+              pasted (page-block-by-title "dest" "Parent")
+              source (page-block-by-title "source" "Parent")]
+        (is (some? pasted) "Copy+paste must insert the collapsed parent on the destination page")
+        (is (not= (:block/uuid parent) (:block/uuid pasted))
+            "Copy must mint a new parent uuid")
+        (is (= expected-titles (subtree-titles (:block/uuid pasted))))
+        (is (= expected-titles (subtree-titles (:block/uuid source)))
+            "The original collapsed tree must remain after copy")))))
+
+(deftest-async paste-after-cut-of-collapsed-parent-restores-full-tree
+  (let [{:keys [parent target expected-titles]} (load-collapsed-clipboard-fixture!)
+        parent-uuid (:block/uuid parent)]
+    (p/let [clipboard (<cut-collapsed-parent! parent)
+            _ (p/with-redefs [db-transact/apply-outliner-ops apply-test-outliner-ops!]
+                (editor/paste-blocks clipboard {:target-block target
+                                                :sibling? true
+                                                :keep-uuid? true
+                                                :ops-only? true}))
+            pasted (page-block-by-title "dest" "Parent")]
+      (is (= parent-uuid (:block/uuid pasted))
+          "Cut+paste keeps the original parent uuid")
+      (is (= expected-titles (subtree-titles parent-uuid)))
+      (is (nil? (page-block-by-title "source" "Parent"))
+          "The source page must stay empty after cut+paste"))))
 
 (deftest-async expand-block-skip-db-keeps-parent-container-collapse
   (testing "Display-only expand must not mark the parent editor container as open"

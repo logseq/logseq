@@ -39,13 +39,6 @@ type cleanup_result = {
 let resolve_root_dir config = config.Cli_config.root_dir
 let graphs_dir config = Filename.concat (resolve_root_dir config) "graphs"
 
-let lock_path ~root_dir repo =
-  Filename.concat
-    (Filename.concat
-       (Filename.concat root_dir "graphs")
-       (Graph_dir.graph_dir_name_of_repo repo))
-    "db-worker.lock"
-
 let env_db_worker_script_path () =
   match Sys.getenv_opt "LOGSEQ_DB_WORKER_NODE_SCRIPT" with
   | Some path when String.trim path <> "" -> Some path

@@ -13,6 +13,20 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
 
+(deftest latest-journals-stays-within-journal-day-index
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:build/journal 20240101}}
+                                  {:page {:build/journal 29990101}}
+                                  {:page {:block/title "Alias target"}}]})
+        future-id (:e (first (d/datoms @conn :avet :block/journal-day 29990101)))
+        alias-id (:db/id (db-test/find-page-by-title @conn "Alias target"))]
+    (d/transact! conn [[:db/add future-id :block/alias alias-id]])
+    (is (= [20240101]
+           (mapv :block/journal-day (common-initial-data/get-latest-journals @conn))))
+    (d/transact! conn [[:db/retractEntity
+                       (:e (first (d/datoms @conn :avet :block/journal-day 20240101)))]])
+    (is (empty? (common-initial-data/get-latest-journals @conn)))))
+
 (use-fixtures
   :each
  ;; Cleaning tmp/ before leaves last tmp/ after a test run for dev and debugging
