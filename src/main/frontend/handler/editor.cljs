@@ -1325,10 +1325,11 @@
 (defn copy-block-refs
   []
   (when-let [selected-blocks (seq (get-selected-blocks))]
-    (let [blocks (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                        (let [level (dom/attr % "level")]
-                                          {:id (uuid id)
-                                           :level (int level)}))
+    (let [blocks (->> (distinct (map (fn [node]
+                                        (when-let [id (util/selection-node-block-id node)]
+                                          (let [level (dom/attr (util/unwrap-property-value-container node) "level")]
+                                            {:id id
+                                             :level (int level)})))
                                      selected-blocks))
                       (remove nil?))
           first-block (first blocks)
@@ -1357,8 +1358,7 @@
   []
   (when-let [blocks (seq (get-selected-blocks))]
     (let [repo (state/get-current-repo)
-          block-ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                           (uuid id)) blocks))
+          block-ids (->> (distinct (keep util/selection-node-block-id blocks))
                          (remove nil?))]
       (p/let [results (db-async/<get-blocks repo block-ids {:children? false})
               blocks (unwrap-block-results results)
@@ -1372,9 +1372,11 @@
   [copy? & {:keys [mobile-action-bar?]}]
   (let [selected-ids (state/get-selection-block-ids)
         selected-blocks (->> (get-selected-blocks)
-                             (remove #(dom/has-class? % "property-value-container"))
+                             (map util/unwrap-property-value-container)
+                             (remove nil?)
                              (remove (fn [block] (or (= "true" (dom/attr block "data-query"))
                                                      (= "true" (dom/attr block "data-transclude")))))
+                             distinct
                              seq)]
     (p/do!
      (when copy?
@@ -1385,7 +1387,7 @@
        (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
          (when (seq dom-blocks)
            (let [repo (state/get-current-repo)
-                 block-uuids (distinct (keep #(when-let [id (dom/attr % "blockid")] (uuid id)) dom-blocks))]
+                 block-uuids (distinct (keep util/selection-node-block-id dom-blocks))]
              (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
                (let [blocks (unwrap-block-results results)
                      top-level-blocks (block-handler/get-top-level-blocks blocks)]
@@ -1548,17 +1550,17 @@
 
 (defn- selection-node-block-id
   [node]
-  (let [id (cond
-             (string? node)
-             (some-> node
-                     (string/replace #"^ls-block-" ""))
+  (or (util/selection-node-block-id node)
+      (let [id (cond
+                 (string? node)
+                 (some-> node
+                         (string/replace #"^ls-block-" ""))
 
-             (some-> node .-getAttribute)
-             (or (dom/attr node "blockid")
-                 (some-> node (dom/attr "id") (string/replace #"^ls-block-" ""))))]
-    (when (and (string? id)
-               (util/uuid-string? id))
-      (uuid id))))
+                 (some-> node .-getAttribute)
+                 (some-> node (dom/attr "id") (string/replace #"^ls-block-" "")))]
+        (when (and (string? id)
+                   (util/uuid-string? id))
+          (uuid id)))))
 
 (defn- selection-node-for-block-id
   [block-id]
@@ -2763,8 +2765,7 @@
 
 (defn- property-value-inner-block
   [node]
-  (when (property-value-node? node)
-    (some-> node (.querySelector ".ls-block[blockid]"))))
+  (util/property-value-inner-block node))
 
 (defn- property-value-container-node
   [node]
