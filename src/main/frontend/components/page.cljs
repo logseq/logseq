@@ -154,13 +154,17 @@
   (let [page (db-hooks/use-block-projection page-uuid render-stable-page)
         child-uuids (db-hooks/use-children page-uuid)]
     (when page
-      [:div.page-blocks-inner.relative
-       (when (or (seq child-uuids) (:current-page? config))
-         (block/page-root-virtual-list config child-uuids))
-       (when (and (not config/publishing?)
-                  (or (empty? child-uuids)
-                      (not hide-add-button?)))
-         (add-button page child-uuids config))])))
+      (block/with-library-child-uuids
+       config
+       child-uuids
+       (fn [visible-uuids]
+         [:div.page-blocks-inner.relative
+          (when (or (seq visible-uuids) (:current-page? config))
+            (block/page-root-virtual-list config visible-uuids))
+          (when (and (not config/publishing?)
+                     (or (empty? visible-uuids)
+                         (not hide-add-button?)))
+            (add-button page visible-uuids config))])))))
 
 (hsx/defc special-page-root
   [page-uuid membership-kind user-uuid config hide-add-button?]
