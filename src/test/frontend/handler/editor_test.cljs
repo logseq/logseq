@@ -2636,6 +2636,12 @@
         "Library keeps child pages expanded so the page tree is visible")
     (is (not (editor/block-default-collapsed? child-page {:page-title? true}))
         "The current page title is not collapsed")
+    (is (not (editor/block-default-collapsed?
+              child-page
+              {:original-block {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}))
+        "Embedded pages stay expanded so their blocks remain visible")
+    (is (not (editor/block-default-collapsed? child-page {:embed? true}))
+        "Embed config keeps the target page expanded")
     (is (not (editor/block-default-collapsed? {:block/title "hello"} {}))
         "Normal blocks stay expanded by default")))
 

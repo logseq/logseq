@@ -4456,9 +4456,12 @@
                 (:table-block-title? config)))
        ;; Nested pages stay collapsed on a parent page so their blocks do not
        ;; dump into the outline. Library is the page tree, so keep those expanded.
+       ;; Node embeds render the target page via :original-block; keep those open.
        (and (entity/page? block)
             (not (:library? config))
-            (not (:page-title? config)))))))
+            (not (:page-title? config))
+            (not (:original-block config))
+            (not (:embed? config)))))))
 
 (defn load-children?
   [block temporary-collapsed-state ignore-block-collapsed?]
