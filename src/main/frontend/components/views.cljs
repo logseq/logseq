@@ -1075,7 +1075,7 @@
           (shui/dropdown-menu-sub-content
            (for [column (remove #(or (false? (:column-list? %))
                                      (:disable-hide? %)
-                                     (= (:id %) :block/title)) columns)]
+                                     (= (:id %) :id)) columns)]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
