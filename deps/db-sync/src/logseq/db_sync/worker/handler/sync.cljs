@@ -150,9 +150,8 @@
 ;;     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
 
 (defn- snapshot-stream-url [request graph-id]
-  ;; local-mode fix: clients fetch this URL like a pre-signed link (no auth
-  ;; header), so carry the caller's token as a query param -- auth.cljs
-  ;; token-from-request already accepts ?token=.
+  ;; Clients fetch this URL like a pre-signed link (no auth header), so carry
+  ;; the caller's token as a query param -- token-from-request accepts ?token=.
   (let [url (js/URL. (.-url request))
         auth-header (.get (.-headers request) "authorization")
         btoken (when (and (string? auth-header)
