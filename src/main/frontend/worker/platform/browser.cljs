@@ -173,10 +173,7 @@
 
 (defn- sqlite-wasm-url
   [filename]
-  (let [name (or (some-> filename (string/split "/") last) filename)]
-    (if (exists? js/location)
-      (str (js/URL. name (.-href js/location)))
-      name)))
+  (str (js/URL. (last (string/split filename "/")) (.-href js/location))))
 
 (defn- init-sqlite!
   []
