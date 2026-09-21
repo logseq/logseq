@@ -18,11 +18,12 @@
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
 ;; for how to respond to different MCP requests
 (defn handle-post-request [api-fn {:keys [port host]} req res]
-  (let [session-id (aget (.-headers req) "mcp-session-id")]
+  (let [session-id (aget (.-headers req) "mcp-session-id")
+        existing-transport (and session-id (@transports session-id))]
     (js/console.log "POST /mcp request" session-id (pr-str (.-body req)))
     (cond
-      (and session-id (@transports session-id))
-      (mcp-transport/handle-request! (@transports session-id) req res (.-body req))
+      existing-transport
+      (mcp-transport/handle-request! existing-transport req res (.-body req))
 
       (and (not session-id)
            (isInitializeRequest (.-body req)))

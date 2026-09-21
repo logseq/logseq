@@ -165,7 +165,7 @@
               ;; response and send it back on every later request, and a browser
               ;; only exposes response headers that CORS lists explicitly.
               _     (.register s FastifyCORS #js {:origin "*"
-                                                  :exposedHeaders #js ["mcp-session-id"]})
+                                                :exposedHeaders #js ["mcp-session-id"]})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
