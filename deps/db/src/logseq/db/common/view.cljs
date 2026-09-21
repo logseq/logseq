@@ -1099,9 +1099,12 @@
         :data index})
      :else
      (let [view (d/entity db view-id)
-           group-by-property (:logseq.property.view/group-by-property view)
+           group-by-property-ident (or (:db/ident (:logseq.property.view/group-by-property view))
+                                       group-by-property-ident)
+           group-by-property (or (:logseq.property.view/group-by-property view)
+                                 (when group-by-property-ident
+                                   (d/entity db group-by-property-ident)))
            list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
            group-by-closed-values? (some? (:property/closed-values group-by-property))
            ref-property? (= (:db/valueType group-by-property) :db.type/ref)
            filters (or (:logseq.property.table/filters view) filters)
