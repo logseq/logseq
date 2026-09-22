@@ -710,6 +710,9 @@ let block_uuid_lookup (u : Wire.t) : Wire.t =
 let db_add (e : Wire.t) (a : string) (v : Wire.t) : Wire.t =
   Wire.Array [ kw "db/add"; e; kw a; v ]
 
+(* cljs (:block/raw-title e) — virtual attr falling back to :block/title *)
+let ent_raw_title (e : entity) : value option = Ldb.raw_title e.db e
+
 let db_retract_entity (e : Wire.t) : Wire.t =
   Wire.Array [ kw "db/retractEntity"; e ]
 
@@ -4671,6 +4674,820 @@ let test_direct_outliner_page_delete_persists_delete_page_outliner_op () =
              | _ -> false);
           check "inverse ops" (pending.inverse_outliner_ops <> [])))
 
+(* cljs [:db/retract e a v] *)
+let db_retract (e : Wire.t) (a : string) (v : Wire.t) : Wire.t =
+  Wire.Array [ kw "db/retract"; e; kw a; v ]
+
+(* the last pending tx with this :outliner-op (cljs (filter ... last)) *)
+let last_pending_tx_with_op (op : string) : Sync_client_op.local_tx_entry =
+  List.filter
+    (fun (e : Sync_client_op.local_tx_entry) -> e.outliner_op = Some op)
+    (Sync_apply.pending_txs test_repo ())
+  |> List.rev |> List.hd |> Option.some
+  |> function
+  | Some e -> e
+  | None -> Alcotest.fail "pending tx with outliner-op missing"
+
+(* cljs (ffirst entry) = op keyword of an op entry *)
+let op_entry_name (entry : Wire.t) : string option =
+  match entry with
+  | Wire.Array (Wire.Keyword n :: _) -> Some n
+  | _ -> None
+
+(* cljs (get-in entry [1 0]) — first arg of an op entry *)
+let op_entry_arg0 (entry : Wire.t) : Wire.t option =
+  match entry with
+  | Wire.Array [ _; Wire.Array (a :: _) ] -> Some a
+  | _ -> None
+
+(* cljs ([op [block]] ...) destructured save-block entries *)
+let save_block_entry_block (entry : Wire.t) : Wire.t option =
+  match entry with
+  | Wire.Array [ Wire.Keyword "save-block"; Wire.Array (b :: _) ] -> Some b
+  | _ -> None
+
+let ent_refs (db : db) (uuid_str : string) (attr : string) : value list =
+  match ent_by_block_uuid db uuid_str with
+  | Some e -> Ldb.values e attr
+  | None -> []
+
+let ref_ids (vs : value list) : int list =
+  List.filter_map (fun v -> match v with Ref id -> Some id | _ -> None) vs
+
+(* cljs delete-page-rewrites-node-refs-and-semantic-undo-redo-test *)
+let test_delete_page_rewrites_node_refs_and_semantic_undo_redo () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "Delete Me" }
+              ; blocks = [] }
+            ; { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "Ref Page" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "seed" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db conn) "Delete Me")
+      in
+      let page_id = page.id in
+      let page_uuid = wire_uuid_str (entity_block_uuid page) in
+      let ref_block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "seed")
+      in
+      let ref_block_uuid = wire_uuid_str (entity_block_uuid ref_block) in
+      let node_ref_content = "ref " ^ Page_ref.to_page_ref page_uuid in
+      let title_content = "ref Delete Me" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Datascript.transact_conn_string conn
+               (Printf.sprintf
+                  "[{:db/id %d :block/title \"%s\" :block/refs #{%d}}]"
+                  ref_block.id node_ref_content page_id));
+          ignore (Outliner_page.delete_conn conn page_uuid (Wire.Map []));
+          let tx = last_pending_tx_with_op "delete-page" in
+          let fwd = tx.forward_outliner_ops in
+          let inv = tx.inverse_outliner_ops in
+          check "first op delete-page"
+            (match fwd with
+             | e :: _ -> op_entry_name e = Some "delete-page"
+             | [] -> false);
+          check "delete-page arg"
+            (match fwd with
+             | e :: _ -> op_entry_arg0 e = Some (Wire.Uuid page_uuid)
+             | [] -> false);
+          check "fwd rewritten save-block"
+            (List.exists
+               (fun e ->
+                  match save_block_entry_block e with
+                  | Some b ->
+                      Wire.get "block/uuid" b = Some (Wire.Uuid ref_block_uuid)
+                      && Wire.get "block/title" b
+                         = Some (Wire.String title_content)
+                  | None -> false)
+               fwd);
+          check "inv restore-recycled"
+            (List.exists
+               (fun e ->
+                  op_entry_name e = Some "restore-recycled"
+                  && op_entry_arg0 e = Some (Wire.Uuid page_uuid))
+               inv);
+          check "inv node-ref save-block"
+            (List.exists
+               (fun e ->
+                  match save_block_entry_block e with
+                  | Some b ->
+                      Wire.get "block/uuid" b = Some (Wire.Uuid ref_block_uuid)
+                      && Wire.get "block/title" b
+                         = Some (Wire.String node_ref_content)
+                  | None -> false)
+               inv);
+          ( match ent_by_block_uuid (Datascript.db conn) ref_block_uuid with
+            | Some e ->
+                check "raw title rewritten"
+                  (ent_raw_title e = Some (String title_content));
+                check "page ref removed"
+                  (not (List.mem page_id (ref_ids (Ldb.values e "block/refs"))))
+            | None -> Alcotest.fail "ref-block missing" );
+          let r_undo =
+            Sync_apply.apply_history_action test_repo tx.tx_id true []
+          in
+          check "undo applied"
+            (Wire.get "applied?" r_undo = Some (Wire.Bool true));
+          ( match ent_by_block_uuid (Datascript.db conn) ref_block_uuid with
+            | Some e ->
+                check "undo raw title"
+                  (ent_raw_title e = Some (String node_ref_content));
+                check "undo ref restored"
+                  (List.mem page_id (ref_ids (Ldb.values e "block/refs")))
+            | None -> Alcotest.fail "ref-block missing" );
+          check "undo deleted-at cleared"
+            (match ent_by_block_uuid (Datascript.db conn) page_uuid with
+             | Some e -> Ldb.value e "logseq.property/deleted-at" = None
+             | None -> false);
+          let r_redo =
+            Sync_apply.apply_history_action test_repo tx.tx_id false []
+          in
+          check "redo applied"
+            (Wire.get "applied?" r_redo = Some (Wire.Bool true));
+          ( match ent_by_block_uuid (Datascript.db conn) ref_block_uuid with
+            | Some e ->
+                check "redo raw title"
+                  (ent_raw_title e = Some (String title_content));
+                check "redo page ref removed"
+                  (not
+                     (List.mem page_id (ref_ids (Ldb.values e "block/refs"))))
+            | None -> Alcotest.fail "ref-block missing" );
+          check "redo deleted-at set"
+            (match ent_by_block_uuid (Datascript.db conn) page_uuid with
+             | Some e -> (
+                 match Ldb.value e "logseq.property/deleted-at" with
+                 | Some (Int _ | Instant _) -> true
+                 | _ -> false)
+             | None -> false)))
+
+(* cljs direct-outliner-property-set-persists-set-block-property-outliner-op-test *)
+let test_direct_outliner_property_set_persists_set_block_property_op () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ "p2", { Db_test_util.default_property with p_type = "default" } ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "local object")
+      in
+      let block_uuid = wire_uuid_str (entity_block_uuid block) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Outliner_property.set_block_property conn
+            (block_uuid_lookup (Wire.Uuid block_uuid))
+            "user.property/p2" (Wire.String "local value");
+          let pending = Sync_apply.pending_txs test_repo () in
+          let property_tx =
+            List.find_opt
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 e.outliner_op = Some "set-block-property")
+              pending
+          in
+          check "pending" (pending <> []);
+          check "property tx" (property_tx <> None);
+          check "no forward ops"
+            (match property_tx with
+             | Some e -> e.forward_outliner_ops = []
+             | None -> false)))
+
+(* cljs rebase-replays-direct-set-block-property-without-semantic-ops-test *)
+let test_rebase_replays_direct_set_block_property_without_semantic_ops () =
+  preserve_state (fun () ->
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ "p2", { Db_test_util.default_property with p_type = "default" } ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      ignore
+        (Datascript.listen conn_b "capture-rebase-direct-property-set"
+           (fun r ->
+              if !remote_tx = [] then
+                remote_tx :=
+                  Db_normalize.normalize_tx_data r.db_after r.db_before
+                    (Db_normalize.wire_of_datoms r.tx_data)));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-rebase-direct-property-set")
+        (fun () ->
+           Sync_deps.graph_e2ee := Some (fun _ -> false);
+           Sync_deps.ensure_graph_aes_key :=
+             Some (fun _ -> Db_worker_effect.pure Wire.Nil);
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let block =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "local object")
+               in
+               let block_uuid = wire_uuid_str (entity_block_uuid block) in
+               Outliner_property.set_block_property conn_a
+                 (block_uuid_lookup (Wire.Uuid block_uuid))
+                 "user.property/p2" (Wire.String "local value");
+               let pending_before =
+                 List.hd (Sync_apply.pending_txs test_repo ())
+               in
+               check "outliner-op"
+                 (pending_before.outliner_op = Some "set-block-property");
+               check "no fwd ops"
+                 (pending_before.forward_outliner_ops = []);
+               ignore
+                 (Outliner_core.save_block_conn conn_b
+                    (Outliner_op.block_map_of_wire
+                       (wire_map
+                          [ "block/uuid", Wire.Uuid block_uuid
+                          ; "block/title", Wire.String "remote title" ]))
+                    Outliner_core.default_save_opts Block_map.empty);
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               ( match
+                   ent_by_block_uuid (Datascript.db conn_a) block_uuid
+                 with
+                 | Some e ->
+                     check "remote title"
+                       (Ldb.value e "block/title"
+                        = Some (String "remote title"));
+                     (* cljs (if (map? property-value)
+                          (:block/title property-value) property-value) *)
+                     let property_value =
+                       match Ldb.value e "user.property/p2" with
+                       | Some (Ref id) -> (
+                           match
+                             Datascript.entity (Datascript.db conn_a)
+                               (Entity_id id)
+                           with
+                           | Some ve -> Ldb.value ve "block/title"
+                           | None -> None)
+                       | v -> v
+                     in
+                     check "local property kept"
+                       (property_value = Some (String "local value"))
+                 | None -> Alcotest.fail "block missing" );
+               check "still pending"
+                 (Sync_apply.pending_tx_by_id test_repo pending_before.tx_id
+                  <> None))))
+
+(* cljs canonical-set-block-property-rewrites-ref-values-to-stable-refs-test *)
+let test_canonical_set_block_property_rewrites_ref_values () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "x7"
+              , { Db_test_util.default_property with
+                  p_type = "page"; p_cardinality_many = true } ) ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "local object")
+      in
+      let block_uuid = wire_uuid_str (entity_block_uuid block) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Page y" ();
+          let page_y =
+            Option.get
+              (Db_test_util.find_page_by_title (Datascript.db conn) "Page y")
+          in
+          Outliner_property.set_block_property conn
+            (block_uuid_lookup (Wire.Uuid block_uuid))
+            "user.property/x7" (Wire.Int page_y.id);
+          let property_tx =
+            List.find_opt
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 match e.forward_outliner_ops with
+                 | op :: _ -> op_entry_name op = Some "set-block-property"
+                 | [] -> false)
+              (Sync_apply.pending_txs test_repo ())
+          in
+          check "no set-block-property fwd op" (property_tx = None)))
+
+(* cljs canonical-batch-set-property-rewrites-ref-values-to-stable-refs-test *)
+let test_canonical_batch_set_property_rewrites_ref_values () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "x7"
+              , { Db_test_util.default_property with
+                  p_type = "page"; p_cardinality_many = true } ) ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object 1" }
+                  ; { Db_test_util.default_block with
+                      b_title = Some "local object 2" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let db0 = Datascript.db conn in
+      let block_1 =
+        Option.get (Db_test_util.find_block_by_content db0 "local object 1")
+      in
+      let block_2 =
+        Option.get (Db_test_util.find_block_by_content db0 "local object 2")
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Page y" ();
+          let page_y =
+            Option.get
+              (Db_test_util.find_page_by_title (Datascript.db conn) "Page y")
+          in
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "batch-set-property"
+                   ; Wire.Array
+                       [ Wire.Array [ Wire.Int block_1.id; Wire.Int block_2.id ]
+                       ; kw "user.property/x7"
+                       ; Wire.Int page_y.id
+                       ; wire_map [] ] ] ]
+               (wire_map []));
+          let property_tx =
+            List.find_opt
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 match e.forward_outliner_ops with
+                 | op :: _ -> op_entry_name op = Some "batch-set-property"
+                 | [] -> false)
+              (Sync_apply.pending_txs test_repo ())
+          in
+          check "no batch-set-property fwd op" (property_tx = None)))
+
+(* shared body for the three apply-history-action batch/set replays:
+   seed a tx whose semantic ops carry whatever id form cljs used, then
+   apply forward (undo=false) and undo (undo=true) and check values *)
+let check_property_value (db : db) (block_uuid : string) (prop : string)
+    : value list =
+  match ent_by_block_uuid db block_uuid with
+  | Some e -> Ldb.values e prop
+  | None -> []
+
+let prop_names (db : db) (vs : value list) : string list =
+  List.filter_map
+    (fun v ->
+       match v with
+       | Ref id ->
+           Option.bind
+             (Ldb.ent_of_id db id)
+             (fun e ->
+                match Ldb.value e "block/name" with
+                | Some (String s) -> Some s
+                | _ -> None)
+       | _ -> None)
+    vs
+
+(* cljs apply-history-action-replays-batch-set-property-from-tx-data-with-lookup-refs-test *)
+let test_apply_history_action_batch_set_property_lookup_refs () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "x7"
+              , { Db_test_util.default_property with
+                  p_type = "page"; p_cardinality_many = true } ) ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Page y" ();
+          let db = Datascript.db conn in
+          let block =
+            Option.get (Db_test_util.find_block_by_content db "local object")
+          in
+          let page_y =
+            Option.get (Db_test_util.find_page_by_title db "Page y")
+          in
+          let block_ref = block_uuid_lookup (entity_block_uuid block) in
+          let page_y_ref = block_uuid_lookup (entity_block_uuid page_y) in
+          let block_uuid = wire_uuid_str (entity_block_uuid block) in
+          let action_tx_id = fresh_uuid () in
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"batch-set-property"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "batch-set-property"
+                      ; Wire.Array
+                          [ Wire.Array [ block_ref ]
+                          ; kw "user.property/x7"
+                          ; page_y_ref
+                          ; wire_map [ "entity-id?", Wire.Bool true ] ] ] ]
+                ~inverse_ops:
+                  [ Wire.Array
+                      [ kw "batch-remove-property"
+                      ; Wire.Array
+                          [ Wire.Array [ block_ref ]; kw "user.property/x7" ] ]
+                  ]
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add block_ref "user.property/x7" page_y_ref ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_retract block_ref "user.property/x7" page_y_ref ])
+                action_tx_id ];
+          let r1 =
+            Sync_apply.apply_history_action test_repo action_tx_id false []
+          in
+          check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
+          check "x7 = page y"
+            (List.sort compare
+               (prop_names (Datascript.db conn)
+                  (check_property_value (Datascript.db conn) block_uuid
+                     "user.property/x7"))
+             = [ "page y" ]);
+          let r2 =
+            Sync_apply.apply_history_action test_repo action_tx_id true []
+          in
+          check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
+          check "x7 empty"
+            (check_property_value (Datascript.db conn) block_uuid
+               "user.property/x7"
+             = [])))
+
+(* cljs apply-history-action-replays-batch-set-property-from-tx-data-with-raw-uuid-ids-test
+   and cljs apply-history-action-redo-replays-batch-set-property-with-raw-uuid-ids-test
+   — identical bodies in cljs; ported once here and registered under both
+   test names so the suite keeps the same count/order. *)
+let batch_set_property_raw_uuid_body () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "heading"
+              , { Db_test_util.default_property with p_type = "number" } )
+            ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let db = Datascript.db conn in
+          let block =
+            Option.get (Db_test_util.find_block_by_content db "local object")
+          in
+          let block_uuid = wire_uuid_str (entity_block_uuid block) in
+          let block_ref = block_uuid_lookup (Wire.Uuid block_uuid) in
+          let action_tx_id = fresh_uuid () in
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"batch-set-property"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "batch-set-property"
+                      ; Wire.Array
+                          [ Wire.Array [ Wire.Uuid block_uuid ]
+                          ; kw "logseq.property/heading"
+                          ; Wire.Int 2
+                          ; Wire.Nil ] ] ]
+                ~inverse_ops:
+                  [ Wire.Array
+                      [ kw "batch-remove-property"
+                      ; Wire.Array
+                          [ Wire.Array [ block_ref ]
+                          ; kw "logseq.property/heading" ] ] ]
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add block_ref "logseq.property/heading"
+                         (Wire.Int 2) ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_retract block_ref "logseq.property/heading"
+                         (Wire.Int 2) ])
+                action_tx_id ];
+          let r1 =
+            Sync_apply.apply_history_action test_repo action_tx_id false []
+          in
+          check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
+          let heading_v =
+            check_property_value (Datascript.db conn) block_uuid
+              "logseq.property/heading"
+          in
+          check "heading 2"
+            (match heading_v with
+             | [ Int 2 ] -> true
+             | [ Float f ] -> f = 2.
+             | _ -> false);
+          let r2 =
+            Sync_apply.apply_history_action test_repo action_tx_id true []
+          in
+          check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
+          check "heading cleared"
+            (check_property_value (Datascript.db conn) block_uuid
+               "logseq.property/heading"
+             = [])))
+
+(* cljs apply-history-action-replays-set-block-property-from-tx-data-with-lookup-refs-test *)
+let test_apply_history_action_set_block_property_lookup_refs () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "x7"
+              , { Db_test_util.default_property with
+                  p_type = "page"; p_cardinality_many = true } ) ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Page y" ();
+          let db = Datascript.db conn in
+          let block =
+            Option.get (Db_test_util.find_block_by_content db "local object")
+          in
+          let page_y =
+            Option.get (Db_test_util.find_page_by_title db "Page y")
+          in
+          let block_ref = block_uuid_lookup (entity_block_uuid block) in
+          let page_y_ref = block_uuid_lookup (entity_block_uuid page_y) in
+          let block_uuid = wire_uuid_str (entity_block_uuid block) in
+          let action_tx_id = fresh_uuid () in
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"set-block-property"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "set-block-property"
+                      ; Wire.Array [ block_ref; kw "user.property/x7"; page_y_ref ]
+                      ] ]
+                ~inverse_ops:
+                  [ Wire.Array
+                      [ kw "remove-block-property"
+                      ; Wire.Array [ block_ref; kw "user.property/x7" ] ] ]
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add block_ref "user.property/x7" page_y_ref ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_retract block_ref "user.property/x7" page_y_ref ])
+                action_tx_id ];
+          let r1 =
+            Sync_apply.apply_history_action test_repo action_tx_id false []
+          in
+          check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
+          check "x7 = page y"
+            (List.sort compare
+               (prop_names (Datascript.db conn)
+                  (check_property_value (Datascript.db conn) block_uuid
+                     "user.property/x7"))
+             = [ "page y" ]);
+          let r2 =
+            Sync_apply.apply_history_action test_repo action_tx_id true []
+          in
+          check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
+          check "x7 empty"
+            (check_property_value (Datascript.db conn) block_uuid
+               "user.property/x7"
+             = [])))
+
+(* cljs apply-history-action-skips-sync-fix-pending-tx-test *)
+let test_apply_history_action_skips_sync_fix_pending_tx () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let missing_block_ref = block_uuid_lookup (Wire.Uuid (fresh_uuid ())) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"fix"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add missing_block_ref "block/title"
+                         (Wire.String "missing") ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_retract missing_block_ref "block/title"
+                         (Wire.String "missing") ])
+                tx_id ];
+          let r = Sync_apply.apply_history_action test_repo tx_id true [] in
+          check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
+          check "reason"
+            (Wire.get "reason" r = Some (kw "unsupported-history-action"))))
+
+(* cljs replay-recycle-delete-permanently-removes-recycled-page-test *)
+let test_replay_recycle_delete_permanently_removes_recycled_page () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "child 1" } ] } ]
+          ()
+      in
+      let db = Datascript.db conn in
+      let page =
+        Option.get (Db_test_util.find_page_by_title db "page 1")
+      in
+      let child =
+        Option.get (Db_test_util.find_block_by_content db "child 1")
+      in
+      let page_uuid = wire_uuid_str (entity_block_uuid page) in
+      let child_uuid = wire_uuid_str (entity_block_uuid child) in
+      ignore (Outliner_page.delete_conn conn page_uuid (Wire.Map []));
+      check "page recycled"
+        (match ent_by_block_uuid (Datascript.db conn) page_uuid with
+         | Some e -> Ldb.recycled e
+         | None -> false);
+      check "replay"
+        (Sync_apply.replay_canonical_outliner_op conn
+           (Wire.Array
+              [ kw "recycle-delete-permanently"
+              ; Wire.Array [ block_uuid_lookup (Wire.Uuid page_uuid) ] ])
+           None
+         <> None);
+      check "page gone"
+        (ent_by_block_uuid (Datascript.db conn) page_uuid = None);
+      check "child gone"
+        (ent_by_block_uuid (Datascript.db conn) child_uuid = None))
+
+(* cljs replay-recycle-delete-permanently-removes-recycled-block-test *)
+let test_replay_recycle_delete_permanently_removes_recycled_block () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "parent"
+                    ; b_children =
+                        [ { Db_test_util.default_block with
+                            b_title = Some "child" } ] } ] } ]
+          ()
+      in
+      let db = Datascript.db conn in
+      let parent =
+        Option.get (Db_test_util.find_block_by_content db "parent")
+      in
+      let child =
+        Option.get (Db_test_util.find_block_by_content db "child")
+      in
+      let parent_uuid = wire_uuid_str (entity_block_uuid parent) in
+      let child_uuid = wire_uuid_str (entity_block_uuid child) in
+      ignore
+        (Datascript.transact_conn
+           ~tx_meta:[ "outliner-op", Keyword "delete-blocks" ]
+           conn
+           (Outliner_recycle.recycle_blocks_tx_data (Datascript.db conn)
+              [ parent ] ()));
+      check "parent recycled"
+        (match ent_by_block_uuid (Datascript.db conn) parent_uuid with
+         | Some e -> Ldb.recycled e
+         | None -> false);
+      check "replay"
+        (Sync_apply.replay_canonical_outliner_op conn
+           (Wire.Array
+              [ kw "recycle-delete-permanently"
+              ; Wire.Array [ block_uuid_lookup (Wire.Uuid parent_uuid) ] ])
+           None
+         <> None);
+      check "parent gone"
+        (ent_by_block_uuid (Datascript.db conn) parent_uuid = None);
+      check "child gone"
+        (ent_by_block_uuid (Datascript.db conn) child_uuid = None))
+
+(* cljs replay-recycle-delete-permanently-missing-root-is-idempotent-test *)
+let test_replay_recycle_delete_permanently_missing_root_is_idempotent () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks = [] } ]
+          ()
+      in
+      check "replay nil"
+        (Sync_apply.replay_canonical_outliner_op conn
+           (Wire.Array
+              [ kw "recycle-delete-permanently"
+              ; Wire.Array [ block_uuid_lookup (Wire.Uuid (fresh_uuid ())) ] ])
+           None
+         = None))
+
+(* cljs apply-history-action-replays-set-block-property-from-tx-data-with-raw-uuid-id-test
+   and cljs apply-history-action-redo-replays-set-block-tags-with-raw-uuid-id-test
+   — identical bodies in cljs; shared body, registered under both names. *)
+let set_block_property_raw_uuid_body () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~classes:[ "tag1", Db_test_util.default_class ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let db = Datascript.db conn in
+          let block =
+            Option.get (Db_test_util.find_block_by_content db "local object")
+          in
+          let tag1 =
+            Option.get (Ldb.ent_of_ref db (Ident "user.class/tag1"))
+          in
+          let block_uuid = wire_uuid_str (entity_block_uuid block) in
+          let tag_uuid = wire_uuid_str (entity_block_uuid tag1) in
+          let block_ref = block_uuid_lookup (Wire.Uuid block_uuid) in
+          let tag_ref = block_uuid_lookup (Wire.Uuid tag_uuid) in
+          let action_tx_id = fresh_uuid () in
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"set-block-property"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "set-block-property"
+                      ; Wire.Array
+                          [ Wire.Uuid block_uuid; kw "block/tags"; tag_ref ] ]
+                  ]
+                ~inverse_ops:
+                  [ Wire.Array
+                      [ kw "remove-block-property"
+                      ; Wire.Array [ block_ref; kw "block/tags" ] ] ]
+                ~tx_data_v:
+                  (Wire.Array [ db_add block_ref "block/tags" tag_ref ])
+                ~reversed_tx_data:
+                  (Wire.Array [ db_retract block_ref "block/tags" tag_ref ])
+                action_tx_id ];
+          let r1 =
+            Sync_apply.apply_history_action test_repo action_tx_id false []
+          in
+          check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
+          check "tags = #{tag}"
+            (ref_ids
+               (check_property_value (Datascript.db conn) block_uuid
+                  "block/tags")
+             = [ tag1.id ]);
+          let r2 =
+            Sync_apply.apply_history_action test_repo action_tx_id true []
+          in
+          check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
+          check "tags cleared"
+            (check_property_value (Datascript.db conn) block_uuid "block/tags"
+             = [])))
+
 (*__TESTS__*)
 
 let () =
@@ -4964,4 +5781,51 @@ let () =
             "direct-outliner-page-delete-persists-delete-page-outliner-op"
             `Quick
             test_direct_outliner_page_delete_persists_delete_page_outliner_op
+        ; Alcotest.test_case
+            "delete-page-rewrites-node-refs-and-semantic-undo-redo" `Quick
+            test_delete_page_rewrites_node_refs_and_semantic_undo_redo
+        ; Alcotest.test_case
+            "direct-outliner-property-set-persists-set-block-property-outliner-op"
+            `Quick
+            test_direct_outliner_property_set_persists_set_block_property_op
+        ; Alcotest.test_case
+            "rebase-replays-direct-set-block-property-without-semantic-ops"
+            `Quick
+            test_rebase_replays_direct_set_block_property_without_semantic_ops
+        ; Alcotest.test_case
+            "canonical-set-block-property-rewrites-ref-values-to-stable-refs"
+            `Quick test_canonical_set_block_property_rewrites_ref_values
+        ; Alcotest.test_case
+            "canonical-batch-set-property-rewrites-ref-values-to-stable-refs"
+            `Quick test_canonical_batch_set_property_rewrites_ref_values
+        ; Alcotest.test_case
+            "apply-history-action-replays-batch-set-property-from-tx-data-with-lookup-refs"
+            `Quick test_apply_history_action_batch_set_property_lookup_refs
+        ; Alcotest.test_case
+            "apply-history-action-replays-batch-set-property-from-tx-data-with-raw-uuid-ids"
+            `Quick batch_set_property_raw_uuid_body
+        ; Alcotest.test_case
+            "apply-history-action-redo-replays-batch-set-property-with-raw-uuid-ids"
+            `Quick batch_set_property_raw_uuid_body
+        ; Alcotest.test_case
+            "apply-history-action-replays-set-block-property-from-tx-data-with-lookup-refs"
+            `Quick test_apply_history_action_set_block_property_lookup_refs
+        ; Alcotest.test_case "apply-history-action-skips-sync-fix-pending-tx"
+            `Quick test_apply_history_action_skips_sync_fix_pending_tx
+        ; Alcotest.test_case
+            "replay-recycle-delete-permanently-removes-recycled-page" `Quick
+            test_replay_recycle_delete_permanently_removes_recycled_page
+        ; Alcotest.test_case
+            "replay-recycle-delete-permanently-removes-recycled-block" `Quick
+            test_replay_recycle_delete_permanently_removes_recycled_block
+        ; Alcotest.test_case
+            "replay-recycle-delete-permanently-missing-root-is-idempotent"
+            `Quick
+            test_replay_recycle_delete_permanently_missing_root_is_idempotent
+        ; Alcotest.test_case
+            "apply-history-action-replays-set-block-property-from-tx-data-with-raw-uuid-id"
+            `Quick set_block_property_raw_uuid_body
+        ; Alcotest.test_case
+            "apply-history-action-redo-replays-set-block-tags-with-raw-uuid-id"
+            `Quick set_block_property_raw_uuid_body
         ] ) ]
