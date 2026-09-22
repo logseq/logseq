@@ -100,6 +100,54 @@ let merge_state t =
         kvs
   | _ -> ()
 
+(* cljs state/set-state! — [path] is a keyword or a vector path
+   (assoc-in) into app state; nested keys keep their wire key form. *)
+let rec wire_assoc_in (path : Wire.t list) (value : Wire.t) (m : Wire.t)
+    : Wire.t =
+  let assoc k v m =
+    match m with
+    | Wire.Map pairs ->
+        if List.exists (fun (k', _) -> k' = k) pairs then
+          Wire.Map
+            (List.map
+               (fun (k', v') -> if k' = k then (k, v) else (k', v'))
+               pairs)
+        else Wire.Map (pairs @ [ (k, v) ])
+    | _ -> Wire.Map [ (k, v) ]
+  in
+  match path with
+  | [] -> m
+  | [ k ] -> assoc k value m
+  | k :: rest ->
+      let sub =
+        match m with
+        | Wire.Map pairs ->
+            (match List.assoc_opt k pairs with
+             | Some (Wire.Map _ as sm) -> sm
+             | _ -> Wire.Map [])
+        | _ -> Wire.Map []
+      in
+      assoc k (wire_assoc_in rest value sub) m
+
+let set_state_at_path (path : Wire.t) (value : Wire.t) : unit =
+  match path with
+  | Wire.Keyword _ | Wire.Symbol _ | Wire.String _ ->
+      Hashtbl.replace app_state (state_key_name path) value
+  | Wire.Array elems | Wire.List elems ->
+      (match elems with
+       | [] -> ()
+       | k :: rest ->
+           let root = state_key_name k in
+           if rest = [] then Hashtbl.replace app_state root value
+           else
+             let cur =
+               match Hashtbl.find_opt app_state root with
+               | Some (Wire.Map _ as m) -> m
+               | _ -> Wire.Map []
+             in
+             Hashtbl.replace app_state root (wire_assoc_in rest value cur))
+  | _ -> ()
+
 (* thread atoms *)
 let thread_atom_names =
   [ "thread-atom/online-event"; "thread-atom/search-input-idle-status" ]

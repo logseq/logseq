@@ -37,6 +37,10 @@ let init () =
     ignore Endpoint_property.get_structured_children;
     ignore Endpoint_property.validate_block_tag;
     ignore Endpoint_property.validate_property_value;
+    ignore Endpoint_property.convert_tag_to_page;
+    ignore Endpoint_property.convert_page_to_tag;
+    ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
+    ignore Endpoint_user.ensure_id_and_access_token;
     ignore Endpoint_crypt.arg;
     ignore Endpoint_block.get_blocks;
     ignore Render_resource.get_render_snapshots;
