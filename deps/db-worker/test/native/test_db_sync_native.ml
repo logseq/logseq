@@ -7313,6 +7313,470 @@ let test_rebase_drops_pending_reaction_tx_when_target_deleted () =
 
 (*__TESTS__*)
 
+(* cljs tx-batch-ok-removes-acked-pending-txs-test *)
+let test_tx_batch_ok_removes_acked_pending_txs () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Ack Page" ~uuid:(fresh_uuid ()) ();
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          check "pending" (pending_before <> []);
+          client.inflight
+          := List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+               pending_before;
+          Sync_handle_message.handle_message test_repo client raw;
+          check "inflight cleared" (!(client.inflight) = []);
+          check "pending cleared"
+            (Sync_apply.pending_txs test_repo () = []);
+          check "local tx 1"
+            (Sync_client_op.get_local_tx test_repo = Some 1)))
+
+(* cljs tx-batch-ok-broadcasts-cleared-pending-state-test *)
+let test_tx_batch_ok_broadcasts_cleared_pending_state () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Ack Page" ~uuid:(fresh_uuid ()) ();
+          client.inflight
+          := List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+               (Sync_apply.pending_txs test_repo ());
+          with_broadcast_capture (fun broadcasts ->
+              Sync_handle_message.handle_message test_repo client raw;
+              let rtc_bcasts =
+                List.filter_map
+                  (fun (kind, payload) ->
+                    if kind = "rtc-sync-state" then Some payload else None)
+                  !broadcasts
+              in
+              let last = List.nth rtc_bcasts (List.length rtc_bcasts - 1) in
+              check "unpushed 0"
+                (Wire.get "unpushed-block-update-count" last
+                 = Some (Wire.Int 0)))))
+
+(* cljs tx-batch-ok-removes-only-inflight-acked-pending-txs-test *)
+let test_tx_batch_ok_removes_only_inflight_acked_pending_txs () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Ack Page A" ~uuid:(fresh_uuid ()) ();
+          page_create conn "Ack Page B" ~uuid:(fresh_uuid ()) ();
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          let acked_tx_id = (List.nth pending_before 0).tx_id in
+          let unacked_tx_id = (List.nth pending_before 1).tx_id in
+          check "2 pending" (List.length pending_before = 2);
+          client.inflight := [ acked_tx_id ];
+          Sync_handle_message.handle_message test_repo client raw;
+          check "inflight cleared" (!(client.inflight) = []);
+          check "unacked stays"
+            (List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+               (Sync_apply.pending_txs test_repo ())
+             = [ unacked_tx_id ]);
+          check "local tx 1"
+            (Sync_client_op.get_local_tx test_repo = Some 1)))
+
+(* cljs tx-batch-ok-does-not-anchor-remote-checksum-after-acked-pending-txs-test *)
+let test_tx_batch_ok_does_not_anchor_remote_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let remote_checksum = "bad-remote-checksum" in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1
+          ; "checksum", Wire.String remote_checksum ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Ack Checksum Page" ~uuid:(fresh_uuid ()) ();
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          let local_checksum =
+            Db_sync_checksum.recompute_checksum (Datascript.db conn)
+          in
+          check "pending" (pending_before <> []);
+          Sync_client_op.update_local_checksum test_repo local_checksum;
+          client.inflight
+          := List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+               pending_before;
+          Sync_state.dev_or_test := true;
+          Sync_log_and_state.rtc_log := Wire.Nil;
+          Sync_handle_message.handle_message test_repo client raw;
+          check "inflight cleared" (!(client.inflight) = []);
+          check "pending cleared"
+            (Sync_apply.pending_txs test_repo () = []);
+          check "local tx 1"
+            (Sync_client_op.get_local_tx test_repo = Some 1);
+          check "local checksum stays"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some local_checksum);
+          let captured = !(Sync_log_and_state.rtc_log) in
+          check "rtc-log type"
+            (Wire.get "type" captured
+             = Some (kw "rtc.log/checksum-mismatch"));
+          check "local-checksum"
+            (Wire.get "local-checksum" captured
+             = Some (Wire.String local_checksum));
+          check "remote-checksum"
+            (Wire.get "remote-checksum" captured
+             = Some (Wire.String remote_checksum))))
+
+(* cljs apply-remote-tx-does-not-clear-pending-without-ack-test *)
+let test_apply_remote_tx_does_not_clear_pending_without_ack () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let block_uuid = fresh_uuid () in
+      let remote_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let remote_tx = ref [] in
+      ignore (Datascript.listen remote_conn "capture-remote-same-insert"
+        (fun (r : tx_report) ->
+          if r.tx_data <> [] then
+            remote_tx
+            := Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten remote_conn "capture-remote-same-insert")
+        (fun () ->
+           with_datascript_conns conn (Some ops) (fun () ->
+               ignore
+                 (Outliner_core.insert_blocks_conn conn
+                    [ Block_map.of_transit
+                        (wire_map
+                           [ "block/title", Wire.String "same insert"
+                           ; "block/uuid", Wire.Uuid block_uuid ]) ]
+                    (Block_map.of_entity parent)
+                    { Outliner_core.default_insert_opts with
+                      sibling = false
+                    ; keep_uuid = true }
+                    (Block_map.of_transit
+                       (wire_map
+                          [ "sibling?", Wire.Bool false
+                          ; "keep-uuid?", Wire.Bool true ])));
+               let pending_before = Sync_apply.pending_txs test_repo () in
+               let pending_ids =
+                 List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+                   pending_before
+               in
+               check "1 pending" (List.length pending_before = 1);
+               let remote_parent =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn) parent_uuid)
+               in
+               ignore
+                 (Outliner_core.insert_blocks_conn remote_conn
+                    [ Block_map.of_transit
+                        (wire_map
+                           [ "block/title", Wire.String "same insert"
+                           ; "block/uuid", Wire.Uuid block_uuid ]) ]
+                    (Block_map.of_entity remote_parent)
+                    { Outliner_core.default_insert_opts with
+                      sibling = false
+                    ; keep_uuid = true }
+                    (Block_map.of_transit
+                       (wire_map
+                          [ "sibling?", Wire.Bool false
+                          ; "keep-uuid?", Wire.Bool true ])));
+               check "remote tx" (!remote_tx <> []);
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let pending_after = Sync_apply.pending_txs test_repo () in
+               check "tx ids unchanged"
+                 (List.map
+                    (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
+                    pending_after
+                  = pending_ids);
+               check "1 pending" (List.length pending_after = 1))))
+
+(* cljs tx-batch-ok-stale-ack-does-not-regress-local-or-remote-checksum-state-test *)
+let test_tx_batch_ok_stale_ack_does_not_regress_checksum_state () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let actual_checksum =
+        Db_sync_checksum.recompute_checksum (Datascript.db conn)
+      in
+      let stale_checksum = "ffffffffffffffff" in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 4
+          ; "checksum", Wire.String stale_checksum ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 5;
+          Hashtbl.replace Sync_apply.repo_latest_remote_checksum test_repo
+            actual_checksum;
+          Sync_client_op.update_local_tx test_repo 5;
+          Sync_client_op.update_local_checksum test_repo actual_checksum;
+          Sync_state.dev_or_test := true;
+          Sync_log_and_state.rtc_log := Wire.Nil;
+          Sync_handle_message.handle_message test_repo client raw;
+          check "inflight cleared" (!(client.inflight) = []);
+          check "local tx stays 5"
+            (Sync_client_op.get_local_tx test_repo = Some 5);
+          check "latest remote tx stays 5"
+            (Hashtbl.find_opt Sync_apply.repo_latest_remote_tx test_repo
+             = Some 5);
+          check "latest remote checksum stays"
+            (Hashtbl.find_opt Sync_apply.repo_latest_remote_checksum
+               test_repo
+             = Some actual_checksum);
+          check "no rtc-log" (!(Sync_log_and_state.rtc_log) = Wire.Nil)))
+
+(* cljs tx-batch-ok-real-checksum-mismatch-logs-warning-test *)
+let test_tx_batch_ok_real_checksum_mismatch_logs_warning () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let stale_checksum = "0000000000000000" in
+      let remote_checksum = "ffffffffffffffff" in
+      let client = mk_client () in
+      let raw =
+        msg_json
+          [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 0
+          ; "checksum", Wire.String remote_checksum ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo stale_checksum;
+          check "no throw"
+            (handle_message_error test_repo client raw = None)))
+
+(* cljs local-checksum-stays-in-sync-after-undo-redo-sequence-test *)
+let test_local_checksum_stays_in_sync_after_undo_redo () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let inserted_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes
+            ~handler_keys:[ "checksum-undo-redo" ] test_repo conn;
+          ignore
+            (Outliner_core.insert_blocks_conn conn
+               [ Block_map.of_transit
+                   (wire_map
+                      [ "block/uuid", Wire.Uuid inserted_uuid
+                      ; "block/title", Wire.String "tmp" ]) ]
+               (Block_map.of_entity parent)
+               { Outliner_core.default_insert_opts with
+                 sibling = false
+               ; keep_uuid = true }
+               (Block_map.of_transit
+                  (wire_map
+                     [ "sibling?", Wire.Bool false
+                     ; "keep-uuid?", Wire.Bool true ])));
+          let inserted =
+            Option.get
+              (ent_by_block_uuid (Datascript.db conn) inserted_uuid)
+          in
+          Outliner_core.indent_outdent_blocks_conn conn [ inserted ] true
+            Block_map.empty;
+          Outliner_core.indent_outdent_blocks_conn conn [ inserted ] false
+            Block_map.empty;
+          delete_blocks conn [ inserted ];
+          let rec undo_all n =
+            match Undo_redo.undo test_repo with
+            | Wire.Keyword "frontend.worker.undo-redo/empty-undo-stack" -> ()
+            | _ ->
+                if n > 128 then failwith "undo loop exceeded";
+                undo_all (n + 1)
+          in
+          let rec redo_all n =
+            match Undo_redo.redo test_repo with
+            | Wire.Keyword "frontend.worker.undo-redo/empty-redo-stack" -> ()
+            | _ ->
+                if n > 128 then failwith "redo loop exceeded";
+                redo_all (n + 1)
+          in
+          undo_all 0;
+          redo_all 0;
+          check "checksum in sync"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs reparent-block-when-cycle-detected-test *)
+let test_reparent_block_when_cycle_detected () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let page_id =
+            match Ldb.ref_ent parent "block/page" with
+            | Some p -> p.id
+            | None -> failwith "parent has no page"
+          in
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/parent"
+                   (Wire.Int child1.id)
+               ; db_add (Wire.Int child1.id) "block/parent"
+                   (Wire.Int page_id) ]);
+          let parent' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) parent.id)
+          in
+          let child1' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) child1.id)
+          in
+          let page' = Ldb.ref_ent parent' "block/page" in
+          check "page" (page' <> None);
+          check "parent's parent is child1"
+            (Option.map (fun (p : entity) -> p.id)
+               (Ldb.ref_ent parent' "block/parent")
+             = Some child1'.id);
+          check "child1's parent is page"
+            (Option.map (fun (p : entity) -> p.id)
+               (Ldb.ref_ent child1' "block/parent")
+             = Option.map (fun (p : entity) -> p.id) page')))
+
+(* cljs two-children-cycle-test *)
+let test_two_children_cycle () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, child2, _c3 = setup_parent_child () in
+      let remote_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let child1_uuid = ent_block_uuid child1 in
+      let child2_uuid = ent_block_uuid child2 in
+      let remote_tx = ref [] in
+      ignore (Datascript.listen remote_conn "capture-two-children-cycle-remote"
+        (fun (r : tx_report) ->
+          if r.tx_data <> [] && !remote_tx = [] then
+            remote_tx
+            := Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten remote_conn
+              "capture-two-children-cycle-remote")
+        (fun () ->
+           with_datascript_conns conn (Some ops) (fun () ->
+               raw_transact_string conn
+                 [ db_add (Wire.Int child1.id) "block/parent"
+                     (Wire.Int child2.id) ];
+               let remote_child1 =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn)
+                      child1_uuid)
+               in
+               let remote_child2 =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn)
+                      child2_uuid)
+               in
+               move_blocks remote_conn [ remote_child2 ] remote_child1 false;
+               check "remote tx" (!remote_tx <> []);
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let child1' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) child1_uuid)
+               in
+               let child2' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) child2_uuid)
+               in
+               check "child1 parent is child 2"
+                 (Option.bind (Ldb.ref_ent child1' "block/parent")
+                    (fun p -> Ldb.value p "block/title")
+                  = Some (String "child 2"));
+               check "child2 parent is child 1"
+                 (Option.bind (Ldb.ref_ent child2' "block/parent")
+                    (fun p -> Ldb.value p "block/title")
+                  = Some (String "child 1")))))
+
+(* cljs three-children-cycle-test *)
+let test_three_children_cycle () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, child2, child3 = setup_parent_child () in
+      let remote_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let child1_uuid = ent_block_uuid child1 in
+      let child2_uuid = ent_block_uuid child2 in
+      let child3_uuid = ent_block_uuid child3 in
+      let remote_txs = ref [] in
+      ignore (Datascript.listen remote_conn "capture-three-children-cycle-remote"
+        (fun (r : tx_report) ->
+          if r.tx_data <> [] then
+            remote_txs
+            := !remote_txs
+               @ [ Sync_apply.normalize_tx_data r.db_after r.db_before
+                     r.tx_data ]));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten remote_conn
+              "capture-three-children-cycle-remote")
+        (fun () ->
+           with_datascript_conns conn (Some ops) (fun () ->
+               raw_transact_string conn
+                 [ db_add (Wire.Int child2.id) "block/parent"
+                     (Wire.Int child1.id)
+                 ; db_add (Wire.Int child3.id) "block/parent"
+                     (Wire.Int child2.id) ];
+               let remote_child1 =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn)
+                      child1_uuid)
+               in
+               let remote_child2 =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn)
+                      child2_uuid)
+               in
+               let remote_child3 =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db remote_conn)
+                      child3_uuid)
+               in
+               move_blocks remote_conn [ remote_child2 ] remote_child3
+                 false;
+               move_blocks remote_conn [ remote_child1 ] remote_child2
+                 false;
+               check "2 remote txs" (List.length !remote_txs = 2);
+               await_unit
+                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                    (List.map
+                       (fun tx ->
+                          Wire.Map [ kw "tx-data", Wire.Array tx ])
+                       !remote_txs));
+               let child1' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) child1_uuid)
+               in
+               let child2' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) child2_uuid)
+               in
+               let child3' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) child3_uuid)
+               in
+               check "child1 parent is child 2"
+                 (Option.bind (Ldb.ref_ent child1' "block/parent")
+                    (fun p -> Ldb.value p "block/title")
+                  = Some (String "child 2"));
+               check "child2 parent is child 1"
+                 (Option.bind (Ldb.ref_ent child2' "block/parent")
+                    (fun p -> Ldb.value p "block/title")
+                  = Some (String "child 1"));
+               check "child3 parent is child 2"
+                 (Option.bind (Ldb.ref_ent child3' "block/parent")
+                    (fun p -> Ldb.value p "block/title")
+                  = Some (String "child 2")))))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -7746,4 +8210,32 @@ let () =
             "rebase-drops-pending-reaction-tx-when-target-is-remotely-deleted"
             `Quick
             test_rebase_drops_pending_reaction_tx_when_target_deleted
+        ; Alcotest.test_case "tx-batch-ok-removes-acked-pending-txs"
+            `Quick test_tx_batch_ok_removes_acked_pending_txs
+        ; Alcotest.test_case "tx-batch-ok-broadcasts-cleared-pending-state"
+            `Quick test_tx_batch_ok_broadcasts_cleared_pending_state
+        ; Alcotest.test_case
+            "tx-batch-ok-removes-only-inflight-acked-pending-txs" `Quick
+            test_tx_batch_ok_removes_only_inflight_acked_pending_txs
+        ; Alcotest.test_case
+            "tx-batch-ok-does-not-anchor-remote-checksum" `Quick
+            test_tx_batch_ok_does_not_anchor_remote_checksum
+        ; Alcotest.test_case
+            "apply-remote-tx-does-not-clear-pending-without-ack" `Quick
+            test_apply_remote_tx_does_not_clear_pending_without_ack
+        ; Alcotest.test_case
+            "tx-batch-ok-stale-ack-does-not-regress-checksum-state" `Quick
+            test_tx_batch_ok_stale_ack_does_not_regress_checksum_state
+        ; Alcotest.test_case
+            "tx-batch-ok-real-checksum-mismatch-logs-warning" `Quick
+            test_tx_batch_ok_real_checksum_mismatch_logs_warning
+        ; Alcotest.test_case
+            "local-checksum-stays-in-sync-after-undo-redo" `Quick
+            test_local_checksum_stays_in_sync_after_undo_redo
+        ; Alcotest.test_case "reparent-block-when-cycle-detected" `Quick
+            test_reparent_block_when_cycle_detected
+        ; Alcotest.test_case "two-children-cycle" `Quick
+            test_two_children_cycle
+        ; Alcotest.test_case "three-children-cycle" `Quick
+            test_three_children_cycle
         ] ) ]

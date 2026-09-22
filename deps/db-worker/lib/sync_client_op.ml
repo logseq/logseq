@@ -201,7 +201,9 @@ let get_pending_local_tx_count repo : int =
     c
 
 let adjust_pending_local_tx_count repo delta =
-  let base = get_pending_local_tx_count repo in
+  (* cljs: (or (get m repo) 0) — cold base is 0, NOT a db recount; the
+     count query already includes a just-upserted row *)
+  let base = Option.value (Worker_state.pending_local_tx_count repo) ~default:0 in
   Worker_state.set_pending_local_tx_count repo (max 0 (base + delta))
 
 (* cljs (exists? js/process) — any non-browser runtime (node daemon,
