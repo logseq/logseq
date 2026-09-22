@@ -335,7 +335,7 @@ and property_value_blocks_content db property (tv : tx_value) spaces
    one level deeper. *)
 and property_value_children_content db (value_e : entity) spaces (ctx : context)
     : string option =
-  match Ldb.sort_by_order (Ldb.ref_ents value_e "block/_parent") with
+  match Ldb.sort_by_order (Ldb.parent_children value_e) with
   | [] -> None
   | children ->
       let indent = ctx.export_bullet_indentation in
@@ -506,7 +506,7 @@ and transform_content db (b : entity) level ~heading_to_list ~include_properties
 
 and node_children ~open_blocks_only (e : entity) : entity list =
   if open_blocks_only && Ldb.truthy (Ldb.value e "block/collapsed?") then []
-  else Ldb.sort_by_order (Ldb.ref_ents e "block/_parent")
+  else Ldb.sort_by_order (Ldb.parent_children e)
 
 (* cljs page? in tree->file-content: node has no :block/page. *)
 and is_page_node (e : entity) : bool = Option.is_none (Ldb.value e "block/page")

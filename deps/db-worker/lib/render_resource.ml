@@ -113,10 +113,17 @@ let uuid_of (e : entity) : string =
 
 (* ==================== basic.cljs ==================== *)
 
-(* select-keys over an entity; cljs entity attr access returns stored
-   values; db/id comes from the entity record. *)
+(* select-keys over an entity-plus entity; db/id comes from the entity
+   record, and :block/title / :block/raw-title go through the entity-plus
+   lookups (id-ref resolution / journal title). *)
 let sidebar_page_summary (page : entity) : Wire.t =
-  let get a = Ldb.value page a in
+  let get a =
+    match a with
+    | "block/title" ->
+        Option.map (fun s -> String s) (Db_content.block_title page)
+    | "block/raw-title" -> Ldb.raw_title page.db page
+    | _ -> Ldb.value page a
+  in
   let pairs =
     List.filter_map
       (fun a ->
@@ -1113,11 +1120,12 @@ let rec value_of_form (f : query_form) : value =
        | None -> String s)
   | QueryFormTagged (_, f) -> value_of_form f
 
-let result_arg (v : value) : query_arg =
-  match v with
-  | Keyword s -> Arg_scalar (Result_attr s)
-  | Int n -> Arg_scalar (Result_entity n)
-  | v -> Arg_scalar (Result_value v)
+(* cljs resolve-input passes values through unchanged — a keyword input is a
+   keyword value, an eid a number. The engine equates Int with Ref when
+   matching datom values, and resolves QValue keywords to attrs in attribute
+   position. Result_attr/Result_entity inputs must not be used here: the
+   engine drops them when the bound var is substituted into value position. *)
+let result_arg (v : value) : query_arg = Arg_scalar (Result_value v)
 
 let query_input_value (t : Wire.t) : value =
   match t with
@@ -1628,6 +1636,19 @@ let query_result_cell_uuid (r : query_result) : string option =
       | _ -> None)
   | _ -> None
 
+(* cljs (:block/uuid cell) — Result_entity resolves through the db the way
+   entity attr access would. *)
+let query_result_cell_entity_uuid db (r : query_result) : string option =
+  match r with
+  | Result_entity n -> (
+      match Ldb.ent_of_id db n with
+      | Some e -> (
+          match Ldb.value e "block/uuid" with
+          | Some (Uuid u) -> Some u
+          | _ -> None)
+      | None -> None)
+  | _ -> query_result_cell_uuid r
+
 let query_result_cell_id (r : query_result) : int option =
   match r with
   | Result_entity n -> Some n
@@ -1668,29 +1689,19 @@ let filter_block_query_result db (cells : query_result list)
   let cells =
     List.filter
       (fun cell ->
-        match query_result_cell_uuid cell, cell with
-        | Some u, _ -> (
+        match query_result_cell_entity_uuid db cell with
+        | Some u -> (
             match entity db (Lookup_ref ("block/uuid", Uuid u)) with
             | Some e -> not (Ldb.hidden e)
-            | None -> false)
-        | None, Result_entity n -> (
-            match Ldb.ent_of_id db n with
-            | Some e -> (
-                match Ldb.value e "block/uuid" with
-                | Some (Uuid u) -> (
-                    match entity db (Lookup_ref ("block/uuid", Uuid u)) with
-                    | Some e' -> not (Ldb.hidden e')
-                    | None -> true)
-                | _ -> true)
             | None -> true)
-        | None, _ -> true)
+        | None -> true)
       cells
   in
   let cells =
     match current_block_uuid with
     | Some cu ->
         List.filter
-          (fun cell -> query_result_cell_uuid cell <> Some cu)
+          (fun cell -> query_result_cell_entity_uuid db cell <> Some cu)
           cells
     | None -> cells
   in
@@ -1872,8 +1883,8 @@ let render_views db key _runtime =
   let views_eids =
     q_string db
       ~inputs:
-        [ Arg_scalar (Result_entity owner.id)
-        ; Arg_scalar (Result_attr feature_type) ]
+        [ Arg_scalar (Result_value (Int owner.id))
+        ; Arg_scalar (Result_value (Keyword feature_type)) ]
       "[:find [?view ...] \
         :in $ ?owner ?feature-type \
         :where \

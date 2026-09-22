@@ -26,15 +26,20 @@ let datoms_for (db : db) (a : attr) : datom list =
   else []
 
 let datoms_for_v (db : db) (a : attr) (v : value) : datom list =
-  let vid =
-    match v with
-    | Keyword k -> Datascript.entid_ref db (Ident k)
-    | Ref id | Int id -> Some id
-    | _ -> None
-  in
-  match vid, Option.is_some (Datascript.entid_ref db (Ident a)) with
-  | Some id, true -> List.of_seq (datoms db Avet ~a ~v:(Ref id) ())
-  | _ -> []
+  (* cljs (d/datoms db :avet a v) matches :v for any value type. Keyword
+     lookups go through d/entid like cljs ref values. *)
+  if Option.is_some (Datascript.entid_ref db (Ident a)) then
+    let v' =
+      match v with
+      | Keyword k -> (
+          match Datascript.entid_ref db (Ident k) with
+          | Some id -> Ref id
+          | None -> v)
+      | Int id -> Ref id
+      | _ -> v
+    in
+    List.of_seq (datoms db Avet ~a ~v:v' ())
+  else []
 
 let entity_ids_with (db : db) (a : attr) : IntSet.t =
   List.fold_left (fun s d -> IntSet.add d.e s) IntSet.empty (datoms_for db a)
@@ -139,7 +144,7 @@ let string_map_of_value_map m =
   IntMap.fold
     (fun k v acc ->
       match v with
-      | String s -> imadd acc k s
+      | String s | Keyword s -> imadd acc k s
       | _ -> acc)
     m IntMap.empty
 
