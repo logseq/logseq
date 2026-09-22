@@ -2220,6 +2220,13 @@ let initial_data_ops : tx_op list =
     let title =
       if title = "" then String.capitalize_ascii (name_of ident) else title
     in
+    (* cljs sqlite-util/build-new-class auto-adds extends :logseq.class/Root
+       to every non-Root class without one *)
+    let extends =
+      if extends = [] && ident <> "logseq.class/Root" then
+        [ "logseq.class/Root" ]
+      else extends
+    in
     Datascript.Entity
       { db_id = Some (Temp_id ("cls-" ^ ident))
       ; attrs =
@@ -2294,8 +2301,7 @@ let initial_data_ops : tx_op list =
           ; "file/last-modified-at", One_value (Instant 1577836800000L) ]
       }
   in
-  [ initial_data_ident "logseq.property" [] ]
-  @ [ class_ident "logseq.class/Root"
+  [ class_ident "logseq.class/Root"
     ; class_ident "logseq.class/Tag"
     ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Page"
     ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Property"
