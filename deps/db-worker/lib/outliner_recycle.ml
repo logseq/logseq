@@ -70,9 +70,9 @@ let resolve_entity (db : db) (v : value option) : entity option =
   | Some (Ref_to r) -> entity db r
   | _ -> None
 
-(* recycle/block-children — :block/_raw-parent lookup *)
+(* recycle/block-children — unfiltered :block/_parent reverse lookup *)
 let block_children (e : entity) : entity list =
-  Ldb.ref_ents e "block/_raw-parent"
+  Ldb.ref_ents e "block/_parent"
 
 let block_subtree db (block : entity) : entity list =
   let ids = block.id :: Ldb.get_block_full_children_ids db block.id in

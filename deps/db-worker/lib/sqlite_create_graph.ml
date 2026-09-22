@@ -421,13 +421,10 @@ let build_initial_class_entries
             Keyword ident)
           e.P.c_schema_properties
       in
-      (* The ported build_new_class reads "db/ident" via string_attr, so
-         we hand it a String (its only use is the = :logseq.class/Root
-         check) and restore the cljs Keyword on the result. *)
       let block =
         [ "block/title", String title
         ; "block/name", String (Ldb.page_name_sanity_lc title)
-        ; "db/ident", String e.P.c_ident
+        ; "db/ident", Keyword e.P.c_ident
         ; "block/uuid"
         , Uuid (Common_uuid.gen_uuid "db-ident-block-uuid" e.P.c_ident) ]
         |> (fun m ->
@@ -436,7 +433,6 @@ let build_initial_class_entries
             else m)
         |> (fun m -> BM.merge m e.P.c_properties)
         |> Db_property_build.build_new_class
-        |> (fun m -> BM.put m "db/ident" (Keyword e.P.c_ident))
         |> mark_block_as_built_in
       in
       block)
