@@ -234,6 +234,26 @@ let () =
 
 (* ---- misc db-core sync endpoints ---- *)
 
+(* :thread-api/db-sync-start [repo] — db_core.cljs
+   (def-thread-api :thread-api/db-sync-start [repo]
+     (p/let [_ (start-db! repo {:close-other-db? false})] nil)).
+   start-db! delegates to <create-or-open-db!; the cljs *master-client?
+   guard has no worker-side counterpart here (no master-client concept),
+   so this opens the db when not already open, same as create-or-open-db
+   with :close-other-db? false. *)
+let () =
+  Dispatcher.register "thread-api/db-sync-start" (fun args ->
+      (match arg args 0 with
+       | Wire.String repo ->
+           Endpoint_lifecycle.create_or_open_db
+             [ Wire.String repo
+             ; Wire.Map [ (kw "close-other-db?", Wire.Bool false) ] ]
+           >>= fun _ -> pure_nil
+       | _ ->
+           raise
+             (Dispatcher.Exn_info
+                ( "db-sync-start: missing repo arg", [] ))))
+
 let () =
   Dispatcher.register "thread-api/db-sync-rehydrate-large-titles"
     (fun args ->

@@ -225,6 +225,53 @@ let recur_replace_uuid_in_block_title ?(max_depth = 10)
       Some (loop title 0)
   | other -> other
 
+(* common-util/escape-chars specials (utils) — regex-escape a literal *)
+let regex_escape_specials = "\\[]{}().+*?|$^"
+
+let regex_escape (s : string) : string =
+  let buf = Buffer.create (String.length s * 2) in
+  String.iter
+    (fun c ->
+      if String.contains regex_escape_specials c then begin
+        Buffer.add_char buf '\\';
+        Buffer.add_char buf c
+      end else
+        Buffer.add_char buf c)
+    s;
+  Buffer.contents buf
+
+(* common-util/replace-ignore-case — literal match, replace all.
+   Regexp is always compiled case-insensitive, matching the cljs "gi"
+   flags. *)
+let replace_ignore_case s ~pattern ~replacement =
+  Regexp.replace_all (Regexp.compile (regex_escape pattern))
+    ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> replacement)
+    s
+
+(* content/replace-tag-refs-with-page-refs — "Replace tag refs in content
+   with page refs e.g. #[[UUID]] -> [[UUID]]". Upstream runs the identical
+   "#id-ref -> id-ref" replacement twice (the second was presumably meant
+   to replace bare #tag references but is passed id-ref again) — kept
+   1:1. *)
+let replace_tag_refs_with_page_refs (content : string) (tags : entity list)
+    : string =
+  let content =
+    List.fold_left
+      (fun c (tag : entity) ->
+        match uuid_of tag with
+        | Some u ->
+            let id_ref = page_ref u in
+            let c =
+              replace_ignore_case c ~pattern:("#" ^ id_ref)
+                ~replacement:id_ref
+            in
+            replace_ignore_case c ~pattern:("#" ^ id_ref)
+              ~replacement:id_ref
+        | None -> c)
+      content (sort_refs tags)
+  in
+  String.trim content
+
 (* common-util/clear-markdown-heading — strip leading "#"s + whitespace *)
 let clear_markdown_heading (s : string) : string =
   let n = String.length s in

@@ -52,6 +52,10 @@ val set_context : Wire.t -> unit
 val state_get : string -> Wire.t option
 val merge_state : Wire.t -> unit
 
+(* cljs state/set-state! — path is a keyword (or string/symbol key) or a
+   vector path assoc'd-in under the first key. *)
+val set_state_at_path : Wire.t -> Wire.t -> unit
+
 (* thread atoms — *state[:thread-atom/*] cells updated through
    :thread-api/update-thread-atom. *)
 val thread_atom_names : string list

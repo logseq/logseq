@@ -30,6 +30,18 @@ let () =
       (match args with t :: _ -> Worker_state.merge_context t | [] -> ());
       pure' Wire.nil)
 
+(* :thread-api/set-ui-state [path value] — persist_db/browser.cljs
+   def-thread-api is a main-thread endpoint (state/set-state!), but the
+   name is also remoteInvoke'd at the worker from
+   db-core/set-import-ui-state!; registering it here applies the same
+   set-state! semantics to the worker's app-state mirror. *)
+let () =
+  Dispatcher.register "thread-api/set-ui-state" (fun args ->
+      (match args with
+       | path :: value :: _ -> Worker_state.set_state_at_path path value
+       | _ -> ());
+      pure' Wire.nil)
+
 (* :thread-api/update-thread-atom [atom-key new-value] *)
 let () =
   Dispatcher.register "thread-api/update-thread-atom" (fun args ->
