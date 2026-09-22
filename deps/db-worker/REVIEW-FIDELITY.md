@@ -110,57 +110,52 @@ wrong results in common paths; **low** = edge cases / dead code.
 - Fix: delegate to OCaml worker when registered (`thread_api.cljc`,
   `db_core.cljs`).
 
-## Confirmed — listed for humans (not fixed)
-
-### A. `commit_tx_report` replays raw datoms; cljs delivers the pipeline report — **blocker**, needs engine API
+### 15. `commit_tx_report` replayed raw datoms; cljs delivers the pipeline report — `be08740242` + engine `6e618bd` (blocker)
 - cljs `transact-sync` (`deps/db/src/logseq/db.cljs:175-178`):
   `compare-and-set!` + `run-callbacks conn tx-report` delivers THE PIPELINE
   REPORT — listeners see the pipeline's `tempids`, including
   `:db/current-tx` resolving to `db_after.max_tx` (the value the pipeline's
   `with_report` wrote into `block/tx-id`).
-- OCaml `deps/db-worker/lib/db_tx.ml:149-151` `commit_tx_report`:
-  `transact_conn conn (map Raw_datom report.tx_data)` — replays the datoms as
-  a *new* transaction. Listeners see a different report identity:
-  `tx = conn.db.max_tx + 1` (one higher than the pipeline's inner tx) and
-  `tempids` lack `db/current-tx`. Any listener that resolves
-  `(:tempids tx-report)` gets wrong/missing values.
-- Why not fixed: `Datascript.Conn` exposes `transact`/`reset`/`notify_listeners`
-  but no `commit-report`/`apply-report` API that installs a precomputed
-  `tx_report`. Adding one is an engine change (`impl/conn.ml:115,143-163`).
-- Trigger: `test_pipeline_native.exe` `temp-inner-mutations canonical
-  revision` — expects `db/current-tx` tempid = `m+2` (pipeline tx-id), gets
-  `m+1` (replay tx).
-- Suggested fix: add `Conn.commit (conn : conn) (report : tx_report) : unit`
-  to datascript-ocaml that sets `conn.db := report.db_after` and runs
-  `notify_listeners conn report`, then use it in `commit_tx_report`.
+- Old OCaml `deps/db-worker/lib/db_tx.ml` `commit_tx_report`:
+  `transact_conn conn (map Raw_datom report.tx_data)` — replayed the datoms
+  as a *new* transaction, so listeners saw a different report identity
+  (`tx = conn.db.max_tx + 1`, `tempids` missing `db/current-tx`).
+- Fix: datascript-ocaml main `6e618bd` adds `Conn.apply_report` /
+  `Datascript.apply_report` which installs a precomputed `tx_report`, does
+  the storage-tail bookkeeping, and notifies listeners with that report;
+  `commit_tx_report` calls it directly (`be08740242`).
+- Was: `test_pipeline_native.exe` `temp-inner-mutations canonical
+  revision` (`db/current-tx` tempid off by one). Now green.
 
-### B. `initial_max_eid` pre-scan shifts eid allocation vs upstream — **high**, engine-owned
+### 16. `initial_max_eid` pre-scan shifted eid allocation vs upstream — engine `68587df` (high)
 - cljs datascript `db.cljc:1362-1419`: `next-eid db = inc max-eid`;
   `advance-max-eid` bumps `max-eid` only when a datom with a larger explicit
   eid is *applied*. No pre-scan of tx ops.
-- datascript-ocaml `impl/transact.ml:428`:
-  `let initial_max_eid = List.fold_left max_explicit_tx_op db.max_eid tx_ops`
-  — scans all ops for explicit `Entity_id`/`Ref` eids and starts allocation
-  above them.
-- Consequence (confirmed in `test_pipeline_native` `reschedule template child
-  used-template`): `insert_tag_templates` computes insert ops against
-  `template_db` where the journal is `e76`; ops embed `Entity_id 76`. The
-  final `with_report report.db_after extra_tx_data` pre-scans, sees the
-  explicit `76`, bumps `initial_max_eid` to 76, so the journal op allocates
-  `e77`. `block/parent Ref 76` now points to a ghost entity (never allocated,
-  zero datoms). The child's parent/page land on a nonexistent entity.
-- cljs has the same shape (ops embed resolved `(:db/id object)` = 76) but
-  cljs datascript allocates sequentially — the journal op still creates `e76`
-  because allocation happens in op order, not pre-scanned.
-- Suggested fix (engine): drop `initial_max_eid` pre-scan; allocate from
-  `db.max_eid` and advance on explicit encounters only (`advance-max-eid`
-  already exists — `context.max_eid_with_entity_id`).
-- Note: pre-scan also changes tempid→eid assignment order vs upstream —
-  upstream allows a tempid to collide with a later explicit eid (upsert
-  semantics resolve it); the pre-scan avoids the collision by
-  over-allocating. This is the divergence root.
+- Old datascript-ocaml `impl/transact.ml` scanned all tx ops for explicit
+  `Entity_id`/`Ref` eids (entity *and* value positions) and started
+  allocation above them, so ops embedding resolved eids (e.g.
+  `insert_tag_templates` ops carrying `Entity_id 76` computed against
+  `template_db`) shifted allocation and left dangling refs (`block/parent
+  Ref 76` on a ghost entity).
+- Fix (engine, `68587df`): pre-scan now counts entity positions only —
+  value-position refs are excluded, so forward refs to eids minted later
+  in the same tx no longer shift tempid allocation. The same commit maps
+  negative integer `:db/id`s to tempids, matching upstream.
+- Residual divergence from upstream: the entity-position pre-scan still
+  means a tempid can never collide with a later explicit eid, whereas
+  upstream allocates strictly sequentially (`next-eid = inc max-eid`) and
+  resolves such collisions via `retry-with-tempid` upsert. Observable in
+  tempid→eid assignment on mixed txs (verified against upstream
+  `datascript.js`). A fully sequential allocation + `retry-with-tempid`
+  implementation matching upstream exactly sits on datascript-ocaml branch
+  `devin/ocaml-db-worker` (`0aa9954`); whether to take it over the
+  restricted pre-scan is an engine decision.
+- Was: `test_pipeline_native.exe` `reschedule template child
+  used-template` (ghost parent `e76`). Now green.
 
-### C. Other listed items (lower confidence / dead code / engine notes)
+## Confirmed — listed for humans (not fixed)
+
+### A. Other listed items (lower confidence / dead code / engine notes)
 - `Db_listener.main_thread_sync` unwired — no main-thread sync hook.
 - `Db_tx.batch_transact` dead code path — batch temp conn unused after fix 4.
 - `entity_of_wire_ref` missing map/ref shapes — wire deserialization partial.
@@ -173,7 +168,7 @@ wrong results in common paths; **low** = edge cases / dead code.
 - `deferred_handlers` raw `tx_report` — engine object leaks across the wire
   boundary instead of serialized form.
 
-### D. Deferred / not fully reviewed
+### B. Deferred / not fully reviewed
 - Sync edges: `presence.cljs`, `transport.cljs`, `asset_db_listener.cljs`,
   `large_title.cljs` — budget exhausted after `sync_apply`/`sync_client`.
 - `worker_core` adapter drops `errors_humanized` on the error path.
@@ -184,19 +179,18 @@ wrong results in common paths; **low** = edge cases / dead code.
 - `property_value_tx_m` transient String handling — correct.
 - `journal_page`/`journal_page_or_title`/`page_ref_for`/`variable-rules`
   (`outliner_template.ml:41-136` vs `template.cljs:60-112`) — pure
-  query-or-title, no journal creation; confirmed NOT the source of issue B.
+  query-or-title, no journal creation; confirmed NOT the source of issue 16.
 - `insert-tag-templates` structure (`worker_pipeline.ml:136-327` vs
   `pipeline.cljs:93-160`) — `tag->templates`, `raw-template-blocks`,
   `tag-additions` group-by-e, `insert-blocks {:sibling? false :keep-uuid?
-  journal-template?}` — faithful; the only gap is the engine eid shift
-  (issue B).
+  journal-template?}` — faithful; the only gap was the engine eid shift
+  (issue 16).
 
 ## Test status
 - `dune build` — green.
-- `dune runtest` — one known engine-owned failure in `test_db_native`
-  (tolerated per task brief).
-- `test_pipeline_native.exe` — 2 documented failures remaining, both rooted
-  in the engine issues above:
-  - `temp-inner-mutations canonical revision` → issue A.
-  - `reschedule template child used-template` → issue B.
+- `dune runtest` — fully green (0 failures); the previously tolerated
+  `test_db_native` engine-owned failure is gone after the engine fixes.
+- `test_pipeline_native.exe` — green (previously `temp-inner-mutations
+  canonical revision` → issue 15 and `reschedule template child
+  used-template` → issue 16).
 - No test source was modified to work around either issue.
