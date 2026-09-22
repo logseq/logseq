@@ -758,4 +758,33 @@ let () =
   Dispatcher.register "thread-api/db-sync-invalidate-search-db"
     invalidate_search_db;
   Db_listener.register "search" search_listener;
-  Sync_deps.search_truncate_table := Some Search_index.truncate_table
+  Sync_deps.search_truncate_table := Some Search_index.truncate_table;
+  (* render-resource consumes search-handler/search-blocks results as
+     :db/id maps; the hook returns entities so call sites stay
+     representation-free *)
+  Render_deps.search_blocks_fn :=
+    Some
+      (fun ~repo ~db q limit ->
+         match Worker_state.datascript_conn repo with
+         | Some conn ->
+             let search_db = get_search_db repo in
+             let vector_index = Worker_state.vector_index repo in
+             let opts =
+               { Search_index.default_opts with
+                 Search_index.opt_limit = limit }
+             in
+             let rows =
+               match
+                 Search_index.search_blocks ~conn ~search_db ~vector_index
+                   ~q0:q ~opts
+               with
+               | Search_index.Rows rows -> rows
+               | Search_index.Rows_with_count (rows, _) -> rows
+             in
+             List.filter_map
+               (fun (br : Search_index.block_result) ->
+                  match List.assoc_opt "db/id" br with
+                  | Some (Datascript.Int id) -> Ldb.ent_of_id db id
+                  | _ -> None)
+               rows
+         | None -> [])
