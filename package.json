@@ -119,7 +119,6 @@
     "android:dev": "cross-env PLATFORM=android gulp cap"
   },
   "dependencies": {
-    "@logseq/graph-lifecycle": "file:deps/graph-lifecycle",
     "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@base-ui/react": "^1.5.0",
     "@capacitor-community/safe-area": "8.0.1",
@@ -150,6 +149,7 @@
     "@js-joda/core": "3.2.0",
     "@js-joda/locale_en-us": "3.1.1",
     "@js-joda/timezone": "2.5.0",
+    "@logseq/graph-lifecycle": "file:deps/graph-lifecycle",
     "@logseq/react-tweet-embed": "1.3.1-1",
     "@logseq/simple-wave-record": "^0.0.3",
     "@sentry/react": "^10.51.0",
@@ -196,6 +196,7 @@
     "send-intent": "^7.0.0",
     "string-width": "8.2.0",
     "tiny-pinyin": "1.3.2",
+    "transit-js": "0.8.874",
     "uniqolor": "1.1.1",
     "url": "^0.11.4",
     "util": "^0.12.5",

@@ -169,3 +169,35 @@ let built_in_class_property_to_properties : (string * string) list =
 let is_protected_property_pair (entity_ident : string) (property_ident : string)
     : bool =
   List.mem (entity_ident, property_ident) built_in_class_property_to_properties
+
+(* db-property namespace predicates — data lives in Db_schema. *)
+let namespace_of (kw : string) : string option =
+  match String.index_opt kw '/' with
+  | Some i when i > 0 -> Some (String.sub kw 0 i)
+  | _ -> None
+
+let logseq_property_namespaces = Db_schema.logseq_property_namespaces
+let public_db_attribute_properties = Db_schema.public_db_attribute_properties
+
+(* db-property/logseq-property? *)
+let logseq_property (kw : string) : bool =
+  match namespace_of kw with
+  | Some ns -> List.mem ns logseq_property_namespaces
+  | None -> false
+
+(* db-property/user-property-namespace? — takes a namespace string *)
+let user_property_namespace (s : string) : bool = Ns_util.str_contains s ".property"
+
+(* db-property/plugin-property? *)
+let plugin_property (kw : string) : bool =
+  match namespace_of kw with
+  | Some ns -> Ns_util.str_starts_with ns "plugin.property."
+  | None -> false
+
+(* db-property/internal-property? *)
+let internal_property (kw : string) : bool =
+  match namespace_of kw with
+  | Some ns ->
+      List.mem ns logseq_property_namespaces
+      || List.mem kw public_db_attribute_properties
+  | None -> List.mem kw public_db_attribute_properties
