@@ -15,9 +15,7 @@
 
    cljs deftest names are kept as OCaml test names.
 
-   Skipped cljs cases (unported dependency):
-   - initial_data_test.cljs get-initial-data*/restore-*: sqlite storage layer
-     is not ported
+   Skipped cljs cases (unported dependency): none remaining.
    - view_test.cljs: ported to test_db_view_native.ml (all 42 deftests)
 
    cljs (d/transact! conn tx-maps-or-datoms) -> Datascript.transact_conn /
@@ -816,6 +814,104 @@ let test_get_block_and_children_has_children_flag () =
           gb_children_false)
      = Some (Wire.Bool false))
 
+(* ---------- initial_data_test.cljs (sqlite storage) ---------- *)
+
+(* cljs use-fixtures :each — fresh tmp/graphs dir per test. *)
+let graphs_dir_seq = ref 0
+
+let fresh_graphs_dir () =
+  incr graphs_dir_seq;
+  let dir =
+    Filename.concat (Filename.get_temp_dir_name ())
+      (Printf.sprintf "logseq-initial-data-%d-%d" (Unix.getpid ())
+         !graphs_dir_seq)
+  in
+  Unix.mkdir dir 0o755;
+  let graphs_dir = Filename.concat dir "graphs" in
+  Unix.mkdir graphs_dir 0o755;
+  Unix.mkdir (Filename.concat graphs_dir "test-db") 0o755;
+  graphs_dir
+
+(* cljs (d/transact! conn* (sqlite-create-graph/build-db-initial-data "{}")) *)
+let seed_db_initial_data conn =
+  ignore
+    (Datascript.transact_conn conn
+       (Sqlite_create_graph.initial_tx_data ~db:(db_of conn)
+          ~config_content:"{}" ()))
+
+(* cljs (d/conn-from-datoms initial-data schema) *)
+let restore_conn_of (s : Common_initial_data.initial_data) : conn =
+  Datascript.conn_from_datoms ~schema:s.initial_schema s.initial_datoms
+
+(* (deftest get-initial-data ...) — "Fetches a defined block" *)
+let test_get_initial_data () =
+  let graphs_dir = fresh_graphs_dir () in
+  let conn' = Sqlite_cli.open_db ~graphs_dir "test-db" in
+  seed_db_initial_data conn';
+  ignore
+    (Datascript.transact_conn conn'
+       [ Entity
+           { db_id = None
+           ; attrs =
+               [ "file/path", One_value (String "logseq/config.edn")
+               ; "file/content", One_value (String "{:foo :bar}") ] } ]);
+  (* Simulate getting data from sqlite and restoring it for frontend *)
+  let conn = restore_conn_of (Common_initial_data.get_initial_data (db_of conn')) in
+  let db = db_of conn in
+  (* cljs (d/q '[:find (pull ?b [:file/path :file/content])
+                :where [?b :file/content] [?b :file/path "logseq/config.edn"]])
+     returns the file entity — assert path+content survive the restore. *)
+  check "get-initial-data restores file block"
+    (List.exists
+       (fun (d : datom) ->
+         match
+           Seq.uncons (Datascript.datoms db Eavt ~e:d.e ~a:"file/content" ())
+         with
+         | Some (c, _) -> c.v = String "{:foo :bar}"
+         | None -> false)
+       (List.of_seq
+          (Datascript.datoms db Aevt ~a:"file/path"
+             ~v:(String "logseq/config.edn") ())))
+
+(* (deftest get-initial-data-includes-property-description-datoms ...) *)
+let test_get_initial_data_includes_property_description_datoms () =
+  let graphs_dir = fresh_graphs_dir () in
+  let conn' = Sqlite_cli.open_db ~graphs_dir "test-db" in
+  seed_db_initial_data conn';
+  let conn = restore_conn_of (Common_initial_data.get_initial_data (db_of conn')) in
+  let db = db_of conn in
+  let description =
+    match Datascript.entity db (Ident "logseq.property/deadline") with
+    | Some deadline -> Ldb.ref_ent deadline "logseq.property/description"
+    | None -> None
+  in
+  let content = Option.bind description Ldb.property_value_content in
+  check "get-initial-data-includes-property-description-datoms"
+    (match content with
+     | Some s -> Db_test_util.includes s "finish something"
+     | None -> false)
+
+(* (deftest restore-initial-data ...) *)
+let test_restore_initial_data () =
+  let open Db_test_util in
+  let graphs_dir = fresh_graphs_dir () in
+  let conn' = Sqlite_cli.open_db ~graphs_dir "test-db" in
+  seed_db_initial_data conn';
+  let init_tx, _block_props_tx =
+    Sqlite_build.build_blocks_tx
+      (Edn_util.read_string
+         "{:pages-and-blocks [{:page {:block/title \"page1\"}
+                              :blocks [{:block/title \"b1\"}]}]}")
+  in
+  (* cljs (db-test/transact! conn* init-tx) *)
+  ignore
+    (Db_tx.transact conn'
+       (Sqlite_build.tx_ops_of_values (db_of conn') init_tx));
+  (* Simulate getting data from sqlite and restoring it for frontend *)
+  let conn = restore_conn_of (Common_initial_data.get_initial_data (db_of conn')) in
+  check "restore-initial-data restores recently updated page"
+    (find_page_by_title (db_of conn) "page1" <> None)
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "delete-blocks-removes-reactions" `Quick test_delete_blocks_removes_reactions;
     Alcotest.test_case "delete-blocks-expands-property-value-children" `Quick test_delete_blocks_expands_property_value_children;
@@ -837,4 +933,7 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "graph-dir" `Quick test_graph_dir;
     Alcotest.test_case "client-id-allowed?" `Quick test_client_id_allowed;
     Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema;
-    Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag ]
+    Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag;
+    Alcotest.test_case "get-initial-data" `Quick test_get_initial_data;
+    Alcotest.test_case "get-initial-data-includes-property-description-datoms" `Quick test_get_initial_data_includes_property_description_datoms;
+    Alcotest.test_case "restore-initial-data" `Quick test_restore_initial_data ]
