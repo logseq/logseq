@@ -83,11 +83,19 @@ let pull args =
          | None -> invalid_arg "pull requires a selector"
        in
        let id_t = match List.nth_opt args 2 with Some t -> t | None -> invalid_arg "pull requires an id" in
+       let pull_by eref =
+         match Datascript.pull_string (Datascript.db conn) selector_edn eref with
+         | Some pulled -> Db_worker_effect.pure (Ds_wire.transit_of_pulled pulled)
+         | None -> Db_worker_effect.pure Wire.nil
+       in
        (* cljs special-case: [:block/name "x"] resolves through get-page *)
-       let eref = Ds_wire.entity_ref_of_transit id_t in
-       (match Datascript.pull_string (Datascript.db conn) selector_edn eref with
-        | Some pulled -> Db_worker_effect.pure (Ds_wire.transit_of_pulled pulled)
-        | None -> Db_worker_effect.pure Wire.nil))
+       (match id_t with
+        | Wire.Array [ Wire.Keyword "block/name"; Wire.String name ]
+        | Wire.List [ Wire.Keyword "block/name"; Wire.String name ] ->
+            (match Ldb.get_page (Datascript.db conn) (String name) with
+             | Some page -> pull_by (Entity_id page.id)
+             | None -> Db_worker_effect.pure Wire.nil)
+        | _ -> pull_by (Ds_wire.entity_ref_of_transit id_t)))
 
 let () = Dispatcher.register "thread-api/pull" pull
 
