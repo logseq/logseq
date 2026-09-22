@@ -484,6 +484,11 @@ let () =
          Dispatcher.invoke "thread-api/db-sync-invalidate-search-db"
            [ Wire.String repo ]
          >>= fun _ -> Db_worker_effect.pure ());
+  Sync_deps.create_or_open_db :=
+    Some
+      (fun repo opts ->
+         Dispatcher.invoke "thread-api/create-or-open-db"
+           [ Wire.String repo; opts ]);
   Sync_deps.rehydrate_large_titles :=
     Some
       (fun repo graph_id -> rehydrate_large_titles_from_db repo graph_id);

@@ -342,23 +342,30 @@ let prepare_import repo reset graph_id graph_e2ee_opt ?total_datoms ()
     | None -> true
   in
   Db_worker_effect.catch
-    ((match !import_state with
+    (let close_db_f =
+       require_thread_fn Sync_deps.close_db "thread-api/db-sync-close-db"
+     in
+     let unlink_db_f =
+       require_thread_fn Sync_deps.unlink_db "thread-api/unsafe-unlink-db"
+     in
+     let invalidate_search_db_f =
+       require_thread_fn Sync_deps.invalidate_search_db
+         "thread-api/db-sync-invalidate-search-db"
+     in
+     let create_or_open_db_f =
+       require_thread_fn Sync_deps.create_or_open_db
+         "thread-api/create-or-open-db"
+     in
+     (match !import_state with
       | Some state ->
-          close_import_state state >>= fun () ->
-          require_thread_fn Sync_deps.close_db "thread-api/db-sync-close-db"
-            state.repo
+          close_import_state state >>= fun () -> close_db_f state.repo
       | None -> Db_worker_effect.pure ())
      >>= fun () ->
      import_state := None;
      (if reset then
-        require_thread_fn Sync_deps.close_db "thread-api/db-sync-close-db"
-          repo
+        close_db_f repo
         >>= fun () ->
-        require_thread_fn Sync_deps.unlink_db "thread-api/unsafe-unlink-db"
-          repo
-        >>= fun () ->
-        require_thread_fn Sync_deps.invalidate_search_db
-          "thread-api/db-sync-invalidate-search-db" repo
+        unlink_db_f repo >>= fun () -> invalidate_search_db_f repo
       else Db_worker_effect.pure ())
      >>= fun () ->
      let import_id = Uuid_gen.uuid () in
@@ -375,8 +382,7 @@ let prepare_import repo reset graph_id graph_e2ee_opt ?total_datoms ()
                ; Wire.Keyword "field", Wire.Keyword "aes-key" ])
       | _ -> Db_worker_effect.pure ())
      >>= fun () ->
-     require_thread_fn Sync_deps.create_or_open_db
-       "thread-api/create-or-open-db" repo
+     create_or_open_db_f repo
        (Wire.Map
           [ Wire.Keyword "close-other-db?", Wire.Bool true
           ; Wire.Keyword "sync-download-graph?", Wire.Bool true ])
