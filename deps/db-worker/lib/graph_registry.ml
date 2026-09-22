@@ -1,130 +1,135 @@
-(* logseq.common.graph-registry — graph registry normalization and
-   lookup helpers. Registry entries stay as [Wire.Map] keyword maps so
-   unknown keys are preserved through normalize-entry, matching cljs. *)
+(* Port of logseq.common.graph-registry — registry normalization and
+   lookup helpers. Entries are cljs maps carried as [Wire.Map] with
+   keyword-name keys; the registry is a vector (list) with newest first. *)
 
 let db_version_prefix = "logseq_db_"
 
-(* clojure.string/blank?: nil or whitespace-only *)
-let is_blank (s : string) : bool =
-  let rec loop i =
-    if i >= String.length s then true
-    else
-      match s.[i] with
-      | ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c' | '\xa0' -> loop (i + 1)
-      | _ -> false
-  in
-  loop 0
+let trim = String.trim
+let blank s = String.trim s = ""
+let present_string s = not (blank s)
 
-let trim (s : string) : string = String.trim s
+(* cljs str *)
+let cljs_str (v : Wire.t) : string =
+  match v with
+  | Wire.String s -> s
+  | Wire.Keyword s -> ":" ^ s
+  | Wire.Bool b -> if b then "true" else "false"
+  | Wire.Int n -> string_of_int n
+  | Wire.Float f -> string_of_float f
+  | Wire.Nil -> ""
+  | _ -> ""
 
-let lower (s : string) : string = String.lowercase_ascii s
+(* cljs (present-string? v) — literal string, not blank *)
+let present_string_opt (v : Wire.t option) : bool =
+  match v with
+  | Some (Wire.String s) -> present_string s
+  | _ -> false
 
-let get_string (k : string) (e : Wire.t) : string option =
-  match Cljs_map.get e k with
-  | Some (Wire.String s) -> Some s
+let string_field (e : Wire.t) (k : string) : string option =
+  match Wire.get k e with
+  | Some (Wire.String s) when present_string s -> Some s
   | _ -> None
 
-let present_string (k : string) (e : Wire.t) : bool =
-  match get_string k e with
-  | Some s -> not (is_blank s)
-  | None -> false
-
-let present_string_value (s : Wire.t option) : string option =
-  match s with
-  | Some (Wire.String v) when not (is_blank v) -> Some v
-  | _ -> None
-
-(* normalize-entry *)
+(* normalize-entry — :graph-id falls back to :local-graph-id (both must
+   be present strings), :repo and :graph-name are trimmed when strings,
+   :rtc-graph-id dropped. Missing identity throws ex-info. *)
 let normalize_entry (entry : Wire.t) : Wire.t =
-  let local_graph_id = get_string "local-graph-id" entry in
   let graph_id =
-    match present_string_value (Cljs_map.get entry "graph-id") with
-    | Some s -> Some s
-    | None ->
-        (match local_graph_id with
-         | Some s when not (is_blank s) -> Some s
-         | _ -> None)
+    match string_field entry "graph-id" with
+    | Some g -> Some g
+    | None -> string_field entry "local-graph-id"
   in
-  (match graph_id with
-   | None ->
-       raise
-         (Dispatcher.Exn_info
-            ( "Missing graph identity"
-            , [ (Wire.Keyword "entry", entry) ] ))
-   | Some gid ->
-       let e = Cljs_map.assoc entry "graph-id" (Wire.String gid) in
-       let e = Cljs_map.dissoc e "rtc-graph-id" in
-       let e =
-         match get_string "repo" e with
-         | Some r -> Cljs_map.assoc e "repo" (Wire.String (trim r))
-         | None -> e
-       in
-       (match get_string "graph-name" e with
-        | Some n -> Cljs_map.assoc e "graph-name" (Wire.String (trim n))
-        | None -> e))
+  match graph_id with
+  | None ->
+      raise
+        (Dispatcher.Exn_info
+           ("Missing graph identity", [ (Wire.Keyword "entry", entry) ]))
+  | Some g ->
+      let entry = Cljs_map.assoc entry "graph-id" (Wire.String g) in
+      let entry = Cljs_map.dissoc entry "rtc-graph-id" in
+      let entry =
+        match Wire.get "repo" entry with
+        | Some (Wire.String s) ->
+            Cljs_map.assoc entry "repo" (Wire.String (trim s))
+        | _ -> entry
+      in
+      (match Wire.get "graph-name" entry with
+       | Some (Wire.String s) ->
+           Cljs_map.assoc entry "graph-name" (Wire.String (trim s))
+       | _ -> entry)
 
-(* upsert-entry *)
+(* upsert-entry — drop every existing entry whose :graph-id, present
+   :repo, or present :local-graph-id equals the new entry's raw value;
+   cons on front. *)
 let upsert_entry (registry : Wire.t list) (entry : Wire.t) : Wire.t list =
   let entry' = normalize_entry entry in
-  let gid = get_string "graph-id" entry' in
-  let repo = get_string "repo" entry' in
-  let lgid = get_string "local-graph-id" entry' in
-  let same (e : Wire.t) : bool =
-    gid = get_string "graph-id" e
-    || (match repo with
-        | Some r when not (is_blank r) -> Some r = get_string "repo" e
-        | _ -> false)
-    || (match lgid with
-        | Some l when not (is_blank l) ->
-            Some l = get_string "local-graph-id" e
-        | _ -> false)
+  let eq_field k (e : Wire.t) =
+    match Wire.get k entry', Wire.get k e with
+    | Some a, Some b -> a = b
+    | _ -> false
+  in
+  let same (e : Wire.t) =
+    eq_field "graph-id" e
+    || (present_string_opt (Wire.get "repo" entry') && eq_field "repo" e)
+    || (present_string_opt (Wire.get "local-graph-id" entry')
+        && eq_field "local-graph-id" e)
   in
   entry' :: List.filter (fun e -> not (same e)) registry
 
-let normalize_comparable (s : string) : string = lower (trim s)
+(* normalize-comparable — (some-> s str trim lower-case) *)
+let normalize_comparable (v : Wire.t option) : string option =
+  match v with
+  | Some x ->
+      (match x with
+       | Wire.Nil -> None
+       | _ -> Some (String.lowercase_ascii (trim (cljs_str x))))
+  | None -> None
 
-let normalize_comparable_opt (s : string option) : string option =
-  Option.map normalize_comparable s
-
-(* canonical-repo: strip every leading "logseq_db_" then re-add one. *)
+(* canonical-repo — ensure the logseq_db_ prefix exactly once; cljs
+   strips the prefix repeatedly (leading ws tolerated each round) then
+   re-prepends it. *)
 let canonical_repo (s : string) : string option =
   if s = "" then None
   else
-    let trimmed = trim s in
-    let n = String.length db_version_prefix in
-    let rec strip name =
-      if String.length name >= n && String.sub name 0 n = db_version_prefix
+    let rec strip n =
+      if
+        String.length n >= String.length db_version_prefix
+        && String.sub n 0 (String.length db_version_prefix) = db_version_prefix
       then
         strip
           (trim
-             (String.sub name n (String.length name - n)))
-      else name
+             (String.sub n (String.length db_version_prefix)
+                (String.length n - String.length db_version_prefix)))
+      else n
     in
-    Some (db_version_prefix ^ strip trimmed)
+    Some (db_version_prefix ^ strip (trim (cljs_str (Wire.String s))))
 
 let identifier_match (entry : Wire.t) (graph_identifier : string) : bool =
-  let identifier = normalize_comparable graph_identifier in
-  let repo = normalize_comparable_opt (get_string "repo" entry) in
-  let graph_name = normalize_comparable_opt (get_string "graph-name" entry) in
-  let graph_id = normalize_comparable_opt (get_string "graph-id" entry) in
-  let canonical =
-    match canonical_repo graph_identifier with
-    | Some c -> Some (normalize_comparable c)
-    | None -> None
+  let identifier = normalize_comparable (Some (Wire.String graph_identifier)) in
+  let repo = normalize_comparable (Wire.get "repo" entry) in
+  let graph_name = normalize_comparable (Wire.get "graph-name" entry) in
+  let graph_id = normalize_comparable (Wire.get "graph-id" entry) in
+  let canonical_repo_name =
+    normalize_comparable
+      (Option.map (fun s -> Wire.String s) (canonical_repo graph_identifier))
   in
-  Some identifier = repo
-  || Some identifier = graph_name
-  || Some identifier = graph_id
-  || canonical = repo
+  identifier = repo
+  || identifier = graph_name
+  || identifier = graph_id
+  || canonical_repo_name = repo
 
-(* resolve-target *)
+(* resolve-target — exact :graph-id match first, else fuzzy
+   :graph-identifier match (repo / graph-name / graph-id /
+   canonical-repo). *)
 let resolve_target (registry : Wire.t list) ~(graph_id : string option)
     ~(graph_identifier : string option) : Wire.t option =
   match graph_id with
-  | Some gid when not (is_blank gid) ->
-      List.find_opt (fun e -> get_string "graph-id" e = Some gid) registry
+  | Some gid when present_string gid ->
+      List.find_opt
+        (fun e -> Wire.get "graph-id" e = Some (Wire.String gid))
+        registry
   | _ ->
       (match graph_identifier with
-       | Some ident when not (is_blank ident) ->
-           List.find_opt (fun e -> identifier_match e ident) registry
+       | Some gi when present_string gi ->
+           List.find_opt (fun e -> identifier_match e gi) registry
        | _ -> None)

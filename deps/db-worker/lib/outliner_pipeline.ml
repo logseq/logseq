@@ -264,43 +264,39 @@ let filter_deleted_blocks (datoms : datom list) : (entity_id * string) list =
       else None)
     datoms
 
-(* outliner-pipeline/rebuild-block-refs-tx — for each block that still
-   exists in db-after, rebuild its :block/refs and emit the retract +
-   map tx forms. *)
-let rebuild_block_refs_tx (db : db) (blocks : entity list) : Wire.t list =
+(* outliner-pipeline/rebuild-block-refs-tx — per-block retract+set of
+   :block/refs for blocks still present in db-after. *)
+let rebuild_block_refs_tx (tx_report : tx_report) (blocks : entity list)
+    : tx_op list =
   List.concat_map
     (fun (block : entity) ->
-      match entity db (Entity_id block.id) with
-      | Some _ ->
-          (match db_rebuild_block_refs db block () with
-           | [] -> []
-           | refs ->
-               [ Wire.List
-                   [ Wire.Keyword "db/retract"; Wire.Int block.id
-                   ; Wire.Keyword "block/refs" ]
-               ; Wire.Map
-                   [ (Wire.Keyword "db/id", Wire.Int block.id)
-                   ; ( Wire.Keyword "block/refs"
-                     , Wire.Array
-                         (List.map (fun id -> Wire.Int id) refs) )
-                   ]
-               ])
-      | None -> [])
+       match entity tx_report.db_after (Entity_id block.id) with
+       | None -> []
+       | Some _ ->
+           let refs = db_rebuild_block_refs tx_report.db_after block () in
+           if refs = [] then []
+           else
+             [ RetractAttr (Entity_id block.id, "block/refs")
+             ; Entity
+                 { db_id = Some (Entity_id block.id)
+                 ; attrs =
+                     [ ( "block/refs"
+                       , Many_values
+                           (List.map (fun id -> Ref id) refs) ) ]
+                 } ])
     blocks
 
-(* outliner-pipeline/transact-new-db-graph-refs — transacts :block/refs
-   for a new or imported DB graph *)
+(* outliner-pipeline/transact-new-db-graph-refs — rebuild :block/refs
+   for blocks in a fresh/imported graph tx-report. *)
 let transact_new_db_graph_refs (conn : conn) (tx_report : tx_report)
     : tx_report option =
   let blocks, _pages = Ds_report.get_blocks_and_pages tx_report in
-  match blocks with
-  | [] -> None
-  | _ ->
-      (match rebuild_block_refs_tx tx_report.db_after blocks with
-       | [] -> None
-       | refs_tx ->
-           let tx_meta =
-             List.remove_assoc "transact-new-graph-refs?" tx_report.tx_meta
-             @ [ "transact-new-graph-refs?", Bool true ]
-           in
-           Db_transact.transact conn refs_tx tx_meta)
+  let refs_tx =
+    if blocks = [] then [] else rebuild_block_refs_tx tx_report blocks
+  in
+  if refs_tx = [] then None
+  else
+    Some
+      (Db_tx.transact conn refs_tx
+         ~tx_meta:
+           (("transact-new-graph-refs?", Bool true) :: tx_report.tx_meta))

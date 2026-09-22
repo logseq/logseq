@@ -1,8 +1,6 @@
-(* logseq.common.version — build metadata helpers.
-
-   cljs goog-define BUILD_TIME/REVISION are compile-time constants; the
-   OCaml analog reads process env at runtime (LOGSEQ_BUILD_TIME /
-   LOGSEQ_BUILD_REVISION, the latter already used by sync-util). *)
+(* logseq.common.version — build metadata. cljs goog-define
+   BUILD_TIME/REVISION become env lookups here (same convention as
+   sync_util's LOGSEQ_BUILD_REVISION). *)
 
 let build_time () =
   match Runtime_env.env "LOGSEQ_BUILD_TIME" with
@@ -15,5 +13,4 @@ let revision () =
   | None -> "dev"
 
 let format_version () =
-  Printf.sprintf "Build time: %s\nRevision: %s" (build_time ())
-    (revision ())
+  "Build time: " ^ build_time () ^ "\nRevision: " ^ revision ()
