@@ -6,14 +6,17 @@
    - db_ident_test.cljc → Db_ident.create-db-ident-from-name
    - class_test.cljs   → Db_class.get-class-objects / get-class-object-ids /
                          private-create-page-tag?
-   - property_test.cljs → Export_file.sort-properties (the only ported fn;
-                         normalize-sorted-entities-block-order and the
-                         built-in-properties map are not ported — skipped)
+   - property_test.cljs → Export_file.sort-properties,
+                         Db_property.normalize-sorted-entities-block-order,
+                         Builtin_data.built-in-properties — all 5 deftests
    - property/type_test.cljs → Outliner_property.validate_pred "asset"
-                         (the cljs built-in-validation-schemas entry)
-   - content_test.cljs → Db_content.recur-replace-uuid-in-block-title
-                         (title-ref->id-ref and replace-tags-with-id-refs
-                         are not ported — skipped)
+                         (the cljs built-in-validation-schemas entry) +
+                         Db_malli_schema.user-built-in-property-types —
+                         both deftests
+   - content_test.cljs → Db_content.recur-replace-uuid-in-block-title,
+                         title-ref->id-ref, replace-tags-with-id-refs —
+                         all 3 deftests
+   - reaction_test.cljs → Db_validate.validate-local-db — the deftest
 
    Divergence note: cljs resolve-input throws "Nothing found for entity"
    when :current-block-uuid is nil/invalid; the OCaml port returns the
@@ -398,6 +401,249 @@ let test_recur_replace_uuid_in_block_title () =
        check "recur-replace max-depth stops"
          (not (contains_sub ~sub:"Too Deep" result))
    | None -> check "recur-replace max-depth" false)
+
+(* (deftest replace-tags-with-page-refs ...) — cljs passes extracted ref
+   maps; OCaml takes the (attr * value) pair lists directly. *)
+let test_replace_tags_with_page_refs () =
+  let tags =
+    [ [ "block/title", String "foo"; "block/uuid", Uuid "foo" ];
+      [ "block/title", String "foo-bar"; "block/uuid", Uuid "foo-bar" ] ]
+  in
+  check "replace-tags-with-page-refs"
+    (Db_content.replace_tags_with_id_refs
+       "string #foo string2 #foo-bar" tags
+     = "string [[foo]] string2 [[foo-bar]]")
+
+(* (deftest title-ref->id-ref ...) — refs are raw Map values as they
+   appear in extracted :block/refs. *)
+let title_ref_map (pairs : (string * value) list) : value =
+  Map (List.map (fun (k, v) -> (Keyword k, v)) pairs)
+
+let test_title_ref_to_id_ref () =
+  let page_uuid = gen_uuid () in
+  check "title-ref->id-ref replaces name with uuid"
+    (Db_content.title_ref_to_id_ref "some page ref [[page1]]"
+       [ title_ref_map
+           [ "block/title", String "page1"; "block/uuid", Uuid page_uuid ] ]
+     = "some page ref " ^ Page_ref.to_page_ref page_uuid);
+  let journal_uuid = "00000001-2026-0615-0000-000000000000" in
+  check "title-ref->id-ref uses original-page-name for journal"
+    (Db_content.title_ref_to_id_ref "some page ref [[2026-06-15]]"
+       [ title_ref_map
+           [ "block/title", String "Jun 15th, 2026";
+             "block.temp/original-page-name", String "2026-06-15";
+             "block/uuid", Uuid journal_uuid ] ]
+     = "some page ref " ^ Page_ref.to_page_ref journal_uuid);
+  check "title-ref->id-ref ignores refs without uuid"
+    (Db_content.title_ref_to_id_ref "some page ref [[2026-06-15]]"
+       [ title_ref_map [ "block/title", String "2026-06-15" ] ]
+     = "some page ref [[2026-06-15]]");
+  check "title-ref->id-ref replace-tag true bare tag"
+    (Db_content.title_ref_to_id_ref ~replace_tag:true "some #test tag"
+       [ title_ref_map
+           [ "block/title", String "test";
+             "block/uuid",
+             Uuid "5c6cd067-c602-4955-96b8-74b62e08113c" ] ]
+     = "some #[[5c6cd067-c602-4955-96b8-74b62e08113c]] tag");
+  check "title-ref->id-ref replace-tag true page-ref tag"
+    (Db_content.title_ref_to_id_ref ~replace_tag:true
+       "some #[[another test]] tag"
+       [ title_ref_map
+           [ "block/title", String "another test";
+             "block/uuid",
+             Uuid "5c6cd067-c602-4955-96b8-74b62e08113c" ] ]
+     = "some #[[5c6cd067-c602-4955-96b8-74b62e08113c]] tag");
+  let any_uuid = gen_uuid () in
+  check "title-ref->id-ref replace-tag false bare tag"
+    (Db_content.title_ref_to_id_ref ~replace_tag:false "some #test tag"
+       [ title_ref_map
+           [ "block/title", String "test"; "block/uuid", Uuid any_uuid ] ]
+     = "some #test tag");
+  check "title-ref->id-ref replace-tag false page-ref tag"
+    (Db_content.title_ref_to_id_ref ~replace_tag:false
+       "some #[[another test]] tag"
+       [ title_ref_map
+           [ "block/title", String "another test";
+             "block/uuid", Uuid any_uuid ] ]
+     = "some #[[another test]] tag")
+
+(* ---------- reaction_test.cljs ---------- *)
+
+(* (deftest reaction-entity-valid ...) *)
+let test_reaction_entity_valid () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "Page" };
+            blocks = [ { default_block with b_title = Some "Block" } ] } ]
+      ()
+  in
+  let block = Option.get (find_block_by_content (db_of conn) "Block") in
+  ignore
+    (Datascript.transact_conn conn
+       [ Entity
+           { db_id = None
+           ; attrs =
+               [ "block/uuid", One_value (Uuid (gen_uuid ()))
+               ; "block/created-at",
+                 One_value (Int (int_of_float (Clock.now_ms ())))
+               ; "logseq.property.reaction/emoji-id",
+                 One_value (String "+1")
+               ; "logseq.property.reaction/target",
+                 One_value (Ref block.id) ] } ]);
+  (* cljs (empty? (:errors (db-validate/validate-local-db! @conn))) *)
+  check "reaction-entity-valid"
+    (Db_validate.validate_local_db (db_of conn) = [])
+
+(* ---------- property_test.cljs (built-in-properties) ---------- *)
+
+(* cljs (get db-property/built-in-properties ident) *)
+let find_bip (ident : string) : Builtin_data.builtin_property option =
+  List.find_opt
+    (fun (p : Builtin_data.builtin_property) -> p.ident = ident)
+    Builtin_data.built_in_properties
+
+(* cljs (get-in props [ident :schema k]) *)
+let bip_schema (p : Builtin_data.builtin_property) (k : attr) : value option =
+  List.assoc_opt k p.schema
+
+let test_reaction_built_in_properties () =
+  let emoji = Option.get (find_bip "logseq.property.reaction/emoji-id") in
+  let target = Option.get (find_bip "logseq.property.reaction/target") in
+  check "reaction schema types emoji-id"
+    (bip_schema emoji "type" = Some (Keyword "string"));
+  check "reaction schema types target"
+    (bip_schema target "type" = Some (Keyword "node"));
+  check "reaction emoji-id not public"
+    (bip_schema emoji "public?" = Some (Bool false));
+  check "reaction target not public"
+    (bip_schema target "public?" = Some (Bool false));
+  check "reaction emoji-id hidden"
+    (bip_schema emoji "hide?" = Some (Bool true));
+  check "reaction target hidden"
+    (bip_schema target "hide?" = Some (Bool true));
+  check "reaction emoji-id logseq-property?"
+    (Db_property.logseq_property "logseq.property.reaction/emoji-id");
+  check "reaction target logseq-property?"
+    (Db_property.logseq_property "logseq.property.reaction/target")
+
+let test_comments_built_in_properties () =
+  let p = Option.get (find_bip "logseq.property.comments/blocks") in
+  check "comments title" (p.title = Some "Commented blocks");
+  check "comments type" (bip_schema p "type" = Some (Keyword "node"));
+  check "comments cardinality"
+    (bip_schema p "cardinality" = Some (Keyword "many"));
+  check "comments not public"
+    (bip_schema p "public?" = Some (Bool false));
+  check "comments hidden" (bip_schema p "hide?" = Some (Bool true));
+  check "comments logseq-property?"
+    (Db_property.logseq_property "logseq.property.comments/blocks")
+
+let test_assignee_built_in_property () =
+  let p = Option.get (find_bip "logseq.property/assignee") in
+  check "assignee title" (p.title = Some "Assignee");
+  check "assignee type" (bip_schema p "type" = Some (Keyword "node"));
+  check "assignee cardinality"
+    (bip_schema p "cardinality" = Some (Keyword "many"));
+  check "assignee public" (bip_schema p "public?" = Some (Bool true));
+  check "assignee queryable" (p.queryable = Some true);
+  (* cljs db-property/public-built-in-properties — set of idents whose
+     [:schema :public?] is true *)
+  let public_built_in_properties =
+    List.filter_map
+      (fun (p : Builtin_data.builtin_property) ->
+        match List.assoc_opt "public?" p.schema with
+        | Some (Bool true) -> Some p.ident
+        | _ -> None)
+      Builtin_data.built_in_properties
+  in
+  check "assignee in public-built-in-properties"
+    (List.mem "logseq.property/assignee" public_built_in_properties);
+  check "assignee logseq-property?"
+    (Db_property.logseq_property "logseq.property/assignee")
+
+(* (deftest normalize-block-order-tx-data-test ...) — cljs entities are
+   bare {:db/id, :block/order} maps; OCaml entities need at least one
+   datom, so each carries a block/uuid (never asserted — only :db/id and
+   :block/order drive normalize + sort). *)
+let test_normalize_block_order_tx_data () =
+  let conn = create_conn () in
+  let mk ?order uuid =
+    Entity
+      { db_id = None
+      ; attrs =
+          ("block/uuid", One_value (Uuid uuid))
+          :: (match order with
+              | Some o -> [ "block/order", One_value (String o) ]
+              | None -> []) }
+  in
+  ignore
+    (Datascript.transact_conn conn
+       [ mk ~order:"a0" "p1"; mk ~order:"bbb" "p2"; mk ~order:"bbb" "p3";
+         mk "p4"; mk "p5" ]);
+  let ent uuid =
+    Option.get
+      (Ldb.ent_of_ref (db_of conn) (Lookup_ref ("block/uuid", Uuid uuid)))
+  in
+  let sorted = [ ent "p1"; ent "p2"; ent "p3"; ent "p4"; ent "p5" ] in
+  let tx_data = Db_property.normalize_sorted_entities_block_order sorted in
+  (* cljs merges tx-data into the entities then re-sorts *)
+  let apply =
+    List.filter_map
+      (fun (v : value) ->
+        match v with
+        | Map pairs ->
+            (match List.assoc_opt (Keyword "db/id") pairs,
+                   List.assoc_opt (Keyword "block/order") pairs with
+             | Some (Int id), Some (String o) ->
+                 Some
+                   (Entity
+                      { db_id = Some (Entity_id id)
+                      ; attrs = [ "block/order", One_value (String o) ] })
+             | _ -> None)
+        | _ -> None)
+      tx_data
+  in
+  ignore (Datascript.transact_conn conn apply);
+  let updated = [ ent "p1"; ent "p2"; ent "p3"; ent "p4"; ent "p5" ] in
+  let final = Export_file.sort_properties updated in
+  let orders = List.map (fun e -> Ldb.value e "block/order") final in
+  check "normalize count" (List.length final = 5);
+  check "normalize all orders strings"
+    (List.for_all (function Some (String _) -> true | _ -> false) orders);
+  check "normalize orders unique"
+    (List.sort_uniq compare orders = orders && List.length orders = 5);
+  check "normalize sorted correctly"
+    (let rec inc = function
+       | Some (String a) :: (Some (String b) :: _ as tl) -> a < b && inc tl
+       | _ -> true
+     in
+     inc orders);
+  (* "No changes needed for already valid orders" *)
+  let conn2 = create_conn () in
+  let mk2 order uuid =
+    Entity
+      { db_id = None
+      ; attrs =
+          [ "block/uuid", One_value (Uuid uuid)
+          ; "block/order", One_value (String order) ] }
+  in
+  ignore
+    (Datascript.transact_conn conn2 [ mk2 "b00" "q1"; mk2 "b01" "q2" ]);
+  let ent2 uuid =
+    Option.get
+      (Ldb.ent_of_ref (db_of conn2) (Lookup_ref ("block/uuid", Uuid uuid)))
+  in
+  check "normalize valid-orders empty tx"
+    (Db_property.normalize_sorted_entities_block_order [ ent2 "q1"; ent2 "q2" ]
+     = [])
+
+(* ---------- property/type_test.cljs ---------- *)
+
+(* (deftest asset-property-type-registered ...) *)
+let test_asset_property_type_registered () =
+  check "asset in user-built-in-property-types"
+    (List.mem "asset" Db_malli_schema.user_built_in_property_types)
 
 (* ---------- rules_test.cljs ---------- *)
 
@@ -857,6 +1103,14 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "sort-properties" `Quick test_sort_properties;
     Alcotest.test_case "asset-entity-validator" `Quick test_asset_entity_validator;
     Alcotest.test_case "recur-replace-uuid-in-block-title-test" `Quick test_recur_replace_uuid_in_block_title;
+    Alcotest.test_case "replace-tags-with-page-refs" `Quick test_replace_tags_with_page_refs;
+    Alcotest.test_case "title-ref->id-ref" `Quick test_title_ref_to_id_ref;
+    Alcotest.test_case "reaction-entity-valid" `Quick test_reaction_entity_valid;
+    Alcotest.test_case "reaction-built-in-properties" `Quick test_reaction_built_in_properties;
+    Alcotest.test_case "comments-built-in-properties" `Quick test_comments_built_in_properties;
+    Alcotest.test_case "assignee-built-in-property" `Quick test_assignee_built_in_property;
+    Alcotest.test_case "normalize-block-order-tx-data-test" `Quick test_normalize_block_order_tx_data;
+    Alcotest.test_case "asset-property-type-registered" `Quick test_asset_property_type_registered;
     Alcotest.test_case "get-full-deps" `Quick test_get_full_deps;
     Alcotest.test_case "has-property-rule" `Quick test_has_property_rule;
     Alcotest.test_case "ref-property-rule" `Quick test_ref_property_rule;

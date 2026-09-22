@@ -820,6 +820,28 @@ let initial_data_edn =
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
      :logseq.property/public? true
      }
+    {:db/ident :block/page
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000338\"
+     :block/name \"node page\" :block/title \"Node page\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/hide? true
+     :logseq.property/type :entity
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/title
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000339\"
+     :block/name \"node title\" :block/title \"Node title\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/hide? true
+     :logseq.property/type :string
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
     {:db/ident :logseq.property/order-list-type
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000329\"
      :block/name \"order list type\" :block/title \"Order list type\"
