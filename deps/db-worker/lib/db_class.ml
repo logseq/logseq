@@ -388,3 +388,19 @@ let get_class_object_ids db (class_id : entity_id) : entity_id list =
 (* db-class/get-class-objects *)
 let get_class_objects db (class_id : entity_id) : entity list =
   List.filter_map (Ldb.ent_of_id db) (class_object_eids db class_id)
+
+(* db-class/build-new-class — creates a fresh :db/ident via
+   create-user-class-ident-from-name then sqlite-util/build-new-class. *)
+let build_new_class db ?(ident_namespace : string option) (page_m : Wire.t)
+    : Wire.t =
+  let title =
+    match Cljs_map.get page_m "block/title" with
+    | Some (Wire.String t) -> t
+    | _ -> invalid_arg "build_new_class: :block/title must be a string"
+  in
+  let db_ident =
+    Db_ident.create_user_class_ident_from_name ~db
+      ?ident_namespace title
+  in
+  Sqlite_util.build_new_class
+    (Cljs_map.assoc page_m "db/ident" (Wire.Keyword db_ident))
