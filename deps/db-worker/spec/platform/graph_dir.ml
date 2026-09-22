@@ -162,6 +162,27 @@ let decode_graph_dir_name (dir_name : string) : string option =
         let trimmed = String.trim decoded in
         if decoded = trimmed && trimmed <> "" then Some trimmed else None
 
+(* legacy-dir-pattern — "++" | "+3A+" | "%" *)
+let legacy_dir_pattern_re =
+  Regexp.compile "(\\+\\+|\\+3A\\+|%)"
+
+(* decode-legacy-graph-dir-name — only names carrying legacy encodings
+   ("++", "+3A+" or URI escapes) decode; "+3A+" -> ":", "++" -> "/",
+   then decodeURIComponent + trim. *)
+let decode_legacy_graph_dir_name (dir_name : string) : string option =
+  if Regexp.test legacy_dir_pattern_re dir_name then
+    let compat_name =
+      dir_name
+      |> fun s -> str_replace_all s "+3A+" ":"
+      |> fun s -> str_replace_all s "++" "/"
+    in
+    match uri_decode compat_name with
+    | Some decoded ->
+        let trimmed = String.trim decoded in
+        if trimmed = "" then None else Some trimmed
+    | None -> None
+  else None
+
 (* decode-canonical-graph-dir-key — decoded name must not re-enter the
    db-version-prefix namespace. *)
 let decode_canonical_graph_dir_key (encoded : string) : string option =

@@ -60,7 +60,17 @@ let path_join_impl ~(encode : bool) (segments : string list) : string =
       segments
   in
   let split_fn s =
-    if s = "/" then [ "" ] else String.split_on_char '/' s
+    if s = "/" then [ "" ]
+    else
+      (* clojure.string/split drops trailing empty strings *)
+      let parts = String.split_on_char '/' s in
+      let rec drop_trailing_empties = function
+        | [] -> []
+        | "" :: rest ->
+            (match drop_trailing_empties rest with [] -> [] | l -> l)
+        | l -> l
+      in
+      drop_trailing_empties (List.rev parts) |> List.rev
   in
   let join_fn segs =
     match segs with
@@ -68,7 +78,8 @@ let path_join_impl ~(encode : bool) (segments : string list) : string =
     | [ "" ] -> "/"
     | _ -> String.concat "/" segs
   in
-  let segments = List.filter (fun s -> s <> "") segments in
+  (* cljs (remove string/blank? segments) *)
+  let segments = List.filter (fun s -> String.trim s <> "") segments in
   let parts =
     List.concat_map split_fn segments
     |> (if encode then List.map Common_util.encode_uri_component else Fun.id)
@@ -123,11 +134,19 @@ let url_parse (s : string) : url_parts option =
       Some { protocol = scheme; host = ""; pathname = rest }
     else
       let rest' = String.sub rest 2 (String.length rest - 2) in
-      (match Common_util.str_index_of rest' "/" with
-       | None -> Some { protocol = scheme; host = rest'; pathname = "" }
-       | Some i ->
-         Some { protocol = scheme; host = String.sub rest' 0 i;
-                pathname = String.sub rest' i (String.length rest' - i) })
+      let host =
+        match Common_util.str_index_of rest' "/" with
+        | None -> rest'
+        | Some i -> String.sub rest' 0 i
+      in
+      let pathname =
+        match Common_util.str_index_of rest' "/" with
+        (* js/URL normalizes empty path to "/" *)
+        | None -> "/"
+        | Some i -> String.sub rest' i (String.length rest' - i)
+      in
+      (* js/URL lowercases the host *)
+      Some { protocol = scheme; host = String.lowercase_ascii host; pathname }
 
 let custom_scheme_re = Regexp.compile "^[a-zA-Z0-9_+\\-.]+://"
 
@@ -177,6 +196,13 @@ let path_join (base : string) (segments : string list) : string =
     if base <> "" && starts_with base "//" (* Win path fix *)
     then "/" ^ rejoined_path
     else rejoined_path
+
+(* path/prepend-protocol — protocol is one of file: http: https:
+   assets:. UNC paths ("//…") get the protocol prepended verbatim. *)
+let prepend_protocol (protocol : string) (path : string) : string =
+  if starts_with path protocol then path
+  else if starts_with path "//" then protocol ^ path
+  else path_join (protocol ^ "//") [ path ]
 
 let path_normalize_internal (path : string) : string = path_join path []
 
@@ -228,6 +254,25 @@ let file_url_or_path_to_path (s : string) : string =
   if is_file_url s then url_to_path s else s
 
 (* path/parent *)
+(* path/trim-dir-prefix *)
+let trim_dir_prefix (base_path : string) (sub_path : string) : string option =
+  let base_path = path_normalize base_path in
+  let sub_path = path_normalize sub_path in
+  let is_url = is_file_url base_path in
+  if Common_util.str_starts_with sub_path base_path then
+    let rest =
+      String.sub sub_path (String.length base_path)
+        (String.length sub_path - String.length base_path)
+    in
+    let rec drop_leading_slash s =
+      if String.length s > 0 && s.[0] = '/' then
+        drop_leading_slash (String.sub s 1 (String.length s - 1))
+      else s
+    in
+    let rest = drop_leading_slash rest in
+    Some (if is_url then safe_decode_uri_component rest else rest)
+  else None
+
 let parent (path : string) : string option =
   if String.contains path '/' then Some (path_normalize (path ^ "/..")) else None
 

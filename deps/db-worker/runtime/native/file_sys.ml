@@ -111,3 +111,6 @@ let check_read_write path =
   wrap (fun () -> Unix.access path [ Unix.R_OK; Unix.W_OK ])
 
 let realpath path = wrap (fun () -> Unix.realpath path)
+
+let is_symbolic_link path =
+  wrap (fun () -> (Unix.lstat path).Unix.st_kind = Unix.S_LNK)
