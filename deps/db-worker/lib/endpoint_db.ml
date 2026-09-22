@@ -106,24 +106,7 @@ let pull_many args =
 
 let () = Dispatcher.register "thread-api/pull-many" pull_many
 
-(* :thread-api/transact [repo tx-data tx-meta context] *)
-let transact args =
-  let repo = require_repo args in
-  let conn = require_conn repo in
-  let tx_data_edn =
-    match List.nth_opt args 1 with
-    | Some t -> Ds_wire.edn_text_of_arg t
-    | None -> "[]"
-  in
-  let tx_meta =
-    match List.nth_opt args 2 with
-    | Some t -> Ds_wire.tx_meta_of_transit t
-    | None -> []
-  in
-  let report = Datascript.transact_conn_string ~tx_meta conn tx_data_edn in
-  Db_worker_effect.pure (Ds_wire.transit_of_tx_report report)
-
-let () = Dispatcher.register "thread-api/transact" transact
+(* :thread-api/transact lives in endpoint_transaction.ml *)
 
 (* :thread-api/entity [repo eid] -> tagged entity map *)
 let entity args =

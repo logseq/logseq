@@ -1169,3 +1169,214 @@ let create_bang conn (title : string)
          (Wire.Map (List.map (fun (k, v) -> (Wire.Keyword k, v)) r.tx_meta)))
     |> ignore;
   (r.title, r.page_uuid)
+(* ---------- page delete (outliner-page/delete!) ---------- *)
+
+type ref_rewrite_target =
+  { ref_id : entity_id
+  ; ref_uuid : string option
+  ; title : string
+  ; refs : entity_id list }
+
+(* Collect entities that reference [page] via node refs and need title
+   rewrite (ref ids resolved to page names). *)
+let page_ref_rewrite_targets (page : entity) : ref_rewrite_target list =
+  let refs =
+    List.filter
+      (fun (r : entity) ->
+        if r.id = page.id then false
+        else
+          match Ldb.ref_ent r "block/page" with
+          | Some p -> p.id <> page.id
+          | None -> true)
+      (Ldb.ref_ents page "block/_refs")
+  in
+  List.filter_map
+    (fun (r : entity) ->
+      match Ldb.string_value r "block/raw-title" with
+      | None -> None
+      | Some raw_title ->
+          let content' = Db_content.content_id_ref_to_page raw_title [ page ] in
+          if raw_title <> content' then
+            let remaining_refs =
+              List.filter (fun id -> id <> page.id) (Ldb.ref_ids r "block/refs")
+            in
+            let block_uuid =
+              match Ldb.value r "block/uuid" with
+              | Some (Uuid u) -> Some u
+              | _ -> None
+            in
+            Some
+              { ref_id = r.id
+              ; ref_uuid = block_uuid
+              ; title = content'
+              ; refs = remaining_refs }
+          else None)
+    refs
+
+(* db-refs->page — retract page refs + rewrite titles *)
+let db_refs_to_page (page : entity) : tx_op list =
+  List.concat_map
+    (fun t ->
+      [ Retract (Entity_id t.ref_id, "block/refs", Some (Ref page.id))
+      ; Entity
+          { db_id = Some (Entity_id t.ref_id)
+          ; attrs = [ "block/title", One_value (String t.title) ] } ])
+    (page_ref_rewrite_targets page)
+
+(* db-refs->page-save-ops — save-block op entries for the rewired
+   refs, appended to :outliner-ops *)
+let db_refs_to_page_save_ops (page : entity) : value list =
+  List.filter_map
+    (fun t ->
+      match t.ref_uuid with
+      | None -> None
+      | Some u ->
+          Some
+            (Outliner_tx_meta.op_entry "save-block"
+               [ Map
+                   [ (Keyword "block/uuid", Uuid u)
+                   ; (Keyword "block/title", String t.title)
+                   ; ( Keyword "block/refs"
+                     , Vector (List.map (fun id -> Ref id) t.refs) ) ]
+               ; Map [] ]))
+    (page_ref_rewrite_targets page)
+
+(* build-page-retract-tx *)
+let build_page_retract_tx ?(include_page_retract = true) ?(today_page = false)
+    db (page : entity) : tx_op list =
+  let page_blocks_tx_data =
+    List.filter_map
+      (fun (b : entity) ->
+        match Ldb.value b "block/uuid" with
+        | Some (Uuid u)
+          when Option.is_some (entity db (Lookup_ref ("block/uuid", Uuid u))) ->
+            Some (RetractEntity (Lookup_ref ("block/uuid", Uuid u)))
+        | _ -> None)
+      (Ldb.ref_ents page "block/_page")
+  in
+  if today_page then page_blocks_tx_data
+  else
+    let property_pair_tx_data =
+      if Ldb.is_property page then
+        match Ldb.ident_of page with
+        | Some ident ->
+            List.map
+              (fun (d : datom) -> Retract (Entity_id d.e, d.a, Some d.v))
+              (List.of_seq (datoms db Avet ~a:ident ()))
+        | None -> []
+      else []
+    in
+    let restore_class_parent_tx =
+      if Ldb.is_class page then
+        List.map
+          (fun (p : entity) ->
+            Entity
+              { db_id = Some (Entity_id p.id)
+              ; attrs =
+                  [ ( "logseq.property.class/extends"
+                    , One_value (Ref_to (Ident "logseq.class/Root")) ) ] })
+          (List.filter Ldb.is_class
+             (Ldb.ref_ents page "logseq.property.class/_extends"))
+      else []
+    in
+    let page_tx =
+      if include_page_retract && Option.is_some (entity db (Entity_id page.id))
+      then [ RetractEntity (Entity_id page.id) ]
+      else []
+    in
+    page_blocks_tx_data @ property_pair_tx_data @ restore_class_parent_tx
+    @ db_refs_to_page page @ page_tx
+
+(* outliner-page/delete! — returns the cljs result shape: true |
+   {:truncated? true} | false *)
+let delete_conn (conn : conn) (page_uuid : string) (opts : Wire.t) : Wire.t =
+  let persist_op =
+    match Cljs_map.get opts "persist-op?" with
+    | Some (Wire.Bool b) -> b
+    | _ -> true
+  in
+  let rename = Cljs_map.get opts "rename?" = Some (Wire.Bool true) in
+  let deleted_by_uuid =
+    match Cljs_map.get opts "deleted-by-uuid" with
+    | Some (Wire.Uuid u) -> Some u
+    | _ -> None
+  in
+  let now_ms =
+    match Cljs_map.get opts "now-ms" with
+    | Some (Wire.Int ms) -> Some (Int64.of_int ms)
+    | Some (Wire.Float ms) -> Some (Int64.of_float ms)
+    | _ -> None
+  in
+  match entity (Datascript.db conn) (Lookup_ref ("block/uuid", Uuid page_uuid)) with
+  | None -> Wire.Bool false
+  | Some page ->
+      let db = Datascript.db conn in
+      let today_page =
+        match Ldb.value page "block/journal-day" with
+        | Some (Int day) ->
+            let now =
+              match now_ms with
+              | Some ms -> ms
+              | None -> Date_time_util.time_ms ()
+            in
+            Date_time_util.ms_to_journal_day now = day
+        | _ -> false
+      in
+      let deleted_title =
+        match Ldb.value page "block/title" with
+        | Some (String t) -> String t
+        | _ -> Nil
+      in
+      let tx_meta =
+        let m =
+          Outliner_tx_meta.ensure_outliner_ops
+            [ ("outliner-op", Keyword "delete-page")
+            ; ("deleted-page", deleted_title)
+            ; ("persist-op?", Bool persist_op) ]
+            (Some
+               (Outliner_tx_meta.op_entry "delete-page"
+                  [ Uuid page_uuid
+                  ; Map
+                      (List.filter_map (fun x -> x)
+                         [ (match deleted_by_uuid with
+                            | Some u -> Some (Keyword "deleted-by-uuid", Uuid u)
+                            | None -> None)
+                         ; (match now_ms with
+                            | Some ms ->
+                                Some (Keyword "now-ms", Int (Int64.to_int ms))
+                            | None -> None) ]) ]))
+        in
+        if rename then
+          Outliner_tx_meta.tx_meta_put m "source-outliner-op"
+            (Keyword "rename-page")
+        else m
+      in
+      if Ldb.built_in page || Ldb.hidden page then
+        (* cljs error-handler logs; result false *)
+        Wire.Bool false
+      else if today_page then begin
+        let tx_data = build_page_retract_tx ~today_page:true db page in
+        if tx_data <> [] then ignore (Db_tx.transact ~tx_meta conn tx_data);
+        Wire.Map [ (Wire.Keyword "truncated?", Wire.Bool true) ]
+      end
+      else if Ldb.is_class page || Ldb.is_property page then begin
+        let tx_data = build_page_retract_tx db page in
+        ignore (Db_tx.transact ~tx_meta conn tx_data);
+        Wire.Bool true
+      end
+      else begin
+        let ref_rewrite_save_ops = db_refs_to_page_save_ops page in
+        let tx_data =
+          db_refs_to_page page
+          @ Outliner_recycle.recycle_page_tx_data db page ?deleted_by_uuid
+              ?now_ms:(Option.map Int64.to_float now_ms) ()
+        in
+        let tx_meta' =
+          if ref_rewrite_save_ops <> [] then
+            Outliner_tx_meta.append_outliner_ops tx_meta ref_rewrite_save_ops
+          else tx_meta
+        in
+        if tx_data <> [] then
+          ignore (Db_tx.transact ~tx_meta:tx_meta' conn tx_data);
+        Wire.Bool true
+      end

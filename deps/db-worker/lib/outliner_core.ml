@@ -1778,6 +1778,7 @@ let rewrite_tx_op (id_to_new_uuid : (entity_id * string) list) (op : tx_op)
   | _ -> op
 
 exception Invalid_outliner_data
+exception Not_allowed_move_block_page
 
 (* insert-blocks — full port *)
 let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_map.t)
@@ -2202,7 +2203,7 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
     (not sibling) && not (Ldb.is_page target_block) && Ldb.is_page block
   in
   if target_without_parent || move_page_as_block_child then
-    failwith "not-allowed-move-block-page"
+    raise Not_allowed_move_block_page
   else
     let first_block_page = Ldb.ref_ent block "block/page" in
     let target_page = get_target_block_page target_block sibling in
@@ -2689,7 +2690,9 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
 (* op args as values for direct-op-entry *)
 let op_transact (outliner_op : string) (f : unit -> tx_result option)
     (args : value list) (conn : conn) : tx_result option =
-  match f () with
+  match
+    (try f () with Not_allowed_move_block_page -> None)
+  with
   | Some result when result.tx_data <> [] || result.tx_meta <> [] ->
       let entry = direct_op_entry outliner_op args in
       let tx_meta =
@@ -2703,7 +2706,11 @@ let op_transact (outliner_op : string) (f : unit -> tx_result option)
   | r -> r
 
 (* conn/block value conversions for direct-op-entry args *)
-let entity_arg (e : entity) : value = Ref e.id
+(* cljs ->block-id is (:block/uuid block) — entities serialize as their uuid *)
+let entity_arg (e : entity) : value =
+  match Ldb.value e "block/uuid" with
+  | Some (Uuid u) -> Uuid u
+  | _ -> Nil
 let bmap_arg (m : Block_map.t) : value =
   Map (List.map (fun (a, v) -> (Keyword a, v)) m)
 let bmaps_arg (ms : Block_map.t list) : value = Vector (List.map bmap_arg ms)
@@ -2765,10 +2772,13 @@ let move_blocks_up_down_conn (conn : conn) (blocks : entity list) (up : bool)
        conn)
 
 let indent_outdent_blocks_conn (conn : conn) (blocks : entity list) (indent : bool)
+    ?(parent_original : entity option) ?(logical_outdenting = false)
     (opts_entry : Block_map.t) : unit =
   ignore
     (op_transact "indent-outdent-blocks"
-       (fun () -> indent_outdent_blocks conn blocks indent ())
+       (fun () ->
+         indent_outdent_blocks conn blocks indent ?parent_original
+           ~logical_outdenting ())
        [ Ref 0; Vector (List.map entity_arg blocks); Bool indent
        ; opts_arg opts_entry ]
        conn)

@@ -63,3 +63,33 @@ let () =
           Db_worker_effect.map (fun _ -> ())
             (Markdown_mirror.handle_tx_report repo r
                { Markdown_mirror.default_opts with defer = true })))
+
+(* *outliner-op-deltas / *outliner-op-perf — keyed by :ui/perf-id.
+   The main-thread-sync pipeline records per-perf-id deltas here;
+   apply-outliner-ops takes them back out in the same roundtrip. *)
+let outliner_op_deltas : (string, Wire.t) Hashtbl.t = Hashtbl.create 8
+
+let note_outliner_op_delta perf_id delta =
+  Hashtbl.replace outliner_op_deltas perf_id delta
+
+let take_outliner_op_delta perf_id =
+  match perf_id with
+  | None -> None
+  | Some id -> (
+      match Hashtbl.find_opt outliner_op_deltas id with
+      | Some d -> Hashtbl.remove outliner_op_deltas id; Some d
+      | None -> None)
+
+let outliner_op_perf : (string, Wire.t list) Hashtbl.t = Hashtbl.create 8
+
+let note_outliner_op_perf perf_id data =
+  let prev = Option.value (Hashtbl.find_opt outliner_op_perf perf_id) ~default:[] in
+  Hashtbl.replace outliner_op_perf perf_id (prev @ [ data ])
+
+let take_outliner_op_perf perf_id =
+  match perf_id with
+  | None -> []
+  | Some id -> (
+      match Hashtbl.find_opt outliner_op_perf id with
+      | Some xs -> Hashtbl.remove outliner_op_perf id; xs
+      | None -> [])

@@ -109,3 +109,11 @@ let pending_tx : (string, int) Hashtbl.t = Hashtbl.create 7
 let pending_local_tx_count repo = Option.value (Hashtbl.find_opt pending_tx repo) ~default:0
 let set_pending_local_tx_count repo n = Hashtbl.replace pending_tx repo n
 let drop_pending_local_tx_count repo = Hashtbl.remove pending_tx repo
+
+(* :db/latest-transact-time per repo *)
+let db_latest_tx_time : (string, float) Hashtbl.t = Hashtbl.create 7
+
+let set_db_latest_tx_time repo =
+  Hashtbl.replace db_latest_tx_time repo (Date_time_util.time_ms () |> Int64.to_float)
+
+let db_latest_tx_time_get repo = Hashtbl.find_opt db_latest_tx_time repo
