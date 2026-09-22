@@ -2708,6 +2708,53 @@ let () =
             ops_call "recycle-delete-permanently";
           Js.Promise.resolve pass));
 
+  test_promise "CLI parity remove page rejects non-page id before delete"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",190,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\",\"~:block/title\",\"a block\"]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "[\"^ \",\"~:result\",true]")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = Some 190L;
+                page = None;
+                force = true;
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "remove page block target is error" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "remove page block target code" "page-not-found"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected remove error");
+          expect_bool "delete not called" false !apply_called;
+          Js.Promise.resolve pass));
+
   test_promise "CLI parity remove block rejects page entities before delete"
     (fun () ->
       let apply_called = ref false in
@@ -6719,6 +6766,22 @@ let () =
       (match remove_page.command with
       | Cli_request.Remove (Remove.Parsed_page opts) ->
           expect_bool "remove page -f is force" true opts.force
+      | _ -> fail_test "expected remove page");
+      let remove_page_force_eq_false =
+        expect_parse_ok "remove page --force=false"
+          [| "remove"; "page"; "--page"; "Home"; "--force=false" |]
+      in
+      (match remove_page_force_eq_false.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page --force=false is not force" false opts.force
+      | _ -> fail_test "expected remove page");
+      let remove_page_force_space_false =
+        expect_parse_ok "remove page --force false"
+          [| "remove"; "page"; "--page"; "Home"; "--force"; "false" |]
+      in
+      (match remove_page_force_space_false.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page --force false is not force" false opts.force
       | _ -> fail_test "expected remove page");
       expect_parse_error_code "graph validate rejects --fields"
         ":invalid-options"
