@@ -10,6 +10,16 @@ type reconnect_state =
   ; mutable timer : Timers.timer option
   }
 
+(* in-flight upload batch tracked for response timeout reporting *)
+type upload_request =
+  { tx_ids : string list
+  ; outliner_ops : string list
+  ; large_upload_progress : Wire.t list
+  ; t_before : int option
+  ; mutable sent_at : float
+  ; mutable timer : Timers.timer option
+  }
+
 type client =
   { repo : string
   ; mutable ws : Web_socket.t option
@@ -19,7 +29,7 @@ type client =
   ; asset_queue : unit Db_worker_effect.t ref
   ; pending_pull_since : int option ref
   ; inflight : string list ref
-  ; upload_request : Wire.t option ref
+  ; upload_request : upload_request option ref
   ; last_sync_error : Wire.t option ref
   ; reconnect : reconnect_state ref
   ; stale_kill_timer : Timers.timer option ref
@@ -93,6 +103,8 @@ let client_ops_conn repo : Sqlite.db =
       Hashtbl.replace client_ops_conns repo db;
       db
 
+let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
+
 let close_client_ops_conn repo =
   match Hashtbl.find_opt client_ops_conns repo with
   | Some db -> Sqlite.close db; Hashtbl.remove client_ops_conns repo
@@ -115,9 +127,9 @@ let id_token () : string option =
   | _ -> None
 
 (* worker-state/non-auth-db-sync-config — db-sync-config minus auth keys *)
-let non_auth_db_sync_config () : Wire.t =
+let non_auth_db_sync_config (config : Wire.t) : Wire.t =
   let drop = [ "auth-token"; "oauth-token-url"; "oauth-domain"; "oauth-client-id" ] in
-  match Worker_state.db_sync_config () with
+  match config with
   | Wire.Map kvs ->
       Wire.Map
         (List.filter
@@ -162,3 +174,7 @@ let uuid_re = Regexp.compile "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9
 let uuid_string s = Regexp.test uuid_re s
 
 let time_ms () = Clock.now_ms ()
+
+(* worker-util/dev-or-test? — goog.DEBUG || node-test in cljs; a settable
+   flag here, defaulting to off like production builds *)
+let dev_or_test : bool ref = ref false
