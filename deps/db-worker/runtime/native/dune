@@ -12,4 +12,11 @@
   threads.posix
   uunf
   re
-  re.pcre))
+  re.pcre
+  yojson
+  digestif
+  mirage-crypto
+  mirage-crypto-rng.unix
+  mirage-crypto-pk
+  kdf.pbkdf
+  x509))

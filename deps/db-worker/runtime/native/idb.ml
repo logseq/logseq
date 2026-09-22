@@ -21,3 +21,13 @@ let delete key =
     | false -> Db_worker_effect.pure ())
 
 let keys () = File_sys.readdir (dir ())
+
+(* Binary values are raw bytes in the same file kv. *)
+let get_binary key =
+  Db_worker_effect.bind (File_sys.exists (key_path key)) (function
+    | true -> Db_worker_effect.map Option.some (File_sys.read_binary (key_path key))
+    | false -> Db_worker_effect.pure None)
+
+let set_binary key value =
+  Db_worker_effect.bind (File_sys.mkdir_p (dir ())) (fun () ->
+      File_sys.write_binary (key_path key) value)
