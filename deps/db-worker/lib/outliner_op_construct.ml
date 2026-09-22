@@ -553,7 +553,12 @@ let created_block_uuids_from_tx_data (tx_data : Wire.t list) : Wire.t list =
        | Wire.Map _ ->
            (match mget "block/uuid" item with
             | Some u when u <> Wire.Nil -> Some u
-            | _ -> None)
+            | _ ->
+                (* d/with-style datom maps {:e :a :v :added} *)
+                (match (item_get "a" item, item_get "added" item) with
+                 | Some (Wire.Keyword "block/uuid"), Some (Wire.Bool true) ->
+                     item_get "v" item
+                 | _ -> None))
        | _ when is_datom_item item ->
            (match (item_get "a" item, item_get "added" item) with
             | Some (Wire.Keyword "block/uuid"), Some (Wire.Bool true) ->

@@ -1033,6 +1033,105 @@ let initial_data_edn =
     {:block/uuid #uuid \"00000004-1904-0402-0048-000000000000\"
      :file/path \"logseq/publish.css\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}
+    {:db/ident :block/parent
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000340\"
+     :block/name \"node parent\" :block/title \"Node parent\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+     :logseq.property/hide? true
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/order
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000341\"
+     :block/name \"node order\" :block/title \"Node order\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :string
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/collapsed?
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000342\"
+     :block/name \"node collapsed\" :block/title \"Node collapsed?\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :checkbox
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/refs
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000343\"
+     :block/name \"node references\" :block/title \"Node references\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+     :logseq.property/hide? true
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/link
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000344\"
+     :block/name \"node links to\" :block/title \"Node links to\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+     :logseq.property/hide? true
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/closed-value-property
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000345\"
+     :block/name \"closed value property\" :block/title \"Closed value property\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+     :logseq.property/hide? true
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/journal-day
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000346\"
+     :block/name \"journal date\" :block/title \"Journal date\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :raw-number
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/created-at
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000347\"
+     :block/name \"node created at\" :block/title \"Node created at\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :datetime
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/updated-at
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000348\"
+     :block/name \"node updated at\" :block/title \"Node updated at\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :datetime
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
     {:block/uuid #uuid \"00000004-4879-1153-0006-000000000000\"
      :file/path \"logseq/publish.js\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}]"

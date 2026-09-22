@@ -219,7 +219,7 @@ let test_close_db_clears_worker_state () =
       check "close-db dropped client-ops conn"
         (not (Sync_state.has_client_ops_conn repo));
       check "close-db cleared pending tx count"
-        (Worker_state.pending_local_tx_count repo = 0);
+        (Worker_state.pending_local_tx_count repo = None);
       check "close-db cleared search index build"
         (Worker_state.search_index_build_id repo = None))
 

@@ -2818,12 +2818,12 @@ let core_cases : unit Alcotest.test_case list =
    dependency.
 
    ========== deps/outliner/test/logseq/outliner/cut_paste_property_test.cljs ==========
-   6 of 8 deftests ported. Skipped (unported dep — outliner.op.construct /
-   derive-history-outliner-ops is not in lib/):
-   - undo-delete-restores-all-property-types
-   - delete-inverse-includes-property-value-children
-   (op_construct_test.cljs and move_property_value_undo_test.cljs are
-    skipped wholesale for the same reason.)
+   All 8 deftests ported — undo-delete-restores-all-property-types and
+   delete-inverse-includes-property-value-children live in the
+   op_construct section below (they need derive-history-outliner-ops)
+   and are registered in cut_paste_undo_cases.
+   op_construct_test.cljs (17) and move_property_value_undo_test.cljs (3)
+   are fully ported in the sections at the end of this file.
 
    Reported lib divergence (not worked around): Ldb.property_value_content
    returns [string option] while cljs db-property/property-value-content
@@ -3663,3 +3663,1310 @@ let cut_paste_cases : unit Alcotest.test_case list =
     Alcotest.test_case "copy-paste-duplicates-text-property-values" `Quick test_copy_paste_duplicates_text_property_values;
     Alcotest.test_case "copy-paste-text-property-value-as-regular-block" `Quick test_copy_paste_text_property_value_as_regular_block;
     Alcotest.test_case "cut-paste-text-property-value-as-regular-block" `Quick test_cut_paste_text_property_value_as_regular_block ]
+
+(* ---------- deps/outliner/test/logseq/outliner/op_construct_test.cljs ----------
+
+   17 of 17 deftests ported.
+   Notes:
+   - cljs derive-history-outliner-ops returns {:forward-outliner-ops
+     :inverse-outliner-ops}; the OCaml port returns the pair
+     (forward, inverse) as Wire.Arrays — derive_ops unwraps to entry lists.
+   - cljs tx-meta is a plain map; the OCaml port takes a (kw, wire) list —
+     tx_meta builds it literally. cljs literal tx-data {:e :a :v :added}
+     maps -> Wire.Map items; real tx-report datoms go through
+     Db_normalize.wire_of_datoms.
+   - cljs = on persistent data is unordered for maps/sets and sequential
+     across list/vector — wire_equal mirrors that.
+   - cljs derive-history-outliner-ops-delete-blocks-inverse-avoids-self-
+     target stubs ldb/get-left-sibling via with-redefs to return the
+     deleted root itself (simulating a stale renderer lookup); OCaml has
+     no rebinding seam. The fixture's child block is already its parent's
+     only child, so the equivalent real-path case is exercised: with no
+     left sibling the inverse falls back to the parent target with
+     :sibling? false — the same branch the stale case lands on. The
+     target-id == root-id guard inside delete-root->restore-plan is the
+     cljs-with-redefs-only path and is noted rather than exercised.
+
+   ---------- deps/outliner/test/logseq/outliner/move_property_value_undo_test.cljs ----------
+
+   3 of 3 deftests ported (the two doseq bodies cover 4 property cases
+   total).
+
+   Two extra cut_paste_property_test.cljs deftests (undo-delete-restores-
+   all-property-types, delete-inverse-includes-property-value-children)
+   live in the cut-paste section above and are registered in
+   cut_paste_cases. *)
+
+let wkw s = Wire.Keyword s
+let wmap kvs = Wire.Map kvs
+let warr xs = Wire.Array xs
+let wop name args = Wire.Array [ Wire.Keyword name; Wire.Array args ]
+
+let wmeta (k : string) (v : Wire.t) : Wire.t * Wire.t = (wkw k, v)
+
+(* cljs {:outliner-op op :outliner-ops ops} tx-meta *)
+let tx_meta (op : string) (ops : Wire.t list) : (Wire.t * Wire.t) list =
+  [ wmeta "outliner-op" (wkw op); wmeta "outliner-ops" (Wire.Array ops) ]
+
+(* cljs literal tx-data item {:e :a :v :added} *)
+let tx_datom e a v added : Wire.t =
+  wmap
+    [ wkw "e", Wire.Int e
+    ; wkw "a", wkw a
+    ; wkw "v", v
+    ; wkw "added", Wire.Bool added ]
+
+(* cljs (op-construct/derive-history-outliner-ops db-before db-after
+   tx-data tx-meta) -> {:forward-outliner-ops _ :inverse-outliner-ops _};
+   the OCaml port returns (forward-wire, inverse-wire) — unwrapped to
+   op-entry lists here. *)
+let derive_ops db_before db_after tx_data (meta : (Wire.t * Wire.t) list)
+    : Wire.t list * Wire.t list =
+  let f, i =
+    Outliner_op_construct.derive_history_outliner_ops db_before db_after
+      tx_data meta
+  in
+  (Wire.as_seq f, Wire.as_seq i)
+
+(* op entry = [op-name [args]] *)
+let op_name (entry : Wire.t) : string =
+  match Wire.as_seq entry with
+  | Wire.Keyword n :: _ -> n
+  | _ -> ""
+
+(* nth arg of an [op [args]] entry; cljs (get-in entry [1 n]) *)
+let op_arg (entry : Wire.t) (n : int) : Wire.t =
+  match Wire.as_seq entry with
+  | [ _; args ] ->
+      (match List.nth_opt (Wire.as_seq args) n with
+       | Some v -> v
+       | None -> Wire.Nil)
+  | _ -> Wire.Nil
+
+let wget (k : string) (w : Wire.t) : Wire.t =
+  match Wire.get k w with Some v -> v | None -> Wire.Nil
+
+(* cljs = for wire data: maps and sets compare unordered; sequential
+   collections compare across vector/list. *)
+let rec wire_equal (a : Wire.t) (b : Wire.t) : bool =
+  match a, b with
+  | Wire.Map xs, Wire.Map ys ->
+      List.length xs = List.length ys
+      && List.for_all
+           (fun (k, v) ->
+             match List.find_opt (fun (k2, _) -> wire_equal k k2) ys with
+             | Some (_, v2) -> wire_equal v v2
+             | None -> false)
+           xs
+  | (Wire.Array xs | Wire.List xs), (Wire.Array ys | Wire.List ys) ->
+      List.length xs = List.length ys && List.for_all2 wire_equal xs ys
+  | Wire.Set xs, Wire.Set ys ->
+      List.length xs = List.length ys
+      && List.for_all (fun x -> List.exists (fun y -> wire_equal x y) ys) xs
+  | _ -> a = b
+
+let wire_list_equal (xs : Wire.t list) (ys : Wire.t list) : bool =
+  List.length xs = List.length ys && List.for_all2 wire_equal xs ys
+
+(* cljs (into {} entity) -> wire map; keeps the Ref/db-id refs as the
+   transit values op-construct canonicalizes against tx-data. *)
+let wire_of_block_map (m : Block_map.t) : Wire.t =
+  Wire.Map
+    (List.map (fun (a, v) -> wkw a, Ds_wire.transit_of_value v) m)
+
+(* cljs (d/transact! conn [{:db/id -1 ...}]) — tag entity tx used by the
+   retracted-ref tests *)
+let transact_tag conn (tag_uuid : string) : unit =
+  ignore
+    (Datascript.transact_conn conn
+       [ Entity
+           { db_id = Some (Entity_id (-1))
+           ; attrs =
+               [ "block/uuid", One_value (Uuid tag_uuid)
+               ; "block/title", One_value (String "Tag")
+               ; "block/name", One_value (String "tag")
+               ; "block/tags", One_value (Keyword "logseq.class/Tag") ] } ])
+
+(* (deftest derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse-test) *)
+let test_derive_create_page_canonicalizes_and_builds_delete_inverse () =
+  let conn = create_conn_with_blocks () in
+  let page_uuid = gen_uuid () in
+  let tx_data =
+    [ tx_datom 1 "block/title" (Wire.String "Created Page") true
+    ; tx_datom 1 "block/uuid" (Wire.Uuid page_uuid) true ]
+  in
+  let meta =
+    tx_meta "create-page"
+      [ wop "create-page"
+          [ Wire.String "Created Page"
+          ; wmap
+              [ wkw "redirect?", Wire.Bool false
+              ; wkw "split-namespace?", Wire.Bool true
+              ; wkw "tags", Wire.List [] ] ] ]
+  in
+  let db = db_of conn in
+  let forward, inverse = derive_ops db db tx_data meta in
+  check "forward op is create-page"
+    (forward <> [] && op_name (List.hd forward) = "create-page");
+  check "create-page forward keeps created uuid"
+    (wget "uuid" (op_arg (List.hd forward) 1) = Wire.Uuid page_uuid);
+  check "inverse deletes created page"
+    (wire_list_equal inverse
+       [ wop "delete-page" [ Wire.Uuid page_uuid; wmap [] ] ])
+
+(* (deftest derive-history-outliner-ops-handles-replace-empty-target-insert-inverse-test) *)
+let test_derive_replace_empty_target_insert_inverse () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks = [ { default_block with b_title = Some "" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let empty_target = Option.get (find_block_by_content db "") in
+  let parent_uuid = gen_uuid () in
+  let child_uuid = gen_uuid () in
+  let meta =
+    tx_meta "insert-blocks"
+      [ wop "insert-blocks"
+          [ warr
+              [ wmap
+                  [ wkw "block/uuid", Wire.Uuid parent_uuid
+                  ; wkw "block/title", Wire.String "paste parent" ]
+              ; wmap
+                  [ wkw "block/uuid", Wire.Uuid child_uuid
+                  ; wkw "block/title", Wire.String "paste child"
+                  ; ( wkw "block/parent"
+                    , warr [ wkw "block/uuid"; Wire.Uuid parent_uuid ] ) ] ]
+          ; Wire.Int empty_target.id
+          ; wmap
+              [ wkw "sibling?", Wire.Bool true
+              ; wkw "replace-empty-target?", Wire.Bool true
+              ; wkw "outliner-op", wkw "paste" ] ] ]
+  in
+  let forward, inverse = derive_ops db db [] meta in
+  check "forward parent block keeps uuid"
+    (match forward with
+     | entry :: _ ->
+         (match Wire.as_seq (op_arg entry 0) with
+          | first_block :: _ ->
+              wget "block/uuid" first_block = Wire.Uuid parent_uuid
+          | [] -> false)
+     | [] -> false);
+  check "forward keep-uuid? true"
+    (match forward with
+     | entry :: _ -> wget "keep-uuid?" (op_arg entry 2) = Wire.Bool true
+     | [] -> false);
+  let inverse' = List.filter (fun w -> w <> Wire.Nil) inverse in
+  check "inverse deletes empty target"
+    (List.exists
+       (fun e ->
+         op_name e = "delete-blocks"
+         && (match Wire.as_seq (op_arg e 0) with
+            | [ Wire.Uuid u ] -> u = uuid_of empty_target
+            | _ -> false))
+       inverse');
+  check "inverse has no save-block"
+    (not (List.exists (fun e -> op_name e = "save-block") inverse'))
+
+(* (deftest derive-history-outliner-ops-builds-upsert-property-inverse-delete-page-test) *)
+let test_derive_upsert_property_inverse_delete_page () =
+  let conn = create_conn_with_blocks () in
+  let property_id = "user.property/custom-prop" in
+  let meta =
+    tx_meta "upsert-property"
+      [ wop "upsert-property"
+          [ wkw property_id
+          ; wmap [ wkw "logseq.property/type", wkw "default" ]
+          ; wmap [ wkw "property-name", Wire.String "custom-prop" ] ] ]
+  in
+  let db = db_of conn in
+  let _forward, inverse = derive_ops db db [] meta in
+  let expected_uuid =
+    Common_uuid.gen_uuid "db-ident-block-uuid" property_id
+  in
+  check "upsert-property inverse deletes the new property page"
+    (wire_list_equal inverse
+       [ wop "delete-page" [ Wire.Uuid expected_uuid; wmap [] ] ])
+
+(* (deftest derive-history-outliner-ops-upsert-property-update-builds-schema-restore-inverse-test) *)
+let test_derive_upsert_property_update_schema_restore_inverse () =
+  let conn =
+    create_conn_with_blocks
+      ~properties:
+        [ "p-many", { default_property with p_type = "default" } ]
+      ()
+  in
+  let property_id = "user.property/p-many" in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add
+           ( Ident property_id
+           , "logseq.property/classes"
+           , Keyword "logseq.class/Root" ) ]);
+  let db = db_of conn in
+  let before_property =
+    Option.get (Datascript.entity db (Ident property_id))
+  in
+  (* cljs (-> (db-property/get-property-schema (into {} before-property))
+       (update :logseq.property/classes (partial map class->ref) set)) *)
+  let expected_schema =
+    Db_property.get_property_schema (Block_map.of_entity before_property)
+    |> List.map (fun (a, v) ->
+        if a = "logseq.property/classes" then
+          let vs = match v with List vs -> vs | v -> [ v ] in
+          ( wkw a
+          , Wire.Set
+              (List.map
+                 (fun c ->
+                   let r =
+                     match c with
+                     | Ref_to r -> Some r
+                     | Ref id -> Some (Entity_id id)
+                     | _ -> None
+                   in
+                   match r with
+                   | Some r ->
+                       (match Datascript.entity db r with
+                        | Some e ->
+                            (match Ldb.value e "block/uuid" with
+                             | Some (Uuid u) ->
+                                 warr [ wkw "block/uuid"; Wire.Uuid u ]
+                             | _ ->
+                                 (match Ldb.ident_of e with
+                                  | Some i -> wkw i
+                                  | None -> Wire.Nil))
+                        | None -> Wire.Nil)
+                   | None -> Ds_wire.transit_of_value c)
+                 vs) )
+        else (wkw a, Ds_wire.transit_of_value v))
+  in
+  let meta =
+    tx_meta "upsert-property"
+      [ wop "upsert-property"
+          [ wkw property_id
+          ; wmap
+              [ wkw "logseq.property/type", wkw "node"
+              ; wkw "db/cardinality", wkw "many" ]
+          ; wmap [] ] ]
+  in
+  let _forward, inverse = derive_ops db db [] meta in
+  check "upsert-property update inverse restores schema"
+    (wire_list_equal inverse
+       [ wop "upsert-property"
+           [ wkw property_id
+           ; Wire.Map expected_schema
+           ; wmap [ wkw "property-name", Wire.String "p-many" ] ] ]);
+  (match inverse with
+   | entry :: _ ->
+       let classes =
+         Wire.as_seq (wget "logseq.property/classes" (op_arg entry 1))
+       in
+       check "class refs are keywords or uuid lookup-refs"
+         (List.for_all
+            (fun c ->
+              match c with
+              | Wire.Keyword _ -> true
+              | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid _ ] -> true
+              | _ -> false)
+            classes)
+   | [] -> check "inverse nonempty" false)
+
+(* (deftest derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target-test)
+   Equivalent real-path coverage: cljs stubs ldb/get-left-sibling to return
+   the deleted root; here the child is genuinely the parent's only child,
+   so the inverse lands on the same parent-target fallback. *)
+let test_derive_delete_blocks_inverse_avoids_self_target () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child = Option.get (find_block_by_content db "child") in
+  let child_uuid = uuid_of child in
+  let parent_uuid =
+    match Ldb.ref_ent child "block/parent" with
+    | Some p -> uuid_of p
+    | None -> ""
+  in
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "delete-blocks" [ warr [ Wire.Int child.id ]; wmap [] ] ]
+  in
+  let _forward, inverse = derive_ops db db [] meta in
+  match inverse with
+  | insert_op :: _ ->
+      check "inverse is insert-blocks"
+        (op_name insert_op = "insert-blocks");
+      check "restore target is the parent"
+        (op_arg insert_op 1 = Wire.Uuid parent_uuid);
+      check "restore is not sibling-positioned"
+        (wget "sibling?" (op_arg insert_op 2) = Wire.Bool false);
+      check "restore target is not the deleted child"
+        (op_arg insert_op 1 <> Wire.Uuid child_uuid)
+  | [] -> check "inverse nonempty" false
+
+(* (deftest compound-history-inverses-run-in-reverse-dependency-order-test) *)
+let test_compound_history_inverses_reverse_dependency_order () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "target" }
+              ; { default_block with b_title = Some "source"
+                ; b_children =
+                    [ { default_block with b_title = Some "nested" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let target = Option.get (find_block_by_content db "target") in
+  let source = Option.get (find_block_by_content db "source") in
+  let nested = Option.get (find_block_by_content db "nested") in
+  (* cljs (assoc (into {} target) :block/title "combined") *)
+  let target_map =
+    ("block/title", String "combined")
+    :: List.remove_assoc "block/title" (Block_map.of_entity target)
+  in
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "move-blocks"
+          [ warr [ Wire.Int nested.id ]
+          ; Wire.Int target.id
+          ; wmap [ wkw "sibling?", Wire.Bool false ] ]
+      ; wop "delete-blocks" [ warr [ Wire.Int source.id ]; wmap [] ]
+      ; wop "save-block" [ wire_of_block_map target_map; Wire.Nil ] ]
+  in
+  let _forward, inverse = derive_ops db db [] meta in
+  check "inverses run in reverse dependency order"
+    (List.map op_name inverse
+     = [ "save-block"; "insert-blocks"; "move-blocks" ])
+
+(* (deftest derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id-test) *)
+let test_derive_delete_blocks_stale_id_keeps_id () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child = Option.get (find_block_by_content db "child") in
+  let stale_id = 99999999 in
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "delete-blocks"
+          [ warr [ Wire.Int child.id; Wire.Int stale_id ]; wmap [] ] ]
+  in
+  let forward, _inverse = derive_ops db db [] meta in
+  check "unresolved numeric id kept in forward ops"
+    (wire_list_equal forward
+       [ wop "delete-blocks"
+           [ warr [ Wire.Uuid (uuid_of child); Wire.Int stale_id ]
+           ; wmap [] ] ])
+
+(* (deftest derive-history-outliner-ops-delete-blocks-prefers-retracted-tx-data-ids-test) *)
+let test_derive_delete_blocks_prefers_retracted_tx_data_ids () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child = Option.get (find_block_by_content db "child") in
+  let stale_id = 99999999 in
+  let tx_report =
+    Datascript.with_tx db [ RetractEntity (Entity_id child.id) ]
+  in
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "delete-blocks"
+          [ warr [ Wire.Int child.id; Wire.Int stale_id ]; wmap [] ] ]
+  in
+  let forward, _inverse =
+    derive_ops db tx_report.db_after
+      (Db_normalize.wire_of_datoms tx_report.tx_data)
+      meta
+  in
+  check "forward prefers retracted tx-data ids"
+    (wire_list_equal forward
+       [ wop "delete-blocks"
+           [ warr [ Wire.Uuid (uuid_of child) ]; wmap [] ] ])
+
+(* (deftest derive-history-outliner-ops-move-blocks-resolves-target-id-from-tx-data-test) *)
+let test_derive_move_blocks_resolves_target_id_from_tx_data () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks = [ { default_block with b_title = Some "child" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child = Option.get (find_block_by_content db "child") in
+  let stale_target_id = 9999999 in
+  let target_uuid = gen_uuid () in
+  let tx_data =
+    [ tx_datom stale_target_id "block/uuid" (Wire.Uuid target_uuid) false ]
+  in
+  let meta =
+    tx_meta "move-blocks"
+      [ wop "move-blocks"
+          [ warr [ Wire.Int child.id ]
+          ; Wire.Int stale_target_id
+          ; wmap [ wkw "sibling?", Wire.Bool true ] ] ]
+  in
+  let forward, _inverse = derive_ops db db tx_data meta in
+  check "stale numeric target id resolves via tx-data uuid"
+    (match forward with
+     | entry :: _ -> op_arg entry 1 = Wire.Uuid target_uuid
+     | [] -> false)
+
+(* (deftest derive-history-outliner-ops-save-block-resolves-retracted-ref-id-from-db-before-test) *)
+let test_derive_save_block_resolves_retracted_ref_from_db_before () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks = [ { default_block with b_title = Some "child" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child = Option.get (find_block_by_content db "child") in
+  let child_uuid = uuid_of child in
+  let tag_uuid = gen_uuid () in
+  transact_tag conn tag_uuid;
+  let db = db_of conn in
+  let tag =
+    Option.get
+      (Datascript.entity db (Lookup_ref ("block/uuid", Uuid tag_uuid)))
+  in
+  let tx_report =
+    Datascript.with_tx db [ RetractEntity (Entity_id tag.id) ]
+  in
+  let meta =
+    tx_meta "save-block"
+      [ wop "save-block"
+          [ wmap
+              [ wkw "block/uuid", Wire.Uuid child_uuid
+              ; wkw "block/tags", Wire.Set [ Wire.Int tag.id ] ]
+          ; wmap [] ] ]
+  in
+  let forward, _inverse =
+    derive_ops db tx_report.db_after
+      (Db_normalize.wire_of_datoms tx_report.tx_data)
+      meta
+  in
+  check "save-block ref canonicalized via db-before"
+    (match forward with
+     | entry :: _ ->
+         wire_equal
+           (wget "block/tags" (op_arg entry 0))
+           (Wire.Set [ warr [ wkw "block/uuid"; Wire.Uuid tag_uuid ] ])
+     | [] -> false)
+
+(* (deftest derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data-test) *)
+let test_derive_insert_blocks_resolves_retracted_ref_from_tx_data () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks = [ { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let target = Option.get (find_block_by_content db "target") in
+  let tag_uuid = gen_uuid () in
+  transact_tag conn tag_uuid;
+  let db = db_of conn in
+  let tag =
+    Option.get
+      (Datascript.entity db (Lookup_ref ("block/uuid", Uuid tag_uuid)))
+  in
+  let tx_report =
+    Datascript.with_tx db [ RetractEntity (Entity_id tag.id) ]
+  in
+  let meta =
+    tx_meta "insert-blocks"
+      [ wop "insert-blocks"
+          [ warr
+              [ wmap
+                  [ wkw "block/uuid", Wire.Uuid (gen_uuid ())
+                  ; wkw "block/title", Wire.String "new child"
+                  ; wkw "block/tags", Wire.Set [ Wire.Int tag.id ] ] ]
+          ; Wire.Int target.id
+          ; wmap [ wkw "sibling?", Wire.Bool true ] ] ]
+  in
+  let forward, _inverse =
+    derive_ops db tx_report.db_after
+      (Db_normalize.wire_of_datoms tx_report.tx_data)
+      meta
+  in
+  check "insert-blocks ref canonicalized via tx-data"
+    (match forward with
+     | entry :: _ ->
+         (match Wire.as_seq (op_arg entry 0) with
+          | first_block :: _ ->
+              wire_equal
+                (wget "block/tags" first_block)
+                (Wire.Set [ warr [ wkw "block/uuid"; Wire.Uuid tag_uuid ] ])
+          | [] -> false)
+     | [] -> false)
+
+(* (deftest derive-history-outliner-ops-apply-template-undo-canonicalizes-template-block-refs-test) *)
+let test_derive_apply_template_undo_canonicalizes_template_block_refs () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "template" }
+              ; { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let template = Option.get (find_block_by_content db "template") in
+  let target = Option.get (find_block_by_content db "target") in
+  let template_uuid = uuid_of template in
+  let target_uuid = uuid_of target in
+  let inserted_uuid = gen_uuid () in
+  let tag_uuid = gen_uuid () in
+  transact_tag conn tag_uuid;
+  let db = db_of conn in
+  let tag =
+    Option.get
+      (Datascript.entity db (Lookup_ref ("block/uuid", Uuid tag_uuid)))
+  in
+  let tx_report =
+    Datascript.with_tx db [ RetractEntity (Entity_id tag.id) ]
+  in
+  let meta =
+    [ wmeta "outliner-op" (wkw "apply-template")
+    ; wmeta "undo?" (Wire.Bool true)
+    ; ( wmeta "db-sync/inverse-outliner-ops"
+          (warr
+             [ wop "apply-template"
+                 [ Wire.Uuid template_uuid
+                 ; Wire.Uuid target_uuid
+                 ; wmap
+                     [ ( wkw "template-blocks"
+                       , warr
+                           [ wmap
+                               [ wkw "block/uuid", Wire.Uuid inserted_uuid
+                               ; wkw "block/title", Wire.String "inserted"
+                               ; wkw "block/tags"
+                               , Wire.Set [ Wire.Int tag.id ] ] ] )
+                     ; wkw "sibling?", Wire.Bool true ] ] ]) ) ]
+  in
+  let _forward, inverse =
+    derive_ops db tx_report.db_after
+      (Db_normalize.wire_of_datoms tx_report.tx_data)
+      meta
+  in
+  check "apply-template undo canonicalizes nested template-block refs"
+    (match inverse with
+     | entry :: _ ->
+         (match Wire.as_seq (wget "template-blocks" (op_arg entry 2)) with
+          | tb :: _ ->
+              wire_equal
+                (wget "block/tags" tb)
+                (Wire.Set [ warr [ wkw "block/uuid"; Wire.Uuid tag_uuid ] ])
+          | [] -> false)
+     | [] -> false)
+
+(* (deftest derive-history-outliner-ops-apply-template-captures-template-blocks-when-missing-in-op-test) *)
+let test_derive_apply_template_captures_template_blocks () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "template"
+                ; b_children =
+                    [ { default_block with b_title = Some "template child 1" }
+                    ; { default_block with b_title = Some "template child 2" } ] }
+              ; { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let template = Option.get (find_block_by_content db "template") in
+  let template_child_1 =
+    Option.get (find_block_by_content db "template child 1")
+  in
+  let template_child_2 =
+    Option.get (find_block_by_content db "template child 2")
+  in
+  let target = Option.get (find_block_by_content db "target") in
+  let inserted_child_1_uuid = gen_uuid () in
+  let inserted_child_2_uuid = gen_uuid () in
+  let tx_data =
+    [ tx_datom 900001 "block/uuid" (Wire.Uuid inserted_child_1_uuid) true
+    ; tx_datom 900002 "block/uuid" (Wire.Uuid inserted_child_2_uuid) true ]
+  in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add
+           ( Entity_id template_child_1.id
+           , "block/refs"
+           , Ref template_child_2.id ) ]);
+  let db = db_of conn in
+  let meta =
+    tx_meta "apply-template"
+      [ wop "apply-template"
+          [ Wire.Int template.id
+          ; Wire.Int target.id
+          ; wmap [ wkw "sibling?", Wire.Bool true ] ] ]
+  in
+  let forward, _inverse = derive_ops db db tx_data meta in
+  check "forward op is apply-template"
+    (forward <> [] && op_name (List.hd forward) = "apply-template");
+  check "apply-template keep-uuid? true"
+    (wget "keep-uuid?" (op_arg (List.hd forward) 2) = Wire.Bool true);
+  (match
+     Wire.as_seq (wget "template-blocks" (op_arg (List.hd forward) 2))
+   with
+   | tbs ->
+       check "template-blocks captured in order"
+         (List.map (fun b -> wget "block/uuid" b) tbs
+          = [ Wire.Uuid inserted_child_1_uuid
+            ; Wire.Uuid inserted_child_2_uuid ]);
+       (match tbs with
+        | tb0 :: _ ->
+            check "first template-block refs captured"
+              (wire_equal
+                 (wget "block/refs" tb0)
+                 (Wire.Set
+                    [ warr
+                        [ wkw "block/uuid"
+                        ; Wire.Uuid inserted_child_2_uuid ] ]))
+        | [] -> check "template-blocks nonempty" false))
+
+(* (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test) *)
+let test_derive_delete_page_inverse_for_class_property_today () =
+  let today =
+    Date_time_util.ms_to_journal_day (Int64.of_float (Clock.now_ms ()))
+  in
+  let conn =
+    create_conn_with_blocks
+      ~classes:[ "Movie", default_class ]
+      ~properties:
+        [ "rating", { default_property with p_type = "number" } ]
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_journal = Some today }
+          ; blocks =
+              [ { default_block with b_title = Some "today child" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let class_page =
+    Option.get (Ldb.get_page db (String "Movie"))
+  in
+  let property_page =
+    Option.get (Datascript.entity db (Ident "user.property/rating"))
+  in
+  let today_page =
+    Option.get (find_journal_by_journal_day db today)
+  in
+  let today_child =
+    Option.get (find_block_by_content db "today child")
+  in
+  let delete_page_inverse (e : entity) : Wire.t list =
+    let _f, inverse =
+      derive_ops db db []
+        (tx_meta "delete-page"
+           [ wop "delete-page" [ Wire.Uuid (uuid_of e); wmap [] ] ])
+    in
+    inverse
+  in
+  let class_inverse = delete_page_inverse class_page in
+  let property_inverse = delete_page_inverse property_page in
+  let today_inverse = delete_page_inverse today_page in
+  check "class inverse has create-page"
+    (List.exists (fun e -> op_name e = "create-page") class_inverse);
+  check "class inverse has save-block"
+    (List.exists (fun e -> op_name e = "save-block") class_inverse);
+  (match
+     List.find_opt (fun e -> op_name e = "save-block") class_inverse
+   with
+   | Some save ->
+       check "class save-block keeps db/ident"
+         (wget "db/ident" (op_arg save 0)
+          = wkw (Option.get (Ldb.ident_of class_page)))
+   | None -> ());
+  check "property inverse has upsert-property"
+    (List.exists (fun e -> op_name e = "upsert-property") property_inverse);
+  check "property inverse has save-block"
+    (List.exists (fun e -> op_name e = "save-block") property_inverse);
+  (match
+     List.find_opt (fun e -> op_name e = "save-block") property_inverse
+   with
+   | Some save ->
+       check "property save-block keeps db/ident"
+         (wget "db/ident" (op_arg save 0)
+          = wkw (Option.get (Ldb.ident_of property_page)))
+   | None -> ());
+  check "today inverse has no restore-recycled"
+    (not
+       (List.exists (fun e -> op_name e = "restore-recycled") today_inverse));
+  (match
+     List.find_opt (fun e -> op_name e = "insert-blocks") today_inverse
+   with
+   | Some insert_op ->
+       check "today inverse insert target is journal page"
+         (op_arg insert_op 1 = Wire.Uuid (uuid_of today_page));
+       (match Wire.as_seq (op_arg insert_op 0) with
+        | first_block :: _ ->
+            check "today inverse restores journal child"
+              (wget "block/uuid" first_block
+               = Wire.Uuid (uuid_of today_child))
+        | [] -> check "insert blocks nonempty" false)
+   | None -> check "today inverse has insert-blocks" false)
+
+(* (deftest derive-history-outliner-ops-builds-inverse-for-all-supported-ops-test) *)
+let test_derive_builds_inverse_for_all_supported_ops () =
+  let conn =
+    create_conn_with_blocks
+      ~classes:
+        [ "c1", { default_class with c_class_properties = [ "p1" ] } ]
+      ~properties:
+        [ "p1", { default_property with p_type = "default" } ]
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child-a" }
+                    ; { default_block with b_title = Some "child-b" } ] }
+              ; { default_block with b_title = Some "prop-block-1"
+                ; b_properties = [ "p1", Str "before-1" ] }
+              ; { default_block with b_title = Some "prop-block-2" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let page = Option.get (find_page_by_title db "page") in
+  let parent = Option.get (find_block_by_content db "parent") in
+  let child_a = Option.get (find_block_by_content db "child-a") in
+  let child_b = Option.get (find_block_by_content db "child-b") in
+  (* ":save-block" *)
+  let _f, inverse =
+    derive_ops db db []
+      (tx_meta "save-block"
+         [ wop "save-block"
+             [ wmap
+                 [ wkw "block/uuid", Wire.Uuid (uuid_of child_a)
+                 ; wkw "block/title", Wire.String "changed" ]
+             ; wmap [] ] ])
+  in
+  check "save-block inverse op"
+    (inverse <> [] && op_name (List.hd inverse) = "save-block");
+  check "save-block inverse keeps uuid"
+    (wget "block/uuid" (op_arg (List.hd inverse) 0)
+     = Wire.Uuid (uuid_of child_a));
+  (* ":insert-blocks" *)
+  let inserted_uuid = gen_uuid () in
+  let tx_data =
+    [ tx_datom 999999 "block/uuid" (Wire.Uuid inserted_uuid) true ]
+  in
+  let _f, inverse =
+    derive_ops db db tx_data
+      (tx_meta "insert-blocks"
+         [ wop "insert-blocks"
+             [ warr
+                 [ wmap
+                     [ wkw "block/uuid", Wire.Uuid inserted_uuid
+                     ; wkw "block/title", Wire.String "new" ] ]
+             ; Wire.Int parent.id
+             ; wmap [ wkw "sibling?", Wire.Bool false ] ] ])
+  in
+  check "insert-blocks inverse op"
+    (inverse <> [] && op_name (List.hd inverse) = "delete-blocks");
+  check "insert-blocks inverse deletes inserted uuid"
+    (Wire.as_seq (op_arg (List.hd inverse) 0) = [ Wire.Uuid inserted_uuid ]);
+  (* ":move-blocks" *)
+  let _f, inverse =
+    derive_ops db db []
+      (tx_meta "move-blocks"
+         [ wop "move-blocks"
+             [ warr [ Wire.Int child_b.id ]
+             ; Wire.Int parent.id
+             ; wmap [ wkw "sibling?", Wire.Bool false ] ] ])
+  in
+  check "move-blocks inverse op"
+    (inverse <> [] && op_name (List.hd inverse) = "move-blocks");
+  check "move-blocks inverse moves child-b"
+    (Wire.as_seq (op_arg (List.hd inverse) 0)
+     = [ Wire.Uuid (uuid_of child_b) ]);
+  (* ":delete-blocks" *)
+  let _f, inverse =
+    derive_ops db db []
+      (tx_meta "delete-blocks"
+         [ wop "delete-blocks" [ warr [ Wire.Int child_b.id ]; wmap [] ] ])
+  in
+  check "delete-blocks inverse op"
+    (inverse <> [] && op_name (List.hd inverse) = "insert-blocks");
+  check "delete-blocks inverse restores child-b"
+    (match Wire.as_seq (op_arg (List.hd inverse) 0) with
+     | first_block :: _ ->
+         wget "block/uuid" first_block = Wire.Uuid (uuid_of child_b)
+     | [] -> false);
+  (* ":create-page" *)
+  let page_uuid = gen_uuid () in
+  let tx_data =
+    [ tx_datom 1 "block/title" (Wire.String "P2") true
+    ; tx_datom 1 "block/uuid" (Wire.Uuid page_uuid) true ]
+  in
+  let _f, inverse =
+    derive_ops db db tx_data
+      (tx_meta "create-page"
+         [ wop "create-page"
+             [ Wire.String "P2"; wmap [ wkw "redirect?", Wire.Bool false ] ] ])
+  in
+  check "create-page inverse deletes page"
+    (wire_list_equal inverse
+       [ wop "delete-page" [ Wire.Uuid page_uuid; wmap [] ] ]);
+  (* ":delete-page" *)
+  let _f, inverse =
+    derive_ops db db []
+      (tx_meta "delete-page"
+         [ wop "delete-page" [ Wire.Uuid (uuid_of page); wmap [] ] ])
+  in
+  check "delete-page inverse restores recycled page"
+    (wire_list_equal inverse
+       [ wop "restore-recycled" [ Wire.Uuid (uuid_of page) ] ]);
+  (* ":upsert-property" *)
+  let property_ident = "user.property/test-inverse" in
+  let expected_page_uuid =
+    Common_uuid.gen_uuid "db-ident-block-uuid" property_ident
+  in
+  let _f, inverse =
+    derive_ops db db []
+      (tx_meta "upsert-property"
+         [ wop "upsert-property"
+             [ wkw property_ident
+             ; wmap [ wkw "logseq.property/type", wkw "default" ]
+             ; wmap [ wkw "property-name", Wire.String "test-inverse" ] ] ])
+  in
+  check "upsert-property inverse deletes property page"
+    (wire_list_equal inverse
+       [ wop "delete-page" [ Wire.Uuid expected_page_uuid; wmap [] ] ])
+
+(* cljs run-direct-outdent — (#'outliner-core/indent-outdent-blocks conn
+   [block] false :parent-original nil :logical-outdenting? nil) then
+   (d/with @conn tx-data {}); returns (tx-data wire datoms, db-after) *)
+(* cljs run-direct-outdent: the non-bang indent-outdent-blocks performs
+   its moves via transact-move-blocks! (committed on conn) and returns nil;
+   the test then does (d/with @conn nil {}) → tx-data [], db-after @conn. *)
+let run_direct_outdent conn (block : entity) : Wire.t list * db =
+  ignore (Outliner_core.indent_outdent_blocks conn [ block ] false ());
+  let report = Datascript.with_tx (db_of conn) [] in
+  (Db_normalize.wire_of_datoms report.tx_data, report.db_after)
+
+(* (deftest build-history-action-metadata-direct-outdent-builds-indent-outdent-forward-and-inverse-test) *)
+let test_direct_outdent_builds_indent_outdent_forward_and_inverse () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child-1" }
+                    ; { default_block with b_title = Some "child-2" }
+                    ; { default_block with b_title = Some "child-3" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child_3 = Option.get (find_block_by_content db "child-3") in
+  let tx_data, db_after = run_direct_outdent conn child_3 in
+  let io_opts =
+    wmap [ wkw "parent-original", Wire.Nil; wkw "logical-outdenting?", Wire.Nil ]
+  in
+  let meta =
+    tx_meta "move-blocks"
+      [ wop "indent-outdent-blocks"
+          [ warr [ Wire.Int child_3.id ]; Wire.Bool false; io_opts ] ]
+  in
+  let forward, inverse = derive_ops (db_of conn) db_after tx_data meta in
+  check "direct outdent forward op"
+    (wire_list_equal forward
+       [ wop "indent-outdent-blocks"
+           [ warr [ Wire.Uuid (uuid_of child_3) ]; Wire.Bool false; io_opts ] ]);
+  check "direct outdent inverse op"
+    (wire_list_equal inverse
+       [ wop "indent-outdent-blocks"
+           [ warr [ Wire.Uuid (uuid_of child_3) ]; Wire.Bool true; io_opts ] ])
+
+(* (deftest derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-keeps-semantic-ops-test) *)
+let test_direct_outdent_with_extra_moved_blocks_keeps_semantic_ops () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { default_block with b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child-1" }
+                    ; { default_block with b_title = Some "child-2" }
+                    ; { default_block with b_title = Some "child-3" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let child_2 = Option.get (find_block_by_content db "child-2") in
+  let tx_data, db_after = run_direct_outdent conn child_2 in
+  let io_opts =
+    wmap [ wkw "parent-original", Wire.Nil; wkw "logical-outdenting?", Wire.Nil ]
+  in
+  let meta =
+    tx_meta "move-blocks"
+      [ wop "indent-outdent-blocks"
+          [ warr [ Wire.Int child_2.id ]; Wire.Bool false; io_opts ] ]
+  in
+  let forward, inverse = derive_ops (db_of conn) db_after tx_data meta in
+  check "outdent with extra moved blocks forward op"
+    (wire_list_equal forward
+       [ wop "indent-outdent-blocks"
+           [ warr [ Wire.Uuid (uuid_of child_2) ]; Wire.Bool false; io_opts ] ]);
+  check "outdent with extra moved blocks inverse op"
+    (wire_list_equal inverse
+       [ wop "indent-outdent-blocks"
+           [ warr [ Wire.Uuid (uuid_of child_2) ]; Wire.Bool true; io_opts ] ])
+
+let op_construct_cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse" `Quick test_derive_create_page_canonicalizes_and_builds_delete_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-handles-replace-empty-target-insert-inverse" `Quick test_derive_replace_empty_target_insert_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-builds-upsert-property-inverse-delete-page" `Quick test_derive_upsert_property_inverse_delete_page;
+    Alcotest.test_case "derive-history-outliner-ops-upsert-property-update-builds-schema-restore-inverse" `Quick test_derive_upsert_property_update_schema_restore_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target" `Quick test_derive_delete_blocks_inverse_avoids_self_target;
+    Alcotest.test_case "compound-history-inverses-run-in-reverse-dependency-order" `Quick test_compound_history_inverses_reverse_dependency_order;
+    Alcotest.test_case "derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id" `Quick test_derive_delete_blocks_stale_id_keeps_id;
+    Alcotest.test_case "derive-history-outliner-ops-delete-blocks-prefers-retracted-tx-data-ids" `Quick test_derive_delete_blocks_prefers_retracted_tx_data_ids;
+    Alcotest.test_case "derive-history-outliner-ops-move-blocks-resolves-target-id-from-tx-data" `Quick test_derive_move_blocks_resolves_target_id_from_tx_data;
+    Alcotest.test_case "derive-history-outliner-ops-save-block-resolves-retracted-ref-id-from-db-before" `Quick test_derive_save_block_resolves_retracted_ref_from_db_before;
+    Alcotest.test_case "derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data" `Quick test_derive_insert_blocks_resolves_retracted_ref_from_tx_data;
+    Alcotest.test_case "derive-history-outliner-ops-apply-template-undo-canonicalizes-template-block-refs" `Quick test_derive_apply_template_undo_canonicalizes_template_block_refs;
+    Alcotest.test_case "derive-history-outliner-ops-apply-template-captures-template-blocks-when-missing-in-op" `Quick test_derive_apply_template_captures_template_blocks;
+    Alcotest.test_case "derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page" `Quick test_derive_delete_page_inverse_for_class_property_today;
+    Alcotest.test_case "derive-history-outliner-ops-builds-inverse-for-all-supported-ops" `Quick test_derive_builds_inverse_for_all_supported_ops;
+    Alcotest.test_case "build-history-action-metadata-direct-outdent-builds-indent-outdent-forward-and-inverse" `Quick test_direct_outdent_builds_indent_outdent_forward_and_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-keeps-semantic-ops" `Quick test_direct_outdent_with_extra_moved_blocks_keeps_semantic_ops ]
+
+(* ---------- deps/outliner/test/logseq/outliner/move_property_value_undo_test.cljs ---------- *)
+
+(* cljs child-titles is outline_child_titles (defined in the
+   cut-paste section above). *)
+
+(* cljs undo-op! — run the forward op, derive the inverse from
+   (db-before, @conn, [], tx-meta), apply it. *)
+let undo_op_bang conn (meta : (Wire.t * Wire.t) list)
+    (forward : unit -> unit) : Wire.t list =
+  let db_before = db_of conn in
+  forward ();
+  let _f, inverse = derive_ops db_before (db_of conn) [] meta in
+  check "forward op has an inverse op" (inverse <> []);
+  apply_ops conn inverse;
+  inverse
+
+(* cljs undo-move! *)
+let undo_move_bang conn (value : entity) (dest : entity) : Wire.t list =
+  let meta =
+    tx_meta "move-blocks"
+      [ wop "move-blocks"
+          [ warr [ Wire.Uuid (uuid_of value) ]
+          ; Wire.Uuid (uuid_of dest)
+          ; wmap [ wkw "sibling?", Wire.Bool false ] ] ]
+  in
+  undo_op_bang conn meta (fun () ->
+      move_blocks_bang conn [ value ] dest
+        ~opts:{ Outliner_core.default_insert_opts with sibling = false }
+        ())
+
+(* cljs undo-delete! (move_property_value_undo variant — bang delete) *)
+let undo_move_delete_bang conn (value : entity) : Wire.t list =
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "delete-blocks" [ warr [ Wire.Uuid (uuid_of value) ]; wmap [] ] ]
+  in
+  undo_op_bang conn meta (fun () -> delete_blocks_bang conn [ value ] ())
+
+let created_from_property_ident (db : db) (e : entity) : string option =
+  match Ldb.ref_ent e "logseq.property/created-from-property" with
+  | Some p -> Ldb.ident_of p
+  | None -> None
+
+(* (deftest undo-move-restores-text-and-url-property-values) *)
+let test_undo_move_restores_text_and_url_property_values () =
+  List.iter
+    (fun (property_type, property_key, value_title) ->
+      let conn =
+        create_conn_with_blocks
+          ~properties:
+            [ property_key
+            , { default_property with p_type = property_type } ]
+          ~pages_and_blocks:
+            [ { page = { default_page with pg_title = Some "page" }
+              ; blocks =
+                  [ { default_block with b_title = Some "node"
+                    ; b_properties = [ property_key, Str value_title ]
+                    ; b_children =
+                        [ { default_block with b_title = Some "child" } ] }
+                  ; { default_block with b_title = Some "dest" } ] } ]
+          ()
+      in
+      let property_ident = "user.property/" ^ property_key in
+      let db = db_of conn in
+      let node = Option.get (find_block_by_content db "node") in
+      let dest = Option.get (find_block_by_content db "dest") in
+      let value = Option.get (Ldb.ref_ent node property_ident) in
+      let value_uuid = uuid_of value in
+      check (property_type ^ " value has db/id") (value.id > 0);
+      check (property_type ^ " created-from-property ident")
+        (created_from_property_ident db value = Some property_ident);
+      check (property_type ^ " node children")
+        (outline_child_titles node = [ "child" ]);
+      let inverse = undo_move_bang conn value dest in
+      let db = db_of conn in
+      let restored =
+        Option.get
+          (Datascript.entity db
+             (Lookup_ref ("block/uuid", Uuid value_uuid)))
+      in
+      let node' = Option.get (Datascript.entity db (Entity_id node.id)) in
+      let dest' = Option.get (Datascript.entity db (Entity_id dest.id)) in
+      check (property_type ^ " inverse is move-blocks")
+        (inverse <> [] && op_name (List.hd inverse) = "move-blocks");
+      check (property_type ^ " inverse reattaches property identity")
+        (wget "created-from-property" (op_arg (List.hd inverse) 2)
+         = Wire.Keyword property_ident);
+      check (property_type ^ " restored is a property value")
+        (created_from_property_ident db restored = Some property_ident);
+      check (property_type ^ " node still owns the property value")
+        (match Ldb.ref_ent node' property_ident with
+         | Some v -> v.id = restored.id
+         | None -> false);
+      check (property_type ^ " restored parent is node")
+        (match Ldb.ref_ent restored "block/parent" with
+         | Some p -> p.id = node'.id
+         | None -> false);
+      check (property_type ^ " restored value not a normal child")
+        (outline_child_titles node' = [ "child" ]);
+      check (property_type ^ " restored parent is not dest")
+        (match Ldb.ref_ent restored "block/parent" with
+         | Some p -> p.id <> dest'.id
+         | None -> false))
+    [ "default", "p-text", "text property value"
+    ; "url", "p-url", "https://logseq.com" ]
+
+(* (deftest undo-delete-restores-text-and-url-property-values) *)
+let test_undo_delete_restores_text_and_url_property_values () =
+  List.iter
+    (fun (property_type, property_key, value_title) ->
+      let conn =
+        create_conn_with_blocks
+          ~properties:
+            [ property_key
+            , { default_property with p_type = property_type } ]
+          ~pages_and_blocks:
+            [ { page = { default_page with pg_title = Some "page" }
+              ; blocks =
+                  [ { default_block with b_title = Some "node"
+                    ; b_properties = [ property_key, Str value_title ]
+                    ; b_children =
+                        [ { default_block with b_title = Some "child" } ] } ] } ]
+          ()
+      in
+      let property_ident = "user.property/" ^ property_key in
+      let db = db_of conn in
+      let node = Option.get (find_block_by_content db "node") in
+      let value = Option.get (Ldb.ref_ent node property_ident) in
+      let value_uuid = uuid_of value in
+      check (property_type ^ " value has db/id") (value.id > 0);
+      check (property_type ^ " created-from-property ident")
+        (created_from_property_ident db value = Some property_ident);
+      check (property_type ^ " node children")
+        (outline_child_titles node = [ "child" ]);
+      let inverse = undo_move_delete_bang conn value in
+      let db = db_of conn in
+      let restored =
+        Option.get
+          (Datascript.entity db
+             (Lookup_ref ("block/uuid", Uuid value_uuid)))
+      in
+      let node' = Option.get (Datascript.entity db (Entity_id node.id)) in
+      check (property_type ^ " inverse is insert-blocks")
+        (inverse <> [] && op_name (List.hd inverse) = "insert-blocks");
+      check (property_type ^ " inverse reattaches property identity")
+        (wget "created-from-property" (op_arg (List.hd inverse) 2)
+         = Wire.Keyword property_ident);
+      check (property_type ^ " restored is a property value")
+        (created_from_property_ident db restored = Some property_ident);
+      check (property_type ^ " node still owns the property value")
+        (match Ldb.ref_ent node' property_ident with
+         | Some v -> v.id = restored.id
+         | None -> false);
+      check (property_type ^ " restored parent is node")
+        (match Ldb.ref_ent restored "block/parent" with
+         | Some p -> p.id = node'.id
+         | None -> false);
+      check (property_type ^ " restored value not a normal child")
+        (outline_child_titles node' = [ "child" ]))
+    [ "default", "p-text", "text property value"
+    ; "url", "p-url", "https://logseq.com" ]
+
+(* (deftest undo-delete-restores-many-text-property-values) *)
+let test_undo_delete_restores_many_text_property_values () =
+  List.iter
+    (fun value_title ->
+      let conn =
+        create_conn_with_blocks
+          ~properties:
+            [ "p-many"
+            , { default_property with p_type = "default"
+              ; p_cardinality_many = true } ]
+          ~pages_and_blocks:
+            [ { page = { default_page with pg_title = Some "page" }
+              ; blocks =
+                  [ { default_block with b_title = Some "node"
+                    ; b_properties =
+                        [ "p-many", Set_ [ Str "alpha"; Str "beta" ] ]
+                    ; b_children =
+                        [ { default_block with b_title = Some "child" } ] } ] } ]
+          ()
+      in
+      let db = db_of conn in
+      let node = Option.get (find_block_by_content db "node") in
+      let values = Ldb.ref_ents node "user.property/p-many" in
+      let value =
+        match
+          List.find_opt
+            (fun v -> ent_title v = Some value_title)
+            values
+        with
+        | Some v -> v
+        | None -> failwith "value not found"
+      in
+      let value_uuid = uuid_of value in
+      check (value_title ^ " value has db/id") (value.id > 0);
+      let inverse = undo_move_delete_bang conn value in
+      let db = db_of conn in
+      let restored =
+        Option.get
+          (Datascript.entity db
+             (Lookup_ref ("block/uuid", Uuid value_uuid)))
+      in
+      let node' = Option.get (Datascript.entity db (Entity_id node.id)) in
+      check (value_title ^ " inverse is insert-blocks")
+        (inverse <> [] && op_name (List.hd inverse) = "insert-blocks");
+      check (value_title ^ " inverse reattaches p-many")
+        (wget "created-from-property" (op_arg (List.hd inverse) 2)
+         = Wire.Keyword "user.property/p-many");
+      check (value_title ^ " restored is a property value")
+        (created_from_property_ident db restored
+         = Some "user.property/p-many");
+      check (value_title ^ " node owns restored value")
+        (List.exists
+           (fun v ->
+             v.id = restored.id && ent_title v = Some value_title)
+           (Ldb.ref_ents node' "user.property/p-many"));
+      check (value_title ^ " node keeps both values")
+        (List.length (Ldb.ref_ents node' "user.property/p-many") = 2);
+      check (value_title ^ " restored value not a normal child")
+        (outline_child_titles node' = [ "child" ]))
+    [ "alpha"; "beta" ]
+
+let move_undo_cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "undo-move-restores-text-and-url-property-values" `Quick test_undo_move_restores_text_and_url_property_values;
+    Alcotest.test_case "undo-delete-restores-text-and-url-property-values" `Quick test_undo_delete_restores_text_and_url_property_values;
+    Alcotest.test_case "undo-delete-restores-many-text-property-values" `Quick test_undo_delete_restores_many_text_property_values ]
+
+(* ---------- cut_paste_property_test.cljs remaining deftests ---------- *)
+
+(* cljs undo-delete! (cut_paste_property variant — pure delete-blocks +
+   d/with + reset!, then derive + apply inverse ops) *)
+let undo_delete_blocks_bang conn (block : entity) : Wire.t list =
+  let db_before = db_of conn in
+  let block_uuid = uuid_of block in
+  let r = Outliner_core.delete_blocks db_before [ Block_map.of_entity block ] in
+  let report = Datascript.with_tx db_before r.tx_data in
+  let meta =
+    tx_meta "delete-blocks"
+      [ wop "delete-blocks" [ warr [ Wire.Uuid block_uuid ]; wmap [] ] ]
+  in
+  let _f, inverse =
+    derive_ops db_before report.db_after
+      (Db_normalize.wire_of_datoms report.tx_data)
+      meta
+  in
+  ignore (Datascript.apply_report conn report);
+  check "delete has an inverse op" (inverse <> []);
+  apply_ops conn inverse;
+  inverse
+
+(* (deftest undo-delete-restores-all-property-types) *)
+let test_undo_delete_restores_all_property_types () =
+  List.iter
+    (fun (c : paste_case) ->
+      let conn = create_case_conn c in
+      let db = db_of conn in
+      let block = find_source_block db c in
+      let block_uuid = uuid_of block in
+      check (c.pc_title ^ " source block exists") (block.id > 0);
+      ignore (undo_delete_blocks_bang conn block);
+      let restored =
+        Datascript.entity (db_of conn)
+          (Lookup_ref ("block/uuid", Uuid block_uuid))
+      in
+      check (c.pc_title ^ " restored") (restored <> None);
+      (match restored with
+       | Some p -> assert_properties (db_of conn) p c.pc_expected
+       | None -> ()))
+    cut_property_cases
+
+(* (deftest delete-inverse-includes-property-value-children) *)
+let test_delete_inverse_includes_property_value_children () =
+  let c = List.hd cut_property_cases in
+  let conn = create_case_conn c in
+  let db = db_of conn in
+  let block = find_source_block db c in
+  let value_uuid =
+    match Ldb.ref_ent block "user.property/p1" with
+    | Some v -> uuid_of v
+    | None -> ""
+  in
+  let inverse = undo_delete_blocks_bang conn block in
+  check "inverse is insert-blocks"
+    (inverse <> [] && op_name (List.hd inverse) = "insert-blocks");
+  let insert_uuids =
+    match inverse with
+    | insert_op :: _ ->
+        List.filter_map
+          (fun b ->
+            match wget "block/uuid" b with
+            | Wire.Uuid u -> Some u
+            | _ -> None)
+          (Wire.as_seq (op_arg insert_op 0))
+    | [] -> []
+  in
+  check "restore payload includes the block"
+    (List.mem (uuid_of block) insert_uuids);
+  check "restore payload includes the property-value child"
+    (List.mem value_uuid insert_uuids)
+
+let cut_paste_undo_cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "undo-delete-restores-all-property-types" `Quick test_undo_delete_restores_all_property_types;
+    Alcotest.test_case "delete-inverse-includes-property-value-children" `Quick test_delete_inverse_includes_property_value_children ]
