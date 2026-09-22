@@ -58,7 +58,7 @@ let block_map_of_value (v : value) : BM.t =
    a Map on a non-ref attr (e.g. :logseq.property/icon — :type :map) is
    stored as the value itself. Block_map.to_tx_entity always expands Map
    values, so we special-case them here. *)
-let entity_tx (db : db) (m : BM.t) : tx_op =
+let entity_tx (db : db) ?(hint : BM.schema_hint option) (m : BM.t) : tx_op =
   let db_id = BM.ref_attr m "db/id" in
   let attrs =
     List.filter_map
@@ -66,9 +66,16 @@ let entity_tx (db : db) (m : BM.t) : tx_op =
         if a = "db/id" then None
         else
           match v with
-          | Map _ when not (Ldb.ref_attr db a) -> Some (a, One_value v)
+          | Map _
+            when not
+                   (Ldb.ref_attr db a
+                    ||
+                    (match hint with
+                     | Some h -> List.mem a h.BM.ref_attrs
+                     | None -> false)) ->
+            Some (a, One_value v)
           | _ ->
-            (match BM.value_to_tx_value db a v with
+            (match BM.value_to_tx_value db ?hint a v with
              | Some tv -> Some (a, tv)
              | None -> None))
       m
@@ -549,47 +556,53 @@ let initial_tx_data
     ?(graph_git_sha : string option)
     ?(creating_remote_graph : bool option)
     () : tx_op list =
-  let entity (m : BM.t) : tx_op = entity_tx db m in
+  let initial_data_bms : BM.t list =
+    [ kv "logseq.kv/db-type" (String "db")
+    ; kv "logseq.kv/schema-version" db_schema_version
+    ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
+    ; kv "logseq.kv/graph-created-at"
+        (Int (Int64.to_int (Date_time_util.time_ms ())))
+    ; (* Empty property value used by db.type/ref properties *)
+      [ "db/ident", Keyword "logseq.property/empty-placeholder"
+      ; "block/uuid"
+      , Uuid
+          (Common_uuid.gen_uuid "builtin-block-uuid"
+             "logseq.property/empty-placeholder") ] ]
+    @ (match graph_git_sha with
+       | Some sha -> [ kv "logseq.kv/graph-git-sha" (String sha) ]
+       | None -> [])
+    @ (match creating_remote_graph with
+       | Some b -> [ kv "logseq.kv/graph-remote?" (Bool b) ]
+       | None -> [])
+    @ [ kv "logseq.kv/local-graph-uuid"
+          (let s = Common_uuid.new_block_id () in
+           Uuid ("00000000" ^ String.sub s 8 (String.length s - 8))) ]
+  in
+  let file_bms = build_initial_files config_content in
+  let properties_tx, db_ident_to_properties = build_initial_properties () in
+  let default_classes = build_initial_classes db_ident_to_properties in
+  let page_bms =
+    List.map (fun n -> mark_block_as_built_in (build_new_page n))
+      built_in_pages_names
+  in
+  let hidden_bms =
+    build_initial_views () @ build_favorites_page () @ build_recycle_page ()
+  in
+  let hint =
+    BM.schema_hint_of_bms
+      (initial_data_bms @ file_bms @ properties_tx @ default_classes
+       @ page_bms @ hidden_bms)
+  in
+  let entity (m : BM.t) : tx_op = entity_tx ~hint db m in
   let initial_data : tx_op list =
-    List.map entity
-      [ kv "logseq.kv/db-type" (String "db")
-      ; kv "logseq.kv/schema-version" db_schema_version
-      ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
-      ; kv "logseq.kv/graph-created-at"
-          (Int (Int64.to_int (Date_time_util.time_ms ())))
-      ; (* Empty property value used by db.type/ref properties *)
-        [ "db/ident", Keyword "logseq.property/empty-placeholder"
-        ; "block/uuid"
-        , Uuid
-            (Common_uuid.gen_uuid "builtin-block-uuid"
-               "logseq.property/empty-placeholder") ] ]
+    List.map entity initial_data_bms
     @ (match import_type with
        | Some t -> import_tx db t
        | None -> [])
-    @ (match graph_git_sha with
-       | Some sha -> [ entity (kv "logseq.kv/graph-git-sha" (String sha)) ]
-       | None -> [])
-    @ (match creating_remote_graph with
-       | Some b -> [ entity (kv "logseq.kv/graph-remote?" (Bool b)) ]
-       | None -> [])
-    @ [ entity
-          (kv "logseq.kv/local-graph-uuid"
-             (let s = Common_uuid.new_block_id () in
-              Uuid ("00000000" ^ String.sub s 8 (String.length s - 8)))) ]
   in
-  let initial_files =
-    List.map entity (build_initial_files config_content)
-  in
-  let properties_tx, db_ident_to_properties = build_initial_properties () in
-  let default_classes = build_initial_classes db_ident_to_properties in
-  let default_pages =
-    List.map (fun n -> entity (mark_block_as_built_in (build_new_page n)))
-      built_in_pages_names
-  in
-  let hidden_pages =
-    List.map entity
-      (build_initial_views () @ build_favorites_page () @ build_recycle_page ())
-  in
+  let initial_files = List.map entity file_bms in
+  let default_pages = List.map entity page_bms in
+  let hidden_pages = List.map entity hidden_bms in
   (* These classes bootstrap our tags and properties as they depend on each
      other e.g. Root <-> Tag, classes-tx depends on
      logseq.property.class/extends, properties-tx depends on Property *)

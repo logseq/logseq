@@ -3268,9 +3268,11 @@ let check_for_existing_entities (db : db) (export_map : value)
   in
   let out =
     if List.mem export_type [ "graph"; "graph-human" ] then
-      (* merge (dissoc export-map :pages-and-blocks :classes :properties) *)
-      List.filter (fun (k, _) -> k <> "pages-and-blocks" && k <> "classes" && k <> "properties") out
-      @ bm_dissoc mm [ "pages-and-blocks"; "classes"; "properties" ]
+      (* cljs (merge out (dissoc export-map :pages-and-blocks :classes
+         :properties)) — [out] keeps those keys; remaining export-map keys
+         win on duplicates *)
+      let rest = bm_dissoc mm [ "pages-and-blocks"; "classes"; "properties" ] in
+      rest @ List.filter (fun (k, _) -> not (List.mem_assoc k rest)) out
     else out
   in
   let export_map' = Map (List.map (fun (k, v) -> (Keyword k, v)) out) in

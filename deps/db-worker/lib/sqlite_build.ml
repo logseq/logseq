@@ -1718,10 +1718,16 @@ let build_blocks_tx ?page_id_fn (options_v : value) : value list * value list =
 (* EDN tx items -> tx_op list. Map -> entity; bare [:block/uuid u]
    -> lookup-ref upsert; everything else fails fast. *)
 let tx_ops_of_values (db : db) (txs : value list) : tx_op list =
+  let hint =
+    BM.schema_hint_of_bms
+      (List.filter_map
+         (fun v -> match v with Map _ -> Some (bm_of_value v) | _ -> None)
+         txs)
+  in
   List.map
     (fun v ->
       match v with
-      | Map _ -> Sqlite_create_graph.entity_tx db (bm_of_value v)
+      | Map _ -> Sqlite_create_graph.entity_tx ~hint db (bm_of_value v)
       | Vector [ Keyword "block/uuid"; Uuid u ]
       | List [ Keyword "block/uuid"; Uuid u ] ->
           Entity
