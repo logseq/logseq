@@ -51,6 +51,8 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -327,7 +329,7 @@
                             :ok-label (t :ui/confirm)})
                           (p/then (fn []
                                     (shui/dialog-close!)
-                                    (editor-handler/delete-asset-of-block!
+                                    (editor-assets/delete-asset-of-block!
                                      {:block-id block-id
                                       :asset-block asset-block
                                       :local? local?
@@ -2123,7 +2125,7 @@
         block-uuid (:db/id block)]
     (when-not selected?
       (state/clear-selection!)
-      (editor-handler/highlight-block! block-uuid))
+      (editor-format/highlight-block! block-uuid))
     (editor-handler/block->data-transfer! block-uuid event false)
 
     (.setData (gobj/get event "dataTransfer")
@@ -2925,7 +2927,7 @@
                       (.preventDefault e))
                     (mobile-util/mobile-focus-hidden-input)
                     (editor-handler/clear-selection!)
-                    (editor-handler/unhighlight-blocks!)
+                    (editor-format/unhighlight-blocks!)
                     (when-let [editing-block (state/get-edit-block)]
                       (when-not (= (:block/uuid editing-block) (:block/uuid block))
                         (editor-handler/save-current-block!)))
@@ -3720,7 +3722,7 @@
   [config block edit-input-id]
   (let [content (:block/title block)]
     (editor-handler/clear-selection!)
-    (editor-handler/unhighlight-blocks!)
+    (editor-format/unhighlight-blocks!)
     (state/set-editing! edit-input-id content block content {:container-id (:container-id config)})))
 
 (hsx/defc block-content-with-error
@@ -4162,7 +4164,7 @@
       (reset! *dragging-over-block nil)
       (reset! *drag-to-block nil)
       (reset! *move-to' nil)
-      (editor-handler/unhighlight-blocks!)))))
+      (editor-format/unhighlight-blocks!)))))
 
 (defn- block-drag-leave
   [_event *move-to']
