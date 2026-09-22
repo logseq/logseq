@@ -113,6 +113,13 @@ Fix (approved single-owner delegation):
 - `db_core.cljs` `on-become-master`: the
   `(assert (some? (get-datascript-conn repo)))` check now also accepts
   `ocaml-registered?` — the conn lives in OCaml `worker-state`, not cljs's.
+- `db_core.cljs` `close-db!`: when
+  `ocaml-registered? "thread-api/close-db"`, additionally dispatches
+  `<ocaml-invoke "thread-api/close-db"` (OCaml drops its
+  `datascript_conn`/`sqlite_conn`/pending-local-tx/search-builds for the
+  repo) and returns that promise so `p/let` callers keep close-before-
+  mutate ordering; cljs `close-db-aux!` still runs for any cljs-side
+  state.
 
 The resulting flow calls OCaml `create_or_open_db` twice per open — once
 via delegation inside `init-service`, once via `remote-function`
@@ -128,13 +135,16 @@ the repo's conn), so this is safe.
 OCaml ownership. Reachability audit of every cljs reader outside
 `def-thread-api`:
 
-- **No-op readers**: `close-other-dbs!`, `close-db!`, `close-db-aux!`
-  iterate cljs `*sqlite-conns` — empty → harmless. Caveat: internal cljs
-  `close-db!` calls (e.g. `init-service` graph-switch) do **not** close
-  OCaml's conns; OCaml `worker_state` keeps them per-repo and a later
-  `create-or-open-db` reuses them. Closing OCaml conns on graph switch
-  would need an OCaml `close-db` dispatch added to `close-db!` — not done
-  here.
+- **No-op readers**: `close-other-dbs!` iterates cljs `*sqlite-conns` —
+  empty → harmless (OCaml `create_or_open_db` already runs
+  `close_other_sqlite_conns` for other repos when `close-other-db?`).
+  `close-db!` keeps running `close-db-aux!` on cljs state AND now
+  dispatches `<ocaml-invoke "thread-api/close-db"` when registered —
+  `init-service` graph switch and shutdown release OCaml's
+  `datascript_conns`/`sqlite_conns`/pending counts for the repo. The
+  returned promise preserves ordering for `p/let` callers
+  (`import-db-binary`, cljs `unsafe-unlink-db`); a logging catch keeps
+  fire-and-forget callers free of unhandled rejections.
 - **Endpoint-scoped readers** (reachable only through def-thread-api):
   all of `handler/*.cljs`, `publish.cljs`, `undo_redo.cljs`,
   `sync*.cljs`/`deps/sync/*` helpers, `<invalidate-search-db!`,
