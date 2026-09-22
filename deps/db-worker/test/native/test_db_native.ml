@@ -2950,4 +2950,5 @@ let () =
     ; "handler-block", Test_handler_native.block_cases
     ; "handler-comments", Test_handler_native.comments_cases
     ; "handler-property", Test_handler_native.property_cases
-    ; "handler-transaction", Test_handler_native.transaction_cases ]
+    ; "handler-transaction", Test_handler_native.transaction_cases
+    ; "undo-redo", Test_undo_redo_native.cases ]
