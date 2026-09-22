@@ -1041,9 +1041,7 @@ let test_apply_template_op_resolves_dynamic_variables () =
     [ Wire.List
         [ Wire.Keyword "apply-template"
         ; Wire.List
-            [ Wire.Array
-                [ Wire.Keyword "block/uuid"
-                ; Wire.Uuid (uuid_of template_root) ]
+            [ Wire.Uuid (uuid_of template_root)
             ; Wire.Uuid (uuid_of target_block)
             ; Wire.Map [] ] ] ];
   let page_var_block =
@@ -2861,8 +2859,38 @@ let clipboard_block (db : db) (block : entity) : Block_map.t =
   let attrs =
     List.filter_map
       (fun (a, tv) ->
+        (* cljs (into {} entity) yields forward attrs only *)
+        if
+          String.length a > 1
+          && String.contains a '/'
+          && a.[String.index a '/' + 1] = '_'
+        then None
+        else
         match tv with
+        | One_value (Ref id) ->
+            (* raw ref eids also serialize as [:block/uuid] lookups —
+               cljs entity values become lookup-refs; raw eids would
+               silently assert dangling refs on paste *)
+            Option.map
+              (fun u -> a, uuid_lookup_ref u)
+              (Option.bind (Ldb.ent_of_id db id)
+                 (fun e -> Ldb.uuid_value e "block/uuid"))
         | One_value v -> Some (a, v)
+        | Many_values vs
+          when vs <> []
+               && List.for_all (function Ref _ -> true | _ -> false) vs ->
+            Some
+              ( a
+              , Datascript.Set
+                  (List.filter_map
+                     (fun v ->
+                       match v with
+                       | Ref id ->
+                           Option.map uuid_lookup_ref
+                             (Option.bind (Ldb.ent_of_id db id)
+                                (fun e -> Ldb.uuid_value e "block/uuid"))
+                       | _ -> None)
+                     vs))
         | Many_values vs -> Some (a, Datascript.List vs)
         | One_entity te ->
             Option.map (fun u -> a, uuid_lookup_ref u) (uuid_of_te db te)
@@ -3155,7 +3183,21 @@ let copy_paste_cases : unit Alcotest.test_case list =
    passthrough. *)
 let rec value_contents (db : db) (tv : tx_value) : value option =
   match tv with
+  | One_value (Ref id) ->
+      entity_contents db
+        { db_id = Some (Entity_id id); attrs = [] }
   | One_value v -> Some v
+  | Many_values vs when List.for_all (function Ref _ -> true | _ -> false) vs ->
+      Some
+        (Datascript.Set
+           (List.filter_map
+              (fun v ->
+                match v with
+                | Ref id ->
+                    entity_contents db
+                      { db_id = Some (Entity_id id); attrs = [] }
+                | _ -> None)
+              vs))
   | Many_values vs -> Some (Datascript.Set vs)
   | One_entity te -> entity_contents db te
   | Many_entities tes ->
@@ -3507,12 +3549,15 @@ let test_copy_paste_duplicates_text_property_values () =
   let db = db_of conn in
   let original = Option.get (entity_by_uuid conn original_uuid) in
   let pasted =
-    List.filter_map
-      (function Result_value (Int id) -> Some id | _ -> None)
       (List.concat
          (Datascript.q_string db
             "[:find [?b ...] :where [?b :block/title \"b1\"] \
-             [?b :block/parent]]"))
+             [?b :block/parent]]")
+      |> List.filter_map
+           (function
+             | Result_entity id -> Some id
+             | Result_value (Int id) -> Some id
+             | _ -> None))
     |> List.filter_map (Ldb.ent_of_id db)
     |> List.find_opt (fun e -> e.id <> original.id)
   in

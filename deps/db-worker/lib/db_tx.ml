@@ -244,8 +244,7 @@ let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
            | None -> ());
           raise
             (Invalid_tx
-               (Printf.sprintf
-                  "DB write failed with invalid data (%d errors)"
+               (Printf.sprintf "DB write failed with invalid data (%d errors)"
                   (List.length errors)))
         end else
           transact_sync_ conn tx_ops tx_meta

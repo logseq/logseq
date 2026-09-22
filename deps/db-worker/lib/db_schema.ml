@@ -229,3 +229,11 @@ let schema_edn =
     :file/size {}}"
 
 let schema () = schema_of_edn_string schema_edn
+
+(* datascript maybe-wrap-multival: a 2-element collection in ref position is
+   a lookup-ref only when its first element is a :db.unique/identity attr *)
+let is_unique_identity_attr (a : attr) : bool =
+  a = "db/ident"
+  || (match Datascript.Schema.schema_attr_by_name (schema ()) a with
+      | Some (sa : Datascript.schema_attr) -> sa.unique = Some Identity
+      | None -> false)

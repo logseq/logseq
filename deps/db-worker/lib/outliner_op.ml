@@ -272,6 +272,101 @@ let resolve_indent_outdent_opts (db : db) (opts : Wire.t)
       | None -> (None, opts))
   | None -> (None, opts)
 
+(* outliner.op/ops-schema — [:sequential op-schema], each op
+   [:catn [:op :keyword] [:args [:tuple specs]]] dispatched on first.
+   Mirrored declaratively on Wire.t so apply_ops asserts the same shape
+   the cljs malli validator enforces (e.g. ::block-id is uuid?, which
+   rejects lookup-ref vectors). *)
+type op_arg_spec =
+  | SBlock
+  | SSchema
+  | SBlockId
+  | SEmojiId
+  | SPropertyId
+  | SValue
+  | SOption
+  | SImportEdn
+  | STitle
+  | SUuid
+  | SMaybeUuid
+  | SBool
+  | SMaybe of op_arg_spec
+  | SSeqOf of op_arg_spec
+
+let op_args_spec : (string * op_arg_spec list) list =
+  [ "save-block", [ SBlock; SOption ]
+  ; "insert-blocks", [ SSeqOf SBlock; SBlockId; SOption ]
+  ; "apply-template", [ SBlockId; SBlockId; SOption ]
+  ; "delete-blocks", [ SSeqOf SBlockId; SOption ]
+  ; "move-blocks", [ SSeqOf SBlockId; SBlockId; SOption ]
+  ; "move-blocks-up-down", [ SSeqOf SBlockId; SBool ]
+  ; "indent-outdent-blocks", [ SSeqOf SBlockId; SBool; SOption ]
+  ; "collapse-expand-blocks", [ SSeqOf SBlock; SOption ]
+  ; "upsert-property", [ SMaybe SPropertyId; SSchema; SOption ]
+  ; "set-block-property", [ SBlockId; SPropertyId; SValue ]
+  ; "remove-block-property", [ SBlockId; SPropertyId ]
+  ; "delete-property-value", [ SBlockId; SPropertyId; SValue ]
+  ; "batch-delete-property-value",
+    [ SSeqOf SBlockId; SPropertyId; SValue ]
+  ; "create-property-text-block",
+    [ SMaybe SBlockId; SPropertyId; SValue; SOption ]
+  ; "collapse-expand-block-property", [ SBlockId; SPropertyId; SBool ]
+  ; "batch-set-property",
+    [ SSeqOf SBlockId; SPropertyId; SValue; SOption ]
+  ; "batch-remove-property", [ SSeqOf SBlockId; SPropertyId ]
+  ; "class-add-property", [ SBlockId; SPropertyId ]
+  ; "class-remove-property", [ SBlockId; SPropertyId ]
+  ; "upsert-closed-value", [ SPropertyId; SOption ]
+  ; "delete-closed-value", [ SPropertyId; SBlockId ]
+  ; "add-existing-values-to-closed-values",
+    [ SPropertyId; SSeqOf SValue ]
+  ; "batch-import-edn", [ SImportEdn; SOption ]
+  ; "transact", [ SSeqOf SValue; SOption ]
+  ; "create-page", [ STitle; SOption ]
+  ; "rename-page", [ SUuid; STitle ]
+  ; "delete-page", [ SUuid; SOption ]
+  ; "restore-recycled", [ SUuid ]
+  ; "recycle-delete-permanently", [ SUuid ]
+  ; "toggle-reaction", [ SUuid; SEmojiId; SMaybeUuid ] ]
+
+let rec arg_ok (spec : op_arg_spec) (v : Wire.t) : bool =
+  match spec with
+  | SValue -> true
+  | SBlock | SSchema | SImportEdn ->
+      (match v with Wire.Map _ -> true | _ -> false)
+  | SBlockId | SUuid -> (match v with Wire.Uuid _ -> true | _ -> false)
+  | SMaybeUuid ->
+      (match v with Wire.Uuid _ | Wire.Nil -> true | _ -> false)
+  | SEmojiId | STitle -> (match v with Wire.String _ -> true | _ -> false)
+  | SPropertyId ->
+      (match v with
+       | Wire.Keyword s ->
+           (match String.index_opt s '/' with
+            | Some i -> i > 0 && i < String.length s - 1
+            | None -> false)
+       | _ -> false)
+  | SOption -> (match v with Wire.Map _ | Wire.Nil -> true | _ -> false)
+  | SBool -> (match v with Wire.Bool _ -> true | _ -> false)
+  | SMaybe s -> (match v with Wire.Nil -> true | _ -> arg_ok s v)
+  | SSeqOf s ->
+      (match v with
+       | Wire.Array xs | Wire.List xs -> List.for_all (arg_ok s) xs
+       | _ -> false)
+
+let validate_ops (raw_entries : Wire.t list) : unit =
+  List.iter
+    (fun entry ->
+      match op_of_entry entry with
+      | Some (op, args) ->
+          (match List.assoc_opt op op_args_spec with
+           | Some specs
+             when List.length args = List.length specs
+                  && List.for_all2 arg_ok specs args ->
+               ()
+           | _ -> raise (Invalid_outliner_op "invalid op args"))
+      | None -> raise (Invalid_outliner_op "invalid op"))
+    raw_entries
+
 (* cljs ops arg shapes — used by apply_op dispatch *)
 
 let get_block_ids (w : Wire.t) : Wire.t list =
@@ -500,7 +595,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
                    ~class_:(opt_bool opts "class?")
                    ~journal:(opt_bool opts "journal?")
                    ~today_journal:(opt_bool opts "today-journal?")
-                   ~split_namespace:(Option.value (Option.bind (Cljs_map.get opts "split-namespace?") bool_of_wire) ~default:true)
+                   ~split_namespace:(Option.value (Option.bind (Cljs_map.get opts "split-namespace?") bool_of_wire) ~default:false)
                    ~persist_op:(Option.value (Option.bind (Cljs_map.get opts "persist-op?") bool_of_wire) ~default:true)
                    ())
                ()
@@ -554,6 +649,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
     | Wire.Array xs | Wire.List xs -> xs
     | _ -> raise (Invalid_outliner_op "ops must be a vector")
   in
+  validate_ops raw_entries;
   let op_entries = List.filter_map op_of_entry raw_entries in
   let semantic_ops =
     List.filter_map

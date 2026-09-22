@@ -148,6 +148,13 @@ let of_entity (e : entity) : t =
   let attrs =
     List.filter_map
       (fun (a, tv) ->
+        (* cljs (into {} entity) yields forward attrs only *)
+        if
+          String.length a > 1
+          && String.contains a '/'
+          && a.[String.index a '/' + 1] = '_'
+        then None
+        else
         match tv with
         | One_value v -> Some (a, v)
         | Many_values vs -> Some (a, List vs)
@@ -231,6 +238,14 @@ let rec value_to_tx_value
   | Ref_to r -> Some (One_entity (tx_entity_of_ref r))
   | Keyword s when ref_ok -> Some (One_entity (tx_entity_of_ref (Ident s)))
   | Int n when ref_ok -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
+  (* datascript maybe-wrap-multival: a 2-element collection in ref position
+     is a lookup-ref only when its first element is a :db.unique/identity
+     attr — it must reach the engine as Lookup_ref so unresolved ones throw
+     "Nothing found for entity id". A 2-element collection of ordinary
+     idents (e.g. class/properties idents) expands as a collection. *)
+  | (Vector [ Keyword la; _ ] | List [ Keyword la; _ ]) as v
+    when ref_ok && Db_schema.is_unique_identity_attr la ->
+      Some (One_entity (tx_entity_of_ref (Option.get (entity_ref_of_value v))))
   | Map kvs ->
     (match tx_entity_of_map kvs with
      | Some te -> Some (One_entity te)

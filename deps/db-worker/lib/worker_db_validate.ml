@@ -706,19 +706,22 @@ let notify_invalid_data (report : tx_report) (errors : string list) : unit =
                   ; Wire.Map
                       [ kw "i18n-key"
                       , kw "storage/invalid-data-writing" ] ] ]));
-    Comlink.post_message
-      (Transit_codec.to_string
-         (Wire.Array
-            [ kw "capture-error"
-            ; Wire.Map
-                [ ( kw "error"
-                  , Wire.String "Invalid data writing to db" )
-                ; ( kw "extra"
-                  , Wire.Map
-                      [ ( kw "errors"
-                        , Wire.String (String.concat "; " errors) )
-                      ; ( kw "tx-meta"
-                        , Ds_wire.transit_of_tx_meta report.tx_meta ) ] ) ] ]))
+    (* cljs platform/post-message! :capture-error — browser posts on self;
+       node routes to the embedder's broadcast fn via to_clients *)
+    Broadcast.to_clients ~kind:"capture-error"
+      ~transit_payload:
+        (Transit_codec.to_string
+           (Wire.Array
+              [ kw "capture-error"
+              ; Wire.Map
+                  [ ( kw "error"
+                    , Wire.String "Invalid data writing to db" )
+                  ; ( kw "extra"
+                    , Wire.Map
+                        [ ( kw "errors"
+                          , Wire.String (String.concat "; " errors) )
+                        ; ( kw "tx-meta"
+                          , Ds_wire.transit_of_tx_meta report.tx_meta ) ] ) ] ]))
   end
 
 (* worker-db-validate/recompute-checksum-diagnostics *)

@@ -350,10 +350,11 @@ let throw_private_create_page_tag (title : string) =
           ; (Wire.Keyword "payload",
              Wire.Map
                [ (Wire.Keyword "message",
-                  Wire.String ("Can't create a page with tag #" ^ title))
+                  Wire.String
+                    ("New page can't set built-in tags: \"" ^ title ^ "\""))
                ; (Wire.Keyword "i18n-key",
-                  Wire.Keyword "class.validation/cant-create-page-with-private-tag")
-               ; (Wire.Keyword "i18n-args", Wire.Array [ Wire.String title ])
+                  Wire.Keyword "page.validation/cant-set-built-in-tags")
+               ; (Wire.Keyword "i18n-args", Wire.Array [ Wire.String ("\"" ^ title ^ "\"") ])
                ; (Wire.Keyword "type", Wire.Keyword "error") ]) ]))
 
 let existing_class_for_title db (title : string) : entity option =
@@ -931,7 +932,7 @@ type create_result =
 let create db (title_star : string)
     ?(uuid : string option) ?(tags : Wire.t list option) ?(properties : (string * Wire.t) list option)
     ?(persist_op = true) ?(class_ = false) ?(journal = false)
-    ?(today_journal = false) ?(split_namespace = true)
+    ?(today_journal = false) ?(split_namespace = false)
     ?(class_ident_namespace : string option) () : create_result =
   let date_formatter =
     match Ldb.ent_of_ref db (Ident "logseq.class/Journal") with

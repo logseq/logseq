@@ -1250,7 +1250,8 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
                  | None -> failwith "Failed to create page"
                  | Some u ->
                      (match
-                        entity db (Lookup_ref ("block/uuid", Uuid u))
+                        entity (Datascript.db conn)
+                          (Lookup_ref ("block/uuid", Uuid u))
                       with
                       | Some e -> Wire.Int e.id
                       | None -> failwith "Failed to create page")))
@@ -1884,9 +1885,14 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
                if many && (match v' with Wire.Array _ | Wire.List _ | Wire.Set _ -> true | _ -> false)
                then existing_ids = new_ids
                else
-                 (match Ldb.values block property_id with
-                  | [ Ref id ] ->
-                      (match v' with Wire.Int nid -> id = nid | _ -> false)
+                 (* cljs compares (= existing-value v') where existing-value
+                    is the entity object (or set of entities) — an int/kw/vector
+                    v' is never equal; only a de/entity with the same eid is *)
+                 (match v', Ldb.value block property_id with
+                  | Wire.Tagged ("datascript/Entity", Wire.Map kvs), Some (Ref id) ->
+                      (match Wire.get "db/id" (Wire.Map kvs) with
+                       | Some (Wire.Int nid) -> nid = id
+                       | _ -> false)
                   | _ -> false)
              else
                Ldb.value block property_id
