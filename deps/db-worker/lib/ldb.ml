@@ -453,7 +453,11 @@ let get_built_in_page db (title : string) : entity option =
   entity db (Lookup_ref ("block/uuid", Uuid u))
 
 (* common-initial-data/get-block-full-children-ids — BFS over raw
-   block/_parent (cljs uses the :parent rule which reads raw datoms). *)
+   block/_parent (cljs uses the :parent rule which reads raw datoms).
+   Verified engine limitation (datascript-ocaml @ 8db9e3c): bound :in
+   args — even literal head args — are dropped inside recursive rule
+   calls, so [:find [?c ...] :in $ ?id % :where (parent ?id ?c)] with
+   the :parent rules returns children of every parent. *)
 let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
   let module S = Set.Make (Int) in
   let rec go visited queue acc =
