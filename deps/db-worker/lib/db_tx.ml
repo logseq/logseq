@@ -128,23 +128,26 @@ let normalize_tx (txs : tx_op list) : tx_op list =
 
 exception Invalid_tx of string
 
-(* cljs `d/with`: compute the report without committing or persisting.
-   "skip-store?" suppresses `persist_transact_tail` for storage-backed
-   dbs; the real tx_meta is restored on the returned report. *)
-let transact_report ~(tx_meta : tx_meta) (db : db) (tx_ops : tx_op list)
-    : tx_report =
-  let report =
-    transact ~tx_meta:(("skip-store?", Bool true) :: tx_meta) db tx_ops
-  in
-  { report with tx_meta }
+(* cljs d/with — apply tx-ops to a db value without touching storage.
+   `transact` would persist each intermediate report's datoms to the db's
+   storage_ref immediately (and again on conn commit); stripping the ref
+   keeps the report pure. The ref is restored on db_after so the resulting
+   db keeps its storage for the commit below and later reads/writes. *)
+let with_report ~tx_meta (db : db) (tx_ops : tx_op list) : tx_report =
+  let report = transact ~tx_meta { db with storage_ref = None } tx_ops in
+  { report with db_after = { report.db_after with storage_ref = db.storage_ref } }
 
-(* cljs commit: conn.db <- db_after, store-after-transact!, run-callbacks.
-   Replaying the report's tx-data as raw datoms through `transact_conn`
-   reproduces all three atomically. *)
-let commit_tx_report (conn : conn) (report : tx_report) : unit =
-  ignore
-    (transact_conn ~tx_meta:report.tx_meta conn
-       (List.map (fun d -> Raw_datom d) report.tx_data))
+(* cljs compare-and-set! + dc/store-after-transact! + dc/run-callbacks —
+   re-apply the pipeline's final datoms through the conn so listeners see
+   exactly the validated tx_data and storage persists the tail once.
+   Single-threaded worker: the CAS can never fail, matching the shape kept
+   in transact_sync below. *)
+let commit_tx_report (conn : conn) (report : tx_report) : tx_report =
+  let conn_report =
+    transact_conn ~tx_meta:report.tx_meta conn
+      (List.map (fun (d : datom) -> Raw_datom d) report.tx_data)
+  in
+  { conn_report with tempids = report.tempids }
 
 let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
   Ldb.db_based_graph db
@@ -198,7 +201,7 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
   else begin
     let db = Conn.db conn in
     if should_run_pipeline conn db tx_meta then begin
-      let report0 = transact ~tx_meta db tx_ops in
+      let report0 = with_report ~tx_meta db tx_ops in
       let report =
         match !transact_pipeline_fn with
         | Some f -> f report0
@@ -226,7 +229,7 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           transact_sync conn tx_ops tx_meta
       end
       else if report.tx_data <> [] then begin
-        commit_tx_report conn report;
+        ignore (commit_tx_report conn report);
         report
       end else report
     end else
