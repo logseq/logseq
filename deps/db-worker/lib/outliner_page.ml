@@ -1193,7 +1193,13 @@ let page_ref_rewrite_targets (page : entity) : ref_rewrite_target list =
   in
   List.filter_map
     (fun (r : entity) ->
-      match Ldb.string_value r "block/raw-title" with
+      (* cljs :block/raw-title is a virtual entity attr (falls back to
+         :block/title) — go through Ldb.raw_title, not a raw datom read *)
+      match
+        (match Ldb.raw_title r.db r with
+         | Some (String s) -> Some s
+         | _ -> None)
+      with
       | None -> None
       | Some raw_title ->
           let content' = Db_content.content_id_ref_to_page raw_title [ page ] in
