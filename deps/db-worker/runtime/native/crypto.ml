@@ -80,6 +80,64 @@ module Rsa = struct
 
   let sign ~private_key:_ _ =
     Db_worker_effect.error (Failure "Crypto.Rsa.sign: not implemented on native yet")
+
+  (* JWK base64url decode — url-safe alphabet, optional padding. *)
+  let decode_b64url s =
+    let b64 =
+      let buf = Buffer.create (String.length s) in
+      String.iter
+        (function
+          | '-' -> Buffer.add_char buf '+'
+          | '_' -> Buffer.add_char buf '/'
+          | c -> Buffer.add_char buf c)
+        s;
+      Buffer.contents buf
+    in
+    let table = Array.make 256 (-1) in
+    String.iteri (fun i c -> table.(Char.code c) <- i)
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let len = String.length b64 in
+    let out = Buffer.create (len * 6 / 8) in
+    let rec go i acc bits =
+      if i < len then
+        match b64.[i] with
+        | '=' -> ()
+        | c ->
+            let v = table.(Char.code c) in
+            if v < 0 then invalid_arg "bad base64 char";
+            let acc = (acc lsl 6) lor v and bits = bits + 6 in
+            if bits >= 8 then begin
+              Buffer.add_char out (Char.chr ((acc lsr (bits - 8)) land 0xFF));
+              go (i + 1) (acc land ((1 lsl (bits - 8)) - 1)) (bits - 8)
+            end
+            else go (i + 1) acc bits
+    in
+    go 0 0 0;
+    Buffer.contents out
+
+  (* big-endian byte string -> Z (Z.of_bits is little-endian). *)
+  let z_of_be s =
+    let n = String.length s in
+    Z.of_bits (String.init n (fun i -> String.unsafe_get s (n - 1 - i)))
+
+  let verify_rs256_jwk ~jwk ~signature ~data =
+    try
+      let json = Yojson.Safe.from_string jwk in
+      let field name =
+        match Yojson.Safe.Util.member name json with
+        | `String s -> s
+        | _ -> failwith ("Crypto.Rsa.verify_rs256_jwk: missing " ^ name)
+      in
+      let n = z_of_be (decode_b64url (field "n")) in
+      let e = z_of_be (decode_b64url (field "e")) in
+      match Mirage_crypto_pk.Rsa.pub ~e ~n with
+      | Ok pub ->
+          Db_worker_effect.pure
+            (Mirage_crypto_pk.Rsa.PKCS1.verify
+               ~hashp:(function `SHA256 -> true | _ -> false)
+               ~key:pub ~signature (`Message data))
+      | Error (`Msg msg) -> Db_worker_effect.error (Failure msg)
+    with exn -> Db_worker_effect.error exn
 end
 
 module Pbkdf2 = struct

@@ -677,6 +677,52 @@ let test_graph_dir () =
     (Graph_dir.encode_graph_dir_name " \tspace name/child\n "
      = "space name~2Fchild")
 
+(* logseq.common.authorization — client-id-allowed? env bindings *)
+let test_client_id_allowed () =
+  let env =
+    { Authorization.cognito_client_id = Some "primary"
+    ; cognito_client_ids = Some " extra , ,other "
+    ; cognito_issuer = Some "iss"
+    ; cognito_jwks_url = Some "https://jwks" }
+  in
+  List.iter
+    (fun (cid, expected) ->
+      check (Printf.sprintf "client-id %s" cid)
+        (Authorization.client_id_allowed env (Some cid) = expected))
+    [ "primary", true; "extra", true; "other", true; "missing", false ];
+  check "blank client id"
+    (Authorization.client_id_allowed env (Some " ") = false);
+  check "no client id" (Authorization.client_id_allowed env None = false);
+  check "primary unset and additional only"
+    (Authorization.client_id_allowed
+       { env with cognito_client_id = None } (Some "primary")
+     = false)
+
+(* logseq.graph-parser.schema.mldoc — validator spot checks over the
+   JSON-parsed AST domain *)
+let test_mldoc_schema () =
+  let ok schema v = Mldoc_schema.validate schema (Json.parse v) in
+  check "pos-schema accepts"
+    (ok Mldoc_schema.pos_schema {|{"start_pos":1,"end_pos":2}|});
+  check "pos-schema requires keys"
+    (not (ok Mldoc_schema.pos_schema {|{"start_pos":1}|}));
+  check "inline Plain"
+    (ok Mldoc_schema.inline_ast_schema {|["Plain","hello"]|});
+  check "inline Link"
+    (ok Mldoc_schema.inline_ast_schema
+       {|["Link",{"url":["Page_ref","page"],"label":[],"full_text":"x","metadata":""}]|});
+  check "inline rejects unknown tag"
+    (not (ok Mldoc_schema.inline_ast_schema {|["Nope",1]|}));
+  check "block Paragraph"
+    (ok Mldoc_schema.block_ast_schema {|["Paragraph",[["Plain","hi"]]]|});
+  check "nested-link is self-recursive"
+    (ok Mldoc_schema.nested_link_schema
+       {|{"content":"a","children":[["Label","x"],["Nested_link",{"content":"b","children":[]}]]}|});
+  check "nested-link rejects bad children"
+    (not
+       (ok Mldoc_schema.nested_link_schema
+          {|{"content":"a","children":[["Nope","x"]]}|}))
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "delete-blocks-removes-reactions" `Quick test_delete_blocks_removes_reactions;
     Alcotest.test_case "delete-blocks-expands-property-value-children" `Quick test_delete_blocks_expands_property_value_children;
@@ -695,4 +741,6 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-block-refs-count-page-without-db-ident-test" `Quick test_get_block_refs_count_page_without_db_ident;
     Alcotest.test_case "page-ref?" `Quick test_page_ref;
     Alcotest.test_case "url?" `Quick test_url;
-    Alcotest.test_case "graph-dir" `Quick test_graph_dir ]
+    Alcotest.test_case "graph-dir" `Quick test_graph_dir;
+    Alcotest.test_case "client-id-allowed?" `Quick test_client_id_allowed;
+    Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema ]

@@ -39,3 +39,34 @@ val pooled_runtime : unit -> bool
    pool-path). Binary payloads are byte strings. *)
 val export_file : name:string -> dir:string -> path:string -> string Db_worker_effect.t
 val import_db : name:string -> dir:string -> path:string -> string -> unit Db_worker_effect.t
+
+(* cljs platform/sqlite-init! — browser loads sqlite-wasm via
+   sqlite3InitModule with log taps; node/native are per-open so this
+   is a no-op. *)
+val init : unit -> unit Db_worker_effect.t
+
+(* cljs storage :list-graphs — decoded graph names without the
+   logseq_db_ prefix (the endpoint re-prepends it). Browser scans OPFS
+   root ".logseq-pool-*" dirs; node/native scan graph dirs under the
+   storage root. *)
+val list_graphs : unit -> string list Db_worker_effect.t
+
+(* cljs storage :db-exists? — browser checks the OPFS pool dir;
+   node/native checks <graph-dir>/db.sqlite. *)
+val db_exists : repo:string -> bool Db_worker_effect.t
+
+(* cljs storage :remove-vfs! — drops the graph's whole storage
+   namespace: pool.removeVfs on browser, repo-dir contents on
+   node/native. *)
+val remove_vfs : repo:string -> unit Db_worker_effect.t
+
+(* Browser SAH pool access handles and capacity; no-ops/zero where
+   pools don't exist. cljs close-db! pauses; <open-dbs unpauses when
+   capacity is 0. *)
+val pause_vfs : repo:string -> unit
+val unpause_vfs : repo:string -> unit
+val pool_capacity : repo:string -> int
+
+(* cljs worker-state/forget-storage-pool! — drops the cached pool
+   handle for repo. *)
+val drop_pool : repo:string -> unit

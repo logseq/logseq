@@ -18,8 +18,11 @@ module Opfs = struct
   type sqlite3
   type pool
   type handle
+  type oo1
 
-  external init_module : unit -> sqlite3 Js.Promise.t = "sqlite3InitModule"
+  external init_module
+    :  < print : string -> unit ; printErr : string -> unit > Js.t
+    -> sqlite3 Js.Promise.t = "sqlite3InitModule"
 
   external install_pool
     :  sqlite3
@@ -28,9 +31,11 @@ module Opfs = struct
 
   type ctor
 
+  external oo1 : sqlite3 -> oo1 = "oo1" [@@mel.get]
+  external db_class : oo1 -> ctor = "DB" [@@mel.get]
   external pool_db_class : pool -> ctor = "OpfsSAHPoolDb" [@@mel.get]
   (* Reflect.construct(ctor, args) == new ctor(...args) *)
-  external create_db : ctor -> string array -> handle = "construct"
+  external create_db : ctor -> Js.Json.t array -> handle = "construct"
     [@@mel.scope "Reflect"]
   external exec : handle -> string -> unit = "exec" [@@mel.send]
 
@@ -52,6 +57,36 @@ module Opfs = struct
 
   external import_db : pool -> string -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t = "importDb"
     [@@mel.send]
+
+  (* pool-level storage ops — absent on the node fake pool, hence
+     undefined-able getters. *)
+  external pause_vfs : pool -> (unit -> unit) Js.Undefined.t = "pauseVfs" [@@mel.get]
+  external unpause_vfs : pool -> (unit -> unit) Js.Undefined.t = "unpauseVfs" [@@mel.get]
+  external get_capacity : pool -> (unit -> int) Js.Undefined.t = "getCapacity" [@@mel.get]
+  external remove_vfs : pool -> unit Js.Promise.t = "removeVfs" [@@mel.send]
+end
+
+(* OPFS root directory handles — navigator.storage.getDirectory plus
+   the FileSystemDirectoryHandle surface used by list-graphs /
+   db-exists?. *)
+module Opfs_nav = struct
+  type dir_handle
+  type entry
+  type iter
+  type next_result
+
+  external get_directory : unit -> dir_handle Js.Promise.t = "getDirectory"
+    [@@mel.scope "navigator.storage"]
+
+  external get_directory_handle : dir_handle -> string -> dir_handle Js.Promise.t
+    = "getDirectoryHandle" [@@mel.send]
+
+  external values : dir_handle -> iter = "values" [@@mel.send]
+  external next : iter -> next_result Js.Promise.t = "next" [@@mel.send]
+  external next_done : next_result -> bool = "done" [@@mel.get]
+  external next_value : next_result -> entry Js.Undefined.t = "value" [@@mel.get]
+  external kind : entry -> string = "kind" [@@mel.get]
+  external name : entry -> string = "name" [@@mel.get]
 end
 
 type handle =
@@ -103,10 +138,6 @@ let is_node () =
   | None -> false
   | Some _ -> true
 
-let open_db ~path =
-  try { handle = Node_db (Database.create path); filename = path }
-  with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
-
 (* --- OPFS pool lifecycle --- *)
 
 let pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 8
@@ -139,10 +170,40 @@ let ensure_sqlite3 () =
   match !sqlite3_ref with
   | Some sqlite3 -> Db_worker_effect.pure sqlite3
   | None ->
-      Db_worker_effect.bind (task_of_promise (Opfs.init_module ()))
+      (* cljs sqlite-init! taps module stdout/stderr into the log. *)
+      Db_worker_effect.bind
+        (task_of_promise
+           (Opfs.init_module
+              [%obj
+                { print = (fun s -> Worker_log.info "sqlite-wasm" [ "stdout", s ])
+                ; printErr = (fun s -> Worker_log.error "sqlite-wasm" [ "stderr", s ])
+                }]))
         (fun sqlite3 ->
           sqlite3_ref := Some sqlite3;
           Db_worker_effect.pure sqlite3)
+
+let init () =
+  if is_node () then Db_worker_effect.pure ()
+  else Db_worker_effect.map (fun _ -> ()) (ensure_sqlite3 ())
+
+let open_db ~path =
+  if is_node () then
+    try { handle = Node_db (Database.create path); filename = path }
+    with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
+  else
+    (* cljs browser non-pool open: new oo1.DB(path, "c") — publishing
+       graphs only; requires init to have loaded sqlite-wasm. *)
+    match !sqlite3_ref with
+    | Some s3 ->
+        (try
+           { handle =
+               Opfs_db
+                 (Opfs.create_db (Opfs.db_class (Opfs.oo1 s3))
+                    [| Js.Json.string path; Js.Json.string "c" |])
+           ; filename = path
+           }
+         with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
+    | None -> raise (Sqlite_error "sqlite-wasm module not initialized")
 
 let prepare_pool ~name =
   if is_node () || Hashtbl.mem pools name then Db_worker_effect.pure ()
@@ -167,11 +228,21 @@ let open_db_pool ~name ~path =
   else
     match Hashtbl.find_opt pools name with
     | Some pool ->
-        (try { handle =
+        (* cljs <open-dbs: unpauseVfs when the pool's capacity hit 0
+           (post release-access-handles). *)
+        (match
+           Js.Undefined.toOption (Opfs.get_capacity pool),
+           Js.Undefined.toOption (Opfs.unpause_vfs pool)
+         with
+         | Some capacity, Some unpause -> if capacity () = 0 then unpause ()
+         | _ -> ());
+        (try
+           { handle =
                Opfs_db
-                 (Opfs.create_db (Opfs.pool_db_class pool) [| path |])
-             ; filename = path
-             }
+                 (Opfs.create_db (Opfs.pool_db_class pool)
+                    [| Js.Json.string path |])
+           ; filename = path
+           }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error ("opfs pool not prepared: " ^ name))
 
@@ -316,3 +387,141 @@ let import_db ~name ~dir ~path contents =
     | None ->
         Db_worker_effect.error
           (Failure ("opfs pool not prepared: " ^ name))
+
+(* ---------- storage-level graph ops (cljs platform/browser.cljs +
+   platform/node.cljs :storage map) ---------- *)
+
+let data_dir () =
+  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+  | Some dir -> dir
+  | None -> "."
+
+let repo_dir repo =
+  match Graph_dir.repo_to_encoded_graph_dir_name repo with
+  | Some dir -> Filename.concat (data_dir ()) dir
+  | None -> raise (Sqlite_error ("cannot encode graph name: " ^ repo))
+
+(* node fs.statSync().isDirectory() — keeps graph-dir filtering
+   faithful to node.cljs's withFileTypes readdir. *)
+module Fs_stat = struct
+  type stat
+
+  external statSync : string -> stat = "statSync" [@@mel.module "fs"]
+  external is_directory : stat -> bool = "isDirectory" [@@mel.send]
+end
+
+let is_directory path =
+  try Fs_stat.is_directory (Fs_stat.statSync path)
+  with Js.Exn.Error _ -> false
+
+let pool_for repo = Hashtbl.find_opt pools (Graph_dir.pool_name repo)
+
+let list_graphs () =
+  if is_node () then
+    Db_worker_effect.bind (File_sys.readdir (data_dir ()))
+      (fun entries ->
+        let names =
+          List.filter_map
+            (fun entry ->
+              let dir = Filename.concat (data_dir ()) entry in
+              if is_directory dir then
+                match Graph_dir.decode_canonical_graph_dir_key entry with
+                | Some name
+                  when not
+                         (String.equal name "Unlinked graphs"
+                          || String.equal name "backup") ->
+                    Some name
+                | _ -> None
+              else None)
+            entries
+        in
+        Db_worker_effect.pure names)
+  else
+    (* browser: OPFS root ".logseq-pool-*" dirs — decode strips the
+       prefix then +3A+ -> : and ++ -> / (legacy pool-name encoding). *)
+    Db_worker_effect.bind
+      (task_of_promise (Opfs_nav.get_directory ()))
+      (fun root ->
+        let iter = Opfs_nav.values root in
+        let rec collect acc =
+          Db_worker_effect.bind
+            (task_of_promise (Opfs_nav.next iter))
+            (fun res ->
+              if Opfs_nav.next_done res then Db_worker_effect.pure (List.rev acc)
+              else
+                match Js.Undefined.toOption (Opfs_nav.next_value res) with
+                | Some entry
+                  when String.equal (Opfs_nav.kind entry) "directory" ->
+                    let name = Opfs_nav.name entry in
+                    if
+                      String.length name > 13
+                      && String.sub name 0 13 = ".logseq-pool-"
+                    then
+                      let graph =
+                        Graph_dir.str_replace_all
+                          (Graph_dir.str_replace_all
+                             (String.sub name 13 (String.length name - 13))
+                             "+3A+" ":")
+                          "++" "/"
+                      in
+                      collect (graph :: acc)
+                    else collect acc
+                | _ -> collect acc)
+        in
+        collect [])
+
+let db_exists ~repo =
+  if is_node () then
+    File_sys.exists (Filename.concat (repo_dir repo) "db.sqlite")
+  else
+    let name = "." ^ Graph_dir.pool_name repo in
+    Db_worker_effect.catch
+      (Db_worker_effect.bind
+         (task_of_promise (Opfs_nav.get_directory ()))
+         (fun root ->
+           Db_worker_effect.map (fun _ -> true)
+             (task_of_promise (Opfs_nav.get_directory_handle root name))))
+      (fun _ -> Db_worker_effect.pure false)
+
+let remove_vfs ~repo =
+  if is_node () then
+    let dir = repo_dir repo in
+    Db_worker_effect.bind (File_sys.readdir dir)
+      (fun entries ->
+        Db_worker_effect.all
+          (List.map
+             (fun entry -> File_sys.remove (Filename.concat dir entry))
+             entries)
+        |> Db_worker_effect.map (fun _ -> ()))
+  else
+    match pool_for repo with
+    | Some pool ->
+        Hashtbl.remove pools (Graph_dir.pool_name repo);
+        task_of_promise (Opfs.remove_vfs pool)
+    | None -> Db_worker_effect.pure ()
+
+let pause_vfs ~repo =
+  match pool_for repo with
+  | Some pool ->
+      (match Js.Undefined.toOption (Opfs.pause_vfs pool) with
+       | Some f -> f ()
+       | None -> ())
+  | None -> ()
+
+let unpause_vfs ~repo =
+  match pool_for repo with
+  | Some pool ->
+      (match Js.Undefined.toOption (Opfs.unpause_vfs pool) with
+       | Some f -> f ()
+       | None -> ())
+  | None -> ()
+
+let pool_capacity ~repo =
+  match pool_for repo with
+  | Some pool ->
+      (match Js.Undefined.toOption (Opfs.get_capacity pool) with
+       | Some f -> f ()
+       | None -> 0)
+  | None -> 0
+
+let drop_pool ~repo = Hashtbl.remove pools (Graph_dir.pool_name repo)

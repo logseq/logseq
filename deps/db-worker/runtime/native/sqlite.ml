@@ -136,3 +136,50 @@ let import_db ~name:_ ~dir ~path contents =
         ~finally:(fun () -> close_out_noerr oc)
         (fun () -> Out_channel.output_string oc contents);
       Db_worker_effect.pure ())
+
+let init () = Db_worker_effect.pure ()
+
+(* node.cljs storage ops — <data-dir>/<encoded-graph>/db.sqlite. *)
+let data_dir () =
+  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+  | Some dir -> dir
+  | None -> "."
+
+let repo_dir repo =
+  match Graph_dir.repo_to_encoded_graph_dir_name repo with
+  | Some dir -> Filename.concat (data_dir ()) dir
+  | None -> raise (Sqlite_error ("cannot encode graph name: " ^ repo))
+
+let list_graphs () =
+  let base = data_dir () in
+  Db_worker_effect.bind (File_sys.readdir base) (fun entries ->
+      Db_worker_effect.pure
+        (List.filter_map
+           (fun entry ->
+             let dir = Filename.concat base entry in
+             if (try Sys.is_directory dir with Sys_error _ -> false) then
+               match Graph_dir.decode_canonical_graph_dir_key entry with
+               | Some name
+                 when not
+                        (String.equal name "Unlinked graphs"
+                         || String.equal name "backup") ->
+                   Some name
+               | _ -> None
+             else None)
+           entries))
+
+let db_exists ~repo =
+  File_sys.exists (Filename.concat (repo_dir repo) "db.sqlite")
+
+let remove_vfs ~repo =
+  let dir = repo_dir repo in
+  Db_worker_effect.bind (File_sys.readdir dir) (fun entries ->
+      Db_worker_effect.map (fun _ -> ())
+        (Db_worker_effect.all
+           (List.map (fun entry -> File_sys.remove (Filename.concat dir entry)) entries)))
+
+(* no SAH pools natively *)
+let pause_vfs ~repo:_ = ()
+let unpause_vfs ~repo:_ = ()
+let pool_capacity ~repo:_ = 0
+let drop_pool ~repo:_ = ()

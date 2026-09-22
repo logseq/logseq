@@ -31,7 +31,20 @@ let remove_hidden_files (files : 'a list) (config : (attr * value) list)
 let app_name = "logseq"
 let asset_protocol = "assets://"
 let db_version_prefix = "logseq_db_"
+
+(* cljs common-config/strip-leading-db-version-prefix: trim, strip
+   exactly one leading db prefix, trim again. *)
+let strip_leading_db_version_prefix s =
+  let trimmed = String.trim s in
+  let n = String.length db_version_prefix in
+  String.trim
+    (if
+       String.length trimmed >= n
+       && String.sub trimmed 0 n = db_version_prefix
+     then String.sub trimmed n (String.length trimmed - n)
+     else trimmed)
 let file_version_prefix = "logseq_local_"
+let default_graphs_dir = "~/logseq/graphs"
 let local_assets_dir = "assets"
 let unlinked_graphs_dir = "Unlinked graphs"
 let favorites_page_name = "$$$favorites"
