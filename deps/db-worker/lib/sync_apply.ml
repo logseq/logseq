@@ -1490,7 +1490,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                     ~split_namespace:
                       (match Wire.get "split-namespace?" opts with
                        | Some (Wire.Bool b) -> b
-                       | _ -> true)
+                       | _ -> false)
                     ?class_ident_namespace:
                       (match Wire.get "class-ident-namespace" opts with
                        | Some (Wire.String s) -> Some s

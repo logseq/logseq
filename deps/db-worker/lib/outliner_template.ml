@@ -175,8 +175,17 @@ let resolve_block (block : Block_map.t) (rules : (string * string) list)
   let block = resolve_attr block "block/raw-title" resolve_field in
   resolve_attr block "block/properties-text-values" resolve_properties_text_values
 
-(* template/normalize-block — (into {} block) + keep :db/id *)
-let normalize_block (block : Block_map.t) : Block_map.t = block
+(* template/normalize-block — cljs (into {} block) + keep :db/id.
+   Converts entity-sourced maps to plain maps: (db/id, Ref id) becomes
+   (db/id, Int id) so insert-blocks' de/entity? check routes them through
+   the cljs (merge block m) path that preserves all attrs. *)
+let normalize_block (block : Block_map.t) : Block_map.t =
+  List.map
+    (fun (k, v) ->
+      if k = "db/id" then
+        match v with Ref id -> (k, Int id) | _ -> (k, v)
+      else (k, v))
+    block
 
 (* template/resolve-dynamic-template-blocks *)
 let resolve_dynamic_template_blocks (db : db) (target : entity)

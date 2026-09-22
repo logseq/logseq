@@ -314,7 +314,10 @@ let secret_read_fn : (key:string -> string option t) ref = ref Secret_store.read
 let secret_delete_fn : (key:string -> unit t) ref = ref Secret_store.delete
 let read_text_fn : (string -> string t) ref = ref File_sys.read_text
 let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
-let post_message_fn : (string -> unit) ref = ref Comlink.post_message
+(* cljs platform/post-message! — browser posts on self; node routes to the
+   embedder's broadcast fn via Broadcast.to_clients *)
+let post_message_fn : (string -> unit) ref =
+  ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
 let now_ms_fn : (unit -> float) ref = ref Clock.now_ms
 
 (* ---------- hooks: crypt helpers (frontend.common.crypt) ---------- *)
@@ -2201,7 +2204,9 @@ let reset_hooks () =
   secret_delete_fn := Secret_store.delete;
   read_text_fn := File_sys.read_text;
   http_send_fn := Http.send;
-  post_message_fn := Comlink.post_message;
+  post_message_fn :=
+    (fun payload ->
+      Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload);
   now_ms_fn := Clock.now_ms;
   generate_rsa_key_pair_fn := generate_rsa_key_pair_impl;
   encrypt_private_key_fn := encrypt_private_key_impl;
