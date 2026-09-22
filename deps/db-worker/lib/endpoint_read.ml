@@ -621,3 +621,22 @@ let get_block_refs args =
          | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs
+
+(* :thread-api/get-page-blocks-tree — non-:initial-limit path
+   (block-index path deferred). *)
+let get_page_blocks_tree args =
+  with_conn args (fun db ->
+      let ref_v = Option.map Ds_wire.value_of_transit (arg args 1) in
+      Db_worker_effect.pure
+        (match ref_v with
+         | Some v ->
+             (match Ldb.get_page db v with
+              | Some page ->
+                  let blocks = Ldb.get_page_blocks db page.id in
+                  Wire.List
+                    (Outliner_tree.page_blocks_vec_tree db blocks page.id)
+              | None -> Wire.nil)
+         | None -> Wire.nil))
+
+let () =
+  Dispatcher.register "thread-api/get-page-blocks-tree" get_page_blocks_tree
