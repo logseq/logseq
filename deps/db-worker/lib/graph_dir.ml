@@ -64,7 +64,7 @@ let repo_to_encoded_graph_dir_name (repo : string) : string option =
 (* worker-util/get-pool-name: "logseq-pool-" + graph with all
    db-version-prefix occurrences removed, "/" "\\" ":" -> "_" *)
 let pool_name repo =
-  let graph = str_replace_all (String.trim repo) db_version_prefix "" in
+  let graph = String.trim (str_replace_all repo db_version_prefix "") in
   let graph =
     String.map (fun c -> match c with '/' | '\\' | ':' -> '_' | c -> c) graph
   in

@@ -431,7 +431,11 @@ let serializable_db_of_transit (t : Wire.t) : serializable_db =
     | Some w -> List.map datom_of_transit (Wire.as_seq w)
     | None -> []
   in
-  { serializable_schema = schema_of_transit body;
+  { serializable_schema =
+      (* transit DB rep nests the attr->spec map under :schema *)
+      (match Wire.get "schema" body with
+       | Some s -> schema_of_transit s
+       | None -> schema_of_transit body);
     serializable_datoms = datoms;
     serializable_max_eid = 0;
     serializable_max_tx = 0 }
