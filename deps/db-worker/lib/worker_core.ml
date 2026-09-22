@@ -18,6 +18,7 @@ let init () =
     ignore Endpoint_comment.get_comment_thread_block_uuids;
     ignore Endpoint_cli.cli_list_properties;
     ignore Endpoint_cli.api_get_page_data;
+    ignore Endpoint_state.cancel_ui_requests;
     initialized := true
   end
 
