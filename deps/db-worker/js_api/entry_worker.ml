@@ -18,3 +18,8 @@ let registered name = Dispatcher.registered name
    graceful shutdown. Only called when the bundle is run as the
    db-worker-node process replacement. *)
 let main () = Db_worker_node.main ()
+
+(* node embedder hook: the cljs db-worker-node wrapper registers its
+   /v1/events event-fn here (cljs platform :broadcast :post-message!) so
+   Broadcast.to_clients reaches SSE clients. *)
+let set_post_fn f = Broadcast.set_post_fn f
