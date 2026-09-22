@@ -28,7 +28,31 @@ let q args =
              | [] -> Db_worker_effect.pure Wire.nil
              | query_t :: rest ->
                  let query_edn = Ds_wire.edn_text_of_arg query_t in
-                 let inputs' = List.map Ds_wire.query_arg_of_transit rest in
+                 let query = Parser.parse_query_string query_edn in
+                 (* match Query_runtime.initial_query_context: % consumes a
+                    positional arg only when the query has no :rules section *)
+                 let consume_rules = query.rules = [] in
+                 let rec args_of_inputs decls args =
+                   match decls with
+                   | [] -> List.map Ds_wire.query_arg_of_transit args
+                   | Input_rules_decl :: ds when consume_rules ->
+                       (match args with
+                        | arg :: rest ->
+                            Arg_rules
+                              (Parser.parse_rules
+                                 (Parser.read_edn (Ds_wire.edn_text_of_arg arg)))
+                            :: args_of_inputs ds rest
+                        | [] -> [])
+                   | (Input_source_decl _ | Input_rules_decl) :: ds ->
+                       args_of_inputs ds args
+                   | _ :: ds ->
+                       (match args with
+                        | arg :: rest ->
+                            Ds_wire.query_arg_of_transit arg
+                            :: args_of_inputs ds rest
+                        | [] -> [])
+                 in
+                 let inputs' = args_of_inputs query.inputs rest in
                  let output =
                    Datascript.q_return_map_string ~inputs:inputs' (Datascript.db conn) query_edn
                  in
