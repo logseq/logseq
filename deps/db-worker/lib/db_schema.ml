@@ -1,3 +1,5 @@
+open Datascript
+
 (* Static schema/property data ported from
    logseq.db.frontend.property, logseq.db.frontend.property.type and
    logseq.db.frontend.malli-schema. *)
@@ -103,6 +105,83 @@ let required_properties =
     "logseq.property.reaction/emoji-id"; "logseq.property.reaction/target" ]
 
 let mem (xs : string list) (x : string) : bool = List.mem x xs
+
+(* db-schema/schema attribute partitions *)
+let ref_type_attributes =
+  [ "block/parent"; "block/page"; "block/refs"; "block/tags"; "block/link"
+  ; "block/alias"; "block/closed-value-property" ]
+
+let card_many_attributes =
+  [ "block/refs"; "block/tags"; "block/alias"; "block/closed-value-property" ]
+
+let card_many_ref_type_attributes =
+  List.filter (fun a -> List.mem a ref_type_attributes) card_many_attributes
+
+let card_one_ref_type_attributes =
+  List.filter
+    (fun a -> not (List.mem a card_many_attributes))
+    ref_type_attributes
+
+let db_non_ref_attributes =
+  [ "db/ident"; "kv/value"; "block/uuid"; "block/order"; "block/collapsed?"
+  ; "block/created-at"; "block/updated-at"; "block/name"; "block/title"
+  ; "block/journal-day"; "block/tx-id"; "file/path"; "file/content"
+  ; "file/created-at"; "file/last-modified-at"; "file/size" ]
+
+(* db-schema/version *)
+type schema_version = { sv_major : int; sv_minor : int option }
+
+let version = { sv_major = 65; sv_minor = Some 33 }
+
+(* db-schema/parse-schema-version — accepts int, "10.1", [10 1],
+   {:major 10 :minor 1} *)
+let parse_schema_version (v : value) : schema_version =
+  match v with
+  | Int n -> { sv_major = n; sv_minor = None }
+  | Float f -> { sv_major = int_of_float f; sv_minor = None }
+  | String s ->
+      (match String.split_on_char '.' s with
+       | [ maj; min ] ->
+           { sv_major = int_of_string maj; sv_minor = Some (int_of_string min) }
+       | [ maj ] -> { sv_major = int_of_string maj; sv_minor = None }
+       | _ -> invalid_arg ("Not a schema-version: " ^ s))
+  | Vector [ Int maj ] | List [ Int maj ] ->
+      { sv_major = maj; sv_minor = None }
+  | Vector [ Int maj; Int min ] | List [ Int maj; Int min ] ->
+      { sv_major = maj; sv_minor = Some min }
+  | Map kvs ->
+      let get name =
+        List.find_map
+          (fun (k, v) ->
+            match k, v with
+            | (Keyword kk | String kk), Int i when kk = name -> Some i
+            | _ -> None)
+          kvs
+      in
+      (match get "major" with
+       | Some maj -> { sv_major = maj; sv_minor = get "minor" }
+       | None -> invalid_arg "Not a schema-version")
+  | _ -> invalid_arg "Not a schema-version"
+
+(* db-schema/compare-schema-version — compares [major minor] pairs *)
+let compare_schema_version (x : schema_version) (y : schema_version) : int =
+  let c = Int.compare x.sv_major y.sv_major in
+  if c <> 0 then c
+  else
+    match x.sv_minor, y.sv_minor with
+    | None, None -> 0
+    | None, Some _ -> -1
+    | Some _, None -> 1
+    | Some a, Some b -> Int.compare a b
+
+(* db-schema/major-version *)
+let major_version (v : schema_version) : int = v.sv_major
+
+(* db-schema/schema-version->string *)
+let schema_version_to_string (v : schema_version) : string =
+  match v.sv_minor with
+  | Some min -> string_of_int v.sv_major ^ "." ^ string_of_int min
+  | None -> string_of_int v.sv_major
 
 (* db-frontend-schema/schema — the fixed db-attribute schema map.
    Value types only matter for :db.type/ref; the rest is metadata. *)
