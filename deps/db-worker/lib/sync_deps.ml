@@ -29,9 +29,9 @@ let ensure_graph_aes_key : (string -> Wire.t Db_worker_effect.t) option ref = re
 (* crypt/graph-e2ee? : db -> bool *)
 let graph_e2ee : (Datascript.db -> bool) option ref = ref None
 
-(* crypt/<encrypt-datoms : repo aes-key datoms -> promise<datoms> *)
+(* crypt/<encrypt-datoms : aes-key datoms -> promise<datoms> *)
 let encrypt_datoms :
-    (string -> Wire.t -> Wire.t list -> Wire.t list Db_worker_effect.t) option ref =
+    (Wire.t -> Wire.t list -> Wire.t list Db_worker_effect.t) option ref =
   ref None
 
 (* crypt/<decrypt-snapshot-datoms-batch : aes-key datoms -> datoms *)
@@ -173,4 +173,26 @@ let batch_import_edn_fn :
 (* block-handler/canonical-blocks : db block-uuids -> {:blocks {uuid row}} *)
 let canonical_blocks_fn :
     (Datascript.db -> Wire.t list -> Wire.t) option ref =
+  ref None
+
+(* ---- lifecycle endpoints owned by other packages ---- *)
+
+(* thread-api/db-sync-close-db : repo -> unit *)
+let close_db : (string -> unit Db_worker_effect.t) option ref = ref None
+
+(* thread-api/unsafe-unlink-db : repo -> unit *)
+let unlink_db : (string -> unit Db_worker_effect.t) option ref = ref None
+
+(* thread-api/db-sync-invalidate-search-db : repo -> unit *)
+let invalidate_search_db : (string -> unit Db_worker_effect.t) option ref =
+  ref None
+
+(* thread-api/create-or-open-db : repo opts-map -> result *)
+let create_or_open_db :
+    (string -> Wire.t -> Wire.t Db_worker_effect.t) option ref =
+  ref None
+
+(* thread-api/db-sync-rehydrate-large-titles : repo graph-id -> unit *)
+let rehydrate_large_titles :
+    (string -> string -> unit Db_worker_effect.t) option ref =
   ref None
