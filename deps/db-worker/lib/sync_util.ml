@@ -13,7 +13,7 @@ let kw_name k =
   | None -> k
 
 (* sync-util/fail-fast *)
-let fail_fast tag (data : Wire.t) : 'a =
+let fail_fast_exn_impl tag (data : Wire.t) : exn =
   let field_of (k, v) =
     let k' =
       match k with
@@ -28,7 +28,13 @@ let fail_fast tag (data : Wire.t) : 'a =
     (match data with
      | Wire.Map kvs -> List.map field_of kvs
      | _ -> []);
-  raise (ex_info (kw_name tag) (Wire.as_map data))
+  ex_info (kw_name tag) (Wire.as_map data)
+
+(* test seam — cljs tests inject :fail-fast-f (a hook that produces or
+   raises the exn fail-fast throws) *)
+let fail_fast_fn : (string -> Wire.t -> exn) ref = ref fail_fast_exn_impl
+
+let fail_fast tag (data : Wire.t) : 'a = raise (!fail_fast_fn tag data)
 
 (* cljs (and (= :node runtime) (= :cli owner-source)); the native
    worker is the CLI daemon's worker too, so owner-source "cli"
