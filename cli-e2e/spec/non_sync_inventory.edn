@@ -100,7 +100,8 @@
               "remove property"]
    :options ["--id"
              "--uuid"
-             "--name"]}
+             "--name"
+             "--force"]}
 
   :query
   {:commands ["query"
