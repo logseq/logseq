@@ -242,6 +242,15 @@ let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           (match !transact_invalid_callback with
            | Some f -> f report errors
            | None -> ());
+          (* cljs throw-invalid-tx! — log/error :invalid-data debug-data *)
+          Worker_log.error "invalid-data"
+            [ ( "tx-meta"
+              , Ds_wire.edn_of_transit (Ds_wire.transit_of_tx_meta tx_meta) )
+            ; "tx-count", string_of_int (List.length tx_ops)
+            ; "pipeline-tx-count",
+              string_of_int (List.length report.tx_data)
+            ; "error-count", string_of_int (List.length errors)
+            ; "errors", String.concat "; " errors ];
           raise
             (Invalid_tx
                (Printf.sprintf "DB write failed with invalid data (%d errors)"
