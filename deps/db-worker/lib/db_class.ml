@@ -419,3 +419,14 @@ let logseq_class_kw (kw : string) : bool =
 (* db-class/user-class-namespace? — namespace string contains ".class" *)
 let user_class_namespace (s : string) : bool =
   Ns_util.str_contains s ".class"
+
+(* db-db/class-instance? — object tagged with class or a child class of it.
+   Lives here (not ldb.ml) to keep the module graph acyclic: ldb must not
+   depend on db_class. *)
+let class_instance (class_ : entity) (object_ : entity) : bool =
+  let tag_ids = Ldb.ref_ids object_ "block/tags" in
+  List.mem class_.id tag_ids
+  || List.exists
+       (fun (p : entity) -> p.id = class_.id)
+       (get_classes_parents (Ldb.ref_ents object_ "block/tags"))
+

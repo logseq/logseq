@@ -122,3 +122,10 @@ let new_block_id () : string =
   match Datascript.squuid () with
   | Datascript.Uuid u -> u
   | _ -> invalid_arg "squuid did not return a uuid"
+
+(* common-uuid/gen-journal-template-block — persistent uuid for a
+   journal's template block. *)
+let gen_journal_template_block (journal_uuid : string) (template_block_uuid : string)
+    : string =
+  "00000005-" ^ String.sub journal_uuid 9 14
+  ^ String.sub template_block_uuid 23 (String.length template_block_uuid - 23)
