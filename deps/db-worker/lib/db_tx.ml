@@ -189,7 +189,29 @@ let transact_invalid_callback
     : (tx_report -> string list -> unit) option ref =
   ref None
 
-let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
+(* cljs catch in transact-sync: log :transact-failed {:tx-meta :tx-count
+   :error} unless suppressed by tx-meta flags. *)
+let log_transact_failed (tx_meta : tx_meta) (tx_ops : tx_op list) (e : exn) :
+    unit =
+  let suppressed =
+    tx_meta_flag tx_meta "db-sync/suppress-transact-failed-log?"
+    || (tx_meta_flag tx_meta
+          "db-sync/suppress-stale-rebase-transact-failed-log?"
+        &&
+        (match e with
+         | Dispatcher.Exn_info (_, kvs) ->
+             List.assoc_opt (Wire.Keyword "error") kvs
+             = Some (Wire.Keyword "entity-id/missing")
+         | _ -> false))
+  in
+  if not suppressed then
+    Worker_log.error "transact-failed"
+      [ ( "tx-meta"
+        , Ds_wire.edn_of_transit (Ds_wire.transit_of_tx_meta tx_meta) )
+      ; "tx-count", string_of_int (List.length tx_ops)
+      ; "error", Printexc.to_string e ]
+
+let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
     : tx_report =
   if tx_ops = [] then
     { db_before = Conn.db conn
@@ -226,7 +248,7 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
                   "DB write failed with invalid data (%d errors)"
                   (List.length errors)))
         end else
-          transact_sync conn tx_ops tx_meta
+          transact_sync_ conn tx_ops tx_meta
       end
       else if report.tx_data <> [] then
         (* cljs compare-and-set! — conn must still hold the db the report
@@ -236,11 +258,18 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           ignore (commit_tx_report conn report);
           report
         end else
-          transact_sync conn tx_ops tx_meta
+          transact_sync_ conn tx_ops tx_meta
       else report
     end else
       transact_conn ~tx_meta conn tx_ops
   end
+
+let transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
+    : tx_report =
+  try transact_sync_ conn tx_ops tx_meta
+  with e ->
+    log_transact_failed tx_meta tx_ops e;
+    raise e
 
 (* ldb/transact! — worker path always takes the conn branch *)
 let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
