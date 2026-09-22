@@ -15,16 +15,17 @@
    cljs deftest names are kept as OCaml test names.
 
    Skipped cljs cases (unported dependency):
-   - get-class-extends: ldb/get-class-extends not ported
    - sort-page-random-blocks (2 cases): ldb/sort-page-random-blocks not
      ported
-   - test-batch-transact! / batch-transact-with-temp-conn-* /
-     batch-transact-without-pages-date-* / validated-transact-* /
-     fix-db-transact-* / transact-new-graph-refs-* /
-     test-batch-transact-clears-stale-tx-tail-*: the ldb transact
-     pipeline (batch-transact-with-temp-conn!, batch-transact!,
-     register-transact-pipeline-fn!, storage tx tail internals) is not
-     ported
+   - test-batch-transact!: cljs asserts db validation throws on
+     class->property conversion; the OCaml port has no default
+     validate-tx-report wired (Db_tx.validate_tx_report_fn = None), so
+     the throw assertion has no counterpart
+   - batch-transact-with-temp-conn-before-commit-can-abort-live-commit:
+     Db_tx.batch_transact_with_temp_conn has no :before-commit opt arg
+   - batch-transact-without-pages-date-* /
+     test-batch-transact-clears-stale-tx-tail-*: batch-transact! storage
+     tail internals are not ported
    - get-bidirectional-properties-performance-* and
      get-latest-journals-bounded-scan: ^:long tests that count d/entity /
      d/datoms calls via with-redefs — no OCaml equivalent
@@ -45,7 +46,8 @@
    - cljs thread-api/get-block-refs accepts an entity ref
      ([:block/uuid u]); the OCaml endpoint takes the resolved eid int.
 
-   Lib bugs found by these tests (reported, not fixed here):
+   Lib bugs found by these tests (reported upstream, fixed in
+   fd406466b2 / 304c07d865):
    - Ldb.values (lib/ldb.ml) drops One_entity/Many_entities produced by
      entity_attr's ref materialization, so every ref-attr accessor
      (ref_ids/ref_ent/has_tag/is_page/...) returned empty. Requires
@@ -56,57 +58,16 @@
      ~tx_meta conn report.db_after compile and keep these tests green. *)
 
 open Datascript
-
-(* cljs tests run with $LOGSEQ_STABLE_IDENTS so new user.property/user.class
-   idents are deterministic (db-ident/create-db-ident-from-name). *)
-let () = Unix.putenv "LOGSEQ_STABLE_IDENTS" "1"
-
-let failures = ref 0
-
-let check (name : string) (ok : bool) =
-  if ok then ()
-  else begin
-    incr failures;
-    Printf.eprintf "FAIL: %s\n" name
-  end
-
-let await (t : Wire.t Db_worker_effect.t) : Wire.t =
-  let result = ref Wire.nil in
-  Db_worker_effect.on_any t (fun v -> result := v) (fun e -> raise e);
-  !result
-
-let test_repo = "test-repo"
-
-let register_conn conn = Worker_state.set_datascript_conn test_repo conn
-
-let db_of = Datascript.db
-let ent_title (e : entity) = Ldb.string_value e "block/title"
+open Test_shared
 
 (* Endpoint modules self-register via top-level Dispatcher.register
    effects; force module init before invoking by name. *)
 let () = Worker_core.init ()
 
-let block_by_title db t = Db_test_util.find_page_by_title db t
-
-(* wire helpers for endpoint result assertions *)
-let wire_maps (w : Wire.t) : (Wire.t * Wire.t) list list =
-  match w with
-  | Wire.Array items | Wire.List items ->
-      List.filter_map (function Wire.Map kvs -> Some kvs | _ -> None) items
-  | _ -> []
-
-let wire_get (k : string) (m : (Wire.t * Wire.t) list) : Wire.t option =
-  List.find_map (function Wire.Keyword k', v when k' = k -> Some v | _ -> None) m
-
-let wire_string_field (k : string) (m : (Wire.t * Wire.t) list) : string option =
-  match wire_get k m with
-  | Some (Wire.String s) | Some (Wire.Uuid s) -> Some s
-  | _ -> None
-
 (* ---------- deps/db/test/logseq/db_test.cljs ---------- *)
 
 (* (deftest get-case-page ...) *)
-let () =
+let test_get_case_page () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -129,7 +90,7 @@ let () =
   check "get-case-page Movie" (title_of "Movie" = Some "Movie")
 
 (* (deftest get-journal-page-by-day ...) *)
-let () =
+let test_get_journal_page_by_day () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -183,16 +144,18 @@ let check_ordinary_sibling name conn =
      | Some e -> e.id = after'.id
      | None -> false)
 
-let () =
+let test_ordinary_sibling_skips_created_from_property_children () =
   check_ordinary_sibling "ordinary-sibling-skips-created-from-property-children"
-    (create_sibling_conn ":logseq.property/created-from-property -2");
+    (create_sibling_conn ":logseq.property/created-from-property -2")
+
+let test_ordinary_sibling_skips_closed_value_property_children () =
   check_ordinary_sibling "ordinary-sibling-skips-closed-value-property-children"
     (create_sibling_conn ":block/closed-value-property -2")
 
 (* (deftest page-exists ...)
    cljs page-exists? returns a seq of page eids (e.g. ["foo" page]);
    Ldb.page_exists returns bool — boolean equivalents asserted. *)
-let () =
+let test_page_exists () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -211,7 +174,7 @@ let () =
     (not (Ldb.page_exists db "movie" [ "logseq.class/Property" ]))
 
 (* (deftest test-transact-with-multiple-tx-datoms ...) *)
-let () =
+let test_transact_with_multiple_tx_datoms () =
   (* cljs (d/create-conn) — no schema *)
   let conn = Datascript.create_conn () in
   ignore (Datascript.transact_conn_string conn "[[:db/add -1 :property :v1]]");
@@ -267,26 +230,30 @@ let create_bidirectional_conn ~enabled =
           blocks = [] } ]
     ()
 
-let () =
+let test_get_bidirectional_properties_disabled () =
   let db = db_of (create_bidirectional_conn ~enabled:false) in
   let target = Option.get (block_by_title db "Bob") in
   check "get-bidirectional-properties disabled"
     (Ldb.get_bidirectional_properties db target.id = [])
 
-let () =
+let test_get_bidirectional_properties () =
   let conn = create_bidirectional_conn ~enabled:true in
   let db = db_of conn in
   let target = Option.get (block_by_title db "Bob") in
   let result = Ldb.get_bidirectional_properties db target.id in
   check "get-bidirectional-properties group count" (List.length result = 1);
-  (match result with
-   | [ g ] ->
-       check "get-bidirectional-properties group title" (g.title = "People");
-       check "get-bidirectional-properties group entities"
-         (List.map ent_title g.entities = [ Some "Alice" ])
-   | _ -> ());
+  match result with
+  | [ g ] ->
+      check "get-bidirectional-properties group title" (g.title = "People");
+      check "get-bidirectional-properties group entities"
+        (List.map ent_title g.entities = [ Some "Alice" ])
+  | _ -> ()
 
-  (* (deftest get-bidirectional-properties-ignores-recycled-entities ...) *)
+(* (deftest get-bidirectional-properties-ignores-recycled-entities ...) *)
+let test_get_bidirectional_properties_ignores_recycled_entities () =
+  let conn = create_bidirectional_conn ~enabled:true in
+  let db = db_of conn in
+  let target = Option.get (block_by_title db "Bob") in
   let alice = Option.get (block_by_title db "Alice") in
   ignore
     (Datascript.transact_conn_string conn
@@ -300,7 +267,7 @@ let () =
 (* ---------- src/test/frontend/worker/db_core_test.cljs ---------- *)
 
 (* (deftest get-block-parents-returns-parents ...) *)
-let () =
+let test_get_block_parents_returns_parents () =
   let conn = Db_test_util.create_conn () in
   ignore
     (Datascript.transact_conn_string conn
@@ -329,7 +296,7 @@ let () =
 (* (deftest get-block-refs-returns-linked-references ...)
    cljs passes [:block/uuid ref-uuid]; the OCaml endpoint takes the
    resolved eid — resolved via entity lookup, same endpoint. *)
-let () =
+let test_get_block_refs_returns_linked_references () =
   let conn = Db_test_util.create_conn () in
   ignore
     (Datascript.transact_conn_string conn
@@ -360,7 +327,7 @@ let () =
    maps :block/title through get-block-title; the OCaml endpoint emits
    the stored literal under :block/title and the formatted title under
    :block/raw-title, so raw-title is asserted here (see header note). *)
-let () =
+let test_get_latest_journals_returns_worker_maps () =
   let conn = Db_test_util.create_conn () in
   ignore
     (Datascript.transact_conn_string conn
@@ -385,8 +352,8 @@ let () =
      = [ Some "Jan 2nd, 2024" ])
 
 (* (deftest q-executes-datascript-query ...) *)
-let () =
-  let conn = Db_test_util.create_conn () in
+let test_q_executes_datascript_query () =
+  let conn = Db_test_util.create_conn_bare () in
   ignore
     (Datascript.transact_conn_string conn
        "[{:block/title \"page a\"} {:block/title \"page b\"}]");
@@ -401,8 +368,62 @@ let () =
   let rows = match res with Wire.Array r | Wire.List r -> r | _ -> [] in
   check "q-executes-datascript-query" (List.length rows = 2)
 
-(* (deftest q-returns-nil-for-missing-conn ...) *)
-let () =
+(* (deftest get-class-extends ...) *)
+let test_get_class_extends () =
+  let conn = Db_test_util.create_conn () in
+  (* cljs class-parents-data *)
+  ignore
+    (Datascript.transact_conn conn
+       [ Entity
+           { db_id = None
+           ; attrs =
+               [ "block/tags", One_value (Ref_to (Ident "logseq.class/Tag"))
+               ; "block/title", One_value (String "x")
+               ; "block/name", One_value (String "x")
+               ; "block/uuid",
+                 One_value (Uuid "6c353967-f79b-4785-b804-a39b81d72461") ] }
+       ; Entity
+           { db_id = None
+           ; attrs =
+               [ "block/tags", One_value (Ref_to (Ident "logseq.class/Tag"))
+               ; "block/title", One_value (String "y")
+               ; "block/name", One_value (String "y")
+               ; "block/uuid",
+                 One_value (Uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99")
+               ; "logseq.property.class/extends",
+                 One_value
+                   (Ref_to
+                      (Lookup_ref
+                         ("block/uuid",
+                          Uuid "6c353967-f79b-4785-b804-a39b81d72461"))) ] }
+       ; Entity
+           { db_id = None
+           ; attrs =
+               [ "block/tags", One_value (Ref_to (Ident "logseq.class/Tag"))
+               ; "block/title", One_value (String "z")
+               ; "block/name", One_value (String "z")
+               ; "block/uuid",
+                 One_value (Uuid "d95f2912-a7af-41b9-8ed5-28861f7fc0be")
+               ; "logseq.property.class/extends",
+                 One_value
+                   (Ref_to
+                      (Lookup_ref
+                         ("block/uuid",
+                          Uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99"))) ] } ]);
+  let db = db_of conn in
+  let z =
+    match Ldb.get_page db (String "z") with
+    | Some e -> e
+    | None -> failwith "class page z not found"
+  in
+  let titles =
+    sort_uniq
+      (List.filter_map ent_title (Db_class.get_class_extends z))
+  in
+  check "get-class-extends" (titles = [ "x"; "y" ])
+
+(* (deftest q-returns-nil-for-nonexistent-conn ...) *)
+let test_q_returns_nil_for_nonexistent_conn () =
   let res =
     await
       (Dispatcher.invoke "thread-api/q"
@@ -412,8 +433,8 @@ let () =
   check "q-returns-nil-for-missing-conn" (res = Wire.nil)
 
 (* (deftest datoms-returns-formatted-datoms ...) *)
-let () =
-  let conn = Db_test_util.create_conn () in
+let test_datoms_returns_formatted_datoms () =
+  let conn = Db_test_util.create_conn_bare () in
   ignore (Datascript.transact_conn_string conn "[{:block/title \"test\"}]");
   register_conn conn;
   let res =
@@ -430,8 +451,8 @@ let () =
      | _ -> false)
 
 (* (deftest pull-returns-entity-data ...) *)
-let () =
-  let conn = Db_test_util.create_conn () in
+let test_pull_returns_entity_data () =
+  let conn = Db_test_util.create_conn_bare () in
   ignore
     (Datascript.transact_conn_string conn
        "[{:block/title \"test page\" :block/name \"test-page\"
@@ -453,6 +474,209 @@ let () =
        check "pull-returns-entity-data title"
          (wire_string_field "block/title" kvs = Some "test page")
    | _ -> ())
+
+(* (deftest batch-transact-with-temp-conn-preserves-retracts-test ...) *)
+let test_batch_transact_with_temp_conn_preserves_retracts_test () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks = [ { default_block with b_title = Some "old" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "old")
+  in
+  let block_id = block.id in
+  let uuid = uuid_of block in
+  let ref_ = Lookup_ref ("block/uuid", Uuid uuid) in
+  ignore
+    (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+         ignore
+           (Db_tx.transact temp
+              [ Retract (ref_, "block/title", Some (String "old")) ]);
+         ignore
+           (Db_tx.transact temp
+              [ Add (ref_, "block/title", String "new") ])));
+  let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
+  check "batch-transact-with-temp-conn-preserves-retracts"
+    (Ldb.string_value e "block/title" = Some "new")
+
+(* (deftest batch-transact-with-temp-conn-preserves-cardinality-one-schema-test
+   ...) *)
+let test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks = [ { default_block with b_title = Some "old" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "old")
+  in
+  let block_id = block.id in
+  let uuid = uuid_of block in
+  ignore
+    (Db_tx.transact conn
+       [ Add (Entity_id block_id, "block/order", String "a0") ]);
+  ignore
+    (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+         ignore
+           (Db_tx.transact temp
+              [ Add (Lookup_ref ("block/uuid", Uuid uuid), "block/order",
+                     String "a1") ])));
+  let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
+  check "batch-transact-with-temp-conn-preserves-cardinality-one-schema"
+    (Ldb.string_value e "block/order" = Some "a1")
+
+(* (deftest validated-transact-retries-when-live-conn-changes-before-commit-test
+   ...) *)
+let test_validated_transact_retries_when_live_conn_changes_before_commit_test () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks =
+                [ { default_block with b_title = Some "first" };
+                  { default_block with b_title = Some "second" } ] } ]
+      ()
+  in
+  let first_block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "first")
+  in
+  let second_block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "second")
+  in
+  let injected = ref false in
+  let saved = !Db_tx.transact_pipeline_fn in
+  (try
+     Db_tx.transact_pipeline_fn
+       := Some
+            (fun (report : tx_report) ->
+              if
+                (not !injected)
+                && List.exists
+                     (fun (d : datom) ->
+                       d.a = "block/title" && d.v = String "first updated")
+                     report.tx_data
+              then begin
+                injected := true;
+                ignore
+                  (Db_tx.transact conn
+                     [ Add (Entity_id second_block.id, "block/title",
+                            String "second updated") ])
+              end;
+              report);
+     ignore
+       (Db_tx.transact conn
+          [ Add (Entity_id first_block.id, "block/title",
+                 String "first updated") ]);
+     let first' = ent_of_ref_exn (db_of conn) (Entity_id first_block.id) in
+     let second' =
+       ent_of_ref_exn (db_of conn) (Entity_id second_block.id)
+     in
+     check "validated-transact-retries first"
+       (Ldb.string_value first' "block/title" = Some "first updated");
+     check "validated-transact-retries second"
+       (Ldb.string_value second' "block/title" = Some "second updated")
+   with e ->
+     Db_tx.transact_pipeline_fn := saved;
+     raise e);
+  Db_tx.transact_pipeline_fn := saved
+
+(* (deftest fix-db-transact-runs-pipeline-without-recursive-validation-test
+   ...) *)
+let test_fix_db_transact_runs_pipeline_without_recursive_validation_test () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks = [ { default_block with b_title = Some "before" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "before")
+  in
+  let block_id = block.id in
+  let saved_pipeline = !Db_tx.transact_pipeline_fn in
+  let saved_validate = !Db_tx.validate_tx_report_fn in
+  (try
+     Db_tx.transact_pipeline_fn
+       := Some
+            (fun (report : tx_report) ->
+              let stamp =
+                Datascript.with_tx report.db_after
+                  [ Entity
+                      { db_id = Some (Entity_id block_id)
+                      ; attrs = [ "block/tx-id", One_value (Int 42) ] } ]
+              in
+              { stamp with
+                db_before = report.db_before
+              ; tx_data = report.tx_data @ stamp.tx_data
+              ; tx_meta = report.tx_meta });
+     (* cljs with-redefs db-validate/validate-tx-report to throw — any
+        validation here would be a recursive-validation bug *)
+     Db_tx.validate_tx_report_fn
+       := Some
+            (fun (_ : tx_report) ->
+              failwith
+                "Repair transactions must not recursively validate");
+     ignore
+       (Db_tx.transact conn
+          ~tx_meta:[ "fix-db?", Bool true ]
+          [ Entity
+              { db_id = Some (Entity_id block_id)
+              ; attrs = [ "block/title", One_value (String "after") ] } ]);
+     let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
+     check "fix-db-transact title"
+       (Ldb.string_value e "block/title" = Some "after");
+     check "fix-db-transact pipeline-data committed"
+       (Ldb.value e "block/tx-id" = Some (Int 42))
+   with e ->
+     Db_tx.transact_pipeline_fn := saved_pipeline;
+     Db_tx.validate_tx_report_fn := saved_validate;
+     raise e);
+  Db_tx.transact_pipeline_fn := saved_pipeline;
+  Db_tx.validate_tx_report_fn := saved_validate
+
+(* (deftest transact-new-graph-refs-skips-pipeline-test ...) *)
+let test_transact_new_graph_refs_skips_pipeline_test () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks = [ { default_block with b_title = Some "before" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "before")
+  in
+  let block_id = block.id in
+  let calls = ref 0 in
+  let saved = !Db_tx.transact_pipeline_fn in
+  (try
+     Db_tx.transact_pipeline_fn
+       := Some (fun (r : tx_report) -> incr calls; r);
+     ignore
+       (Db_tx.transact conn
+          ~tx_meta:[ "transact-new-graph-refs?", Bool true ]
+          [ Entity
+              { db_id = Some (Entity_id block_id)
+              ; attrs = [ "block/title", One_value (String "after") ] } ]);
+     check "transact-new-graph-refs-skips-pipeline calls" (!calls = 0);
+     let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
+     check "transact-new-graph-refs-skips-pipeline title"
+       (Ldb.string_value e "block/title" = Some "after")
+   with e ->
+     Db_tx.transact_pipeline_fn := saved;
+     raise e);
+  Db_tx.transact_pipeline_fn := saved
 
 (* ---------- property/class/validate test helpers ---------- *)
 
@@ -532,7 +756,7 @@ let kw_map (kvs : (string * Wire.t) list) : Wire.t =
 (* ---------- deps/db/test/logseq/db/frontend/class_test.cljs ---------- *)
 
 (* (deftest get-class-objects-dedupes-inherited-tags-test ...) *)
-let () =
+let test_get_class_objects_dedupes_inherited_tags_test () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -568,7 +792,7 @@ let () =
    get_class_objects by construction. *)
 
 (* (deftest get-class-objects-filters-hidden-objects-test ...) *)
-let () =
+let test_get_class_objects_filters_hidden_objects_test () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -620,7 +844,7 @@ let () =
     (titles = [ "Nested visible"; "Visible" ])
 
 (* (deftest get-class-objects-includes-hide-by-default-properties-test ...) *)
-let () =
+let test_get_class_objects_includes_hide_by_default_properties_test () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -668,7 +892,7 @@ let () =
     (not (List.mem "Property type" titles))
 
 (* (deftest private-create-page-tag-test ...) *)
-let () =
+let test_private_create_page_tag_test () =
   let open Db_class in
   check "private-create-page-tag ident authoritative Tag"
     (private_create_page_tag ~ident:"logseq.class/Tag" ~title:(Some "Tag") () = true);
@@ -688,7 +912,7 @@ let () =
 (* ---------- deps/outliner/test/logseq/outliner/property_test.cljs ---------- *)
 
 (* (deftest upsert-property! "Creates a property" ...) *)
-let () =
+let test_upsert_property () =
   let conn = Db_test_util.create_conn_with_blocks () in
   ignore
     (Outliner_property.upsert_property conn None
@@ -701,7 +925,7 @@ let () =
    | None -> check "upsert-property! creates property with :number type" false)
 
 (* (deftest upsert-property! "Updates a property" ...) *)
-let () =
+let test_upsert_property_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -751,7 +975,7 @@ let () =
 
 (* (deftest upsert-property! "Multiple properties that generate the same
    initial :db/ident" ...) *)
-let () =
+let test_upsert_property_3 () =
   let conn = Db_test_util.create_conn_with_blocks () in
   ignore
     (Outliner_property.upsert_property conn None
@@ -781,7 +1005,7 @@ let () =
      | None -> false)
 
 (* (deftest upsert-property-rejects-type-change-with-existing-data ...) *)
-let () =
+let test_upsert_property_rejects_type_change_with_existing_data () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -800,7 +1024,7 @@ let () =
          (Wire.Map [ kw "logseq.property/type", kw "number" ])
          ~property_name:None ~properties:[])
 
-let () =
+let test_upsert_property_rejects_type_change_with_existing_data_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -820,7 +1044,7 @@ let () =
 (* (deftest convert-property-input-string ...)
    cljs calls the private fn with a bare property map; the OCaml fn takes an
    entity — seed ident entities carrying just :logseq.property/type. *)
-let () =
+let test_convert_property_input_string () =
   let conn = Db_test_util.create_conn () in
   Db_test_util.transact_maps conn
     [ [ "db/ident", Db_test_util.Kw "user.property/p-number";
@@ -855,7 +1079,7 @@ let () =
       "user.property/p-none" ]
 
 (* (deftest create-property-text-block! "Create a new :default property value" ...) *)
-let () =
+let test_create_property_text_block () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -901,7 +1125,7 @@ let () =
 
 (* (deftest create-property-text-block! "Create cases for a new :one :number
    property value" ...) *)
-let () =
+let test_create_property_text_block_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -947,7 +1171,7 @@ let () =
 
 (* (deftest create-property-text-block! "Create new :many :number property
    values" ...) *)
-let () =
+let test_create_property_text_block_3 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -996,7 +1220,7 @@ let () =
     (values = [ 3.; 4.; 5. ])
 
 (* (deftest set-block-property-basic-cases ...) *)
-let () =
+let test_set_block_property_basic_cases () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -1058,7 +1282,7 @@ let () =
      | _ -> false)
 
 (* set-block-property "Update a :number value with existing value" *)
-let () =
+let test_set_block_property_basic_cases_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -1098,7 +1322,7 @@ let () =
      | _ -> false)
 
 (* (deftest set-block-property-with-non-ref-values ...) *)
-let () =
+let test_set_block_property_with_non_ref_values () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1145,7 +1369,7 @@ let () =
 
 (* set-block-property "Setting :checkbox with same property value reuses
    existing entity" *)
-let () =
+let test_set_block_property_with_non_ref_values_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1183,7 +1407,7 @@ let () =
     (Ldb.value b2' "user.property/checkbox" = property_value)
 
 (* (deftest remove-block-property! ...) *)
-let () =
+let test_remove_block_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -1213,7 +1437,7 @@ let () =
 (* (deftest batch-set-property! "Set built-in property values for multiple
    blocks" ...) — user.property/order-list-type stands in for the built-in
    (same default-type write path). *)
-let () =
+let test_batch_set_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties: [ "order-list-type", Db_test_util.default_property ]
@@ -1255,7 +1479,7 @@ let () =
 
 (* batch-set-property "Set custom default-many property values from string
    vector" *)
-let () =
+let test_batch_set_property_2 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1291,7 +1515,7 @@ let () =
 
 (* batch-set-property "Set custom default-many property values from id
    vector" *)
-let () =
+let test_batch_set_property_3 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1339,7 +1563,7 @@ let () =
    | None -> check "batch-set-property! id vector persisted" false)
 
 (* batch-set-property "Invalid many values throw and don't partially persist" *)
-let () =
+let test_batch_set_property_4 () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1370,7 +1594,7 @@ let () =
    | None -> check "batch-set-property! no partial values on failure" false)
 
 (* (deftest status-property-setting-classes ...) *)
-let () =
+let test_status_property_setting_classes () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -1443,7 +1667,7 @@ let () =
     (tags_of project_task = [ "user.class/Project" ])
 
 (* (deftest task-child-class-does-not-add-parent-task-tag ...) *)
-let () =
+let test_task_child_class_does_not_add_parent_task_tag () =
   List.iter
     (fun (property_id, v) ->
        let conn =
@@ -1536,7 +1760,7 @@ let () =
       "logseq.property/deadline", Wire.Int64 1783699200000L ]
 
 (* (deftest batch-set-property-rejects-private-built-in-entity ...) *)
-let () =
+let test_batch_set_property_rejects_private_built_in_entity () =
   let conn = Db_test_util.create_conn () in
   Db_test_util.transact_maps conn
     [ [ "db/ident", Db_test_util.Kw "logseq.property/empty-placeholder";
@@ -1559,7 +1783,7 @@ let () =
          "logseq.property/description" (Wire.String "hacked") ())
 
 (* (deftest batch-remove-property! ...) *)
-let () =
+let test_batch_remove_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes: [ "C1", Db_test_util.default_class ]
@@ -1619,7 +1843,7 @@ let () =
          "logseq.property.class/extends" ())
 
 (* (deftest batch-remove-property-rejects-private-built-in-entity ...) *)
-let () =
+let test_batch_remove_property_rejects_private_built_in_entity () =
   let conn = Db_test_util.create_conn () in
   Db_test_util.transact_maps conn
     [ [ "db/ident", Db_test_util.Kw "logseq.property/empty-placeholder";
@@ -1642,7 +1866,7 @@ let () =
          "logseq.property/description" ())
 
 (* (deftest add-existing-values-to-closed-values! ...) *)
-let () =
+let test_add_existing_values_to_closed_values () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -1673,7 +1897,7 @@ let () =
     (closed_values_content (db_of conn) "user.property/num" = [ "1"; "2" ])
 
 (* (deftest add-existing-generated-value-to-closed-values-reparents-to-property ...) *)
-let () =
+let test_add_existing_generated_value_to_closed_values_reparents_to_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1744,7 +1968,7 @@ let () =
    | None -> check "add-existing-generated-value reparented" false)
 
 (* (deftest upsert-closed-value! ...) *)
-let () =
+let test_upsert_closed_value () =
   let cv_uuid = "aaaaaaaa-0000-4000-8000-00000000c001" in
   let conn =
     Db_test_util.create_conn_with_blocks
@@ -1797,7 +2021,7 @@ let () =
    | _ -> check "upsert-closed-value! added choice is closed value" false)
 
 (* (deftest delete-closed-value! ...) *)
-let () =
+let test_delete_closed_value () =
   let closed_value_uuid = "bbbbbbbb-0000-4000-8000-00000000c002" in
   let used_value_uuid = "bbbbbbbb-0000-4000-8000-00000000c003" in
   let conn =
@@ -1857,7 +2081,7 @@ let () =
      | None -> false)
 
 (* (deftest class-add-property! ...) *)
-let () =
+let test_class_add_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes: [ "c1", Db_test_util.default_class ]
@@ -1876,7 +2100,7 @@ let () =
    | None -> check "class-add-property! adds properties in order" false)
 
 (* (deftest class-remove-property! ...) *)
-let () =
+let test_class_remove_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -1897,7 +2121,7 @@ let () =
    | None -> check "class-remove-property! removes property" false)
 
 (* (deftest get-block-classes-properties ...) *)
-let () =
+let test_get_block_classes_properties () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -1924,7 +2148,7 @@ let () =
 (* ---------- deps/outliner/test/logseq/outliner/validate_test.cljs ---------- *)
 
 (* (deftest validate-block-title-unique-for-properties ...) *)
-let () =
+let test_validate_block_title_unique_for_properties () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -1958,7 +2182,7 @@ let () =
          (ent_ident db "user.property/color2") None)
 
 (* (deftest validate-block-title-unique-for-tags ...) *)
-let () =
+let test_validate_block_title_unique_for_tags () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes:
@@ -1991,7 +2215,7 @@ let () =
          (ent_ident db "user.class/Class1") None)
 
 (* (deftest validate-block-title-unique-for-pages ...) *)
-let () =
+let test_validate_block_title_unique_for_pages () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -2042,7 +2266,7 @@ let () =
 (* (deftest validate-block-title-unique-for-namespaced-pages ...)
    :build-existing-tx? is a fixture flag; same shape via explicit
    block/parent lookup refs. *)
-let () =
+let test_validate_block_title_unique_for_namespaced_pages () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~pages_and_blocks:
@@ -2094,7 +2318,7 @@ let () =
      with _ -> false)
 
 (* (deftest validate-extends-property ...) *)
-let () =
+let test_validate_extends_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties: [ "prop1", Db_test_util.default_property ]
@@ -2152,7 +2376,7 @@ let () =
        | _ -> failwith "built-ins missing")
 
 (* (deftest validate-tags-property ...) *)
-let () =
+let test_validate_tags_property () =
   let class_uuid = "cccccccc-0000-4000-8000-00000000d001" in
   let conn =
     Db_test_util.create_conn_with_blocks
@@ -2257,7 +2481,7 @@ let () =
    | None -> check "validate-tags: invalid location can't tag #Page" false)
 
 (* (deftest validate-tags-property-deletion ...) *)
-let () =
+let test_validate_tags_property_deletion () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~classes: [ "SomeTag", Db_test_util.default_class ]
@@ -2312,7 +2536,7 @@ let () =
    | None -> check "validate-tags-deletion: root page" false)
 
 (* (deftest validate-editing-built-in-property ...) *)
-let () =
+let test_validate_editing_built_in_property () =
   let conn =
     Db_test_util.create_conn_with_blocks
       ~properties:
@@ -2360,7 +2584,7 @@ let () =
 (* ---------- src/test/frontend/worker/db_core_test.cljs ---------- *)
 
 (* (deftest get-property-node-selector-data-prepares-worker-owned-db-data-test ...) *)
-let () =
+let test_get_property_node_selector_data_prepares_worker_owned_db_data_test () =
   let conn = Db_test_util.create_conn () in
   ignore
     (Datascript.transact_conn_string conn
@@ -2431,7 +2655,7 @@ let () =
    | _ -> check "node-selector returns map" false)
 
 (* (deftest alias-selector-initial-choice-keeps-page-and-owner-data-test ...) *)
-let () =
+let test_alias_selector_initial_choice_keeps_page_and_owner_data_test () =
   let conn = Db_test_util.create_conn () in
   ignore
     (Datascript.transact_conn_string conn
@@ -2489,9 +2713,88 @@ let () =
         | _ -> check "alias-selector has initial choice" false)
    | _ -> check "alias-selector returns map" false)
 
+(* ---------- other translated cljs test modules ---------- *)
+
+let endpoint_cases : unit Alcotest.test_case list =
+  [     Alcotest.test_case "get-class-objects-dedupes-inherited-tags-test" `Quick test_get_class_objects_dedupes_inherited_tags_test;
+    Alcotest.test_case "get-class-objects-filters-hidden-objects-test" `Quick test_get_class_objects_filters_hidden_objects_test;
+    Alcotest.test_case "get-class-objects-includes-hide-by-default-properties-test" `Quick test_get_class_objects_includes_hide_by_default_properties_test;
+    Alcotest.test_case "private-create-page-tag-test" `Quick test_private_create_page_tag_test;
+    Alcotest.test_case "upsert-property" `Quick test_upsert_property;
+    Alcotest.test_case "upsert-property-2" `Quick test_upsert_property_2;
+    Alcotest.test_case "upsert-property-3" `Quick test_upsert_property_3;
+    Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data" `Quick test_upsert_property_rejects_type_change_with_existing_data;
+    Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data-2" `Quick test_upsert_property_rejects_type_change_with_existing_data_2;
+    Alcotest.test_case "convert-property-input-string" `Quick test_convert_property_input_string;
+    Alcotest.test_case "create-property-text-block" `Quick test_create_property_text_block;
+    Alcotest.test_case "create-property-text-block-2" `Quick test_create_property_text_block_2;
+    Alcotest.test_case "create-property-text-block-3" `Quick test_create_property_text_block_3;
+    Alcotest.test_case "set-block-property-basic-cases" `Quick test_set_block_property_basic_cases;
+    Alcotest.test_case "set-block-property-basic-cases-2" `Quick test_set_block_property_basic_cases_2;
+    Alcotest.test_case "set-block-property-with-non-ref-values" `Quick test_set_block_property_with_non_ref_values;
+    Alcotest.test_case "set-block-property-with-non-ref-values-2" `Quick test_set_block_property_with_non_ref_values_2;
+    Alcotest.test_case "remove-block-property" `Quick test_remove_block_property;
+    Alcotest.test_case "batch-set-property" `Quick test_batch_set_property;
+    Alcotest.test_case "batch-set-property-2" `Quick test_batch_set_property_2;
+    Alcotest.test_case "batch-set-property-3" `Quick test_batch_set_property_3;
+    Alcotest.test_case "batch-set-property-4" `Quick test_batch_set_property_4;
+    Alcotest.test_case "status-property-setting-classes" `Quick test_status_property_setting_classes;
+    Alcotest.test_case "task-child-class-does-not-add-parent-task-tag" `Quick test_task_child_class_does_not_add_parent_task_tag;
+    Alcotest.test_case "batch-set-property-rejects-private-built-in-entity" `Quick test_batch_set_property_rejects_private_built_in_entity;
+    Alcotest.test_case "batch-remove-property" `Quick test_batch_remove_property;
+    Alcotest.test_case "batch-remove-property-rejects-private-built-in-entity" `Quick test_batch_remove_property_rejects_private_built_in_entity;
+    Alcotest.test_case "add-existing-values-to-closed-values" `Quick test_add_existing_values_to_closed_values;
+    Alcotest.test_case "add-existing-generated-value-to-closed-values-reparents-to-property" `Quick test_add_existing_generated_value_to_closed_values_reparents_to_property;
+    Alcotest.test_case "upsert-closed-value" `Quick test_upsert_closed_value;
+    Alcotest.test_case "delete-closed-value" `Quick test_delete_closed_value;
+    Alcotest.test_case "class-add-property" `Quick test_class_add_property;
+    Alcotest.test_case "class-remove-property" `Quick test_class_remove_property;
+    Alcotest.test_case "get-block-classes-properties" `Quick test_get_block_classes_properties;
+    Alcotest.test_case "validate-block-title-unique-for-properties" `Quick test_validate_block_title_unique_for_properties;
+    Alcotest.test_case "validate-block-title-unique-for-tags" `Quick test_validate_block_title_unique_for_tags;
+    Alcotest.test_case "validate-block-title-unique-for-pages" `Quick test_validate_block_title_unique_for_pages;
+    Alcotest.test_case "validate-block-title-unique-for-namespaced-pages" `Quick test_validate_block_title_unique_for_namespaced_pages;
+    Alcotest.test_case "validate-extends-property" `Quick test_validate_extends_property;
+    Alcotest.test_case "validate-tags-property" `Quick test_validate_tags_property;
+    Alcotest.test_case "validate-tags-property-deletion" `Quick test_validate_tags_property_deletion;
+    Alcotest.test_case "validate-editing-built-in-property" `Quick test_validate_editing_built_in_property;
+    Alcotest.test_case "get-property-node-selector-data-prepares-worker-owned-db-data-test" `Quick test_get_property_node_selector_data_prepares_worker_owned_db_data_test;
+    Alcotest.test_case "alias-selector-initial-choice-keeps-page-and-owner-data-test" `Quick test_alias_selector_initial_choice_keeps_page_and_owner_data_test ]
+
+
+
+
+
+let db_test_cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "get-case-page" `Quick test_get_case_page;
+    Alcotest.test_case "get-journal-page-by-day" `Quick test_get_journal_page_by_day;
+    Alcotest.test_case "ordinary-sibling-skips-created-from-property-children" `Quick test_ordinary_sibling_skips_created_from_property_children;
+    Alcotest.test_case "ordinary-sibling-skips-closed-value-property-children" `Quick test_ordinary_sibling_skips_closed_value_property_children;
+    Alcotest.test_case "page-exists" `Quick test_page_exists;
+    Alcotest.test_case "test-transact-with-multiple-tx-datoms" `Quick test_transact_with_multiple_tx_datoms;
+    Alcotest.test_case "get-bidirectional-properties" `Quick
+      (fun () ->
+        test_get_bidirectional_properties_disabled ();
+        test_get_bidirectional_properties ());
+    Alcotest.test_case "get-bidirectional-properties-ignores-recycled-entities" `Quick test_get_bidirectional_properties_ignores_recycled_entities;
+    Alcotest.test_case "get-block-parents-returns-parents" `Quick test_get_block_parents_returns_parents;
+    Alcotest.test_case "get-block-refs-returns-linked-references" `Quick test_get_block_refs_returns_linked_references;
+    Alcotest.test_case "get-latest-journals-returns-worker-maps" `Quick test_get_latest_journals_returns_worker_maps;
+    Alcotest.test_case "q-executes-datascript-query" `Quick test_q_executes_datascript_query;
+    Alcotest.test_case "get-class-extends" `Quick test_get_class_extends;
+    Alcotest.test_case "q-returns-nil-for-nonexistent-conn" `Quick test_q_returns_nil_for_nonexistent_conn;
+    Alcotest.test_case "datoms-returns-formatted-datoms" `Quick test_datoms_returns_formatted_datoms;
+    Alcotest.test_case "pull-returns-entity-data" `Quick test_pull_returns_entity_data;
+    Alcotest.test_case "batch-transact-with-temp-conn-preserves-retracts-test" `Quick test_batch_transact_with_temp_conn_preserves_retracts_test;
+    Alcotest.test_case "batch-transact-with-temp-conn-preserves-cardinality-one-schema-test" `Quick test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test;
+    Alcotest.test_case "validated-transact-retries-when-live-conn-changes-before-commit-test" `Quick test_validated_transact_retries_when_live_conn_changes_before_commit_test;
+    Alcotest.test_case "fix-db-transact-runs-pipeline-without-recursive-validation-test" `Quick test_fix_db_transact_runs_pipeline_without_recursive_validation_test;
+    Alcotest.test_case "transact-new-graph-refs-skips-pipeline-test" `Quick test_transact_new_graph_refs_skips_pipeline_test ]
+
 let () =
-  if !failures > 0 then begin
-    Printf.eprintf "%d translated cljs test assertion(s) failed\n" !failures;
-    exit 1
-  end
-  else Printf.printf "test_db_native: all assertions passed\n"
+  Alcotest.run "db-worker"
+    [ "db_test", db_test_cases
+    ; "endpoint", endpoint_cases
+    ; "common", Test_db_common_native.cases
+    ; "frontend", Test_db_frontend_native.cases
+    ; "outliner", Test_outliner_native.cases ]
