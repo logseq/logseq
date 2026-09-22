@@ -7,6 +7,9 @@ let init () =
     ignore Endpoint_db.q;
     ignore Endpoint_lifecycle.create_or_open_db;
     ignore Endpoint_state.cancel_ui_requests;
+    ignore Endpoint_markdown.set_enabled;
+    ignore Endpoint_markdown.flush;
+    ignore Endpoint_markdown.regenerate;
     ignore Endpoint_read.get_journal_page_by_day;
     ignore Endpoint_read.get_block_source;
     ignore Endpoint_read.get_block_parents;

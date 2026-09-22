@@ -43,3 +43,11 @@ let remove path =
           end else Sys.remove path
       in
       rm path)
+
+let write_text_atomic path contents =
+  wrap (fun () ->
+      let tmp = path ^ ".tmp" in
+      let oc = open_out_bin tmp in
+      output_string oc contents;
+      close_out oc;
+      Unix.rename tmp path)
