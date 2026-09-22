@@ -81,27 +81,7 @@
      thread-atom/online-event atom — native plays the cljs :node role).
      All three cljs cases assert their node-runtime observable truth
      (online) here; the web-runtime atom-driven branch has no native
-     counterpart.
-
-   Known lib/engine bugs kept red (documented, no workarounds):
-   - Graph_dir.pool_name trims BEFORE stripping the logseq_db_ prefix;
-     cljs get-pool-name strips the prefix first, then trims. For
-     "  logseq_db_ space name  " OCaml yields "logseq-pool- space name"
-     where cljs yields "logseq-pool-space name". The cljs expectation is
-     asserted verbatim and fails red.
-   - ensure-built-in-data-exists! (datascript-ocaml): the transit
-     fixture src/test/migration/64.8.transit declares :block/uuid
-     :db.unique/identity, but Ds_wire.serializable_db_of_transit ->
-     Datascript.from_serializable loses the unique flag, so the
-     keep-item lookup ref [:block/uuid #uuid ...] throws "Lookup ref
-     attribute should be marked as :db/unique".
-   - migrate-65-* upgrade cases (lib/db_migrate.ml): migrate appends
-     ensure_built_in_data_exists, whose seed_initial_data composes
-     properties_tx @ classes_tx but never emits the bootstrap_class_ids
-     (Root/Property/Tag/Page/Template idents) that
-     Sqlite_create_graph.initial_tx_data emits first; on a bare-schema
-     conn property maps referencing :logseq.class/Property by ident
-     throw "ident did not resolve" in transact.ml resolve_entity_ref. *)
+     counterpart. *)
 
 open Datascript
 open Test_shared
@@ -127,9 +107,14 @@ let entities_with (db : db) (a : attr) : entity_id list =
 let tag_idents (e : entity) : string list =
   sort_uniq (List.filter_map Ldb.ident_of (Ldb.ref_ents e "block/tags"))
 
-(* cljs ref-ids: (set (map :db/id refs)) *)
+(* cljs ref-ids: (set (map #(if (number? %) % (:db/id %)) refs)) — values
+   written under an attr that is not schema-ref at write time stay plain
+   numbers and read back as Int. *)
 let ref_id_set (e : entity) (a : attr) : int list =
-  List.sort_uniq compare (Ldb.ref_ids e a)
+  List.sort_uniq compare
+    (List.filter_map
+       (function Ref id -> Some id | Int id -> Some id | _ -> None)
+       (Ldb.values e a))
 
 let ident_of_ref (e : entity) (a : attr) : string option =
   match Ldb.ref_ent e a with Some r -> Ldb.ident_of r | None -> None
@@ -391,9 +376,13 @@ let test_migrate_65_25_adds_repeat_type_property () =
         (ident_of_ref property "logseq.property/default-value"
          = Some "logseq.property.repeat/repeat-type.double-plus");
       check "65-25b: closed values"
-        (sort_uniq
+        ((* cljs :property/closed-values is a derived attr — reverse refs of
+            :block/closed-value-property minus recycled, sorted by
+            :block/order; order is irrelevant under sort_uniq *)
+         sort_uniq
            (List.filter_map Ldb.ident_of
-              (Ldb.ref_ents property "property/closed-values"))
+              (List.filter (fun e -> not (Ldb.recycled e))
+                 (Ldb.ref_ents property "block/_closed-value-property")))
          = sort_uniq
              [ "logseq.property.repeat/repeat-type.dotted-plus"
              ; "logseq.property.repeat/repeat-type.plus"
@@ -659,11 +648,19 @@ let test_migrate_65_32_adds_root_extends_to_comment_classes () =
     | Some { upgrade_reports = Some report :: _; _ } -> Some report.db_after
     | _ -> None
   in
+  (* cljs extends-idents: numbers are resolved via (d/entity db parent) —
+     :logseq.property.class/extends is not a schema ref in this fixture, so
+     [:db/add] stores the eid as a plain number. *)
   let extends_idents (db : db) (ident : string) : string list =
     match entity db (Ident ident) with
     | Some e ->
-        Ldb.ref_ents e "logseq.property.class/extends"
-        |> List.filter_map Ldb.ident_of
+        Ldb.values e "logseq.property.class/extends"
+        |> List.filter_map (function
+             | Ref id | Int id ->
+                 (match Ldb.ent_of_id db id with
+                  | Some parent -> Ldb.ident_of parent
+                  | None -> None)
+             | _ -> None)
     | None -> []
   in
   (match migration_db with
