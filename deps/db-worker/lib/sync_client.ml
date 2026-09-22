@@ -118,11 +118,14 @@ let clear_stale_ws_loop_timer (client : Sync_state.client) : unit =
 let touch_last_ws_message (client : Sync_state.client) : unit =
   client.last_ws_message_ts := Clock.now_ms ()
 
-let ready_state (ws : Web_socket.t) : int = Web_socket.ready_state ws
+let ready_state (ws : Sync_state.ws_endpoint) : int =
+  Sync_state.ws_endpoint_ready_state ws
 
-let ws_open (ws : Web_socket.t) : bool = Sync_transport.ws_open ws
+let ws_open (ws : Sync_state.ws_endpoint) : bool =
+  Sync_transport.ws_open ws
 
-let send (ws : Web_socket.t) (message : Wire.t) : unit Db_worker_effect.t =
+let send (ws : Sync_state.ws_endpoint) (message : Wire.t)
+    : unit Db_worker_effect.t =
   Sync_transport.send ws message
 
 let enqueue_receive_message (client : Sync_state.client)
@@ -208,8 +211,8 @@ and attach_ws_handlers repo (client : Sync_state.client)
    OCaml Web_socket spec delivers all events through a single on_event
    callback. *)
 
-and close_stale_ws_loop (client : Sync_state.client) (ws : Web_socket.t)
-    (url : string) : unit =
+and close_stale_ws_loop (client : Sync_state.client)
+    (ws : Sync_state.ws_endpoint) (url : string) : unit =
   clear_stale_ws_loop_timer client;
   let timer =
     Timers.set_interval ws_stale_kill_interval_ms (fun () ->
@@ -217,7 +220,9 @@ and close_stale_ws_loop (client : Sync_state.client) (ws : Web_socket.t)
          | Some current
            when current.repo = client.repo
                 && current.graph_id = client.graph_id
-                && current.ws = Some ws ->
+                && (match current.ws with
+                    | Some w -> Sync_state.same_ws_endpoint w ws
+                    | None -> false) ->
              if ws_open ws then begin
                let now = Clock.now_ms () in
                let last_ts = !(current.last_ws_message_ts) in
@@ -226,7 +231,7 @@ and close_stale_ws_loop (client : Sync_state.client) (ws : Web_socket.t)
                  Worker_log.warn "db-sync/ws-stale-timeout"
                    [ "repo", client.repo
                    ; "stale-ms", string_of_float stale_ms ];
-                 Db_worker_effect.async (fun () -> Web_socket.close ws)
+                 Db_worker_effect.async (fun () -> Sync_state.ws_endpoint_close ws)
                end
              end
              else if List.mem (ready_state ws) [ 2; 3 ] then begin
@@ -255,7 +260,7 @@ and stop_client (client : Sync_state.client) : unit =
   | Some ws ->
       update_online_users client [];
       set_ws_state client "closed";
-      Db_worker_effect.async (fun () -> Web_socket.close ws)
+      Db_worker_effect.async (fun () -> Sync_state.ws_endpoint_close ws)
   | None -> ()
 
 and active_client_for (client : Sync_state.client option) (repo : string)
@@ -325,8 +330,9 @@ and connect repo (client : Sync_state.client) (url : string)
                set_ws_state updated "closed";
                schedule_reconnect repo updated url "close")
       >>= fun ws ->
-      updated.ws <- Some ws;
-      close_stale_ws_loop updated ws url;
+      let endpoint = Sync_state.Real_ws ws in
+      updated.ws <- Some endpoint;
+      close_stale_ws_loop updated endpoint url;
       Db_worker_effect.pure updated
 
 let stop () : unit Db_worker_effect.t =

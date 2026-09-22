@@ -34,13 +34,18 @@ let cli_node_owner () =
   Runtime_env.kind () = Runtime_env.Node
   && Runtime_env.env "LOGSEQ_OWNER_SOURCE" = Some "cli"
 
-let auth_token () : string option =
+let auth_token_impl () : string option =
   match Worker_state.state_get "auth/id-token" with
   | Some (Wire.String s) -> Some s
   | _ ->
       (match Worker_state.state_get "auth/access-token" with
        | Some (Wire.String s) -> Some s
        | _ -> None)
+
+(* test seam — cljs with-redefs [sync-util/auth-token] *)
+let auth_token_fn = ref auth_token_impl
+
+let auth_token () : string option = !auth_token_fn ()
 
 let get_graph_id repo : string option =
   match
@@ -232,6 +237,9 @@ let parse_jwt (token : string) : Wire.t option =
        | None -> None)
   | _ -> None
 
+(* test seam — cljs with-redefs [worker-util/parse-jwt] *)
+let parse_jwt_fn = ref parse_jwt
+
 (* cljs decode-username: cognito:username may be URL-encoded *)
 let url_decode s =
   let b = Buffer.create (String.length s) in
@@ -247,8 +255,8 @@ let url_decode s =
   done;
   Buffer.contents b
 
-let jwt_payload_field name token =
-  match parse_jwt token with
+let jwt_payload_field token name =
+  match !parse_jwt_fn token with
   | Some payload ->
       (match Wire.get name payload with
        | Some (Wire.String s) -> Some (url_decode s)
@@ -256,7 +264,7 @@ let jwt_payload_field name token =
   | None -> None
 
 let jwt_exp token : float option =
-  match parse_jwt token with
+  match !parse_jwt_fn token with
   | Some payload ->
       (match Wire.get "exp" payload with
        | Some w -> Wire.as_float w
