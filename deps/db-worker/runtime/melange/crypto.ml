@@ -43,6 +43,10 @@ external derive_key : subtle -> 'a -> crypto_key -> 'b -> bool -> string array -
   = "deriveKey"
 [@@mel.send]
 
+external digest : subtle -> string -> T.Uint8Array.t -> array_buffer Js.Promise.t
+  = "digest"
+[@@mel.send]
+
 external get_random_values : T.Uint8Array.t -> T.Uint8Array.t = "getRandomValues"
   [@@mel.scope "crypto"]
 
@@ -90,8 +94,17 @@ let task_of_promise promise =
     | Ok value -> Db_worker_effect.pure value
     | Error exn -> Db_worker_effect.error exn)
 
-let sha256_hex _ =
-  Db_worker_effect.error (Failure "Crypto.sha256_hex: not implemented yet")
+(* cljs decode-digest: each byte toString(16) padStart(2,"0"), joined *)
+let hex_of_u8a a =
+  let buf = Buffer.create (u8a_length a * 2) in
+  for i = 0 to u8a_length a - 1 do
+    Buffer.add_string buf (Printf.sprintf "%02x" (u8a_get a i))
+  done;
+  Buffer.contents buf
+
+let sha256_hex s =
+  task_of_promise (digest subtle "SHA-256" (u8a_of_string s))
+  |> Db_worker_effect.map (fun buffer -> hex_of_u8a (u8a_of_buffer buffer))
 
 let random_bytes n = string_of_u8a (get_random_values (new_u8a n))
 
