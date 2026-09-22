@@ -1322,13 +1322,14 @@ let pull_entity_by_lookup config repo selector lookup =
     ~selector:(Edn_util.expect_vector_t "upsert pull selector" selector)
     ~lookup
 
-let first_entity value =
-  match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some values, _ when not (Vec.is_empty values) ->
-      Some (Vec.peek_front values)
-  | _, Some values when not (Vec.is_empty values) ->
-      Some (Vec.peek_front values)
-  | _ -> None
+let rec first_entity value =
+  match Edn_util.as_seq value with
+  | Some values when not (Vec.is_empty values) ->
+      first_entity (Vec.peek_front values)
+  | _ -> (
+      match Edn_util.as_map value with
+      | Some _ -> Some value
+      | None -> None)
 
 let id_of_entity value = Edn_util.get_int64 value "db/id"
 

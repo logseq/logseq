@@ -383,16 +383,14 @@ let class_query selector class_ident =
 let tag_query selector = query_value (class_query selector "logseq.class/Tag")
 let property_query selector = class_query selector "logseq.class/Property"
 
-let first_entity value =
-  match
-    (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
-  with
-  | Some values, _, _ when not (Vec.is_empty values) ->
-      Some (Vec.peek_front values)
-  | _, Some values, _ when not (Vec.is_empty values) ->
-      Some (Vec.peek_front values)
-  | _, _, Some _ -> Some value
-  | _ -> None
+let rec first_entity value =
+  match Edn_util.as_seq value with
+  | Some values when not (Vec.is_empty values) ->
+      first_entity (Vec.peek_front values)
+  | _ -> (
+      match Edn_util.as_map value with
+      | Some _ -> Some value
+      | None -> None)
 
 let pull_tag_by_name invoke_config repo name =
   Transport.thread_api_q invoke_config ~repo
