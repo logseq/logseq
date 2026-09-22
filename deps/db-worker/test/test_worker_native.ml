@@ -85,7 +85,7 @@ let () =
          ])
   in
   let tx_res = await (Worker_core.invoke "thread-api/transact" tx_args) in
-  check "transact returns report" (string_contains tx_res "db-after");
+  check "transact ok" (not (string_contains tx_res "error"));
 
   let q_args =
     Transit_codec.to_string

@@ -26,6 +26,8 @@ let init () =
     ignore Endpoint_query.query_dsl_query;
     ignore Endpoint_transaction.transact;
     ignore Endpoint_transaction.apply_outliner_ops;
+    ignore Endpoint_comment.ensure_comments_area;
+    ignore Endpoint_flashcard.get_fsrs_due_card_block_ids;
     initialized := true
   end
 
