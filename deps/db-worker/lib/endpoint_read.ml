@@ -46,7 +46,7 @@ let get_journal_page_by_day args =
       Db_worker_effect.pure
         (match day with
          | Some day ->
-             (match Ldb.get_journal_page_by_day db (Int day) with
+             (match Ldb.get_journal_page_by_day db day with
               | Some e -> page_summary db e
               | None -> Wire.nil)
          | None -> Wire.nil))

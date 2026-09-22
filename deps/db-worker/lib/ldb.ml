@@ -271,15 +271,12 @@ let get_case_page db (ref_v : value) : entity option =
   | _ -> None
 
 (* ldb/get-journal-page-by-day *)
-let get_journal_page_by_day db journal_day : entity option =
-  match journal_day with
-  | Int day ->
-      (match
-         Seq.uncons (datoms db Avet ~a:"block/journal-day" ~v:(Int day) ())
-       with
-       | Some (d, _) -> ent_of_id db d.e
-       | None -> None)
-  | _ -> None
+let get_journal_page_by_day db (journal_day : int) : entity option =
+  match
+    Seq.uncons (datoms db Avet ~a:"block/journal-day" ~v:(Int journal_day) ())
+  with
+  | Some (d, _) -> ent_of_id db d.e
+  | None -> None
 
 (* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. *)
 let sort_by_order (ents : entity list) : entity list =
@@ -295,9 +292,19 @@ let sort_by_order (ents : entity list) : entity list =
       | Some x, Some y -> String.compare x y)
     ents
 
+
+(* entity-plus/lookup-kv-then-entity :block/_parent — raw children minus
+   property-created and closed-value children. :block/_raw-parent is the
+   unfiltered variant. *)
+let parent_children (e : entity) : entity list =
+  ref_ents e "block/_parent"
+  |> List.filter (fun c ->
+      not (Option.is_some (value c "logseq.property/created-from-property")
+           || Option.is_some (value c "block/closed-value-property")))
+
 (* ldb/get-children — sorted :block/_parent (no nested). *)
 let get_children (parent : entity) : entity list =
-  sort_by_order (ref_ents parent "block/_parent")
+  sort_by_order (parent_children parent)
 
 (* get-block-children-or-property-children (db.cljs) *)
 let block_children_or_property_children (block : entity) (parent : entity) : entity list =
@@ -310,7 +317,7 @@ let block_children_or_property_children (block : entity) (parent : entity) : ent
         (List.filter
            (fun e -> List.mem prop_id (ref_ids e "logseq.property/created-from-property"))
            (ref_ents parent "block/_raw-parent"))
-  | None, [] -> sort_by_order (ref_ents parent "block/_parent")
+  | None, [] -> sort_by_order (parent_children parent)
 
 (* get-ordinary-sibling — sibling by :block/order among :block/parent
    children, skipping property-created and closed-value children. *)
@@ -395,7 +402,7 @@ let get_right_sibling (block : entity) : entity option =
 
 (* ldb/get-down *)
 let get_down (block : entity) : entity option =
-  match sort_by_order (ref_ents block "block/_parent") with
+  match sort_by_order (parent_children block) with
   | first :: _ -> Some first
   | [] -> None
 
@@ -408,7 +415,7 @@ let ref_v_to_ref = function
 (* ldb/has-children? *)
 let has_children db (ref_v : value) : bool =
   match entity db (ref_v_to_ref ref_v) with
-  | Some e -> Option.is_some (entity_attr e "block/_parent")
+  | Some e -> Option.is_some ((match sort_by_order (parent_children e) with _ :: _ -> Some (Bool true) | [] -> None))
   | None -> false
 
 (* ldb/get-key-value — :kv/value of the kv entity named by ident. *)
@@ -424,7 +431,36 @@ let get_graph_schema_version db = get_key_value db "logseq.kv/schema-version"
 (* ldb/page-exists? — pages titled `page-name` with one of `tags`.
    Classes/Property tags are case-sensitive (:block/title); others go
    through :block/name. *)
-let page_exists db (page_name : string) (tag_idents : string list) : bool =
+(* entity-plus/db-based-graph? *)
+let db_based_graph (db : db) : bool =
+  match entity db (Ident "logseq.kv/db-type") with
+  | Some e -> value e "kv/value" = Some (String "db")
+  | None -> false
+
+(* db-db/get-built-in-page — lookup by deterministic :builtin-block-uuid. *)
+let get_built_in_page db (title : string) : entity option =
+  let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
+  entity db (Lookup_ref ("block/uuid", Uuid u))
+
+(* common-initial-data/get-block-full-children-ids — BFS over raw
+   block/_parent (cljs uses the :parent rule which reads raw datoms). *)
+let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
+  let module S = Set.Make (Int) in
+  let rec go visited queue acc =
+    match queue with
+    | [] -> List.rev acc
+    | id :: rest ->
+      let children =
+        List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref id) ())
+        |> List.filter_map (fun (d : datom) ->
+             if S.mem d.e visited then None else Some d.e)
+      in
+      let visited' = List.fold_left (fun v c -> S.add c v) visited children in
+      go visited' (rest @ children) (List.rev_append (List.rev children) acc)
+  in
+  go (S.singleton block_eid) [ block_eid ] []
+
+let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_id list =
   let tag_set = tag_idents in
   let only_class_tags =
     tag_set <> []
@@ -440,9 +476,9 @@ let page_exists db (page_name : string) (tag_idents : string list) : bool =
     |> List.map (fun d -> d.e)
   in
   match tag_set with
-  | [] -> candidate_ids <> []
+  | [] -> candidate_ids
   | _ ->
-      List.exists
+      List.filter
         (fun eid ->
           match ent_of_id db eid with
           | None -> false
@@ -454,6 +490,9 @@ let page_exists db (page_name : string) (tag_idents : string list) : bool =
                   | None -> false)
                 (ref_ids e "block/tags"))
         candidate_ids
+
+let page_exists db (page_name : string) (tag_idents : string list) : bool =
+  page_exists_ids db page_name tag_idents <> []
 
 (* initial-data/get-latest-journals — journal-day desc, not recycled. *)
 let get_latest_journals db : entity list =
@@ -513,7 +552,7 @@ let get_block_last_direct_child_id db (block_id : entity_id) : entity_id option 
   match ent_of_id db block_id with
   | None -> None
   | Some block ->
-      let children = sort_by_order (ref_ents block "block/_parent") in
+      let children = sort_by_order (parent_children block) in
       (match List.rev children with
        | last :: _ -> Some last.id
        | [] -> None)
@@ -533,7 +572,7 @@ let get_block_and_children db ?(include_property_block : bool option) (block_uui
         in
         sort_by_order (raw @ extras)
       end else
-        sort_by_order (ref_ents e "block/_parent")
+        sort_by_order (parent_children e)
     in
     e :: List.concat_map aux children
   in
