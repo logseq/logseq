@@ -55,7 +55,9 @@ let broadcast_rtc_state (client : Sync_state.client option) : unit =
       Broadcast.to_clients ~kind:"rtc-sync-state"
         ~transit_payload:
           (Transit_codec.to_string
-             (Sync_presence.rtc_state_payload ~sync_counts client))
+             (Wire.Array
+                [ kw "rtc-sync-state"
+                ; Sync_presence.rtc_state_payload ~sync_counts client ]))
   | None -> ()
 
 (* ---- ignored attrs ---- *)
@@ -2419,10 +2421,12 @@ let broadcast_sync_conflicts repo conflicts : unit =
        Broadcast.to_clients ~kind:"sync-conflicts-updated"
          ~transit_payload:
            (Transit_codec.to_string
-              (Wire.Map
-                 [ kw "repo", Wire.String repo
-                 ; kw "block-uuid", Wire.String block_uuid
-                 ; ( kw "conflicts"
+              (Wire.Array
+                 [ kw "sync-conflicts-updated"
+                 ; Wire.Map
+                     [ kw "repo", Wire.String repo
+                     ; kw "block-uuid", Wire.String block_uuid
+                     ; ( kw "conflicts"
                    , Wire.Array
                        (List.map
                           (fun (c : Sync_client_op.sync_conflict) ->
@@ -2436,7 +2440,7 @@ let broadcast_sync_conflicts repo conflicts : unit =
                                    | Some t -> Wire.Int t
                                    | None -> Wire.Nil )
                                ; kw "created-at", Wire.Int c.created_at ])
-                          cs)) ])))
+                          cs)) ]] )))
     uuids
 
 (* ---- apply-remote-txs! ---- *)

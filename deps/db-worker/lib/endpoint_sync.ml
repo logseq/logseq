@@ -177,10 +177,12 @@ let () =
        Broadcast.to_clients ~kind:"sync-conflicts-updated"
          ~transit_payload:
            (Transit_codec.to_string
-              (Wire.Map
-                 [ kw "repo", Wire.String repo
-                 ; kw "block-uuid", Wire.Uuid block_uuid
-                 ; kw "conflicts", Wire.Array [] ]));
+              (Wire.Array
+                 [ kw "sync-conflicts-updated"
+                 ; Wire.Map
+                     [ kw "repo", Wire.String repo
+                     ; kw "block-uuid", Wire.Uuid block_uuid
+                     ; kw "conflicts", Wire.Array [] ] ]));
        pure_nil)
 
 (* ---- download ---- *)
