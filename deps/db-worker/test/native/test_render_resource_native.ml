@@ -38,10 +38,9 @@
    - cljs function values (identity, query-fn) cannot exist on the wire in
      OCaml; the "non-data contract" rejections are exercised with a
      datascript/Entity tagged value instead (same fail path).
-   - cljs `re-pattern` compiles eagerly; datascript-ocaml binds a Regex
-     lazily so an invalid pattern like "(" never errors. The
-     render-snapshots-isolates-failing-query-resources test therefore shows
-     a currently-red engine divergence.
+   - cljs `re-pattern` compiles eagerly; the engine validates pattern
+     syntax when binding so an invalid pattern like "(" raises the same
+     "Invalid regular expression" error the JS RegExp constructor throws.
    - Regex values serialize as Wire.String, not a regexp object —
      query-resource-keeps-escaped-paren-regex-inputs asserts the string.
    - block-task-time cljs test redefs time-ms to 10000; with doing@1000 ->
@@ -78,8 +77,6 @@
      (quoted-full-text-query-uses-worker-search-and-filters-results).
    - positioned-property chips snapshot is empty for a property whose
      value is positioned (canonical-visible-blocks-...-positioned-chips).
-   - failing-query isolation: lazy re-pattern (below) means no error
-     value is produced.
 
    engine (datascript-ocaml):
    - :in scalar bindings are rebound by later clauses instead of acting
@@ -95,11 +92,7 @@
      updates are not applied (block-breadcrumb-...-updated-title).
    - AVET index strictness: unindexed :user.property/page-mode raises
      Invalid_argument on plain datoms access
-     (view-data-resource-supports-view-config).
-   - lazy re-pattern: "(" binds without erroring — cljs
-     re-pattern/regex-match compile eagerly and raise
-     "Invalid regular expression" (render-snapshots-isolates-failing-
-     query-resources). *)
+     (view-data-resource-supports-view-config). *)
 
 open Datascript
 open Test_shared
@@ -2608,9 +2601,7 @@ let test_query_resource_keeps_escaped_paren_regex_inputs () =
       check "regex row value" (wire_eq first (Wire.String matcher))
   | _ -> check "regex row value" false
 
-(* render-snapshots-isolates-failing-query-resources-test — lazy re-pattern
-   means "(" produces no error value; this is a known engine divergence
-   (currently red upstream). *)
+(* render-snapshots-isolates-failing-query-resources-test *)
 let test_render_snapshots_isolates_failing_query_resources () =
   let conn, _ = render_resource_fixture () in
   let db = db_of conn in
