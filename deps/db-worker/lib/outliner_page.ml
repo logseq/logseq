@@ -217,7 +217,7 @@ let page_name_string_to_map (original_page_name : string) db
   let page_entity =
     if not skip_existing_page_check then
       match journal_day with
-      | Some day -> Ldb.get_journal_page_by_day db (Int day)
+      | Some day -> Ldb.get_journal_page_by_day db day
       | None ->
           if class_ && db_based then
             (match page_exists_ids db original_page_name' [ "logseq.class/Tag" ] with
@@ -480,7 +480,7 @@ let page_with_parent_and_order db (page : Wire.t) ~(parent : Wire.t) : Wire.t =
       in
       Cljs_map.assoc_list page
         [ "block/parent", parent_v
-        ; "block/order", Wire.String (Db_order.gen_key ()) ]
+        ; "block/order", Wire.String (Db_order.gen_key_from_max ()) ]
 
 (* outliner-page/split-namespace-pages — items are either existing
    entities or new page maps. *)
@@ -634,7 +634,7 @@ let next_child_order (parent : entity) : string =
          | Some (String s) -> Some s
          | _ -> None)
   in
-  Db_order.gen_key ?left:last_order ()
+  Db_order.gen_key last_order None
 
 let recycled_ (e : entity) : bool =
   Option.is_some (Ldb.value e "logseq.property/deleted-at")
@@ -797,7 +797,7 @@ let build_property_values_tx_m (block : Wire.t)
                 (if k = "logseq.property/default-value" then block_id
                  else prop_ident))
              ; (Wire.Keyword "block/order",
-                Wire.String (Db_order.gen_key ())) ]
+                Wire.String (Db_order.gen_key_from_max ())) ]
          in
          let value_key =
            (* property-value-content? for :default type property →
