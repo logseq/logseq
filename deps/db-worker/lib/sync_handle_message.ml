@@ -27,7 +27,7 @@ let wire_str (v : Wire.t) : string =
   | _ -> ""
 
 let update_user_presence (client : Sync_state.client) (user_id : string)
-    (editing_block_uuid : string) =
+    (editing_block_uuid : string option) =
   Sync_presence.update_user_presence ~broadcast:broadcast_rtc_state client
     ~user_id ~editing_block_uuid
 
@@ -172,8 +172,15 @@ let verify_sync_checksum repo (client : Sync_state.client) local_tx remote_tx
             in
             Sync_log_and_state.add_rtc_log "rtc.log/checksum-mismatch"
               mismatch;
+            (* cljs log/warn logs the full mismatch map *)
             Worker_log.warn "db-sync/checksum-mismatch"
-              [ ("repo", repo) ]
+              (List.map
+                 (fun (k, v) ->
+                    ( (match k with
+                       | Wire.Keyword s | Wire.String s -> s
+                       | _ -> "?")
+                    , Transit_codec.to_string v ))
+                 (Wire.as_map mismatch))
           end
     | _ -> ()
 
@@ -321,15 +328,21 @@ let handle_online_users repo (client : Sync_state.client) (message : Wire.t) =
 let handle_presence (client : Sync_state.client) (message : Wire.t) =
   let user_id = Wire.get "user-id" message in
   let editing_block_uuid = Wire.get "editing-block-uuid" message in
-  match user_id with
-  | Some (Wire.Uuid uid) ->
+  (* cljs :keys destructures raw values — no uuid shape gate *)
+  let user_id_s =
+    match user_id with
+    | Some (Wire.Uuid u) | Some (Wire.String u) -> Some u
+    | _ -> None
+  in
+  match user_id_s with
+  | Some uid ->
       let own = get_user_uuid () = Some uid in
       if not own then
         update_user_presence client uid
-            (match editing_block_uuid with
-             | Some (Wire.Uuid u) | Some (Wire.String u) -> u
-             | _ -> "")
-  | _ -> ()
+          (match editing_block_uuid with
+           | Some (Wire.Uuid u) | Some (Wire.String u) -> Some u
+           | _ -> None)
+  | None -> ()
 
 let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
     remote_checksum =
@@ -380,8 +393,11 @@ let update_latest_remote_state repo (message : Wire.t)
             | Some prev -> max prev r
             | None -> r)
    | None -> ());
+  (* cljs assoc-any: :checksum nil clobbers the stored checksum *)
   (if has_checksum && not stale_remote_tx then
      match remote_checksum with
+     | Some Wire.Nil ->
+         Hashtbl.remove Sync_apply.repo_latest_remote_checksum repo
      | Some (Wire.String c) ->
          Hashtbl.replace Sync_apply.repo_latest_remote_checksum repo c
      | _ -> ());

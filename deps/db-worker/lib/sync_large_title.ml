@@ -86,8 +86,11 @@ let find_large_title_object_eid (db : db) (obj : value) : entity_id option =
 
 let resolve_large_title_item_eid (db : db) ~(e : Wire.t) ~(obj : value)
     : entity_id option =
+  (* cljs (number? e) — ints and floats both *)
   match e with
   | Wire.Int n -> Some n
+  | Wire.Int64 n -> Some (Int64.to_int n)
+  | Wire.Float f -> Some (int_of_float f)
   | _ ->
       (match
          (try entid_ref db (Ds_wire.entity_ref_of_transit e)
