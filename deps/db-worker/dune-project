@@ -52,4 +52,6 @@
   melange-fetch
   melange-webapi
   rrbvec
-  sqlite3))
+  sqlite3
+  uunf
+  re))
