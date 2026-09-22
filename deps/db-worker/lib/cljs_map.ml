@@ -21,6 +21,7 @@ let assoc (m : Wire.t) (k : string) (v : Wire.t) : Wire.t =
                 | _ -> (ek, ev))
              entries)
       else Wire.Map (entries @ [ (Wire.Keyword k, v) ])
+  | Wire.Nil -> Wire.Map [ (Wire.Keyword k, v) ]
   | _ -> invalid_arg "assoc: not a map"
 
 let assoc_list (m : Wire.t) (kvs : (string * Wire.t) list) : Wire.t =
@@ -36,6 +37,7 @@ let dissoc (m : Wire.t) (k : string) : Wire.t =
               | Wire.Keyword s | Wire.String s -> not (String.equal s k)
               | _ -> true)
            entries)
+  | Wire.Nil -> Wire.Nil
   | _ -> invalid_arg "dissoc: not a map"
 
 let dissoc_list (m : Wire.t) (ks : string list) : Wire.t =
