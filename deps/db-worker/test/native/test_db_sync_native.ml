@@ -4142,6 +4142,535 @@ let test_apply_history_action_save_block_ignores_stale_db_id_when_uuid_exists
              | Some e -> Ldb.value e "block/title" = Some (String new_title)
              | None -> false)))
 
+(* cljs local-tx map → local_tx_entry *)
+let mk_local_tx_entry ?(outliner_op : string option)
+    ?(forward_ops = ([] : Wire.t list))
+    ?(inverse_ops = ([] : Wire.t list)) ?(tx = Wire.Array [])
+    ?(reversed_tx = Wire.Array []) (tx_id : string)
+    : Sync_client_op.local_tx_entry =
+  { tx_id
+  ; outliner_op
+  ; forward_outliner_ops = forward_ops
+  ; inverse_outliner_ops = inverse_ops
+  ; inferred_outliner_ops = false
+  ; undo_redo = None
+  ; tx
+  ; reversed_tx }
+
+(* cljs with-silenced-console-error *)
+let with_silenced_console_error (f : unit -> 'a) : 'a = f ()
+
+(* cljs reverse-local-txs-uses-reversed-tx-data-test *)
+let test_reverse_local_txs_uses_reversed_tx_data () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = wire_uuid_str (entity_block_uuid child1) in
+      let local_tx =
+        mk_local_tx_entry ~outliner_op:"save-block"
+          ~forward_ops:
+            [ save_block_op
+                (wire_map
+                   [ "block/uuid", Wire.Uuid (fresh_uuid ())
+                   ; "block/title", Wire.String "value" ])
+                (wire_map []) ]
+          ~reversed_tx:
+            (Wire.Array
+               [ db_add (Wire.Int child1.id) "block/title"
+                   (Wire.String "raw reverse") ])
+          tx_id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let reports = Sync_apply.reverse_local_txs conn [ local_tx ] in
+          check "1 report" (List.length reports = 1);
+          check "title"
+            (match ent_by_block_uuid (Datascript.db conn) child_uuid with
+             | Some e -> Ldb.value e "block/title" = Some (String "raw reverse")
+             | None -> false)))
+
+(* cljs reverse-local-txs-keeps-order-add-for-restored-entity-test *)
+let test_reverse_local_txs_keeps_order_add_for_restored_entity () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let restored_id = 999999 in
+      let restored_uuid = fresh_uuid () in
+      let now = Wire.Int64 1760000000000L in
+      let local_tx =
+        mk_local_tx_entry ~outliner_op:"delete-block"
+          ~reversed_tx:
+            (Wire.Array
+               [ db_add (Wire.Int restored_id) "block/uuid"
+                   (Wire.Uuid restored_uuid)
+               ; db_add (Wire.Int restored_id) "block/title"
+                   (Wire.String "reverse-restored")
+               ; db_add (Wire.Int restored_id) "block/created-at" now
+               ; db_add (Wire.Int restored_id) "block/updated-at" now
+               ; db_add (Wire.Int restored_id) "block/page"
+                   (Wire.Int parent.id)
+               ; db_add (Wire.Int restored_id) "block/parent"
+                   (Wire.Int parent.id)
+               ; db_add (Wire.Int restored_id) "block/order"
+                   (Wire.String "a0") ])
+          tx_id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          check "absent"
+            (ent_by_block_uuid (Datascript.db conn) restored_uuid = None);
+          let reports = Sync_apply.reverse_local_txs conn [ local_tx ] in
+          check "1 report" (List.length reports = 1);
+          match ent_by_block_uuid (Datascript.db conn) restored_uuid with
+          | Some restored ->
+              check "title"
+                (Ldb.value restored "block/title"
+                 = Some (String "reverse-restored"));
+              check "order"
+                (Ldb.value restored "block/order" = Some (String "a0"))
+          | None -> Alcotest.fail "restored entity missing"))
+
+(* cljs reverse-local-txs-resolves-existing-uuid-string-temp-id-test *)
+let test_reverse_local_txs_resolves_existing_uuid_string_temp_id () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = wire_uuid_str (entity_block_uuid child1) in
+      let local_tx =
+        mk_local_tx_entry ~outliner_op:"delete-blocks"
+          ~reversed_tx:
+            (Wire.Array
+               [ Wire.Array
+                   [ kw "db/add"; Wire.String child_uuid
+                   ; kw "block/uuid"; Wire.Uuid child_uuid
+                   ; Wire.Int 536880744 ]
+               ; Wire.Array
+                   [ kw "db/add"; Wire.String child_uuid
+                   ; kw "block/title"; Wire.String "reverse existing"
+                   ; Wire.Int 536880744 ] ])
+          tx_id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let reports = Sync_apply.reverse_local_txs conn [ local_tx ] in
+          check "1 report" (List.length reports = 1);
+          match ent_by_block_uuid (Datascript.db conn) child_uuid with
+          | Some child' ->
+              check "same eid" (child'.id = child1.id);
+              check "title"
+                (Ldb.value child' "block/title"
+                 = Some (String "reverse existing"))
+          | None -> Alcotest.fail "child missing"))
+
+(* cljs reverse-local-txs-drops-stale-duplicate-block-uuid-reverse-test *)
+let test_reverse_local_txs_drops_stale_duplicate_block_uuid_reverse () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, child2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let stale_uuid = wire_uuid_str (entity_block_uuid child1) in
+      let duplicate_uuid = wire_uuid_str (entity_block_uuid child2) in
+      let local_tx =
+        mk_local_tx_entry ~outliner_op:"insert-blocks"
+          ~forward_ops:
+            [ Wire.Array
+                [ kw "insert-blocks"
+                ; Wire.Array
+                    [ Wire.Array
+                        [ wire_map
+                            [ "block/uuid", Wire.Uuid stale_uuid
+                            ; "block/title", Wire.String "stale forward" ] ]
+                    ; Wire.Uuid duplicate_uuid
+                    ; wire_map [ "keep-uuid?", Wire.Bool true ] ] ] ]
+          ~reversed_tx:
+            (Wire.Array
+               [ Wire.Array
+                   [ kw "db/add"; block_uuid_lookup (Wire.Uuid stale_uuid)
+                   ; kw "block/uuid"; Wire.Uuid duplicate_uuid ] ])
+          tx_id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_silenced_console_error (fun () ->
+              let reports = Sync_apply.reverse_local_txs conn [ local_tx ] in
+              check "failed"
+                (reports
+                 = [ Sync_apply.Reverse_failed tx_id ]);
+              check "child1 uuid"
+                (match
+                   Datascript.entity (Datascript.db conn) (Entity_id child1.id)
+                 with
+                 | Some e ->
+                     Ldb.value e "block/uuid" = Some (Uuid stale_uuid)
+                 | None -> false);
+              check "child2 uuid"
+                (match
+                   Datascript.entity (Datascript.db conn) (Entity_id child2.id)
+                 with
+                 | Some e ->
+                     Ldb.value e "block/uuid" = Some (Uuid duplicate_uuid)
+                 | None -> false))))
+
+(* cljs reverse-local-txs-skips-validation-for-rebase-intermediate-state-test *)
+let test_reverse_local_txs_skips_validation_for_rebase_intermediate_state () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Raw_datom
+               (Datascript.datom ~e:child1.id
+                  ~a:"logseq.property/created-by-ref"
+                  ~v:(Ref parent.id) ~added:true ~tx:0 ()) ]);
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_silenced_console_error (fun () ->
+              let reports =
+                Sync_apply.reverse_local_txs conn
+                  [ mk_local_tx_entry ~outliner_op:"insert-blocks"
+                      ~reversed_tx:
+                        (Wire.Array
+                           [ Wire.Array
+                               [ kw "db/retract"; Wire.Int child1.id
+                               ; kw "block/title"; Wire.String "child 1" ] ])
+                      tx_id ]
+              in
+              check "1 report" (List.length reports = 1);
+              check "title retracted"
+                (match
+                   Datascript.entity (Datascript.db conn) (Entity_id child1.id)
+                 with
+                 | Some e -> Ldb.value e "block/title" = None
+                 | None -> false))))
+
+(* cljs apply-remote-txs-reverses-parent-insert-with-existing-child-without-orphaning-test *)
+let test_apply_remote_txs_reverses_parent_insert_with_existing_child () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let parent_page_uuid =
+        match Ldb.value parent "block/page" with
+        | Some (Ref page_id) -> (
+            match Ldb.ent_of_id (Datascript.db conn) page_id with
+            | Some page -> wire_uuid_str (entity_block_uuid page)
+            | None -> "")
+        | _ -> ""
+      in
+      let target_uuid = wire_uuid_str (entity_block_uuid parent) in
+      let remote_block_id = child1.id in
+      let inserted_parent_uuid = fresh_uuid () in
+      let inserted_child_uuid = fresh_uuid () in
+      ignore
+        (Datascript.transact_conn_string conn
+           (Printf.sprintf
+              "[[:db/add \"queued-parent\" :block/uuid #uuid \"%s\"]\n\
+              \            [:db/add \"queued-parent\" :block/title \"queued \
+               parent\"]\n\
+              \            [:db/add \"queued-parent\" :block/page [:block/uuid \
+               #uuid \"%s\"]]\n\
+              \            [:db/add \"queued-parent\" :block/parent \
+               [:block/uuid #uuid \"%s\"]]\n\
+              \            [:db/add \"queued-parent\" :block/order \"b1X\"]\n\
+              \            [:db/add \"queued-parent\" :block/created-at 1]\n\
+              \            [:db/add \"queued-parent\" :block/updated-at 1]\n\
+              \            [:db/add \"queued-child\" :block/uuid #uuid \"%s\"]\n\
+              \            [:db/add \"queued-child\" :block/title \"queued \
+               child\"]\n\
+              \            [:db/add \"queued-child\" :block/page [:block/uuid \
+               #uuid \"%s\"]]\n\
+              \            [:db/add \"queued-child\" :block/parent \
+               \"queued-parent\"]\n\
+              \            [:db/add \"queued-child\" :block/order \"b1Y\"]\n\
+              \            [:db/add \"queued-child\" :block/created-at 1]\n\
+              \            [:db/add \"queued-child\" :block/updated-at 1]]"
+              inserted_parent_uuid parent_page_uuid target_uuid
+              inserted_child_uuid parent_page_uuid));
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* cljs binds sync-crypt fns directly; the fixture graph is not
+             e2ee so graph-e2ee? is false and the aes key is never used. *)
+          Sync_deps.graph_e2ee := Some (fun _ -> false);
+          Sync_deps.ensure_graph_aes_key :=
+            Some (fun _ -> Db_worker_effect.pure Wire.Nil);
+          let pending_tx_id = fresh_uuid () in
+          let reversed_item =
+            db_retract_entity (block_uuid_lookup (Wire.Uuid inserted_parent_uuid))
+          in
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "insert-blocks"
+                      ; Wire.Array
+                          [ Wire.Array
+                              [ wire_map
+                                  [ ( "block/uuid"
+                                    , Wire.Uuid inserted_parent_uuid )
+                                  ; ( "block/title"
+                                    , Wire.String "queued parent" ) ] ]
+                          ; Wire.Uuid target_uuid
+                          ; wire_map
+                              [ "sibling?", Wire.Bool false
+                              ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                ~reversed_tx_data:(Wire.Array [ reversed_item ])
+                pending_tx_id ];
+          let pending_before =
+            Option.get
+              (List.nth_opt (Sync_apply.pending_txs test_repo ()) 0)
+          in
+          check "outliner-op"
+            (pending_before.outliner_op = Some "insert-blocks");
+          check "fwd ops" (pending_before.forward_outliner_ops <> []);
+          check "reversed item"
+            (List.exists
+               (fun i -> wire_equal i reversed_item)
+               (wire_list pending_before.reversed_tx));
+          let client = mk_client () in
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo client
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add (Wire.Int remote_block_id) "block/title"
+                             (Wire.String "remote while nested insert pending")
+                         ] ) ] ]);
+          ( match
+              ent_by_block_uuid (Datascript.db conn) inserted_parent_uuid
+            with
+            | Some inserted_parent ->
+                check "parent title"
+                  (Ldb.value inserted_parent "block/title"
+                   = Some (String "queued parent"))
+            | None -> Alcotest.fail "inserted parent missing" );
+          ( match
+              ent_by_block_uuid (Datascript.db conn) inserted_child_uuid
+            with
+            | Some inserted_child ->
+                check "child parent"
+                  (Ldb.value inserted_child "block/parent" <> None);
+                check "child page"
+                  (Ldb.value inserted_child "block/page" <> None)
+            | None -> () );
+          let validation =
+            Db_validate.validate_local_db (Datascript.db conn)
+          in
+          check "no validation errors"
+            (non_recycle_validation_entities validation = [])))
+
+(* cljs apply-remote-txs-drops-stale-save-block-reverse-test *)
+let test_apply_remote_txs_drops_stale_save_block_reverse () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let missing_uuid = fresh_uuid () in
+      let parent_uuid = wire_uuid_str (entity_block_uuid parent) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_deps.graph_e2ee := Some (fun _ -> false);
+          Sync_deps.ensure_graph_aes_key :=
+            Some (fun _ -> Db_worker_effect.pure Wire.Nil);
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~forward_ops:
+                  [ save_block_op
+                      (wire_map
+                         [ "block/uuid", Wire.Uuid missing_uuid
+                         ; "block/title", Wire.String "stale forward" ])
+                      (wire_map []) ]
+                ~inverse_ops:
+                  [ save_block_op
+                      (wire_map
+                         [ "block/uuid", Wire.Uuid missing_uuid
+                         ; "block/title", Wire.String "stale reverse" ])
+                      (wire_map []) ]
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid missing_uuid))
+                         "block/title" (Wire.String "stale forward") ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid missing_uuid))
+                         "block/title" (Wire.String "stale reverse") ])
+                tx_id ];
+          let client = mk_client () in
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo client
+               [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                   "block/title" (Wire.String "remote parent") ]);
+          check "parent title"
+            (match ent_by_block_uuid (Datascript.db conn) parent_uuid with
+             | Some e ->
+                 Ldb.value e "block/title" = Some (String "remote parent")
+             | None -> false);
+          let row = client_op_tx_row ops tx_id in
+          check "pending 0" (tx_row_int row 1 = 0)))
+
+(* cljs enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test *)
+let test_enqueue_local_tx_keeps_mixed_semantic_forward_outliner_ops () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, child2, _c3 = setup_parent_child () in
+      let block_uuid = wire_uuid_str (entity_block_uuid child2) in
+      let tx_report =
+        Datascript.with_tx (Datascript.db conn)
+          ~tx_meta:
+            [ "client-id", String "test-client"
+            ; "local-tx?", Bool true
+            ; "outliner-op", Keyword "save-block"
+            ; ( "outliner-ops"
+              , Vector
+                  [ Ds_wire.value_of_transit
+                      (save_block_op
+                         (wire_map
+                            [ "block/uuid", Wire.Uuid block_uuid
+                            ; "block/title", Wire.String "mixed fallback" ])
+                         (wire_map []))
+                  ; Ds_wire.value_of_transit
+                      (Wire.Array
+                         [ kw "indent-outdent-blocks"
+                         ; Wire.Array
+                             [ Wire.Array [ Wire.Int child2.id ]
+                             ; Wire.Bool false
+                             ; wire_map
+                                 [ "parent-original", Wire.Nil
+                                 ; "logical-outdenting?", Wire.Nil ] ] ]) ] ) ]
+          [ Datascript.Raw_datom
+              (Datascript.datom ~e:child2.id ~a:"block/title"
+                 ~v:(String "mixed fallback") ~added:true ~tx:0 ()) ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_apply.enqueue_local_tx test_repo tx_report;
+          let forward_ops =
+            (List.hd (Sync_apply.pending_txs test_repo ()))
+              .forward_outliner_ops
+          in
+          check "op0 save-block"
+            (match List.nth_opt forward_ops 0 with
+             | Some (Wire.Array (Wire.Keyword "save-block" :: _)) -> true
+             | _ -> false);
+          check "op1 indent-outdent-blocks"
+            (match List.nth_opt forward_ops 1 with
+             | Some (Wire.Array (Wire.Keyword "indent-outdent-blocks" :: _)) ->
+                 true
+             | _ -> false);
+          check "op1 block-uuid"
+            (match List.nth_opt forward_ops 1 with
+             | Some
+                 (Wire.Array
+                    [ _; Wire.Array (Wire.Array [ Wire.Uuid u ] :: _) ]) ->
+                 u = block_uuid
+             | _ -> false)))
+
+(* cljs apply-history-action-undo-delete-blocks-noops-when-target-missing-test *)
+let test_apply_history_action_undo_delete_blocks_noops_when_target_missing ()
+    =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = entity_block_uuid child1 in
+      let missing_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"delete-blocks"
+                ~forward_ops:
+                  [ save_block_op
+                      (wire_map
+                         [ "block/uuid", child_uuid
+                         ; "block/title", Wire.String "semantic source" ])
+                      Wire.Nil ]
+                ~inverse_ops:
+                  [ Wire.Array
+                      [ kw "delete-blocks"
+                      ; Wire.Array
+                          [ Wire.Array
+                              [ block_uuid_lookup (Wire.Uuid missing_uuid) ]
+                          ; wire_map [] ] ] ]
+                tx_id ];
+          let r = Sync_apply.apply_history_action test_repo tx_id true [] in
+          check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
+          check "child exists"
+            (ent_by_block_uuid (Datascript.db conn)
+               (wire_uuid_str child_uuid)
+             <> None)))
+
+(* cljs enqueue-local-tx-persists-semantic-undo-ops-test *)
+let test_enqueue_local_tx_persists_semantic_undo_ops () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = entity_block_uuid child1 in
+      let forward_ops =
+        [ save_block_op
+            (wire_map
+               [ "block/uuid", child_uuid
+               ; "block/title", Wire.String "undo value" ])
+            (wire_map []) ]
+      in
+      let inverse_ops =
+        [ save_block_op
+            (wire_map
+               [ "block/uuid", child_uuid
+               ; "block/title", Wire.String "child 1" ])
+            (wire_map []) ]
+      in
+      let tx_report =
+        Datascript.with_tx (Datascript.db conn)
+          ~tx_meta:
+            [ "client-id", String "test-client"
+            ; "local-tx?", Bool true
+            ; "db-sync/tx-id", Uuid tx_id
+            ; ( "db-sync/forward-outliner-ops"
+              , Vector (List.map Ds_wire.value_of_transit forward_ops) )
+            ; ( "db-sync/inverse-outliner-ops"
+              , Vector (List.map Ds_wire.value_of_transit inverse_ops) )
+            ; "outliner-op", Keyword "save-block"
+            ; "undo?", Bool true
+            ; "gen-undo-ops?", Bool false ]
+          [ Datascript.Raw_datom
+              (Datascript.datom ~e:child1.id ~a:"block/title"
+                 ~v:(String "undo value") ~added:true ~tx:0 ()) ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_apply.enqueue_local_tx test_repo tx_report;
+          let pending = List.hd (Sync_apply.pending_txs test_repo ()) in
+          let raw_pending =
+            Sync_client_op.get_local_tx_entry test_repo tx_id
+          in
+          check "tx-id" (pending.tx_id = tx_id);
+          check "fwd"
+            (pending.forward_outliner_ops = forward_ops);
+          check "raw fwd"
+            (match raw_pending with
+             | Some e -> e.forward_outliner_ops = forward_ops
+             | None -> false);
+          check "raw inv"
+            (match raw_pending with
+             | Some e -> e.inverse_outliner_ops = inverse_ops
+             | None -> false)))
+
+(* cljs direct-outliner-page-delete-persists-delete-page-outliner-op-test *)
+let test_direct_outliner_page_delete_persists_delete_page_outliner_op () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "Delete Me" }
+              ; blocks = [] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db conn) "Delete Me")
+      in
+      let page_uuid = wire_uuid_str (entity_block_uuid page) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_page.delete_conn conn page_uuid (Wire.Map []));
+          let pending = List.hd (Sync_apply.pending_txs test_repo ()) in
+          check "delete-page op"
+            (match pending.forward_outliner_ops with
+             | Wire.Array (Wire.Keyword "delete-page" :: _) :: _ -> true
+             | _ -> false);
+          check "uuid arg"
+            (match pending.forward_outliner_ops with
+             | Wire.Array [ _; Wire.Array (Wire.Uuid u :: _) ] :: _ ->
+                 u = page_uuid
+             | _ -> false);
+          check "inverse ops" (pending.inverse_outliner_ops <> [])))
+
 (*__TESTS__*)
 
 let () =
@@ -4399,4 +4928,40 @@ let () =
             "apply-history-action-save-block-ignores-stale-db-id-when-uuid-exists"
             `Quick
             test_apply_history_action_save_block_ignores_stale_db_id_when_uuid_exists
+        ; Alcotest.test_case "reverse-local-txs-uses-reversed-tx-data" `Quick
+            test_reverse_local_txs_uses_reversed_tx_data
+        ; Alcotest.test_case
+            "reverse-local-txs-keeps-order-add-for-restored-entity" `Quick
+            test_reverse_local_txs_keeps_order_add_for_restored_entity
+        ; Alcotest.test_case
+            "reverse-local-txs-resolves-existing-uuid-string-temp-id" `Quick
+            test_reverse_local_txs_resolves_existing_uuid_string_temp_id
+        ; Alcotest.test_case
+            "reverse-local-txs-drops-stale-duplicate-block-uuid-reverse"
+            `Quick
+            test_reverse_local_txs_drops_stale_duplicate_block_uuid_reverse
+        ; Alcotest.test_case
+            "reverse-local-txs-skips-validation-for-rebase-intermediate-state"
+            `Quick
+            test_reverse_local_txs_skips_validation_for_rebase_intermediate_state
+        ; Alcotest.test_case
+            "apply-remote-txs-reverses-parent-insert-with-existing-child-without-orphaning"
+            `Quick
+            test_apply_remote_txs_reverses_parent_insert_with_existing_child
+        ; Alcotest.test_case "apply-remote-txs-drops-stale-save-block-reverse"
+            `Quick test_apply_remote_txs_drops_stale_save_block_reverse
+        ; Alcotest.test_case
+            "enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops"
+            `Quick
+            test_enqueue_local_tx_keeps_mixed_semantic_forward_outliner_ops
+        ; Alcotest.test_case
+            "apply-history-action-undo-delete-blocks-noops-when-target-missing"
+            `Quick
+            test_apply_history_action_undo_delete_blocks_noops_when_target_missing
+        ; Alcotest.test_case "enqueue-local-tx-persists-semantic-undo-ops"
+            `Quick test_enqueue_local_tx_persists_semantic_undo_ops
+        ; Alcotest.test_case
+            "direct-outliner-page-delete-persists-delete-page-outliner-op"
+            `Quick
+            test_direct_outliner_page_delete_persists_delete_page_outliner_op
         ] ) ]
