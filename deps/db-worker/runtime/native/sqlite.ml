@@ -38,6 +38,9 @@ let open_db ~path =
   let handle = Sqlite3.db_open path in
   { handle; filename = path }
 
+let prepare_pool ~name:_ = Db_worker_effect.pure ()
+let open_db_pool ~name:_ ~path = open_db ~path
+
 let close t = ignore (Sqlite3.db_close t.handle)
 
 let exec t ~sql ~bind =
@@ -99,3 +102,5 @@ let backup t ~dst_path =
   exec t ~sql:(Printf.sprintf "vacuum into '%s'" escaped) ~bind:[||]
 
 let filename t = t.filename
+
+let pooled_runtime () = false

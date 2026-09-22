@@ -83,7 +83,12 @@ let client_ops_conn repo : Sqlite.db =
   match Hashtbl.find_opt client_ops_conns repo with
   | Some db -> db
   | None ->
-      let db = Sqlite.open_db ~path:(client_ops_path repo) in
+      let db =
+        Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo)
+          ~path:
+            (if Sqlite.pooled_runtime () then "client-ops-/db.sqlite"
+             else client_ops_path repo)
+      in
       Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
       Hashtbl.replace client_ops_conns repo db;
       db

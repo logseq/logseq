@@ -63,11 +63,19 @@ let create_or_open_db args =
        | None ->
            if opt_bool "close-other-db?" true opts then
              Worker_state.close_other_sqlite_conns repo;
+           Db_worker_effect.bind
+             (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
+             (fun () ->
            let db =
              match Worker_state.sqlite_conn repo with
              | Some db -> db
              | None ->
-                 let db = Sqlite.open_db ~path:(db_path repo) in
+                 let db =
+                   Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo)
+                     ~path:
+                       (if Sqlite.pooled_runtime () then "/db.sqlite"
+                        else db_path repo)
+                 in
                  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
                  Worker_state.set_sqlite_conn repo db;
                  db
@@ -103,7 +111,7 @@ let create_or_open_db args =
                        [
                          (Wire.Keyword "type", Wire.Keyword "db/missing-connection");
                          (Wire.Keyword "repo", Wire.String repo);
-                       ] ))))
+                       ] )))))
   | _ -> invalid_arg "create-or-open-db expects (repo opts)"
 
 let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
