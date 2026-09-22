@@ -237,9 +237,43 @@ let rec generate_n_keys_between ?(digits : string = base62_digits)
       @ generate_n_keys_between ~digits (Some c) b (n - mid - 1)
 
 (* db-order/gen-key *)
-let gen_key ?left ?right () : string =
-  generate_key_between left right
+(* db-order/*max-key — global highest key seen; 0-arity gen-key starts
+   from it instead of nil so keys stay monotonic across calls. *)
+let max_key : string option ref = ref None
 
-let gen_n_keys (n : int) ?left ?right () : string list =
-  generate_n_keys_between left right n |> fun l ->
-  List.filteri (fun i _ -> i < n) l
+let reset_max_key ?(max_key_atom = max_key) (key : string option) : unit =
+  match key with
+  | Some k ->
+    (match !max_key_atom with
+     | Some cur when String.compare k cur <= 0 -> ()
+     | _ -> max_key_atom := Some k)
+  | None -> ()
+
+(* cljs gen-key 2-arity: explicit start (nil means nil, not *max-key);
+   always updates *max-key. *)
+let gen_key ?(max_key_atom = max_key) (start : string option) (end_ : string option)
+    : string =
+  let k = generate_key_between start end_ in
+  reset_max_key ~max_key_atom (Some k);
+  k
+
+(* cljs gen-key 0/1-arity: starts from *max-key when start not given. *)
+let gen_key_from_max ?(max_key_atom = max_key) ?(end_ : string option) () : string =
+  gen_key ~max_key_atom !max_key_atom end_
+
+let gen_n_keys ?(max_key_atom = max_key) (n : int) (start : string option)
+    (end_ : string option) : string list =
+  let ks =
+    generate_n_keys_between start end_ n |> fun l ->
+    List.filteri (fun i _ -> i < n) l
+  in
+  (match List.rev ks with
+   | last :: _ -> reset_max_key ~max_key_atom (Some last)
+   | [] -> ());
+  ks
+
+(* db-order/get-max-order — last :block/order value in the avet index. *)
+let get_max_order db : string option =
+  match Seq.uncons (Datascript.rseek_datoms db Avet ~a:"block/order" ()) with
+  | Some (d, _) -> (match d.Datascript.v with String s -> Some s | _ -> None)
+  | None -> None
