@@ -2168,11 +2168,12 @@ let property_cases : unit Alcotest.test_case list =
 open Datascript
 
 (* ---------- core_test.cljs ----------
-   15 of 16 deftests ported. Skipped:
-   - insert-blocks-does-not-trust-stale-right-order — cljs passes
-     :end-order-state [:known stale-order] to insert-blocks; the OCaml
-     insert_opts record has no end-order-state field (lib gap).
+   All 16 deftests ported.
    Notes:
+   - cljs passes :end-order-state [:known stale-order] in
+     insert-blocks-does-not-trust-stale-right-order — the key is dead in
+     cljs (never destructured); both impls consult the live right
+     sibling, so the OCaml port needs no such field.
    - cljs delete-blocks! takes {:deleted-by-uuid u}; OCaml
      delete_blocks has no per-op deleted-by arg — the opt is dropped
      (the asserted hard retractions don't depend on it).
@@ -2259,6 +2260,54 @@ let page_uuids_named (db : db) (title : string) : string list =
        | [ Result_value (Uuid u) ] -> Some u
        | [ Result_value (String u) ] -> Some u
        | _ -> None)
+
+(* (deftest insert-blocks-does-not-trust-stale-right-order ...)
+   cljs passes :end-order-state [:known stale-order]; that key is dead in
+   cljs too (insert-blocks never destructures it) — both impls always
+   consult the live right sibling, which is what this test proves. *)
+let test_insert_blocks_does_not_trust_stale_right_order () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks =
+              [ { default_block with b_title = Some "target" };
+                { default_block with b_title = Some "original right" } ] } ]
+      ()
+  in
+  let opts =
+    { Outliner_core.default_insert_opts with
+      sibling = true; keep_uuid = true }
+  in
+  insert_blocks_bang conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "concurrent right" ] ]
+    (Block_map.of_entity
+       (Option.get (find_block_by_content (db_of conn) "target")))
+    ~opts ();
+  let db = db_of conn in
+  let target = Option.get (find_block_by_content db "target") in
+  let current_right = Option.get (Ldb.get_right_sibling target) in
+  let _r, blocks =
+    Outliner_core.insert_blocks db
+      [ [ "block/uuid", Uuid (gen_uuid ())
+        ; "block/title", String "inserted" ] ]
+      (Block_map.of_entity target) opts
+  in
+  let inserted_order =
+    match bm_string (List.hd blocks) "block/order" with
+    | Some s -> s
+    | None -> ""
+  in
+  let right_order =
+    match Ldb.string_value current_right "block/order" with
+    | Some s -> s
+    | None -> ""
+  in
+  check "insert stale-right current-right"
+    (Ldb.string_value current_right "block/title" = Some "concurrent right");
+  check "insert stale-right order before current right"
+    (String.compare inserted_order right_order < 0)
 
 (* (deftest insert-blocks-finds-right-order-on-1k-sibling-page ...) *)
 let test_insert_blocks_finds_right_order_on_1k_sibling_page () =
@@ -2803,7 +2852,8 @@ let test_move_blocks_protects_comment_blocks () =
 
 (* core_test.cljs — the ported deftests *)
 let core_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "insert-blocks-finds-right-order-on-1k-sibling-page" `Quick test_insert_blocks_finds_right_order_on_1k_sibling_page;
+  [ Alcotest.test_case "insert-blocks-does-not-trust-stale-right-order" `Quick test_insert_blocks_does_not_trust_stale_right_order;
+    Alcotest.test_case "insert-blocks-finds-right-order-on-1k-sibling-page" `Quick test_insert_blocks_finds_right_order_on_1k_sibling_page;
     Alcotest.test_case "blocks-with-level-handles-10k-deep-tree" `Quick test_blocks_with_level_handles_10k_deep_tree;
     Alcotest.test_case "existing-inline-class-uses-its-canonical-uuid" `Quick test_existing_inline_class_uses_its_canonical_uuid;
     Alcotest.test_case "insert-blocks-reuses-page-created-after-reference-parsing" `Quick test_insert_blocks_reuses_page_created_after_reference_parsing;
