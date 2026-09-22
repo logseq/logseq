@@ -4,6 +4,7 @@
             ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
             ["zod/v3" :as z] ;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
+            [electron.mcp-compat :as mcp-compat]
             [promesa.core :as p]))
 
 ;; Server util fns
@@ -95,45 +96,29 @@
           (mcp-success-response body)))
       (p/catch unexpected-api-error)))
 
-(defn- api-get-page
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.getPageData" [(aget args "pageName")]))
-
-(defn- api-list-pages
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))
-
-(defn- api-list-tags
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.listTags" [#js {:expand (aget args "expand")}]))
-
-(defn- api-list-properties
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.listProperties" [#js {:expand (aget args "expand")}]))
-
-(defn- api-search-blocks
-  [call-api-fn args]
-  (call-api-fn "logseq.app.search" [(aget args "searchTerm") #js {:enable-snippet? false}]))
-
-(defn- api-upsert-nodes
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations") #js {:dry-run (aget args "dry-run")}]))
+(defn- api-data-tool
+  [api-fn data-fn args]
+  (-> (p/let [body (data-fn api-fn args)]
+        (if-let [error (and body (aget body "error"))]
+          (mcp-error-response (str "API Error: " error))
+          (mcp-success-response body)))
+      (p/catch unexpected-api-error)))
 
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
   {:listPages
-   {:fn api-list-pages
+    {:fn mcp-compat/list-pages
     :config #js {:title "List Pages"
                  :description "List all pages in a graph"
                  :inputSchema
                  #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each page"))}}}
    :getPage
-   {:fn api-get-page
+  {:fn mcp-compat/get-page
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks. A property and a tag are pages."
                  :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
    :upsertNodes
-   {:fn api-upsert-nodes
+  {:fn mcp-compat/upsert-nodes
     :config
     #js {:title "Upsert Nodes"
          :description
@@ -195,22 +180,96 @@
                      :data        (-> (z/object #js {}) (.passthrough))}))
               :dry-run (-> (z/boolean) .optional (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
    :searchBlocks
-   {:fn api-search-blocks
+  {:fn mcp-compat/search-blocks
     :config #js {:title "Search Blocks"
                  :description "Search graph for blocks containing search term"
                  :inputSchema #js {:searchTerm (z/string)}}}
    :listTags
-   {:fn api-list-tags
+  {:fn mcp-compat/list-tags
     :config #js {:title "List Tags"
                  :description "List all tags in a graph"
                  :inputSchema
                  #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each tag e.g. their parents (extends) and tag properties"))}}}
    :listProperties
-   {:fn api-list-properties
+   {:fn mcp-compat/list-properties
     :config #js {:title "List Properties"
                  :description "List all properties in a graph"
                  :inputSchema
                  #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property e.g. property type, cardinality"))}}}})
+
+(def ^:large-vars/data-var data-tools
+  {:getPageUUID
+   {:fn mcp-compat/get-page-uuid
+    :config #js {:title "Get Page UUID"
+                 :description "Resolve a unique live page title to its UUID."
+                 :inputSchema #js {:title (z/string)}}}
+   :getTagUUID
+   {:fn mcp-compat/get-tag-uuid
+    :config #js {:title "Get Tag UUID"
+                 :description "Resolve a tag title to exactly one UUID."
+                 :inputSchema #js {:title (z/string)}}}
+   :getTag
+   {:fn mcp-compat/get-tag
+    :config #js {:title "Get Tag"
+                 :description "Read one exact tag entity by UUID."
+                 :inputSchema #js {:tag_uuid (z/string)}}}
+   :getPropertyIndent
+   {:fn mcp-compat/get-property-ident
+    :config #js {:title "Get Property Ident"
+                 :description "Resolve a property title to exactly one DB ident."
+                 :inputSchema #js {:title (z/string)}}}
+   :getBlock
+   {:fn mcp-compat/get-block
+    :config #js {:title "Get Block"
+                 :description "Read one exact non-page block by UUID."
+                 :inputSchema #js {:block_uuid (z/string)}}}
+   :getTagUsers
+   {:fn mcp-compat/get-tag-users
+    :config #js {:title "Get Tag Users"
+                 :description "List pages and blocks carrying a tag UUID."
+                 :inputSchema #js {:tag_uuid (z/string)}}}
+   :getBlockUUID
+   {:fn mcp-compat/get-block-uuids
+    :config #js {:title "Get Block UUIDs"
+                 :description "List all descendant block UUIDs on a page."
+                 :inputSchema #js {:page_uuid (z/string)}}}
+   :getBlockTree
+   {:fn mcp-compat/get-block-tree
+    :config #js {:title "Get Block Tree"
+                 :description "Read one block subtree with depth and node bounds."
+                 :inputSchema #js {:block_uuid (z/string)
+                                   :max_depth (-> (z/number) .optional)
+                                   :max_nodes (-> (z/number) .optional)}}}
+   :findBacklinks
+   {:fn mcp-compat/find-backlinks
+    :config #js {:title "Find Backlinks"
+                 :description "List references, tag holders, and property values pointing to a UUID."
+                 :inputSchema #js {:target_uuid (z/string)}}}
+   :findOrphans
+   {:fn mcp-compat/find-orphans
+    :config #js {:title "Find Orphans"
+                 :description "Report block page/parent mismatches without repairing them."
+                 :inputSchema #js {:page_uuid (z/string)}}}
+   :isTitleAvailable
+   {:fn mcp-compat/is-title-available
+    :config #js {:title "Is Title Available"
+                 :description "Check whether a title is held by any graph entity."
+                 :inputSchema #js {:title (z/string)}}}
+   :listRecycled
+   {:fn mcp-compat/list-recycled
+    :config #js {:title "List Recycled"
+                 :description "List recycled pages and their retained deleted-at data."
+                 :inputSchema #js {}}}
+   :listStatus
+   {:fn mcp-compat/list-status
+    :config #js {:title "List Status"
+                 :description "List entities with their Status values."
+                 :inputSchema #js {}}}
+   :listClosedValues
+   {:fn mcp-compat/list-closed-values
+    :config #js {:title "List Closed Values"
+                 :description "List permitted values for closed properties."
+                 :inputSchema #js {}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
   (tool-fn (partial api-tool api-fn) args))
@@ -228,4 +287,9 @@
                      (name k)
                      (:config v)
                      (partial call-api-tool (:fn v) api-fn)))
+    (doseq [[k v] data-tools]
+      (.registerTool mcp-server
+                     (name k)
+                     (:config v)
+                     (partial api-data-tool api-fn (:fn v))))
     mcp-server))
