@@ -12,6 +12,7 @@ env:
   CLOJURE_VERSION: "1.12.4.1618"
   NODE_VERSION: "24"
   JAVA_VERSION: "21"
+  OCAML_VERSION: '5.1.1'
 
 jobs:
   build-and-deploy:
@@ -45,8 +46,19 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Install pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Set build environment flags
         run: |
@@ -56,9 +68,9 @@ jobs:
       - name: Build web + workers
         run: |
           pnpm gulp:build
-          clojure -M:cljs release app db-worker \
+          clojure -M:cljs release app \
             --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
-          pnpm webpack-app-build
+          pnpm db-worker:build
 
           rsync -avz \
             --exclude node_modules \
