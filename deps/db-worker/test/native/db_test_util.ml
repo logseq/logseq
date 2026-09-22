@@ -44,6 +44,7 @@ type edn =
   | Flt of float
   | Bool of bool
   | Uuid of string
+  | Inst of int64            (* #inst "1970-01-01T..." epoch-ms literal *)
   | Vec of edn list
   | Set_ of edn list
   | Map of (string * edn) list
@@ -57,6 +58,39 @@ let rec edn_to_string = function
       if String.contains s '.' || String.contains s 'e' then s else s ^ ".0"
   | Bool b -> string_of_bool b
   | Uuid s -> Printf.sprintf "#uuid \"%s\"" s
+  | Inst ms ->
+      let s = Int64.div ms 1000L and frac = Int64.rem ms 1000L in
+      let days = Int64.div s 86400L in
+      let s' = Int64.rem s 86400L in
+      let h = Int64.div s' 3600L and m = Int64.div (Int64.rem s' 3600L) 60L
+      and sec = Int64.rem s' 60L in
+      (* civil-from-days (inverse of days_from_civil in datascript parser) *)
+      let z = Int64.add days 719468L in
+      let era = Int64.div z 146097L in
+      let doe = Int64.sub z (Int64.mul era 146097L) in
+      let yoe =
+        Int64.div
+          (Int64.sub
+             (Int64.add
+                (Int64.sub doe (Int64.div doe 1460L))
+                (Int64.div doe 36524L))
+             (Int64.div doe 146096L))
+          365L
+      in
+      let y = Int64.add yoe (Int64.mul era 400L) in
+      let doy =
+        Int64.sub doe
+          (Int64.sub
+             (Int64.add (Int64.mul 365L yoe) (Int64.div yoe 4L))
+             (Int64.div yoe 100L))
+      in
+      let mp = Int64.div (Int64.add (Int64.mul 5L doy) 2L) 153L in
+      let d = Int64.add (Int64.sub doy
+                          (Int64.div (Int64.add (Int64.mul 153L mp) 2L) 5L)) 1L in
+      let mo = if Int64.compare mp 10L < 0 then Int64.add mp 3L else Int64.sub mp 9L in
+      let yr = if Int64.compare mo 2L <= 0 then Int64.add y 1L else y in
+      Printf.sprintf "#inst \"%04Ld-%02Ld-%02LdT%02Ld:%02Ld:%02Ld.%03LdZ\""
+        yr mo d h m sec frac
   | Vec vs -> "[" ^ String.concat " " (List.map edn_to_string vs) ^ "]"
   | Set_ vs -> "#{" ^ String.concat " " (List.map edn_to_string vs) ^ "}"
   | Map kvs ->
