@@ -67,7 +67,7 @@ let page_entity_val ctx v =
 let value_of (e : entity) (a : attr) = Ldb.value e a
 
 let is_string_val = function String _ -> true | _ -> false
-let is_number_val = function Int _ | Float _ -> true | _ -> false
+let is_number_val = function Int _ | Float _ | Instant _ -> true | _ -> false
 let is_boolean_val = function Bool _ -> true | _ -> false
 let is_keyword_val = function Keyword _ -> true | _ -> false
 let is_map_val = function Map _ -> true | _ -> false

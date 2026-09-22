@@ -60,7 +60,10 @@ let string_value (e : entity) (a : attr) : string option =
   match value e a with Some (String s) -> Some s | _ -> None
 
 let int_value (e : entity) (a : attr) : int option =
-  match value e a with Some (Int n) -> Some n | _ -> None
+  match value e a with
+  | Some (Int n) -> Some n
+  | Some (Instant ms) -> Some (Int64.to_int ms)
+  | _ -> None
 
 let ident_of (e : entity) : string option =
   match value e "db/ident" with Some (Keyword s) -> Some s | _ -> None
