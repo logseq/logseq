@@ -148,6 +148,13 @@ let as_seq value =
   | Some values, _, _ | _, Some values, _ | _, _, Some values -> Some values
   | _ -> None
 
+(* :find coll results arrive as rows of single-element tuples;
+   unwrap one level to reach the value itself. *)
+let unwrap_row value =
+  match as_seq value with
+  | Some items when Vec.length items = 1 -> Vec.peek_front items
+  | _ -> value
+
 let as_string_like value =
   match (as_string value, as_keyword value, as_uuid value) with
   | Some value, _, _ | _, Some value, _ | _, _, Some value -> Some value

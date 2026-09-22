@@ -900,7 +900,7 @@ let build_task repo graph (opts : task_opts) =
                   Property.key =
                     Property.Key_ident
                       (Edn_util.keyword_t "logseq.property/scheduled");
-                  value = Edn_util.float (Js.Date.getTime scheduled);
+                  value = Edn_util.int64 (Int64.of_float (Js.Date.getTime scheduled));
                 }
           | None -> properties
         in
@@ -912,7 +912,7 @@ let build_task repo graph (opts : task_opts) =
                   Property.key =
                     Property.Key_ident
                       (Edn_util.keyword_t "logseq.property/deadline");
-                  value = Edn_util.float (Js.Date.getTime deadline);
+                  value = Edn_util.int64 (Int64.of_float (Js.Date.getTime deadline));
                 }
           | None -> properties
         in
@@ -2530,7 +2530,9 @@ let resolve_task_status invoke_config repo = function
       let open Cli_effect in
       bind (status_query invoke_config repo) (fun result ->
           let values =
-            Option.value (Edn_util.as_seq result) ~default:Vec.empty
+            match Edn_util.as_seq result with
+            | Some rows -> Vec.map Edn_util.unwrap_row rows
+            | _ -> Vec.empty
           in
           let statuses = Task_status.normalize_available_statuses values in
           match Task_status.resolve_status_ident status_input statuses with
