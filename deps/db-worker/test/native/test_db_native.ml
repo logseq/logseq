@@ -2953,4 +2953,10 @@ let () =
     ; "handler-transaction", Test_handler_native.transaction_cases
     ; "undo-redo", Test_undo_redo_native.cases
     ; "db-listener", Test_db_listener_native.cases
-    ; "render-delta", Test_render_delta_native.cases ]
+    ; "render-delta", Test_render_delta_native.cases
+    ; "misc-migrate", Test_misc_native.migrate_cases
+    ; "misc-plain-value", Test_misc_native.plain_value_cases
+    ; "misc-commands", Test_misc_native.commands_cases
+    ; "misc-publish", Test_misc_native.publish_cases
+    ; "misc-state", Test_misc_native.state_cases
+    ; "misc-worker-util", Test_misc_native.worker_util_cases ]
