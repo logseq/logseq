@@ -47,6 +47,15 @@ let invoke_transit name transit_args =
     | Wire.Nil -> []
     | other -> [ other ]
   in
-  Db_worker_effect.catch (invoke name args) (fun exn ->
-      Db_worker_effect.pure (encode_error name exn))
-  >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)
+  let task = invoke name args in
+  (* cljs remote-function: a handler that throws synchronously
+     ((apply f args) or a missing method) makes remoteInvoke reject; a
+     handler whose promise rejects resolves the error transit instead.
+     An already-settled task maps to the sync path, a pending one to the
+     async path. *)
+  if Db_worker_effect.is_pending task then
+    Db_worker_effect.catch task (fun exn ->
+        Db_worker_effect.pure (encode_error name exn))
+    >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)
+  else
+    Db_worker_effect.map Transit_codec.to_string task

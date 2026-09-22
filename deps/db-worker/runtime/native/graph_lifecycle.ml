@@ -22,3 +22,20 @@ let release_ownership _ = invalid_arg "Graph_lifecycle: unsupported on native"
 let record_stop _ _ = invalid_arg "Graph_lifecycle: unsupported on native"
 let abort_admission _ _ = invalid_arg "Graph_lifecycle: unsupported on native"
 let publish _ _ _ = invalid_arg "Graph_lifecycle: unsupported on native"
+
+let create_graph ~storage:_ ~repo:_ =
+  invalid_arg "Graph_lifecycle: unsupported on native"
+
+type ctx = unit
+
+let context ~storage:_ ~repo:_ =
+  invalid_arg "Graph_lifecycle: unsupported on native"
+
+let ownership_path _ = invalid_arg "Graph_lifecycle: unsupported on native"
+
+type ownership_handle = unit
+
+let acquire_ownership _ =
+  invalid_arg "Graph_lifecycle: unsupported on native"
+
+let release _ = invalid_arg "Graph_lifecycle: unsupported on native"

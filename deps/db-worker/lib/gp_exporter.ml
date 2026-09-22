@@ -5871,10 +5871,10 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
     [ ("step", kw "doc-files"); ("phase", kw "read-file")
     ; ("file", String path); ("file-idx", Int (idx + 1)) ];
   let set = options.set_ui_state in
-  set [ "graph"; "importing-state"; "step" ] (kw "pages");
-  set [ "graph"; "importing-state"; "label" ] (kw "import/loading");
-  set [ "graph"; "importing-state"; "current-idx" ] (Int (idx + 1));
-  set [ "graph"; "importing-state"; "current-page" ] (String path);
+  set [ "graph/importing-state"; "step" ] (kw "pages");
+  set [ "graph/importing-state"; "label" ] (kw "import/loading");
+  set [ "graph/importing-state"; "current-idx" ] (Int (idx + 1));
+  set [ "graph/importing-state"; "current-page" ] (String path);
   (options.read_file file
    >>= fun content ->
    let stat_eff =
@@ -6065,10 +6065,10 @@ let cleanup_missing_block_refs_tx (db : db)
 (* set-finishing-import-ui *)
 let set_finishing_import_ui (options : options) : unit =
   let set = options.set_ui_state in
-  set [ "graph"; "importing-state"; "step" ] (kw "finishing");
-  set [ "graph"; "importing-state"; "label" ] (kw "import/finishing");
-  set [ "graph"; "importing-state"; "current-page" ] Nil;
-  set [ "graph"; "importing-state"; "current-idx" ] Nil
+  set [ "graph/importing-state"; "step" ] (kw "finishing");
+  set [ "graph/importing-state"; "label" ] (kw "import/finishing");
+  set [ "graph/importing-state"; "current-page" ] Nil;
+  set [ "graph/importing-state"; "current-idx" ] Nil
 
 (* finalize-imported-graph — rebuilds :block/refs for imported blocks
    missing :block/tx-id *)
@@ -6307,9 +6307,9 @@ let rec seq_eff (f : 'a -> unit Eff.t) (xs : 'a list) : unit Eff.t =
 let export_doc_files (conn : conn) (raw_doc_files : BM.t list)
     (options : options) : tx_report option Eff.t =
   let set = options.set_ui_state in
-  set [ "graph"; "importing-state"; "step" ] (kw "pages");
-  set [ "graph"; "importing-state"; "label" ] (kw "import/loading");
-  set [ "graph"; "importing-state"; "total" ] (Int (List.length raw_doc_files));
+  set [ "graph/importing-state"; "step" ] (kw "pages");
+  set [ "graph/importing-state"; "label" ] (kw "import/loading");
+  set [ "graph/importing-state"; "total" ] (Int (List.length raw_doc_files));
   import_progress options
     [ ("step", kw "doc-files")
     ; ("total-files", Int (List.length raw_doc_files)) ];
@@ -6666,12 +6666,12 @@ let read_and_copy_asset_files (asset_files_in : BM.t list)
       ; ("file", String path); ("file-idx", Int (idx + 1))
       ; ("total-files", Int (List.length asset_files)) ];
     let set = options.set_ui_state in
-    set [ "graph"; "importing-state"; "step" ] (kw "assets");
-    set [ "graph"; "importing-state"; "label" ] (kw "import/copying-assets");
-    set [ "graph"; "importing-state"; "total" ]
+    set [ "graph/importing-state"; "step" ] (kw "assets");
+    set [ "graph/importing-state"; "label" ] (kw "import/copying-assets");
+    set [ "graph/importing-state"; "total" ]
       (Int (List.length asset_files));
-    set [ "graph"; "importing-state"; "current-idx" ] (Int (idx + 1));
-    set [ "graph"; "importing-state"; "current-page" ] (String path);
+    set [ "graph/importing-state"; "current-idx" ] (Int (idx + 1));
+    set [ "graph/importing-state"; "current-page" ] (String path);
     let buffer_handler (content : string) : (BM.t -> BM.t) * bool =
       let is_edn = Common_path.file_ext path = "edn" in
       let edn_content =
@@ -7010,9 +7010,9 @@ let export_file_graph (_repo_or_conn : conn) (conn : conn)
   (Db_tx.flags_of conn).skip_store <- true;
   let set = options.set_ui_state in
   import_progress options [ ("step", kw "config"); ("phase", kw "read-config") ];
-  set [ "graph"; "importing-state"; "step" ] (kw "config");
-  set [ "graph"; "importing-state"; "label" ] (kw "import/loading");
-  set [ "graph"; "importing-state"; "current-page" ]
+  set [ "graph/importing-state"; "step" ] (kw "config");
+  set [ "graph/importing-state"; "label" ] (kw "import/loading");
+  set [ "graph/importing-state"; "current-page" ]
     (match getv config_file options.rpath_key with
      | Some v -> v
      | None -> Nil);

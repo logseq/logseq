@@ -27,7 +27,8 @@ let q args =
             (match inputs with
              | [] -> Db_worker_effect.pure Wire.nil
              | query_t :: rest ->
-                 let query_edn = Ds_wire.edn_text_of_arg query_t in
+                 (try
+                    let query_edn = Ds_wire.edn_text_of_arg query_t in
                  let query = Parser.parse_query_string query_edn in
                  (* match Query_runtime.initial_query_context: % consumes a
                     positional arg only when the query has no :rules section *)
@@ -56,7 +57,15 @@ let q args =
                  let output =
                    Datascript.q_return_map_string ~inputs:inputs' (Datascript.db conn) query_edn
                  in
-                 Db_worker_effect.pure (Ds_wire.wire_of_query_output output))
+                 Db_worker_effect.pure (Ds_wire.wire_of_query_output output)
+                 (* datascript raises ex-info {:error :parser/query} for
+                    query parse/validation errors; datascript-ocaml
+                    signals them as Invalid_argument. *)
+                 with Invalid_argument msg ->
+                   raise
+                     (Dispatcher.Exn_info
+                        ( msg
+                        , [ Wire.Keyword "error", Wire.Keyword "parser/query" ] ))))
         | _ -> invalid_arg "q expects an inputs vector"))
 
 let () = Dispatcher.register "thread-api/q" q

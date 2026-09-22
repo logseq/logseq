@@ -15,10 +15,16 @@ let term_dumb () : bool =
   | Some "dumb" -> true
   | _ -> false
 
+(* cljs style/*color-enabled?* — a dynamic override tests bind; None
+   defers to the TTY check. *)
+let color_enabled_override : bool option ref = ref None
+
 (* color-supported?: stdout TTY and not a dumb terminal (picocolors'
    createColors uses the same check for isColorSupported). *)
 let color_supported () : bool =
-  Node_process.stdout_is_tty () && not (term_dumb ())
+  match !color_enabled_override with
+  | Some b -> b
+  | None -> Node_process.stdout_is_tty () && not (term_dumb ())
 
 let apply_style (s : string) ~(open_ : string) ~(close : string) : string =
   if color_supported () then "\027[" ^ open_ ^ "m" ^ s ^ "\027[" ^ close ^ "m"

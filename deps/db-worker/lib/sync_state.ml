@@ -137,19 +137,26 @@ let db_dir () =
 let sanitize_repo_name repo =
   String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo
 
+(* cljs resolve-db-path "client-ops-/db.sqlite": <repo dir>/client-ops-/db.sqlite *)
 let client_ops_path repo =
-  Filename.concat (db_dir ()) (Printf.sprintf "client-ops-%s.sqlite" (sanitize_repo_name repo))
+  let repo_dir =
+    match Graph_dir.repo_to_encoded_graph_dir_name repo with
+    | Some dir -> Filename.concat (db_dir ()) dir
+    | None -> db_dir ()
+  in
+  Filename.concat (Filename.concat repo_dir "client-ops-") "db.sqlite"
 
 let client_ops_conn repo : Sqlite.db =
   match Hashtbl.find_opt client_ops_conns repo with
   | Some db -> db
   | None ->
-      let db =
-        Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo)
-          ~path:
-            (if Sqlite.pooled_runtime () then "client-ops-/db.sqlite"
-             else client_ops_path repo)
+      let path =
+        if Sqlite.pooled_runtime () then "client-ops-/db.sqlite"
+        else client_ops_path repo
       in
+      if not (Sqlite.pooled_runtime ()) then
+        ignore (File_sys.mkdir_p (Filename.dirname path));
+      let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
       Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
       Hashtbl.replace client_ops_conns repo db;
       db
