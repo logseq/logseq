@@ -20,9 +20,17 @@ module Opfs = struct
   type handle
   type oo1
 
+  (* @sqlite.org/sqlite-wasm's bundler-friendly default export
+     (sqlite3InitModule). Imported as a module so the bundle is
+     self-contained — vite inlines it; locateFile keeps sqlite3.wasm
+     resolving relative to the worker script (static/js/). *)
   external init_module
-    :  < print : string -> unit ; printErr : string -> unit > Js.t
-    -> sqlite3 Js.Promise.t = "sqlite3InitModule"
+    :  < print : string -> unit
+       ; printErr : string -> unit
+       ; locateFile : string -> string -> string [@u]
+       > Js.t
+    -> sqlite3 Js.Promise.t = "default"
+    [@@mel.module "@sqlite.org/sqlite-wasm"]
 
   external install_pool
     :  sqlite3
@@ -179,6 +187,7 @@ let ensure_sqlite3 () =
               [%obj
                 { print = (fun s -> Worker_log.info "sqlite-wasm" [ "stdout", s ])
                 ; printErr = (fun s -> Worker_log.error "sqlite-wasm" [ "stderr", s ])
+                ; locateFile = (fun [@u] path _script_dir -> path)
                 }]))
         (fun sqlite3 ->
           sqlite3_ref := Some sqlite3;

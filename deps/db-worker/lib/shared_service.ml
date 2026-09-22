@@ -210,6 +210,7 @@ let clear_old_service () =
   common_channel_listener := None;
   client_channel_listener := None;
   requests_in_flight := [];
+  Broadcast.set_extra_poster None;
   (* cljs remove-watch :check-master *)
   master_re_check_watchers :=
     List.remove_assoc "check-master" !master_re_check_watchers
@@ -219,8 +220,8 @@ let clear_old_service () =
 let on_response_handler (data : Wire.t) : unit =
   match wire_string "type" data with
   | Some "response" ->
-      (match Wire.get "id" data with
-       | Some (Wire.Int id) ->
+      (match Option.bind (Wire.get "id" data) Wire.as_int with
+       | Some id ->
            (match List.assoc_opt id !requests_in_flight with
             | Some entry ->
                 requests_in_flight :=
@@ -241,8 +242,8 @@ let on_response_handler (data : Wire.t) : unit =
 let create_on_request_handler (client_channel : Broadcast_channel.t)
     (target : target) : Wire.t -> unit =
   fun data ->
-    match wire_string "type" data, Wire.get "id" data with
-    | Some "request", Some (Wire.Int id) ->
+    match wire_string "type" data, Option.bind (Wire.get "id" data) Wire.as_int with
+    | Some "request", Some id ->
         let method_name =
           match Wire.get "method" data with
           | Some (Wire.String m) -> m
@@ -449,6 +450,18 @@ let create_service ~service_name ~target ~on_become_master_handler
     if import then master_client := true;
     let ready, ready_r = E.wait () in
     let common = ensure_common_channel service_name in
+    (* cljs broadcast-to-clients! also relays every broadcast onto the
+       common channel so slave clients' UI threads see them. *)
+    Broadcast.set_extra_poster
+      (Some
+         (fun ~kind ~transit_payload ->
+            (match !common_channel with
+             | Some ch ->
+                 Broadcast_channel.post_message ch
+                   (Wire.Map
+                      [ Wire.String "type", Wire.String kind
+                      ; Wire.String "data", Wire.String transit_payload ])
+             | None -> ())));
     E.bind (ensure_client_id ()) (fun cid ->
         let check_master_slave () =
           check_master_or_slave_client ~service_name
@@ -506,15 +519,8 @@ let create_service ~service_name ~target ~on_become_master_handler
   end
 
 (* cljs broadcast-to-clients! — Broadcast.to_clients covers the
-   self.postMessage / node event-fn halves; add the common-channel
-   broadcast (browser slave forwarding) here. The transit payload is
-   the already-encoded [type' data] string, same as cljs. *)
+   self.postMessage / node event-fn halves and the extra_poster relay
+   registered by create_service covers the common-channel broadcast
+   (browser slave forwarding). *)
 let broadcast_to_clients ~(kind : string) ~(transit_payload : string) : unit =
-  Broadcast.to_clients ~kind ~transit_payload;
-  match !common_channel with
-  | Some ch ->
-      Broadcast_channel.post_message ch
-        (Wire.Map
-           [ Wire.String "type", Wire.String kind
-           ; Wire.String "data", Wire.String transit_payload ])
-  | None -> ()
+  Broadcast.to_clients ~kind ~transit_payload

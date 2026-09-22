@@ -125,6 +125,12 @@ jobs:
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       - name: Fetch CLI pnpm deps
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
@@ -161,7 +167,7 @@ jobs:
           pnpm cljs:release-electron
           pnpm db-worker-node:bundle
           opam exec -- pnpm cli:release
-          pnpm webpack-app-build
+          pnpm db-worker:build
           pnpm desktop:prepare-runtime-js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}

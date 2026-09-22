@@ -1,8 +1,9 @@
 // Bundles the Melange-emitted CommonJS tree into the two files the
-// cljs workers load:
+// app loads:
 //   --mode node    -> static/db-worker-ocaml.cjs   (require'd by db-worker-node)
-//   --mode browser -> static/js/db-worker-ocaml.js (importScripts'd by db-worker,
-//                     exposes globalThis.LogseqDbWorker)
+//   --mode browser -> static/js/db-worker.js (the worker script the
+//                     UI thread spawns; installs the Comlink surface
+//                     on load — see js_api/entry_worker.ml)
 // Build order: `dune build` (deps/db-worker) then `vite build --mode ...`.
 import { builtinModules } from "node:module";
 import { resolve } from "node:path";
@@ -48,29 +49,63 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // Relative base: sqlite-wasm resolves its vfs worker URL off
+    // self.location.href, so assets land next to db-worker.js and the
+    // same URLs work under the app's origin and under Capacitor's
+    // scheme on mobile.
+    base: "./",
     build: {
       lib: {
         entry,
         formats: ["iife"],
         name: "LogseqDbWorker",
-        fileName: () => "db-worker-ocaml.js",
+        fileName: () => "db-worker.js",
       },
       outDir: resolve(import.meta.dirname, "../../static/js"),
       emptyOutDir: false,
       minify: true,
       sourcemap: false,
       rollupOptions: {
-        output: { codeSplitting: false },
+        // Classic-worker IIFE has no import.meta; sqlite-wasm resolves
+        // its vfs worker + wasm URLs relative to it. Polyfill per
+        // rolldown's non-ESM output format docs: define rewrites the
+        // references, intro binds the worker script URL.
+        transform: {
+          define: {
+            "import.meta.url": "__db_worker_import_meta_url__",
+          },
+        },
+        output: {
+          codeSplitting: false,
+          intro: "var __db_worker_import_meta_url__ = self.location.href;",
+        },
       },
     },
+    plugins: [
+      {
+        name: "worker-url-base",
+        // With base './' the URL rewriter emits
+        // `document.currentScript || document.baseURI` as the base;
+        // neither exists in a worker scope — substitute the worker
+        // script URL bound by the intro.
+        renderChunk: (code) =>
+          code
+            .replaceAll("document.currentScript", "undefined")
+            .replaceAll("document.baseURI", "__db_worker_import_meta_url__"),
+      },
+    ],
     resolve: {
       alias: [
         // Node-only modules are only reached under Node runtime
-        // detection (see runtime/melange/sqlite.ml is_node); stub them
-        // out so the shared melange modules bundle for browser.
-        { find: /^node:sqlite$/, replacement: nodeExternalsStub },
-        { find: /^fs$/, replacement: nodeExternalsStub },
-        { find: /^node:fs$/, replacement: nodeExternalsStub },
+        // detection (see runtime/melange/sqlite.ml is_node); stub all
+        // node builtins out so the shared melange modules bundle for
+        // browser.
+        {
+          find: new RegExp(
+            `^(node:)?(${builtinModules.join("|")})$`,
+          ),
+          replacement: nodeExternalsStub,
+        },
         { find: /^keytar$/, replacement: nodeExternalsStub },
       ],
     },
