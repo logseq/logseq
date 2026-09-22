@@ -1,0 +1,34 @@
+(melange.emit
+ (target test_node)
+ (modules test_worker_melange)
+ (module_systems commonjs)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_melange
+  melange-fest
+  melange.node
+  melange.js)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_js ./test_node/test/test_worker_melange.js))
+ (action
+  (run node --test %{test_js})))
+
+(executable
+ (name test_worker_native)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_worker_native.exe))
+ (action
+  (run %{test_bin})))

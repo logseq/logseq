@@ -1,0 +1,10 @@
+(melange.emit
+ (target js_api)
+ (modules entry_worker)
+ (module_systems commonjs)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_melange
+  melange.js)
+ (preprocess
+  (pps melange.ppx)))
