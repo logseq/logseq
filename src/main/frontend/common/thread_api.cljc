@@ -1,7 +1,8 @@
 (ns frontend.common.thread-api
   "Macro for defining thread apis, which is invokeable by other threads"
   #?(:cljs (:require-macros [frontend.common.thread-api]))
-  #?(:cljs (:require [logseq.db :as ldb]
+  #?(:cljs (:require [goog.object :as gobj]
+                     [logseq.db :as ldb]
                      [promesa.core :as p]
                      [lambdaisland.glogi :as log])))
 
@@ -42,6 +43,19 @@
          (throw e)))))
 
 #?(:cljs
+   (defn- ocaml-db-worker
+     "The OCaml db-worker API (deps/db-worker CommonJS bundle, loaded as
+     `globalThis.LogseqDbWorker`) when it implements `qualified-kw-str`.
+     Its `invoke` resolves to a transit string honoring the same wire
+     contract as this ns: a plain result, or a handler error encoded as
+     the tagged `error`/`js/Error` transit values that `read-transit-str`
+     decodes back into ExceptionInfo/js/Error."
+     [qualified-kw-str]
+     (when-let [ocaml-worker (gobj/get js/globalThis "LogseqDbWorker")]
+       (when (.registered ocaml-worker qualified-kw-str)
+         ocaml-worker))))
+
+#?(:cljs
    (defn remote-function
      "Return a promise whose value is a transit string."
      [qualified-kw-str args-transit-str]
@@ -49,7 +63,9 @@
            call-id (swap! *worker-thread-api-call-id inc)
            started-at (.now js/performance)]
        (vswap! *profile update qkw inc)
-       (if-let [f (@*thread-apis qkw)]
+       (if-let [ocaml-worker (ocaml-db-worker qualified-kw-str)]
+         (.invoke ocaml-worker qualified-kw-str args-transit-str)
+         (if-let [f (@*thread-apis qkw)]
          (let [args (ldb/read-transit-str args-transit-str)
                handler-started-at (.now js/performance)]
            (try
@@ -92,4 +108,4 @@
                  :serialize-ms 0
                  :total-ms (- (.now js/performance) started-at)})
                (throw error))))
-         (throw (ex-info (str "not found thread-api: " qualified-kw-str) {}))))))
+           (throw (ex-info (str "not found thread-api: " qualified-kw-str) {})))))))

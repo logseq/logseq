@@ -13,11 +13,29 @@
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
+(defn- load-ocaml-db-worker!
+  "Loads the optional OCaml db-worker bundle (deps/db-worker) as
+   `globalThis.LogseqDbWorker` and calls its `init()`. Absent bundle is
+   expected (not part of the default build) and leaves the cljs worker
+   unchanged; a present-but-broken bundle fails here instead of silently
+   degrading dispatch."
+  []
+  (try
+    (.importScripts js/self "db-worker-ocaml.js")
+    (if-let [ocaml-worker (gobj/get js/globalThis "LogseqDbWorker")]
+      (.init ocaml-worker)
+      (throw (ex-info "db-worker-ocaml.js did not expose globalThis.LogseqDbWorker" {})))
+    (catch :default e
+      (if (gobj/get js/globalThis "LogseqDbWorker")
+        (throw e)
+        (log/debug :db-worker-ocaml/not-loaded (ex-message e))))))
+
 (defn- ensure-worker-bootstrap!
   []
   (when-not (gobj/get js/self worker-bootstrap-loaded-key)
     (gobj/set js/self worker-bootstrap-loaded-key true)
-    (.importScripts js/self "worker.js")))
+    (.importScripts js/self "worker.js")
+    (load-ocaml-db-worker!)))
 
 (ensure-worker-bootstrap!)
 
