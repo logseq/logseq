@@ -247,14 +247,14 @@ let verbose_line config result =
                  (Edn_util.keyword "root-dir", Edn_util.string config.root_dir);
                |])))
 
-type raw_argv
-type parsed_argv
-type resolved_config
-type built_action
-type executed_action
-type error
-type final
-type not_final
+type raw_argv = [ `Raw_argv ]
+type parsed_argv = [ `Parsed_argv ]
+type resolved_config = [ `Resolved_config ]
+type built_action = [ `Built_action ]
+type executed_action = [ `Executed_action ]
+type error = [ `Error ]
+type final = [ `Final ]
+type not_final = [ `Not_final ]
 
 type ('phase, 'final) state =
   | Raw_argv_state : run_input -> (raw_argv, not_final) state
