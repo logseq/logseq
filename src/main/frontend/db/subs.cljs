@@ -33,6 +33,7 @@
    :rev -1
    :slots {}
    :resource-slot-keys #{}
+   :watch-index {}
    :warm (cache/lru-cache-factory {} :threshold warm-cache-size)})
 
 (defonce ^:private *store (atom (empty-store (state/get-current-repo) 0)))
@@ -68,6 +69,64 @@
   [store slot-key]
   (or (get-in store [:slots slot-key])
       (cache/lookup (:warm store) slot-key)))
+
+;; Only :block slots carry :watch keys. :watch-index mirrors them
+;; (watch-key -> #{slot-key}) so delta application does not scan every
+;; mounted slot and warm entry on each renderer delta.
+
+(defn- watch-index-add
+  [index slot-key keys]
+  (reduce (fn [index key] (update index key (fnil conj #{}) slot-key))
+          index keys))
+
+(defn- watch-index-remove
+  [index slot-key keys]
+  (reduce (fn [index key]
+            (let [slot-keys (disj (get index key) slot-key)]
+              (if (seq slot-keys)
+                (assoc index key slot-keys)
+                (dissoc index key))))
+          index keys))
+
+(defn- reindex-slot
+  [store slot-key old-slot new-slot]
+  (if (= :block (first slot-key))
+    (let [old-keys (get-in old-slot [:watch :keys])
+          new-keys (get-in new-slot [:watch :keys])]
+      (if (= old-keys new-keys)
+        store
+        (-> store
+            (update :watch-index watch-index-remove slot-key old-keys)
+            (update :watch-index watch-index-add slot-key new-keys))))
+    store))
+
+(defn- warm-miss
+  [store slot-key slot]
+  (let [warm (:warm store)
+        ;; LRUCache tracks usage order in :lru; peek is the eviction victim.
+        victim (when (and (>= (count warm) warm-cache-size)
+                          (not (cache/has? warm slot-key)))
+                 (first (peek (:lru warm))))
+        store (update store :warm cache/miss slot-key slot)]
+    (if victim
+      (reindex-slot store victim (cache/lookup warm victim) nil)
+      store)))
+
+(defn- put-slot
+  [store slot-key next-slot]
+  (let [current (store-slot store slot-key)
+        store (if (mounted? slot-key)
+                (-> store
+                    (assoc-in [:slots slot-key] next-slot)
+                    (update :warm cache/evict slot-key))
+                (warm-miss store slot-key next-slot))]
+    (reindex-slot store slot-key current next-slot)))
+
+(defn- evict-warm
+  [store slot-key]
+  (-> store
+      (reindex-slot slot-key (cache/lookup (:warm store) slot-key) nil)
+      (update :warm cache/evict slot-key)))
 
 (defn- slot-snapshot
   [slot-key]
@@ -221,11 +280,7 @@
                           (when-not (identical? (:snapshot current)
                                                 (:snapshot next-slot))
                             (vswap! changed conj slot-key))
-                          (if (mounted? slot-key)
-                            (-> store
-                                (assoc-in [:slots slot-key] next-slot)
-                                (update :warm cache/evict slot-key))
-                            (update store :warm cache/miss slot-key next-slot))))))
+                          (put-slot store slot-key next-slot)))))
                   store
                   slots))))
       (doseq [slot-key @changed]
@@ -262,8 +317,10 @@
                (if (or (nil? current) (:stale? current)
                        (= :error (get-in current [:snapshot :status])))
                  (do (vreset! changed? true)
-                     (assoc-in store [:slots slot-key]
-                               {:snapshot {:status :error :error error}}))
+                     (-> store
+                         (assoc-in [:slots slot-key]
+                                   {:snapshot {:status :error :error error}})
+                         (reindex-slot slot-key current nil)))
                  store))))
     (when @changed? (notify! slot-key))))
 
@@ -383,7 +440,7 @@
                        (update store :slots dissoc slot-key)
                        (-> store
                            (update :slots dissoc slot-key)
-                           (update :warm cache/miss slot-key slot)))
+                           (warm-miss slot-key slot)))
                      store))))))))
 
 (defn subscribe-block! [block-uuid listener]
@@ -402,9 +459,7 @@
             (and (= :block (first slot-key))
                  (same-block-projection? current next-slot)))
       [store false]
-      [(if (mounted? slot-key)
-         (assoc-in store [:slots slot-key] next-slot)
-         (update store :warm cache/miss slot-key next-slot))
+      [(put-slot store slot-key next-slot)
        (not= current next-slot)])))
 
 (defn- record-delta-slot
@@ -432,18 +487,19 @@
 (defn- invalidate-render-blocks
   [store rev blocks affected-keys reload]
   (reduce
-   (fn [store [slot-key slot]]
-     (if (and (= :block (first slot-key))
-              (not (contains? blocks (second slot-key)))
-              (seq (set/intersection affected-keys (get-in slot [:watch :keys]))))
+   (fn [store slot-key]
+     (if (contains? blocks (second slot-key))
+       store
        (if (mounted? slot-key)
          (do (vswap! reload conj slot-key)
              (assoc-in store [:slots slot-key]
-                       (assoc slot :rev rev :stale? true)))
-         (update store :warm cache/evict slot-key))
-       store))
+                       (assoc (get-in store [:slots slot-key])
+                              :rev rev :stale? true)))
+         (evict-warm store slot-key))))
    store
-   (concat (:slots store) (:warm store))))
+   (into #{}
+         (mapcat #(get (:watch-index store) %))
+         affected-keys)))
 
 (defn- apply-delta-store
   [store {:keys [rev blocks deleted children affected-keys]}]
