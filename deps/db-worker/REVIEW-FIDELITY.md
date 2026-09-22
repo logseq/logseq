@@ -194,3 +194,169 @@ wrong results in common paths; **low** = edge cases / dead code.
   canonical revision` → issue 15 and `reschedule template child
   used-template` → issue 16).
 - No test source was modified to work around either issue.
+
+---
+
+# Pass 2 — sync edges + deferred C-list
+
+Method: same as pass 1 — walked each cljs fn next to its OCaml port,
+diffed behavior not syntax. Scope: `presence.cljs`, `transport.cljs`,
+`asset_db_listener.cljs`, `large_title.cljs`, `handle_message.cljs` (e2ee
+envelope + checksum/cursor paths) vs `lib/sync_*.ml`, plus all deferred
+section-C items.
+
+## Confirmed & fixed
+
+1. **Stale ws event can kill a live reconnect — high** — commit
+   `aea704e1f0`.
+   - cljs: `client.cljs` calls `detach-ws-handlers!` before `.close()` in
+     `stop-client!`, so a late Close event from the old socket never
+     reaches `schedule-reconnect`.
+   - OCaml: `runtime/melange/web_socket.ml` `addEventListener` has no
+     detach equivalent, so `stop_client`/`connect` left the previous
+     client's handlers live. A delayed `Close` from the superseded socket
+     called `schedule_reconnect`, which could `stop`/tear down a freshly
+     connected replacement client (or schedule a reconnect on top of a
+     healthy one).
+   - Fix: `Sync_state.client.conn_gen` bumped on stop/connect; ws event
+     handlers capture the generation at install and ignore events from an
+     older generation (`sync_client.ml`).
+2. **`sanitize_template_block` diverged on `uuid?`/truthiness — low** —
+   commit `6b8081dc91` (`sync_apply.ml` vs `apply_txs.cljs:1384-1400`).
+   - cljs reads `(or (:block/uuid m) ...)` — any truthy value wins raw;
+     `uuid?` is only checked when assoc'ing back, so a non-uuid
+     `:block/uuid` (string, number) stays verbatim in the output block.
+     OCaml replaced non-uuid values with a db-lookup result.
+   - cljs `[:block/uuid u]` db/id form required nothing of `u`; OCaml now
+     requires `Wire.Uuid` — tightened to the lookup-ref contract.
+   - `nil`/`false` `:block/uuid` was treated as present (dropped the
+     fallbacks cljs runs); now uses `wire_truthy`.
+   - `block/uuid` was appended, producing duplicate keys; now `assoc`
+     (replace) like cljs.
+   - missing `:block/parent` now emits `nil` (cljs `update` always writes
+     the key).
+   - apply-template's `replace-empty` and keep filters used non-nil
+     instead of cljs `when` truthiness (`block/uuid` = `false`/`nil`
+     wrongly counted as present).
+3. **Missing/nil `:t` tolerated where cljs fail-fasts — low** — commit
+   `d53ccb4838` (`sync_handle_message.ml`).
+   - `tx/batch/ok` and `changed` skipped `require_non_negative` on nil
+     `:t`; cljs `(require-non-negative remote-tx)` is unconditional.
+   - `pull/ok` evaluated `remote_tx_n = 0` and silently skipped the body;
+     cljs `(> remote-tx local-tx)` throws on nil before the branch.
+4. **`format_ws_url` replaced only the first `%s` — low** — commit
+   `21807b7838` (`sync_transport.ml` vs `transport.cljs:15`).
+   cljs `string/replace` replaces every occurrence.
+5. **`transact-failed` logging absent — low** — commit `4adac1cd2f`
+   (`db_tx.ml` vs `db.cljs:185-190`). cljs `transact-sync` logs
+   `transact-failed` with tx-meta + error on the catch path, gated by
+   `db-sync/suppress-transact-failed-log?` and the stale-rebase
+   `entity-id/missing` suppression; rethrows. OCaml propagated silently.
+6. **`errors_humanized` dropped on the error path — low** — commit
+   `c0c27242ac` (`worker_core.ml` vs `db_core.cljs:1078-1091`).
+   `notify-invalid-data` serializes `{:entity-map, :errors}`; the adapter
+   sent only `entity-map`, so `:capture-error` consumers lose the
+   humanized errors.
+7. **`sort_uniq` vs cljs `distinct` ordering — low** — commits
+   `6b8081dc91` + `d0e7b1ef37` (`sync_apply.ml`,
+   `sync_large_title.ml:245,254`). cljs `distinct` keeps first-occurrence
+   order at `apply_txs.cljs:1209,1214` and `large_title.cljs:171,178`;
+   `sort_uniq` re-sorted. Now `Sync_state.distinct_by Fun.id`.
+
+## Items left for humans (documented, not fixed)
+
+### P2-A. `Db_listener.main_thread_sync` unwired — **high** for melange target
+- `lib/db_listener.ml:26-27`: `main_thread_sync = ref (fun _ _ _ -> ())`
+  is never assigned; invoked at `:46`.
+- cljs `db_listener.cljs:243-279` runs a whole post-commit pipeline:
+  `main-thread-sync-result` (handler-keys selectivity,
+  `publish-render-delta?` gating, `worker-pipeline/invoke-hooks` →
+  `{:tx-report :affected-keys :deleted-block-uuids :deleted-assets
+  :pages :blocks}`, route-candidates Task/Comment tagging,
+  `report-post-commit-error!`, `log-outliner-op-perf!`) then
+  `broadcast-main-thread-sync!` → `:sync-db-changes`.
+- Consequence: the renderer never receives `:sync-db-changes`; UI does
+  not re-render on tx-report deltas. In-process `deferred_handlers`
+  still run (search/markdown mirrors) but get the raw `tx_report`
+  object — this resolves the section-C "leak" worry: cljs handlers also
+  receive the in-process report object (invoke-hooks wraps, not
+  transforms it); the real gap is the missing pipeline + broadcast,
+  not wire serialization.
+- Suggested fix: port `invoke-hooks`/`publish-render-delta?`/broadcast
+  or deliberately document the melange listener contract; note it does
+  not affect the native/CLI target the same way.
+
+### P2-B. `Db_tx.batch_transact` — dead AND divergent — **low**
+- `lib/db_tx.ml:307-333` has no callers in `lib/`/`js_api/`; cljs
+  `batch-transact!` (`db.cljs:305-353`) is also only referenced by
+  `db_test.cljs`.
+- OCaml re-transacts the collected datoms as a new tx; cljs synthesizes
+  a `batch-final-tx-report?` report, runs `d/store` + rollback on error,
+  and marks the report. If ever wired, behavior diverges (extra tx,
+  wrong `tx`/`tempids`, no rollback semantics).
+- Suggested fix: delete it, or port the cljs synthesized-report path
+  (needs `Conn.apply_report`, already pinned).
+
+### P2-C. Sync-edge polish (all **low**, edge-case fidelity)
+- `update_latest_remote_state` (`sync_handle_message.ml:383-387`) stores
+  only `Wire.String` checksums; cljs `(assoc repo remote-checksum)`
+  stores any value — a nil `:checksum` clobbers the stored checksum.
+- `handle_presence` (`sync_handle_message.ml:321-332`) requires
+  `Wire.Uuid` user-id and String/Uuid editing-uuid; cljs passes any
+  shape through to `update-user-presence!`.
+- `verify_sync_checksum` warn drops the mismatch map detail (cljs logs
+  the whole `mismatch-data`; OCaml logs only `repo`).
+- `update_user_presence` (`sync_presence.ml:148`) guards `<> ""`; cljs
+  `(and user-id* editing-block-uuid)` accepts empty strings.
+- `normalize_online_users` (`sync_presence.ml:67-99`) requires
+  String `username`/`name`; cljs `(or username name user-id)` accepts
+  any truthy shape.
+- `send` tx-id normalization (`sync_transport.ml:136-172`) converts
+  `Wire.Uuid` only; cljs `(str tx-id)` stringifies any truthy value.
+- `datom_to_op` (`sync_asset_db_listener.ml:8-17`) drops ops whose
+  entity lacks a uuid; cljs `datom=>op` emits `{:block-uuid nil}` and
+  the whole `add-asset-ops` batch is what coercion would reject — OCaml
+  silently degrades instead.
+- `resolve_large_title_item_eid` (`sync_large_title.ml:87-97`) accepts
+  `Wire.Int` only for the `e` position; cljs `(number? e)` also accepts
+  doubles. Also the cljs pattern matches only exactly-4-element vectors
+  (`(nth item 0..3)`); OCaml pattern is equivalent — verified.
+- `normalize_string_list` non-seq passthrough: cljs `(mapv f ids)`
+  throws on non-seq; OCaml returns the value unchanged (edge — coerce
+  schema rejects anyway).
+
+### P2-D. Engine pin drift — operational
+- `datascript-ocaml` was pinned at upstream `main`; upstream `c215a55`
+  widened `Instant` to `int64`, breaking `ds_wire.ml`. Re-pinned all
+  three packages to `#1013dcf` (newest commit with `Instant of int` AND
+  `apply_report`). Recommend the blueprint/maintenance pin to a sha.
+- `test_db_native.exe test` baseline: 29 failures / 187, identical
+  before and after this pass (translated-suite baseline at pin
+  `#1013dcf`, engine-side, not introduced by these changes).
+
+## Verified faithful (pass 2 spot-checks, no divergence)
+- `handle_pull_ok` e2ee envelope: `graph_e2ee` → `ensure_graph_aes_key`
+  → fail on missing key → per-tx `decrypt_tx_data` → apply →
+  update-local-tx → broadcast → verify-checksum → flush, catch →
+  `set_last_sync_error` — matches `handle_message.cljs:341-384`.
+- `request_pull!` dedup/`pending_pull_since` min-wins semantics.
+- `handle_tx_reject` validation, inflight filtering, per-tx
+  success/failed handling, rollback-all fallback, ordering of
+  inflight-clear/broadcast/rtc-log/fail-fast.
+- `verify_sync_checksum` gating (`dev-or-test?`, ready predicates,
+  mismatch compare).
+- `handle_online_users` seq check + nil→[]; `handle_hello` ordering
+  (require → verify → broadcast → pull → assets → log → flush).
+- `update_latest_remote_state` authoritative/stale tx + max semantics
+  (except the checksum note above).
+- `entity_of_wire_ref` (section C): `Wire.Map`/unresolvable ref shapes
+  fall through `entity_ref_of_transit` → caught → `None`, matching cljs
+  `(d/entity db m)` → nil. Not a bug.
+- `deferred_handlers` raw `tx_report`: cljs passes the same in-process
+  report object; the gap is the unwired pipeline (P2-A), not a wire
+  leak.
+- `reconnect_delay_ms`, `append_token`, `coerce_ws_{client,server}_message`,
+  `normalize_legacy_tx_reject`, `parse_message`, `send!` tx/batch
+  normalization (except notes above) — faithful.
+- `update_online_users` broadcast-on-change; `normalize_online_users`
+  shape + distinct-by-user/uuid ordering.
