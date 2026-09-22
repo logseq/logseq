@@ -592,7 +592,7 @@ and block_tx (m : node) (page_uuids : (string * string) list)
     else
       [ "db/id", new_db_id ()
       ; ( "block/page", Map [ (Keyword "db/id", page_id) ] )
-      ; "block/order", String (Db_order.gen_key None None)
+      ; "block/order", String (Db_order.gen_key_from_max ())
       ; ( "block/parent"
         , match BM.attr_value m.bm "block/parent" with
           | Some p -> p
@@ -1715,8 +1715,102 @@ let build_blocks_tx ?page_id_fn (options_v : value) : value list * value list =
   validate_options options;
   build_blocks_tx_impl options
 
-(* EDN tx items -> tx_op list. Map -> entity; bare [:block/uuid u]
-   -> lookup-ref upsert; everything else fails fast. *)
+(* EDN tx items -> tx_op list. Map -> entity; bare [attr v] lookup
+   vectors -> lookup-ref upsert; op vectors follow datascript tx-op
+   dispatch (see datascript-ocaml data_readers.tx_op_of_edn_form). *)
+let entity_ref_of_value (v : value) : entity_ref =
+  match v with
+  | Int n when n < 0 -> Temp_id (string_of_int n)
+  | Int n -> Entity_id n
+  | String s -> Temp_id s
+  | Keyword "db/current-tx" | Symbol "db/current-tx" -> CurrentTx
+  | Symbol ("datomic.tx" | "datascript.tx" as s) -> Temp_id s
+  | Keyword ident -> Ident ident
+  | Vector [ Keyword a; x ] | List [ Keyword a; x ] -> Lookup_ref (a, x)
+  | _ ->
+      fail
+        ("Expected number or lookup ref for entity id: "
+         ^ Db_property_build.str_of_value v)
+
+let tx_attr_of_value (v : value) : attr =
+  match v with
+  | Keyword a | String a | Symbol a -> a
+  | _ ->
+      fail ("Bad entity attribute: " ^ Db_property_build.str_of_value v)
+
+let tx_op_name_of_value (v : value) : string =
+  match v with
+  | Keyword a | String a | Symbol a -> a
+  | _ -> fail "Unknown operation"
+
+(* [op e a v tx] -> explicit-tx raw datom (datascript/datom literal). *)
+let raw_datom_of_values (e : value) (a : value) (v : value) (tx : value)
+    (added : bool) : tx_op =
+  let eid =
+    match e with
+    | Int n -> n
+    | _ -> fail "explicit transaction datoms require entity ids"
+  in
+  let txid =
+    match tx with
+    | Int n -> n
+    | _ -> fail "explicit transaction tx must be an integer"
+  in
+  Raw_datom (Datascript.datom ~tx:txid ~added ~e:eid ~a:(tx_attr_of_value a) ~v ())
+
+let is_tx_op_head (v : value) : bool =
+  match tx_op_name_of_value v with
+  | "add" | "db/add" | "retract" | "db/retract" | "db/cas" | "db.fn/cas"
+  | "db/retractEntity" | "db.fn/retractEntity" | "db/retractAttribute"
+  | "db.fn/retractAttribute" ->
+      true
+  | _ -> false
+  | exception _ -> false
+
+let tx_op_of_value (db : db) (v : value) : tx_op =
+  match v with
+  | Map _ -> Sqlite_create_graph.entity_tx db (bm_of_value v)
+  | Vector (op_head :: rest) | List (op_head :: rest) when is_tx_op_head op_head ->
+      (match rest with
+       | [ e; a; v' ] ->
+           (match tx_op_name_of_value op_head with
+            | "add" | "db/add" ->
+                Add (entity_ref_of_value e, tx_attr_of_value a, v')
+            | "retract" | "db/retract" ->
+                Retract (entity_ref_of_value e, tx_attr_of_value a, Some v')
+            | "db/cas" | "db.fn/cas" ->
+                fail "db/cas requires entity, attr, expected value, and new value"
+            | _ -> fail "Unknown operation")
+       | [ e; a; expected; v' ] ->
+           (match tx_op_name_of_value op_head with
+            | "add" | "db/add" -> raw_datom_of_values e a expected v' true
+            | "retract" | "db/retract" -> raw_datom_of_values e a expected v' false
+            | "db/cas" | "db.fn/cas" ->
+                CompareAndSet
+                  ( entity_ref_of_value e
+                  , tx_attr_of_value a
+                  , (match expected with Nil -> None | _ -> Some expected)
+                  , v' )
+            | _ -> fail "Unknown operation")
+       | [ e; a ] ->
+           (match tx_op_name_of_value op_head with
+            | "retract" | "db/retract" ->
+                Retract (entity_ref_of_value e, tx_attr_of_value a, None)
+            | "db/retractAttribute" | "db.fn/retractAttribute" ->
+                RetractAttr (entity_ref_of_value e, tx_attr_of_value a)
+            | _ -> fail "Unknown operation")
+       | [ e ] ->
+           (match tx_op_name_of_value op_head with
+            | "db/retractEntity" | "db.fn/retractEntity" ->
+                RetractEntity (entity_ref_of_value e)
+            | _ -> fail "Unknown operation")
+       | _ -> fail "Unknown operation")
+  | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
+      (* bare lookup ref, e.g. [:block/uuid u] -> upserted entity *)
+      Entity { db_id = Some (Lookup_ref (a, x)); attrs = [] }
+  | _ ->
+      fail ("Unexpected tx item: " ^ Db_property_build.str_of_value v)
+
 let tx_ops_of_values (db : db) (txs : value list) : tx_op list =
   let hint =
     BM.schema_hint_of_bms
@@ -1728,12 +1822,7 @@ let tx_ops_of_values (db : db) (txs : value list) : tx_op list =
     (fun v ->
       match v with
       | Map _ -> Sqlite_create_graph.entity_tx ~hint db (bm_of_value v)
-      | Vector [ Keyword "block/uuid"; Uuid u ]
-      | List [ Keyword "block/uuid"; Uuid u ] ->
-          Entity
-            { db_id = Some (Lookup_ref ("block/uuid", Uuid u)); attrs = [] }
-      | _ ->
-          fail ("Unexpected tx item: " ^ Db_property_build.str_of_value v))
+      | _ -> tx_op_of_value db v)
     txs
 
 (* create-blocks — build + transact on a conn *)
@@ -1753,10 +1842,11 @@ let create_blocks (conn : conn) (options_v : value) : unit =
              (BM.put (bm_of_value options_v) "auto-create-ontology?" (Bool true)))
   in
   let init_tx, block_props_tx = build_blocks_tx_impl options in
-  ignore (Db_tx.transact conn (tx_ops_of_values (Conn.db conn) init_tx));
+  let ops1 = tx_ops_of_values (Conn.db conn) init_tx in
+  ignore (Db_tx.transact conn ops1);
   if block_props_tx <> [] then
-    ignore
-      (Db_tx.transact conn (tx_ops_of_values (Conn.db conn) block_props_tx))
+    let ops2 = tx_ops_of_values (Conn.db conn) block_props_tx in
+    ignore (Db_tx.transact conn ops2)
 
 (* extract-from-blocks *)
 let extract_from_blocks (blocks : BM.t list) (f : BM.t -> 'a list) : 'a list =

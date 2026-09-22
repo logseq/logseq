@@ -130,10 +130,18 @@ let is_class_e = Ldb.is_class
 let is_page_e = Ldb.is_page
 
 (* entity attrs as (attr * value) — entity refs become Ref_to, many
-   attrs become Set (cljs (into {} entity) shape). *)
+   attrs become Set (cljs (into {} entity) shape, which excludes
+   reverse-ref attrs like "ns/_name"). *)
 let ent_bm (e : entity) : BM.t =
+  let is_reverse_attr (a : attr) : bool =
+    match String.index_opt a '/' with
+    | Some i -> i + 1 < String.length a && a.[i + 1] = '_'
+    | None -> false
+  in
   List.filter_map
     (fun (a, (tv : tx_value)) ->
+      if is_reverse_attr a then None
+      else
       match tv with
       | One_value v -> Some (a, v)
       | Many_values vs -> Some (a, Set vs)
@@ -1548,11 +1556,9 @@ let build_uuid_block_export ~epuuids (db : db) (pvalue_uuids : string list)
                 include_uuid_fn = always
               ; shallow_copy = true }
           in
-          let merged =
-            merge_export_maps
-              [ map_of_bm be
-              ; Map [ Keyword "page", map_of_bm (shallow_copy_page page_e) ] ]
-          in
+          (* cljs (merge blocks-export {:page ...}) — plain merge, not
+             merge-export-maps *)
+          let merged = map_of_bm (bm_put be "page" (map_of_bm (shallow_copy_page page_e))) in
           merged :: acc)
         by_page []
       |> List.rev
@@ -1785,7 +1791,9 @@ let build_page_export' ~epuuids (db : db) (eid : entity_id)
     in
     { options with
       blocks =
-        (match bm_get_opt (bm_of_value merged) "blocks" with
+        (* cljs {:blocks (:blocks blocks-export)} — from blocks-export
+           directly, not the merged export map *)
+        (match bm_get_opt (bm_of_value blocks_export_v) "blocks" with
          | Some b -> Some b
          | None -> None)
     ; properties =
@@ -2009,11 +2017,8 @@ let build_nodes_export ~epuuids (db : db) (nodes : entity list)
               build_blocks_export ~epuuids db
                 (sort_by_block_order blocks) options
             in
-            Some
-              (merge_export_maps
-                 [ map_of_bm be
-                 ; Map
-                     [ Keyword "page", map_of_bm (shallow_copy_page page_e) ] ])
+            (* cljs (merge blocks-export {:page ...}) — plain merge *)
+            Some (map_of_bm (bm_put be "page" (map_of_bm (shallow_copy_page page_e))))
         | None -> None)
       !page_order
   in
@@ -2079,6 +2084,8 @@ let build_view_nodes_export ~epuuids (db : db) (rows : value list)
         match v with
         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
         | Int n -> Ldb.ent_of_id db n
+        | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
+            entity db (Lookup_ref (a, x))
         | _ -> None)
       eids
   in
@@ -2115,6 +2122,8 @@ let build_selected_nodes_export ~epuuids (db : db) (eids : value list) : value =
         match v with
         | Int n -> Ldb.ent_of_id db n
         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+        | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
+            entity db (Lookup_ref (a, x))
         | _ -> None)
       eids
   in
@@ -3094,10 +3103,18 @@ let build_export (db : db) (options_v : value) : value =
     | "block" ->
         (match bm_get_opt options_m "block-id" with
          | Some (Int eid) -> build_block_export ~epuuids:options.epuuids db eid
+         | Some (Vector [ Keyword a; x ]) | Some (List [ Keyword a; x ]) ->
+             (match entity db (Lookup_ref (a, x)) with
+              | Some e -> build_block_export ~epuuids:options.epuuids db e.id
+              | None -> fail "Missing :block-id")
          | _ -> fail "Missing :block-id")
     | "page" ->
         (match bm_get_opt options_m "page-id" with
          | Some (Int eid) -> build_page_export ~epuuids:options.epuuids db eid
+         | Some (Vector [ Keyword a; x ]) | Some (List [ Keyword a; x ]) ->
+             (match entity db (Lookup_ref (a, x)) with
+              | Some e -> build_page_export ~epuuids:options.epuuids db e.id
+              | None -> fail "Missing :page-id")
          | _ -> fail "Missing :page-id")
     | "view-nodes" ->
         build_view_nodes_export ~epuuids:options.epuuids db
@@ -3123,10 +3140,10 @@ let build_export (db : db) (options_v : value) : value =
     | Some g -> export_options_of_value db g
     | None -> options
   in
-  if graph_options.catch_validation_errors then
-    (try basic_validate_export ~epuuids:options.epuuids db export_map graph_options
-     with Export_error e -> Printf.eprintf "Caught error: %s\n%!" e)
-  else basic_validate_export ~epuuids:options.epuuids db export_map graph_options;
+  (if graph_options.catch_validation_errors then
+     (try basic_validate_export ~epuuids:options.epuuids db export_map graph_options
+      with Export_error _ -> ())
+   else basic_validate_export ~epuuids:options.epuuids db export_map graph_options);
   map_of_bm
     (bm_put (bm_of_value export_map) k_export_type (Keyword export_type))
 
@@ -3156,9 +3173,12 @@ let add_uuid_to_page_if_exists (db : db)
   in
   match ent with
   | Some e ->
-      (match bm_get_opt m "block/uuid", uuid_of e with
-       | Some (Uuid u), Some eu | Some (String u), Some eu ->
-           import_to_existing_page_uuids := (u, eu) :: !import_to_existing_page_uuids;
+      (match uuid_of e with
+       | Some eu ->
+           (match bm_get_opt m "block/uuid" with
+            | Some (Uuid u) | Some (String u) ->
+                import_to_existing_page_uuids := (u, eu) :: !import_to_existing_page_uuids
+            | _ -> ());
            let m' = bm_put m "block/uuid" (Uuid eu) in
            (if options.existing_pages_keep_properties then
               match bm_get_opt m' "build/properties" with
@@ -3171,7 +3191,7 @@ let add_uuid_to_page_if_exists (db : db)
                   bm_put m' "build/properties" (map_of_bm props)
               | None -> m'
             else m')
-       | _ -> m)
+       | None -> m)
   | None -> m
 
 (* cljs update-existing-properties *)
@@ -3183,8 +3203,11 @@ let update_existing_properties (db : db)
       match entity db (Ident k) with
       | Some ent ->
           let sel = [ "logseq.property/type"; "db/cardinality" ] in
-          let actual = Sqlite_build.select_keys v sel in
-          let expected = Sqlite_build.select_keys (ent_bm ent) sel in
+          let sort_bm (m : BM.t) : BM.t =
+            List.sort (fun (a, _) (b, _) -> String.compare a b) m
+          in
+          let actual = sort_bm (Sqlite_build.select_keys v sel) in
+          let expected = sort_bm (Sqlite_build.select_keys (ent_bm ent) sel) in
           if actual <> expected then
             property_conflicts := (k, actual, expected) :: !property_conflicts;
           (match uuid_of ent with
@@ -3308,20 +3331,20 @@ let check_for_existing_entities (db : db) (export_map : value)
 let build_block_import_options (current_block : entity) (export_map : value) : value =
   let mm = bm_of_value export_map in
   let block = bm_of_value (bm_get mm k_block) in
+  (* cljs (merge block {...}) — right wins; use bm_put not append *)
   let block =
-    block
-    @ [ ( "block/uuid"
-        , (match uuid_of current_block with
-           | Some u -> Uuid u
-           | None -> Nil) )
-      ; ( "block/page"
-        , map_of_bm
-            (Sqlite_build.select_keys
-               (ent_bm
-                  (Option.value ~default:current_block
-                     (Ldb.ref_ent current_block "block/page")))
-               [ "block/uuid" ]) )
-      ]
+    bm_put
+      (bm_put block "block/uuid"
+         (match uuid_of current_block with
+          | Some u -> Uuid u
+          | None -> Nil))
+      "block/page"
+      (map_of_bm
+         (Sqlite_build.select_keys
+            (ent_bm
+               (Option.value ~default:current_block
+                  (Ldb.ref_ent current_block "block/page")))
+            [ "block/uuid" ]))
   in
   let page_of_block =
     bm_of_value (bm_get (bm_of_value (map_of_bm block)) "block/page")

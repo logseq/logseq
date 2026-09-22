@@ -267,6 +267,10 @@ let validate_property_value (ctx : vctx) (opts : vopts) (tuple : value) : bool =
 let property_entity_to_map (property : entity) : value =
   let add a kvs =
     match value_of property a with
+    (* cljs stores :logseq.property/type datoms as keywords; the OCaml db
+       convention keeps them as String, so normalize back here *)
+    | Some (String s) when a = "logseq.property/type" ->
+        kvs @ [ kw a, Keyword s ]
     | Some v -> kvs @ [ kw a, v ]
     | None -> kvs
   in
