@@ -270,7 +270,9 @@ let main_thread_sync_result (repo : string) (conn : conn)
 let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
   let broadcast_at = perf_time_ms () in
   Broadcast.to_clients ~kind:"sync-db-changes"
-    ~transit_payload:(Transit_codec.to_string s.sync_payload);
+    ~transit_payload:
+      (Transit_codec.to_string
+         (Wire.Array [ kw "sync-db-changes"; s.sync_payload ]));
   let perf_id =
     match tx_meta_v r "ui/perf-id" with
     | Some v -> Ds_wire.transit_of_value v
