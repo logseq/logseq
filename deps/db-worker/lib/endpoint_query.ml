@@ -74,7 +74,7 @@ let rec value_of_form (f : query_form) : value =
       (* ISO 8601 inst literal -> epoch ms; keep the raw string on
          unparseable input rather than fabricating a time. *)
       (match Date_time_util.epoch_ms_of_iso s with
-       | Some ms -> Instant (Int64.to_int ms)
+       | Some ms -> Instant ms
        | None -> String s)
   | QueryFormTagged (_, f) -> value_of_form f
 

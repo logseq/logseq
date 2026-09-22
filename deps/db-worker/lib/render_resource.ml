@@ -1111,7 +1111,7 @@ let rec value_of_form (f : query_form) : value =
   | QueryFormTagged ("regex", QueryFormString s) -> Regex s
   | QueryFormTagged ("inst", QueryFormString s) ->
       (match Date_time_util.epoch_ms_of_iso s with
-       | Some ms -> Instant (Int64.to_int ms)
+       | Some ms -> Instant ms
        | None -> String s)
   | QueryFormTagged (_, f) -> value_of_form f
 

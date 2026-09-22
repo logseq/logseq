@@ -874,7 +874,7 @@ let get_timestamp (v : value) : float option =
        | _ -> None)
   | Int i -> Some (float_of_int i)
   | Float f -> Some f
-  | Instant i -> Some (float_of_int i)
+  | Instant i -> Some (Int64.to_float i)
   | _ -> None
 
 (* db-property-type sets *)
@@ -898,7 +898,7 @@ let js_number_opt (v : value) : float option =
   match v with
   | Int i -> Some (float_of_int i)
   | Float f -> Some f
-  | Instant i -> Some (float_of_int i)
+  | Instant i -> Some (Int64.to_float i)
   | Bool b -> Some (if b then 1. else 0.)
   | Nil -> Some 0.
   | String s ->
@@ -947,7 +947,7 @@ let js_str (v : value) : string =
   match v with
   | Int i -> string_of_int i
   | Float f -> js_num_str f
-  | Instant i -> string_of_int i
+  | Instant i -> Int64.to_string i
   | String s -> s
   | Bool b -> if b then "true" else "false"
   | Keyword k -> ":" ^ k

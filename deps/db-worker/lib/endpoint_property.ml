@@ -1003,7 +1003,7 @@ let group_by_page (blocks : Wire.t list) : Wire.t =
    ?block-attrs query input; datascript-ocaml parses input pull patterns
    against an empty db, which rejects ref map-specs, so the same selector is
    inlined here — wire args are unchanged ([repo start-time end-time]). *)
-let get_date_scheduled_or_deadlines db (start_time : int) (end_time : int)
+let get_date_scheduled_or_deadlines db (start_time : int64) (end_time : int64)
     : Wire.t =
   let rows =
     Datascript.q_string db
@@ -1037,8 +1037,8 @@ let get_date_scheduled_or_deadlines_endpoint args =
   with_conn args (fun db ->
       let epoch_ms_arg i =
         match arg args i with
-        | Some (Wire.Int n) -> n
-        | Some (Wire.Int64 n) -> Int64.to_int n
+        | Some (Wire.Int n) -> Int64.of_int n
+        | Some (Wire.Int64 n) -> n
         | Some w ->
             invalid_arg
               ("get-date-scheduled-or-deadlines: time arg must be epoch ms: "

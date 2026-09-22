@@ -36,7 +36,7 @@ let rec str_of_value (v : value) : string =
   | Ref n -> string_of_int n
   | Ref_to r -> str_of_entity_ref r
   | TxRef -> ":db/current-tx"
-  | Instant ms -> string_of_int ms
+  | Instant ms -> Int64.to_string ms
   | Regex s -> "#\"" ^ s ^ "\""
 
 and str_of_entity_ref (r : entity_ref) : string =

@@ -128,7 +128,7 @@ let string_of_value (v : value) : string =
   | Keyword k -> k
   | Symbol s -> s
   | Uuid u -> u
-  | Instant ms -> string_of_int ms
+  | Instant ms -> Int64.to_string ms
   | Ref id -> string_of_int id
   | _ -> ""
 

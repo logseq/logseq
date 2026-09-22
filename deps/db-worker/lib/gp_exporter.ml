@@ -6408,7 +6408,7 @@ let default_save_file (conn : conn) (path : string) (content : string)
        [ bm_tx_op db
            [ ("file/path", String path); ("file/content", String content)
            ; ("file/last-modified-at",
-              Instant (int_of_float (Import_profile.now_ms ()))) ] ]);
+              Instant (Int64.of_float (Import_profile.now_ms ()))) ] ]);
   Eff.pure ()
 
 (* export-logseq-files — custom.css / custom.js under logseq/ *)
