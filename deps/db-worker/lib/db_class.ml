@@ -218,16 +218,23 @@ let class_extends_rules = lazy_rules class_extends_rules_edn
 let alias_rules = lazy_rules alias_rules_edn
 let property_objects_rules = lazy_rules property_objects_rules_edn
 
-(* db-class/get-structured-children *)
+(* db-class/get-structured-children — BFS over
+   :logseq.property.class/extends, equivalent to the recursive
+   (class-extends ?p ?c) rule. *)
 let get_structured_children db (eid : entity_id) : entity_id list =
-  q_string db
-    ~inputs:
-      [ Arg_scalar (Result_entity eid); Arg_rules (Lazy.force class_extends_rules) ]
-    "[:find [?c ...] :in $ ?p % :where (class-extends ?p ?c)]"
-  |> List.filter_map (function
-       | [ Result_entity id ] -> Some id
-       | [ Result_value (Int id) ] -> Some id
-       | _ -> None)
+  let rec go seen frontier =
+    match frontier with
+    | [] -> seen
+    | eid :: rest ->
+        let children =
+          List.of_seq
+            (datoms db Avet ~a:"logseq.property.class/extends" ~v:(Ref eid) ())
+          |> List.map (fun (d : datom) -> d.e)
+          |> List.filter (fun id -> not (List.mem id seen))
+        in
+        go (seen @ children) (rest @ children)
+  in
+  go [ eid ] [ eid ]
   |> List.filter (fun id -> id <> eid)
 
 (* db-class/get-class-extends — breadth-first walk of

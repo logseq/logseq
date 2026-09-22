@@ -14,7 +14,30 @@ let kw (s : string) : Wire.t = Wire.Keyword s
 
 let vec args : Wire.t = Wire.Array args
 
-let tx_item_edn (item : Wire.t) : string = Ds_wire.edn_of_transit item
+(* EDN rendering of Float leaves uses %.17g which loses the decimal point
+   for whole numbers ("3"), so the string round-trip would store Int. Render
+   them through Symbol so the EDN reader keeps a float. *)
+let rec float_leaves_as_symbols (t : Wire.t) : Wire.t =
+  match t with
+  | Wire.Float f ->
+      let s = Printf.sprintf "%.17g" f in
+      Wire.Symbol
+        (if String.exists (fun c -> c = '.' || c = 'e' || c = 'E') s
+         then s
+         else s ^ ".0")
+  | Wire.Map kvs ->
+      Wire.Map
+        (List.map
+           (fun (k, v) -> float_leaves_as_symbols k, float_leaves_as_symbols v)
+           kvs)
+  | Wire.Array xs -> Wire.Array (List.map float_leaves_as_symbols xs)
+  | Wire.List xs -> Wire.List (List.map float_leaves_as_symbols xs)
+  | Wire.Set xs -> Wire.Set (List.map float_leaves_as_symbols xs)
+  | Wire.Tagged (tag, v) -> Wire.Tagged (tag, float_leaves_as_symbols v)
+  | _ -> t
+
+let tx_item_edn (item : Wire.t) : string =
+  Ds_wire.edn_of_transit (float_leaves_as_symbols item)
 
 let tx_edn (items : Wire.t list) : string =
   "[" ^ String.concat " " (List.map tx_item_edn items) ^ "]"

@@ -36,7 +36,7 @@ let macro_url (s : string) : bool =
 (* db-property-type/entity? *)
 let entity_exists db (v : value) : bool =
   let ref_of = function
-    | Ref id -> Some (Entity_id id)
+    | Ref id | Int id -> Some (Entity_id id)
     | Keyword k -> Some (Ident k)
     | Uuid u -> Some (Lookup_ref ("block/uuid", Uuid u))
     | List [ Keyword a; v ] | Vector [ Keyword a; v ] ->
@@ -79,7 +79,7 @@ let page_entity db v =
 
 let entity_of_value db (v : value) : entity option =
   match v with
-  | Ref id -> Ldb.ent_of_id db id
+  | Ref id | Int id -> Ldb.ent_of_id db id
   | Keyword k -> entity db (Ident k)
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | List [ Keyword a; x ] | Vector [ Keyword a; x ] ->
@@ -345,7 +345,9 @@ let kw s = Wire.Keyword s
 
 (* Entity-based helpers mirroring the map versions above *)
 let ent_property_type (e : entity) : string option =
-  Ldb.string_value e "logseq.property/type"
+  match Ldb.value e "logseq.property/type" with
+  | Some (Keyword s) | Some (String s) -> Some s
+  | _ -> None
 
 let ent_many (e : entity) : bool =
   match Ldb.value e "db/cardinality" with
@@ -942,14 +944,14 @@ let update_property conn (db_ident : string) (property : entity)
   property
 
 (* validate! — same contract as cljs validate!: throws when invalid *)
-let validate_bang (property : entity) (value : value) ~(new_closed_value : bool)
-    : unit =
+let validate_bang (db : db) (property : entity) (value : value)
+    ~(new_closed_value : bool) : unit =
   let skip =
     ent_ref_type property && value = Keyword "logseq.property/empty-placeholder"
   in
   if not skip then
     match
-      validate_property_value_aux_value property.db ~new_closed_value property
+      validate_property_value_aux_value db ~new_closed_value property
         value ~many:(ent_many property)
     with
     | None -> ()
@@ -987,8 +989,7 @@ let throw_error_if_invalid_property_value db (property : entity) (value : value)
       match value with List _ | Vector _ | Set _ -> value | _ -> Set [ value ]
     else value
   in
-  ignore db;
-  validate_bang property value' ~new_closed_value:false
+  validate_bang db property value' ~new_closed_value:false
 
 (* throw-error-if-invalid-new-property-value *)
 let throw_error_if_invalid_new_property_value db (property : entity)
@@ -999,8 +1000,7 @@ let throw_error_if_invalid_new_property_value db (property : entity)
       match value with List _ | Vector _ | Set _ -> value | _ -> Set [ value ]
     else value
   in
-  ignore db;
-  validate_bang property value' ~new_closed_value:true
+  validate_bang db property value' ~new_closed_value:true
 
 (* ->eid — uuid → lookup ref, other → as-is *)
 let to_eid (v : Wire.t) : Wire.t =
@@ -1205,7 +1205,9 @@ let find_or_create_property_value conn (property_id : string) (v : Wire.t)
       create_property_text_block conn ~block_id property_id v
         ~set_block_property:false ()
     in
-    match entity db (Lookup_ref ("block/uuid", Uuid v_uuid)) with
+    match
+      entity (Datascript.db conn) (Lookup_ref ("block/uuid", Uuid v_uuid))
+    with
     | Some e -> e.id
     | None -> failwith "value block not created"
   end else
@@ -1216,7 +1218,9 @@ let find_or_create_property_value conn (property_id : string) (v : Wire.t)
         let v_uuid =
           create_property_text_block conn ~block_id:None property_id v ()
         in
-        (match entity db (Lookup_ref ("block/uuid", Uuid v_uuid)) with
+        (match
+           entity (Datascript.db conn) (Lookup_ref ("block/uuid", Uuid v_uuid))
+         with
          | Some e -> e.id
          | None -> failwith "value block not created")
 
@@ -1682,8 +1686,8 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
                  else v'
                in
                throw_error_if_self_value block v' ref_;
-               throw_error_if_invalid_property_value db property
-                 (Ds_wire.value_of_transit v');
+               throw_error_if_invalid_property_value (Datascript.db conn)
+                 property (Ds_wire.value_of_transit v');
                if property_id = "block/alias" then
                  (let alias_ids =
                     match v' with
@@ -1995,7 +1999,7 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
       Db_transact.transact conn tx_data
         [ ("outliner-op", Keyword "upsert-property") ]
       |> ignore;
-      (match entity db (Ident db_ident') with
+      (match entity (Datascript.db conn) (Ident db_ident') with
        | Some e -> e
        | None -> failwith "upsert-property failed to create entity")
 

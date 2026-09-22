@@ -10,7 +10,8 @@ let random_state =
   in
   Stdlib.Random.State.make [| seed |]
 
-let random_int () = Stdlib.Random.State.int random_state 0x40000000
+(* bound must be < 2^30 for Random.State.int *)
+let random_int () = Stdlib.Random.State.int random_state 0x3FFFFFFF
 
 let random_bytes n =
   Bytes.init n (fun _ -> Char.chr (Stdlib.Random.State.int random_state 256)) |> Bytes.to_string

@@ -42,34 +42,61 @@ let is_page_tags tags =
   || has_tag_ident tags "logseq.class/Tag"
   || has_tag_ident tags "logseq.class/Property"
 
-(* outliner-validate/find-other-ids-with-title-and-tags — query per
-   entity shape: property, namespaced (has parent), or plain page. *)
+(* outliner-validate/find-other-ids-with-title-and-tags — the cljs
+   variants (built-in exclusion, same-parent, not= eid) are folded into
+   an OCaml post-filter because the query engine cannot evaluate
+   predicate clauses over :in-bound vars. *)
 let find_other_ids db ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id list =
-  let q =
-    if is_property then
-      "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] [?b :block/tags ?tag-id] \
-       [(missing? $ ?b :logseq.property/built-in?)] [(not= ?b ?eid)]]"
-    else if has_parent then
-      "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] [?b :block/tags ?tag-id] \
-       [(not= ?b ?eid)] \
-       [?b :block/parent ?bp] [?eid :block/parent ?ep] [(= ?bp ?ep)]]"
-    else
-      "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] [?b :block/tags ?tag-id] \
-       [(not= ?b ?eid)]]"
+  (* the cljs query also binds [?tag-id ...] and [(not= ?b ?eid)]; both
+     are folded into OCaml filters because collection inputs and
+     predicate clauses over :in-bound vars do not constrain the query *)
+  let res =
+    q_string db
+      ~inputs:
+        [ Arg_scalar (match title with Some t -> Result_value (String t) | None -> Result_value Nil) ]
+      "[:find [?b ...] :in $ ?title :where [?b :block/title ?title]]"
   in
-  q_string db
-    ~inputs:
-      [ Arg_scalar (match eid with Some id -> Result_entity id | None -> Result_value Nil)
-      ; Arg_scalar (match title with Some t -> Result_value (String t) | None -> Result_value Nil)
-      ; Arg_collection (List.map (fun id -> Result_entity id) tag_ids) ]
-    q
+  let parent_id =
+    match has_parent, eid with
+    | true, Some id ->
+        (match Ldb.ent_of_id db id with
+         | Some e ->
+             (match Ldb.value e "block/parent" with
+              | Some (Ref p) -> Some p
+              | Some (Int p) -> Some p
+              | _ -> None)
+         | None -> None)
+    | _ -> None
+  in
+  res
   |> List.filter_map (function
        | [ Result_entity id ] -> Some id
        | [ Result_value (Int id) ] -> Some id
        | _ -> None)
+  |> List.filter (fun id ->
+       (* ?b :block/tags ?tag-id *)
+       (match Ldb.ent_of_id db id with
+        | Some e' ->
+            List.exists (fun (t : entity) -> List.mem t.id tag_ids)
+              (Ldb.ref_ents e' "block/tags")
+        | None -> false)
+       (* [(not= ?b ?eid)] *)
+       && (match eid with Some e -> id <> e | None -> true)
+       (* [(missing? $ ?b :logseq.property/built-in?)] — property variant only *)
+       && (not is_property
+           || (match Ldb.ent_of_id db id with
+              | Some e' -> Option.is_none (Ldb.value e' "logseq.property/built-in?")
+              | None -> true))
+       (* same-parent variant: [(= ?bp ?ep)] *)
+       && (match parent_id with
+          | None -> true
+          | Some p ->
+              (match Ldb.ent_of_id db id with
+               | Some e' ->
+                   (match Ldb.value e' "block/parent" with
+                    | Some (Ref p') | Some (Int p') -> p' = p
+                    | _ -> false)
+               | None -> false)))
 
 (* outliner-validate/validate-unique-for-page *)
 let validate_unique_for_page db (new_title : string option) ~is_property ~is_class ~has_parent ~eid

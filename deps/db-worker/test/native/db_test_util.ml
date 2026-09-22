@@ -80,8 +80,18 @@ let db_id_counter = ref 0
 let new_db_id () = decr db_id_counter; Int !db_id_counter
 
 let order_counter = ref 0
-(* db-order/gen-key — lexicographically increasing order keys *)
-let gen_order_key () = incr order_counter; Printf.sprintf "a%05d" !order_counter
+(* db-order/gen-key — lexicographically increasing, valid fractional-index
+   keys (integer char a..z then a trailing digit) *)
+let gen_order_key () =
+  incr order_counter;
+  (* a0..a9, b00..b99, c000..c999 — head char encodes integer length *)
+  let n = ref (!order_counter - 1) in
+  let cap = ref 10 in
+  let level = ref 1 in
+  while !n >= !cap do n := !n - !cap; cap := !cap * 10; incr level done;
+  Printf.sprintf "%c%0*d"
+    (Char.chr (Char.code 'a' + !level - 1))
+    !level !n
 
 let time_counter = ref 0
 (* common-util/time-ms — monotonically increasing epoch-ms ints *)
@@ -302,6 +312,16 @@ let schema_edn =
     :block/journal-day {:db/index true}
     :block/tx-id {}
     :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    :logseq.property/built-in? {:db/index true}
+    :logseq.property/type {:db/index true}
+    :logseq.property/hide? {:db/index true}
+    :logseq.property/deleted-at {:db/index true}
+    :logseq.property/public? {:db/index true}
+    :logseq.property/value {:db/index true}
+    :logseq.property/classes {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    :logseq.property.class/properties {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    :logseq.property.class/extends {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    :logseq.property/created-from-property {:db/valueType :db.type/ref :db/index true}
     :file/path {:db/unique :db.unique/identity}
     :file/content {}
     :file/created-at {}
@@ -325,12 +345,15 @@ let initial_data_edn =
     {:db/ident :logseq.class/Property}
     {:db/ident :logseq.class/Journal}
     {:db/ident :logseq.property}
-    {:db/ident :logseq.property/type}
-    {:db/ident :logseq.property/hide?}
-    {:db/ident :logseq.property/public?}
-    {:db/ident :logseq.property/default-value}
-    {:db/ident :logseq.property/deleted-at}
-    {:db/ident :logseq.property/cardinality}
+    {:db/ident :logseq.property/public? :db/index true}
+    {:db/ident :logseq.property/default-value :db/index true}
+    {:db/ident :logseq.property/deleted-at :db/index true}
+    {:db/ident :logseq.property/cardinality :db/index true}
+    {:db/ident :logseq.property/type :db/index true}
+    {:db/ident :logseq.property/hide? :db/index true}
+    {:db/ident :logseq.property/description :db/index true
+     :block/tags #{:logseq.class/Property}
+     :logseq.property/type :default}
     {:db/ident :logseq.property.class/enable-bidirectional?}
     {:db/ident :logseq.property.class/bidirectional-property-title}
     {:db/ident :logseq.property.journal/title-format}
@@ -339,7 +362,9 @@ let initial_data_edn =
     {:db/ident :logseq.property.class/extends :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     {:db/ident :logseq.property/created-from-property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
     {:db/ident :logseq.property/closed-values :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :logseq.property/value :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}]"
+    {:db/ident :logseq.property/value :db/cardinality :db.cardinality/one}
+    {:db/ident :block/alias :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    {:db/ident :block/tags :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}]"
 
 let create_conn () : conn =
   let conn = Datascript.create_conn ~schema:(schema ()) () in
@@ -686,6 +711,10 @@ let auto_create_ontology ~(options : create_options)
     List.concat_map props_of_map pages
     @ List.concat_map props_of_map blocks
     @ List.concat_map (fun (_, d) -> d.c_properties) options.classes
+    (* cljs props-to-values includes :build/class-properties as [p ::no-value] *)
+    @ List.concat_map
+        (fun (_, d) -> List.map (fun p -> p, Map []) d.c_class_properties)
+        options.classes
     @ List.concat_map (fun (_, d) -> d.p_properties) options.properties
   in
   let used_prop_kws = List.map fst used_props |> List.sort_uniq compare in
@@ -1087,7 +1116,7 @@ let build_page_tx ~(page : (string * edn) list) ~(all_idents : string StringMap.
        @ (match properties @ List.map (fun e -> e.pv_key, e.pv_ref) pvalue_entries with
           | [] -> []
           | props -> block_properties props page_uuids all_idents ~translate_values)
-       @ (match tag_idents with [] -> [] | _ -> [ "block/tags", tags_value ]))
+       @ [ "block/tags", tags_value ])
   in
   List.concat_map (fun e -> e.pv_txs) pvalue_entries @ [ final ]
 
@@ -1450,10 +1479,12 @@ let transact_maps conn (txs : (string * edn) list list) =
        ("[" ^ String.concat " " (List.map edn_map_to_string txs) ^ "]"))
 
 let create_conn_with_blocks ?(options = default_options)
-    ?(properties = []) ?(classes = []) ?(pages_and_blocks = []) () : conn =
+    ?(properties = []) ?(classes = []) ?(pages_and_blocks = [])
+    ?(pre_txs : (string * edn) list list = []) () : conn =
   let options = { options with properties; classes; pages_and_blocks } in
   let init_tx, block_props_tx = build_blocks_tx options in
   let conn = create_conn () in
+  if pre_txs <> [] then transact_maps conn pre_txs;
   transact_maps conn init_tx;
   if block_props_tx <> [] then transact_maps conn block_props_tx;
   conn

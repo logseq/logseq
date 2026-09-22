@@ -72,17 +72,9 @@ let get_block_alias_ids db (eid : entity_id) : entity_id list =
   in
   forward @ backward
 
-(* common-initial-data/get-block-alias — query with the :alias rule *)
+(* common-initial-data/get-block-alias *)
 let get_block_alias db (eid : entity_id) : entity_id list =
-  q_string db
-    ~inputs:
-      [ Arg_scalar (Result_entity eid)
-      ; Arg_rules (Lazy.force Db_class.alias_rules) ]
-    "[:find [?e ...] :in $ ?eid % :where (alias ?eid ?e)]"
-  |> List.filter_map (function
-       | [ Result_entity id ] -> Some id
-       | [ Result_value (Int id) ] -> Some id
-       | _ -> None)
+  get_block_alias_ids db eid
 
 (* common-initial-data/hidden-eid-pred — memoized ancestor walk over
    hide?/deleted-at. Returns a fresh predicate per call like cljs. *)
