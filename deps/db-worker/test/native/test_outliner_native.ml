@@ -9,8 +9,8 @@
      deftests (the three apply-ops cases run via Outliner_op.apply_ops).
    - deps/outliner/test/logseq/outliner/op_test.cljs — all 8 deftests.
    - deps/outliner/test/logseq/outliner/pipeline_test.cljs — all 4
-     deftests (the db-rebuild-block-refs-fn variant of the bulk test is
-     not ported — no OCaml equivalent).
+     deftests (including the db-rebuild-block-refs-fn bulk-pass
+     variant).
    - deps/outliner/test/logseq/outliner/tree_test.cljs —
      blocks->vec-tree-data-preserves-caller-field-policy (both the
      default and :keep-block-tx-id? variants).
@@ -1200,9 +1200,8 @@ let test_db_rebuild_block_refs_removes_recursive_self_ref () =
 
    cljs uses create-conn-with-import-map (sqlite-export/build-import —
    not ported); the fixture has no upserts so create-conn-with-blocks is
-   equivalent. The second cljs assert calls
-   outliner-pipeline/db-rebuild-block-refs-fn — not ported (no OCaml
-   equivalent); only the db-rebuild-block-refs assert is translated. *)
+   equivalent. Covers both the db-rebuild-block-refs and
+   db-rebuild-block-refs-fn asserts. *)
 let test_bulk_block_refs_preserve_datetime_and_content_rules () =
   (* (.getTime (js/Date. 2026 8 8 12)) — Sep 8 2026 noon UTC *)
   let timestamp = 1788868800000 in
@@ -1246,7 +1245,10 @@ let test_bulk_block_refs_preserve_datetime_and_content_rules () =
   in
   check "bulk-block-refs-preserve-datetime-and-content-rules"
     (List.sort_uniq compare (Outliner_core.rebuild_block_refs db updated_block)
-     = expected)
+     = expected);
+  let rebuild_fn = Outliner_pipeline.db_rebuild_block_refs_fn db in
+  check "bulk-block-refs-fn preserve-datetime-and-content-rules"
+    (List.sort_uniq compare (rebuild_fn updated_block) = expected)
 
 (* ---------- tree_test.cljs ----------
 

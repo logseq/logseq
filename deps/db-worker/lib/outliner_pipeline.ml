@@ -205,6 +205,7 @@ let build_journal_refs_for_datetime_properties (db : db)
 (* block-refs — all ref ids for a block: tags + link + property key/value
    refs + content refs, dedup'd, minus self and alias refs. *)
 let block_refs (db : db) (block : entity) (properties : (attr * value list) list)
+    (page_or_object : value -> bool)
     (property_entity : attr -> entity option) : entity_id list =
   let block_db_id = block.id in
   let alias_ids = Ldb.ref_ids block "block/alias" in
@@ -217,7 +218,7 @@ let block_refs (db : db) (block : entity) (properties : (attr * value list) list
   let property_value_refs =
     List.concat_map
       (fun (property, vs) ->
-        if vs <> [] && List.for_all (page_or_object_helper db) vs then
+        if vs <> [] && List.for_all page_or_object vs then
           List.filter_map (ref_to_id db) vs
         else
           let prop_ent = property_entity property in
@@ -247,10 +248,77 @@ let db_rebuild_block_refs (db : db) (block : entity)
     properties_of block
     |> List.filter (fun (k, _) -> not (is_non_ref_property k))
   in
-  let _page_or_object =
-    Option.value page_or_object ~default:(page_or_object_helper db)
+  block_refs db block properties
+    (Option.value page_or_object ~default:(page_or_object_helper db))
+    (fun ident -> entity db (Ident ident))
+
+(* db-rebuild-block-refs-fn — bulk-pass ref builder over the immutable
+   db: memoized entity lookups, ref-producing property entities resolved
+   once, per-eid properties precomputed from aevt scans, memoized
+   page-or-object?. cljs materializes entities for ref-typed values;
+   OCaml keeps Ref values — page_or_object resolves them identically. *)
+let db_rebuild_block_refs_fn (db : db) : entity -> entity_id list =
+  let memo_entity =
+    let cache : (entity_ref, entity option) Hashtbl.t = Hashtbl.create 64 in
+    fun r ->
+      match Hashtbl.find_opt cache r with
+      | Some e -> e
+      | None ->
+          let e = entity db r in
+          Hashtbl.replace cache r e;
+          e
   in
-  block_refs db block properties (fun ident -> entity db (Ident ident))
+  let property_entities : (attr, entity) Hashtbl.t = Hashtbl.create 64 in
+  Seq.iter
+    (fun (d : datom) ->
+      match d.v with
+      | Keyword ident
+        when user_visible_property ident && not (is_non_ref_property ident)
+        -> (
+          match memo_entity (Entity_id d.e) with
+          | Some e -> Hashtbl.replace property_entities ident e
+          | None -> ())
+      | _ -> ())
+    (Datascript.datoms db Avet ~a:"db/ident" ());
+  let properties_by_id : (entity_id, (attr * value list) list) Hashtbl.t =
+    Hashtbl.create 256
+  in
+  Hashtbl.iter
+    (fun ident _ ->
+      Seq.iter
+        (fun (d : datom) ->
+          let entry =
+            match Hashtbl.find_opt properties_by_id d.e with
+            | Some ps -> ps
+            | None -> []
+          in
+          let vs =
+            match List.assoc_opt ident entry with
+            | Some vs -> vs @ [ d.v ]
+            | None -> [ d.v ]
+          in
+          Hashtbl.replace properties_by_id d.e
+            ((ident, vs) :: List.remove_assoc ident entry))
+        (Datascript.datoms db Aevt ~a:ident ()))
+    property_entities;
+  let memo_page_or_object =
+    let cache : (value, bool) Hashtbl.t = Hashtbl.create 256 in
+    fun v ->
+      match Hashtbl.find_opt cache v with
+      | Some b -> b
+      | None ->
+          let b = page_or_object_helper db v in
+          Hashtbl.replace cache v b;
+          b
+  in
+  fun (block : entity) ->
+    let properties =
+      match Hashtbl.find_opt properties_by_id block.id with
+      | Some ps -> ps
+      | None -> []
+    in
+    block_refs db block properties memo_page_or_object
+      (fun ident -> Hashtbl.find_opt property_entities ident)
 
 (* outliner-pipeline/filter-deleted-blocks — retracted :block/uuid datoms
    as (eid, uuid) pairs. *)
