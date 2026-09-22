@@ -356,6 +356,7 @@ let gc_tx_data db ?(now_ms : float option) () : tx_op list =
       "[:find [?e ...] :in $ ?cutoff :where [?e :logseq.property/deleted-at ?d] [(<= ?d ?cutoff)]]"
     |> List.concat_map
          (List.filter_map (function
+            | Result_entity i -> Some i
             | Result_value (Int i) -> Some i
             | _ -> None))
   in

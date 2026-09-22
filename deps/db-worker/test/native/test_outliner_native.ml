@@ -32,15 +32,14 @@ let entity_by_uuid_exn conn uuid = Option.get (entity_by_uuid conn uuid)
 let expect_notification name ~i18n_key (f : unit -> unit) : unit =
   match f () with
   | () -> check name false
-  | exception Outliner_validate.Notification (Wire.Map kvs) ->
+  | exception Outliner_validate.Notification w ->
+      (* cljs ex-data shape: {:type :notification :payload {:i18n-key ...}} *)
       let key =
-        List.find_map
-          (function
-            | Wire.Keyword "i18n-key", Wire.Keyword k -> Some k
-            | _ -> None)
-          kvs
+        match Wire.get "payload" w with
+        | Some p -> Wire.get "i18n-key" p
+        | None -> None
       in
-      check name (key = Some i18n_key)
+      check name (key = Some (Wire.Keyword i18n_key))
   | exception _ -> check name false
 
 let ent_title (e : entity) : string option = Ldb.string_value e "block/title"
