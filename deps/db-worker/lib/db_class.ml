@@ -359,11 +359,21 @@ let class_object_eids db (class_id : entity_id) : entity_id list =
   |> filter_visible_class_object_ids db
 
 (* db-class/get-class-object-ids *)
+(* Test instrumentation: cljs view_test redefines get-class-object-ids
+   to throw — the offset-window path must not walk hidden ancestors. *)
+let get_class_object_ids_calls = ref 0
+
 let get_class_object_ids db (class_id : entity_id) : entity_id list =
+  incr get_class_object_ids_calls;
   class_object_eids db class_id
 
 (* db-class/get-class-objects *)
+(* Test instrumentation: cljs view_test asserts get-class-objects is
+   never called on the id-only view paths. *)
+let get_class_objects_calls = ref 0
+
 let get_class_objects db (class_id : entity_id) : entity list =
+  incr get_class_objects_calls;
   List.filter_map (Ldb.ent_of_id db) (class_object_eids db class_id)
 
 (* view.cljs :property-objects — the
