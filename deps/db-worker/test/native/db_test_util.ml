@@ -1670,6 +1670,7 @@ let create_conn_with_blocks ?(options = default_options)
 
 (* ---------- finders (db-test helpers) ---------- *)
 
+(* cljs helpers take the first result of a [:find [?b ...] ...] query *)
 let query_one_id (db : db) (q : string) (input : value) : entity option =
   (* first result only — cljs find-* helpers use (ffirst (d/q ...)) *)
   match Datascript.q_string ~inputs:[ Arg_scalar (Result_value input) ] db q with
