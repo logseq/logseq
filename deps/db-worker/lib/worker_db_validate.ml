@@ -634,6 +634,10 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
   let errors_wire =
     Wire.Array (List.map humanize_grouped result.dr_errors)
   in
+  (* cljs validate-db leaves :errors nil when the graph is valid *)
+  let errors_result =
+    match result.dr_errors with [] -> Wire.nil | _ -> errors_wire
+  in
   if result.dr_errors <> [] then begin
     Broadcast.to_clients ~kind:"log"
       ~transit_payload:
@@ -677,7 +681,7 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
                          counts.property_pairs counts.datoms)
                   ; kw "success"; Wire.Bool false ] ]));
   Wire.Map
-    [ kw "errors", errors_wire
+    [ kw "errors", errors_result
     ; ( kw "invalid-entity-ids"
       , Wire.Array
           (List.map (fun i -> Wire.Int i) result.dr_invalid_entity_ids) )
