@@ -336,6 +336,74 @@ section-C items.
   `#ee483e6` (29 at `#1013dcf`), a strict subset of the pre-pass
   baseline — engine-side failures, none introduced by these changes.
 
+---
+
+# Pass 3 — faithful port + fix all P2 items (implemented)
+
+## Confirmed & fixed (commits on `devin/ocaml-db-worker`)
+
+### P2-A FIXED — main-thread sync pipeline — `b0b5f90475`
+Full port of the cljs `process-committed-tx!` pipeline:
+- `worker_pipeline.ml:invoke_hooks` — cljs `compute-hooks`: outliner-op
+  handlers, affected-keys, deleted block uuids/assets, pages/blocks, and
+  the post-hook tx-report.
+- `render_delta.ml` (new) — cljs `render-delta/build`: input validation,
+  membership ops (parent+order), ordered ops, per-parent children
+  patches, `{:graph-id :rev :op-id :blocks :deleted :children
+  :affected-keys}` delta.
+- `render_affected_keys.ml` (new) — cljs `compute-affected-keys`:
+  entity/property/class/status/task/source/children invalidation keys.
+- `db_listener.ml` — cljs `process-committed-tx!` order:
+  update-checksum → persist-local-tx (timed) → main-thread-sync-result
+  (handler-keys selectivity, `publish-render-delta?` gating,
+  route-candidates) → deferred listeners on the processed report →
+  `:sync-db-changes` broadcast → perf/outliner-op recording keyed by
+  `:ui/perf-id`. `report-post-commit-error!` posts `:capture-error`.
+
+### P2-B FIXED — `batch_transact` cljs semantics — `a6871b6df3`
+Rewritten to cljs `batch-transact!`: inner txs run on the real conn
+with `:skip-store?` + `:batch-tx-report?` meta, datoms collected via a
+listen hook, one synthesized `:batch-final-tx-report?` report commits
+the aggregate; error path rolls back to db-before silently (cljs
+`reset!` — empty-tx-data apply_report) then re-raises.
+
+### P2-C FIXED — all nine sync-edge divergences — `c918e7f9ba`
+Checksum `Nil` clears stored checksum + full mismatch map logging;
+presence accepts any user-id wire shape and truthy editing-uuid;
+`normalize-online-users` `(or username name user-id)`; `send!`
+stringifies any truthy tx-id; `tx/reject-field` accepts seqables and
+raises on non-seqable; asset `datom->op` emits `{:block-uuid nil}`;
+large-title `e` accepts all numeric wire values.
+
+## New divergences found & fixed while activating the pipeline
+
+Linking `Worker_pipeline` (via `invoke_hooks`) activated the previously
+dead-linked `transact_pipeline`, unmasking two latent port bugs — both
+engine-side-looking but actually fidelity bugs in db-worker code:
+
+### P2-E. `remove-inline-page-class-from-title` raw attr read — `da8d4de55e`
+Read `block/raw-title` as a plain attr; cljs `(:block/raw-title e)` is
+an entity-plus alias falling back to `:block/title` (and journal
+title). New pages without explicit raw-title got their
+`block/title`/`block/name` rewritten to `""` by `toggle-page-and-block`
+— broke create-namespace-pages, create-page-with-tag, and
+insert-blocks-reuses-page tests. Fixed via `Ldb.raw_title`.
+
+### P2-F. `:_reverse` lookups required `:db/index` — `da8d4de55e`
+`Ldb.values` routed `:x/_attr` through the engine's `entity_attr`,
+which reverse-looks-up over the AVET index and raises on unindexed
+attrs (`logseq.property/template-applied-to` — the crash behind the
+41-vs-23 test regression). cljs `entity-attr` does an unindexed
+`-search` scan, so `Ldb.values` now scans the AEVT index for
+`:_reverse` attrs — no `:db/index` requirement, cljs-identical result.
+
+## Test status after pass 3
+- `dune build` — green.
+- `test_db_native.exe test` — 23 failures / 187, byte-identical to the
+  `#ee483e6` baseline set (all engine-side, pre-existing). Verified by
+  A/B: pipeline-active-with-bugs peaked at 41; after the P2-E/P2-F
+  fixes the failing set equals the baseline exactly.
+
 ## Verified faithful (pass 2 spot-checks, no divergence)
 - `handle_pull_ok` e2ee envelope: `graph_e2ee` → `ensure_graph_aes_key`
   → fail on missing key → per-tx `decrypt_tx_data` → apply →
