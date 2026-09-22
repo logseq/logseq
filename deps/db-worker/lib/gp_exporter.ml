@@ -341,7 +341,7 @@ let template_file_property_names = [ "template"; "template-including-parent" ]
 let get_template_name (block : BM.t) : string option =
   match List.assoc_opt "template" (prop_map_of block) with
   | Some (String s) ->
-    let s = String.trim s in
+    let s = Unicode.trim s in
     if s = "" then None else Some s
   | _ -> None
 
@@ -515,7 +515,7 @@ let get_page_uuid (page_names_to_uuids : (string, string) Hashtbl.t)
     (page_name : string) (ex_ctx : (string * value) list) : string =
   let page_name' =
     (if Common_util.str_includes page_name "#" then
-       String.lowercase_ascii (Gp_block.sanitize_hashtag_name page_name)
+       Unicode.lowercase (Gp_block.sanitize_hashtag_name page_name)
      else page_name)
     |> Common_util.str_trimr
   in
@@ -884,7 +884,7 @@ let content_without_tags_ignore_case (content : string) (tags : string list) :
         ("#" ^ Page_ref.left_brackets ^ tag ^ Page_ref.right_brackets)
         "")
     content sorted
-  |> String.trim
+  |> Unicode.trim
 
 (* replace-namespaced-tags-with-id-refs — tags are ref-map values *)
 let replace_namespaced_tags_with_id_refs (content : string) (tags : value list)
@@ -911,7 +911,7 @@ let replace_namespaced_tags_with_id_refs (content : string) (tags : value list)
           ("#" ^ id_ref)
       | _ -> content)
     content sorted
-  |> String.trim
+  |> Unicode.trim
 
 (* update-block-tags *)
 let update_block_tags (block : BM.t) (db : db) (user_options : user_options)
@@ -1002,7 +1002,7 @@ let status_markers =
 let marker_only_block_title (block : BM.t) : string option =
   match get_string block "block/title" with
   | Some title ->
-    let t = String.trim title in
+    let t = Unicode.trim title in
     if List.mem t status_markers then Some t else None
   | None -> None
 
@@ -1624,9 +1624,9 @@ let all_built_in_names : string list =
   all_built_in_property_file_ids
   @ List.map
       (fun (c : Db_class.built_in_class) ->
-        String.lowercase_ascii c.Db_class.title)
+        Unicode.lowercase c.Db_class.title)
       Db_class.built_in_classes
-  @ [ String.lowercase_ascii Common_config.library_page_name ]
+  @ [ Unicode.lowercase Common_config.library_page_name ]
 
 let file_built_in_property_names : string list =
   [ "alias"; "tags"; "background-color"; "heading"; "query-table"
@@ -1716,7 +1716,7 @@ let emoji_icons : (string * BM.t) list Lazy.t =
 let file_icon_value_to_db_icon (prop_value : value) : BM.t option =
   match prop_value with
   | String s ->
-    let t = String.trim s in
+    let t = Unicode.trim s in
     (match
        List.find_opt (fun (n, _) -> n = t) (Lazy.force emoji_icons)
      with
@@ -1886,27 +1886,9 @@ let update_page_or_date_values
                      [ "original-name", String name ]) ])
           property_values))
 
-(* parse-double approximation: leading JS parseDouble-style prefix *)
+(* parse-double — cljs parse-double = js/parseFloat *)
 let parse_double (s : string) : value option =
-  let n = String.length s in
-  let rec scan i seen_digit seen_dot seen_exp =
-    if i >= n then i
-    else
-      let c = s.[i] in
-      if c >= '0' && c <= '9' then scan (i + 1) true seen_dot seen_exp
-      else if c = '.' && not seen_dot && not seen_exp then
-        scan (i + 1) seen_digit true seen_exp
-      else if (c = 'e' || c = 'E') && seen_digit && not seen_exp then
-        scan (i + 1) seen_digit seen_dot true
-      else if (c = '-' || c = '+') && (i = 0 || s.[i - 1] = 'e' || s.[i - 1] = 'E')
-      then scan (i + 1) seen_digit seen_dot seen_exp
-      else i
-  in
-  let stop = scan 0 false false false in
-  if stop > 0 then
-    try Some (floatv (float_of_string (String.sub s 0 stop)))
-    with _ -> None
-  else None
+  Option.map floatv (Common_util.parse_float s)
 
 (* handle-changed-property — changes : (string, (string*string)) Hashtbl *)
 let handle_changed_property (v : value) (prop : string)
@@ -2110,7 +2092,7 @@ let pre_update_properties (properties : (attr * value) list)
       else if not (List.mem prop file_built_in_property_names) then
         match v with
         | String s ->
-          if preserve_empty_properties || String.trim s <> "" then
+          if preserve_empty_properties || Unicode.trim s <> "" then
             Some
               ( prop
               , match parse_double s with
@@ -2391,7 +2373,7 @@ let rec ast_to_text (ast_block : value) (options : options) : string =
         [ kw "ast->text"; strv "Ignored ast node"; kw "node"; node ];
       []
   in
-  extract ast_block |> String.concat "" |> String.trim
+  extract ast_block |> String.concat "" |> Unicode.trim
 
 and extract_block_list (options : options) (l : value list) (in_list : bool)
     : string list =
@@ -2409,7 +2391,7 @@ and extract_block_list_item (options : options) (item : value) : string list =
   let number' =
     match Clj_value.map_get_opt item "number" with
     | Some (Int i) -> string_of_int i ^ ". "
-    | Some (Float f) -> string_of_float f ^ ". "
+    | Some (Float f) -> Common_util.js_string_of_float f ^ ". "
     | Some (String s) -> s ^ ". "
     | Some v when truthy v -> "* "
     | _ -> "* "
@@ -2738,7 +2720,7 @@ let handle_queries (block : BM.t) (db : db)
   let simple_query =
     match !(walked.wa_simple_queries) with
     | q :: _ ->
-      let q' = String.trim (ast_to_text q options) in
+      let q' = Unicode.trim (ast_to_text q options) in
       if q' = "" then None else Some q'
     | [] -> None
   in
@@ -2755,7 +2737,7 @@ let handle_queries (block : BM.t) (db : db)
       |> fun b ->
          BM.put b "block/title"
            (String
-              (String.trim
+              (Unicode.trim
                  (Common_util.regex_replace_first query_title_re ~replacement:""
                     title)))
     in
@@ -2771,7 +2753,7 @@ let handle_queries (block : BM.t) (db : db)
     in
     (match
        Option.bind advanced_node (fun n ->
-         let q = String.trim (ast_to_text n options) in
+         let q = Unicode.trim (ast_to_text n options) in
          if q = "" then None else Some q)
      with
      | Some advanced_query ->
@@ -2807,7 +2789,7 @@ let handle_queries (block : BM.t) (db : db)
              | Some (String t) -> t
              | Some v -> Edn_util.pr_str v
              | None ->
-               String.trim
+               Unicode.trim
                  (Common_util.regex_replace_first begin_query_re ~replacement:""
                     title)
            in
@@ -2833,7 +2815,7 @@ let handle_queries (block : BM.t) (db : db)
                | arg0 :: _ ->
                  (match str_opt_of arg0 with
                   | Some s ->
-                    let s' = String.trim s in
+                    let s' = Unicode.trim s in
                     if s' = "" then None else Some s'
                   | None -> None)
                | _ -> None)
@@ -2852,7 +2834,7 @@ let handle_queries (block : BM.t) (db : db)
                |> fun b ->
                   BM.put b "block/title"
                     (String
-                       (String.trim
+                       (Unicode.trim
                           (Common_util.regex_replace_first cards_title_re
                              ~replacement:"" title)))
              in
@@ -3403,7 +3385,7 @@ let resolve_asset_data (asset_link : value)
   in
   let linked_path =
     match linked_relative, linked_base_dir with
-    | Some r, Some base when String.trim base <> "" ->
+    | Some r, Some base when Unicode.trim base <> "" ->
       Some (Gp_node_path.join [ base; r ])
     | _ -> None
   in
@@ -3703,7 +3685,7 @@ let hls_annotation_md_file (file : string) : bool =
 let pdf_link_re = Regexp.compile "\\[[^\\]]*\\]\\(([^)\\s]+)\\)"
 
 let pdf_url_from_text (s : string) : string option =
-  let trimmed = String.trim s in
+  let trimmed = Unicode.trim s in
   let url =
     match Regexp.exec pdf_link_re trimmed with
     | Some m -> m.groups.(1)
@@ -3792,15 +3774,15 @@ let code_fence_re = Regexp.compile "```"
 
 let quote_node_to_markdown (ast : value) (options : options) (depth : int)
     : string list =
-  let raw_md = String.trim (ast_to_text ast options) in
+  let raw_md = Unicode.trim (ast_to_text ast options) in
   let markdown =
     String.concat "\n"
-      (List.map String.trim (String.split_on_char '\n' raw_md))
+      (List.map Unicode.trim (String.split_on_char '\n' raw_md))
   in
   let lines1 =
     List.mapi
       (fun i line ->
-        (if i = 0 then "" else "\n") ^ String.trim line)
+        (if i = 0 then "" else "\n") ^ Unicode.trim line)
       (String.split_on_char '\n' markdown)
   in
   let lines2 =
@@ -3810,7 +3792,7 @@ let quote_node_to_markdown (ast : value) (options : options) (depth : int)
           String.length line >= 2
           && String.length line >= 1 && line.[0] = '>'
         then
-          [ String.sub line 0 2; String.trim (String.sub line 2 (String.length line - 2)) ]
+          [ String.sub line 0 2; Unicode.trim (String.sub line 2 (String.length line - 2)) ]
         else [ line ])
       lines1
   in
@@ -3840,7 +3822,7 @@ let quote_node_to_markdown (ast : value) (options : options) (depth : int)
         if Common_util.str_includes line "```" then
           let parts = split_fences line in
           List.concat_map
-            (fun x -> [ String.trim x; "```" ])
+            (fun x -> [ Unicode.trim x; "```" ])
             (match List.rev parts with _ :: tl -> List.rev tl | [] -> [])
         else [ line ])
       lines2
@@ -3894,7 +3876,7 @@ let handle_quotes (block : BM.t) (options : options) : BM.t =
   if heading_empty && all_body_quotes then
     let combined_title =
       String.concat "\n"
-        (List.filter (fun s -> String.trim s <> "")
+        (List.filter (fun s -> Unicode.trim s <> "")
            (List.concat_map
               (fun n -> quote_node_to_markdown n options 0)
               body_elements))
@@ -3926,14 +3908,14 @@ let handle_quotes (block : BM.t) (options : options) : BM.t =
               String.concat "\n" (quote_node_to_markdown el options 1)
             | _ -> ast_to_text el options
           in
-          if String.trim text = "" then None
+          if Unicode.trim text = "" then None
           else Some (is el "Quote", text))
         ordered_blocks
     in
     let combined, _ =
       List.fold_left
         (fun (result, prev_quote) (quote_, text) ->
-          ( (if String.trim result = "" then text
+          ( (if Unicode.trim result = "" then text
              else result ^ (if prev_quote then "\n\n" else "\n") ^ text)
           , quote_ ))
         ("", false) tagged_parts
@@ -3944,7 +3926,7 @@ let handle_quotes (block : BM.t) (options : options) : BM.t =
 let handle_math (block : BM.t) : BM.t =
   match getv block "block/title" with
   | Some (String t) ->
-    let title = String.trim t in
+    let title = Unicode.trim t in
     let len = String.length title in
     if
       len > 4
@@ -3953,7 +3935,7 @@ let handle_math (block : BM.t) : BM.t =
       && not (Common_util.str_includes (String.sub title 2 (len - 4)) "$$")
     then
       BM.merge block
-        [ "block/title", String (String.trim (String.sub title 2 (len - 4)))
+        [ "block/title", String (Unicode.trim (String.sub title 2 (len - 4)))
         ; "logseq.property.node/display-type", kw "math"
         ; "block/tags", List [ kw "logseq.class/Math-block" ] ]
     else block
@@ -3974,11 +3956,11 @@ let split_title_by_code_fences (title : string) :
          else text_parts)
       , List.rev code_segs )
     | line :: rest ->
-      let trimmed = String.trim line in
+      let trimmed = Unicode.trim line in
       if not in_code && Regexp.test fence_line_re trimmed then
         let lang' =
           let l = String.sub trimmed 3 (String.length trimmed - 3) in
-          if String.trim l = "" then None else Some l
+          if Unicode.trim l = "" then None else Some l
         in
         loop rest true lang' []
           (if current <> [] then
@@ -4092,12 +4074,12 @@ let handle_code_blocks (block : BM.t) (options : options) : BM.t * BM.t list =
     let text_parts, code_segs = split_title_by_code_fences title in
     let pure_single_code =
       List.length code_segs = 1
-      && List.for_all (fun s -> String.trim s = "") text_parts
+      && List.for_all (fun s -> Unicode.trim s = "") text_parts
     in
     let has_mixed_content =
       options.user_options.extract_code_snippets
       && code_segs <> []
-      && List.exists (fun s -> String.trim s <> "") text_parts
+      && List.exists (fun s -> Unicode.trim s <> "") text_parts
     in
     if pure_single_code then
       let seg = List.hd code_segs in
@@ -4115,7 +4097,7 @@ let handle_code_blocks (block : BM.t) (options : options) : BM.t * BM.t list =
       (b, [])
     else if has_mixed_content then
       let remaining_title =
-        String.trim
+        Unicode.trim
           (Common_util.regex_replace newline_runs_re ~replacement:"\n"
              (String.concat "\n" text_parts))
       in
@@ -4443,7 +4425,7 @@ let journal_file_re =
 
 let journal_file_title (path : string) : string option =
   let normalized =
-    String.lowercase_ascii (Common_util.str_replace_all path "\\" "/")
+    Unicode.lowercase (Common_util.str_replace_all path "\\" "/")
   in
   match Regexp.exec journal_file_re normalized with
   | Some m -> m.groups.(1)
@@ -5092,7 +5074,7 @@ let build_tx_options (options : options) : options =
   let lower_names =
     List.filter_map
       (fun s ->
-        let s = String.lowercase_ascii s in
+        let s = Unicode.lowercase s in
         if List.mem s file_built_in then None else Some s)
   in
   { options with
@@ -5109,7 +5091,7 @@ let build_tx_options (options : options) : options =
   ; user_options =
       { options.user_options with
         tag_classes =
-          List.map String.lowercase_ascii options.user_options.tag_classes
+          List.map Unicode.lowercase options.user_options.tag_classes
       ; property_classes = lower_names options.user_options.property_classes
       ; property_parent_classes =
           lower_names options.user_options.property_parent_classes } }
@@ -5184,7 +5166,7 @@ let split_pages_and_properties_tx (db : db) (pages_tx : BM.t list)
     List.partition page_tx_for_new_property pages_tx
   in
   let build_property_page (title : string) (block_uuid : string option) : BM.t =
-    let property_name = String.lowercase_ascii title in
+    let property_name = Unicode.lowercase title in
     let db_ident = get_ident import_state.all_idents property_name in
     let upstream_property =
       match Hashtbl.find_opt upstream_properties property_name with
@@ -5955,7 +5937,7 @@ let remove_block_ref_from_title (title : value option) (block_uuid : string)
     let t = Common_util.str_replace_all t (Page_ref.to_page_ref block_uuid) "" in
     Some
       (String
-         (String.trim
+         (Unicode.trim
             (Regexp.replace ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> " ")
                (Regexp.compile " {2,}") t)))
   | _ -> None
@@ -6477,7 +6459,7 @@ let resolve_zotero_config_path (config : value) (config_file : BM.t) : value =
   let to_abs (p : value option) : value =
     match base_dir, p with
     | Some base, Some (String s)
-      when String.trim s <> "" && not (Gp_node_path.is_absolute s) ->
+      when Unicode.trim s <> "" && not (Gp_node_path.is_absolute s) ->
       String (Gp_node_path.join [ base; s ])
     | _, Some v -> v
     | _, None -> Nil
@@ -6730,7 +6712,7 @@ let insert_favorites (conn : conn) (favorited_ids : string list)
 (* favorite-config-page-name — bare name or [[page]] ref *)
 let favorite_config_page_name (page_name : value option) : string option =
   match page_name with
-  | Some (String s) -> Page_ref.get_page_name (String.trim s)
+  | Some (String s) -> Page_ref.get_page_name (Unicode.trim s)
   | Some _ -> None
   | None -> None
 

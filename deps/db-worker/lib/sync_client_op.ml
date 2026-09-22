@@ -161,7 +161,7 @@ let get_graph_uuid repo = get_meta (store repo) "graph-uuid"
 
 let get_local_tx repo : int option =
   match get_meta (store repo) "local-tx" with
-  | Some s -> int_of_string_opt s
+  | Some s -> Common_util.parse_long ~radix:10 s
   | None -> None
 
 let update_local_tx repo (t : int) =
