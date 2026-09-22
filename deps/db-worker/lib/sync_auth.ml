@@ -34,7 +34,7 @@ let id_token_expired (token : string option) : bool =
   match token with
   | Some t ->
       (match Sync_util.jwt_exp t with
-       | Some exp_ms -> exp_ms <= Sync_state.time_ms ()
+       | Some exp_s -> exp_s *. 1000. <= Sync_state.time_ms ()
        | None -> true)
   | None -> true
 
