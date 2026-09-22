@@ -1844,11 +1844,13 @@ let assert_no_stale_numeric_ids db (ops : Wire.t list) (stage : string)
       ops
   with
   | Some (idx, entry) ->
-      invalid_arg
-        (Printf.sprintf
-           "Non-transact outliner ops contain numeric entity ids \
-            (stage=%s index=%d): %s"
-           stage idx (Transit_codec.to_string entry))
+      (* cljs ex-info message; stage/index/op detail goes in ex-data *)
+      raise
+        (Dispatcher.Exn_info
+           ( "Non-transact outliner ops contain numeric entity ids"
+           , [ Wire.Keyword "stage", Wire.String stage
+             ; Wire.Keyword "index", Wire.Int idx
+             ; Wire.Keyword "op", entry ] ))
   | None -> ()
 
 (* op-construct/assert-no-numeric-entity-ids! *)

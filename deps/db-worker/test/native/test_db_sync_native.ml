@@ -697,6 +697,11 @@ let entity_block_uuid (e : entity) : Wire.t =
   | Some (Uuid _ as u) -> Ds_wire.transit_of_value u
   | _ -> failwith "entity has no block/uuid"
 
+let wire_uuid_str (u : Wire.t) : string =
+  match u with
+  | Wire.Uuid s | Wire.String s -> s
+  | _ -> failwith "not a uuid"
+
 (* cljs [:block/uuid u] lookup ref *)
 let block_uuid_lookup (u : Wire.t) : Wire.t =
   Wire.Array [ kw "block/uuid"; u ]
@@ -3858,6 +3863,285 @@ let test_process_asset_ops_retries_missing_file_without_blocking_later_ops
               | None -> false);
            check "broadcasts" (!broadcast_count = 3)))
 
+(* cljs (:forward-outliner-ops e) [0] [1] [0] :block/title *)
+let op_entry_first_block_title (ops : Wire.t list) : string option =
+  match ops with
+  | Wire.Array [ _; Wire.Array ((Wire.Map _ as m) :: _) ] :: _ -> (
+      match Wire.get "block/title" m with
+      | Some (Wire.String s) -> Some s
+      | _ -> None)
+  | _ -> None
+
+let save_block_op (block : Wire.t) (opts : Wire.t) : Wire.t =
+  Wire.Array [ kw "save-block"; Wire.Array [ block; opts ] ]
+
+(* cljs apply-history-action-does-not-reuse-original-tx-id-test *)
+let test_apply_history_action_does_not_reuse_original_tx_id () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = entity_block_uuid child1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ save_block_op
+                   (wire_map
+                      [ "block/uuid", child_uuid
+                      ; "block/title", Wire.String "hello" ])
+                   Wire.Nil ]
+               local_tx_meta);
+          let tx_id = (List.hd (Sync_apply.pending_txs test_repo ())).tx_id in
+          let r =
+            Sync_apply.apply_history_action test_repo tx_id true
+              [ "db-sync/tx-id", Uuid tx_id ]
+          in
+          check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
+          let history_tx_id =
+            match Wire.get "history-tx-id" r with
+            | Some (Wire.Uuid s) -> s
+            | _ -> ""
+          in
+          check "uuid" (history_tx_id <> "");
+          check "new id" (history_tx_id <> tx_id);
+          let pending = Sync_apply.pending_txs test_repo () in
+          check "2 pending" (List.length pending = 2);
+          check "distinct ids"
+            (List.length
+               (List.sort_uniq String.compare
+                  (List.map
+                  (fun (e : Sync_client_op.local_tx_entry) ->
+                     e.tx_id)
+                  pending)) = 2);
+          check "source title"
+            (op_entry_first_block_title
+               (Option.get (Sync_apply.pending_tx_by_id test_repo tx_id))
+                 .forward_outliner_ops
+             = Some "hello")))
+
+(* cljs apply-history-action-preserves-source-forward-inverse-ops-test *)
+let test_apply_history_action_preserves_source_forward_inverse_ops () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = entity_block_uuid child1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ save_block_op
+                   (wire_map
+                      [ "block/uuid", child_uuid
+                      ; "block/title", Wire.String "hello" ])
+                   Wire.Nil ]
+               local_tx_meta);
+          let source_tx_id =
+            (List.hd (Sync_apply.pending_txs test_repo ())).tx_id
+          in
+          let r =
+            Sync_apply.apply_history_action test_repo source_tx_id true []
+          in
+          check "undo applied" (Wire.get "applied?" r = Some (Wire.Bool true));
+          let undo_history_tx_id =
+            match Wire.get "history-tx-id" r with
+            | Some (Wire.Uuid s) -> s
+            | _ -> ""
+          in
+          check "uuid" (undo_history_tx_id <> "");
+          check "new id" (undo_history_tx_id <> source_tx_id);
+          let source_pending =
+            Option.get (Sync_apply.pending_tx_by_id test_repo source_tx_id)
+          in
+          let pending_after_undo = Sync_apply.pending_txs test_repo () in
+          let undo_pending =
+            List.find_opt
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                  e.tx_id <> source_tx_id)
+              pending_after_undo
+          in
+          check "2 pending" (List.length pending_after_undo = 2);
+          check "undo pending" (undo_pending <> None);
+          check "source fwd title"
+            (op_entry_first_block_title source_pending.forward_outliner_ops
+             = Some "hello");
+          check "source inv title"
+            (op_entry_first_block_title source_pending.inverse_outliner_ops
+             = Some "child 1");
+          let undo_pending = Option.get undo_pending in
+          check "undo fwd title"
+            (op_entry_first_block_title undo_pending.forward_outliner_ops
+             = Some "child 1");
+          check "undo inv title"
+            (op_entry_first_block_title undo_pending.inverse_outliner_ops
+             = Some "hello");
+          let r2 =
+            Sync_apply.apply_history_action test_repo source_tx_id false []
+          in
+          check "redo applied" (Wire.get "applied?" r2 = Some (Wire.Bool true));
+          let redo_history_tx_id =
+            match Wire.get "history-tx-id" r2 with
+            | Some (Wire.Uuid s) -> s
+            | _ -> ""
+          in
+          check "uuid" (redo_history_tx_id <> "");
+          check "new id" (redo_history_tx_id <> source_tx_id);
+          let source_pending2 =
+            Option.get (Sync_apply.pending_tx_by_id test_repo source_tx_id)
+          in
+          let pending_after_redo = Sync_apply.pending_txs test_repo () in
+          let new_tx_ids =
+            List.sort_uniq String.compare
+              (List.map
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 e.tx_id)
+              pending_after_redo)
+          in
+          check "3 pending" (List.length pending_after_redo = 3);
+          check "3 ids" (List.length new_tx_ids = 3);
+          check "source still present" (List.mem source_tx_id new_tx_ids);
+          check "source fwd title"
+            (op_entry_first_block_title source_pending2.forward_outliner_ops
+             = Some "hello");
+          check "source inv title"
+            (op_entry_first_block_title source_pending2.inverse_outliner_ops
+             = Some "child 1")))
+
+(* cljs apply-history-action-semantic-op-must-not-fallback-to-raw-tx-test *)
+let test_apply_history_action_semantic_op_must_not_fallback_to_raw_tx () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = entity_block_uuid child1 in
+      let before_title =
+        match Ldb.value child1 "block/title" with
+        | Some (String s) -> s
+        | _ -> ""
+      in
+      let missing_uuid = fresh_uuid () in
+      let raw_title = "raw fallback title" in
+      let tx_data =
+        Wire.Array
+          [ db_add (block_uuid_lookup child_uuid) "block/title"
+              (Wire.String raw_title) ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~forward_ops:
+                  [ save_block_op
+                      (wire_map
+                         [ "block/uuid", Wire.Uuid missing_uuid
+                         ; "block/title", Wire.String "broken semantic" ])
+                      (wire_map []) ]
+                ~tx_data_v:tx_data tx_id ];
+          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
+          check "reason"
+            (Wire.get "reason" r
+             = Some (kw "invalid-history-action-ops"));
+          check "title unchanged"
+            (match ent_by_block_uuid (Datascript.db conn) (wire_uuid_str child_uuid) with
+             | Some e -> Ldb.value e "block/title" = Some (String before_title)
+             | None -> false)))
+
+(* cljs apply-history-action-inline-semantic-op-rejects-numeric-ref-ids-test *)
+let test_apply_history_action_inline_semantic_op_rejects_numeric_ref_ids () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = entity_block_uuid child1 in
+      let stale_ref_id = 99999999 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let fwd =
+            [ save_block_op
+                (wire_map
+                   [ "block/uuid", child_uuid
+                   ; "block/tags", Wire.List [ Wire.Int stale_ref_id ] ])
+                (wire_map []) ]
+          in
+          let inv =
+            [ save_block_op
+                (wire_map
+                   [ "block/uuid", child_uuid
+                   ; "block/title", Wire.String "child 1" ])
+                (wire_map []) ]
+          in
+          let r =
+            Sync_apply.apply_history_action test_repo tx_id false
+              [ "outliner-op", Keyword "save-block"
+              ; ( "db-sync/forward-outliner-ops"
+                , Vector (List.map Ds_wire.value_of_transit fwd) )
+              ; ( "db-sync/inverse-outliner-ops"
+                , Vector (List.map Ds_wire.value_of_transit inv) ) ]
+          in
+          check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
+          check "reason"
+            (Wire.get "reason" r
+             = Some (kw "invalid-history-action-ops"))))
+
+(* cljs apply-history-action-redo-invalid-insert-conflict-skips-fail-fast-test *)
+let test_apply_history_action_redo_invalid_insert_conflict_skips_fail_fast ()
+    =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let missing_parent_uuid = fresh_uuid () in
+      let inserted_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let inserted_block =
+            wire_map
+              [ "block/uuid", Wire.Uuid inserted_uuid
+              ; "block/title", Wire.String ""
+              ; ( "block/parent"
+                , block_uuid_lookup (Wire.Uuid missing_parent_uuid) ) ]
+          in
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+                ~forward_ops:
+                  [ Wire.Array
+                      [ kw "insert-blocks"
+                      ; Wire.Array
+                          [ Wire.Array [ inserted_block ]
+                          ; block_uuid_lookup (Wire.Uuid missing_parent_uuid)
+                          ; wire_map
+                              [ "sibling?", Wire.Bool false
+                              ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                tx_id ];
+          Sync_util.fail_fast_fn :=
+            (fun _tag _data -> Failure "fail-fast-called");
+          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
+          check "reason"
+            (Wire.get "reason" r
+             = Some (kw "invalid-history-action-ops"));
+          check "action outliner-op"
+            (match Wire.get "action" r with
+             | Some a -> Wire.get "outliner-op" a = Some (kw "insert-blocks")
+             | None -> false)))
+
+(* cljs apply-history-action-save-block-ignores-stale-db-id-when-uuid-exists-test *)
+let test_apply_history_action_save_block_ignores_stale_db_id_when_uuid_exists
+    () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = entity_block_uuid child1 in
+      let stale_db_id = 99999999 in
+      let new_title = "semantic replay with stale db id" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~forward_ops:
+                  [ save_block_op
+                      (wire_map
+                         [ "db/id", Wire.Int stale_db_id
+                         ; "block/uuid", child_uuid
+                         ; "block/title", Wire.String new_title ])
+                      (wire_map []) ]
+                tx_id ];
+          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
+          check "new title"
+            (match ent_by_block_uuid (Datascript.db conn) (wire_uuid_str child_uuid) with
+             | Some e -> Ldb.value e "block/title" = Some (String new_title)
+             | None -> false)))
+
 (*__TESTS__*)
 
 let () =
@@ -4092,4 +4376,27 @@ let () =
             "process-asset-ops-retries-missing-file-without-blocking-later-ops"
             `Quick
             test_process_asset_ops_retries_missing_file_without_blocking_later_ops
+        ; Alcotest.test_case
+            "apply-history-action-does-not-reuse-original-tx-id" `Quick
+            test_apply_history_action_does_not_reuse_original_tx_id
+        ; Alcotest.test_case
+            "apply-history-action-preserves-source-forward-inverse-ops"
+            `Quick
+            test_apply_history_action_preserves_source_forward_inverse_ops
+        ; Alcotest.test_case
+            "apply-history-action-semantic-op-must-not-fallback-to-raw-tx"
+            `Quick
+            test_apply_history_action_semantic_op_must_not_fallback_to_raw_tx
+        ; Alcotest.test_case
+            "apply-history-action-inline-semantic-op-rejects-numeric-ref-ids"
+            `Quick
+            test_apply_history_action_inline_semantic_op_rejects_numeric_ref_ids
+        ; Alcotest.test_case
+            "apply-history-action-redo-invalid-insert-conflict-skips-fail-fast"
+            `Quick
+            test_apply_history_action_redo_invalid_insert_conflict_skips_fail_fast
+        ; Alcotest.test_case
+            "apply-history-action-save-block-ignores-stale-db-id-when-uuid-exists"
+            `Quick
+            test_apply_history_action_save_block_ignores_stale_db_id_when_uuid_exists
         ] ) ]
