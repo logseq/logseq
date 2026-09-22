@@ -22,6 +22,10 @@ let init () =
     ignore Endpoint_cli.cli_list_properties;
     ignore Endpoint_cli.api_get_page_data;
     ignore Endpoint_state.cancel_ui_requests;
+    ignore Endpoint_property.get_all_properties;
+    ignore Endpoint_query.query_dsl_query;
+    ignore Endpoint_transaction.transact;
+    ignore Endpoint_transaction.apply_outliner_ops;
     initialized := true
   end
 

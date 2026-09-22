@@ -164,3 +164,13 @@ let search_truncate_table : (Sqlite.db -> unit) option ref = ref None
    service channel; OCaml posts Comlink.post_message. *)
 
 (* entity-plus/lookup-kv-then-entity equivalent lives in Ldb. *)
+
+(* outliner-op/import-edn-data : conn export-map import-options -> result *)
+let batch_import_edn_fn :
+    (Datascript.conn -> Wire.t -> Wire.t -> Wire.t option) option ref =
+  ref None
+
+(* block-handler/canonical-blocks : db block-uuids -> {:blocks {uuid row}} *)
+let canonical_blocks_fn :
+    (Datascript.db -> Wire.t list -> Wire.t) option ref =
+  ref None
