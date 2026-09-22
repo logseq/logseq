@@ -365,16 +365,6 @@ let schema_edn =
     :block/journal-day {:db/index true}
     :block/tx-id {}
     :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    :logseq.property/built-in? {:db/index true}
-    :logseq.property/type {:db/index true}
-    :logseq.property/hide? {:db/index true}
-    :logseq.property/deleted-at {:db/index true}
-    :logseq.property/public? {:db/index true}
-    :logseq.property/value {:db/index true}
-    :logseq.property/classes {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    :logseq.property.class/properties {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    :logseq.property.class/extends {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    :logseq.property/created-from-property {:db/valueType :db.type/ref :db/index true}
     :file/path {:db/unique :db.unique/identity}
     :file/content {}
     :file/created-at {}

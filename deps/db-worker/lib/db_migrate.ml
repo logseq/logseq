@@ -268,6 +268,15 @@ let seed_initial_data () : Block_map.t list =
     | Some (Keyword i) | Some (String i) -> List.mem i bootstrap_class_idents
     | _ -> false
   in
+  (* cljs build-db-initial-data emits bootstrap-class-ids first — stub
+     entities {db/ident, block/uuid} for Root/Property/Tag/Page/Template —
+     so properties-tx/class maps can reference those idents. *)
+  let bootstrap_class_ids =
+    List.map
+      (fun m ->
+        List.filter (fun (a, _) -> a = "db/ident" || a = "block/uuid") m)
+      (List.filter is_bootstrap_class default_classes)
+  in
   let classes_tx =
     List.map
       (fun m -> Block_map.remove_attr m "db/ident")
@@ -276,7 +285,8 @@ let seed_initial_data () : Block_map.t list =
         (fun m -> not (is_bootstrap_class m))
         default_classes
   in
-  [ kv "logseq.kv/db-type" (String "db")
+  bootstrap_class_ids
+  @ [ kv "logseq.kv/db-type" (String "db")
   ; kv "logseq.kv/schema-version" db_schema_version
   ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
   ; kv "logseq.kv/graph-created-at"
@@ -343,9 +353,11 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
   in
   let keep_item (data : Block_map.t) : Block_map.t option =
     let is_kv =
-      match Block_map.string_attr data "db/ident" with
-      | Some i -> Ns_util.str_starts_with i "logseq.kv/"
-      | None -> false
+      (* db/ident is stored as a Keyword value, so string_attr misses it *)
+      match Block_map.attr_value data "db/ident" with
+      | Some (Keyword i) | Some (String i) ->
+          Ns_util.str_starts_with i "logseq.kv/"
+      | _ -> false
     in
     if is_kv then None
     else
@@ -486,9 +498,9 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
   let new_class_idents =
     List.filter_map
       (fun (m : Block_map.t) ->
-        match Block_map.string_attr m "db/ident" with
-        | Some i -> Some (wire_map [ "db/ident", Keyword i ])
-        | None -> None)
+        match Block_map.attr_value m "db/ident" with
+        | Some (Keyword i) -> Some (wire_map [ "db/ident", Keyword i ])
+        | _ -> None)
       new_class_maps
   in
   let new_classes = List.map wire_map new_class_maps in
@@ -499,15 +511,20 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
     List.concat_map (fun a -> delete_property db a) update.u_delete_properties
   in
   let kv_tx =
-    [ wire_map
-        [ "db/ident", Keyword "logseq.kv/schema-version"
-        ; ( "kv/value"
-          , Map
-              [ Keyword "major", Int version_map.sv_major
-              ; Keyword "minor",
-                (match version_map.sv_minor with
-                 | Some n -> Int n
-                 | None -> Nil) ] ) ] ]
+    (* vector-op form: a Map value on non-ref kv/value is stored as a
+       plain value; the entity-map form would treat it as a nested
+       entity and throw "nested entity attribute requires ref schema" *)
+    [ Wire.Array
+        [ Keyword "db/add"
+        ; Wire.Array
+            [ Keyword "db/ident"; Keyword "logseq.kv/schema-version" ]
+        ; Keyword "kv/value"
+        ; Map
+            [ Keyword "major", Int version_map.sv_major
+            ; Keyword "minor",
+              (match version_map.sv_minor with
+               | Some n -> Int n
+               | None -> Nil) ] ] ]
   in
   let tx_data =
     kv_tx @ new_class_idents @ new_properties @ new_classes @ fixes
@@ -563,10 +580,13 @@ let migrate ?(target_version = Db_schema.version) (conn : conn) :
           else None)
         schema_version_updates
     in
+    (* upgrades run before ensure-built-in-data-exists! — OCaml evaluates
+       @'s right operand first, so the call must be sequenced explicitly
+       (cljs runs it after the upgrade doseq). *)
     let reports =
       List.map (fun (v_str, u) -> upgrade_version conn v_str u) updates
-      @ [ ensure_built_in_data_exists conn ]
     in
+    let reports = reports @ [ ensure_built_in_data_exists conn ] in
     Some
       { from_version = version_in_db
       ; to_version = target_version
