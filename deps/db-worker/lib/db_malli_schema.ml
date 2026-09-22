@@ -208,7 +208,9 @@ let empty_placeholder_value (db : db) (property : value) (property_val : value)
 (* malli-schema/validate-property-value *)
 let validate_property_value (ctx : vctx) (opts : vopts) (tuple : value) : bool =
   match coll_items tuple with
-  | [ property; property_val ] ->
+  (* cljs destructures [property property-val]; block/tags tuples carry a
+     trailing opts map, so match the first two items *)
+  | property :: property_val :: _ ->
       let ptype =
         match vget "logseq.property/type" property with
         | Some (Keyword s) -> s
@@ -353,6 +355,8 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
   let order = ref [] in
   List.iter
     (fun (d : datom) ->
+      (* cljs datom :v is the raw eid for ref attrs; OCaml keeps Ref. *)
+      let v = match d.v with Ref n -> Int n | v -> v in
       let m = try Hashtbl.find tbl d.e with Not_found -> [] in
       if m = [] then order := d.e :: !order;
       let m' =
@@ -363,13 +367,13 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
             | Some v -> [ v ]
             | None -> []
           in
-          List.remove_assoc d.a m @ [ (d.a, Set (cur @ [ d.v ])) ]
+          List.remove_assoc d.a m @ [ (d.a, Set (cur @ [ v ])) ]
         else
           match mget d.a m with
-          | Some (Set xs) -> List.remove_assoc d.a m @ [ (d.a, Set (xs @ [ d.v ])) ]
+          | Some (Set xs) -> List.remove_assoc d.a m @ [ (d.a, Set (xs @ [ v ])) ]
           | Some existing ->
-              List.remove_assoc d.a m @ [ (d.a, Set [ existing; d.v ]) ]
-          | None -> m @ [ (d.a, d.v) ]
+              List.remove_assoc d.a m @ [ (d.a, Set [ existing; v ]) ]
+          | None -> m @ [ (d.a, v) ]
       in
       Hashtbl.replace tbl d.e m')
     datoms;

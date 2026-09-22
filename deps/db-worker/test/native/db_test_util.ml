@@ -395,38 +395,38 @@ let initial_data_edn =
      :db/valueType :db.type/ref}
     {:db/ident :logseq.property}
     {:db/ident :logseq.property/public? :db/index true}
-    {:db/ident :logseq.property/default-value :db/index true}
-    {:db/ident :logseq.property/deleted-at :db/index true}
-    {:db/ident :logseq.property/cardinality :db/index true}
+    {:db/ident :logseq.property/default-value :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property/deleted-at :db/index true :logseq.property/type :datetime}
+    {:db/ident :logseq.property/cardinality :db/index true :logseq.property/type :keyword}
     {:db/ident :logseq.property/type :db/index true}
     {:db/ident :logseq.property/hide? :db/index true}
-    {:db/ident :logseq.property/built-in? :db/index true}
+    {:db/ident :logseq.property/built-in? :db/index true :logseq.property/type :checkbox}
     {:db/ident :logseq.property/description :db/index true
      :block/tags #{:logseq.class/Property}
      :logseq.property/type :default}
-    {:db/ident :logseq.property.class/enable-bidirectional? :db/index true}
-    {:db/ident :logseq.property.class/bidirectional-property-title :db/index true}
-    {:db/ident :logseq.property.journal/title-format :db/index true}
-    {:db/ident :logseq.property/status :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property/classes :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    {:db/ident :logseq.property.class/properties :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    {:db/ident :logseq.property.class/extends :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    {:db/ident :logseq.property.class/enable-bidirectional? :db/index true :logseq.property/type :checkbox}
+    {:db/ident :logseq.property.class/bidirectional-property-title :db/index true :logseq.property/type :string}
+    {:db/ident :logseq.property.journal/title-format :db/index true :logseq.property/type :string}
+    {:db/ident :logseq.property/status :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :default}
+    {:db/ident :logseq.property/classes :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property.class/properties :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :property}
+    {:db/ident :logseq.property.class/extends :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :class}
     ;; cljs (sqlite-util/kv :logseq.kv/db-type 'db') — marks the graph as
     ;; db-based so Db_tx routes through the transact pipeline like the
     ;; cljs create-conn.
     {:db/ident :logseq.kv/db-type :kv/value \"db\"}
-    {:db/ident :logseq.property/created-from-property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property/closed-values :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
-    {:db/ident :logseq.property/value :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.history/block :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.history/property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.history/ref-value :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.history/scalar-value :db/index true}
-    {:db/ident :logseq.property.reaction/target :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.reaction/emoji-id :db/index true}
-    {:db/ident :logseq.property/view-for :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
-    {:db/ident :logseq.property.view/type :db/index true}
-    {:db/ident :logseq.property.view/feature-type :db/index true}
+    {:db/ident :logseq.property/created-from-property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property/closed-values :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property/value :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :any}
+    {:db/ident :logseq.property.history/block :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property.history/property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :property}
+    {:db/ident :logseq.property.history/ref-value :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :entity}
+    {:db/ident :logseq.property.history/scalar-value :db/index true :logseq.property/type :any}
+    {:db/ident :logseq.property.reaction/target :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :node}
+    {:db/ident :logseq.property.reaction/emoji-id :db/index true :logseq.property/type :string}
+    {:db/ident :logseq.property/view-for :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :node}
+    {:db/ident :logseq.property.view/type :db/index true :logseq.property/type :default}
+    {:db/ident :logseq.property.view/feature-type :db/index true :logseq.property/type :keyword}
     {:db/ident :block/alias :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     {:db/ident :block/tags :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     {:db/ident :logseq.class/Status}
@@ -434,6 +434,7 @@ let initial_data_edn =
     {:block/uuid #uuid \"00000004-1514-5003-0003-000000000000\"
      :block/name \"recycle\" :block/title \"Recycle\"
      :block/tags [:logseq.class/Page]
+     :block/created-at 0 :block/updated-at 0
      :logseq.property/hide? true :logseq.property/built-in? true}]"
 
 let create_conn () : conn =
