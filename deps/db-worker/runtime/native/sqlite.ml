@@ -104,3 +104,35 @@ let backup t ~dst_path =
 let filename t = t.filename
 
 let pooled_runtime () = false
+
+(* --- raw db-file ops (cljs storage :export-file/:import-db) --- *)
+
+let native_pool_path dir path =
+  let stripped =
+    if String.length path > 0 && path.[0] = '/'
+    then String.sub path 1 (String.length path - 1)
+    else path
+  in
+  Filename.concat dir stripped
+
+let export_file ~name:_ ~dir ~path =
+  let full = native_pool_path dir path in
+  if Sys.file_exists full then
+    let ic = open_in_bin full in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr ic)
+      (fun () -> Db_worker_effect.pure (In_channel.input_all ic))
+  else
+    Db_worker_effect.error
+      (Failure ("sqlite export_file: file not found: " ^ full))
+
+let import_db ~name:_ ~dir ~path contents =
+  let full = native_pool_path dir path in
+  Db_worker_effect.bind
+    (File_sys.mkdir_p (Filename.dirname full))
+    (fun () ->
+      let oc = open_out_bin full in
+      Fun.protect
+        ~finally:(fun () -> close_out_noerr oc)
+        (fun () -> Out_channel.output_string oc contents);
+      Db_worker_effect.pure ())

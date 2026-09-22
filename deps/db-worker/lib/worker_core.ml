@@ -30,6 +30,9 @@ let init () =
     ignore Endpoint_export.export_get_all_page_content;
     ignore Endpoint_export.export_get_blocks_data;
     ignore Endpoint_export.export_blocks_as_format;
+    ignore Endpoint_export.export_db_binary;
+    ignore Endpoint_export.export_client_ops_db_binary;
+    ignore Endpoint_export.import_db_binary;
     ignore Endpoint_export.export_edn_endpoint;
     ignore Endpoint_export.import_edn_endpoint;
     ignore Endpoint_export.build_publishing_html;
@@ -75,6 +78,8 @@ let init () =
     ignore Endpoint_property.convert_tag_to_page;
     ignore Endpoint_property.convert_page_to_tag;
     ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
+    ignore Endpoint_property.get_display_properties_endpoint;
+    ignore Endpoint_property.reorder_display_property;
     ignore Endpoint_user.ensure_id_and_access_token;
     ignore Endpoint_crypt.arg;
     ignore Endpoint_block.get_blocks;

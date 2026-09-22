@@ -132,7 +132,7 @@ let sanitize_property_values_for_display db
 (* display-property-map* — no cljs volatile cache *)
 let display_property_map db (property_id : string) : Wire.t option =
   match entity db (Ident property_id) with
-  | Some p -> Some (Endpoint_property.display_property_map db p)
+  | Some p -> Some (Property_maps.display_property_map db p)
   | None -> None
 
 (* display-property-row — {:property-id :property :value}; nil when the
