@@ -1,7 +1,7 @@
 (ns frontend.components.cmdk.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
@@ -353,7 +353,7 @@
                        (highlight-content-query title input)
                        title)]
               :header (when (:block/parent entity)
-                        (block/breadcrumb {:disable-preview? true
+                        (block-breadcrumb/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
                                           {:disabled? true
                                            :variant :search-result
@@ -371,7 +371,7 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
-     :header (block/breadcrumb {:disable-preview? true
+     :header (block-breadcrumb/breadcrumb {:disable-preview? true
                                 :search? true} repo id
                                {:disabled? true
                                 :variant :search-result
@@ -516,7 +516,7 @@
                              {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id
+                              :header (block-breadcrumb/breadcrumb {:search? true} repo id
                                                         {:disabled? true
                                                          :variant :search-result
                                                          :block block})

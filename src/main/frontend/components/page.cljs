@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.class :as class-component]
             [frontend.components.db-based.page :as db-page]
@@ -531,7 +532,7 @@
                   (property-component/bidirectional-properties-area page config)))])
 
             (when (and block? (not sidebar?))
-              (block/breadcrumb {} repo (:block/uuid page) {:block page}))
+              (block-breadcrumb/breadcrumb {} repo (:block/uuid page) {:block page}))
 
             (when (ldb/library? page)
               (library/add-pages page))
