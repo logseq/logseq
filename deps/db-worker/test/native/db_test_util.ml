@@ -429,6 +429,8 @@ let initial_data_idents_edn =
     {:db/ident :logseq.property/used-template}
     {:db/ident :logseq.property.comments/blocks}
     {:db/ident :block/tags}
+    {:db/ident :block/page}
+    {:db/ident :block/title}
     {:db/ident :logseq.class/Tag}
     {:db/ident :logseq.class/Root}
     {:db/ident :logseq.class/Page}
@@ -774,6 +776,28 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :keyword
 :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.view/group-by-property
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000336\"
+     :block/name \"group by property\" :block/title \"View group by property\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/hide? true
+     :logseq.property/type :property
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.view/sort-groups-by-property
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000337\"
+     :block/name \"sort groups by\" :block/title \"View sort groups by\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/hide? true
+     :logseq.property/type :property
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
      :logseq.property/public? false
      }
     {:db/ident :block/alias

@@ -139,6 +139,24 @@
   (run %{test_bin})))
 
 (executable
+ (name test_db_view_native)
+ (modules test_db_view_native db_test_util test_shared)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  datascript_ocaml
+  alcotest
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_db_view_native.exe))
+ (action
+  (run %{test_bin})))
+
+(executable
  (name test_common_native)
  (modules test_common_native test_shared db_test_util)
  (modes native)

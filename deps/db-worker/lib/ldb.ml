@@ -6,8 +6,18 @@ open Datascript
 
 (* ---------- entity access ---------- *)
 
-let ent_of_id db (id : entity_id) : entity option = entity db (Entity_id id)
-let ent_of_ref db (r : entity_ref) : entity option = entity db r
+(* Test instrumentation: number of entity lookups — mirrors the cljs
+   view_test `with-redefs d/entity` counter. *)
+let entity_lookups = ref 0
+
+let counted_entity db (r : entity_ref) : entity option =
+  incr entity_lookups;
+  entity db r
+
+let ent_of_id db (id : entity_id) : entity option =
+  counted_entity db (Entity_id id)
+
+let ent_of_ref db (r : entity_ref) : entity option = counted_entity db r
 
 (* cljs entity-attr on a :_reverse attr scans the forward attr's datoms
    (db/-search) — it never requires :db/index. The engine's entity_attr
@@ -75,7 +85,7 @@ let ref_attr (db : db) (a : attr) : bool =
   match Schema.schema_attr_by_name (schema db) a with
   | Some sa when sa.value_type = Some RefType -> true
   | _ ->
-      (match entity db (Ident a) with
+      (match counted_entity db (Ident a) with
        | Some e -> value e "db/valueType" = Some (Keyword "db.type/ref")
        | None -> false)
 
@@ -83,7 +93,7 @@ let many_attr (db : db) (a : attr) : bool =
   match Schema.schema_attr_by_name (schema db) a with
   | Some sa -> sa.cardinality = Many
   | None ->
-      (match entity db (Ident a) with
+      (match counted_entity db (Ident a) with
        | Some e -> value e "db/cardinality" = Some (Keyword "db.cardinality/many")
        | None -> false)
 
@@ -93,7 +103,7 @@ let unique_attr (db : db) (a : attr) : bool =
   match Schema.schema_attr_by_name (schema db) a with
   | Some sa -> sa.unique <> None
   | None ->
-      (match entity db (Ident a) with
+      (match counted_entity db (Ident a) with
        | Some e -> value e "db/unique" <> None
        | None -> false)
 
@@ -259,7 +269,7 @@ let journal_title_of_day (day : int) (fmt : string) : string =
   Buffer.contents b
 
 let journal_title_format db : string =
-  match entity db (Ident "logseq.class/Journal") with
+  match counted_entity db (Ident "logseq.class/Journal") with
   | Some j ->
       (match value j "logseq.property.journal/title-format" with
        | Some (String s) -> s
@@ -284,10 +294,10 @@ let raw_title db (e : entity) : value option =
 let get_page db (ref_v : value) : entity option =
   match ref_v with
   | Int id -> ent_of_id db id
-  | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+  | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s ->
       if is_uuid_string s then
-        entity db (Lookup_ref ("block/uuid", Uuid s))
+        counted_entity db (Lookup_ref ("block/uuid", Uuid s))
       else
         (match first_page_by_name db s with
          | Some id -> ent_of_id db id
@@ -297,10 +307,10 @@ let get_page db (ref_v : value) : entity option =
 (* ldb/get-case-page — uuid or exact :block/title. *)
 let get_case_page db (ref_v : value) : entity option =
   match ref_v with
-  | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+  | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s ->
       if is_uuid_string s then
-        entity db (Lookup_ref ("block/uuid", Uuid s))
+        counted_entity db (Lookup_ref ("block/uuid", Uuid s))
       else
         (match first_page_by_title db s with
          | Some id -> ent_of_id db id
@@ -453,13 +463,13 @@ let ref_v_to_ref = function
 (* ldb/has-children? — cljs (:block/_parent e) is the filtered reverse
    lookup (minus property-created and closed-value children). *)
 let has_children db (ref_v : value) : bool =
-  match entity db (ref_v_to_ref ref_v) with
+  match counted_entity db (ref_v_to_ref ref_v) with
   | Some e -> parent_children e <> []
   | None -> false
 
 (* ldb/get-key-value — :kv/value of the kv entity named by ident. *)
 let get_key_value db (key_ident : string) : value option =
-  match entity db (Ident key_ident) with
+  match counted_entity db (Ident key_ident) with
   | Some e -> value e "kv/value"
   | None -> None
 
@@ -473,14 +483,14 @@ let get_graph_rtc_e2ee db = get_key_value db "logseq.kv/graph-rtc-e2ee?"
    through :block/name. *)
 (* entity-plus/db-based-graph? *)
 let db_based_graph (db : db) : bool =
-  match entity db (Ident "logseq.kv/db-type") with
+  match counted_entity db (Ident "logseq.kv/db-type") with
   | Some e -> value e "kv/value" = Some (String "db")
   | None -> false
 
 (* db-db/get-built-in-page — lookup by deterministic :builtin-block-uuid. *)
 let get_built_in_page db (title : string) : entity option =
   let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
-  entity db (Lookup_ref ("block/uuid", Uuid u))
+  counted_entity db (Lookup_ref ("block/uuid", Uuid u))
 
 (* common-initial-data/get-block-full-children-ids — the recursive
    :parent rule, as in cljs. *)
@@ -624,7 +634,7 @@ let get_block_and_children db ?(include_property_block : bool option) (block_uui
     in
     e :: List.concat_map aux children
   in
-  match entity db (Lookup_ref ("block/uuid", Uuid block_uuid)) with
+  match counted_entity db (Lookup_ref ("block/uuid", Uuid block_uuid)) with
   | Some e -> aux e
   | None -> []
 
@@ -696,7 +706,7 @@ let get_bidirectional_properties db (target_id : entity_id)
       |> List.filter (fun a ->
              match Schema.split_namespaced_attr a with
              | Some ns, _ when user_property_namespace ns || plugin_property a ->
-                 (match entity db (Ident a) with
+                 (match counted_entity db (Ident a) with
                   | Some p ->
                       value p "db/valueType" = Some (Keyword "db.type/ref")
                       && ref_ids p "logseq.property/classes" <> []
@@ -791,7 +801,7 @@ let get_block_parents db ?(depth : int option) (block_uuid : string) : entity li
   let rec loop uuid parents d =
     if d > depth then parents
     else
-      match entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
+      match counted_entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
       | None -> parents
       | Some e ->
           (match ref_ent e "block/parent" with
@@ -881,13 +891,13 @@ let inline_tag (raw_title : string) (tag_uuid : string) : bool =
 
 (* ldb/page-empty? — no raw :block/_parent children *)
 let page_empty (db : db) (page_id : entity_id) : bool =
-  match entity db (Entity_id page_id) with
+  match counted_entity db (Entity_id page_id) with
   | None -> false
   | Some page -> ref_ents page "block/_parent" = []
 
 (* ldb/get-first-child — first raw :block/_parent child by :block/order *)
 let get_first_child db (id : entity_id) : entity option =
-  match entity db (Entity_id id) with
+  match counted_entity db (Entity_id id) with
   | Some e ->
       (match sort_by_order (ref_ents e "block/_parent") with
        | c :: _ -> Some c
@@ -980,7 +990,7 @@ let sort_page_random_blocks _db (blocks : entity list) : entity list =
 (* ldb/last-child-block? — child (or its chain) is the right-most sibling.
    Child may be collapsed. *)
 let rec last_child_block db (parent_id : entity_id) (child_id : entity_id) : bool =
-  match entity db (Entity_id child_id) with
+  match counted_entity db (Entity_id child_id) with
   | None -> false
   | Some child ->
       if parent_id = child_id then true
@@ -1042,7 +1052,7 @@ let build_favorite_tx (favorite_uuid : string) : (attr * value) list =
 
 (* db/get-all-properties — all entities tagged logseq.class/Property. *)
 let get_all_properties (db : db) : entity list =
-  match entity db (Ident "logseq.class/Property") with
+  match counted_entity db (Ident "logseq.class/Property") with
   | None -> []
   | Some class_ent ->
       datoms db Avet ~a:"block/tags" ~v:(Ref class_ent.id) ()
