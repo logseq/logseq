@@ -973,7 +973,17 @@ let create_all_idents ~(properties : (string * property_decl) list)
 
 (* ---------- sqlite-util / property-build builders ---------- *)
 
-let timestamps () = [ "block/created-at", time_ms (); "block/updated-at", time_ms () ]
+(* cljs common-util/block-with-timestamps — :block/updated-at is always
+   stamped fresh; :block/created-at only fills in when the block doesn't
+   carry one already, so an explicit :block/created-at on a declared
+   page/class/block survives the tx pipeline. *)
+let block_with_timestamps (block : (string * edn) list)
+    : (string * edn) list =
+  merge' block
+    ( (match get' block "block/created-at" with
+       | Some _ -> []
+       | None -> [ "block/created-at", time_ms () ])
+    @ [ "block/updated-at", time_ms () ] )
 
 (* cljs sqlite-util/build-new-property *)
 let build_new_property ~db_ident ~(decl : property_decl) () : (string * edn) list =
@@ -996,8 +1006,8 @@ let build_new_property ~db_ident ~(decl : property_decl) () : (string * edn) lis
        Kw (if decl.p_cardinality_many then "db.cardinality/many" else "db.cardinality/one");
        "block/order", Str (gen_order_key ()) ]
      @ (if ref_type then [ "db/valueType", Kw "db.type/ref" ] else [])
-     @ decl.p_extra
-     @ timestamps ())
+     @ decl.p_extra)
+  |> block_with_timestamps
 
 (* cljs sqlite-util/build-new-class *)
 let build_new_class (block : (string * edn) list) : (string * edn) list =
@@ -1017,7 +1027,7 @@ let build_new_class (block : (string * edn) list) : (string * edn) list =
     then assoc' block' "logseq.property.class/extends" (Kw "logseq.class/Root")
     else block'
   in
-  merge' block'' (timestamps ())
+  block_with_timestamps block''
 
 (* cljs db-property-build/build-closed-value-block *)
 let build_closed_value_block ~block_uuid ~block_type ~value ~property_ident
@@ -1040,9 +1050,9 @@ let build_closed_value_block ~block_uuid ~block_type ~value ~property_ident
      @ (match icon with
         | Some m -> [ "logseq.property/icon", Map m ]
         | None -> [])
-     @ timestamps ()
      @ [ "block/order", Str (gen_order_key ()) ])
     extra
+  |> block_with_timestamps
 
 (* Handle for the entity a pvalue belongs to (cljs new-block) *)
 type new_block =
@@ -1065,9 +1075,9 @@ let build_property_value_block (block : new_block) ~(property_ident : string)
        "block/order", Str (gen_order_key ()) ]
      @ (if property_value_content_type prop_type property_ident
         then [ "logseq.property/value", value ]
-        else [ "block/title", value ])
-     @ timestamps ())
+        else [ "block/title", value ]))
     extra
+  |> block_with_timestamps
 
 (* cljs ->property-value-tx-m + build-pvalue +
    build-property-values-tx-m :pvalue-map? — for each property whose values
@@ -1213,9 +1223,9 @@ let block_tx ~(block_map : (string * edn) list) ~(page_id : edn)
          "block/parent",
          (match get' block_map "block/parent" with
           | Some p -> p
-          | None -> Map [ "db/id", page_id ]) ]
-       @ timestamps ())
+          | None -> Map [ "db/id", page_id ]) ])
       (dissoc' block_map [ "build/properties"; "build/tags"; "build/keep-uuid?" ])
+    |> block_with_timestamps
   in
   let with_props =
     match properties @ List.map (fun e -> e.pv_key, e.pv_ref) pvalue_entries with
@@ -1306,16 +1316,16 @@ let build_page_tx ~(page : (string * edn) list) ~(all_idents : string StringMap.
           "block/tags" (Set_ [ Kw "logseq.class/Page" ])
   in
   let final =
-    merge' page'
-      (timestamps ()
-       @ (match properties @ List.map (fun e -> e.pv_key, e.pv_ref) pvalue_entries with
+    block_with_timestamps
+      (merge' page'
+         ( (match properties @ List.map (fun e -> e.pv_key, e.pv_ref) pvalue_entries with
           | [] -> []
           | props -> block_properties props page_uuids all_idents ~translate_values)
        @ (* cljs build-page-tx emits :block/tags only when :build/tags is
             present *)
          (match tag_idents with
           | [] -> []
-          | _ -> [ "block/tags", tags_value ]))
+          | _ -> [ "block/tags", tags_value ])))
   in
   List.concat_map (fun e -> e.pv_txs) pvalue_entries @ [ final ]
 
