@@ -138,6 +138,15 @@ let preserve_state (f : unit -> 'a) : 'a =
   let enqueue_asset_sync_prev = !(Sync_assets.enqueue_asset_sync_fn) in
   let dl_missing_prev = !(Sync_assets.download_missing_remote_assets_fn) in
   let dl_if_missing_prev = !(Sync_assets.download_remote_assets_if_missing_fn) in
+  let dl_remote_prev = !(Sync_assets.download_remote_asset_fn) in
+  let upload_remote_prev = !(Sync_assets.upload_remote_asset_fn) in
+  let http_send_prev = !(Sync_assets.http_send_fn) in
+  let http_bytes_prev = !(Sync_assets.http_bytes_send_fn) in
+  let fail_fast_prev = !(Sync_util.fail_fast_fn) in
+  let transact_fn_prev = !(Db_transact.transact_fn) in
+  let pipeline_fn_prev = !(Db_tx.transact_pipeline_fn) in
+  let invalid_cb_prev = !(Db_tx.transact_invalid_callback) in
+  let handle_local_tx_prev = !(Sync_apply.handle_local_tx_ref) in
   let owner_source_prev = Sys.getenv_opt "LOGSEQ_OWNER_SOURCE" in
   let module SD = Sync_deps in
   let sd_encrypt_tx = !(SD.encrypt_tx_data)
@@ -216,6 +225,15 @@ let preserve_state (f : unit -> 'a) : 'a =
       Sync_assets.enqueue_asset_sync_fn := enqueue_asset_sync_prev;
       Sync_assets.download_missing_remote_assets_fn := dl_missing_prev;
       Sync_assets.download_remote_assets_if_missing_fn := dl_if_missing_prev;
+      Sync_assets.download_remote_asset_fn := dl_remote_prev;
+      Sync_assets.upload_remote_asset_fn := upload_remote_prev;
+      Sync_assets.http_send_fn := http_send_prev;
+      Sync_assets.http_bytes_send_fn := http_bytes_prev;
+      Sync_util.fail_fast_fn := fail_fast_prev;
+      Db_transact.transact_fn := transact_fn_prev;
+      Db_tx.transact_pipeline_fn := pipeline_fn_prev;
+      Db_tx.transact_invalid_callback := invalid_cb_prev;
+      Sync_apply.handle_local_tx_ref := handle_local_tx_prev;
       SD.encrypt_tx_data := sd_encrypt_tx;
       SD.decrypt_tx_data := sd_decrypt_tx;
       SD.ensure_graph_aes_key := sd_aes_key;
@@ -2734,6 +2752,1112 @@ let test_apply_remote_txs_keeps_browser_assets_lazy () =
         apply_remote_asset_tx_with_owner_source "browser" calls;
         check "no download calls" (!calls = []))
 
+(* cljs non-recycle-validation-entities *)
+let non_recycle_validation_entities
+    (validation : Db_validate.grouped_error list) : value list =
+  let recycle_idents =
+    [ "logseq.property.recycle/original-parent"
+    ; "logseq.property.recycle/original-page"
+    ; "logseq.property.recycle/original-order" ]
+  in
+  List.filter_map
+    (fun ge ->
+       let keep =
+         match ge.Db_validate.ge_entity with
+         | Map kvs -> (
+             match
+               List.find_map
+                 (fun (k, v) ->
+                    match k, v with
+                    | (Keyword "db/ident" | String "db/ident"), Keyword s ->
+                        Some s
+                    | _ -> None)
+                 kvs
+             with
+             | Some s -> not (List.mem s recycle_idents)
+             | None -> true)
+         | _ -> true
+       in
+       if keep then Some ge.ge_entity else None)
+    validation
+
+(* cljs worker-page/create! *)
+let page_create (conn : conn) (title : string) ?uuid () : unit =
+  ignore
+    (Outliner_page.create_bang conn title
+       ~opts:(fun () -> Outliner_page.create (Datascript.db conn) title ?uuid ())
+       ())
+
+(* cljs apply-remote-txs-preserves-many-page-property-values-test *)
+let test_apply_remote_txs_preserves_many_page_property_values () =
+  preserve_state (fun () ->
+      let property_id = "plugin.property._test_plugin/x7" in
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "remote object" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_txs = ref [] in
+      ignore
+        (Datascript.listen conn_b "capture-remote-many-page-property"
+           (fun r ->
+              remote_txs :=
+                !remote_txs
+                @ [ wire_map
+                      [ ( "tx-data"
+                        , Wire.Array
+                            (Db_normalize.normalize_tx_data r.db_after
+                               r.db_before
+                               (Db_normalize.wire_of_datoms r.tx_data)) )
+                      ; ( "outliner-op"
+                        , (match List.assoc_opt "outliner-op" r.tx_meta with
+                           | Some v -> Ds_wire.transit_of_value v
+                           | None -> Wire.Nil) ) ] ]));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-remote-many-page-property")
+        (fun () ->
+           let block_id =
+             (Option.get
+                (Db_test_util.find_block_by_content (Datascript.db conn_b)
+                   "remote object"))
+               .id
+           in
+           ignore
+             (Outliner_property.upsert_property conn_b (Some property_id)
+                (wire_map
+                   [ "logseq.property/type", kw "page"
+                   ; "db/cardinality", kw "db.cardinality/many" ])
+                ~property_name:(Some "x7") ~properties:[]);
+           Outliner_property.set_block_property conn_b (Wire.Int block_id)
+             property_id (Wire.String "Page y");
+           Outliner_property.set_block_property conn_b (Wire.Int block_id)
+             property_id (Wire.String "Page z");
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               with_pull_ok_prelude (fun () ->
+                   await_unit
+                     (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                        !remote_txs);
+                   let block' =
+                     Option.get
+                       (Db_test_util.find_block_by_content
+                          (Datascript.db conn_a) "remote object")
+                   in
+                   let names =
+                     List.filter_map
+                       (function
+                         | Ref id -> (
+                             match Ldb.ent_of_id (Datascript.db conn_a) id with
+                             | Some e -> Ldb.string_value e "block/name"
+                             | None -> None)
+                         | _ -> None)
+                       (Ldb.values block' property_id)
+                     |> List.sort compare
+                   in
+                   check "property values" (names = [ "page y"; "page z" ])))))
+
+(* cljs batch-transact-preserves-many-page-property-values-test *)
+let test_batch_transact_preserves_many_page_property_values () =
+  preserve_state (fun () ->
+      let property_id = "plugin.property._test_plugin/x7" in
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "remote object" } ] } ]
+          ()
+      in
+      let block_id =
+        (Option.get
+           (Db_test_util.find_block_by_content (Datascript.db conn)
+              "remote object"))
+          .id
+      in
+      ignore
+        (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+             ignore
+               (Outliner_property.upsert_property temp (Some property_id)
+                  (wire_map
+                     [ "logseq.property/type", kw "page"
+                     ; "db/cardinality", kw "db.cardinality/many" ])
+                  ~property_name:(Some "x7") ~properties:[]);
+             Outliner_property.set_block_property temp (Wire.Int block_id)
+               property_id (Wire.String "Page y");
+             Outliner_property.set_block_property temp (Wire.Int block_id)
+               property_id (Wire.String "Page z")));
+      let block' =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "remote object")
+      in
+      let names =
+        List.filter_map
+          (function
+            | Ref id -> (
+                match Ldb.ent_of_id (Datascript.db conn) id with
+                | Some e -> Ldb.string_value e "block/name"
+                | None -> None)
+            | _ -> None)
+          (Ldb.values block' property_id)
+        |> List.sort compare
+      in
+      check "property values" (names = [ "page y"; "page z" ]))
+
+(* cljs batch-transact-preserves-tag-many-page-property-values-test *)
+let test_batch_transact_preserves_tag_many_page_property_values () =
+  preserve_state (fun () ->
+      let property_id = "plugin.property._test_plugin/x7" in
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "remote object" } ] } ]
+          ()
+      in
+      ignore
+        (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+             ignore
+               (Outliner_property.upsert_property temp (Some property_id)
+                  (wire_map
+                     [ "logseq.property/type", kw "page"
+                     ; "db/cardinality", kw "db.cardinality/many" ])
+                  ~property_name:(Some "x7") ~properties:[]);
+             ignore
+               (Outliner_page.create_bang temp "Tag x"
+                  ~opts:(fun () ->
+                    Outliner_page.create (Datascript.db temp) "Tag x"
+                      ~class_:true ())
+                  ());
+             let tag_id =
+               (Option.get
+                  (Ldb.get_page (Datascript.db temp) (String "Tag x")))
+                 .id
+             in
+             Outliner_property.set_block_property temp (Wire.Int tag_id)
+               property_id (Wire.String "Page y");
+             Outliner_property.set_block_property temp (Wire.Int tag_id)
+               property_id (Wire.String "Page z")));
+      let tag' =
+        Option.get (Ldb.get_page (Datascript.db conn) (String "Tag x"))
+      in
+      check "is class" (Ldb.is_class tag');
+      let names =
+        List.filter_map
+          (function
+            | Ref id -> (
+                match Ldb.ent_of_id (Datascript.db conn) id with
+                | Some e -> Ldb.string_value e "block/name"
+                | None -> None)
+            | _ -> None)
+          (Ldb.values tag' property_id)
+        |> List.sort compare
+      in
+      check "property values" (names = [ "page y"; "page z" ]))
+
+(* cljs replace-attr-retract-with-retract-entity-preserves-input-order-test *)
+let test_replace_attr_retract_with_retract_entity_preserves_input_order () =
+  preserve_state (fun () ->
+      let property_id = "plugin.property._test_plugin/x7" in
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "remote object" } ] } ]
+          ()
+      in
+      let block_id =
+        (Option.get
+           (Db_test_util.find_block_by_content (Datascript.db conn)
+              "remote object"))
+          .id
+      in
+      let temp_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let batch_tx_data = ref [] in
+      let fl = Db_tx.flags_of temp_conn in
+      fl.Db_tx.skip_store <- true;
+      fl.Db_tx.batch_tx <- true;
+      ignore
+        (Datascript.listen temp_conn "capture-temp-batch" (fun r ->
+             batch_tx_data := !batch_tx_data @ r.tx_data));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten temp_conn "capture-temp-batch")
+        (fun () ->
+           ignore
+             (Outliner_property.upsert_property temp_conn (Some property_id)
+                (wire_map
+                   [ "logseq.property/type", kw "page"
+                   ; "db/cardinality", kw "db.cardinality/many" ])
+                ~property_name:(Some "x7") ~properties:[]);
+           Outliner_property.set_block_property temp_conn
+             (Wire.Int block_id) property_id (Wire.String "Page y");
+           Outliner_property.set_block_property temp_conn
+             (Wire.Int block_id) property_id (Wire.String "Page z");
+           let tx_data' =
+             Db_normalize.replace_attr_retract_with_retract_entity
+               (Datascript.db temp_conn)
+               (Db_normalize.wire_of_datoms !batch_tx_data)
+           in
+           let nth w i = List.nth (wire_tx_items w) i in
+           let find_index pred =
+             let rec go i = function
+               | [] -> None
+               | d :: rest -> if pred d then Some i else go (i + 1) rest
+             in
+             go 0 tx_data'
+           in
+           let schema_index =
+             find_index (fun d ->
+                 nth d 1 = kw "db/ident" && nth d 2 = kw property_id)
+           in
+           let value_index =
+             find_index (fun d ->
+                 nth d 0 = Wire.Int block_id && nth d 1 = kw property_id
+                 && nth d 4 = Wire.Bool true)
+           in
+           check "schema index found" (schema_index <> None);
+           check "value index found" (value_index <> None);
+           match schema_index, value_index with
+           | Some s, Some v -> check "schema before value" (s < v)
+           | _ -> ()))
+
+(* cljs local-checksum-matches-recompute-after-post-pipeline-update-test *)
+let test_local_checksum_matches_recompute_after_post_pipeline_update () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let page_id =
+            match Ldb.value parent "block/page" with
+            | Some (Ref id | Int id) -> id
+            | _ -> failwith "no page ref"
+          in
+          let parent_id = parent.id in
+          let block_uuid = fresh_uuid () in
+          let now = "1773661308002" in
+          let tx_report' =
+            Datascript.with_tx_string (Datascript.db conn)
+              ~tx_meta:[ "outliner-op", Keyword "insert-blocks" ]
+              (Printf.sprintf
+                 "[[:db/add -1 :block/uuid #uuid \"%s\"]\
+                  [:db/add -1 :block/title \"Checksum Block\"]\
+                  [:db/add -1 :block/parent %d]\
+                  [:db/add -1 :block/page %d]\
+                  [:db/add -1 :block/order \"a0\"]\
+                  [:db/add -1 :block/created-at %s]\
+                  [:db/add -1 :block/updated-at %s]]"
+                 block_uuid parent_id page_id now now)
+          in
+          let tx_report = Worker_pipeline.transact_pipeline tx_report' in
+          Sync_client.update_local_sync_checksum test_repo tx_report;
+          check "checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum tx_report.db_after))))
+
+(* cljs local-checksum-listener-updates-in-release-mode-test *)
+let test_local_checksum_listener_updates_in_release_mode () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Sync_state.dev_or_test := false;
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          ignore
+            (Datascript.transact_conn conn
+               [ Add
+                   ( Entity_id parent.id
+                   , "block/title"
+                   , String "Release checksum block" ) ]);
+          check "checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs local-checksum-ignores-aborted-batch-transact-test *)
+let test_local_checksum_ignores_aborted_batch_transact () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          let checksum_before =
+            Sync_client_op.get_local_checksum test_repo
+          in
+          let title_before = Ldb.value parent "block/title" in
+          check "aborted batch throws"
+            (try
+               ignore
+                 (Db_tx.batch_transact conn
+                    ~tx_meta:[ "outliner-op", Keyword "checksum-abort-test" ]
+                    (fun c ->
+                       ignore
+                         (Db_transact.transact c
+                            [ db_add (Wire.Int parent.id) "block/title"
+                                (Wire.String "aborted batch title") ]
+                            []);
+                       failwith "abort checksum batch"));
+               false
+             with _ -> true);
+          let parent' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) parent.id)
+          in
+          check "title unchanged"
+            (Ldb.value parent' "block/title" = title_before);
+          check "checksum unchanged"
+            (Some
+               (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+             = checksum_before
+             && Sync_client_op.get_local_checksum test_repo
+                = checksum_before);
+          ignore
+            (Db_tx.batch_transact conn
+               ~tx_meta:[ "outliner-op", Keyword "checksum-commit-test" ]
+               (fun c ->
+                  ignore
+                    (Db_transact.transact c
+                       [ db_add (Wire.Int parent.id) "block/title"
+                           (Wire.String "committed batch title") ]
+                       [])));
+          check "checksum updated"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs local-checksum-updates-for-final-batch-report-with-batch-flag-test *)
+let test_local_checksum_updates_for_final_batch_report_with_batch_flag () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          let flags = Db_tx.flags_of conn in
+          flags.Db_tx.batch_tx <- true;
+          Fun.protect
+            ~finally:(fun () -> flags.Db_tx.batch_tx <- false)
+            (fun () ->
+               ignore
+                 (Datascript.transact_conn conn
+                    ~tx_meta:
+                      [ "outliner-op", Keyword "checksum-final-batch-test"
+                      ; "batch-final-tx-report?", Bool true ]
+                    [ Add
+                        ( Entity_id parent.id
+                        , "block/title"
+                        , String "final batch report title" ) ]));
+          check "checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs local-checksum-updates-non-batch-report-with-stale-batch-flag-test *)
+let test_local_checksum_updates_non_batch_report_with_stale_batch_flag () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          let flags = Db_tx.flags_of conn in
+          flags.Db_tx.batch_tx <- true;
+          Fun.protect
+            ~finally:(fun () -> flags.Db_tx.batch_tx <- false)
+            (fun () ->
+               ignore
+                 (Datascript.transact_conn conn
+                    ~tx_meta:
+                      [ ( "outliner-op"
+                        , Keyword "checksum-stale-batch-flag-test" ) ]
+                    [ Add
+                        ( Entity_id parent.id
+                        , "block/title"
+                        , String
+                            "non-batch tx while stale batch flag is set" ) ]));
+          check "checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs local-checksum-updates-ldb-non-batch-report-with-stale-batch-flag-test *)
+let test_local_checksum_updates_ldb_non_batch_report_with_stale_batch_flag
+    () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          let flags = Db_tx.flags_of conn in
+          flags.Db_tx.batch_tx <- true;
+          Fun.protect
+            ~finally:(fun () -> flags.Db_tx.batch_tx <- false)
+            (fun () ->
+               ignore
+                 (Db_transact.transact conn
+                    [ db_add (Wire.Int parent.id) "block/title"
+                        (Wire.String
+                           "ldb non-batch tx while stale batch flag is set") ]
+                    [ ( "outliner-op"
+                      , Keyword "checksum-ldb-stale-batch-flag-test" ) ]));
+          check "checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs batch-transact-tags-inner-tx-reports-test *)
+let test_batch_transact_tags_inner_tx_reports () =
+  preserve_state (fun () ->
+      let conn, _ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let captured = ref [] in
+      with_datascript_conns conn None (fun () ->
+          ignore
+            (Datascript.listen conn "capture-batch-tx-meta" (fun r ->
+                 captured := !captured @ [ r.tx_meta ]));
+          Fun.protect
+            ~finally:(fun () ->
+                Datascript.unlisten conn "capture-batch-tx-meta")
+            (fun () ->
+               ignore
+                 (Db_tx.batch_transact conn
+                    ~tx_meta:
+                      [ "outliner-op", Keyword "checksum-batch-final-test" ]
+                    (fun c ->
+                       ignore
+                         (Db_transact.transact c
+                            [ db_add (Wire.Int parent.id) "block/title"
+                                (Wire.String "inner batch report title") ]
+                            [ ( "outliner-op"
+                              , Keyword "checksum-inner-batch-test" ) ]))));
+          match !captured with
+          | [ inner; final ] ->
+              check "inner batch-tx-report?"
+                (tx_meta_get "batch-tx-report?" inner
+                 = Some (Bool true));
+              check "inner no batch-final"
+                (tx_meta_get "batch-final-tx-report?" inner = None);
+              check "final batch-final-tx-report?"
+                (tx_meta_get "batch-final-tx-report?" final
+                 = Some (Bool true));
+              check "final no batch-tx-report?"
+                (tx_meta_get "batch-tx-report?" final = None)
+          | _ ->
+              Alcotest.failf "expected 2 captured tx-metas, got %d"
+                (List.length !captured)))
+
+(* cljs remote-batch-drops-follow-up-ops-for-stale-created-block-test *)
+let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let page_id =
+        match Ldb.value parent "block/page" with
+        | Some (Ref id | Int id) -> id
+        | _ -> failwith "no page ref"
+      in
+      let missing_parent_uuid = fresh_uuid () in
+      let stale_child_uuid = fresh_uuid () in
+      let now = Wire.Int64 1783110501711L in
+      let client = mk_client () in
+      let remote_txs =
+        [ wire_map
+            [ "t", Wire.Int 1; "outliner-op", kw "insert-blocks"
+            ; ( "tx-data"
+              , Wire.Array
+                  [ db_add (Wire.String "stale-child") "block/uuid"
+                      (Wire.Uuid stale_child_uuid)
+                  ; db_add (Wire.String "stale-child") "block/title"
+                      (Wire.String "stale child")
+                  ; db_add (Wire.String "stale-child") "block/parent"
+                      (block_uuid_lookup (Wire.Uuid missing_parent_uuid))
+                  ; db_add (Wire.String "stale-child") "block/page"
+                      (Wire.Int page_id)
+                  ; db_add (Wire.String "stale-child") "block/order"
+                      (Wire.String "a0")
+                  ; db_add (Wire.String "stale-child") "block/created-at"
+                      now
+                  ; db_add (Wire.String "stale-child") "block/updated-at"
+                      now ] ) ]
+        ; wire_map
+            [ "t", Wire.Int 2; "outliner-op", kw "save-block"
+            ; ( "tx-data"
+              , Wire.Array
+                  [ db_add
+                      (block_uuid_lookup (Wire.Uuid stale_child_uuid))
+                      "block/title"
+                      (Wire.String "stale child update") ] ) ] ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          with_pull_ok_prelude (fun () ->
+              (match
+                 (try
+                    await_unit
+                      (Sync_apply.apply_remote_txs test_repo client
+                         remote_txs);
+                    None
+                  with _ -> Some ())
+               with
+               | Some () -> Alcotest.fail "apply-remote-txs raised"
+               | None -> ());
+              check "stale child absent"
+                (ent_by_block_uuid (Datascript.db conn) stale_child_uuid
+                 = None);
+              check "checksum aligned"
+                (Sync_client_op.get_local_checksum test_repo
+                 = Some
+                     (Db_sync_checksum.recompute_checksum
+                        (Datascript.db conn))))))
+
+(* cljs reaction-add-enqueues-pending-sync-tx-test *)
+let test_reaction_add_enqueues_pending_sync_tx () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "toggle-reaction"
+                   ; Wire.Array
+                       [ Wire.Uuid (ent_block_uuid parent)
+                       ; Wire.String "+1"; Wire.Nil ] ] ]
+               local_tx_meta);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let txs =
+            List.concat_map
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 wire_tx_items e.tx)
+              pending
+          in
+          check "pending" (pending <> []);
+          check "outliner-op"
+            ((List.hd pending).outliner_op = Some "toggle-reaction");
+          check "emoji datom"
+            (List.exists
+               (function
+                 | Wire.Array
+                     (Wire.Keyword "db/add" :: _
+                     :: Wire.Keyword "logseq.property.reaction/emoji-id"
+                     :: Wire.String "+1" :: _) -> true
+                 | _ -> false)
+               txs)))
+
+(* cljs db-migration-tx-enqueues-db-migrate-pending-op-test *)
+let test_db_migration_tx_enqueues_db_migrate_pending_op () =
+  preserve_state (fun () ->
+      let conn = Db_test_util.create_conn () in
+      let ops = new_client_ops_db () in
+      let block_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int (-1)) "block/uuid"
+                   (Wire.Uuid block_uuid)
+               ; db_add (Wire.Int (-1)) "block/title"
+                   (Wire.String "migration-only") ]
+               [ "db-migrate?", Bool true
+               ; "skip-validate-db?", Bool true ]);
+          let pending = Sync_apply.pending_txs test_repo () in
+          check "one pending" (List.length pending = 1);
+          check "outliner-op"
+            ((List.hd pending).outliner_op = Some "db-migrate")))
+
+(* cljs rename-page-enqueues-canonical-save-block-pending-op-test *)
+let test_rename_page_enqueues_canonical_save_block_pending_op () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let page_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          page_create conn "Rename Me" ~uuid:page_uuid ();
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "rename-page"
+                   ; Wire.Array [ Wire.Uuid page_uuid; Wire.String "Renamed" ] ] ]
+               local_tx_meta);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd (List.rev pending) in
+          match row.Sync_client_op.forward_outliner_ops with
+          | Wire.Array [ Wire.Keyword op; Wire.Array [ block; _opts ] ]
+            :: _ ->
+              check "op" (op = "save-block");
+              check "block uuid"
+                (Wire.get "block/uuid" block = Some (Wire.Uuid page_uuid));
+              check "block title"
+                (Wire.get "block/title" block
+                 = Some (Wire.String "Renamed"))
+          | ops ->
+              Alcotest.failf "unexpected forward ops: %d entries"
+                (List.length ops)))
+
+(* cljs move-blocks-up-down-enqueues-canonical-move-blocks-pending-op-test *)
+let test_move_blocks_up_down_enqueues_canonical_move_blocks_pending_op () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, child2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "move-blocks-up-down"
+                   ; Wire.Array
+                       [ Wire.Array [ Wire.Int child2.id ]
+                       ; Wire.Bool true ] ] ]
+               local_tx_meta);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd pending in
+          match row.Sync_client_op.forward_outliner_ops with
+          | Wire.Array [ Wire.Keyword op; Wire.Array [ ids; up ] ] :: _ ->
+              check "op" (op = "move-blocks-up-down");
+              check "ids" (wire_list ids <> []);
+              check "up?" (up = Wire.Bool true)
+          | _ -> Alcotest.fail "unexpected forward ops"))
+
+(* cljs indent-outdent-enqueues-canonical-move-blocks-pending-op-test *)
+let test_indent_outdent_enqueues_canonical_move_blocks_pending_op () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, child2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "indent-outdent-blocks"
+                   ; Wire.Array
+                       [ Wire.Array [ Wire.Int child2.id ]
+                       ; Wire.Bool true; Wire.Map [] ] ] ]
+               local_tx_meta);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd pending in
+          match row.Sync_client_op.forward_outliner_ops with
+          | Wire.Array [ Wire.Keyword op; Wire.Array [ _ids; target; opts ] ]
+            :: _ ->
+              check "op" (op = "move-blocks");
+              check "target" (target <> Wire.Nil);
+              check "sibling? key"
+                (Wire.get "sibling?" opts <> None);
+              check "no source-op"
+                (Wire.get "source-op" opts = None)
+          | _ -> Alcotest.fail "unexpected forward ops"))
+
+let move_blocks_tx_meta : Wire.t =
+  wire_map
+    [ "client-id", Wire.String "test-client"
+    ; "local-tx?", Wire.Bool true
+    ; "outliner-op", kw "move-blocks" ]
+
+let indent_outdent_block (conn : conn) (block : entity) (indent : bool)
+    (meta : Wire.t) : unit =
+  ignore
+    (apply_ops conn
+       [ Wire.Array
+           [ kw "indent-outdent-blocks"
+           ; Wire.Array
+               [ Wire.Array [ Wire.Int block.id ]
+               ; Wire.Bool indent
+               ; Wire.Map
+                   [ kw "parent-original", Wire.Nil
+                   ; kw "logical-outdenting?", Wire.Nil ] ] ] ]
+       meta)
+
+let check_move_op (label : string) (ops : Wire.t list) (ids_uuid : string)
+    (target_uuid : string) : unit =
+  match ops with
+  | Wire.Array [ Wire.Keyword op; Wire.Array [ ids; target; opts ] ] :: _
+    ->
+      check (label ^ " op") (op = "move-blocks");
+      check (label ^ " ids")
+        (ids = Wire.Array [ Wire.Uuid ids_uuid ]);
+      check (label ^ " target") (target = Wire.Uuid target_uuid);
+      check (label ^ " sibling?")
+        (Wire.get "sibling?" opts = Some (Wire.Bool true))
+  | _ -> Alcotest.fail (label ^ ": unexpected ops")
+
+(* cljs indent-outdent-direct-outdent-last-child-builds-forward-and-inverse-move-history-test *)
+let
+    test_indent_outdent_direct_outdent_last_child_builds_forward_and_inverse_move_history
+    () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, child2, child3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          indent_outdent_block conn child3 false move_blocks_tx_meta;
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd pending in
+          check_move_op "forward" row.Sync_client_op.forward_outliner_ops
+            (ent_block_uuid child3) (ent_block_uuid parent);
+          check_move_op "inverse" row.Sync_client_op.inverse_outliner_ops
+            (ent_block_uuid child3) (ent_block_uuid child2)))
+
+(* cljs indent-outdent-direct-outdent-with-right-sibling-persists-semantic-move-history-test *)
+let
+    test_indent_outdent_direct_outdent_with_right_sibling_persists_semantic_move_history
+    () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, child2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          indent_outdent_block conn child2 false move_blocks_tx_meta;
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd pending in
+          check_move_op "forward" row.Sync_client_op.forward_outliner_ops
+            (ent_block_uuid child2) (ent_block_uuid parent);
+          check_move_op "inverse" row.Sync_client_op.inverse_outliner_ops
+            (ent_block_uuid child2) (ent_block_uuid child1)))
+
+(* cljs indent-outdent-direct-outdent-undo-restores-right-sibling-parent-test *)
+let test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
+    () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, child2, child3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let child2_uuid = ent_block_uuid child2 in
+      let child3_uuid = ent_block_uuid child3 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          indent_outdent_block conn child2 false local_tx_meta;
+          let pending = Sync_apply.pending_txs test_repo () in
+          let tx_id = (List.hd pending).tx_id in
+          let parent_uuid_of (u : string) : string option =
+            match ent_by_block_uuid (Datascript.db conn) u with
+            | Some e -> (
+                match Ldb.value e "block/parent" with
+                | Some (Ref id | Int id) -> (
+                    match Ldb.ent_of_id (Datascript.db conn) id with
+                    | Some p -> Some (ent_block_uuid p)
+                    | None -> None)
+                | _ -> None)
+            | None -> None
+          in
+          check "child3 parented to child2"
+            (parent_uuid_of child3_uuid = Some child2_uuid);
+          let undo_result =
+            Sync_apply.apply_history_action test_repo tx_id true []
+          in
+          check "undo applied"
+            (Wire.get "applied?" undo_result = Some (Wire.Bool true));
+          check "child2 restored"
+            (parent_uuid_of child2_uuid = Some parent_uuid);
+          check "child3 restored"
+            (parent_uuid_of child3_uuid = Some parent_uuid)))
+
+(* cljs indent-outdent-undo-enqueues-concrete-move-blocks-history-test *)
+let test_indent_outdent_undo_enqueues_concrete_move_blocks_history () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, child2, _c3 = setup_parent_child () in
+      let invalid_payload = ref false in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Db_tx.transact_invalid_callback :=
+            Some (fun _report _errors -> invalid_payload := true);
+          indent_outdent_block conn child2 false local_tx_meta;
+          let pending = Sync_apply.pending_txs test_repo () in
+          let row = List.hd pending in
+          let tx_id = row.tx_id in
+          let undo_result =
+            Sync_apply.apply_history_action test_repo tx_id true []
+          in
+          let redo_result =
+            Sync_apply.apply_history_action test_repo tx_id false []
+          in
+          check "op"
+            (match row.Sync_client_op.forward_outliner_ops with
+             | Wire.Array [ Wire.Keyword op; _ ] :: _ ->
+                 op = "move-blocks"
+             | _ -> false);
+          check "undo applied"
+            (Wire.get "applied?" undo_result = Some (Wire.Bool true));
+          check "redo applied"
+            (Wire.get "applied?" redo_result = Some (Wire.Bool true));
+          check "no invalid tx" (not !invalid_payload);
+          let child2' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) child2.id)
+          in
+          check "child2 title"
+            (Ldb.value child2' "block/title" = Some (String "child 2"))))
+
+(* cljs enqueue-local-tx-preserves-existing-tx-id-test *)
+let test_enqueue_local_tx_preserves_existing_tx_id () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let tx_report =
+        Datascript.with_tx (Datascript.db conn)
+          ~tx_meta:
+            [ "client-id", String "test-client"
+            ; "local-tx?", Bool true
+            ; "db-sync/tx-id", Uuid tx_id
+            ; "outliner-op", Keyword "save-block" ]
+          [ Add (Entity_id child1.id, "block/title", String "stable tx id") ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_apply.enqueue_local_tx test_repo tx_report;
+          let pending = Sync_apply.pending_txs test_repo () in
+          check "tx-id" ((List.hd pending).tx_id = tx_id)))
+
+(* cljs handle-local-tx-enqueues-asset-op-for-local-asset-checksum-test *)
+let test_handle_local_tx_enqueues_asset_op_for_local_asset_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let asset_uuid = fresh_uuid () in
+      let tx_report =
+        Datascript.with_tx (Datascript.db conn)
+          ~tx_meta:
+            [ "client-id", String "test-client"
+            ; "local-tx?", Bool true
+            ; "outliner-op", Keyword "save-block" ]
+          [ Datascript.Entity
+              { db_id = None
+              ; attrs =
+                  [ "block/uuid", One_value (Uuid asset_uuid)
+                  ; "block/title", One_value (String "asset.png")
+                  ; ( "logseq.property.asset/type"
+                    , One_value (String "png") )
+                  ; ( "logseq.property.asset/checksum"
+                    , One_value (String "sha-256-value") ) ] } ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_apply.handle_local_tx test_repo tx_report;
+          let asset_ops = Sync_client_op.get_all_asset_ops test_repo in
+          check "one asset op"
+            (Sync_client_op.get_unpushed_asset_ops_count test_repo = 1);
+          match asset_ops with
+          | asset_op :: _ -> (
+              match Wire.get "update-asset" asset_op with
+              | Some (Wire.Array [ Wire.Keyword "update-asset"; _t; m ]) ->
+                  check "block-uuid"
+                    (Wire.get "block-uuid" m
+                     = Some (Wire.Uuid asset_uuid))
+              | _ -> Alcotest.fail "missing :update-asset op")
+          | [] -> Alcotest.fail "no asset ops"))
+
+(* cljs process-pending-asset-op! *)
+let process_pending_asset_op (asset_uuid : string) : bool * int * int =
+  Sync_client_op.add_asset_ops test_repo
+    [ Wire.Array
+        [ kw "update-asset"; Wire.Int 10
+        ; wire_map [ "block-uuid", Wire.Uuid asset_uuid ] ] ];
+  let fail_fast_called = ref false in
+  let broadcast_count = ref 0 in
+  let asset_op = List.hd (Sync_client_op.get_all_asset_ops test_repo) in
+  Sync_util.fail_fast_fn :=
+    (fun tag _data ->
+       fail_fast_called := true;
+       Sync_util.ex_info tag []);
+  (try
+     await_unit
+       (Sync_assets.process_asset_op test_repo "graph-id" asset_op
+          ~current_client:(fun _ ->
+             Some (Sync_state.new_client test_repo))
+          ~broadcast_rtc_state:(fun _ -> incr broadcast_count))
+   with _ -> ());
+  ( !fail_fast_called, !broadcast_count
+  , Sync_client_op.get_unpushed_asset_ops_count test_repo )
+
+let check_asset_op_dropped (result : bool * int * int) : unit =
+  let fail_fast_called, broadcast_count, pending_count = result in
+  check "no fail-fast" (not fail_fast_called);
+  check "one broadcast" (broadcast_count = 1);
+  check "op dropped" (pending_count = 0)
+
+(* cljs process-asset-op-drops-update-when-asset-entity-is-missing-test *)
+let test_process_asset_op_drops_update_when_asset_entity_is_missing () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let asset_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          check_asset_op_dropped (process_pending_asset_op asset_uuid)))
+
+(* cljs process-asset-op-drops-update-when-asset-type-is-missing-test *)
+let test_process_asset_op_drops_update_when_asset_type_is_missing () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let asset_uuid = fresh_uuid () in
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Entity
+               { db_id = None
+               ; attrs =
+                   [ "block/uuid", One_value (Uuid asset_uuid)
+                   ; "block/title"
+                   , One_value (String "asset-without-type")
+                   ; ( "logseq.property.asset/checksum"
+                     , One_value (String "sha-256-value") ) ] } ]);
+      with_datascript_conns conn (Some ops) (fun () ->
+          check_asset_op_dropped (process_pending_asset_op asset_uuid)))
+
+(* cljs process-asset-op-drops-update-when-asset-checksum-is-missing-test *)
+let test_process_asset_op_drops_update_when_asset_checksum_is_missing () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let asset_uuid = fresh_uuid () in
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Entity
+               { db_id = None
+               ; attrs =
+                   [ "block/uuid", One_value (Uuid asset_uuid)
+                   ; "block/title", One_value (String "asset.png")
+                   ; ( "logseq.property.asset/type"
+                     , One_value (String "png") ) ] } ]);
+      with_datascript_conns conn (Some ops) (fun () ->
+          check_asset_op_dropped (process_pending_asset_op asset_uuid)))
+
+(* cljs process-asset-op-drops-update-when-required-asset-attributes-are-blank-test *)
+let test_process_asset_op_drops_update_when_required_asset_attributes_are_blank
+    () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let asset_uuid = fresh_uuid () in
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Entity
+               { db_id = None
+               ; attrs =
+                   [ "block/uuid", One_value (Uuid asset_uuid)
+                   ; "block/title", One_value (String "asset.png")
+                   ; ( "logseq.property.asset/type"
+                     , One_value (String "png") )
+                   ; ( "logseq.property.asset/checksum"
+                     , One_value (String "") ) ] } ]);
+      with_datascript_conns conn (Some ops) (fun () ->
+          check_asset_op_dropped (process_pending_asset_op asset_uuid)))
+
+(* cljs process-asset-ops-retries-missing-file-without-blocking-later-ops-test *)
+let test_process_asset_ops_retries_missing_file_without_blocking_later_ops
+    () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let repo = test_repo ^ "-asset-retry" in
+      let missing_uuid = fresh_uuid () in
+      let later_uuid = fresh_uuid () in
+      let restored = ref false in
+      let upload_calls = ref [] in
+      let broadcast_count = ref 0 in
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Entity
+               { db_id = None
+               ; attrs =
+                   [ "block/uuid", One_value (Uuid missing_uuid)
+                   ; "block/title", One_value (String "missing.pdf")
+                   ; ( "logseq.property.asset/type"
+                     , One_value (String "pdf") )
+                   ; ( "logseq.property.asset/checksum"
+                     , One_value (String "missing-sha-256") )
+                   ; ( "block/tags"
+                     , One_value (Ref_to (Ident "logseq.class/Asset")) ) ] }
+           ; Datascript.Entity
+               { db_id = None
+               ; attrs =
+                   [ "block/uuid", One_value (Uuid later_uuid)
+                   ; "block/title", One_value (String "later.pdf")
+                   ; ( "logseq.property.asset/type"
+                     , One_value (String "pdf") )
+                   ; ( "logseq.property.asset/checksum"
+                     , One_value (String "later-sha-256") )
+                   ; ( "block/tags"
+                     , One_value (Ref_to (Ident "logseq.class/Asset")) ) ] }
+           ]);
+      Worker_state.set_datascript_conn repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns repo ops;
+      Fun.protect
+        ~finally:(fun () ->
+            Worker_state.drop_datascript_conn repo;
+            Hashtbl.remove Sync_state.client_ops_conns repo)
+        (fun () ->
+           let client = Sync_state.new_client repo in
+           client.Sync_state.graph_id <- Some "graph-id";
+           Sync_assets.upload_remote_asset_fn :=
+             (fun _repo _graph_id asset_uuid _asset_type _checksum ->
+                upload_calls := !upload_calls @ [ asset_uuid ];
+                if asset_uuid = missing_uuid && not !restored then
+                  Db_worker_effect.error
+                    (Sync_util.ex_info "read-asset failed"
+                       [ ( Wire.Keyword "type"
+                         , kw "rtc.exception/read-asset-failed" ) ])
+                else Db_worker_effect.pure ());
+           (* cljs rebinds ldb/transact! to a bare d/transact! so the
+              remote-metadata write survives the test's unvalidated graph *)
+           Db_transact.transact_fn :=
+             (fun conn tx_data _tx_meta ->
+                Some
+                  (Datascript.transact_conn_string conn
+                     ("["
+                      ^ String.concat " "
+                          (List.map Ds_wire.edn_of_transit tx_data)
+                      ^ "]")));
+           let process_asset_ops () =
+             await_unit
+               (Sync_assets.process_asset_ops repo client
+                  ~current_client:(fun _ -> Some client)
+                  ~broadcast_rtc_state:(fun _ -> incr broadcast_count))
+           in
+           Sync_client_op.add_asset_ops repo
+             [ Wire.Array
+                 [ kw "update-asset"; Wire.Int 10
+                 ; wire_map [ "block-uuid", Wire.Uuid missing_uuid ] ]
+             ; Wire.Array
+                 [ kw "update-asset"; Wire.Int 11
+                 ; wire_map [ "block-uuid", Wire.Uuid later_uuid ] ] ];
+           process_asset_ops ();
+           let pending_after_missing =
+             Sync_client_op.get_unpushed_asset_ops_count repo
+           in
+           let later_remote_metadata =
+             match ent_by_block_uuid (Datascript.db conn) later_uuid with
+             | Some e ->
+                 Ldb.value e "logseq.property.asset/remote-metadata"
+             | None -> None
+           in
+           restored := true;
+           process_asset_ops ();
+           let pending_after_retry =
+             Sync_client_op.get_unpushed_asset_ops_count repo
+           in
+           check "upload calls"
+             (!upload_calls = [ missing_uuid; later_uuid; missing_uuid ]);
+           check "pending after missing" (pending_after_missing = 1);
+           check "later remote metadata"
+             (match later_remote_metadata with
+              | Some v ->
+                  let m = Ds_wire.transit_of_value v in
+                  Wire.get "checksum" m
+                  = Some (Wire.String "later-sha-256")
+                  && Wire.get "type" m = Some (Wire.String "pdf")
+              | None -> false);
+           check "pending after retry" (pending_after_retry = 0);
+           check "missing remote metadata"
+             (match ent_by_block_uuid (Datascript.db conn) missing_uuid with
+              | Some e -> (
+                  match
+                    Ldb.value e "logseq.property.asset/remote-metadata"
+                  with
+                  | Some v ->
+                      let m = Ds_wire.transit_of_value v in
+                      Wire.get "checksum" m
+                      = Some (Wire.String "missing-sha-256")
+                      && Wire.get "type" m = Some (Wire.String "pdf")
+                  | None -> false)
+              | None -> false);
+           check "broadcasts" (!broadcast_count = 3)))
+
 (*__TESTS__*)
 
 let () =
@@ -2865,4 +3989,107 @@ let () =
         ; Alcotest.test_case
             "apply-remote-txs-keeps-browser-assets-lazy"
             `Quick test_apply_remote_txs_keeps_browser_assets_lazy
+        ; Alcotest.test_case
+            "apply-remote-txs-preserves-many-page-property-values"
+            `Quick
+            test_apply_remote_txs_preserves_many_page_property_values
+        ; Alcotest.test_case
+            "batch-transact-preserves-many-page-property-values"
+            `Quick
+            test_batch_transact_preserves_many_page_property_values
+        ; Alcotest.test_case
+            "batch-transact-preserves-tag-many-page-property-values"
+            `Quick
+            test_batch_transact_preserves_tag_many_page_property_values
+        ; Alcotest.test_case
+            "replace-attr-retract-with-retract-entity-preserves-input-order"
+            `Quick
+            test_replace_attr_retract_with_retract_entity_preserves_input_order
+        ; Alcotest.test_case
+            "local-checksum-matches-recompute-after-post-pipeline-update"
+            `Quick
+            test_local_checksum_matches_recompute_after_post_pipeline_update
+        ; Alcotest.test_case
+            "local-checksum-listener-updates-in-release-mode"
+            `Quick test_local_checksum_listener_updates_in_release_mode
+        ; Alcotest.test_case
+            "local-checksum-ignores-aborted-batch-transact"
+            `Quick test_local_checksum_ignores_aborted_batch_transact
+        ; Alcotest.test_case
+            "local-checksum-updates-for-final-batch-report-with-batch-flag"
+            `Quick
+            test_local_checksum_updates_for_final_batch_report_with_batch_flag
+        ; Alcotest.test_case
+            "local-checksum-updates-non-batch-report-with-stale-batch-flag"
+            `Quick
+            test_local_checksum_updates_non_batch_report_with_stale_batch_flag
+        ; Alcotest.test_case
+            "local-checksum-updates-ldb-non-batch-report-with-stale-batch-flag"
+            `Quick
+            test_local_checksum_updates_ldb_non_batch_report_with_stale_batch_flag
+        ; Alcotest.test_case "batch-transact-tags-inner-tx-reports"
+            `Quick test_batch_transact_tags_inner_tx_reports
+        ; Alcotest.test_case
+            "remote-batch-drops-follow-up-ops-for-stale-created-block"
+            `Quick
+            test_remote_batch_drops_follow_up_ops_for_stale_created_block
+        ; Alcotest.test_case "reaction-add-enqueues-pending-sync-tx"
+            `Quick test_reaction_add_enqueues_pending_sync_tx
+        ; Alcotest.test_case
+            "db-migration-tx-enqueues-db-migrate-pending-op"
+            `Quick test_db_migration_tx_enqueues_db_migrate_pending_op
+        ; Alcotest.test_case
+            "rename-page-enqueues-canonical-save-block-pending-op"
+            `Quick
+            test_rename_page_enqueues_canonical_save_block_pending_op
+        ; Alcotest.test_case
+            "move-blocks-up-down-enqueues-canonical-move-blocks-pending-op"
+            `Quick
+            test_move_blocks_up_down_enqueues_canonical_move_blocks_pending_op
+        ; Alcotest.test_case
+            "indent-outdent-enqueues-canonical-move-blocks-pending-op"
+            `Quick
+            test_indent_outdent_enqueues_canonical_move_blocks_pending_op
+        ; Alcotest.test_case
+            "indent-outdent-direct-outdent-last-child-builds-forward-and-inverse-move-history"
+            `Quick
+            test_indent_outdent_direct_outdent_last_child_builds_forward_and_inverse_move_history
+        ; Alcotest.test_case
+            "indent-outdent-direct-outdent-with-right-sibling-persists-semantic-move-history"
+            `Quick
+            test_indent_outdent_direct_outdent_with_right_sibling_persists_semantic_move_history
+        ; Alcotest.test_case
+            "indent-outdent-direct-outdent-undo-restores-right-sibling-parent"
+            `Quick
+            test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
+        ; Alcotest.test_case
+            "indent-outdent-undo-enqueues-concrete-move-blocks-history"
+            `Quick
+            test_indent_outdent_undo_enqueues_concrete_move_blocks_history
+        ; Alcotest.test_case "enqueue-local-tx-preserves-existing-tx-id"
+            `Quick test_enqueue_local_tx_preserves_existing_tx_id
+        ; Alcotest.test_case
+            "handle-local-tx-enqueues-asset-op-for-local-asset-checksum"
+            `Quick
+            test_handle_local_tx_enqueues_asset_op_for_local_asset_checksum
+        ; Alcotest.test_case
+            "process-asset-op-drops-update-when-asset-entity-is-missing"
+            `Quick
+            test_process_asset_op_drops_update_when_asset_entity_is_missing
+        ; Alcotest.test_case
+            "process-asset-op-drops-update-when-asset-type-is-missing"
+            `Quick
+            test_process_asset_op_drops_update_when_asset_type_is_missing
+        ; Alcotest.test_case
+            "process-asset-op-drops-update-when-asset-checksum-is-missing"
+            `Quick
+            test_process_asset_op_drops_update_when_asset_checksum_is_missing
+        ; Alcotest.test_case
+            "process-asset-op-drops-update-when-required-asset-attributes-are-blank"
+            `Quick
+            test_process_asset_op_drops_update_when_required_asset_attributes_are_blank
+        ; Alcotest.test_case
+            "process-asset-ops-retries-missing-file-without-blocking-later-ops"
+            `Quick
+            test_process_asset_ops_retries_missing_file_without_blocking_later_ops
         ] ) ]
