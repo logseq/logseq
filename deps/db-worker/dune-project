@@ -54,4 +54,11 @@
   rrbvec
   sqlite3
   uunf
-  re))
+  re
+  yojson
+  digestif
+  mirage-crypto
+  mirage-crypto-rng
+  mirage-crypto-pk
+  kdf
+  x509))

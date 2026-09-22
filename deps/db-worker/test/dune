@@ -1,6 +1,6 @@
 (melange.emit
  (target test_node)
- (modules test_worker_melange test_query_melange)
+ (modules test_worker_melange test_query_melange test_crypt_melange)
  (module_systems commonjs)
  (libraries
   logseq_db_worker
@@ -15,9 +15,10 @@
  (alias runtest)
  (deps
   (:test_js ./test_node/test/test_worker_melange.js)
-  (:test_query_js ./test_node/test/test_query_melange.js))
+  (:test_query_js ./test_node/test/test_query_melange.js)
+  (:test_crypt_js ./test_node/test/test_crypt_melange.js))
  (action
-  (run node --test %{test_js} %{test_query_js})))
+  (run node --test %{test_js} %{test_query_js} %{test_crypt_js})))
 
 (executable
  (name test_worker_native)

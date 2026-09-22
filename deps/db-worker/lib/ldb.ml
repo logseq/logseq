@@ -436,6 +436,7 @@ let get_key_value db (key_ident : string) : value option =
 let get_graph_rtc_uuid db = get_key_value db "logseq.kv/graph-uuid"
 let get_graph_local_uuid db = get_key_value db "logseq.kv/local-graph-uuid"
 let get_graph_schema_version db = get_key_value db "logseq.kv/schema-version"
+let get_graph_rtc_e2ee db = get_key_value db "logseq.kv/graph-rtc-e2ee?"
 
 (* ldb/page-exists? — pages titled `page-name` with one of `tags`.
    Classes/Property tags are case-sensitive (:block/title); others go

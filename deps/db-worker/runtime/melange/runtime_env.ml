@@ -32,4 +32,15 @@ let search_param_true name =
     | _ -> false
   with _ -> false
 
-let electron_owner () = search_param_true "electron"
+let owner_source () =
+  match kind () with
+  | Browser_worker ->
+      if search_param_true "capacitor" then "capacitor"
+      else if search_param_true "electron" then "electron"
+      else "browser"
+  | Node | Native ->
+      (match env "LOGSEQ_OWNER_SOURCE" with
+       | Some s -> s
+       | None -> "unknown")
+
+let electron_owner () = String.equal (owner_source ()) "electron"
