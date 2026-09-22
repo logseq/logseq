@@ -9,11 +9,20 @@ open Datascript
 let ent_of_id db (id : entity_id) : entity option = entity db (Entity_id id)
 let ent_of_ref db (r : entity_ref) : entity option = entity db r
 
-(* cljs (get entity attr) over forward and :_reverse attrs. *)
+(* cljs (get entity attr) over forward and :_reverse attrs. entity_attr
+   materializes ref values into tx_entities — unwrap their :db/id back to
+   Ref so ref attrs keep working (cljs yields {:db/id ...} maps). *)
 let values (e : entity) (a : attr) : value list =
+  let db_id_ref (te : tx_entity) =
+    match te.db_id with
+    | Some (Entity_id id) -> Some (Ref id)
+    | _ -> None
+  in
   match entity_attr e a with
   | Some (One_value v) -> [ v ]
   | Some (Many_values vs) -> vs
+  | Some (One_entity te) -> List.filter_map Fun.id [ db_id_ref te ]
+  | Some (Many_entities tes) -> List.filter_map db_id_ref tes
   | _ -> []
 
 let value (e : entity) (a : attr) : value option =
