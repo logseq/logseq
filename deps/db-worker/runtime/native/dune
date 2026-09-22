@@ -3,6 +3,8 @@
  (implements logseq_db_worker_platform_spec)
  (modes native byte)
  (libraries
+  mldoc
+  angstrom
   datascript-ocaml-native
   datascript-ocaml-native.sqlite
   melange-transit-native

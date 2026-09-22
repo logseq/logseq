@@ -2,9 +2,9 @@
    All arguments and results are JSON strings, mirroring
    Mldoc.parseJson/parseInlineJson/getReferences/astExportMarkdown.
 
-   The parser is only available on the JS target.  The native
-   implementation raises [Invalid_argument] because the file-graph import
-   pipeline cannot run without it. *)
+   The JS implementation binds the npm bundle; the native implementation
+   binds the same OCaml mldoc library directly and mirrors its
+   error-fallback semantics. *)
 
 exception Mldoc_error of string
 
