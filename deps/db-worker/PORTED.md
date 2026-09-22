@@ -16,3 +16,15 @@ what must be re-ported:
 Every ported OCaml file cites its cljs source namespace in the header
 comment — use it to map a cljs diff to the OCaml file that needs the
 same change.
+
+## datascript-ocaml engine pin
+
+The engine follows `logseq/datascript-ocaml#main` (opam pin). Baseline
+for this port state:
+
+    b3f5689 (on top of 1bec8d6 incremental mid-tx schema refresh +
+             once-per-refresh removals fix)
+
+When the engine pin moves, re-run `dune build @runtest` plus
+`test_export_native.exe` — export/import roundtrip is the most
+sensitive suite to engine changes.
