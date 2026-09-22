@@ -998,27 +998,17 @@ let group_by_page (blocks : Wire.t list) : Wire.t =
            (List.rev !order))
   | _ -> Wire.Array blocks
 
-(* handler/property.cljs scheduled-deadline-pull-selector:
-   '[:* {:block/page [:db/id :block/title :block/uuid]}] *)
-let scheduled_deadline_pull_selector : query_arg =
-  Arg_scalar
-    (Result_value
-       (Vector
-          [ Keyword "*"
-          ; Map
-              [ ( Keyword "block/page"
-                , Vector
-                    [ Keyword "db/id"
-                    ; Keyword "block/title"
-                    ; Keyword "block/uuid" ] ) ] ]))
-
-(* handler/property.cljs get-date-scheduled-or-deadlines *)
+(* handler/property.cljs get-date-scheduled-or-deadlines. The cljs passes the
+   pull selector '[:* {:block/page [:db/id :block/title :block/uuid]}] as the
+   ?block-attrs query input; datascript-ocaml parses input pull patterns
+   against an empty db, which rejects ref map-specs, so the same selector is
+   inlined here — wire args are unchanged ([repo start-time end-time]). *)
 let get_date_scheduled_or_deadlines db (start_time : int) (end_time : int)
     : Wire.t =
   let rows =
     Datascript.q_string db
-      "[:find [(pull ?block ?block-attrs) ...] \
-       :in $ ?start-time ?end-time ?block-attrs \
+      "[:find [(pull ?block [:* {:block/page [:db/id :block/title :block/uuid]}]) ...] \
+       :in $ ?start-time ?end-time \
        :where \
        (or [?block :logseq.property/scheduled ?n] \
            [?block :logseq.property/deadline ?n]) \
@@ -1030,8 +1020,7 @@ let get_date_scheduled_or_deadlines db (start_time : int) (end_time : int)
        [(not= ?status-ident :logseq.property/status.canceled)]]"
       ~inputs:
         [ Arg_scalar (Result_value (Instant start_time))
-        ; Arg_scalar (Result_value (Instant end_time))
-        ; scheduled_deadline_pull_selector ]
+        ; Arg_scalar (Result_value (Instant end_time)) ]
   in
   let blocks =
     List.filter_map

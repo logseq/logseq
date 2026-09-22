@@ -419,6 +419,30 @@ let () =
     && string_contains res "logseq.property/status.done"
     && string_contains res "Doing");
 
+  (* get-date-scheduled-or-deadlines: scheduled-in-range todo is grouped under
+     its page; done and canceled blocks are filtered out *)
+  ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
+  ignore
+    (Datascript.transact_conn_string conn
+       "[{:db/ident :logseq.property/status.canceled :block/title \"Canceled\"}
+         {:db/id -301 :block/title \"sched ok\" :block/page [:block/name \"page1\"]
+          :logseq.property/scheduled #inst \"2026-09-20T00:00:00.000Z\"
+          :logseq.property/status :logseq.property/status.todo}
+         {:db/id -302 :block/title \"sched done\" :block/page [:block/name \"page1\"]
+          :logseq.property/scheduled #inst \"2026-09-20T00:00:00.000Z\"
+          :logseq.property/status :logseq.property/status.done}
+         {:db/id -303 :block/title \"dl canceled\" :block/page [:block/name \"page1\"]
+          :logseq.property/deadline #inst \"2026-09-20T00:00:00.000Z\"
+          :logseq.property/status :logseq.property/status.canceled}]");
+  let res =
+    invoke "thread-api/get-date-scheduled-or-deadlines"
+      [ Wire.String repo; Wire.Int 0; Wire.Int 1800000000000 ]
+  in
+  check "get-date-scheduled-or-deadlines returns grouped result"
+    (string_contains res "sched ok"
+    && not (string_contains res "sched done")
+    && not (string_contains res "dl canceled"));
+
   if !failures > 0 then begin
     Printf.printf "%d failures\n%!" !failures;
     exit 1
