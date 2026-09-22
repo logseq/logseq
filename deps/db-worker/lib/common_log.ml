@@ -1,5 +1,6 @@
-(* logseq.common.log — the nbb shim of lambdaisland.glogi.
-   cljs: (apply js/console.error (map clj->js msgs)) — the OCaml log
-   sink flattens to text the way console.error renders. *)
+(* logseq.common.log — minimal error-logging shim (the cljs ns shims
+   lambdaisland.glogi fns for nbb by applying console.error to each
+   message arg; here messages are concatenated). *)
 
-let error msgs = Worker_log.error "common-log/error" [ ("messages", String.concat " " msgs) ]
+let error (msgs : string list) : unit =
+  Worker_log.error (String.concat " " msgs) []
