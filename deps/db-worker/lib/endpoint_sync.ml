@@ -7,7 +7,12 @@
 
    init () wiring needed in worker_core:
      Endpoint_sync — this module's top-level `let () = ...` blocks
-     self-register on module load, so just force the module.
+     self-register on module load, so just force the module
+     (worker_core does `ignore Endpoint_sync.pure_nil`).
+
+   db-sync-invalidate-search-db is registered by endpoint_search.ml —
+   not duplicated here; the download path reaches the same truncation via
+   Sync_deps.invalidate_search_db (populated by the search package).
 *)
 
 open Db_worker_effect.Infix
@@ -228,13 +233,6 @@ let () =
        >>= fun () -> pure_nil)
 
 (* ---- misc db-core sync endpoints ---- *)
-
-let () =
-  Dispatcher.register "thread-api/db-sync-invalidate-search-db"
-    (fun args ->
-       Sync_deps.require "invalidate_search_db"
-         Sync_deps.invalidate_search_db (arg_str args 0)
-       >>= fun () -> pure_nil)
 
 let () =
   Dispatcher.register "thread-api/db-sync-rehydrate-large-titles"

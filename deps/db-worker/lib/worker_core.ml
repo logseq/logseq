@@ -39,6 +39,7 @@ let init () =
     ignore Endpoint_property.validate_property_value;
     ignore Endpoint_crypt.arg;
     ignore Endpoint_search.clear_search_index_builds;
+    ignore Endpoint_sync.pure_nil;
     ignore Sync_crypt.init;
     ignore Endpoint_query.query_dsl_query;
     ignore Endpoint_transaction.transact;
