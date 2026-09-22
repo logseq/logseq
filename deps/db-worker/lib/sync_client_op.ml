@@ -185,9 +185,9 @@ let update_local_checksum repo checksum =
 let get_local_checksum repo = get_meta (store repo) "db-sync/checksum"
 
 let get_pending_local_tx_count repo : int =
-  let cached = Worker_state.pending_local_tx_count repo in
-  if cached >= 0 then cached
-  else
+  match Worker_state.pending_local_tx_count repo with
+  | Some cached -> cached
+  | None ->
     let c =
       match
         row (store repo)

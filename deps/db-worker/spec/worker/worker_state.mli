@@ -80,7 +80,7 @@ val deleted_block_uuid_to_db_id : unit -> (string, int) Hashtbl.t
 val reset_deleted_blocks : unit -> unit
 
 (* client-op/*repo->pending-local-tx-count *)
-val pending_local_tx_count : string -> int
+val pending_local_tx_count : string -> int option
 val set_pending_local_tx_count : string -> int -> unit
 val drop_pending_local_tx_count : string -> unit
 

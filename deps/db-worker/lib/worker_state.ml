@@ -192,7 +192,7 @@ let reset_deleted_blocks () = Hashtbl.reset deleted_blocks
 
 (* pending local tx counts *)
 let pending_tx : (string, int) Hashtbl.t = Hashtbl.create 7
-let pending_local_tx_count repo = Option.value (Hashtbl.find_opt pending_tx repo) ~default:0
+let pending_local_tx_count repo = Hashtbl.find_opt pending_tx repo
 let set_pending_local_tx_count repo n = Hashtbl.replace pending_tx repo n
 let drop_pending_local_tx_count repo = Hashtbl.remove pending_tx repo
 
