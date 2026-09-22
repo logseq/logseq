@@ -14,6 +14,9 @@ let sanitize_hashtag_name (s : string) : string =
 (* gp-block/*export-to-db-graph?* *)
 let export_to_db_graph = ref false
 
+(* alias so optional-arg shadowing can still read the flag *)
+let export_to_db_graph_ref = export_to_db_graph
+
 let page_entity (e : entity) : bool =
   Ldb.is_page e
   || (match Ldb.value e "block/type" with
@@ -23,16 +26,20 @@ let page_entity (e : entity) : bool =
 (* convert-page-if-journal (memoized on (name, formatter)) *)
 module CPJ = struct
   module H = Hashtbl.Make (struct
-    type t = string * string option
-    let equal (a1, b1) (a2, b2) = a1 = a2 && b1 = b2
+    type t = string * string option * bool
+    let equal (a1, b1, c1) (a2, b2, c2) = a1 = a2 && b1 = b2 && c1 = c2
     let hash = Hashtbl.hash
   end)
   let tbl = H.create 127
 end
 
-let convert_page_if_journal (original_page_name : string) (date_formatter : string option)
+let convert_page_if_journal ?(export_to_db_graph : bool option)
+    (original_page_name : string) (date_formatter : string option)
     : string * string * int option =
-  let key = (original_page_name, date_formatter) in
+  let export_to_db_graph =
+    Option.value ~default:!export_to_db_graph_ref export_to_db_graph
+  in
+  let key = (original_page_name, date_formatter, export_to_db_graph) in
   match CPJ.H.find_opt CPJ.tbl key with
   | Some r -> r
   | None ->
@@ -42,8 +49,14 @@ let convert_page_if_journal (original_page_name : string) (date_formatter : stri
         match date_formatter with
         | None -> None
         | Some fmt ->
+          (* cljs passes [date-formatter] (not safe-journal-title-formatters)
+             when exporting to a db graph. *)
           Date_time_util.journal_title_to_int
-            ~formatters:(Date_time_util.safe_journal_title_formatters (Some fmt))
+            ~formatters:
+              (if export_to_db_graph then
+                 [ fmt ]
+               else
+                 Date_time_util.safe_journal_title_formatters (Some fmt))
             page_name
       in
       match day with

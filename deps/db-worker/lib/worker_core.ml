@@ -7,6 +7,7 @@ let init () =
     ignore Endpoint_db.q;
     ignore Endpoint_lifecycle.create_or_open_db;
     ignore Endpoint_state.cancel_ui_requests;
+    ignore Endpoint_import.import_file_graph;
     ignore Endpoint_markdown.set_enabled;
     ignore Endpoint_markdown.flush;
     ignore Endpoint_markdown.regenerate;
