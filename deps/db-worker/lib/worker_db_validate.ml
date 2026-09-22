@@ -273,9 +273,9 @@ let fix_invalid_blocks (conn : conn)
                    dispatch_key = "block" && Ldb.ref_ent e "block/page" = None
                  then
                    let latest_journal_id =
-                     match Ldb.get_latest_journals db with
-                     | j :: _ -> Some j.id
-                     | [] -> None
+                     match Seq.uncons (Ldb.get_latest_journals db) with
+                     | Some (j, _) -> Some j.id
+                     | None -> None
                    in
                    let page_id =
                      match Ldb.ref_ent e "block/parent" with

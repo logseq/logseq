@@ -10,8 +10,20 @@ open Datascript
    view_test `with-redefs d/entity` counter. *)
 let entity_lookups = ref 0
 
+(* Test instrumentation: Ident (keyword) lookups only — mirrors the cljs
+   db_test `(when (keyword? eid) (swap! attr-lookups inc))` counter. *)
+let attr_lookups = ref 0
+
+(* Test instrumentation: datoms pulled by get-latest-journals' avet
+   scan — mirrors the cljs db_core_test `wrap-scan` counter that counts
+   realized :block/journal-day datoms. *)
+let journal_day_scans = ref 0
+
 let counted_entity db (r : entity_ref) : entity option =
   incr entity_lookups;
+  (match r with
+   | Ident _ -> incr attr_lookups
+   | _ -> ());
   entity db r
 
 let ent_of_id db (id : entity_id) : entity option =
@@ -545,29 +557,33 @@ let page_exists db (page_name : string) (tag_idents : string list) : bool =
   page_exists_ids db page_name tag_idents <> []
 
 (* initial-data/get-latest-journals — journal-day desc, not recycled. *)
-let get_latest_journals db : entity list =
+(* ldb/get-latest-journals — journal entities ordered by journal-day
+   descending, LAZILY like cljs: callers `Seq.take n` to bound the work
+   to the requested page size. *)
+let get_latest_journals db : entity Seq.t =
   let today = Clock.today_int () in
-  (* rseek walks the index backwards from the seek point; keep while
-     the attr stays :block/journal-day and day <= today. *)
-  let ds =
-    rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int today) ()
-    |> Seq.take_while (fun d -> d.a = "block/journal-day")
-    |> List.of_seq
-  in
   let seen = Hashtbl.create 31 in
-  List.filter_map
-    (fun (d : datom) ->
-      match d.v with
-      | Int day when day <= today ->
-          (match ent_of_id db d.e with
-           | Some e
-             when is_journal e && not (recycled e)
-                  && not (Hashtbl.mem seen e.id) ->
-               Hashtbl.replace seen e.id ();
-               Some e
-           | _ -> None)
-      | _ -> None)
-    ds
+  (* cljs take-while over the rseek seq, counting each pulled datom *)
+  let rec take_while_journals (s : datom Seq.t) : datom Seq.t = fun () ->
+    match s () with
+    | Seq.Cons (d, rest) when d.a = "block/journal-day" ->
+        incr journal_day_scans;
+        Seq.Cons (d, take_while_journals rest)
+    | _ -> Seq.Nil
+  in
+  rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int today) ()
+  |> take_while_journals
+  |> Seq.filter_map (fun (d : datom) ->
+         match d.v with
+         | Int day when day <= today -> (
+             match ent_of_id db d.e with
+             | Some e
+               when is_journal e && not (recycled e)
+                    && not (Hashtbl.mem seen e.id) ->
+                 Hashtbl.replace seen e.id ();
+                 Some e
+             | _ -> None)
+         | _ -> None)
 
 (* db-class/internal-tags — built-in classes hidden on a node and in
    all-pages views. *)
