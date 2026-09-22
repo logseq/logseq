@@ -199,8 +199,10 @@ let db_schema_ref_attrs =
   [ "block/parent"; "block/page"; "block/refs"; "block/tags"; "block/link";
     "block/alias"; "block/closed-value-property" ]
 
-(* cljs db-schema/schema — the full fixed schema map as an EDN string for
-   (d/create-conn db-schema/schema). *)
+(* db-schema/schema — the fixed datascript schema map from
+   deps/db/src/logseq/db/frontend/schema.cljs, verbatim. Every conn
+   opened by the worker uses it (cljs get-storage-conn never takes the
+   caller's schema). *)
 let schema_edn =
   "{:db/ident {:db/unique :db.unique/identity}
     :kv/value {}
@@ -226,4 +228,4 @@ let schema_edn =
     :file/last-modified-at {}
     :file/size {}}"
 
-let schema () : schema = Datascript.schema_of_edn_string schema_edn
+let schema () = schema_of_edn_string schema_edn

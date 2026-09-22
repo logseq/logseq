@@ -69,3 +69,82 @@ let pool_name repo =
     String.map (fun c -> match c with '/' | '\\' | ':' -> '_' | c -> c) graph
   in
   "logseq-pool-" ^ graph
+
+(* ---------- decoding (list-graphs) ---------- *)
+
+let contains_substring (s : string) (sub : string) : bool =
+  let n = String.length s and m = String.length sub in
+  let rec find i =
+    i + m <= n && (String.sub s i m = sub || find (i + 1))
+  in
+  m = 0 || find 0
+
+let valid_utf8 (s : string) : bool =
+  let n = String.length s in
+  let rec loop i =
+    i >= n
+    ||
+    (let dec = String.get_utf_8_uchar s i in
+     Uchar.utf_decode_is_valid dec
+     && loop (i + Uchar.utf_decode_length dec))
+  in
+  loop 0
+
+(* js/decodeURIComponent: %XX sequences are UTF-8 code units; malformed
+   percent escapes or invalid UTF-8 raise a URIError, mapped to [None]. *)
+let uri_decode (s : string) : string option =
+  let hex c =
+    match c with
+    | '0' .. '9' -> Some (Char.code c - Char.code '0')
+    | 'a' .. 'f' -> Some (Char.code c - Char.code 'a' + 10)
+    | 'A' .. 'F' -> Some (Char.code c - Char.code 'A' + 10)
+    | _ -> None
+  in
+  let n = String.length s in
+  let b = Buffer.create n in
+  let rec loop i =
+    if i >= n then Some ()
+    else
+      match s.[i] with
+      | '%' ->
+          if i + 2 < n then
+            (match hex s.[i + 1], hex s.[i + 2] with
+             | Some h1, Some h2 ->
+                 Buffer.add_char b (Char.chr ((h1 * 16) + h2));
+                 loop (i + 3)
+             | _ -> None)
+          else None
+      | c ->
+          Buffer.add_char b c;
+          loop (i + 1)
+  in
+  match loop 0 with
+  | None -> None
+  | Some () ->
+      let bytes = Buffer.contents b in
+      if valid_utf8 bytes then Some bytes else None
+
+(* decode-graph-dir-name — cljs rejects names carrying the legacy
+   encodings ("++" or "+3A+") outright, then requires the decoded name to
+   be canonical: equal to its own trim and non-empty. *)
+let decode_graph_dir_name (dir_name : string) : string option =
+  if contains_substring dir_name "++" || contains_substring dir_name "+3A+" then
+    None
+  else
+    match uri_decode (str_replace_all dir_name "~" "%") with
+    | None -> None
+    | Some decoded ->
+        let trimmed = String.trim decoded in
+        if decoded = trimmed && trimmed <> "" then Some trimmed else None
+
+(* decode-canonical-graph-dir-key — decoded name must not re-enter the
+   db-version-prefix namespace. *)
+let decode_canonical_graph_dir_key (encoded : string) : string option =
+  match decode_graph_dir_name encoded with
+  | Some decoded
+    when not
+           (String.length decoded >= String.length db_version_prefix
+            && String.sub decoded 0 (String.length db_version_prefix)
+               = db_version_prefix) ->
+      Some decoded
+  | _ -> None
