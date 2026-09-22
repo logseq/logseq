@@ -747,7 +747,7 @@ let ensure_query_property_on_tag_additions (report : tx_report) : tx_op list =
               in
               (match
                  Option.bind query_entity
-                   (fun qe -> Ldb.string_value qe "block/uuid")
+                   (fun qe -> Ldb.uuid_value qe "block/uuid")
                with
                | Some _ -> []
                | None ->

@@ -5927,7 +5927,7 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
           Eff.map ignore (add_file_to_db_graph conn p c opts)
         | _ -> Eff.pure ())
   in
-  Eff.map (fun () -> Some m) (export_fn conn m export_options)
+  Eff.map (fun () -> Some m) (export_fn conn m export_options))
   |> Fun.flip Eff.catch (fun error ->
      options.notify_user
        [ ( "msg"
@@ -5942,7 +5942,7 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
      options.import_state.ignored_files :=
        [ ("path", String path); ("reason", kw "export-failed") ]
        :: !(options.import_state.ignored_files);
-     Eff.pure None))
+     Eff.pure None)
 
 (* ---------- missing block refs ---------- *)
 

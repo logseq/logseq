@@ -45,10 +45,11 @@ let vget (k : string) (v : value) : value option =
 let mget (k : string) (m : (attr * value) list) : value option =
   List.find_map (fun (a, v) -> if a = k then Some v else None) m
 
-(* (d/entity db v) — v is a raw eid (Int) or ref value (Ref) *)
+(* (d/entity db v) — raw eid (Int/Ref) or db-ident keyword *)
 let ent_of_val (db : db) (v : value) : entity option =
   match v with
   | Ref id | Int id -> Ldb.ent_of_id db id
+  | Keyword ident -> Ldb.ent_of_ref db (Ident ident)
   | _ -> None
 
 let entity_val ctx v = Option.is_some (ent_of_val ctx.db v)

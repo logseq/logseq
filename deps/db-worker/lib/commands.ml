@@ -456,7 +456,7 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                | Some u ->
                    Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
                | None -> None
-             else Some (Instant next_time_long)
+             else Some (Int (Int64.to_int next_time_long))
            in
            default_value_tx_data @ page_txs
            @ (match value with

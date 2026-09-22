@@ -1224,14 +1224,16 @@ let get_target_block_page (target_block : entity) (sibling : bool) : entity_id o
   match Ldb.ref_ent target_block "block/page" with
   | Some p -> Some p.id
   | None -> (
-      if sibling then
-        match Ldb.ref_ent target_block "block/parent" with
-        | Some p when Ldb.is_page p -> Some p.id
-        | _ ->
-            (* target-block is a page itself *)
-            if Ldb.is_page target_block then Some target_block.id else None
-      else if Ldb.is_page target_block then Some target_block.id
-      else None)
+      match
+        if sibling then
+          match Ldb.ref_ent target_block "block/parent" with
+          | Some p when Ldb.is_page p -> Some p.id
+          | _ -> None
+        else None
+      with
+      | Some _ as p -> p
+      (* cljs: (:db/id target-block) unconditional fallback *)
+      | None -> Some target_block.id)
 
 type insert_opts =
   { sibling : bool
@@ -1666,7 +1668,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
         let uuid' =
           match mget_uuid block "block/uuid" with
           | Some u -> List.assoc_opt u uuid_map
-          | None -> None
+          | None -> List.nth_opt uuids idx
         in
         (match uuid' with
          | Some uuid' ->
