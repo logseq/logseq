@@ -601,17 +601,32 @@ let transact (conn : conn) (tx_data : Wire.t list) (tx_meta : tx_meta)
   match tx_data with
   | [] -> None
   | _ ->
-      let report =
-        transact_conn_string ~tx_meta conn (tx_edn tx_data)
+      let flags = Db_tx.flags_of conn in
+      let tx_meta =
+        (if flags.Db_tx.batch_tx
+         then ("batch-tx-report?", Bool true) :: tx_meta
+         else tx_meta)
+        |> fun m ->
+        if flags.Db_tx.skip_store then ("skip-store?", Bool true) :: m else m
       in
-      Some report
+      let tx_ops = Datascript.parse_tx_data_string (tx_edn tx_data) in
+      Some (Db_tx.transact_sync conn tx_ops tx_meta)
 
 (* db.cljs batch-transact-with-temp-conn!. [f] receives the temp conn;
    datoms emitted by its transacts are collected and applied to [conn]
    in a single final transact. *)
 let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
     (f : conn -> unit) : tx_report option =
-  let temp_conn = conn_from_db (Datascript.db conn) in
+  (* cljs temp-conn-from-db: {:skip-store? :skip-validate-db?} — strip
+     storage so conn_from_db neither stores on creation nor lets inner
+     batch ops write tails to the real storage. *)
+  let temp_conn =
+    conn_from_db { (Datascript.db conn) with storage_ref = None }
+  in
+  let fl = Db_tx.flags_of temp_conn in
+  fl.Db_tx.batch_tx <- true;
+  fl.Db_tx.skip_store <- true;
+  fl.Db_tx.skip_validate <- true;
   let collected = ref [] in
   let listener_id =
     listen temp_conn "temp-conn-batch-tx"

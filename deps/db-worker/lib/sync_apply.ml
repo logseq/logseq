@@ -956,7 +956,14 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
     ?(listen_db : (tx_report -> unit) option)
     ?(before_commit : (unit -> unit) option) (f : conn -> unit) () :
     tx_report option =
-  let temp_conn = Datascript.conn_from_db (Datascript.db conn) in
+  let temp_conn =
+    Datascript.conn_from_db
+      { (Datascript.db conn) with storage_ref = None }
+  in
+  let fl = Db_tx.flags_of temp_conn in
+  fl.Db_tx.batch_tx <- true;
+  fl.Db_tx.skip_store <- true;
+  fl.Db_tx.skip_validate <- true;
   let collected = ref [] in
   let listener_id =
     Datascript.listen temp_conn "temp-conn-batch-tx" (fun report ->
