@@ -562,21 +562,20 @@ let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
       ()
   in
   register_conn conn;
-  let b = Option.get (entity_at_uuid (db_of conn) u2) in
   let ops =
     Wire.Array
       [ Wire.Array
           [ kw "indent-outdent-blocks"
           ; Wire.Array
-              [ Wire.Array [ Wire.Int b.id ]
+              [ Wire.Array [ Wire.Uuid u2 ]
               ; Wire.Bool true
               ; Wire.Map
                   [ kw "parent-original"
                   , Wire.Map [ kw "block/uuid", Wire.Uuid missing ] ] ] ] ]
   in
-  (* cljs asserts an ex-info {:type :worker/invalid-request}; the native
-     outliner raises its typed Missing_parent_original exception which the
-     endpoint does not re-wrap — same rejection, different surface *)
+  (* cljs asserts ex-data {:type :logseq.outliner.op/missing-parent-original};
+     the native outliner raises its typed Missing_parent_original exception
+     which the endpoint does not re-wrap — same rejection, different surface *)
   (try
      ignore
        (api "apply-outliner-ops" [ Wire.String test_repo; ops; Wire.Map [] ]);
@@ -1886,8 +1885,7 @@ let seed_favorites_page conn =
     (transact_maps conn
        [ [ "block/uuid", Uuid "11111111-ffff-1111-ffff-111111111111"
          ; "block/title", Str favorites_page
-         ; "block/name", Str favorites_page
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ])
+         ; "block/name", Str favorites_page ] ])
 
 let test_set_page_favorite () =
   let conn = create_conn () in
@@ -1939,19 +1937,19 @@ let test_set_page_favorite_repeated_false () =
   ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.String page_uuid; Wire.Bool false ]);
   check "repeated false ok" true
 
-(* (deftest reorder-favorites-mutates-worker-db ...) *)
+(* (deftest reorder-favorites-mutates-worker-db ...) — cljs uses a bare
+   (d/create-conn schema), not db-test/create-conn: no logseq.kv/db-type,
+   so transact-sync skips pipeline validation like cljs *)
 let test_reorder_favorites () =
-  let conn = create_conn () in
+  let conn = create_conn_bare () in
   let fav_uuid = "11111111-ffff-1111-ffff-111111111111"
   and u1 = "88888888-1111-0000-0000-000000000001"
   and u2 = "88888888-2222-0000-0000-000000000002" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
-       [ [ "block/uuid", Uuid u1; "block/title", Str "f1"; "block/name", Str "f1"
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
-       ; [ "block/uuid", Uuid u2; "block/title", Str "f2"; "block/name", Str "f2"
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
+       [ [ "block/uuid", Uuid u1; "block/title", Str "f1"; "block/name", Str "f1" ]
+       ; [ "block/uuid", Uuid u2; "block/title", Str "f2"; "block/name", Str "f2" ] ]);
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid "88888888-3333-0000-0000-000000000003"
@@ -1975,7 +1973,7 @@ let test_reorder_favorites () =
         match Ldb.ref_ids fb "block/link" with [ id ] -> Some id | _ -> None)
       (Ldb.sort_by_order
          (List.filter_map (Ldb.ent_of_id (db_of conn))
-            (Ldb.ref_ids fav "block/_parent")))
+            (Ldb.ref_ids fav "block/_page")))
   in
   check "reorder favorites" (linked = [ pid2; pid1 ])
 
