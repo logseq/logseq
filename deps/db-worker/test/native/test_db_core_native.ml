@@ -103,6 +103,7 @@
    here):
      get-block-parents-returns-parents, get-block-refs-returns-linked-
      references, get-latest-journals-returns-worker-maps,
+     get-latest-journals-bounded-scan,
      q-executes-datascript-query, q-returns-nil-for-missing-conn,
      datoms-returns-formatted-datoms, pull-returns-entity-data,
      get-property-node-selector-data-prepares-worker-owned-db-data-test,
@@ -142,8 +143,9 @@
        pool + OPFS paths are not ported
      - get-display-properties-* (3 cases) / reorder-display-property:
        thread APIs not registered on native
-     - get-latest-journals-bounded-scan: ^:long test counting d/datoms
-       calls via with-redefs — no OCaml datoms spy
+     - get-latest-journals-bounded-scan: moved — see "already translated
+       in test_db_native.ml" above (Ldb.journal_day_scans is the OCaml
+       counterpart of the cljs wrap-scan counter)
      - init-core-*: browser platform object wiring, unported
      - build-proxy-object-* (2 cases): Comlink proxy objects unported
      - broadcast-data-types-*: relies on a cljs broadcast-data-types
