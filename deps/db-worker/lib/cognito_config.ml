@@ -1,5 +1,5 @@
-(* logseq.common.cognito-config — shared Cognito configuration for
-   frontend and CLI-safe consumers. *)
+(* Port of logseq.common.cognito-config — shared Cognito configuration
+   for frontend and CLI-safe consumers. *)
 
 let cognito_client_id = "69cs1lgme7p8kbgld8n5kseii6"
 
