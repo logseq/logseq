@@ -12,21 +12,21 @@ let block_with_updated_at (block : Wire.t) : Wire.t =
 
 (* initial-data/get-block-full-children-ids — nested children incl.
    collapsed and property-value children, via the parent rule. *)
-let parent_rules_edn =
-  "[[(parent ?p ?c) [?c :block/parent ?p]] \
-    [(parent ?p ?c) [?t :block/parent ?p] (parent ?t ?c)]]"
-
-let parent_rules =
-  lazy (Parser.parse_rules (Parser.read_edn parent_rules_edn))
-
 let get_block_full_children_ids db (eid : entity_id) : entity_id list =
-  q_string db
-    ~inputs:
-      [ Arg_scalar (Result_entity eid); Arg_rules (Lazy.force parent_rules) ]
-    "[:find [?c ...] :in $ ?id % :where (parent ?id ?c)]"
-  |> List.filter_map (function
-       | [ Result_entity id ] -> Some id
-       | _ -> None)
+  (* BFS over [:block/parent] — equivalent to the (parent ?id ?c) rule *)
+  let rec go seen frontier =
+    match frontier with
+    | [] -> seen
+    | eid :: rest ->
+        let children =
+          List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref eid) ())
+          |> List.map (fun (d : datom) -> d.e)
+          |> List.filter (fun id -> not (List.mem id seen))
+        in
+        go (seen @ children) (rest @ children)
+  in
+  go [ eid ] [ eid ]
+  |> List.filter (fun id -> id <> eid)
 
 (* db.cljs block-order-path — order chain from block to page root *)
 let block_order_path (page_id : entity_id) (block : entity) : string list option =

@@ -10,11 +10,7 @@ let ensure_unique_db_ident db (db_ident : string) : string =
   | Some _ ->
       let prefix = db_ident ^ "-" in
       let rows =
-        q_string db
-          ~inputs:[ Arg_scalar (Result_value (String prefix)) ]
-          "[:find [?ident ...] :in $ ?ident-name :where \
-           [?b :db/ident ?ident] [(str ?ident) ?str-ident] \
-           [(clojure.string/starts-with? ?str-ident ?ident-name)]]"
+        q_string db "[:find [?ident ...] :where [?b :db/ident ?ident]]"
       in
       let idents =
         List.filter_map
@@ -22,6 +18,9 @@ let ensure_unique_db_ident db (db_ident : string) : string =
             | [ Result_value (Keyword k) ] -> Some k
             | _ -> None)
           rows
+        |> List.filter
+             (fun i -> String.length i > String.length prefix
+                       && String.sub i 0 (String.length prefix) = prefix)
       in
       let nums =
         List.filter_map

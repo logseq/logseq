@@ -177,40 +177,38 @@ let expand_to_top_refs db top_ref_ids matched_ref_ids : IdSet.t =
     matched_ref_ids;
   !result
 
-(* ---- datalog rule sets (deps/db rules.cljc) ---- *)
-
-let alias_rules : query_rule list =
-  Parser.parse_rules
-    (Parser.read_edn
-       "[[(alias ?e2 ?e1) [?e2 :block/alias ?e1]]
-         [(alias ?e2 ?e1) [?e1 :block/alias ?e2]]]")
-
-let class_extends_rules : query_rule list =
-  Parser.parse_rules
-    (Parser.read_edn
-       "[[(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]]
-         [(class-extends ?p ?c)
-          [?t :logseq.property.class/extends ?p]
-          (class-extends ?t ?c)]]")
-
-(* common-initial-data/get-block-alias — entities aliased to/from id. *)
+(* common-initial-data/get-block-alias — entities aliased to/from id,
+   direct datom scan equivalent to the bidirectional :alias rule. *)
 let get_block_alias db (eid : entity_id) : entity_id list =
-  q_string db
-    ~inputs:[ Arg_scalar (Result_entity eid); Arg_rules alias_rules ]
-    "[:find [?e ...] :in $ ?eid % :where (alias ?eid ?e)]"
-  |> List.filter_map (function
-       | [ Result_entity id ] -> Some id
-       | _ -> None)
-  |> List.sort_uniq compare
+  let forward =
+    List.filter_map
+      (fun (d : datom) -> entid d.v)
+      (List.of_seq (datoms db Eavt ~e:eid ~a:"block/alias" ()))
+  in
+  let backward =
+    List.map
+      (fun (d : datom) -> d.e)
+      (List.of_seq (datoms db Avet ~a:"block/alias" ~v:(Ref eid) ()))
+  in
+  List.sort_uniq compare (forward @ backward)
 
-(* db-class/get-structured-children — all classes extending eid. *)
+(* db-class/get-structured-children — all classes extending eid,
+   BFS over :logseq.property.class/extends. *)
 let structured_children db (eid : entity_id) : entity_id list =
-  q_string db
-    ~inputs:[ Arg_scalar (Result_entity eid); Arg_rules class_extends_rules ]
-    "[:find [?c ...] :in $ ?p % :where (class-extends ?p ?c)]"
-  |> List.filter_map (function
-       | [ Result_entity id ] when id <> eid -> Some id
-       | _ -> None)
+  let rec go seen frontier =
+    match frontier with
+    | [] -> seen
+    | eid :: rest ->
+        let children =
+          List.of_seq
+            (datoms db Avet ~a:"logseq.property.class/extends" ~v:(Ref eid) ())
+          |> List.map (fun (d : datom) -> d.e)
+          |> List.filter (fun id -> not (List.mem id seen))
+        in
+        go (seen @ children) (rest @ children)
+  in
+  go [ eid ] [ eid ]
+  |> List.filter (fun id -> id <> eid)
 
 (* get-filters — linked-references includes/excludes entity ids. *)
 let get_filters (page : entity) : entity_id list * entity_id list =
