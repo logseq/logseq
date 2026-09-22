@@ -24,10 +24,12 @@ let render_basis_rev (db : db) : int =
     fail_render_read "Invalid renderer basis revision"
       [ (kw "basis-rev", Wire.Int db.max_tx) ]
 
-let block_revision (db : db) (eid : entity_id) : int =
+(* cljs block-revision — missing tx-id reads as 0; non-integer values
+   pass through so valid-revision? rejects them downstream *)
+let block_revision (db : db) (eid : entity_id) : value =
   match eavt_scalar db eid "block/tx-id" with
-  | Some (Int n) -> n
-  | _ -> 0
+  | Some v -> v
+  | None -> Int 0
 
 let tagged_with_ident (db : db) (eid : entity_id) (tag_ident : string) : bool =
   datoms db Eavt ~e:eid ~a:"block/tags" ()
@@ -108,11 +110,24 @@ let renderer_display_title (db : db) (eid : entity_id) : string option =
          with _ -> false)
       then
         (match Ldb.ent_of_id db eid with
-         | Some e -> Ldb.string_value e "block/title"
+         | Some e ->
+             (* cljs entity-plus :block/title → get-block-title:
+                journals get the formatted title, others get the stored
+                title with id refs replaced by title refs *)
+             if Ldb.is_journal e then
+               (match Ldb.raw_title db e with
+                | Some (String t) -> Some t
+                | _ -> None)
+             else
+               Some
+                 (Db_content.id_ref_to_title_ref s
+                    (Ldb.ref_ents e "block/refs"))
          | None -> None)
       else Some s
   | _ -> None
 
+(* cljs renderer-raw-title — entity-plus :block/raw-title only when the
+   stored title contains "[["; otherwise the stored title as-is *)
 let renderer_raw_title (db : db) (eid : entity_id) : string option =
   match eavt_scalar db eid "block/title" with
   | Some (String s) ->
@@ -121,7 +136,10 @@ let renderer_raw_title (db : db) (eid : entity_id) : string option =
          with _ -> false)
       then
         (match Ldb.ent_of_id db eid with
-         | Some e -> Ldb.string_value e "block/raw-title"
+         | Some e -> (
+             match Ldb.raw_title db e with
+             | Some (String t) -> Some t
+             | _ -> None)
          | None -> None)
       else Some s
   | _ -> None
@@ -201,7 +219,7 @@ let positioned_property_meta (db : db) (property_id : string)
         , render_property_position property
         , Ldb.value property "logseq.property/public?" <> Some (Bool false)
         , Ldb.value property "logseq.property/hide?" = Some (Bool true)
-        , Ldb.value property "logseq.property/hide-empty-value?"
+        , Ldb.value property "logseq.property/hide-empty-value"
           = Some (Bool true)
         , Option.is_some (Ldb.value property "logseq.property/default-value")
           || Option.is_some
@@ -354,10 +372,14 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
    | None ->
        fail_render_read "Invalid canonical block UUID"
          [ (kw "db-id", Wire.Int entity_id) ]);
-  if not (valid_revision (Int block_tx_id)) then
+  if not (valid_revision block_tx_id) then
     fail_render_read "Invalid canonical block transaction ID"
       [ (kw "db-id", Wire.Int entity_id)
-      ; (kw "block-uuid", Wire.Uuid (Option.value block_uuid ~default:"")) ];
+      ; (kw "block-uuid", Wire.Uuid (Option.value block_uuid ~default:""))
+      ; (kw "block-tx-id", Ds_wire.transit_of_value block_tx_id) ];
+  let block_tx_id =
+    match block_tx_id with Int n -> n | _ -> assert false
+  in
   (* eavt fold *)
   let attrs =
     datoms db Eavt ~e:entity_id ()

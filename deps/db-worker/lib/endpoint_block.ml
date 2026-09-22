@@ -771,10 +771,13 @@ let resolve_parent_id db (parent_uuid : string) : entity_id =
 let parent_membership db (parent_uuid : string) (parent_id : entity_id)
     (parent_recycled : bool) : int * membership_child list =
   let parent_tx_id = Render_snapshot.block_revision db parent_id in
-  if parent_tx_id < 0 then
+  if not (Render_snapshot.valid_revision parent_tx_id) then
     fail_render_read "Invalid direct-children parent transaction ID"
       [ (kw "parent-uuid", Wire.Uuid parent_uuid)
-      ; (kw "block-tx-id", Wire.Int parent_tx_id) ];
+      ; (kw "block-tx-id", Ds_wire.transit_of_value parent_tx_id) ];
+  let parent_tx_id =
+    match parent_tx_id with Int n -> n | _ -> assert false
+  in
   ( parent_tx_id
   , List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
     |> List.filter_map (fun (d : datom) ->
