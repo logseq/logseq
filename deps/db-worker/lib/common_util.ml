@@ -156,19 +156,232 @@ let str_ends_with (s : string) (suffix : string) : bool =
 let str_includes (s : string) (needle : string) : bool =
   str_index_of s needle <> None
 
-let is_space_char c = c = ' ' || c = '\t' || c = '\n' || c = '\r' || c = '\x0b' || c = '\x0c'
+(* cljs string/triml / trimr — goog.string.trimLeft/trimRight use the JS
+   WhiteSpace set (incl. U+00A0, U+3000, U+FEFF), handled by Unicode.triml/r. *)
+let str_triml (s : string) : string = Unicode.triml s
+let str_trimr (s : string) : string = Unicode.trimr s
 
-let str_triml (s : string) : string =
+(* js/parseFloat — leading JS whitespace skipped, then the longest valid
+   float prefix: digits, '.', exponent 'e'/'E' with optional sign, or a
+   sign followed by 'Infinity'. No hex/octal/binary prefixes (0x parses
+   as 0). Returns NaN as [None]. *)
+let parse_float (s0 : string) : float option =
+  let n0 = String.length s0 in
+  let i0 = ref 0 in
+  while
+    !i0 < n0
+    && (match s0.[!i0] with
+        | ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true
+        | _ -> false)
+  do incr i0 done;
+  let s = String.sub s0 !i0 (n0 - !i0) in
   let n = String.length s in
-  let rec go i = if i < n && is_space_char s.[i] then go (i + 1) else i in
-  let i = go 0 in
-  String.sub s i (n - i)
+  (* strip the sign before the Infinity check *)
+  let sign, s, n =
+    if n > 0 && (s.[0] = '+' || s.[0] = '-') then
+      (s.[0], String.sub s 1 (n - 1), n - 1)
+    else ('+', s, n)
+  in
+  if n >= 8 && String.sub s 0 8 = "Infinity" then
+    Some (if sign = '-' then Float.neg_infinity else Float.infinity)
+  else
+    let s = if sign = '+' then s else String.make 1 sign ^ s in
+    let n = String.length s in
+    let rec scan i seen_digit seen_dot seen_exp =
+      if i >= n then i
+      else
+        let c = s.[i] in
+        if c >= '0' && c <= '9' then scan (i + 1) true seen_dot seen_exp
+        else if c = '.' && not seen_dot && not seen_exp then
+          scan (i + 1) seen_digit true seen_exp
+        else if (c = 'e' || c = 'E') && seen_digit && not seen_exp then
+          scan (i + 1) seen_digit seen_dot true
+        else if
+          (c = '-' || c = '+')
+          && (i = 0 || s.[i - 1] = 'e' || s.[i - 1] = 'E')
+        then scan (i + 1) seen_digit seen_dot seen_exp
+        else i
+    in
+    let stop = scan 0 false false false in
+    (* a trailing exponent marker without digits is not part of the
+       number: parseFloat("1e") = 1, parseFloat("1e+") = 1 *)
+    let stop =
+      if stop >= 1 && (s.[stop - 1] = 'e' || s.[stop - 1] = 'E') then
+        stop - 1
+      else if
+        stop >= 2 && (s.[stop - 1] = '-' || s.[stop - 1] = '+')
+        && (s.[stop - 2] = 'e' || s.[stop - 2] = 'E')
+      then stop - 2
+      else stop
+    in
+    if stop > 0 then
+      try Some (float_of_string (String.sub s 0 stop)) with _ -> None
+    else None
 
-let str_trimr (s : string) : string =
+(* js/Number on a string — the whole string must be a numeric literal
+   (unlike parseFloat's prefix scan): optional sign, decimal
+   integer/fraction/exponent, 'Infinity', or 0x/0o/0b integer prefixes.
+   OCaml's float_of_string additionally accepts '_' separators and
+   inf/nan spellings that Number rejects, so gate those out. Input must
+   already be trimmed of whitespace. *)
+let js_number_of_string (s : string) : float option =
+  if s = "" then Some 0.
+  else if String.contains s '_' then None
+  else
+    match s with
+    | "Infinity" | "+Infinity" -> Some Float.infinity
+    | "-Infinity" -> Some Float.neg_infinity
+    | _ ->
+        let n = String.length s in
+        let radix_digits base s =
+          let ok =
+            s <> ""
+            && String.for_all
+                 (fun c ->
+                   match base with
+                   | 16 ->
+                       (c >= '0' && c <= '9')
+                       || (c >= 'a' && c <= 'f')
+                       || (c >= 'A' && c <= 'F')
+                   | 8 -> c >= '0' && c <= '7'
+                   | _ -> c = '0' || c = '1')
+                 s
+          in
+          if ok then
+            let acc =
+              String.fold_left
+                (fun acc c ->
+                  let d =
+                    if c >= '0' && c <= '9' then Char.code c - Char.code '0'
+                    else if c >= 'a' && c <= 'f' then
+                      Char.code c - Char.code 'a' + 10
+                    else Char.code c - Char.code 'A' + 10
+                  in
+                  acc *. float_of_int base +. float_of_int d)
+                0. s
+            in
+            Some acc
+          else None
+        in
+        if
+          n > 2 && s.[0] = '0'
+          && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'o' || s.[1] = 'O'
+             || s.[1] = 'b' || s.[1] = 'B')
+        then
+          let base =
+            match s.[1] with
+            | 'x' | 'X' -> 16
+            | 'o' | 'O' -> 8
+            | _ -> 2
+          in
+          radix_digits base (String.sub s 2 (n - 2))
+        else
+          (* reject OCaml-only spellings that Number returns NaN for *)
+          let signless =
+            if n > 0 && (s.[0] = '+' || s.[0] = '-') then
+              String.sub s 1 (n - 1)
+            else s
+          in
+          let lowered = String.lowercase_ascii signless in
+          if
+            lowered = "inf" || lowered = "infinity" || lowered = "nan"
+          then None
+          else if
+            (* a sign before 0x/0o/0b is NaN in JS, accepted in OCaml *)
+            signless <> s
+            && String.length signless > 2
+            && signless.[0] = '0'
+            && (signless.[1] = 'x' || signless.[1] = 'o'
+               || signless.[1] = 'b')
+          then None
+          else float_of_string_opt s
+
+(* js/parseInt — leading JS whitespace skipped, optional sign, then the
+   longest valid digit prefix. With ~radix:0 (default, matching cljs
+   parse-long/parse-int's bare js/parseInt) a "0x"/"0X" prefix selects
+   base 16, otherwise base 10; an explicit ~radix uses that base and
+   (for 16 only) also strips a leading "0x". Returns NaN as [None]. *)
+let parse_long ?(radix = 0) (s0 : string) : int option =
+  let n0 = String.length s0 in
+  let i0 = ref 0 in
+  while
+    !i0 < n0
+    && (match s0.[!i0] with
+        | ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true
+        | _ -> false)
+  do incr i0 done;
+  let s = String.sub s0 !i0 (n0 - !i0) in
   let n = String.length s in
-  let rec go i = if i >= 0 && is_space_char s.[i] then go (i - 1) else i in
-  let i = go (n - 1) in
-  String.sub s 0 (i + 1)
+  let neg, s, n =
+    if n > 0 && (s.[0] = '+' || s.[0] = '-') then
+      (s.[0] = '-', String.sub s 1 (n - 1), n - 1)
+    else (false, s, n)
+  in
+  let base, s, n =
+    if (radix = 0 || radix = 16) && n > 2 && s.[0] = '0'
+       && (s.[1] = 'x' || s.[1] = 'X')
+    then (16, String.sub s 2 (n - 2), n - 2)
+    else ((if radix = 0 then 10 else radix), s, n)
+  in
+  let digit c =
+    let d =
+      if c >= '0' && c <= '9' then Char.code c - Char.code '0'
+      else if c >= 'a' && c <= 'z' then Char.code c - Char.code 'a' + 10
+      else if c >= 'A' && c <= 'Z' then Char.code c - Char.code 'A' + 10
+      else 99
+    in
+    if d < base then Some d else None
+  in
+  let i = ref 0 and acc = ref 0 in
+  while
+    !i < n && (match digit s.[!i] with Some _ -> true | None -> false)
+  do
+    acc := !acc * base + Option.get (digit s.[!i]);
+    incr i
+  done;
+  if !i = 0 then None else Some (if neg then - !acc else !acc)
+
+(* js (str f) on a double — ECMAScript Number::toString: the shortest
+   digit sequence that round-trips, in fixed notation for
+   1e-6 <= |x| < 1e21 and scientific "d[.ddd]e±n" otherwise. Integers
+   print without a decimal point, -0 prints "0". *)
+let js_string_of_float (f : float) : string =
+  if Float.is_nan f then "NaN"
+  else if f = Float.infinity then "Infinity"
+  else if f = Float.neg_infinity then "-Infinity"
+  else if f = 0. then "0"
+  else
+    (* shortest %.*e precision that round-trips *)
+    let rec find_p p =
+      if p > 17 then 17
+      else
+        let s = Printf.sprintf "%.*e" (p - 1) f in
+        if float_of_string s = f then p else find_p (p + 1)
+    in
+    let sci = Printf.sprintf "%.*e" (find_p 1 - 1) f in
+    let epos = String.index sci 'e' in
+    let mant = String.sub sci 0 epos in
+    let exp =
+      int_of_string (String.sub sci (epos + 1) (String.length sci - epos - 1))
+    in
+    let neg = mant.[0] = '-' in
+    let m = if neg then String.sub mant 1 (String.length mant - 1) else mant in
+    let digits = String.concat "" (String.split_on_char '.' m) in
+    let k = String.length digits in
+    let sign = if neg then "-" else "" in
+    if exp >= -6 && exp < 21 then
+      if exp >= k - 1 then sign ^ digits ^ String.make (exp - k + 1) '0'
+      else if exp >= 0 then
+        sign ^ String.sub digits 0 (exp + 1) ^ "."
+        ^ String.sub digits (exp + 1) (k - exp - 1)
+      else sign ^ "0." ^ String.make (-exp - 1) '0' ^ digits
+    else
+      let m2 =
+        if k = 1 then digits
+        else String.sub digits 0 1 ^ "." ^ String.sub digits 1 (k - 1)
+      in
+      Printf.sprintf "%s%s%s%d" sign m2
+        (if exp < 0 then "e-" else "e+") (abs exp)
 
 (* common-util/tag-valid? *)
 let tag_valid_re = Regexp.compile "[#\t\r\n]+"
@@ -205,7 +418,7 @@ let split_namespace_pages (title : string) : string list =
         let next = last ^ "/" ^ x in
         loop (next :: acc) next rest
     in
-    List.map String.trim (loop [ first ] first others)
+    List.map Unicode.trim (loop [ first ] first others)
 
 let url_encoded_pattern = Regexp.compile "%[0-9a-f]{2}"
 
@@ -218,7 +431,7 @@ let capitalize_all (s : string) : string =
   String.split_on_char ' ' s
   |> List.map (fun w ->
          if w = "" then w
-         else String.mapi (fun i c -> if i = 0 then Char.uppercase_ascii c else c) w)
+         else Unicode.capitalize w)
   |> String.concat " "
 
 (* common-util/distinct-by *)
@@ -255,13 +468,13 @@ let get_format (file : string) : string =
   | "" -> ""
   | _ ->
     (match path_to_file_ext file with
-     | Some ext -> normalize_format (String.lowercase_ascii ext)
+     | Some ext -> normalize_format (Unicode.lowercase ext)
      | None -> "")
 
 (* common-util/get-file-ext *)
 let get_file_ext (file : string) : string option =
   if String.contains file '.' then
-    Option.map String.lowercase_ascii (path_to_file_ext file)
+    Option.map Unicode.lowercase (path_to_file_ext file)
   else None
 
 (* common-util/uuid-string? *)

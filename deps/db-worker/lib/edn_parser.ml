@@ -705,7 +705,7 @@ module Parser = struct
       && String.for_all (fun ch -> ch = '-' || is_hex_digit ch) uuid
     in
     if valid then
-      any (Tagged ("uuid", any (String (String.lowercase_ascii uuid))))
+      any (Tagged ("uuid", any (String (Unicode.lowercase uuid))))
     else parse_error parser ("Invalid UUID literal: " ^ uuid)
 
   and parse_fixed_digits parser source pos count label =

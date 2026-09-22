@@ -150,8 +150,8 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
     ; "block/title", String original_page_name' ]
     @ (match original_page_name with
        | name
-         when String.lowercase_ascii name
-              <> String.lowercase_ascii original_page_name'
+         when Unicode.lowercase name
+              <> Unicode.lowercase original_page_name'
               && not !export_to_db_graph ->
          [ "block.temp/original-page-name", String name ]
        | _ -> [])
@@ -183,10 +183,10 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
          [ "block/uuid", Uuid new_uuid ])
     @ (if namespace then
          match Ns_util.split_last "/" original_page_name with
-         | ns, _ when String.trim ns <> "" ->
+         | ns, _ when Unicode.trim ns <> "" ->
            [ "block/namespace"
            , Block_map.normalize_value
-               (Map [ String "block/name", String (String.trim (Ldb.page_name_sanity_lc ns)) ]) ]
+               (Map [ String "block/name", String (Unicode.trim (Ldb.page_name_sanity_lc ns)) ]) ]
          | _ -> []
        else [])
     @ (if opts.with_timestamp && (opts.skip_existing_page_check || page_e = None) then
@@ -215,7 +215,7 @@ let page_name_to_map (original_page_name : string) db (with_timestamp : bool)
   else
     let db_based = Ldb.db_based_graph db in
     let original_page_name =
-      let t = String.trim original_page_name in
+      let t = Unicode.trim original_page_name in
       if db_based then sanitize_hashtag_name t else t
     in
     match page_name_string_to_map original_page_name db date_formatter
@@ -290,7 +290,7 @@ let inline_nodes_to_plain_text (nodes : value list) : string option =
     | _ -> ()
   in
   List.iter walk nodes;
-  let s = String.trim (Buffer.contents buf) in
+  let s = Unicode.trim (Buffer.contents buf) in
   if s = "" then None else Some s
 
 (* gp-block/get-page-reference — returns the referenced page name, a macro
@@ -433,7 +433,7 @@ let get_page_refs_from_property_names (properties : (value * value * value) list
     in
     properties
     |> List.filter_map (fun (k, _v, _ast) -> Clj_value.string_of_kwish k)
-    |> List.filter (fun s -> String.trim s <> "")
+    |> List.filter (fun s -> Unicode.trim s <> "")
     |> List.filter (fun s -> not (List.mem s excluded))
     |> List.filter (fun s -> not (List.mem s builtins))
     |> Common_util.distinct_by Fun.id
@@ -465,7 +465,7 @@ let get_page_ref_names_from_properties (properties : (value * value * value) lis
              |> List.filter_map
                   (fun x ->
                     match x with
-                    | String s when String.trim s <> "" -> Some (String s)
+                    | String s when Unicode.trim s <> "" -> Some (String s)
                     | _ -> None)
            in
            ast_refs @ value_refs)
@@ -473,7 +473,7 @@ let get_page_ref_names_from_properties (properties : (value * value * value) lis
   let names = get_page_refs_from_property_names properties (property_pages_config user_config) in
   page_refs @ List.map (fun s -> String s) names
   |> List.filter_map Clj_value.string_of_kwish
-  |> List.filter (fun s -> String.trim s <> "")
+  |> List.filter (fun s -> Unicode.trim s <> "")
   |> Common_util.distinct_by Fun.id
 
 (* clojure.walk/postwalk over values *)
@@ -551,7 +551,7 @@ let extract_properties (properties : value list)
                  | String s -> s
                  | _ -> Edn_util.pr_str k
                in
-               let ks = String.lowercase_ascii ks in
+               let ks = Unicode.lowercase ks in
                let ks = Common_util.str_replace_all ks "/" "-" in
                let ks = Common_util.str_replace_all ks " " "-" in
                let ks = Common_util.str_replace_all ks "_" "-" in
@@ -650,7 +650,7 @@ let timestamps_to_scheduled_and_deadline (timestamps : (string * value) list)
     : (attr * value) list =
   List.filter_map
     (fun (k, v) ->
-      match String.lowercase_ascii k with
+      match Unicode.lowercase k with
       | "scheduled" -> Some ("scheduled", timestamp_to_scheduled_or_deadline_value v)
       | "deadline" -> Some ("deadline", timestamp_to_scheduled_or_deadline_value v)
       | _ -> None)
@@ -684,7 +684,7 @@ let ref_to_map db (col : value list)
     List.filter
       (fun p ->
         match p with
-        | String s -> String.trim s <> ""
+        | String s -> Unicode.trim s <> ""
         | Map _ -> true
         | _ -> false)
       col
@@ -713,7 +713,7 @@ let ref_to_map db (col : value list)
           else [ String p ]
         | None -> [])
       col
-    |> List.filter (fun v -> match v with String s -> String.trim s <> "" | _ -> false)
+    |> List.filter (fun v -> match v with String s -> Unicode.trim s <> "" | _ -> false)
     |> Common_util.distinct_by Fun.id
   in
   let col = Common_util.distinct_by Fun.id (col @ children_pages) in
@@ -827,10 +827,10 @@ let with_page_refs_and_tags (block : Block_map.t) db (date_formatter : string op
          List.filter_map
            (fun a ->
              match Block_map.attr_value block a with
-             | Some (String s) when String.trim s <> "" -> Some s
+             | Some (String s) when Unicode.trim s <> "" -> Some s
              | _ -> None)
            [ "marker"; "priority" ])
-    |> List.filter (fun s -> String.trim s <> "")
+    |> List.filter (fun s -> Unicode.trim s <> "")
     |> Common_util.distinct_by Fun.id
   in
   let refs = ref (List.map (fun s -> String s) seed_refs) in
@@ -876,7 +876,7 @@ let with_page_refs_and_tags (block : Block_map.t) db (date_formatter : string op
     (title_items @ body_items);
   let refs =
     List.rev !refs
-    |> List.filter (fun v -> match v with String s -> String.trim s <> "" | _ -> true)
+    |> List.filter (fun v -> match v with String s -> Unicode.trim s <> "" | _ -> true)
   in
   let name_to_id = Name_id.create 127 in
   let ref_maps =
@@ -976,7 +976,7 @@ let get_custom_id_or_new_id (properties : (attr * value) list) : string =
        List.assoc_opt "id" properties)
     with
     | Some v, _, _ | None, Some v, _ | None, None, Some v ->
-      (match v with String s -> Some (String.trim s) | _ -> None)
+      (match v with String s -> Some (Unicode.trim s) | _ -> None)
     | _ -> None
   in
   match custom_id with
@@ -1166,7 +1166,7 @@ let construct_block (ast_block : value) (properties : extract_properties_result)
     | None -> properties
   in
   let ref_pages_in_properties =
-    List.filter (fun s -> String.trim s <> "") properties.page_refs
+    List.filter (fun s -> Unicode.trim s <> "") properties.page_refs
   in
   let block_data =
     match ast_block with

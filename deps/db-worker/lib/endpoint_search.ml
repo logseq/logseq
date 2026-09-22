@@ -48,7 +48,7 @@ let search_index_build_pause_ms = 300.
 
 let node_runtime () = Runtime_env.kind () = Runtime_env.Node
 
-let is_blank s = String.trim s = ""
+let is_blank s = Unicode.trim s = ""
 
 (* clear-search-index-builds! — cljs calls this from close-db-aux!. *)
 let clear_search_index_builds repo =
@@ -226,7 +226,7 @@ let validate_embedding_count blocks embeddings =
                 | None -> Wire.Nil) ) ] ))
 
 let embeddable_index_block (b : Search_index.index_item) : bool =
-  not (is_blank (String.trim b.item_title))
+  not (is_blank (Unicode.trim b.item_title))
 
 (* vector-embedding-title — truncates at UTF-16 length > 2048. *)
 let vector_embedding_title (b : Search_index.index_item) : string =

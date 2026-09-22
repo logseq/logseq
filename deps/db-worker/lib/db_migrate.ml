@@ -168,7 +168,7 @@ let add_missing_page_name (db : db) : Wire.t list =
          match Ldb.ent_of_id db d.e with
          | Some e ->
              (match Ldb.string_value e "block/title" with
-              | Some title when String.trim title <> "" ->
+              | Some title when Unicode.trim title <> "" ->
                   Some
                     (wire_map
                        [ "db/id", Int d.e

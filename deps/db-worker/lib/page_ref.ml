@@ -28,7 +28,7 @@ let markdown_page_ref_name (s : string) : string option =
       else find_last (i - 1)
     in
     match find_last (n - sl) with
-    | Some close -> Some (String.trim (String.sub s 1 (close - 1)))
+    | Some close -> Some (Unicode.trim (String.sub s 1 (close - 1)))
     | None -> None
   else None
 

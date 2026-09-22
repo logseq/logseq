@@ -318,7 +318,7 @@ let build_links (links : link_raw list) : Wire.t list =
           let endpoints = (source, target) in
           let label_ =
             match l.label with
-            | Some s when String.trim s <> "" -> Some s
+            | Some s when Unicode.trim s <> "" -> Some s
             | _ -> None
           in
           (match Hashtbl.find_opt index_by_endpoints endpoints with
@@ -906,7 +906,7 @@ let show_orphan_pages = function
   | _ -> true
 
 let built_in_pages_lower =
-  List.map String.lowercase_ascii Ldb.built_in_pages_names
+  List.map Unicode.lowercase Ldb.built_in_pages_names
 
 let opts_bool (opts : Wire.t) k ~default =
   match Wire.get k opts with
@@ -980,7 +980,7 @@ let all_pages_visible_page (v : all_pages_vis) (page : entity)
   && (v.builtin_pages
       ||
       match Ldb.string_value page "block/name" with
-      | Some n -> not (List.mem (String.lowercase_ascii n) built_in_pages_lower)
+      | Some n -> not (List.mem (Unicode.lowercase n) built_in_pages_lower)
       | None -> true)
   && (v.orphan_pages || IntSet.mem page.id v.linked_page_ids)
 
@@ -991,7 +991,7 @@ let all_pages_visible_page_id (v : all_pages_vis) (page_id : entity_id)
   && (v.journal || not (List.mem "logseq.class/Journal" tag_idents))
   && (v.excluded_pages || not (IntSet.mem page_id v.excluded_page_ids))
   && (v.builtin_pages
-      || not (List.mem (String.lowercase_ascii page_name) built_in_pages_lower))
+      || not (List.mem (Unicode.lowercase page_name) built_in_pages_lower))
   && (v.orphan_pages || IntSet.mem page_id v.linked_page_ids)
 
 (* ---------- normalize ---------- *)

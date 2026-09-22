@@ -215,7 +215,7 @@ let get_debug_datoms (conn : conn) : datom list =
 (* cljs worker/export.cljs content->ast — ->db-edn output with pos
    stripped and Properties asts removed. *)
 let content_to_ast ~(content : string) : Export_common_impl.block_ast list =
-  if String.trim content = "" then []
+  if Unicode.trim content = "" then []
   else
     Gp_mldoc.to_db_edn ~content ~format:"markdown"
     |> Clj_value.coll_items

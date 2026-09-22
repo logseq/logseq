@@ -48,7 +48,7 @@ let uuid_attr (m : t) (a : attr) : string option =
 
 let blank_title (m : t) : bool =
   match string_attr m "block/title" with
-  | Some s -> String.trim s = ""
+  | Some s -> Unicode.trim s = ""
   | None -> false
 
 (* Values that act as entity refs: Ref, Ref_to, Int, Map{db/id},

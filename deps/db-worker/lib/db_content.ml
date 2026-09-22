@@ -91,7 +91,7 @@ let heading_content_to_route_name (s : string) : string option =
   while !i < n && is_ws s.[!i] do incr i done;
   let j = ref !i in
   while !j < n && s.[!j] <> '\n' do incr j done;
-  Some (String.lowercase_ascii (String.sub s !i (!j - !i)))
+  Some (Unicode.lowercase (String.sub s !i (!j - !i)))
 
 (* handler/page.cljs heading-route-name — title with id refs resolved
    to title refs, then to plain page names, then route-normalized. *)
@@ -141,7 +141,7 @@ let block_route_resolution db (ref_v : value) (route_name : string)
   | None -> None
   | Some page ->
       let candidates = heading_route_candidates db page.id in
-      let normalized = String.lowercase_ascii route_name in
+      let normalized = Unicode.lowercase route_name in
       let block =
         List.find_opt
           (fun b -> heading_route_name b = Some normalized)
@@ -270,7 +270,7 @@ let replace_tag_refs_with_page_refs (content : string) (tags : entity list)
         | None -> c)
       content (sort_refs tags)
   in
-  String.trim content
+  Unicode.trim content
 
 (* common-util/clear-markdown-heading — strip leading "#"s + whitespace *)
 let clear_markdown_heading (s : string) : string =
@@ -409,7 +409,7 @@ let title_ref_to_id_ref ?(replace_tag = true) (title : string) (refs : value lis
 (* db-content/replace-tags-with-id-refs *)
 let replace_tags_with_id_refs (content : string) (tags : (attr * value) list list)
     : string =
-  String.trim
+  Unicode.trim
     (List.fold_left
        (fun content tag ->
          match ref_map_uuid tag, ref_map_string tag "block/title" with
@@ -425,7 +425,7 @@ let replace_tags_with_id_refs (content : string) (tags : (attr * value) list lis
    for the import pipeline (the entity version above serves endpoints). *)
 let replace_tag_refs_with_page_refs_maps (content : string)
     (tags : (attr * value) list list) : string =
-  String.trim
+  Unicode.trim
     (List.fold_left
        (fun content tag ->
          match ref_map_uuid tag with

@@ -222,7 +222,7 @@ let validate_page_title_characters (page_title : string) : unit =
 
 (* outliner-validate/validate-page-title *)
 let validate_page_title (page_title : string) : unit =
-  if String.trim page_title = "" then
+  if Unicode.trim page_title = "" then
     raise
       (notif ~kind:"warning" ~i18n_key:"page.validation/name-blank"
          "Page name can't be blank.")

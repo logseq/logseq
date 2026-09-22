@@ -90,12 +90,12 @@ let get_page_name ~(file_path : string) ~(ast : value list) ~(uri_encoded : bool
                    match prop with
                    | Vector (k :: _v :: _) | List (k :: _v :: _) ->
                      (match k with
-                      | String ks when String.lowercase_ascii ks = "title" ->
+                      | String ks when Unicode.lowercase ks = "title" ->
                         (match prop with
                          | Vector (_ :: v :: _) | List (_ :: v :: _) ->
                            (match v with String s -> Some s | _ -> None)
                          | _ -> None)
-                      | Keyword ks when String.lowercase_ascii ks = "title" ->
+                      | Keyword ks when Unicode.lowercase ks = "title" ->
                         (match prop with
                          | Vector (_ :: v :: _) | List (_ :: v :: _) ->
                            (match v with String s -> Some s | _ -> None)
@@ -147,7 +147,7 @@ let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
   let aliases =
     List.filter_map Clj_value.string_of_kwish alias_items
     |> List.filter (fun a ->
-           not (page_name = Ldb.page_name_sanity_lc a || String.trim a = ""))
+           not (page_name = Ldb.page_name_sanity_lc a || Unicode.trim a = ""))
   in
   let aliases' =
     List.filter_map
@@ -179,7 +179,7 @@ let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
              | s -> [ s ]
            in
            List.filter_map Clj_value.string_of_kwish tags_items
-           |> List.filter (fun t -> String.trim t <> "")
+           |> List.filter (fun t -> Unicode.trim t <> "")
            |> List.map
                 (fun tag ->
                   Map
@@ -429,7 +429,7 @@ let extract ~(file_path : string) ~(content : string)
     ~(user_config : (attr * value) list) ?(verbose = false)
     ?(parse_outline_only = false) (opts : Gp_block.extract_options) :
     Block_map.t list * Block_map.t list * value list =
-  if String.trim content = "" then ([], [], [])
+  if Unicode.trim content = "" then ([], [], [])
   else
     let format = Common_util.get_format file_path in
     if verbose then
@@ -465,7 +465,7 @@ let extract ~(file_path : string) ~(content : string)
                    | String s -> s
                    | _ -> Edn_util.pr_str x
                  in
-                 let kl = String.lowercase_ascii k in
+                 let kl = Unicode.lowercase k in
                  Some
                    ( kl
                    , Gp_text.parse_property k

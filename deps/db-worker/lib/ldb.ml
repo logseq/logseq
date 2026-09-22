@@ -170,7 +170,7 @@ let remove_boundary_slashes s =
 
 (* common-util/page-name-sanity: boundary slashes + NFC. *)
 let page_name_sanity s = Unicode.nfc (remove_boundary_slashes s)
-let page_name_sanity_lc s = page_name_sanity (String.lowercase_ascii s)
+let page_name_sanity_lc s = page_name_sanity (Unicode.lowercase s)
 
 (* ---------- initial-data helpers ---------- *)
 
@@ -776,7 +776,7 @@ let get_bidirectional_properties db (target_id : entity_id)
               in
               let title =
                 match custom_title with
-                | Some s when String.length (String.trim s) > 0 -> s
+                | Some s when String.length (Unicode.trim s) > 0 -> s
                 | _ ->
                     Plural.plural
                       (Option.value
@@ -910,7 +910,7 @@ let get_orphaned_pages db
     ?(empty_ref_f = fun (page : entity) -> ref_ids page "block/_refs" = [])
     ?(built_in_pages_names = built_in_pages_names) (pages : string list)
     : entity list =
-  let built_in_lower = List.map String.lowercase_ascii built_in_pages_names in
+  let built_in_lower = List.map Unicode.lowercase built_in_pages_names in
   List.filter_map
     (fun page_name ->
       match get_page db (String page_name) with
@@ -925,7 +925,7 @@ let get_orphaned_pages db
                      List.length (ref_ids page "block/_page") = 1
                      &&
                      (match string_value first_child "block/title" with
-                      | Some t -> List.mem (String.trim t) [ ""; "-"; "*" ]
+                      | Some t -> List.mem (Unicode.trim t) [ ""; "-"; "*" ]
                       | None -> false)
                  | None -> false))
             && not (List.mem name' built_in_lower)

@@ -53,7 +53,7 @@ let wire_assoc key v m =
   | _ -> Wire.Map [ (kw key, v) ]
 
 let seq_ = function
-  | Some s -> String.length (String.trim s) > 0
+  | Some s -> String.length (Unicode.trim s) > 0
   | None -> false
 
 (* Wraps an effect-body so sync raises (fail-fast, transit errors

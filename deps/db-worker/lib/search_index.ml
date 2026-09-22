@@ -307,7 +307,7 @@ let split_ws (s : string) : string list =
   go 0 []
 
 let query_to_terms (q : string) : string list =
-  split_ws (String.trim q)
+  split_ws (Unicode.trim q)
   |> List.filter (fun t -> not (is_blank t))
   |> List.filter (fun t ->
          not (List.mem (Unicode.lowercase t) query_boolean_operators))
@@ -858,7 +858,7 @@ let title_ref_replacement id_to_title ~match_ ~groups ~offset:_ ~input:_ =
   (* spec regexp groups: groups.(0) is the whole match, captures start at 1 *)
   let hash_prefix = match groups.(1) with Some s -> s | None -> "" in
   let id = match groups.(2) with Some s -> s | None -> "" in
-  match List.assoc_opt (String.lowercase_ascii id) id_to_title with
+  match List.assoc_opt (Unicode.lowercase id) id_to_title with
   | Some ref_title ->
       if hash_prefix = "#" && not (String.contains ref_title ' ') then
         "#" ^ ref_title
@@ -871,7 +871,7 @@ let replace_title_refs_once content id_to_title =
 let node_ref_title_entry ~replace_block_refs (r : Ev.node) =
   match Ev.uuid r, Ev.title r with
   | Some u, Some t when replace_block_refs || Ev.is_page r ->
-      Some (String.lowercase_ascii u, t)
+      Some (Unicode.lowercase u, t)
   | _ -> None
 
 let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
@@ -882,13 +882,13 @@ let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
         List.filter
           (fun n ->
              match Ev.uuid n with
-             | Some u -> not (List.mem (String.lowercase_ascii u) seen)
+             | Some u -> not (List.mem (Unicode.lowercase u) seen)
              | None -> false)
           frontier
       in
       let seen' =
         seen @ List.filter_map (fun n ->
-            Option.map String.lowercase_ascii (Ev.uuid n)) new_refs
+            Option.map Unicode.lowercase (Ev.uuid n)) new_refs
       in
       let acc' =
         acc @ List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs

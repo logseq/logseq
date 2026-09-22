@@ -328,7 +328,7 @@ let repo_error ~(method_str : string) (args : Wire.t)
   if List.mem method_str non_repo_methods then None
   else
     match repo_arg args with
-    | Wire.String repo when repo <> "" && String.trim repo <> "" ->
+    | Wire.String repo when repo <> "" && Unicode.trim repo <> "" ->
         if Graph_dir.same_repo repo bound_repo then None
         else
           Some

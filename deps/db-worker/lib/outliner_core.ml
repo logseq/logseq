@@ -16,7 +16,7 @@ let kw (s : string) : value = Keyword s
 let str_contains (s : string) (sub : string) : bool = Ns_util.str_contains s sub
 
 let str_blank (s : string option) : bool =
-  match s with None -> false | Some s -> String.trim s = ""
+  match s with None -> false | Some s -> Unicode.trim s = ""
 
 (* map value field accessors on Block_map.t *)
 let mget (m : Block_map.t) (a : attr) : value option = Block_map.attr_value m a
@@ -491,7 +491,7 @@ let fix_tag_ids (m : Block_map.t) (db : db) : Block_map.t =
         tags
     in
     let ref_titles = List.filter_map (tag_title db) refs_v in
-    let lc_ref_titles = List.map String.lowercase_ascii ref_titles in
+    let lc_ref_titles = List.map Unicode.lowercase ref_titles in
     let tags =
       List.filter
         (fun tag ->
@@ -499,7 +499,7 @@ let fix_tag_ids (m : Block_map.t) (db : db) : Block_map.t =
           | Some t ->
               not
                 ((not (List.mem t ref_titles))
-                 && List.mem (String.lowercase_ascii t) lc_ref_titles)
+                 && List.mem (Unicode.lowercase t) lc_ref_titles)
           | None -> true)
         tags
     in
@@ -930,7 +930,7 @@ let remove_disallowed_inline_classes (db : db) (block : Block_map.t) : Block_map
                   Db_content.replace_all t
                     ~pattern:("#" ^ Page_ref.to_page_ref u)
                     ~replacement:("#" ^ ttitle)
-                  |> String.trim
+                  |> Unicode.trim
               | _ -> t)
             title disallowed
         in

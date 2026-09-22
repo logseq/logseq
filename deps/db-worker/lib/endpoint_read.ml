@@ -388,7 +388,7 @@ let get_recent_pages args =
                        && Ldb.value e "logseq.property/hide?" = Some (Bool true))
                       ||
                       match Ldb.raw_title db e with
-                      | Some (String s) -> String.trim s = ""
+                      | Some (String s) -> Unicode.trim s = ""
                       | _ -> true))
             |> List.map (plain_map_wire db))))
 

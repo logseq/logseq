@@ -449,7 +449,7 @@ let remove_inline_page_class_from_title (block : entity) (page_tag : entity)
     Ldb.string_value page_tag "block/uuid" |> Option.value ~default:""
   in
   let needle = "#" ^ Page_ref.to_page_ref uuid in
-  String.trim (replace_sub_all raw needle)
+  Unicode.trim (replace_sub_all raw needle)
 
 let fix_inline_built_in_page_classes (report : tx_report) : tx_op list =
   if rtc_tx_or_download_graph report.tx_meta then []
@@ -874,7 +874,7 @@ let add_created_by_ref_hook (db_before : db) (db_after : db)
                 | _ -> None
               else if d.a = "block/title"
                       && (match d.v with
-                          | String s -> String.trim s <> ""
+                          | String s -> Unicode.trim s <> ""
                           | _ -> false)
                       && (match
                             entity db_before (Entity_id d.e)
@@ -883,7 +883,7 @@ let add_created_by_ref_hook (db_before : db) (db_after : db)
                               (match
                                  Ldb.string_value old "block/title"
                                with
-                               | Some t -> String.trim t = ""
+                               | Some t -> Unicode.trim t = ""
                                | None -> false)
                           | None -> false)
               then

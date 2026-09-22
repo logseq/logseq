@@ -197,7 +197,7 @@ let order_list_type (block : entity) : string option =
   match Ldb.value block "logseq.property/order-list-type" with
   | Some ((String _ | Keyword _) as v) ->
       (match order_list_type_label v with
-       | Some s -> Some (String.lowercase_ascii s)
+       | Some s -> Some (Unicode.lowercase s)
        | None -> None)
   | Some (Ref id) ->
       (match Ldb.ent_of_id block.db id with
@@ -207,11 +207,11 @@ let order_list_type (block : entity) : string option =
               Ldb.string_value e "block/name",
               Ldb.ident_of e
             with
-            | Some t, _, _ -> Some (String.lowercase_ascii t)
-            | None, Some n, _ -> Some (String.lowercase_ascii n)
+            | Some t, _, _ -> Some (Unicode.lowercase t)
+            | None, Some n, _ -> Some (Unicode.lowercase n)
             | None, None, Some i ->
                 Some
-                  (String.lowercase_ascii
+                  (Unicode.lowercase
                      (match String.rindex_opt i '/' with
                       | Some idx -> String.sub i (idx + 1) (String.length i - idx - 1)
                       | None -> i))
@@ -256,7 +256,7 @@ let order_list_index (block : entity) (target_type : string) : Wire.t option =
   | 0 -> Some (Wire.Int idx)
   | 1 ->
       (match number_to_letters idx with
-       | Some s -> Some (Wire.String (String.lowercase_ascii s))
+       | Some s -> Some (Wire.String (Unicode.lowercase s))
        | None -> None)
   | _ -> (match number_to_roman idx with Some s -> Some (Wire.String s) | None -> None)
 

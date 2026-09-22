@@ -64,7 +64,7 @@ let block_order_list_type (db : db) (eid : entity_id) : string option =
         | _ -> ""
       in
       if label = "" then None
-      else Some (String.lowercase_ascii label)
+      else Some (Unicode.lowercase label)
 
 let canonical_block_excluded_attrs =
   [ "block/children"; "block/properties"; "block/properties-text-values"

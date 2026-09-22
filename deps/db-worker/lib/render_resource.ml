@@ -213,7 +213,7 @@ let render_recent_pages db key _runtime =
              ((Ldb.is_property e
                && Ldb.value e "logseq.property/hide?" = Some (Bool true))
               || (match Ldb.string_value e "block/title" with
-                  | Some t -> String.trim t = ""
+                  | Some t -> Unicode.trim t = ""
                   | None -> true)))
   in
   ( watch_of_ents (List.map uuid_of pages)
@@ -223,7 +223,7 @@ let render_page_identity db key _runtime =
   let lookup =
     match List.nth key 1 with
     | (Wire.Uuid _) as v -> v
-    | Wire.String s when String.trim s <> "" -> Wire.String s
+    | Wire.String s when Unicode.trim s <> "" -> Wire.String s
     | v -> fail "Invalid page identity lookup" [ (kw "lookup", v) ]
   in
   let watch_lookup =
@@ -542,7 +542,7 @@ let unlinked_reference_exists db repo (id : entity_id) : bool =
   | None -> false
   | Some block ->
       let title =
-        String.lowercase_ascii
+        Unicode.lowercase
           (Option.value (Ldb.string_value block "block/title") ~default:"")
       in
       let result = Render_deps.search_blocks ~repo ~db title 100 in
@@ -557,7 +557,7 @@ let unlinked_reference_exists db repo (id : entity_id) : bool =
           && not (List.mem id (Ldb.ref_ids cand "block/refs"))
           && (match Ldb.string_value cand "block/title" with
               | Some t ->
-                  let t' = String.lowercase_ascii t in
+                  let t' = Unicode.lowercase t in
                   if String.length title = 0 then String.length t' = 0
                   else
                     (* string/includes? *)
@@ -660,7 +660,7 @@ let comment_author_title (comment_block : entity) : Wire.t =
   match Ldb.ref_ent comment_block "logseq.property/created-by-ref" with
   | Some author -> (
       match Ldb.string_value author "block/title" with
-      | Some t when String.trim t <> "" -> Wire.String (String.trim t)
+      | Some t when Unicode.trim t <> "" -> Wire.String (Unicode.trim t)
       | _ -> Wire.Nil)
   | None -> Wire.Nil
 
@@ -763,12 +763,12 @@ let render_block_task_time db key _runtime =
 let render_route_block db key _runtime =
   let page_lookup =
     match List.nth key 1 with
-    | Wire.String s when String.trim s <> "" -> s
+    | Wire.String s when Unicode.trim s <> "" -> s
     | v -> fail "Invalid route page lookup" [ (kw "page-lookup", v) ]
   in
   let route_name =
     match List.nth key 2 with
-    | Wire.String s when String.trim s <> "" -> s
+    | Wire.String s when Unicode.trim s <> "" -> s
     | v -> fail "Invalid block route name" [ (kw "route-name", v) ]
   in
   let normalized = Ldb.page_name_sanity_lc page_lookup in
@@ -1153,7 +1153,7 @@ let resolve_page_ref_equality (form : query_form) : query_form =
           let name =
             match page_reference with
             | QueryFormString s ->
-                let lowered = String.lowercase_ascii s in
+                let lowered = Unicode.lowercase s in
                 (match Page_ref.get_page_name lowered with
                  | Some n -> n
                  | None -> lowered)
@@ -1167,7 +1167,7 @@ let resolve_page_ref_equality (form : query_form) : query_form =
 let query_current_page_title (db : db) (ctx : (Wire.t * Wire.t) list) : string option =
   let get k = List.assoc_opt (Wire.Keyword k) ctx in
   match get "current-page-title" with
-  | Some (Wire.String t) when String.trim t <> "" -> Some t
+  | Some (Wire.String t) when Unicode.trim t <> "" -> Some t
   | _ ->
       let block_title =
         match get "current-block-uuid" with
@@ -1384,7 +1384,7 @@ let attr_watch_safe_rules = [ "between"; "block-content"; "page" ]
 let dsl_query_watch_dependencies db (query_string : string)
     (current_page_title : string option) (today_day : int option) =
   if
-    String.trim query_string = ""
+    Unicode.trim query_string = ""
     || Db_query_dsl.wrapped_by_quotes query_string
   then ([], [], false, true)
   else
@@ -1506,7 +1506,7 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
       let ok =
         Option.is_some allowed && keys_ok
         && opt_ok "current-page-title" (function
-             | Some (Wire.String s) -> String.trim s <> ""
+             | Some (Wire.String s) -> Unicode.trim s <> ""
              | _ -> false)
         && opt_ok "current-block-uuid" (function
              | Some (Wire.Uuid _) -> true
@@ -1519,7 +1519,7 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
              | Some (Wire.Bool _) -> true
              | _ -> false)
         && opt_ok "result-transform-edn" (function
-             | Some (Wire.String s) -> String.trim s <> ""
+             | Some (Wire.String s) -> Unicode.trim s <> ""
              | _ -> false)
         &&
         match kind with
@@ -1544,8 +1544,8 @@ let quoted_query_text (s : string) : string option =
   let n = String.length s in
   if n >= 2 && s.[0] = '"' && s.[n - 1] = '"' then
     match (try Some (Parser.read_edn s) with _ -> None) with
-    | Some (QueryFormString v) when String.trim v <> "" ->
-        Some (String.trim v)
+    | Some (QueryFormString v) when Unicode.trim v <> "" ->
+        Some (Unicode.trim v)
     | _ -> None
   else None
 
@@ -1742,7 +1742,7 @@ let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
   match kind with
   | "dsl" -> (
       let qs = Option.value query_string ~default:"" in
-      if String.trim qs = "" then []
+      if Unicode.trim qs = "" then []
       else
         match quoted_query_text qs with
         | Some query_text ->
@@ -1801,7 +1801,7 @@ let query_result_rows db (rows : query_result list list)
      with entities tagged datascript/Entity. *)
   let rows_wire =
     match get "result-transform-edn" with
-    | Some (Wire.String edn) when String.trim edn <> "" ->
+    | Some (Wire.String edn) when Unicode.trim edn <> "" ->
         let encoded =
           List.map (fun row -> Wire.Array (List.map wire_cell_of_query_result row)) rows'
         in
@@ -1865,7 +1865,7 @@ let view_context_keys =
 let view_owner db (owner_lookup : Wire.t) : entity =
   match owner_lookup with
   | Wire.Uuid u -> entity_by_uuid db "owner-uuid" u
-  | Wire.String s when String.trim s <> "" -> (
+  | Wire.String s when Unicode.trim s <> "" -> (
       match Ldb.get_page db (String s) with
       | Some p -> p
       | None -> fail "Missing view owner page" [ (kw "owner-lookup", owner_lookup) ])
@@ -2104,7 +2104,7 @@ let view_value_watch_keys (config : view_config) (view_partition : string)
   in
   let keys =
     match config.vc_input with
-    | Some (Wire.String s) when String.trim s <> "" -> keys @ [ watch_attr "block/title" ]
+    | Some (Wire.String s) when Unicode.trim s <> "" -> keys @ [ watch_attr "block/title" ]
     | _ -> keys
   in
   let keys =

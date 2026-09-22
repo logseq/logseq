@@ -30,7 +30,7 @@ let whitespace_re = Regexp.compile "\\s+"
 
 let simple_tag_token_re = Regexp.compile "[^\\s#\\[\\]\\(\\),.;:'\"`]+"
 
-let str_blank s = String.trim s = ""
+let str_blank s = Unicode.trim s = ""
 
 let split_lines s = if s = "" then [] else String.split_on_char '\n' s
 
@@ -105,7 +105,7 @@ let reserved_windows_device_names =
 let max_file_stem_length = 160
 
 let reserved_windows_device_name s =
-  List.mem (String.uppercase_ascii s) reserved_windows_device_names
+  List.mem (Unicode.uppercase s) reserved_windows_device_names
 
 let normalize_file_stem (s : string) : string option =
   let s =
@@ -115,8 +115,9 @@ let normalize_file_stem (s : string) : string option =
     |> replace_all_const trailing_space_or_dot_re ""
   in
   let s =
-    if String.length s > max_file_stem_length then
-      String.sub s 0 max_file_stem_length
+    (* cljs (subs s' 0 max-file-stem-length) — UTF-16 code units *)
+    if Unicode.js_length s > max_file_stem_length then
+      Unicode.js_sub s 0 max_file_stem_length
     else s
   in
   if str_blank s || reserved_windows_device_name s then None else Some s
@@ -389,11 +390,11 @@ let content_ref_targets (title : string) : ref_target list =
     (page_ref_targets @ tag_targets)
 
 let status_marker_content (content : string) : string option =
-  let c = String.trim content in
+  let c = Unicode.trim content in
   if c = "" then None
   else
     Some
-      (String.uppercase_ascii c
+      (Unicode.uppercase c
        |> replace_all_const whitespace_re "-")
 
 (* status value -> marker (cljs status-marker) *)
@@ -432,7 +433,7 @@ let tag_token (tag : entity) : string option =
     | None -> Ldb.string_value tag "block/name"
   in
   match title with
-  | Some title when String.trim title <> "" ->
+  | Some title when Unicode.trim title <> "" ->
       Some
         (if simple_tag_token title then "#" ^ title
          else "#[[" ^ title ^ "]]")
@@ -466,7 +467,7 @@ let content_tag_titles content : (string, unit) Hashtbl.t =
   content_ref_targets content
   |> List.iter (fun r ->
          if r.tag then
-           Hashtbl.replace titles (String.lowercase_ascii r.title) ());
+           Hashtbl.replace titles (Unicode.lowercase r.title) ());
   titles
 
 let decorate_block_content ~status ~tag_tokens content : string =
@@ -482,7 +483,7 @@ let decorate_block_content ~status ~tag_tokens content : string =
     List.filter
       (fun token ->
          not
-           (Hashtbl.mem existing (String.lowercase_ascii (token_title token))))
+           (Hashtbl.mem existing (Unicode.lowercase (token_title token))))
       tag_tokens
   in
   match tokens' with
@@ -508,7 +509,7 @@ let order_list_number (block : entity) : bool =
         Option.bind (Ldb.ent_of_id block.db id) Ldb.property_value_content
     | _ -> None
   in
-  Option.value ~default:"" (Option.map String.lowercase_ascii content)
+  Option.value ~default:"" (Option.map Unicode.lowercase content)
   = "number"
 
 let embed_target (block : entity) : entity option =
@@ -523,13 +524,13 @@ let embed_target (block : entity) : entity option =
 let content_first_line content =
   match split_lines (Option.value ~default:"" content) with
   | [] -> ""
-  | l :: _ -> String.trim l
+  | l :: _ -> Unicode.trim l
 
 let block_first_line_fragment (block : entity) : string =
   content_first_line (Ldb.string_value block "block/title")
 
 let code_fence_block_line content =
-  let t = String.trim content in
+  let t = Unicode.trim content in
   String.length t >= 3 && String.sub t 0 3 = "```"
 
 let normalize_rendered_match_text (content : string) : string =
@@ -542,8 +543,8 @@ let normalize_rendered_match_text (content : string) : string =
          let g i = Option.value ~default:"" (if i < Array.length groups then groups.(i) else None) in
          g 1 ^ "#[[]]")
   |> replace_all_const whitespace_re " "
-  |> String.trim
-  |> String.lowercase_ascii
+  |> Unicode.trim
+  |> Unicode.lowercase
 
 let rendered_line_matches_block (info : block_line_info option) (content : string)
     : bool =
@@ -805,7 +806,7 @@ let mirrorable_pages db : entity list =
            | _ -> ""
          in
          let title e =
-           String.lowercase_ascii
+           Unicode.lowercase
              (Option.value ~default:"" (Ldb.string_value e "block/title"))
          in
          compare

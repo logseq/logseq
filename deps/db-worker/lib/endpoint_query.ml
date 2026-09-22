@@ -112,7 +112,7 @@ let resolve_page_ref_equality (form : query_form) : query_form =
           let name =
             match page_reference with
             | QueryFormString s ->
-                let lowered = String.lowercase_ascii s in
+                let lowered = Unicode.lowercase s in
                 (match Page_ref.get_page_name lowered with
                  | Some n -> n
                  | None -> lowered)
@@ -132,7 +132,7 @@ let require_query_context (context : Wire.t) : (Wire.t * Wire.t) list option =
         | _ -> false
       in
       let non_blank = function
-        | Wire.String s -> String.trim s <> ""
+        | Wire.String s -> Unicode.trim s <> ""
         | _ -> false
       in
       let current_page_ok =
@@ -156,7 +156,7 @@ let require_query_context (context : Wire.t) : (Wire.t * Wire.t) list option =
 let query_current_page_title (db : db) (ctx : (Wire.t * Wire.t) list) : string option =
   let get k = List.assoc_opt (Wire.Keyword k) ctx in
   match get "current-page-title" with
-  | Some (Wire.String t) when String.trim t <> "" -> Some t
+  | Some (Wire.String t) when Unicode.trim t <> "" -> Some t
   | _ ->
       let block_title =
         match get "current-block-uuid" with

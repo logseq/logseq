@@ -23,10 +23,10 @@ let http_base () : string option =
 (* strip-leading-db-version-prefix *)
 let strip_db_version_prefix (s : string) : string =
   let prefix = "logseq_db_" in
-  let trimmed = String.trim s in
+  let trimmed = Unicode.trim s in
   if String.length trimmed >= String.length prefix
      && String.sub trimmed 0 (String.length prefix) = prefix then
-    String.trim
+    Unicode.trim
       (String.sub trimmed (String.length prefix)
          (String.length trimmed - String.length prefix))
   else trimmed
@@ -318,7 +318,7 @@ let ensure_client_graph_uuid repo graph_id =
   if graph_id <> "" then Sync_client_op.update_graph_uuid repo (Some graph_id)
 
 let persist_upload_graph_identity repo graph_id graph_e2ee =
-  let graph_id = String.trim graph_id in
+  let graph_id = Unicode.trim graph_id in
   if graph_id = "" then
     Sync_util.fail_fast "db-sync/missing-field"
       (Wire.Map
