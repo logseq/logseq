@@ -395,6 +395,15 @@ let mark_failed_txs repo (tx_ids : string list) : int =
   n
 
 (* client-op/history-action-ops-by-tx-id — feeds Undo_redo hook *)
+(* apply-txs/clear-pending-txs! — mark every pending tx non-pending *)
+let clear_pending_txs repo : int =
+  let ids =
+    List.filter_map
+      (fun (e : local_tx_entry) -> Some e.tx_id)
+      (get_pending_local_txs repo ())
+  in
+  mark_pending_txs_false repo ids
+
 let history_action_ops_by_tx_id repo (tx_id : string)
     : (string * Wire.t) list option =
   match get_local_tx_entry repo tx_id with
