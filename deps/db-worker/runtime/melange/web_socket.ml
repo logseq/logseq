@@ -41,3 +41,7 @@ let send_binary t data =
 let close t =
   close_ws t;
   Db_worker_effect.pure ()
+
+external ready_state_ext : t -> int = "readyState" [@@mel.get]
+
+let ready_state t = ready_state_ext t
