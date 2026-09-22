@@ -679,6 +679,11 @@ let () =
       with_conn args (fun db -> Db_worker_effect.pure (api_list_tags db (arg args 1))));
   Dispatcher.register "thread-api/api-list-pages" (fun args ->
       with_conn args (fun db -> Db_worker_effect.pure (api_list_pages db (arg args 1))));
+  Dispatcher.register "thread-api/build-graph" (fun args ->
+      with_conn args (fun db ->
+          Db_worker_effect.pure
+            (Graph_view.build_graph db
+               (match arg args 1 with Some o -> o | None -> Wire.Map []))));
   Dispatcher.register "thread-api/api-build-upsert-nodes-edn" (fun args ->
       with_conn args (fun db ->
           let ops =
