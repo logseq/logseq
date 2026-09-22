@@ -20,7 +20,7 @@ type client =
   ; pending_pull_since : int option ref
   ; inflight : string list ref
   ; upload_request : Wire.t option ref
-  ; last_sync_error : exn option ref
+  ; last_sync_error : Wire.t option ref
   ; reconnect : reconnect_state ref
   ; stale_kill_timer : Timers.timer option ref
   ; last_ws_message_ts : float ref
