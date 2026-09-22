@@ -246,9 +246,12 @@ let journal_title_format db : string =
    :block/title. *)
 let raw_title db (e : entity) : value option =
   if is_journal e then
+    (* cljs get-journal-title — int->journal-title returns nil for a
+       journal without :block/journal-day (callers then fall back to
+       :block/title/:block/name themselves). *)
     match int_value e "block/journal-day" with
     | Some day -> Some (String (journal_title_of_day day (journal_title_format db)))
-    | None -> value e "block/title"
+    | None -> None
   else
     value e "block/title"
 
@@ -409,22 +412,24 @@ let get_right_sibling (block : entity) : entity option =
       then sibling_for_property_children block parent `Right
       else ordinary_sibling block `Right
 
-(* ldb/get-down — raw :block/_parent, first by :block/order *)
+(* ldb/get-down — filtered :block/_parent, first by :block/order *)
 let get_down (block : entity) : entity option =
-  match sort_by_order (ref_ents block "block/_parent") with
+  match sort_by_order (parent_children block) with
   | first :: _ -> Some first
   | [] -> None
 
 let ref_v_to_ref = function
   | Int id -> Entity_id id
+  | Ref id -> Entity_id id
   | Keyword s -> Ident s
   | Uuid u -> Lookup_ref ("block/uuid", Uuid u)
   | v -> Lookup_ref ("block/uuid", v)
 
-(* ldb/has-children? *)
+(* ldb/has-children? — cljs (:block/_parent e) is the filtered reverse
+   lookup (minus property-created and closed-value children). *)
 let has_children db (ref_v : value) : bool =
   match entity db (ref_v_to_ref ref_v) with
-  | Some e -> ref_ents e "block/_parent" <> []
+  | Some e -> parent_children e <> []
   | None -> false
 
 (* ldb/get-key-value — :kv/value of the kv entity named by ident. *)
@@ -490,7 +495,10 @@ let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_
     |> List.map (fun d -> d.e)
   in
   match tag_set with
-  | [] -> candidate_ids
+  | [] ->
+      (* cljs binds [?tag-ident ...] to the empty collection — the query
+         yields no candidates without a tag check. *)
+      []
   | _ ->
       List.filter
         (fun eid ->
@@ -564,8 +572,9 @@ let get_page_blocks db (page_id : entity_id) : pulled_entity list =
 let collapsed_and_has_children db (block : entity) : bool =
   truthy (value block "block/collapsed?") && has_children db (Ref block.id)
 
-(* ldb/get-block-last-direct-child-id — last raw :block/_parent child by
-   :block/order; not-collapsed? skips blocks that are collapsed w/ children. *)
+(* ldb/get-block-last-direct-child-id — last filtered :block/_parent
+   child by :block/order; not-collapsed? skips blocks that are
+   collapsed w/ children. *)
 let get_block_last_direct_child_id db ?(not_collapsed = false)
     (block_id : entity_id) : entity_id option =
   match ent_of_id db block_id with
@@ -573,7 +582,7 @@ let get_block_last_direct_child_id db ?(not_collapsed = false)
   | Some block ->
       if not_collapsed && collapsed_and_has_children db block then None
       else
-        let children = sort_by_order (ref_ents block "block/_parent") in
+        let children = sort_by_order (parent_children block) in
         (match List.rev children with
          | last :: _ -> Some last.id
          | [] -> None)
