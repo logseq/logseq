@@ -165,7 +165,13 @@ let write_text_atomic path contents =
   if is_browser () then unsupported "write_text_atomic"
   else
     wrap (fun () ->
-        let tmp = path ^ ".tmp" in
+        (* cljs write-text-atomic!: ensure-dir + .<base>.tmp-<uuid> + rename *)
+        let dir = Filename.dirname path in
+        let tmp =
+          Filename.concat dir
+            ("." ^ Filename.basename path ^ ".tmp-" ^ Uuid_gen.uuid ())
+        in
+        Fs_ext.mkdirSync dir [%mel.obj { recursive = true }];
         Node.Fs.writeFileAsUtf8Sync tmp contents;
         renameSync tmp path)
 

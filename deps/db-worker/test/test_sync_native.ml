@@ -17,8 +17,14 @@
      drives stream_snapshot_row_batches directly, and js/fetch through
      Sync_deps.http_send_stream)
    - src/test/frontend/worker/sync/assets_test.cljs (request-asset-download
-     local-file checks; the download/upload-mock tests exercise real
-     Asset_store + the real download path — failures propagate like cljs)
+     local-file checks, download-missing-remote-assets candidate
+     filtering, upload-remote-asset payload serialization and missing-
+     local-file recording; the download/upload-mock tests exercise real
+     Asset_store + the real download path — failures propagate like
+     cljs. download-remote-assets-if-missing-bounds-download-concurrency-
+     test is dropped: p/delay yields to the JS event loop while the
+     native Db_worker_effect sleep blocks, so the 10-worker interleave
+     is not observable natively)
 
    src/test/frontend/worker/sync/restart_test.cljs is NOT ported: it
    monkey-patches js/setInterval, js/setTimeout and the platform
@@ -698,6 +704,239 @@ let () =
   check "request-asset-download propagates download failure"
     !raised;
   Worker_state.drop_datascript_conn repo
+
+(* ---- assets_test.cljs (remaining deftests) ----
+
+   download-remote-assets-if-missing-bounds-download-concurrency-test is
+   dropped: it observes real concurrency via p/delay yielding to the JS
+   event loop — the native Db_worker_effect has no scheduler (sleep
+   blocks the thread), so the 10-worker interleave is not observable
+   natively. The bounded worker-pool logic itself is ported
+   (Sync_assets.download_remote_assets_if_missing).
+
+   cljs platform/asset-stat call-list assertions are dropped: on native
+   the stat is a real file-exists check (Asset_store.exists) with no
+   injectable seam; the download/broadcast assertions cover the same
+   observable flow. *)
+
+(* (deftest request-asset-download-downloads-missing-local-asset-test ...) *)
+let () =
+  let repo = "asset-download-missing-repo" in
+  let graph_id = "graph-1" in
+  let asset_uuid = fresh_uuid () in
+  let conn = asset_conn asset_uuid in
+  Worker_state.set_datascript_conn repo conn;
+  let client = Sync_state.new_client repo in
+  client.graph_id <- Some graph_id;
+  let download_calls = ref [] in
+  let broadcasts = ref 0 in
+  let prev_download = !Sync_assets.download_remote_asset_fn in
+  Sync_assets.download_remote_asset_fn :=
+    (fun r g u t ->
+       download_calls := (r, g, u, t) :: !download_calls;
+       Db_worker_effect.pure ());
+  Fun.protect
+    (fun () ->
+       Sync_assets.request_asset_download repo asset_uuid
+         ~current_client:(fun _ -> Some client)
+         ~enqueue_asset_task:(fun _ task -> await (task ()))
+         ~broadcast_rtc_state:(fun _ -> incr broadcasts);
+       check "request-asset-download downloads missing local asset"
+         (!broadcasts = 1
+          && !download_calls
+             = [ (repo, Some graph_id, asset_uuid, Some "png") ]))
+    ~finally:(fun () ->
+      Sync_assets.download_remote_asset_fn := prev_download;
+      Worker_state.drop_datascript_conn repo)
+
+(* (deftest upload-remote-asset-serializes-resolved-encrypted-payload-test
+      ...) — cljs rebinds graph-aes-key (here: graph_e2ee +
+      ensure_graph_aes_key Sync_deps hooks), crypt/<encrypt-uint8array
+      (Sync_deps.encrypt_bytes), js/fetch (Sync_assets.http_send_fn) and
+      broadcast-to-clients! (Broadcast.set_post_fn). *)
+let () =
+  let repo = "asset-upload-repo" in
+  let graph_id = "graph-1" in
+  let asset_uuid = fresh_uuid () in
+  let checksum = "sha-256-value" in
+  let conn = asset_conn asset_uuid in
+  Worker_state.set_datascript_conn repo conn;
+  set_sync_config "https://sync.example.test";
+  set_auth_token ();
+  let asset_bytes = "\x01\x02\x03" in
+  await
+    (Asset_store.write_bytes ~repo ~name:(asset_uuid ^ ".png") asset_bytes);
+  let encrypted_payload =
+    Wire.Map [ kw "cipher", Wire.String "encrypted-payload" ]
+  in
+  let expected_body = Transit_codec.to_string encrypted_payload in
+  let fetch_call = ref None in
+  let encrypt_input = ref None in
+  let prev_graph_e2ee = !Sync_deps.graph_e2ee in
+  let prev_ensure = !Sync_deps.ensure_graph_aes_key in
+  let prev_encrypt = !Sync_deps.encrypt_bytes in
+  let prev_http = !Sync_assets.http_send_fn in
+  Sync_deps.graph_e2ee := Some (fun _ -> true);
+  Sync_deps.ensure_graph_aes_key :=
+    Some (fun _ -> Db_worker_effect.pure (Wire.String "aes-key"));
+  Sync_deps.encrypt_bytes :=
+    Some
+      (fun _key payload ->
+        encrypt_input := Some payload;
+        Db_worker_effect.pure encrypted_payload);
+  Sync_assets.http_send_fn :=
+    (fun (req : Http.request) ->
+      fetch_call := Some req;
+      Db_worker_effect.pure { Http.status = 200; headers = []; body = "" });
+  Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ());
+  Fun.protect
+    (fun () ->
+       await
+         (Sync_assets.upload_remote_asset repo (Some graph_id) asset_uuid
+            (Some "png") (Some checksum));
+       check "upload-remote-asset encrypts the raw bytes"
+         (!encrypt_input = Some asset_bytes);
+       check "upload-remote-asset sends transit-encoded payload"
+         (match !fetch_call with
+          | Some req -> req.Http.body = Some expected_body
+          | None -> false))
+    ~finally:(fun () ->
+      Sync_deps.graph_e2ee := prev_graph_e2ee;
+      Sync_deps.ensure_graph_aes_key := prev_ensure;
+      Sync_deps.encrypt_bytes := prev_encrypt;
+      Sync_assets.http_send_fn := prev_http;
+      Worker_state.drop_datascript_conn repo;
+      Worker_state.set_db_sync_config Wire.Nil)
+
+(* (deftest upload-remote-asset-records-missing-local-file-test ...) —
+   cljs rebinds graph-aes-key to nil; the OCaml port resolves aes to
+   None when the repo has no datascript conn (graph-e2ee check skipped)
+   — same observable nil-aes branch. *)
+let () =
+  let repo = "asset-upload-missing-repo" in
+  let graph_id = "graph-1" in
+  let asset_uuid = fresh_uuid () in
+  let checksum = "sha-256-value" in
+  let missing_file =
+    Printf.sprintf "assets/%s.pdf" asset_uuid
+  in
+  set_sync_config "https://sync.example.test";
+  set_auth_token ();
+  Sync_assets.clear_missing_asset_upload_files repo;
+  let fetch_called = ref false in
+  let broadcasts = ref [] in
+  let prev_http = !Sync_assets.http_send_fn in
+  Sync_assets.http_send_fn :=
+    (fun _ ->
+      fetch_called := true;
+      Db_worker_effect.pure { Http.status = 200; headers = []; body = "" });
+  Broadcast.set_post_fn
+    (fun ~kind ~payload -> broadcasts := (kind, payload) :: !broadcasts);
+  Fun.protect
+    (fun () ->
+       let exn =
+         try
+           await
+             (Sync_assets.upload_remote_asset repo (Some graph_id) asset_uuid
+                (Some "pdf") (Some checksum));
+           None
+         with e -> Some e
+       in
+       check "missing local file rejects with read-asset-failed"
+         (match exn with
+          | Some (Dispatcher.Exn_info (_, kvs)) ->
+              Wire.get "type" (Wire.Map kvs)
+              = Some (Wire.Keyword "rtc.exception/read-asset-failed")
+          | _ -> false);
+       check "fetch not called" (not !fetch_called);
+       check "no broadcasts" (!broadcasts = []);
+       check "missing asset upload file recorded"
+         (Sync_assets.get_missing_asset_upload_files repo
+          = [ Wire.Map
+                [ kw "asset-id", Wire.String asset_uuid
+                ; kw "asset-type", Wire.String "pdf"
+                ; kw "file", Wire.String missing_file ] ]))
+    ~finally:(fun () ->
+      Sync_assets.http_send_fn := prev_http;
+      Sync_assets.clear_missing_asset_upload_files repo;
+      Worker_state.set_db_sync_config Wire.Nil)
+
+(* (deftest download-missing-remote-assets-downloads-only-missing-sync-assets-test
+      ...) — needs :block/tags + :db/ident in the schema so the Asset
+   class tag query resolves. *)
+let tagged_asset_schema_edn =
+  "{:db/ident {:db/unique :db.unique/identity}
+    :block/uuid {:db/unique :db.unique/identity}
+    :block/tags {:db/valueType :db.type/ref
+                 :db/cardinality :db.cardinality/many}
+    :logseq.property.asset/type {}
+    :logseq.property.asset/checksum {}
+    :logseq.property.asset/remote-metadata {:db/valueType :db.type/ref
+                                            :db/isComponent true}
+    :logseq.property.asset/external-url {}}"
+
+let () =
+  let repo = "asset-prefetch-repo" in
+  let graph_id = "graph-1" in
+  let missing_uuid = fresh_uuid () in
+  let existing_uuid = fresh_uuid () in
+  let local_uuid = fresh_uuid () in
+  let external_uuid = fresh_uuid () in
+  let schema = Datascript.schema_of_edn_string tagged_asset_schema_edn in
+  let conn = Datascript.create_conn ~schema () in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/ident :logseq.class/Asset}
+            {:block/uuid #uuid \"%s\"
+             :block/tags #{:logseq.class/Asset}
+             :logseq.property.asset/type \"png\"
+             :logseq.property.asset/checksum \"missing-checksum\"
+             :logseq.property.asset/remote-metadata {:checksum \"missing-checksum\" :type \"png\"}}
+            {:block/uuid #uuid \"%s\"
+             :block/tags #{:logseq.class/Asset}
+             :logseq.property.asset/type \"pdf\"
+             :logseq.property.asset/checksum \"existing-checksum\"
+             :logseq.property.asset/remote-metadata {:checksum \"existing-checksum\" :type \"pdf\"}}
+            {:block/uuid #uuid \"%s\"
+             :block/tags #{:logseq.class/Asset}
+             :logseq.property.asset/type \"jpg\"
+             :logseq.property.asset/checksum \"local-checksum\"}
+            {:block/uuid #uuid \"%s\"
+             :block/tags #{:logseq.class/Asset}
+             :logseq.property.asset/type \"gif\"
+             :logseq.property.asset/checksum \"external-checksum\"
+             :logseq.property.asset/remote-metadata {:checksum \"external-checksum\" :type \"gif\"}
+             :logseq.property.asset/external-url \"https://example.com/asset.gif\"}]"
+          missing_uuid existing_uuid local_uuid external_uuid));
+  Worker_state.set_datascript_conn repo conn;
+  (* the existing asset is present on disk; the rest are absent *)
+  await
+    (Asset_store.write_bytes ~repo ~name:(existing_uuid ^ ".pdf") "pdf-bytes");
+  let download_calls = ref [] in
+  let prev_download = !Sync_assets.download_remote_asset_fn in
+  Sync_assets.download_remote_asset_fn :=
+    (fun r g u t ->
+       download_calls := (r, g, u, t) :: !download_calls;
+       Db_worker_effect.pure ());
+  Fun.protect
+    (fun () ->
+       let result =
+         await (Sync_assets.download_missing_remote_assets repo graph_id)
+       in
+       check "download-missing-remote-assets counts"
+         (match result with
+          | Wire.Map _ ->
+              Wire.get "total" result = Some (Wire.Int 2)
+              && Wire.get "downloaded" result = Some (Wire.Int 1)
+              && Wire.get "skipped-existing" result = Some (Wire.Int 1)
+          | _ -> false);
+       check "only the missing remote asset downloads"
+         (!download_calls
+          = [ (repo, Some graph_id, missing_uuid, Some "png") ]))
+    ~finally:(fun () ->
+      Sync_assets.download_remote_asset_fn := prev_download;
+      Worker_state.drop_datascript_conn repo)
 
 (* ---- summary ---- *)
 

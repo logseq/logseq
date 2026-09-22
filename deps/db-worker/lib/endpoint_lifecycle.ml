@@ -64,6 +64,28 @@ let opt_bool name default t =
   | Some (Wire.Bool b) -> b
   | _ -> default
 
+(* cljs db-core/*client-ops-cleanup-timers — repo -> interval handle *)
+let client_ops_cleanup_timers : (string, Timers.timer) Hashtbl.t =
+  Hashtbl.create 7
+
+(* cljs db-core/client-ops-cleanup-interval-ms *)
+let client_ops_cleanup_interval_ms = 3 * 60 * 60 * 1000
+
+(* cljs db-core/run-client-ops-cleanup! *)
+let run_client_ops_cleanup repo =
+  let protected_tx_ids = Undo_redo.referenced_history_tx_ids repo in
+  ignore (Sync_client_op.cleanup_finished_history_ops repo protected_tx_ids)
+
+(* cljs db-core/ensure-client-ops-cleanup-timer! *)
+let ensure_client_ops_cleanup_timer repo =
+  if (not (Worker_state.publishing ()))
+     && repo <> ""
+     && not (Hashtbl.mem client_ops_cleanup_timers repo)
+  then
+    Hashtbl.replace client_ops_cleanup_timers repo
+      (Timers.set_interval client_ops_cleanup_interval_ms (fun () ->
+           run_client_ops_cleanup repo))
+
 let create_or_open_db args =
   match args with
   | Wire.String repo :: opts_rest ->
@@ -94,9 +116,9 @@ let create_or_open_db args =
              else File_sys.mkdir_p (db_dir repo)
            in
            Db_worker_effect.bind ensure_dir (fun () ->
-           let db =
+           let db, created_sqlite =
              match Worker_state.sqlite_conn repo with
-             | Some db -> db
+             | Some db -> (db, false)
              | None ->
                  let db =
                    Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo)
@@ -106,7 +128,7 @@ let create_or_open_db args =
                  in
                  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
                  Worker_state.set_sqlite_conn repo db;
-                 db
+                 (db, true)
            in
            Graph_store.create_kvs_table db;
            let storage = Graph_store.storage db in
@@ -164,6 +186,9 @@ let create_or_open_db args =
                  need the client-ops db + sync plumbing, not yet ported. *)
               ignore (Db_migrate.migrate conn));
            Worker_state.set_datascript_conn repo conn;
+           (* cljs <start-db! wires the periodic client-ops history cleanup
+              when the sqlite conn is (re)created. *)
+           if created_sqlite then ensure_client_ops_cleanup_timer repo;
            Db_listener.listen_db_changes repo conn;
            (match Worker_state.datascript_conn repo with
             | Some conn ->
@@ -186,21 +211,64 @@ let create_or_open_db args =
 
 let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
 
-(* close-db-aux!: drop conns, clear pending counts, close sqlite —
-   cljs close-db! then pauseVfs + forget-storage-pool! on browser. *)
+(* close-db-aux!: checkpoint + close every sqlite conn, close import
+   state, clear the client-ops cleanup timer, drop all per-repo state.
+   cljs db-core/close-db-aux! — each step is attempted independently
+   and collected errors are thrown together at the end (AggregateError).
+   On browser the cljs wal-checkpoint timer has no counterpart here;
+   the OPFS pool pause/drop applies only on the pooled runtime. *)
 let close_db_aux repo =
+  let errors = ref [] in
+  let attempt f = try f () with e -> errors := e :: !errors in
+  let conns =
+    List.filter_map
+      (fun kind ->
+         match Worker_state.sqlite_conn_of repo kind with
+         | Some db -> Some (kind, db)
+         | None -> None)
+      [ Worker_state.Db; Worker_state.Search; Worker_state.Client_ops ]
+  in
+  List.iter
+    (fun (_, db) ->
+       attempt (fun () ->
+           ignore
+             (Sqlite.exec db ~sql:"PRAGMA wal_checkpoint(TRUNCATE)"
+                ~bind:[||])))
+    conns;
+  (match Sync_state.client_ops_conn_opt repo with
+   | Some db
+     when not (List.exists (fun (_, d) -> d == db) conns) ->
+       attempt (fun () ->
+           ignore
+             (Sqlite.exec db ~sql:"PRAGMA wal_checkpoint(TRUNCATE)"
+                ~bind:[||]))
+   | _ -> ());
+  attempt (fun () ->
+      ignore (Sync_download.close_import_state_for_repo repo));
+  (match Hashtbl.find_opt client_ops_cleanup_timers repo with
+   | Some timer ->
+       Timers.clear timer;
+       Hashtbl.remove client_ops_cleanup_timers repo
+   | None -> ());
+  List.iter
+    (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
+  Worker_state.drop_vector_index repo;
   Worker_state.drop_datascript_conn repo;
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;
-  (match Worker_state.sqlite_conn repo with
-   | Some db ->
-       Sqlite.close db;
-       Worker_state.drop_sqlite_conn repo
-   | None -> ());
+  List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
+  attempt (fun () -> Sync_state.close_client_ops_conn repo);
   if Sqlite.pooled_runtime () then begin
     Sqlite.pause_vfs ~repo;
     Sqlite.drop_pool ~repo
-  end
+  end;
+  (match !errors with
+   | [] -> ()
+   | es ->
+       failwith
+         (Printf.sprintf "Graph resources failed to close: %s"
+            (String.concat "; "
+               (List.map Printexc.to_string (List.rev es)))))
 
 let close_db_handler args =
   match args with
@@ -230,14 +298,18 @@ let () =
           |> Db_worker_effect.map (fun () -> Wire.nil)
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 
-(* :thread-api/release-access-handles [repo] — cljs pauses the OPFS
-   pool's access handles; node/native storage holds none. *)
+(* :thread-api/release-access-handles [repo] — closes any active import
+   state and pauses the OPFS pool's access handles; node/native storage
+   holds none. *)
 let () =
   Dispatcher.register "thread-api/release-access-handles" (fun args ->
       match args with
       | Wire.String repo :: _ ->
-          if Sqlite.pooled_runtime () then Sqlite.pause_vfs ~repo;
-          Db_worker_effect.pure Wire.nil
+          Db_worker_effect.bind
+            (Sync_download.close_import_state_for_repo repo)
+            (fun () ->
+              if Sqlite.pooled_runtime () then Sqlite.pause_vfs ~repo;
+              Db_worker_effect.pure Wire.nil)
       | _ -> invalid_arg "release-access-handles expects repo")
 
 (* :thread-api/reset-db [repo db-transit] — handler/maintenance.cljs *)

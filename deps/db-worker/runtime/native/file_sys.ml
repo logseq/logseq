@@ -46,7 +46,19 @@ let remove path =
 
 let write_text_atomic path contents =
   wrap (fun () ->
-      let tmp = path ^ ".tmp" in
+      (* cljs write-text-atomic!: ensure-dir + .<base>.tmp-<uuid> + rename *)
+      let dir = Filename.dirname path in
+      let tmp =
+        Filename.concat dir
+          ("." ^ Filename.basename path ^ ".tmp-" ^ Uuid_gen.uuid ())
+      in
+      let rec mkdir p =
+        if p <> "" && p <> "/" && not (Sys.file_exists p) then begin
+          mkdir (Filename.dirname p);
+          Unix.mkdir p 0o755
+        end
+      in
+      mkdir dir;
       let oc = open_out_bin tmp in
       output_string oc contents;
       close_out oc;
