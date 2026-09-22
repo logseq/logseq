@@ -122,7 +122,7 @@ let ent_of_value db (v : value) : entity option =
 let string_of_value (v : value) : string =
   match v with
   | Int n -> string_of_int n
-  | Float f -> Printf.sprintf "%g" f
+  | Float f -> Common_util.js_string_of_float f
   | String s -> s
   | Bool b -> string_of_bool b
   | Keyword k -> k
@@ -166,7 +166,7 @@ let rec property_value_to_string db (property : entity) (v : value) (ctx : conte
     : string option =
   let node_ref content =
     if ctx.export_node_property_values_as_page_refs
-       && property_type property = Some "node" && String.trim content <> ""
+       && property_type property = Some "node" && Unicode.trim content <> ""
     then "[[" ^ content ^ "]]"
     else content
   in
@@ -403,7 +403,7 @@ and bounded_heading_level (heading : value option) level =
   | _ -> None
 
 and strip_heading_prefix (content : string) : string =
-  let s = String.trim content in
+  let s = Unicode.trim content in
   let n = String.length s in
   let i = ref 0 in
   while !i < n && s.[!i] = '#' do
@@ -420,7 +420,7 @@ and quote_content (content : string) : string =
   | [] -> ">"
   | lines ->
       String.concat "\n"
-        (List.map (fun l -> if String.trim l = "" then ">" else "> " ^ l) lines)
+        (List.map (fun l -> if Unicode.trim l = "" then ">" else "> " ^ l) lines)
 
 and code_fence (content : string) : string =
   let max_run = ref 0 in
@@ -448,7 +448,7 @@ and format_markdown_block_content (b : entity) content level heading_to_list
       in
       let fence = code_fence content in
       fence
-      ^ (if String.trim lang <> "" then lang else "")
+      ^ (if Unicode.trim lang <> "" then lang else "")
       ^ "\n" ^ content ^ "\n" ^ fence
   | Some "math" -> "$$\n" ^ content ^ "\n$$"
   | _ ->
@@ -469,7 +469,7 @@ and transform_content db (b : entity) level ~heading_to_list ~include_properties
        && (match Ldb.value b "logseq.property.node/display-type" with
            | Some (Keyword ("code" | "math")) -> false
            | _ -> true)
-       && String.trim content <> ""
+       && Unicode.trim content <> ""
        && highlighted_block b
     then "^^" ^ content ^ "^^"
     else content
@@ -492,8 +492,8 @@ and transform_content db (b : entity) level ~heading_to_list ~include_properties
     if heading_to_list then strip_heading_prefix content
     else format_markdown_block_content b content level heading_to_list
   in
-  let new_content = indented_block_content (String.trim content) property_spaces in
-  let sep = if String.trim new_content = "" then "" else " " in
+  let new_content = indented_block_content (Unicode.trim content) property_spaces in
+  let sep = if Unicode.trim new_content = "" then "" else " " in
   let content = prefix ^ sep ^ new_content in
   match
     (if include_properties then block_properties_content db b property_spaces ctx
@@ -533,7 +533,7 @@ and tree_to_file_content db (root : entity) ~(opts : tree_opts) ~(ctx : context)
     : string =
   let level = Option.value opts.init_level ~default:1 in
   node_to_lines db root level ~opts ~ctx
-  |> List.filter (fun c -> String.trim c <> "")
+  |> List.filter (fun c -> Unicode.trim c <> "")
   |> String.concat "\n"
 
 (* block->content — entity's subtree rendered as markdown. *)

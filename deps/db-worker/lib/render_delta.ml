@@ -178,7 +178,7 @@ let str_of_value (v : value) : string =
   | Wire.String s -> s
   | Wire.Int n -> string_of_int n
   | Wire.Int64 n -> Int64.to_string n
-  | Wire.Float f -> Printf.sprintf "%g" f
+  | Wire.Float f -> Common_util.js_string_of_float f
   | Wire.Uuid u -> u
   | Wire.Keyword s -> s
   | Wire.Bool b -> string_of_bool b

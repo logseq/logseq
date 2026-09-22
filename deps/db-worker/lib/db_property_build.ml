@@ -18,7 +18,7 @@ let rec str_of_value (v : value) : string =
   | Keyword s -> ":" ^ s
   | Symbol s -> s
   | Int n -> string_of_int n
-  | Float f -> string_of_float f
+  | Float f -> Common_util.js_string_of_float f
   | Bool b -> if b then "true" else "false"
   | Nil -> "nil"
   | Vector vs | List vs | Set vs ->

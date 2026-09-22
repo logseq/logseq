@@ -4,8 +4,8 @@
 
 let db_version_prefix = "logseq_db_"
 
-let trim = String.trim
-let blank s = String.trim s = ""
+let trim = Unicode.trim
+let blank s = Unicode.trim s = ""
 let present_string s = not (blank s)
 
 (* cljs str *)
@@ -15,7 +15,7 @@ let cljs_str (v : Wire.t) : string =
   | Wire.Keyword s -> ":" ^ s
   | Wire.Bool b -> if b then "true" else "false"
   | Wire.Int n -> string_of_int n
-  | Wire.Float f -> string_of_float f
+  | Wire.Float f -> Common_util.js_string_of_float f
   | Wire.Nil -> ""
   | _ -> ""
 
@@ -82,7 +82,7 @@ let normalize_comparable (v : Wire.t option) : string option =
   | Some x ->
       (match x with
        | Wire.Nil -> None
-       | _ -> Some (String.lowercase_ascii (trim (cljs_str x))))
+       | _ -> Some (Unicode.lowercase (trim (cljs_str x))))
   | None -> None
 
 (* canonical-repo — ensure the logseq_db_ prefix exactly once; cljs

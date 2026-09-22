@@ -430,3 +430,131 @@ attrs (`logseq.property/template-applied-to` — the crash behind the
   normalization (except notes above) — faithful.
 - `update_online_users` broadcast-on-change; `normalize_online_users`
   shape + distinct-by-user/uuid ordering.
+
+# Pass 4 — primitive-semantics sweep (js/Number, js/Date, JS String)
+
+Follow-up pass covering the leaf primitives the port calls where cljs
+delegates to a JavaScript builtin whose semantics differ from the OCaml
+stdlib's. Each helper is documented next to its JS semantics in
+`lib/common_util.ml` / `spec/platform/unicode.mli`.
+
+## P4-A FIXED — cljs string case/trim are full-Unicode, OCaml's are ASCII — `fix(db-worker):`
+
+cljs `clojure.string/lower-case`/`upper-case`/`capitalize`/`trim`/
+`triml`/`trimr` are full-Unicode JS ops (`String.prototype.toLowerCase`
+etc.; `String.trim` strips WhiteSpace + LineTerminator incl. U+00A0,
+U+3000, U+FEFF). `String.lowercase_ascii`/`String.trim` were ASCII-only
+ports. Added `uppercase`/`trim`/`triml`/`trimr`/`capitalize` to
+`spec/platform/unicode.mli` (melange: `Js.String.*`, native: uucp +
+explicit ECMAScript whitespace set). ~200 sites swept:
+`String.lowercase_ascii`→`Unicode.lowercase`, `String.uppercase_ascii`
+→`Unicode.uppercase`, `String.capitalize_ascii`→`Unicode.capitalize`,
+`String.trim`→`Unicode.trim`.
+
+- `common_util.ml:capitalize_all` — cljs `string/capitalize` lowers the
+  REST of the string (`clojure.string/capitalize`), not just first char.
+  Was `Char.uppercase_ascii` on byte 0 only.
+- `common_util.ml:str_triml`/`str_trimr` — were byte-level
+  `is_space_char`; now `Unicode.triml`/`trimr`.
+
+## P4-B FIXED — `url?` predicates — cljs has two, OCaml had one over-permissive — (prior commit this pass)
+
+cljs `common-util/url?` (util.cljs:77) is strict-origin: only special
+schemes (http/https/ws/wss/ftp) yield non-"null" `.origin`.
+`db-property-type/url?` (type.cljs:85) is loose: any `new
+URL`-parseable string. `Ns_util.url_parses` is the WHATWG-URL parse
+approximation; `Ns_util.url` was over-accepting. Sites: `db_property_type.ml:55`,
+`outliner_property.ml:10`, `db_malli_schema.ml:84`, `sqlite_build.ml:1456`,
+`common_config.ml:67` (was the wrong `Common_path.protocol_url`).
+
+## P4-C FIXED — number parsing — `fix(db-worker):`
+
+- `Common_util.parse_float` = `js/parseFloat` (leading JS whitespace,
+  optional sign + `Infinity`, longest-valid-prefix scan, trailing bare
+  `e`/`e±` rollback — `parseFloat("1e")=1`, `parseFloat("0x10")=0`).
+  Callers: `gp_exporter.ml` `parse_double`, `outliner_property.ml`
+  `fail_parse_double` + the number-property `Wire.String` case.
+- `Common_util.js_number_of_string` = `js/Number` (whole-string; `0x`/
+  `0o`/`0b` unsigned radix, exact-case `Infinity`/`±Infinity`, rejects
+  `_` separators and `inf`/`nan` spellings that `float_of_string`
+  accepts). Caller: `db_view.ml` `js_number_opt` (cljs `Number(v)` in
+  `get-view-data` value coercion).
+- `Common_util.parse_long` = `js/parseInt` (prefix parse, optional sign,
+  `0x` hex under radix 0/16). Callers: `db_query_dsl.ml` ×2
+  (`(parse-long (subs input 0 (dec (count input))))` —
+  query_dsl.cljs:132,164), `db_ident.ml` (db_ident.cljc:21),
+  `sync_client_op.ml:get_local_tx` (`js/parseInt result 10`,
+  client_op.cljs:272).
+
+## P4-D FIXED — `str` of doubles = JS Number.toString — `fix(db-worker):`
+
+`Common_util.js_string_of_float` — shortest round-trip digits, fixed
+notation for 1e-6 <= |x| < 1e21, `"d[.ddd]e±n"` otherwise; integer
+doubles print without a decimal point, `-0` → `"0"`. Replaces
+`string_of_float`/`%.17g`/`%g` at the sites that port cljs `str`:
+`db_sync_checksum.ml:value_str` (checksum-vs-server — cljs
+checksum.cljs:162 `(some-> value str)`), `db_property_build.ml`,
+`graph_registry.ml:cljs_str`, `db_view.ml:str_of_value`,
+`export_file.ml`, `export_text_impl.ml`, `export_common_impl.ml`,
+`sync_transport.ml:str_of_wire`, `render_delta.ml:str_of_value`,
+`db_query_dsl.ml:str_of_number`, `gp_exporter.ml` list-number prefix.
+
+## P4-E FIXED — `epoch_ms_of_iso` ignored the ±HH:MM suffix — `fix(db-worker):`
+
+`date_time_util.ml:epoch_ms_of_iso` now parses and applies
+`Z`/`±HH[:MM]`/`±HHMM` (cljs `js/Date` honors it). Also added
+`js_date_parse` = `js/Date.parse` breadth (ISO + `MM/DD/YYYY` +
+month-name + RFC2822, numeric strings → NaN; ISO date-only → UTC
+midnight, everything else without offset → local civil) and wired it
+into `endpoint_cli.ml:parse_time` (cljs `js/Date.parse` at
+cli/common/db_worker.cljs:172). Other `epoch_ms_of_iso` callers
+(`edn_util.ml`, `endpoint_query.ml`, `render_resource.ml`) decode
+`#inst` literals which are strict-ISO by spec — left as-is.
+
+## P4-F FIXED — `db_inputs.ml` "+7d-" edge — `fix(db-worker):`
+
+cljs dispatch regex `^[+-]\d+[dwmy]-(ms|start|end|\d{2}|\d{4}|\d{6}|\d{9})?$`
+allows the empty optional group after `-`, but the resolve re-find
+`^([+-])(\d+)([dwmy])-(ms|start|end|\d{2,9})$` requires a non-empty ts —
+so `+7d-` dispatches `:relative-date-time` then resolves to nil
+(unresolved). OCaml `match_relative_date_time` was treating empty suffix
+as valid; now requires a non-empty suffix, matching cljs resolve.
+
+## P4-G FIXED — `String.length`/`String.sub` are bytes; JS is UTF-16 units — `fix(db-worker):`
+
+Added `Unicode.js_length`/`js_sub` to `spec/platform/unicode.mli`
+(melange: `Js.String.length`/`substring` natively; native: decodes
+UTF-8, counts UTF-16 units — BMP 1, astral 2; boundaries inside an
+astral char keep/drop the whole char since a lone surrogate can't be
+encoded). Applied at the user-text truncation site
+`markdown_mirror.ml:118` (`max-file-stem-length` 160,
+markdown_mirror.cljs:64). **Sweep caveat**: the ~670 other
+`String.length`/`String.sub` sites were NOT converted — byte indexing is
+faster and equivalent whenever the indices only delimit ASCII structure
+(delimiters, keywords, idents, base62 order keys). Only sites where the
+index itself is a user-visible length/truncation point on arbitrary text
+need `js_length`/`js_sub`; `search_index.ml` already uses a dedicated
+`U16` module for that.
+
+## P4-H — documented, not fixed (ambiguous / engine-side / out of scope)
+
+- **`Util.value_equal` `Int n` vs `Float f`** — cljs `=` on numbers is
+  numeric (`(= 1 1.0)` → true since all numbers are doubles). The OCaml
+  port is typed: `Int 1 ≠ Float 1.0`. This is an engine-level
+  (`datascript_ocaml`) decision, not a db-worker port gap — left
+  untouched, flagged for upstream.
+- **`Hashtbl` iteration order vs cljs `seq` on maps** — cljs
+  `PersistentArrayMap` preserves insertion order for small maps,
+  `PersistentHashMap` has hash order. OCaml `Hashtbl` order differs
+  from both. ~47 `Hashtbl.iter`/`fold` sites; the ones feeding sorted
+  output are fine; the ones emitting raw iteration order may diverge in
+  order-of-keys contexts. Not swept — needs per-site judgment.
+- **`tiny-pinyin`** — `search_fuzzy.ml` documents the pinyin npm package
+  is intentionally not ported (native has no equivalent); fuzzy search
+  on CJK queries stays ASCII-only.
+- **`db_view.ml` `get-view-data` sort** — `get_entities_for_all_pages`
+  comment documents the sort/`refs-count` machinery is not ported;
+  entities returned unchanged.
+- **`sqlite_build.ml` `validate-options`** — malli `Options` schema
+  validation approximated by shape checks; `undeclared-properties`
+  check faithful.
