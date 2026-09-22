@@ -853,7 +853,14 @@ let test_combine_results_large_result_benchmark () =
     |> (function Some p -> block_uuid p | None -> "")
   in
   let keyword_results =
+    (* cljs mocks ldb/page? so only the target is a page; the real db also
+       indexes built-in class entities (Page/Task/...), which are pages too.
+       Restrict to the fixture's own entities ("Result *" titles). *)
     Search_index.get_all_blocks db
+    |> List.filter (fun e ->
+           match Ldb.value e "block/title" with
+           | Some (String t) -> String.length t >= 6 && String.sub t 0 6 = "Result"
+           | _ -> false)
     |> List.filter_map (fun e ->
            let title =
              match Ldb.value e "block/title" with

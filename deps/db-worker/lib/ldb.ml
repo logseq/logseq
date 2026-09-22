@@ -303,8 +303,8 @@ let sort_by_order (ents : entity list) : entity list =
 
 
 (* entity-plus/lookup-kv-then-entity :block/_parent — raw children minus
-   property-created and closed-value children. :block/_raw-parent is the
-   unfiltered variant. *)
+   property-created and closed-value children. The unfiltered cljs variant
+   :block/_raw-parent is a plain :block/_parent reverse lookup here. *)
 let parent_children (e : entity) : entity list =
   ref_ents e "block/_parent"
   |> List.filter (fun c ->
@@ -325,7 +325,7 @@ let block_children_or_property_children (block : entity) (parent : entity) : ent
       sort_by_order
         (List.filter
            (fun e -> List.mem prop_id (ref_ids e "logseq.property/created-from-property"))
-           (ref_ents parent "block/_raw-parent"))
+           (ref_ents parent "block/_parent"))
   | None, [] -> sort_by_order (parent_children parent)
 
 (* get-ordinary-sibling — sibling by :block/order among :block/parent
@@ -583,7 +583,7 @@ let get_block_and_children db ?(include_property_block : bool option) (block_uui
   let rec aux (e : entity) : entity list =
     let children =
       if include_property_block then begin
-        let raw = ref_ents e "block/_raw-parent" in
+        let raw = ref_ents e "block/_parent" in
         let extras =
           List.filter_map (fun c -> ref_ent c "logseq.property/query") raw
         in
