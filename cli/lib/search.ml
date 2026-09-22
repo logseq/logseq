@@ -282,8 +282,8 @@ let execute_with_mode action config mode =
                      |])))
           (fun value ->
             let items =
-              match (Edn_util.as_vector value, Edn_util.as_list value) with
-              | Some xs, _ | _, Some xs -> xs
+              match Edn_util.as_seq value with
+              | Some xs -> Vec.map Edn_util.unwrap_row xs
               | _ when Edn_util.is_null value -> Vec.empty
               | _ -> Vec.singleton value
             in

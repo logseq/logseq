@@ -917,8 +917,8 @@ let task_status_query block_uuid =
     (Vec.singleton (Edn_util.uuid block_uuid))
 
 let values_of_query_result value =
-  match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some values, _ | _, Some values -> values
+  match Edn_util.as_seq value with
+  | Some values -> Vec.map Edn_util.unwrap_row values
   | _ -> Vec.empty
 
 let unquote_transit_value = function
