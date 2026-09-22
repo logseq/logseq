@@ -287,6 +287,7 @@ let clear_markdown_heading (s : string) : string =
   end
   else s
 
+
 (* ---------- import-side ref rewriting ---------- *)
 
 (* The extracted-ref maps below are (attr * value) list tx maps, not
@@ -454,3 +455,25 @@ let get_matched_ids (content : string) : string list =
   List.fold_left
     (fun acc u -> if u <> "" && not (List.mem u acc) then acc @ [ u ] else acc)
     [] (loop 0 [])
+
+
+(* entity-plus/get-block-title — cljs (:block/title e) via
+   lookup-kv-then-entity: journal pages get the formatted journal
+   title; other db-graph blocks get [[uuid]] refs resolved to
+   [[title]] via :block/refs. *)
+let block_title (e : entity) : string option =
+  let db = e.db in
+  let db_based = Sqlite_util.db_based_graph db in
+  if db_based && Ldb.is_journal e then
+    match Ldb.int_value e "block/journal-day" with
+    | Some day ->
+        Some (Ldb.journal_title_of_day day (Ldb.journal_title_format db))
+    | None -> Ldb.string_value e "block/title"
+  else
+    match Ldb.value e "block/title" with
+    | Some (String s) when db_based ->
+        let refs = Ldb.ref_ents e "block/refs" in
+        if refs = [] then Some s else Some (id_ref_to_title_ref s refs)
+    | Some (String s) -> Some s
+    | _ -> None
+

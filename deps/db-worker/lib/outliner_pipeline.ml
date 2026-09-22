@@ -251,3 +251,15 @@ let db_rebuild_block_refs (db : db) (block : entity)
     Option.value page_or_object ~default:(page_or_object_helper db)
   in
   block_refs db block properties (fun ident -> entity db (Ident ident))
+
+(* outliner-pipeline/filter-deleted-blocks — retracted :block/uuid datoms
+   as (eid, uuid) pairs. *)
+let filter_deleted_blocks (datoms : datom list) : (entity_id * string) list =
+  List.filter_map
+    (fun (d : datom) ->
+      if d.a = "block/uuid" && not d.added then
+        match d.v with
+        | Uuid u -> Some (d.e, u)
+        | _ -> None
+      else None)
+    datoms

@@ -592,6 +592,7 @@ let property_closed_values (property : entity) : entity list =
          | Some x, Some y -> String.compare x y
          | _ -> 0)
 
+
 (* db-property/built-in-closed-values — (value, db-ident) pairs per
    property ident, used by the file->db translation (e.g. pdf hl-color). *)
 let built_in_closed_value_pairs : (string * (string * string) list) list =
@@ -681,3 +682,7 @@ let get_property_schema (m : Block_map.t) : Block_map.t =
   List.filter
     (fun (k, _) -> List.mem k Db_schema.schema_properties)
     m
+
+(* property-type/all-ref-property-types *)
+let all_ref_property_types = Db_schema.all_ref_property_types
+
