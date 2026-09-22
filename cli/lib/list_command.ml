@@ -621,8 +621,8 @@ let normalize_task_options invoke_config repo options =
   | Some status_input ->
       bind (status_query invoke_config repo) (fun result ->
           let values =
-            match (Edn_util.as_vector result, Edn_util.as_list result) with
-            | Some values, _ | _, Some values -> values
+            match Edn_util.as_seq result with
+            | Some values -> Vec.map Edn_util.unwrap_row values
             | _ -> Vec.empty
           in
           let statuses = Task_status.normalize_available_statuses values in
