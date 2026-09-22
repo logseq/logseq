@@ -415,9 +415,8 @@ let replace_tags_with_id_refs (content : string) (tags : (attr * value) list lis
          match ref_map_uuid tag, ref_map_string tag "block/title" with
          | Some u, Some t ->
              let id_ref = page_ref u in
-             content
-             |> Common_util.replace_ignore_case ("#" ^ page_ref t) id_ref
-             |> Common_util.replace_ignore_case ("#" ^ t) id_ref
+             Common_util.replace_ignore_case content ("#" ^ page_ref t) id_ref
+             |> fun c -> Common_util.replace_ignore_case c ("#" ^ t) id_ref
          | _ -> content)
        content
        (sort_ref_maps tags))
@@ -432,9 +431,8 @@ let replace_tag_refs_with_page_refs_maps (content : string)
          match ref_map_uuid tag with
          | Some u ->
              let id_ref = page_ref u in
-             content
-             |> Common_util.replace_ignore_case ("#" ^ id_ref) id_ref
-             |> Common_util.replace_ignore_case ("#" ^ id_ref) id_ref
+             Common_util.replace_ignore_case content ("#" ^ id_ref) id_ref
+             |> fun c -> Common_util.replace_ignore_case c ("#" ^ id_ref) id_ref
          | _ -> content)
        content
        (sort_ref_maps tags))

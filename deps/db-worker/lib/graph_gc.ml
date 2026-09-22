@@ -2,11 +2,11 @@
 
 let get_non_refed_addrs_sql =
   "WITH all_referenced AS (\
-     SELECT CAST(value AS INTEGER) AS addr\
-     FROM kvs, json_each(kvs.addresses)\
-  )\
-  SELECT kvs.addr\
-  FROM kvs\
+     SELECT CAST(value AS INTEGER) AS addr \
+     FROM kvs, json_each(kvs.addresses) \
+  ) \
+  SELECT kvs.addr \
+  FROM kvs \
   WHERE kvs.addr NOT IN (SELECT addr FROM all_referenced)"
 
 (* kvs addr 0 = db meta (eavt/avet/aevt root addrs); addr 1 = tail. *)
