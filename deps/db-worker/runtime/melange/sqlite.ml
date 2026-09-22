@@ -96,6 +96,8 @@ type handle =
 type db =
   { handle : handle
   ; filename : string
+  ; mutable tx_depth : int
+  ; mutable savepoint_seq : int
   }
 
 type bind =
@@ -188,7 +190,12 @@ let init () =
 
 let open_db ~path =
   if is_node () then
-    try { handle = Node_db (Database.create path); filename = path }
+    try
+      { handle = Node_db (Database.create path)
+      ; filename = path
+      ; tx_depth = 0
+      ; savepoint_seq = 0
+      }
     with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
   else
     (* cljs browser non-pool open: new oo1.DB(path, "c") — publishing
@@ -201,6 +208,8 @@ let open_db ~path =
                  (Opfs.create_db (Opfs.db_class (Opfs.oo1 s3))
                     [| Js.Json.string path; Js.Json.string "c" |])
            ; filename = path
+           ; tx_depth = 0
+           ; savepoint_seq = 0
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error "sqlite-wasm module not initialized")
@@ -242,6 +251,8 @@ let open_db_pool ~name ~path =
                  (Opfs.create_db (Opfs.pool_db_class pool)
                     [| Js.Json.string path |])
            ; filename = path
+           ; tx_depth = 0
+           ; savepoint_seq = 0
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error ("opfs pool not prepared: " ^ name))
@@ -298,15 +309,42 @@ let query t ~sql ~bind =
         |> List.map (fun row -> Array.map bind_of_json row)
   with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
 
+(* cljs platform/node.cljs with-transaction: BEGIN at depth 0,
+   SAVEPOINT __logseq_tx_N when nested. *)
 let transaction t f =
-  exec t ~sql:"begin" ~bind:[||];
-  match f () with
-  | result ->
-      exec t ~sql:"commit" ~bind:[||];
-      result
-  | exception exn ->
-      exec t ~sql:"rollback" ~bind:[||];
-      raise exn
+  let outermost = t.tx_depth = 0 in
+  let savepoint =
+    if outermost then ""
+    else begin
+      t.savepoint_seq <- t.savepoint_seq + 1;
+      Printf.sprintf "__logseq_tx_%d" t.savepoint_seq
+    end
+  in
+  exec t ~sql:(if outermost then "begin" else "SAVEPOINT " ^ savepoint)
+    ~bind:[||];
+  t.tx_depth <- t.tx_depth + 1;
+  Fun.protect
+    ~finally:(fun () -> t.tx_depth <- t.tx_depth - 1)
+    (fun () ->
+      match f () with
+      | result ->
+          exec t
+            ~sql:
+              (if outermost then "commit"
+               else "RELEASE SAVEPOINT " ^ savepoint)
+            ~bind:[||];
+          result
+      | exception exn ->
+          (if outermost then
+             (try exec t ~sql:"rollback" ~bind:[||] with _ -> ())
+           else begin
+             (try
+                exec t ~sql:("ROLLBACK TO SAVEPOINT " ^ savepoint) ~bind:[||]
+              with _ -> ());
+             (try exec t ~sql:("RELEASE SAVEPOINT " ^ savepoint) ~bind:[||]
+              with _ -> ())
+           end);
+          raise exn)
 
 let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
 

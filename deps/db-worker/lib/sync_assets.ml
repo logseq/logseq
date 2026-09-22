@@ -66,17 +66,16 @@ let clear_missing_asset_upload_file repo asset_id =
       else Hashtbl.replace repo_missing_asset_upload_files repo files'
   | None -> ()
 
-(* get-missing-asset-upload-files — sorted by :file *)
-let get_missing_asset_upload_files repo : string list =
+(* get-missing-asset-upload-files — vec of {:asset-id :asset-type :file}
+   maps sorted by :file, matching the cljs wire payload. *)
+let get_missing_asset_upload_files repo : Wire.t list =
   match Hashtbl.find_opt repo_missing_asset_upload_files repo with
   | None -> []
   | Some files ->
-      files
-      |> List.map (fun f ->
-             match Wire.get "file" f with
-             | Some (Wire.String s) -> s
-             | _ -> "")
-      |> List.sort compare
+      List.sort
+        (fun a b ->
+          compare (Wire.get "file" a) (Wire.get "file" b))
+        files
 
 let clear_missing_asset_upload_files repo =
   Hashtbl.remove repo_missing_asset_upload_files repo
@@ -124,6 +123,16 @@ let err typ ?(data = []) msg : exn =
     ([ (Wire.Keyword "type", Wire.Keyword typ) ]
      @ (match data with [] -> [] | _ -> [ (Wire.Keyword "data", Wire.Map data) ]))
 
+(* http seams are rebindable like the cljs js/fetch global (tests
+   substitute a recorder); download-remote-asset! below is rebindable
+   like the cljs var (tests with-redefs it). *)
+let http_send_fn : (Http.request -> Http.response Db_worker_effect.t) ref =
+  ref Http.send
+
+let http_bytes_send_fn
+    : (Http_bytes.request -> Http_bytes.response Db_worker_effect.t) ref =
+  ref Http_bytes.send
+
 (* upload-remote-asset! *)
 let upload_remote_asset repo graph_id asset_uuid asset_type checksum
     : unit Db_worker_effect.t =
@@ -152,7 +161,7 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
          >>= fun payload ->
          let total = String.length payload in
          notify_asset_progress repo asset_id "upload" 0 total;
-         Http.send
+         !http_send_fn
            { Http.url = put_url
            ; method_ = "PUT"
            ; headers =
@@ -375,7 +384,7 @@ let header_opt name (headers : (string * string) list) =
   | None -> None
 
 (* download-remote-asset! *)
-let download_remote_asset repo graph_id asset_uuid asset_type
+let download_remote_asset_impl repo graph_id asset_uuid asset_type
     : unit Db_worker_effect.t =
   match (http_base (), graph_id, asset_type) with
   | Some base, Some gid, Some at
@@ -384,7 +393,7 @@ let download_remote_asset repo graph_id asset_uuid asset_type
         (graph_aes_key repo >>= fun aes_key ->
          let asset_id = asset_uuid in
          let get_url = asset_url base gid asset_id at in
-         Http_bytes.send
+         !http_bytes_send_fn
            { Http_bytes.url = get_url
            ; method_ = "GET"
            ; headers = Sync_util.auth_headers ()
@@ -427,6 +436,13 @@ let download_remote_asset repo graph_id asset_uuid asset_type
            [ Wire.Keyword "repo", Wire.String repo
            ; Wire.Keyword "asset-uuid", Wire.String asset_uuid
            ; Wire.Keyword "graph-id", str_or graph_id ])
+
+(* cljs tests with-redefs download-remote-asset!; every caller goes
+   through this ref so a substitute sees the same call sites. *)
+let download_remote_asset_fn = ref download_remote_asset_impl
+
+let download_remote_asset repo graph_id asset_uuid asset_type =
+  !download_remote_asset_fn repo graph_id asset_uuid asset_type
 
 let log_request_asset_download_failed repo asset_uuid e =
   Worker_log.error "db-sync/request-asset-download-failed"

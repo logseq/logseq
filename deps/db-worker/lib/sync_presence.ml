@@ -54,8 +54,7 @@ let sync_counts ~get_missing_asset_upload_files ~latest_remote_tx
            ; Wire.Keyword "graph-id", str_or_nil graph_uuid
            ; Wire.Keyword "pending-local", Wire.Int pending_local
            ; Wire.Keyword "pending-asset", Wire.Int pending_asset
-           ; Wire.Keyword "missing-asset-upload-files"
-           , Wire.Array (List.map (fun f -> Wire.String f) missing_files)
+           ; Wire.Keyword "missing-asset-upload-files", Wire.Array missing_files
            ; Wire.Keyword "pending-server", int_or_nil pending_server
            ; Wire.Keyword "local-tx", int_or_nil local_tx
            ; Wire.Keyword "remote-tx", int_or_nil remote_tx

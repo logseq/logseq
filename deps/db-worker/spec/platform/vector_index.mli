@@ -37,6 +37,11 @@ val upsert : index -> doc list -> unit
 val delete : index -> string list -> unit
 val truncate : index -> unit
 
+(* cljs platform/node.cljs vector-query-topks: a page-scoped query
+   widens topk by [4 16 64] until enough results survive the page
+   filter. *)
+val vector_query_topks : int -> string option -> int list
+
 (* :set-metadata! — persists {:embedding-model-id :embedding-dimension
    :context-version} next to the on-disk index. *)
 val set_metadata : index -> (string * Wire.t) list -> unit Db_worker_effect.t

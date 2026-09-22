@@ -22,4 +22,12 @@ let query _ ~embedding:_ ~limit:_ ~page:_ = []
 let upsert _ _ = ()
 let delete _ _ = ()
 let truncate _ = ()
+
+let vector_page_filter_topk_multipliers = [ 4; 16; 64 ]
+
+let vector_query_topks limit page =
+  match page with
+  | Some _ -> List.map (fun mul -> limit * mul) vector_page_filter_topk_multipliers
+  | None -> [ limit ]
+
 let set_metadata _ _ = Db_worker_effect.pure ()

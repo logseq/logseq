@@ -33,6 +33,16 @@
    - id-ref->title-ref / content-id-ref->page tests: none exist in
      deps/db test dirs
 
+   Whole-file drops (no native counterpart):
+   - src/test/frontend/worker/db_worker_node_test.cljs (52 deftests):
+     drives the cljs db-worker-node daemon — logseq.cli.server HTTP
+     /v1/invoke + /v1/events SSE and the @logseq/graph-lifecycle npm
+     module. There is no OCaml daemon/server to port it against;
+     VERIFY-CLJS.md covers those tests by loading the melange build
+     into the cljs daemon harness instead.
+   - src/test/frontend/worker/a_test_env.cljs: js/globalThis
+     (self/importScripts/postMessage) shims — N/A natively.
+
    Known cljs-vs-OCaml divergences surfaced by these tests (asserted
    where observable, not papered over):
    - cljs page-exists? returns a seq of matching page eids;
@@ -2963,6 +2973,11 @@ let () =
     ; "misc-state", Test_misc_native.state_cases
     ; "misc-worker-util", Test_misc_native.worker_util_cases
     ; "render-resource", Test_render_resource_native.cases
+    ; "render-affected-keys", Test_render_affected_keys_native.cases
+    ; "db-worker", Test_db_worker_native.cases
+    ; "platform", Test_platform_native.cases
+    ; "search-benchmark", Test_search_benchmark_native.cases
+    ; "shared-service", Test_shared_service_native.cases
     ; "pipeline", Test_pipeline_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
     ; "graph-view", Test_graph_view_native.cases
