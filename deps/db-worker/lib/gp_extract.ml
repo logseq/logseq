@@ -375,7 +375,7 @@ let extract_pages_and_blocks (format : string) (ast : value list)
             |> List.filter (fun (k, _) -> k <> "ref-pages")
             |> fun b ->
             let b = Block_map.put b "block/page"
-                (Map [ Keyword "block/name", String page_name ]) in
+                (Vector [ Keyword "block/name"; String page_name ]) in
             let b =
               if block_ref_pages <> [] then
                 Block_map.put b "block/refs" (List block_ref_pages)
