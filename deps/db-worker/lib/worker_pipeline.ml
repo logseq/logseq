@@ -1323,6 +1323,69 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
   ; db_before = tx_report.db_before
   }
 
+(* ---------- invoke-hooks (db_listener's post-commit surface) ---------- *)
+
+(* cljs {:tx-report :affected-keys :deleted-block-uuids :deleted-assets
+   :pages :blocks} — deleted_block_uuids holds uuid strings,
+   deleted_assets the cljs {:block/uuid :ext} maps as wire. *)
+type invoke_hooks_result =
+  { hooks_tx_report : tx_report
+  ; hooks_affected_keys : Wire.t list
+  ; hooks_deleted_block_uuids : string list
+  ; hooks_deleted_assets : Wire.t list
+  ; hooks_pages : entity list
+  ; hooks_blocks : entity list }
+
+(* cljs pipeline/invoke-hooks-default — console.error + rethrow *)
+let invoke_hooks (_conn : conn) (tx_report : tx_report)
+    : invoke_hooks_result =
+  try
+    let pages, blocks = Ds_report.get_blocks_and_pages tx_report in
+    let deleted_blocks =
+      Outliner_pipeline.filter_deleted_blocks tx_report.tx_data
+    in
+    let deleted_block_uuids =
+      List.map snd deleted_blocks |> Sync_state.distinct_by Fun.id
+    in
+    let deleted_block_ids =
+      List.map fst deleted_blocks |> Sync_state.distinct_by Fun.id
+    in
+    (* cljs (swap! *deleted-block-uuid->db-id merge ...) *)
+    List.iter
+      (fun (db_id, uuid) ->
+         Hashtbl.replace (Worker_state.deleted_block_uuid_to_db_id ())
+           uuid db_id)
+      deleted_blocks;
+    let deleted_assets =
+      List.filter_map
+        (fun id ->
+           match entity tx_report.db_before (Entity_id id) with
+           | Some e when Ldb.asset e ->
+               Some
+                 (Wire.Map
+                    [ ( Wire.Keyword "block/uuid"
+                      , (match Ldb.value e "block/uuid" with
+                         | Some v -> Ds_wire.transit_of_value v
+                         | None -> Wire.Nil) )
+                    ; ( Wire.Keyword "ext"
+                      , (match Ldb.value e "logseq.property.asset/type" with
+                         | Some v -> Ds_wire.transit_of_value v
+                         | None -> Wire.Nil) ) ])
+           | _ -> None)
+        deleted_block_ids
+    in
+    let affected_keys = Render_affected_keys.affected_keys tx_report in
+    { hooks_tx_report = tx_report
+    ; hooks_affected_keys = affected_keys
+    ; hooks_deleted_block_uuids = deleted_block_uuids
+    ; hooks_deleted_assets = deleted_assets
+    ; hooks_pages = pages
+    ; hooks_blocks = blocks }
+  with e ->
+    Worker_log.error "worker-pipeline/invoke-hooks-failed"
+      [ ("error", Printexc.to_string e) ];
+    raise e
+
 (* ---------- wiring ---------- *)
 
 let () =
