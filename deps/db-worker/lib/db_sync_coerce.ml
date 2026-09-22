@@ -30,7 +30,10 @@ let as_int v =
   | _ -> err "int" v
 
 let as_bool v = match v with Wire.Bool b -> b | _ -> err "boolean" v
-let as_seq v = match Wire.as_seq v with [] when not (Wire.is_nil v) -> err "seq" v | xs -> xs
+let as_seq v =
+  match v with
+  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
+  | _ -> err "seq" v
 
 let as_kw v =
   match v with
