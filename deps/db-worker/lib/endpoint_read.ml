@@ -57,9 +57,9 @@ let () = Dispatcher.register "thread-api/get-journal-page-by-day" get_journal_pa
 let get_latest_journals args =
   with_conn args (fun db ->
       let n = Option.value (Option.bind (arg args 1) Wire.as_int) ~default:0 in
-      let js = Ldb.get_latest_journals db in
+      let js = Ldb.get_latest_journals db |> Seq.take n |> List.of_seq in
       Db_worker_effect.pure
-        (Wire.Array (List.map (page_summary db) (List.filteri (fun i _ -> i < n) js))))
+        (Wire.Array (List.map (page_summary db) js)))
 
 let () = Dispatcher.register "thread-api/get-latest-journals" get_latest_journals
 

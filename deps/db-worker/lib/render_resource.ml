@@ -347,7 +347,7 @@ let render_journals db _key _runtime =
   ( Watch_keys [ wkey [ kw "journals" ] ]
   , Wire.Array
       (List.map (fun (j : entity) -> Wire.Uuid (uuid_of j))
-         (Ldb.get_latest_journals db)) )
+         (List.of_seq (Ldb.get_latest_journals db))) )
 
 let render_recycle_roots db _key _runtime =
   let roots =
