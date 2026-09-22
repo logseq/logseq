@@ -108,10 +108,7 @@ let coerce (f : Wire.t -> Wire.t) (v : Wire.t) ~context : Wire.t option =
       (context @ [ "error", ex_message e ]);
     None
 
-let build_revision () =
-  match Runtime_env.env "LOGSEQ_BUILD_REVISION" with
-  | Some r -> r
-  | None -> "dev"
+let build_revision () = Common_version.revision ()
 
 (* sync-util/with-client-revision — :sync/tx-batch gets :client-revision *)
 let with_client_revision schema_key (body : Wire.t) : Wire.t =
