@@ -317,7 +317,8 @@ let build_property_values_tx_m ?(pure = false) ?(pvalue_map = false)
   let gen_uuid_value_prefix =
     if pure then
       match Block_map.attr_value block "db/ident", Block_map.uuid_attr block "block/uuid" with
-      | Some (Keyword i), _ -> Some i
+      (* cljs (str :ns/name "-v") keeps the leading colon. *)
+      | Some (Keyword i), _ -> Some (":" ^ i)
       | _, Some u -> Some u
       | _ -> invalid_arg "pure? requires block :db/ident or :block/uuid"
     else None
@@ -459,7 +460,11 @@ let build_properties_with_ref_values (prop_vals_tx_m : (attr * value) list)
 (* sqlite-util/build-new-class — adds Tag to :block/tags and extends Root
    when no :logseq.property.class/extends. *)
 let build_new_class (block : Block_map.t) : Block_map.t =
-  let ident = Block_map.string_attr block "db/ident" in
+  let ident =
+    match Block_map.attr_value block "db/ident" with
+    | Some (Keyword i) -> Some i
+    | _ -> None
+  in
   let tags =
     match Block_map.attr_value block "block/tags" with
     | Some (Set ts) -> Set (ts @ [ Keyword "logseq.class/Tag" ])
