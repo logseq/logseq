@@ -65,3 +65,39 @@
   (:test_bin ./test_pipeline_native.exe))
  (action
   (run %{test_bin})))
+
+(executable
+ (name test_validate_native)
+ (modules test_validate_native db_test_util test_shared)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  datascript_ocaml
+  alcotest
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_validate_native.exe))
+ (action
+  (run %{test_bin})))
+
+(executable
+ (name test_view_native)
+ (modules test_view_native test_shared db_test_util)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  datascript_ocaml
+  alcotest
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_view_native.exe))
+ (action
+  (run %{test_bin})))

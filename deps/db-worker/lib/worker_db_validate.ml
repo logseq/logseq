@@ -43,6 +43,21 @@ let ident_name (s : string) : string =
 let user_class_namespace (ident : string) : bool =
   namespace_of ident = Some "user.class"
 
+(* cljs (ldb/transact! conn tx-data {:fix-db? true}) — ldb/transact!
+   routes through transact-sync, which runs the worker pipeline
+   (block/tx-id stamping, ref rebuilds) even when :fix-db? skips
+   validate-tx-report. Db_transact.transact is the EDN fast path
+   without the pipeline, so fix txs render to EDN and go through
+   Db_tx.transact instead — its transact_sync does the same
+   d/with -> transact-pipeline-fn -> CAS dance. *)
+let transact_fix (conn : conn) (tx_data : Wire.t list)
+    (tx_meta : tx_meta) : tx_report option =
+  if tx_data = [] then None
+  else
+    Some
+      (Db_tx.transact ~tx_meta conn
+         (Datascript.parse_tx_data_string (Db_transact.tx_edn tx_data)))
+
 (* cljs get-property-by-title *)
 let get_property_by_title (db : db) (title : string) : entity option =
   match Ldb.page_exists_ids db title [ "logseq.class/Property" ] with
@@ -425,7 +440,7 @@ let fix_invalid_blocks (conn : conn)
   if tx_data = [] then false
   else
     match
-      Db_transact.transact conn tx_data [ "fix-db?", Bool true ]
+      transact_fix conn tx_data [ "fix-db?", Bool true ]
     with
     | Some report -> report.tx_data <> []
     | None -> false
@@ -465,7 +480,7 @@ let fix_num_prefix_db_idents (conn : conn) : unit =
   in
   let tx_data' = tx_data @ hidden_columns_tx in
   if tx_data' <> [] then
-    ignore (Db_transact.transact conn tx_data' [])
+    ignore (transact_fix conn tx_data' [])
 
 (* fix-non-closed-values! *)
 let fix_non_closed_values (conn : conn) : unit =
@@ -515,7 +530,7 @@ let fix_non_closed_values (conn : conn) : unit =
   in
   if tx_data <> [] then
     ignore
-      (Db_transact.transact conn tx_data [ "fix-db?", Bool true ])
+      (transact_fix conn tx_data [ "fix-db?", Bool true ])
 
 (* fix-icon-wrong-type! *)
 let fix_icon_wrong_type (conn : conn) : unit =
@@ -530,7 +545,7 @@ let fix_icon_wrong_type (conn : conn) : unit =
             |> List.map (fun (d : datom) -> retract d.e d.a))
       in
       ignore
-        (Db_transact.transact conn tx_data [ "fix-db?", Bool true ])
+        (transact_fix conn tx_data [ "fix-db?", Bool true ])
   | _ -> ()
 
 (* fix-extends-cardinality! *)
@@ -543,7 +558,7 @@ let fix_extends_cardinality (conn : conn) : unit =
   in
   if cur <> Some (Keyword "db.cardinality/many") then
     ignore
-      (Db_transact.transact conn
+      (transact_fix conn
          [ wire_map
              [ "db/ident", Keyword "logseq.property.class/extends"
              ; "db/cardinality", Keyword "db.cardinality/many"

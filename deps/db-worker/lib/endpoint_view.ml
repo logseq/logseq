@@ -108,74 +108,72 @@ let normalize_view_filter_value (v : Wire.t) : Wire.t =
        | _ -> v)
   | _ -> v
 
-(* view-filter-data *)
+(* view-filter-data — standalone fn as in cljs; the thread-api wrapper
+   below resolves the conn and forwards the option map. *)
+let view_filter_data (db : db) (option : Wire.t) : Wire.t =
+  let property_pairs : (Wire.t * Wire.t) list =
+    match Wire.get "property" option with
+    | Some (Wire.Map ps) -> ps
+    | _ ->
+        (match Option.bind (Wire.get "property-ident" option) kw_or_string with
+         | Some ident ->
+             (match Ldb.ent_of_ref db (Ident ident) with
+              | Some e -> entity_map_wire e
+              | None -> [])
+         | None -> [])
+  in
+  let prop_get k = map_get k property_pairs in
+  let prop_ident = Option.bind (prop_get "db/ident") kw_or_string in
+  let prop_type = Option.bind (prop_get "logseq.property/type") kw_or_string in
+  let operator =
+    match Option.bind (Wire.get "operator" option) kw_or_string with
+    | Some s -> s
+    | None -> "is"
+  in
+  let value =
+    match Wire.get "value" option with Some v -> v | None -> Wire.Nil
+  in
+  let value_source = value_source_of prop_type operator in
+  let values =
+    match value_source, prop_ident with
+    | Some "property-values", Some ident ->
+        let view_id =
+          match Wire.get "view-id" option with
+          | Some (Wire.Int i) -> Some i
+          | _ -> None
+        in
+        let query_entity_ids =
+          match Wire.get "query-entity-ids" option with
+          | Some (Wire.Array xs) | Some (Wire.List xs) | Some (Wire.Set xs) ->
+              Some
+                (List.filter_map
+                   (function Wire.Int i -> Some i | _ -> None)
+                   xs)
+          | _ -> None
+        in
+        Wire.Array
+          (List.map normalize_view_filter_value
+             (Db_view.get_property_values db ident ~view_id ~query_entity_ids))
+    | _ -> Wire.Nil
+  in
+  Wire.Map
+    [ ( kw "operators",
+        Wire.Array (List.map kw (operators_of prop_ident prop_type)) )
+    ; ( kw "value-source",
+        match value_source with
+        | Some s -> Wire.Keyword s
+        | None -> Wire.Nil )
+    ; (kw "many?", Wire.Bool (filter_many prop_type operator))
+    ; (kw "values", values)
+    ; ( kw "value-after-operator-change",
+        value_after_operator_change operator value ) ]
+
 let get_view_filter_data args =
   with_conn args (fun db ->
       let option =
         match arg args 1 with Some w -> w | None -> Wire.Map []
       in
-      let property_pairs : (Wire.t * Wire.t) list =
-        match Wire.get "property" option with
-        | Some (Wire.Map ps) -> ps
-        | _ ->
-            (match
-               Option.bind (Wire.get "property-ident" option) kw_or_string
-             with
-             | Some ident ->
-                 (match Ldb.ent_of_ref db (Ident ident) with
-                  | Some e -> entity_map_wire e
-                  | None -> [])
-             | None -> [])
-      in
-      let prop_get k = map_get k property_pairs in
-      let prop_ident = Option.bind (prop_get "db/ident") kw_or_string in
-      let prop_type =
-        Option.bind (prop_get "logseq.property/type") kw_or_string
-      in
-      let operator =
-        match Option.bind (Wire.get "operator" option) kw_or_string with
-        | Some s -> s
-        | None -> "is"
-      in
-      let value =
-        match Wire.get "value" option with Some v -> v | None -> Wire.Nil
-      in
-      let value_source = value_source_of prop_type operator in
-      let values =
-        match value_source, prop_ident with
-        | Some "property-values", Some ident ->
-            let view_id =
-              match Wire.get "view-id" option with
-              | Some (Wire.Int i) -> Some i
-              | _ -> None
-            in
-            let query_entity_ids =
-              match Wire.get "query-entity-ids" option with
-              | Some (Wire.Array xs) | Some (Wire.List xs) | Some (Wire.Set xs) ->
-                  Some
-                    (List.filter_map
-                       (function Wire.Int i -> Some i | _ -> None)
-                       xs)
-              | _ -> None
-            in
-            Wire.Array
-              (List.map normalize_view_filter_value
-                 (Db_view.get_property_values db ident ~view_id ~query_entity_ids))
-        | _ -> Wire.Nil
-      in
-      Db_worker_effect.pure
-        (Wire.Map
-           [ ( kw "operators",
-               Wire.Array
-                 (List.map kw (operators_of prop_ident prop_type)) )
-           ; ( kw "value-source",
-               match value_source with
-               | Some s -> Wire.Keyword s
-               | None -> Wire.Nil )
-           ; (kw "many?", Wire.Bool (filter_many prop_type operator))
-           ; (kw "values", values)
-           ; ( kw "value-after-operator-change",
-               value_after_operator_change operator value ) ]))
+      Db_worker_effect.pure (view_filter_data db option))
 
 let () = Dispatcher.register "thread-api/get-view-filter-data" get_view_filter_data
 

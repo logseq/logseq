@@ -761,8 +761,8 @@ let get_view_property_values db (property_ident : attr) ~view_id ~query_entity_i
   |> distinct_by_label
 
 (* view/get-property-values *)
-let get_property_values db (property_ident : attr) ~view_id ~query_entity_ids :
-    Wire.t list =
+let get_property_values_impl db (property_ident : attr) ~view_id
+    ~query_entity_ids : Wire.t list =
   let property = Ldb.ent_of_ref db (Ident property_ident) in
   let default_value =
     Option.bind property (fun p -> Ldb.ref_ent p "logseq.property/default-value")
@@ -845,6 +845,13 @@ let get_property_values db (property_ident : attr) ~view_id ~query_entity_ids :
     | _ -> values
   in
   distinct_by_label values
+
+(* cljs tests stub db-view/get-property-values via with-redefs; the fn
+   ref is the equivalent native seam (sync_crypt convention). *)
+let get_property_values_fn = ref get_property_values_impl
+
+let get_property_values db property_ident ~view_id ~query_entity_ids =
+  !get_property_values_fn db property_ident ~view_id ~query_entity_ids
 
 (* ================================================================== *)
 (* common/view.cljs — get-view-data machinery (sort/filter/group).    *)

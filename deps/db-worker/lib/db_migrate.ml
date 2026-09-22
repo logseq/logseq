@@ -433,8 +433,16 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
         |> List.filter (fun (k, _) -> k <> "db/id"))
       data
   in
-  Db_transact.transact conn (List.map wire_map data')
-    [ "fix-db?", Bool true; "db-migrate?", Bool true ]
+  (* cljs (ldb/transact! conn data' {:fix-db? true :db-migrate? true}) —
+     Db_tx.transact runs the worker pipeline like ldb/transact!, and the
+     tx_op path (entity_tx) keeps Map values on non-ref attrs as stored
+     values like cljs datascript, which the EDN fast path
+     (Db_transact.transact) cannot express. *)
+  Some
+    (Db_tx.transact
+       ~tx_meta:[ "fix-db?", Bool true; "db-migrate?", Bool true ]
+       conn
+       (List.map (Sqlite_create_graph.entity_tx db) data'))
 
 (* db-migrate/upgrade-version! *)
 let upgrade_version (conn : conn) (version : string) (update : update_spec) :
