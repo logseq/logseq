@@ -1,25 +1,63 @@
 let datascript_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
-let sqlite_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
+
+(* cljs worker-state/*sqlite-conns* — (repo, kind) -> db *)
+type db_kind =
+  | Db
+  | Search
+  | Client_ops
+
+let sqlite_conns : (string * db_kind, Sqlite.db) Hashtbl.t = Hashtbl.create 7
 
 let datascript_conn repo = Hashtbl.find_opt datascript_conns repo
 let set_datascript_conn repo conn = Hashtbl.replace datascript_conns repo conn
 let drop_datascript_conn repo = Hashtbl.remove datascript_conns repo
 
-let sqlite_conn repo = Hashtbl.find_opt sqlite_conns repo
-let set_sqlite_conn repo db = Hashtbl.replace sqlite_conns repo db
-let drop_sqlite_conn repo = Hashtbl.remove sqlite_conns repo
+let sqlite_conn_of repo kind = Hashtbl.find_opt sqlite_conns (repo, kind)
+let set_sqlite_conn_of repo kind db = Hashtbl.replace sqlite_conns (repo, kind) db
+let drop_sqlite_conn_of repo kind = Hashtbl.remove sqlite_conns (repo, kind)
 
-let repos () = Hashtbl.fold (fun repo _ acc -> repo :: acc) sqlite_conns []
+let sqlite_conn repo = sqlite_conn_of repo Db
+let set_sqlite_conn repo db = set_sqlite_conn_of repo Db db
+let drop_sqlite_conn repo = drop_sqlite_conn_of repo Db
+
+let repos () =
+  Hashtbl.fold
+    (fun (repo, kind) _ acc ->
+       if kind = Db && not (List.mem repo acc) then repo :: acc else acc)
+    sqlite_conns []
 
 let close_other_sqlite_conns keep_repo =
   Hashtbl.iter
-    (fun repo db ->
+    (fun (repo, kind) db ->
       if repo <> keep_repo then begin
         (try Sqlite.close db with _ -> ());
-        drop_sqlite_conn repo;
-        drop_datascript_conn repo
+        drop_sqlite_conn_of repo kind;
+        if kind = Db then drop_datascript_conn repo
       end)
     sqlite_conns
+
+(* cljs worker-state/*vector-indexes* *)
+let vector_indexes : (string, Vector_index.index) Hashtbl.t = Hashtbl.create 7
+let vector_index repo = Hashtbl.find_opt vector_indexes repo
+let set_vector_index repo idx = Hashtbl.replace vector_indexes repo idx
+let drop_vector_index repo = Hashtbl.remove vector_indexes repo
+
+(* cljs worker-state/*search-index-build-ids* /
+   *vector-index-rebuild-ids* — repo -> build id *)
+let search_index_build_ids : (string, string) Hashtbl.t = Hashtbl.create 7
+let vector_index_rebuild_ids : (string, string) Hashtbl.t = Hashtbl.create 7
+
+let search_index_build_id repo = Hashtbl.find_opt search_index_build_ids repo
+let set_search_index_build_id repo id = Hashtbl.replace search_index_build_ids repo id
+let clear_search_index_build_id repo = Hashtbl.remove search_index_build_ids repo
+let vector_index_rebuild_id repo = Hashtbl.find_opt vector_index_rebuild_ids repo
+let set_vector_index_rebuild_id repo id = Hashtbl.replace vector_index_rebuild_ids repo id
+let clear_vector_index_rebuild_id repo = Hashtbl.remove vector_index_rebuild_ids repo
+
+(* cljs worker-state/*publishing? *)
+let publishing_ref = ref false
+let publishing () = !publishing_ref
+let set_publishing b = publishing_ref := b
 
 (* :worker/context *)
 let current_context : Wire.t ref = ref (Wire.kw_map [])

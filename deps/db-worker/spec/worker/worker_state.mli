@@ -8,6 +8,36 @@ val sqlite_conn : string -> Sqlite.db option
 val set_sqlite_conn : string -> Sqlite.db -> unit
 val drop_sqlite_conn : string -> unit
 
+(* cljs worker-state/*sqlite-conns* — repo -> {:db :search
+   :client-ops}. `sqlite_conn` is `sqlite_conn_of` Db. *)
+type db_kind =
+  | Db
+  | Search
+  | Client_ops
+
+val sqlite_conn_of : string -> db_kind -> Sqlite.db option
+val set_sqlite_conn_of : string -> db_kind -> Sqlite.db -> unit
+val drop_sqlite_conn_of : string -> db_kind -> unit
+
+(* cljs worker-state/*vector-indexes* — repo -> platform vector
+   index handle. *)
+val vector_index : string -> Vector_index.index option
+val set_vector_index : string -> Vector_index.index -> unit
+val drop_vector_index : string -> unit
+
+(* cljs worker-state/*search-index-build-ids* and
+   *vector-index-rebuild-ids* — repo -> build-id string. *)
+val search_index_build_id : string -> string option
+val set_search_index_build_id : string -> string -> unit
+val clear_search_index_build_id : string -> unit
+val vector_index_rebuild_id : string -> string option
+val set_vector_index_rebuild_id : string -> string -> unit
+val clear_vector_index_rebuild_id : string -> unit
+
+(* cljs worker-state/*publishing? *)
+val publishing : unit -> bool
+val set_publishing : bool -> unit
+
 val repos : unit -> string list
 val close_other_sqlite_conns : string -> unit
 
