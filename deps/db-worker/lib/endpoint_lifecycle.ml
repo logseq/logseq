@@ -130,6 +130,9 @@ let create_or_open_db args =
                  Worker_state.set_sqlite_conn repo db;
                  (db, true)
            in
+           (* cljs get-dbs-open also opens the client-ops sqlite beside
+              the graph db. *)
+           if created_sqlite then ignore (Sync_state.client_ops_conn repo);
            Graph_store.create_kvs_table db;
            let storage = Graph_store.storage db in
            let conn =
@@ -368,6 +371,12 @@ let () =
        | Some db ->
            (match Option.bind (List.nth_opt args 1) Wire.as_string with
             | Some dst ->
+                (* cljs backup-db!: ensure-dir! dirname, checkpoint-db!,
+                   then backup; resolves {:path dst-path}. *)
+                if not (Sqlite.pooled_runtime ()) then
+                  ignore (File_sys.mkdir_p (Filename.dirname dst));
+                Sqlite.checkpoint db;
                 Sqlite.backup db ~dst_path:dst;
-                Db_worker_effect.pure Wire.nil
+                Db_worker_effect.pure
+                  (Wire.Map [ Wire.Keyword "path", Wire.String dst ])
             | None -> Db_worker_effect.pure Wire.nil)))

@@ -2,7 +2,11 @@
  (target test_node)
  (alias test_node)
  (module_systems commonjs)
- (modules test_worker_melange test_query_melange test_crypt_melange)
+ (modules
+  test_worker_melange
+  test_query_melange
+  test_crypt_melange
+  test_db_worker_node_melange)
  (libraries
   logseq_db_worker
   logseq_db_worker_platform_melange
@@ -18,9 +22,11 @@
   (alias test_node)
   (:test_js ./test_node/test/test_worker_melange.js)
   (:test_query_js ./test_node/test/test_query_melange.js)
-  (:test_crypt_js ./test_node/test/test_crypt_melange.js))
+  (:test_crypt_js ./test_node/test/test_crypt_melange.js)
+  (:test_node_js ./test_node/test/test_db_worker_node_melange.js))
  (action
-  (run node --test %{test_js} %{test_query_js} %{test_crypt_js})))
+  (run node --test %{test_js} %{test_query_js} %{test_crypt_js}
+    %{test_node_js})))
 
 (executable
  (name test_worker_native)

@@ -42,6 +42,21 @@ external publish_ :
   Js.Json.t -> Js.Json.t -> int -> (unit -> unit [@u]) -> Js.Json.t Js.Promise.t
   = "publish" [@@mel.send]
 
+external create_graph_ :
+  Js.Json.t -> Js.Json.t -> string -> Js.Json.t Js.Promise.t
+  = "createGraph" [@@mel.send]
+
+external context_ : Js.Json.t -> Js.Json.t -> string -> Js.Json.t
+  = "context" [@@mel.send]
+
+external ownership_path_ : Js.Json.t -> Js.Json.t -> string
+  = "ownershipPath" [@@mel.send]
+
+external acquire_ownership_ : Js.Json.t -> Js.Json.t -> Js.Json.t
+  = "acquireOwnership" [@@mel.send]
+
+external release_ : Js.Json.t -> unit = "release" [@@mel.send]
+
 let resolve_storage ~root ~graphs_dir =
   let m = Lazy.force gl in
   let s = resolve_storage_ m root graphs_dir in
@@ -50,9 +65,11 @@ let resolve_storage ~root ~graphs_dir =
   ; lifecycle_dir = get_str s "lifecycleDir"
   }
 
-(* promise -> Db_worker_effect.t (http_bytes task_of_promise pattern). *)
-external promise_error_message : Js.Promise.error -> string option = "message"
-  [@@mel.get] [@@mel.return { undefined_to_opt }]
+(* promise -> Db_worker_effect.t (http_bytes task_of_promise pattern).
+   cljs callers read (.-code e) off the rejection (repo-locked etc.), so
+   the JS error object itself is kept as the exn box. %identity is safe
+   here: the rejection value already is the JS Error. *)
+external promise_error_as_exn : Js.Promise.error -> exn = "%identity"
 
 let await_promise promise =
   let task, resolver = Db_worker_effect.wait () in
@@ -61,10 +78,7 @@ let await_promise promise =
   in
   let on_ok value = finish (Ok value); Js.Promise.resolve () in
   let on_error error =
-    let message =
-      Option.value (promise_error_message error) ~default:"JavaScript promise rejected"
-    in
-    finish (Error message);
+    finish (Error (promise_error_as_exn error));
     Js.Promise.resolve ()
   in
   ignore
@@ -72,16 +86,19 @@ let await_promise promise =
       : unit Js.Promise.t);
   Db_worker_effect.bind task (function
     | Ok value -> Db_worker_effect.pure value
-    | Error message -> Db_worker_effect.error (Failure message))
+    | Error error -> Db_worker_effect.error error)
 
-let admit ~storage ~repo ~owner ?ticket ?generation () =
-  let m = Lazy.force gl in
-  let opts = Js.Dict.empty () in
+let storage_json (storage : storage) : Js.Json.t =
   let storage_obj = Js.Dict.empty () in
   Js.Dict.set storage_obj "root" (Js.Json.string storage.root);
   Js.Dict.set storage_obj "graphsDir" (Js.Json.string storage.graphs_dir);
   Js.Dict.set storage_obj "lifecycleDir" (Js.Json.string storage.lifecycle_dir);
-  Js.Dict.set opts "storage" (Js.Json.object_ storage_obj);
+  Js.Json.object_ storage_obj
+
+let admit ~storage ~repo ~owner ?ticket ?generation () =
+  let m = Lazy.force gl in
+  let opts = Js.Dict.empty () in
+  Js.Dict.set opts "storage" (storage_json storage);
   Js.Dict.set opts "repo" (Js.Json.string repo);
   Js.Dict.set opts "owner" (Js.Json.string owner);
   (match ticket with
@@ -118,3 +135,20 @@ let abort_admission r error = abort_admission_ (Lazy.force gl) r (js_error_opt e
 let publish r port expose_ready =
   Db_worker_effect.map (fun _ -> ())
     (await_promise (publish_ (Lazy.force gl) r port (fun [@u] () -> expose_ready ())))
+
+let create_graph ~storage ~repo =
+  Db_worker_effect.map (fun _ -> ())
+    (await_promise
+       (create_graph_ (Lazy.force gl) (storage_json storage) repo))
+
+type ctx = Js.Json.t
+
+let context ~storage ~repo =
+  context_ (Lazy.force gl) (storage_json storage) repo
+
+let ownership_path ctx = ownership_path_ (Lazy.force gl) ctx
+
+type ownership_handle = Js.Json.t
+
+let acquire_ownership ctx = acquire_ownership_ (Lazy.force gl) ctx
+let release handle = release_ handle

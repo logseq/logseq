@@ -2978,6 +2978,7 @@ let () =
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases
     ; "shared-service", Test_shared_service_native.cases
+    ; "node-sync", Test_node_sync_native.cases
     ; "pipeline", Test_pipeline_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
     ; "graph-view", Test_graph_view_native.cases

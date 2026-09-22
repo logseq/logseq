@@ -46,3 +46,22 @@ val abort_admission : runtime -> string option -> unit
 (* publish(runtime, port, exposeReady) — writes the ready runtime
    record then invokes exposeReady inside the lease. *)
 val publish : runtime -> int -> (unit -> unit) -> unit Db_worker_effect.t
+
+(* createGraph(storage, repo) — creates the graph directory and its
+   initial "available" state record when missing. *)
+val create_graph :
+  storage:storage -> repo:string -> unit Db_worker_effect.t
+
+(* context(storage, repo) / ownershipPath(ctx) — the graph's lifecycle
+   context and the on-disk ownership lock file path. *)
+type ctx
+
+val context : storage:storage -> repo:string -> ctx
+val ownership_path : ctx -> string
+
+(* acquireOwnership(ctx) — throws (code 'repo-locked') while a live
+   owner holds the lock; [release] drops the returned handle. *)
+type ownership_handle
+
+val acquire_ownership : ctx -> ownership_handle
+val release : ownership_handle -> unit

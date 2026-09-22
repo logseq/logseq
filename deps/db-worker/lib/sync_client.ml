@@ -161,6 +161,15 @@ let enqueue_asset_task (client : Sync_state.client)
 
 let ensure_client_state repo : Sync_state.client = Sync_state.new_client repo
 
+(* with-redefs seam for cljs platform/websocket-connect — the default is
+   the runtime's own Web_socket implementation; tests substitute a stub. *)
+let websocket_connect_fn :
+    (url:string ->
+     on_event:(Web_socket.event -> unit) ->
+     Web_socket.t Db_worker_effect.t)
+    ref =
+  ref Web_socket.connect
+
 let rec schedule_reconnect repo (client : Sync_state.client) (url : string)
     (reason : string) : unit =
   let reconnect = !(client.reconnect) in
@@ -291,7 +300,7 @@ and connect repo (client : Sync_state.client) (url : string)
       let updated = { client with Sync_state.ws = None } in
       incr client.conn_gen;
       let gen = !(client.conn_gen) in
-      Web_socket.connect
+      !websocket_connect_fn
         ~url:(Sync_transport.append_token url (Some token'))
         ~on_event:(fun event ->
            if !(updated.conn_gen) = gen then

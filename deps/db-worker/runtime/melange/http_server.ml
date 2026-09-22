@@ -84,17 +84,10 @@ let read_body req =
     (fun () -> Node.Buffer.toString (Node.Buffer.concat (Array.of_list (List.rev !chunks))))
     (read_body_chunks req chunks)
 
-module U8 = Js.Typed_array.Uint8Array
-
-external u8_of_buffer : Node.Buffer.t -> U8.t = "buffer" [@@mel.get]
-external u8_byte_offset : Node.Buffer.t -> int = "byteOffset" [@@mel.get]
-external u8_length : Node.Buffer.t -> int = "length" [@@mel.get]
-
-(* raw bytes of a Buffer via its backing ArrayBuffer window. *)
+(* raw bytes of a Buffer — latin1 keeps each byte 1:1; utf8 toString
+   would corrupt non-ASCII bytes. *)
 let bytes_of_buffer (b : Node.Buffer.t) =
-  let u8 = u8_of_buffer b in
-  let off = u8_byte_offset b in
-  String.init (u8_length b) (fun i -> Char.chr (U8.unsafe_get u8 (off + i)))
+  Node.Buffer.toString ~encoding:`latin1 b
 
 let read_body_buffer req =
   let chunks = ref [] in

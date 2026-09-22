@@ -109,16 +109,16 @@ let pr_str (s : string) : string =
   Buffer.contents b
 
 (* pr-str of the record's message: fields render as an EDN map
-   {:k v}. *)
+   {:k "v"} — values are strings here, so each renders pr-str-quoted
+   like cljs glogi. *)
 let fields_to_edn (fields : (string * string) list) : string =
   "{"
   ^ String.concat ", "
-      (List.map (fun (k, v) -> ":" ^ k ^ " " ^ v) fields)
+      (List.map (fun (k, v) -> ":" ^ k ^ " " ^ pr_str v) fields)
   ^ "}"
 
-(* format-glogi-line — `ts [level] [logger] "message" {:fields}`.
-   The OCaml Worker_log carries the event key as the message and the
-   glogi record map as fields; logger-name is the daemon logger. *)
+(* format-glogi-line — `ts [level] [logger] {:event {:fields}}`: cljs
+   pr-str's the glogi record message, which is the event map itself. *)
 let format_glogi_line (entry : Worker_log.entry) : string =
   let ts = Clock.iso_string_ms entry.time_ms in
   let level =
@@ -129,11 +129,11 @@ let format_glogi_line (entry : Worker_log.entry) : string =
     | Warn -> "warn"
     | Error -> "error"
   in
-  let fields =
-    if entry.fields = [] then "" else " " ^ fields_to_edn entry.fields
+  let event =
+    if entry.fields = [] then Printf.sprintf "{:%s}" entry.message
+    else Printf.sprintf "{:%s %s}" entry.message (fields_to_edn entry.fields)
   in
-  Printf.sprintf "%s [%s] [logseq.db-worker-node] %s%s\n" ts level
-    (pr_str entry.message) fields
+  Printf.sprintf "%s [%s] [logseq.db-worker-node] %s\n" ts level event
 
 (* append-lines! — split text into lines and append each as
    `iso [stdio] [source] line`; guarded by *writing?. *)

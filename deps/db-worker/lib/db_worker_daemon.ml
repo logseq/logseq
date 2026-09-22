@@ -9,10 +9,12 @@ module E = Db_worker_effect
 let valid_owner_sources = [ "cli"; "electron"; "unknown" ]
 
 (* normalize-owner-source — keywords and strings normalize to their
-   name, anything else to :unknown. *)
+   name, anything else to :unknown. An empty/absent source is :unknown
+   (cljs nil normalizes the same way). *)
 let normalize_owner_source (v : Wire.t) : string =
   match v with
   | Wire.Keyword s -> s
+  | Wire.String "" -> "unknown"
   | Wire.String s -> s
   | _ -> "unknown"
 
