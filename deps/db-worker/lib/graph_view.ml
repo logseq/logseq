@@ -319,18 +319,39 @@ let build_links (links : link_raw list) : Wire.t list =
           (match Hashtbl.find_opt index_by_endpoints endpoints with
            | Some idx ->
                if l.class_extends then (
-                 (* replace entry at idx *)
-                 let entry =
-                   Wire.Map
-                     ( [ (kw "source", Wire.String source)
-                       ; (kw "target", Wire.String target)
-                       ; (kw "edge/type", Wire.String "class-extends") ]
-                     @
-                     match label_ with
-                     | Some s -> [ (kw "label", Wire.String s) ]
-                     | None -> [] )
-                 in
-                 result := List.mapi (fun i x -> if i = idx then entry else x) !result)
+                 (* assoc edge/type + optional label onto existing entry *)
+                 match List.nth_opt !result idx with
+                 | Some (Wire.Map kvs) ->
+                     let kvs =
+                       if
+                         List.exists
+                           (fun (k, _) -> Wire.key_matches "edge/type" k)
+                           kvs
+                       then kvs
+                       else kvs @ [ (kw "edge/type", Wire.String "class-extends") ]
+                     in
+                     let kvs =
+                       match label_ with
+                       | Some s
+                         when not
+                                (List.exists
+                                   (fun (k, _) -> Wire.key_matches "label" k)
+                                   kvs) ->
+                           kvs @ [ (kw "label", Wire.String s) ]
+                       | Some s ->
+                           List.map
+                             (fun (k, v) ->
+                               if Wire.key_matches "label" k then
+                                 (k, Wire.String s)
+                               else (k, v))
+                             kvs
+                       | None -> kvs
+                     in
+                     result :=
+                       List.mapi
+                         (fun i x -> if i = idx then Wire.Map kvs else x)
+                         !result
+                 | _ -> ())
                else
                  (match label_ with
                   | Some s -> (
