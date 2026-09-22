@@ -76,12 +76,14 @@ let is_coll_val = function List _ | Vector _ | Set _ -> true | _ -> false
 let is_some_val = function Nil -> false | _ -> true
 
 let macro_str (s : string) : bool =
-  let s = String.trim s in
+  let s = Unicode.trim s in
   Ns_util.str_starts_with s "{{" && ends_with s "}}"
 
-let blank_str (s : string) : bool = String.trim s = ""
+let blank_str (s : string) : bool = Unicode.trim s = ""
 
-let url_str (s : string) : bool = Ns_util.url s
+(* db-property-type/url? — any parseable URL, not common-util/url?'s
+   origin-restricted variant. *)
+let url_str (s : string) : bool = Ns_util.url_parses s
 
 (* db-property-type/url-entity? *)
 let url_entity_val (ctx : vctx) (opts : vopts) (v : value) : bool =
