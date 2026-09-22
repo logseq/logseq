@@ -145,8 +145,8 @@ let place_client_ops_file repo path =
   let db =
     Sqlite.open_db ~path:(Filename.concat dir path)
   in
-  ignore (Sqlite.exec db ~sql:"create table t (x)" ~bind:[||]);
-  ignore (Sqlite.exec db ~sql:"insert into t values (1)" ~bind:[||]);
+  ignore (Sqlite.exec db ~sql:"create table t_placed (x)" ~bind:[||]);
+  ignore (Sqlite.exec db ~sql:"insert into t_placed values (1)" ~bind:[||]);
   ignore (Sqlite.exec db ~sql:"PRAGMA wal_checkpoint(TRUNCATE)" ~bind:[||]);
   Sqlite.close db;
   let ic = open_in_bin (Filename.concat dir path) in

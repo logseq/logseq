@@ -37,7 +37,19 @@ type proxy =
   }
 
 let ready : bool ref = ref false
-let sse_clients : Http_server.res list ref = ref []
+
+(* *sse-clients — a sink record rather than a bare Http_server.res so
+   tests can inject a fake client (cljs rebinds #js {:write ...}; res
+   is abstract in the spec). *)
+type sse_sink =
+  { sink_id : int; write : string -> unit; close : unit -> unit }
+
+let sse_clients : sse_sink list ref = ref []
+let next_sse_sink_id = ref 0
+
+let fresh_sse_sink_id () =
+  incr next_sse_sink_id;
+  !next_sse_sink_id
 let server_list_file : string option ref = ref None
 let admission : Graph_lifecycle.runtime option ref = ref None
 let platform_ref : platform option ref = ref None
@@ -140,8 +152,14 @@ let parse_args (argv : string list) : cli_opts =
   in
   go empty_cli_opts argv
 
+(* with-redefs seams for the cljs run-main-with-overrides helper —
+   tests substitute argv/exit/console and start-daemon!. *)
+let argv_fn : (unit -> string list) ref = ref Node_process.argv
+let log_fn : (string -> unit) ref = ref Node_console.log
+let error_fn : (string -> unit) ref = ref Node_console.error
+
 let parse_argv () : cli_opts =
-  match Node_process.argv () with
+  match !argv_fn () with
   | _ :: _ :: rest -> parse_args rest
   | _ -> parse_args []
 
@@ -161,9 +179,10 @@ let handle_event (type_ : string) (payload : string) : unit =
   in
   let message = "data: " ^ event ^ "\n\n" in
   List.iter
-    (fun res ->
-       try Http_server.write res message
-       with _ -> Worker_log.error "sse-write-failed" [ ("source", "handle-event") ])
+    (fun sink ->
+       try sink.write message
+       with _ ->
+         Worker_log.error "sse-write-failed" [ ("source", "handle-event") ])
     !sse_clients
 
 let sse_handler (req : Http_server.req) (res : Http_server.res) : unit =
@@ -174,7 +193,11 @@ let sse_handler (req : Http_server.req) (res : Http_server.res) : unit =
          ; "Cache-Control", "no-cache"
          ; "Connection", "keep-alive" ]);
   Http_server.write res "\n";
-  sse_clients := res :: !sse_clients;
+  let sink =
+    { sink_id = fresh_sse_sink_id (); write = Http_server.write res
+    ; close = (fun () -> Http_server.res_end res) }
+  in
+  sse_clients := sink :: !sse_clients;
   let keepalive_id = ref None in
   keepalive_id :=
     Some
@@ -188,7 +211,8 @@ let sse_handler (req : Http_server.req) (res : Http_server.res) : unit =
       (match !keepalive_id with
        | Some t -> Timers.clear t
        | None -> ());
-      sse_clients := List.filter (fun r -> not (r == res)) !sse_clients)
+      sse_clients :=
+        List.filter (fun s -> s.sink_id <> sink.sink_id) !sse_clients)
 
 (* ---- invoke plumbing ---- *)
 
@@ -227,6 +251,14 @@ let invoke_binary ~(proxy : proxy) ~(method_str : string)
   E.finally
     (proxy.remote_invoke_binary method_str repo payload)
     (fun () -> Timers.clear timeout_id; E.pure ())
+
+(* with-redefs seams — cljs tests substitute db-core/init-core!'s
+   remoteInvoke and lifecycle/assertOwnership. *)
+let remote_invoke_fn : (string -> string -> string E.t) ref =
+  ref Worker_core.invoke
+
+let assert_ownership_fn : (Graph_lifecycle.runtime -> unit) ref =
+  ref Graph_lifecycle.assert_ownership
 
 let init_worker (proxy : proxy) : string E.t =
   invoke_args ~proxy ~method_str:"thread-api/init"
@@ -367,6 +399,7 @@ let invoke_error_message (error : exn) (kvs : (Wire.t * Wire.t) list) : string =
 let exn_data (e : exn) : (Wire.t * Wire.t) list =
   match e with
   | Dispatcher.Exn_info (_, kvs) -> kvs
+  | Outliner_validate.Notification (Wire.Map kvs) -> kvs
   | _ -> []
 
 let log_invoke_error (res : Http_server.res) (error : exn)
@@ -394,7 +427,7 @@ let log_invoke_error (res : Http_server.res) (error : exn)
 let assert_lock_owner () : unit =
   match !admission with
   | Some rt ->
-      (try Graph_lifecycle.assert_ownership rt
+      (try !assert_ownership_fn rt
        with e ->
          raise
            (Dispatcher.Exn_info
@@ -633,20 +666,20 @@ let make_server (proxy : proxy) (ctx : server_ctx) : Http_server.server =
   server
 
 let show_help () : unit =
-  Node_console.log
+  !log_fn
     (Cli_style.bold "db-worker-node" ^ " " ^ Cli_style.bold "options" ^ ":");
-  Node_console.log ("  " ^ Cli_style.bold "--root-dir" ^ " <path>    (required)");
-  Node_console.log ("  " ^ Cli_style.bold "--repo" ^ " <name>        (required)");
-  Node_console.log
+  !log_fn ("  " ^ Cli_style.bold "--root-dir" ^ " <path>    (required)");
+  !log_fn ("  " ^ Cli_style.bold "--repo" ^ " <name>        (required)");
+  !log_fn
     ("  " ^ Cli_style.bold "--create-empty-db"
     ^ "  (start with empty initial datoms)");
-  Node_console.log ("  " ^ Cli_style.bold "--embedding-endpoint" ^ " <url>");
-  Node_console.log ("  " ^ Cli_style.bold "--embedding-model-id" ^ " <id>");
-  Node_console.log
+  !log_fn ("  " ^ Cli_style.bold "--embedding-endpoint" ^ " <url>");
+  !log_fn ("  " ^ Cli_style.bold "--embedding-model-id" ^ " <id>");
+  !log_fn
     ("  " ^ Cli_style.bold "--log-level" ^ " <level>  (default info)");
-  Node_console.log
+  !log_fn
     ("  " ^ Cli_style.bold "--version" ^ "            (print build metadata and exit)");
-  Node_console.log
+  !log_fn
     "  logs: <root-dir>/graphs/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"
 
 let startup_db_opts ~(create_empty_db : bool) : Wire.t =
@@ -662,7 +695,7 @@ let close_server (server : Http_server.server) : bool E.t =
 let quiesce_runtime () : unit =
   ready := false;
   stopping := true;
-  List.iter (fun res -> try Http_server.res_end res with _ -> ()) !sse_clients;
+  List.iter (fun s -> try s.close () with _ -> ()) !sse_clients;
   sse_clients := []
 
 (* make-stop! — memoized stop: drains in-flight requests, closes the
@@ -870,7 +903,9 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                         handle_event kind payload);
                     Worker_core.init ();
                     let proxy =
-                      { remote_invoke = Worker_core.invoke
+                      { remote_invoke =
+                          (fun method_str args_transit ->
+                             !remote_invoke_fn method_str args_transit)
                       ; remote_invoke_binary =
                           (fun method_str repo payload ->
                              Dispatcher.invoke method_str
@@ -914,31 +949,36 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
 
 (* ---- entrypoint ---- *)
 
+(* run-main-with-overrides seams continued (start_daemon_fn must live
+   after [start_daemon]'s definition). *)
+let exit_fn : (int -> unit) ref = ref Node_process.exit
+let start_daemon_fn : (daemon_opts -> daemon E.t) ref = ref start_daemon
+
 (* main — cljs load-ocaml-db-worker! is unnecessary here: this process
    IS the OCaml worker. *)
 let main () : unit =
   let opts = parse_argv () in
   (if opts.help then begin
      show_help ();
-     Node_process.exit 0
+     !exit_fn 0
    end);
   if opts.version then begin
-    Node_console.log (Common_version.format_version ());
-    Node_process.exit 0
+    !log_fn (Common_version.format_version ());
+    !exit_fn 0
   end;
   let root_dir = Option.value opts.root_dir ~default:"" in
   let repo = Option.value opts.repo ~default:"" in
   if root_dir = "" then begin
-    Node_console.error "root-dir is required";
-    Node_process.exit 1
+    !error_fn "root-dir is required";
+    !exit_fn 1
   end;
   if repo = "" then begin
-    Node_console.error "repo is required";
-    Node_process.exit 1
+    !error_fn "repo is required";
+    !exit_fn 1
   end;
   let on_stopped (error : exn option) : unit =
     Worker_log.info "db-worker-node-stopped" [];
-    Node_process.exit (match error with Some _ -> 1 | None -> 0)
+    !exit_fn (match error with Some _ -> 1 | None -> 0)
   in
   E.async (fun () ->
       E.catch
@@ -951,7 +991,7 @@ let main () : unit =
                   E.async (fun () -> E.map (fun _ -> ()) (daemon.stop ())));
               Node_process.on_signal "SIGTERM" (fun () ->
                   E.async (fun () -> E.map (fun _ -> ()) (daemon.stop ()))))
-           (start_daemon
+           (!start_daemon_fn
               { opt_root_dir = root_dir
               ; opt_graphs_dir = opts.graphs_dir
               ; opt_lifecycle_dir = opts.lifecycle_dir
@@ -979,14 +1019,14 @@ let main () : unit =
              | _ -> Printexc.to_string error
            in
            if code = "missing-root-dir" || code = "root-dir-permission" then
-             Node_console.error message
+             !error_fn message
            else if
              Common_util.str_includes message ".node"
              || Common_util.str_includes message "Cannot find module"
              || Common_util.str_includes message "MODULE_NOT_FOUND"
              || Common_util.str_includes message "bindings file"
            then
-             Node_console.error
+             !error_fn
                ("db-worker-node failed to start: bundled runtime files are \
                  missing or incomplete. Rebuild with `pnpm \
                  db-worker-node:release:bundle` and ensure \
@@ -994,10 +1034,10 @@ let main () : unit =
                  `dist/db-worker-node-assets.json` are next to it. Root \
                  error: " ^ message)
            else
-             Node_console.error
+             !error_fn
                ("db-worker-node failed to start: " ^ message);
            (match error with
             | Dispatcher.Exn_info _ -> ()
-            | _ -> Node_console.error (Printexc.get_backtrace ()));
-           Node_process.exit 1;
+            | _ -> !error_fn (Printexc.get_backtrace ()));
+           !exit_fn 1;
            E.pure ()))

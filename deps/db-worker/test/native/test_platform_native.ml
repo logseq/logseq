@@ -1,8 +1,11 @@
 (* cljs -> ocaml translation, 1:1:
 
-   - src/test/frontend/worker/platform_test.cljs (3 deftests)
-   - src/test/frontend/worker/platform_node_test.cljs (14 deftests)
-   - src/test/frontend/worker/platform_browser_test.cljs (1 deftest)
+   - src/test/frontend/worker/platform_test.cljs (3 deftests; 2 ported,
+     1 dropped)
+   - src/test/frontend/worker/platform_node_test.cljs (19 deftests; 16
+     ported, 3 dropped)
+   - src/test/frontend/worker/platform_browser_test.cljs (1 deftest,
+     dropped)
 
    The cljs tests exercise the node/browser "platform" record the
    worker is assembled from; the OCaml port's equivalent is the
@@ -12,9 +15,6 @@
    run natively; each dropped deftest is listed below with the reason.
 
    Dropped from platform_test.cljs:
-   - kv-get-normalizes-undefined-to-nil-test — js/undefined does not
-     exist; Idb.get already returns string option.
-   - read-secret-text-normalizes-undefined-to-nil-test — same.
    - browser-platform-mirror-storage-is-unsupported-test — the
      :platform/:feature ex-data throw is the browser platform's
      markdown-mirror stub; native File_sys has no mirror ops.
@@ -26,9 +26,6 @@
    - exec-accepts-dollar-and-colon-bind-key-styles — $addr/:addr named
      binds are the JS sqlite API's bind-object shape; the OCaml
      Sqlite.exec surface takes positional binds.
-   - remove-vfs-clears-graph-resources — installs/removes an OPFS SAH
-     pool; pools only exist on the browser runtime
-     (Sqlite.pooled_runtime () = false natively).
    - draining-platform-waits-for-file-writes-and-rejects-late-background-work
      — exercises the async write-guard promise queue; native writes are
      synchronous so there is no pending-write backlog to drain.
@@ -79,7 +76,19 @@ let with_tmp_dir f =
     ~finally:(fun () -> ignore (File_sys.remove dir |> await))
 
 (* ---------- platform_test.cljs ---------- *)
-(* all three deftests are JS-only; see the header. *)
+
+(* (deftest kv-get-normalizes-undefined-to-nil-test ...) — js/undefined
+   does not exist; the port's normalize step is Idb.get's string
+   option: a missing key is None. *)
+let test_kv_get_normalizes_undefined_to_nil () =
+  check "missing key is None"
+    (await (Idb.get "test-only-missing-key") = None)
+
+(* (deftest read-secret-text-normalizes-undefined-to-nil-test ...) —
+   same normalize contract through the secret-store surface. *)
+let test_read_secret_text_normalizes_undefined_to_nil () =
+  check "missing secret is None"
+    (await (Secret_store.read ~key:"test-only-missing-secret") = None)
 
 (* ---------- platform_node_test.cljs ---------- *)
 
@@ -371,12 +380,38 @@ let test_storage_list_graphs_ignores_backup_root () =
                  = Some (Wire.String "logseq_db_alpha"))
           | _ -> check "only alpha listed" false))
 
+(* (deftest remove-vfs-clears-graph-resources ...) — cljs installs an
+   OPFS SAH pool and calls (:remove-vfs! storage) on it; the observable
+   contract is "the repo dir's entries are gone". Native remove_vfs
+   deletes every entry under <LOGSEQ_WORKER_DB_DIR>/<encoded-repo>. *)
+let test_remove_vfs_clears_graph_resources () =
+  let repo = "logseq_db_demo" in
+  with_tmp_dir (fun root ->
+      with_env "LOGSEQ_WORKER_DB_DIR" (Some root) (fun () ->
+          let dir_name =
+            match Graph_dir.repo_to_encoded_graph_dir_name repo with
+            | Some d -> d
+            | None -> failwith "cannot encode repo"
+          in
+          let repo_dir = Filename.concat root dir_name in
+          let db_path = Filename.concat repo_dir "db.sqlite" in
+          let nested = Filename.concat repo_dir "assets/file.bin" in
+          await (File_sys.mkdir_p (Filename.concat repo_dir "assets"));
+          await (File_sys.write_text db_path "db-bytes");
+          await (File_sys.write_text nested "asset-bytes");
+          await (Sqlite.remove_vfs ~repo);
+          check "db.sqlite removed" (not (Sys.file_exists db_path));
+          check "nested asset removed" (not (Sys.file_exists nested))))
+
 let cases =
   List.map
     (fun (n, f) -> Alcotest.test_case n `Quick f)
     [ (* platform_test.cljs *)
-      (* all JS-only; see header *)
-      (* platform_node_test.cljs *)
+      "kv-get-normalizes-undefined-to-nil-test"
+    , test_kv_get_normalizes_undefined_to_nil
+    ; "read-secret-text-normalizes-undefined-to-nil-test"
+    , test_read_secret_text_normalizes_undefined_to_nil
+    ; (* platform_node_test.cljs *)
       "node-platform-disables-vector-embedding-off-macos"
     , test_node_platform_disables_vector_embedding_off_macos
     ; "node-platform-disables-vector-embedding-on-macos-x64"
@@ -405,4 +440,6 @@ let cases =
     ; "sqlite-backup-db-creates-importable-copy"
     , test_sqlite_backup_db_creates_importable_copy
     ; "storage-list-graphs-ignores-backup-root"
-    , test_storage_list_graphs_ignores_backup_root ]
+    , test_storage_list_graphs_ignores_backup_root
+    ; "remove-vfs-clears-graph-resources"
+    , test_remove_vfs_clears_graph_resources ]

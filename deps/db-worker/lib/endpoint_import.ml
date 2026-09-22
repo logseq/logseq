@@ -190,10 +190,7 @@ let set_import_ui_state (path : string list) (v : Datascript.value) : unit =
   if node_fs_promises () then
     Broadcast.to_clients ~kind:"thread-api/set-ui-state"
       ~transit_payload:
-        (Transit_codec.to_string
-           (Wire.Array
-              [ kw "thread-api/set-ui-state"
-              ; Wire.Array [ path_wire; value_wire ] ]))
+        (Transit_codec.to_string (Wire.Array [ path_wire; value_wire ]))
   else
     Eff.async (fun () ->
         Comlink.invoke_remote "thread-api/set-ui-state"
@@ -465,11 +462,11 @@ let import_file_graph (args : Wire.t list) : Wire.t Eff.t =
        let options = options_of_opts repo opts notifications in
        Gp_exporter.export_file_graph conn conn config_file files options
        >>= fun result ->
-       set_import_ui_state [ "graph"; "importing-state"; "step" ]
+       set_import_ui_state [ "graph/importing-state"; "step" ]
          (Keyword "validating");
-       set_import_ui_state [ "graph"; "importing-state"; "label" ]
+       set_import_ui_state [ "graph/importing-state"; "label" ]
          (Keyword "import/validating-graph");
-       set_import_ui_state [ "graph"; "importing-state"; "current-page" ]
+       set_import_ui_state [ "graph/importing-state"; "current-page" ]
          Nil;
        let validation = Worker_db_validate.validate_db ~fix:false conn in
        Eff.pure

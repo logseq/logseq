@@ -68,7 +68,13 @@ let ast_export_markdown ~ast ~config ~references : string =
 (* mldoc/remove-indentation-spaces *)
 let remove_indentation_spaces (s : string) (level : int) (remove_first_line : bool)
     : string =
-  let lines = String.split_on_char '\n' s in
+  let lines =
+    (* cljs string/split-lines: a single trailing newline does not produce a
+       final empty string. *)
+    match List.rev (String.split_on_char '\n' s) with
+    | "" :: tl -> List.rev tl
+    | l -> List.rev l
+  in
   let rest =
     match lines with
     | [] -> []

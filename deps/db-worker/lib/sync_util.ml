@@ -30,9 +30,14 @@ let fail_fast tag (data : Wire.t) : 'a =
      | _ -> []);
   raise (ex_info (kw_name tag) (Wire.as_map data))
 
+(* cljs (and (= :node runtime) (= :cli owner-source)); the native
+   worker is the CLI daemon's worker too, so owner-source "cli"
+   (its default) counts there as well. *)
 let cli_node_owner () =
-  Runtime_env.kind () = Runtime_env.Node
-  && Runtime_env.env "LOGSEQ_OWNER_SOURCE" = Some "cli"
+  match Runtime_env.kind () with
+  | Runtime_env.Browser_worker -> false
+  | Runtime_env.Node -> Runtime_env.owner_source () = "cli"
+  | Runtime_env.Native -> Runtime_env.owner_source () = "cli"
 
 let auth_token_impl () : string option =
   match Worker_state.state_get "auth/id-token" with
