@@ -408,6 +408,23 @@ let batch_transact ?(tx_meta : tx_meta = [])
         ; tempids = [] }
       in
       if batch_tx_data <> [] then ignore (commit_tx_report conn report);
+      (* cljs batch-transact!: (when-some [_ (storage/storage @conn)]
+          (d/store @conn) (swap! (:atom conn) assoc :tx-tail []
+          :db-last-stored @conn)) — batch-transact! bypasses the normal
+         store-after-transact path, so it persists once via a full
+         snapshot and drops the accumulated tx-tail; otherwise pre-batch
+         tail datoms leak into the next store_tail. reset_schema is the
+         only silent snapshot + in-memory-tail reset on conn (no listener
+         notify — cljs run-callbacks happens only via commit_tx_report);
+         store_tail [] clears the persisted tail written by apply_report
+         above, leaving snapshot = post-batch db, tail = []. *)
+      (match Datascript.storage (Conn.db conn) with
+       | Some storage ->
+           ignore
+             (Datascript.reset_schema conn
+                (Datascript.schema (Conn.db conn)));
+           Datascript.store_tail storage []
+       | None -> ());
       report
 
 (* Runs [f] and returns the last tx-report committed on [conn] while it
