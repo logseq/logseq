@@ -1118,15 +1118,37 @@ let template_parent_ref (parent : Wire.t) : Wire.t =
       | _ -> parent)
   | _ -> parent
 
+(* cljs distinct — dedupe preserving first-occurrence order *)
+let distinct_stable (xs : 'a list) : 'a list =
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun x ->
+       if Hashtbl.mem seen x then false
+       else begin
+         Hashtbl.add seen x ();
+         true
+       end)
+    xs
+
+(* cljs truthy — anything but nil/false *)
+let wire_truthy (v : Wire.t option) : bool =
+  match v with
+  | Some Wire.Nil | Some (Wire.Bool false) | None -> false
+  | Some _ -> true
+
 let sanitize_template_block (current_db : db) (rebase_db_before : db option)
     (block : Wire.t) : Wire.t =
   let m = Wire.as_map block in
   let block_id =
     List.assoc_opt (kw "db/id") m |> Option.value ~default:Wire.Nil
   in
+  (* cljs (or (:block/uuid m) ...) — a truthy :block/uuid wins raw, whatever
+     its shape; the db/id and lookup-vector fallbacks only run when it's
+     absent/nil/false. uuid? is checked at assoc time, so a non-uuid
+     :block/uuid is kept verbatim rather than replaced by a db lookup. *)
   let block_uuid =
     match List.assoc_opt (kw "block/uuid") m with
-    | Some (Wire.Uuid _ as u) -> Some u
+    | Some v when v <> Wire.Nil && v <> Wire.Bool false -> Some v
     | _ -> (
         match block_id with
         | Wire.Int n -> (
@@ -1143,7 +1165,9 @@ let sanitize_template_block (current_db : db) (rebase_db_before : db option)
                 match from current_db with
                 | Some u -> Some (Wire.Uuid u)
                 | None -> None))
-        | Wire.Array [ a; u ] when a = kw "block/uuid" -> Some u
+        | Wire.Array [ a; u ] | Wire.List [ a; u ]
+          when a = kw "block/uuid" -> (
+            match u with Wire.Uuid _ -> Some u | _ -> None)
         | _ -> None)
   in
   let dropped =
@@ -1153,16 +1177,24 @@ let sanitize_template_block (current_db : db) (rebase_db_before : db option)
          && k <> kw "block/tx-id")
       m
   in
+  (* cljs (update :block/parent template-parent-ref) — :block/parent is
+     always present in the result (nil when absent in the input) *)
   let with_parent =
-    List.map
-      (fun (k, v) ->
-         if k = kw "block/parent" then (k, template_parent_ref v)
-         else (k, v))
-      dropped
+    let has_parent = List.exists (fun (k, _) -> k = kw "block/parent") dropped in
+    let mapped =
+      List.map
+        (fun (k, v) ->
+           if k = kw "block/parent" then (k, template_parent_ref v)
+           else (k, v))
+        dropped
+    in
+    if has_parent then mapped
+    else mapped @ [ (kw "block/parent", template_parent_ref Wire.Nil) ]
   in
   match block_uuid with
-  | Some u -> Wire.Map (with_parent @ [ kw "block/uuid", u ])
-  | None -> Wire.Map with_parent
+  | Some (Wire.Uuid _ as u) ->
+      Cljs_map.assoc (Wire.Map with_parent) "block/uuid" u
+  | _ -> Wire.Map with_parent
 
 (* ---- replay-canonical-outliner-op! ---- *)
 
@@ -1294,13 +1326,15 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                            in
                            let block'' =
                              if replace_empty_target && idx = 0
-                                && Wire.get "block/uuid" block' = None
+                                && not
+                                     (wire_truthy
+                                        (Wire.get "block/uuid" block'))
                              then
                                Cljs_map.assoc block' "block/uuid"
                                  (Wire.Uuid tguuid)
                              else block'
                            in
-                           if Wire.get "block/uuid" block'' <> None then
+                           if wire_truthy (Wire.get "block/uuid" block'') then
                              Some block''
                            else None)
                     |> List.filter_map Fun.id
@@ -2366,11 +2400,12 @@ let remote_sync_conflicts (db : db)
                     | _ -> None)
                 | _ -> None)
              tx_data)
-    |> List.sort_uniq compare
+    |> distinct_stable
 
 let broadcast_sync_conflicts repo conflicts : unit =
+  (* cljs (distinct (map :block-uuid conflicts)) — first-occurrence order *)
   let uuids =
-    List.sort_uniq compare (List.map (fun (u, _, _, _) -> u) conflicts)
+    List.map (fun (u, _, _, _) -> u) conflicts |> distinct_stable
   in
   List.iter
     (fun block_uuid ->
