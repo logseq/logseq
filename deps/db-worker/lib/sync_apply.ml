@@ -1592,12 +1592,14 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
           match Outliner_recycle.permanently_delete_tx_data db r with
           | [] -> None
           | tx_ops ->
+              (* cljs returns the transact report — callers/tests only need
+                 truthy-vs-nil, so Bool true carries the same signal *)
               ignore
                 (Db_tx.transact
                    ~tx_meta:
                      [ "outliner-op", Keyword "recycle-delete-permanently" ]
                    conn tx_ops);
-              None)
+              Some (Wire.Bool true))
       | None -> None)
   | _, [ tx_data; tx_meta ] ->
       let tx_data =
