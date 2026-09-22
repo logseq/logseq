@@ -209,7 +209,7 @@ module Fs_more = struct
   external lstatSync_obj : string -> Js.Json.t = "lstatSync" [@@mel.module "fs"]
   external is_dir : Js.Json.t -> bool = "isDirectory" [@@mel.send]
   external is_symbolic_link_obj : Js.Json.t -> bool = "isSymbolicLink" [@@mel.send]
-  external fs_constants : Js.Json.t = "constants" [@@mel.scope "fs"]
+  external fs_constants : Js.Json.t = "constants" [@@mel.module "fs"]
   external const_int : Js.Json.t -> string -> int = "" [@@mel.get_index]
 end
 
