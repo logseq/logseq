@@ -14,6 +14,9 @@
      ignore Endpoint_property.get_all_properties;
      ignore Endpoint_property.validate_property_value;
      ignore Endpoint_property.get_first_url_property_value;
+     ignore Endpoint_property.convert_tag_to_page;
+     ignore Endpoint_property.convert_page_to_tag;
+     ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
 *)
 
 open Datascript
@@ -805,3 +808,258 @@ let validate_property_value args =
 
 let () =
   Dispatcher.register "thread-api/validate-property-value" validate_property_value
+
+(* handler/property.cljs convert-tag-to-page-tx *)
+let convert_tag_to_page_tx db (class_id : entity_id) : Wire.t list =
+  let objects = Db_class.get_class_objects db class_id in
+  let page_txs =
+    [ Wire.Array [ kw "db/retract"; Wire.Int class_id; kw "db/ident" ]
+    ; Wire.Array
+        [ kw "db/retract"; Wire.Int class_id; kw "block/tags"
+        ; kw "logseq.class/Tag" ]
+    ; Wire.Array
+        [ kw "db/retract"; Wire.Int class_id
+        ; kw "logseq.property.class/extends" ]
+    ; Wire.Array
+        [ kw "db/retract"; Wire.Int class_id
+        ; kw "logseq.property.class/properties" ]
+    ; Wire.Array
+        [ kw "db/add"; Wire.Int class_id; kw "block/tags"
+        ; kw "logseq.class/Page" ] ]
+  in
+  let object_txs =
+    List.concat_map
+      (fun (obj : entity) ->
+        let title =
+          match Ldb.string_value obj "block/title" with
+          | Some t ->
+              Db_content.replace_tag_refs_with_page_refs t
+                (Ldb.ref_ents obj "block/tags")
+          | None -> invalid_arg "class object missing :block/title"
+        in
+        [ Wire.Map
+            [ (kw "db/id", Wire.Int obj.id)
+            ; (kw "block/title", Wire.String title) ]
+        ; Wire.Array
+            [ kw "db/retract"; Wire.Int obj.id; kw "block/tags"
+            ; Wire.Int class_id ] ])
+      objects
+  in
+  page_txs @ object_txs
+
+(* :thread-api/convert-tag-to-page [repo class-id] *)
+let convert_tag_to_page args =
+  let repo = repo_arg args in
+  let conn = Endpoint_transaction.require_conn repo in
+  let class_id =
+    match arg args 1 with
+    | Some (Wire.Int n) -> n
+    | Some (Wire.Int64 n) -> Int64.to_int n
+    | Some w ->
+        invalid_arg
+          ("convert-tag-to-page: class-id must be an entity id: "
+           ^ Transit_codec.to_string w)
+    | None -> invalid_arg "convert-tag-to-page: missing class-id"
+  in
+  Worker_state.set_db_latest_tx_time repo;
+  ignore
+    (Db_transact.transact conn
+       (convert_tag_to_page_tx (Datascript.db conn) class_id)
+       [ ("outliner-op", Keyword "save-block") ]);
+  pure Wire.nil
+
+let () = Dispatcher.register "thread-api/convert-tag-to-page" convert_tag_to_page
+
+(* handler/property.cljs convert-page-to-tag-tx *)
+let convert_page_to_tag_tx db (page_id : entity_id) : Wire.t list =
+  let page =
+    match entity db (Entity_id page_id) with
+    | Some e -> e
+    | None -> invalid_arg "convert-page-to-tag: page entity not found"
+  in
+  let value_of a =
+    match Ldb.value page a with
+    | Some v -> Ds_wire.transit_of_value v
+    | None -> Wire.Nil
+  in
+  let page_m =
+    Wire.Map
+      [ (kw "block/uuid", value_of "block/uuid")
+      ; (kw "block/title", value_of "block/title")
+      ; (kw "block/created-at", value_of "block/created-at") ]
+  in
+  [ Db_class.build_new_class db page_m
+  ; Wire.Array
+      [ kw "db/retract"; Wire.Int page_id; kw "block/tags"
+      ; kw "logseq.class/Page" ] ]
+
+(* :thread-api/convert-page-to-tag [repo page-id] *)
+let convert_page_to_tag args =
+  let repo = repo_arg args in
+  let conn = Endpoint_transaction.require_conn repo in
+  let page_id =
+    match arg args 1 with
+    | Some (Wire.Int n) -> n
+    | Some (Wire.Int64 n) -> Int64.to_int n
+    | Some w ->
+        invalid_arg
+          ("convert-page-to-tag: page-id must be an entity id: "
+           ^ Transit_codec.to_string w)
+    | None -> invalid_arg "convert-page-to-tag: missing page-id"
+  in
+  Worker_state.set_db_latest_tx_time repo;
+  ignore
+    (Db_transact.transact conn
+       (convert_page_to_tag_tx (Datascript.db conn) page_id)
+       [ ("outliner-op", Keyword "save-block") ]);
+  pure Wire.nil
+
+let () = Dispatcher.register "thread-api/convert-page-to-tag" convert_page_to_tag
+
+(* cljs walk/postwalk over Wire.t — children first, then the fn. *)
+let rec wire_postwalk (f : Wire.t -> Wire.t) (v : Wire.t) : Wire.t =
+  let inner w =
+    match w with
+    | Wire.Map pairs ->
+        Wire.Map
+          (List.map
+             (fun (k, x) -> (wire_postwalk f k, wire_postwalk f x))
+             pairs)
+    | Wire.Array xs -> Wire.Array (List.map (wire_postwalk f) xs)
+    | Wire.List xs -> Wire.List (List.map (wire_postwalk f) xs)
+    | Wire.Set xs -> Wire.Set (List.map (wire_postwalk f) xs)
+    | Wire.Tagged (t, x) -> Wire.Tagged (t, wire_postwalk f x)
+    | w -> w
+  in
+  f (inner v)
+
+(* handler/property.cljs sort-by-order-recursive — postwalk over pulled
+   wire maps: rewrite :block/_parent sets into :block/children sorted by
+   :block/order (nil order sorts first). *)
+let sort_by_order_recursive (form : Wire.t) : Wire.t =
+  let sort_children children =
+    List.stable_sort
+      (fun a b ->
+        let order_of w =
+          match Wire.get "block/order" w with
+          | Some (Wire.Int n) -> (0, n)
+          | Some (Wire.Int64 n) -> (0, Int64.to_int n)
+          | _ -> (-1, 0)
+        in
+        compare (order_of a) (order_of b))
+      children
+  in
+  let value v =
+    match v with
+    | Wire.Map pairs ->
+        (match List.assoc_opt (kw "block/_parent") pairs with
+         | Some (Wire.Set children | Wire.Array children | Wire.List children) ->
+             let pairs' =
+               List.filter (fun (k, _) -> k <> kw "block/_parent") pairs
+             in
+             Wire.Map (pairs' @ [ (kw "block/children", Wire.Array (sort_children children)) ])
+         | Some _ ->
+             let pairs' =
+               List.filter (fun (k, _) -> k <> kw "block/_parent") pairs
+             in
+             Wire.Map (pairs' @ [ (kw "block/children", Wire.Array []) ])
+         | None -> Wire.Map pairs)
+    | v -> v
+  in
+  wire_postwalk value form
+
+(* handler/property.cljs group-by-page — group by the :block/page wire
+   map when the first block carries one, preserving first-seen order. *)
+let group_by_page (blocks : Wire.t list) : Wire.t =
+  match blocks with
+  | first :: _ when
+      (match Wire.get "block/page" first with
+       | Some (Wire.Map _) -> true
+       | _ -> false) ->
+      let groups : (Wire.t, Wire.t list) Hashtbl.t = Hashtbl.create 17 in
+      let order = ref [] in
+      List.iter
+        (fun b ->
+          let page =
+            match Wire.get "block/page" b with
+            | Some (Wire.Map _ as p) -> p
+            | _ -> Wire.Nil
+          in
+          (match Hashtbl.find_opt groups page with
+           | Some _ -> ()
+           | None -> order := page :: !order);
+          Hashtbl.replace groups page
+            (b :: Option.value (Hashtbl.find_opt groups page) ~default:[]))
+        blocks;
+      Wire.Map
+        (List.map
+           (fun page ->
+             (page, Wire.Array (List.rev (Hashtbl.find groups page))))
+           (List.rev !order))
+  | _ -> Wire.Array blocks
+
+(* handler/property.cljs scheduled-deadline-pull-selector:
+   '[:* {:block/page [:db/id :block/title :block/uuid]}] *)
+let scheduled_deadline_pull_selector : query_arg =
+  Arg_scalar
+    (Result_value
+       (Vector
+          [ Keyword "*"
+          ; Map
+              [ ( Keyword "block/page"
+                , Vector
+                    [ Keyword "db/id"
+                    ; Keyword "block/title"
+                    ; Keyword "block/uuid" ] ) ] ]))
+
+(* handler/property.cljs get-date-scheduled-or-deadlines *)
+let get_date_scheduled_or_deadlines db (start_time : int) (end_time : int)
+    : Wire.t =
+  let rows =
+    Datascript.q_string db
+      "[:find [(pull ?block ?block-attrs) ...] \
+       :in $ ?start-time ?end-time ?block-attrs \
+       :where \
+       (or [?block :logseq.property/scheduled ?n] \
+           [?block :logseq.property/deadline ?n]) \
+       [(>= ?n ?start-time)] \
+       [(<= ?n ?end-time)] \
+       [?block :logseq.property/status ?status] \
+       [?status :db/ident ?status-ident] \
+       [(not= ?status-ident :logseq.property/status.done)] \
+       [(not= ?status-ident :logseq.property/status.canceled)]]"
+      ~inputs:
+        [ Arg_scalar (Result_value (Instant start_time))
+        ; Arg_scalar (Result_value (Instant end_time))
+        ; scheduled_deadline_pull_selector ]
+  in
+  let blocks =
+    List.filter_map
+      (function
+        | [ Result_pull p ] -> Some (Ds_wire.transit_of_pulled p)
+        | _ -> None)
+      rows
+  in
+  group_by_page (List.map sort_by_order_recursive blocks)
+
+(* :thread-api/get-date-scheduled-or-deadlines [repo start-time end-time]
+   — cljs (when-let [conn ...] ...) returns nil without a conn. *)
+let get_date_scheduled_or_deadlines_endpoint args =
+  with_conn args (fun db ->
+      let epoch_ms_arg i =
+        match arg args i with
+        | Some (Wire.Int n) -> n
+        | Some (Wire.Int64 n) -> Int64.to_int n
+        | Some w ->
+            invalid_arg
+              ("get-date-scheduled-or-deadlines: time arg must be epoch ms: "
+               ^ Transit_codec.to_string w)
+        | None -> invalid_arg "get-date-scheduled-or-deadlines: missing time arg"
+      in
+      pure
+        (get_date_scheduled_or_deadlines db (epoch_ms_arg 1)
+           (epoch_ms_arg 2)))
+
+let () =
+  Dispatcher.register "thread-api/get-date-scheduled-or-deadlines"
+    get_date_scheduled_or_deadlines_endpoint
