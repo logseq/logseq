@@ -6,6 +6,6 @@
     "transit-js": "^0.8.874"
   },
   "scripts": {
-    "build": "dune build && webpack -c webpack.config.js"
+    "build": "dune build && vite build --mode node && vite build --mode browser"
   }
 }
