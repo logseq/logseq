@@ -27,7 +27,7 @@ let ensure_unique_db_ident db (db_ident : string) : string =
           (fun ident ->
              if String.length ident > String.length prefix
                 && String.sub ident 0 (String.length prefix) = prefix
-             then int_of_string_opt
+             then Common_util.parse_long
                     (String.sub ident (String.length prefix)
                        (String.length ident - String.length prefix))
              else None)

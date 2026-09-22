@@ -512,15 +512,15 @@ let get_unlinked_references db (id : entity_id) : entity list =
   match Ldb.ent_of_id db id with
   | Some e ->
       (match Ldb.string_value e "block/title" with
-       | Some title when String.trim title <> "" ->
-           let title_lc = String.lowercase_ascii title in
+       | Some title when Unicode.trim title <> "" ->
+           let title_lc = Unicode.lowercase title in
            List.of_seq (datoms db Avet ~a:"block/title" ())
            |> List.filter_map (fun (d : datom) ->
                   match d.v with
                   | String s
                     when d.e <> id
                          && contains_substring
-                              (String.lowercase_ascii s) title_lc ->
+                              (Unicode.lowercase s) title_lc ->
                       Some d.e
                   | _ -> None)
            |> List.filter_map (fun eid ->
@@ -555,7 +555,7 @@ let get_property_value_content db (v : value) : value option =
 let str_of_value = function
   | String s -> s
   | Int i -> string_of_int i
-  | Float f -> Printf.sprintf "%g" f
+  | Float f -> Common_util.js_string_of_float f
   | Bool b -> string_of_bool b
   | Keyword k -> ":" ^ k
   | Uuid u -> u
@@ -744,7 +744,7 @@ let get_view_property_values db (property_ident : attr) ~view_id ~query_entity_i
                   let value_eid =
                     match value_entity with Some e -> Some e.id | None -> None
                   in
-                  if String.trim label_s = "" || Option.equal Int.equal empty_id value_eid
+                  if Unicode.trim label_s = "" || Option.equal Int.equal empty_id value_eid
                   then None
                   else
                     let value_w =
@@ -900,10 +900,10 @@ let js_number_opt (v : value) : float option =
   | Bool b -> Some (if b then 1. else 0.)
   | Nil -> Some 0.
   | String s ->
-      let s = String.trim s in
+      let s = Unicode.trim s in
       if s = "" then Some 0.
       else
-        (match float_of_string_opt s with
+        (match Common_util.js_number_of_string s with
          | Some f when Float.is_nan f -> None
          | Some f -> Some f
          | None -> None)
@@ -954,7 +954,7 @@ let js_str (v : value) : string =
   | Nil -> ""
   | v -> str_of_value v
 
-let lowercase = String.lowercase_ascii
+let lowercase = Unicode.lowercase
 
 let vmap_get (k : attr) (kvs : (value * value) list) : value option =
   List.find_map
@@ -1029,7 +1029,7 @@ let empty_value_opt (v : value option) : bool =
       (match v with
        | Nil -> true
        | Keyword "logseq.property/empty-placeholder" -> true
-       | String s -> String.trim s = ""
+       | String s -> Unicode.trim s = ""
        | List [] | Vector [] | Set [] | Map [] -> true
        | _ -> false)
 
@@ -1417,7 +1417,7 @@ let filter_match_id db (v : value) : entity_id option =
 (* view/build-fast-filter-pred — single ref :is/:is-not clause *)
 let build_fast_filter_pred db (filters : view_filters) (input : string) :
     (entity -> bool) option =
-  if String.trim input <> "" || filters.vf_or then None
+  if Unicode.trim input <> "" || filters.vf_or then None
   else
     match filters.vf_clauses with
     | [ { f_ident; f_op; f_match = Set items } ]
@@ -1448,7 +1448,7 @@ let build_fast_filter_pred db (filters : view_filters) (input : string) :
 (* view/row-matched? — entity-level clause evaluation *)
 let row_matched db (row : entity) (filters : view_filters) (input : string) : bool =
   let title_ok =
-    String.trim input = ""
+    Unicode.trim input = ""
     || (match Ldb.string_value row "block/title" with
         | Some t -> contains_substring (lowercase t) (lowercase input)
         | None -> false)
@@ -1904,7 +1904,7 @@ let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
 
 (* view/feature-filters? *)
 let feature_filters (filters : view_filters) (input : string) : bool =
-  String.trim input <> "" || filters.vf_clauses <> []
+  Unicode.trim input <> "" || filters.vf_clauses <> []
 
 (* view/get-exclude-page-ids — shared by the entity and eid paths *)
 let get_exclude_page_ids db : entity_id list =
@@ -1987,7 +1987,7 @@ let empty_attr_values (raw : value list) (empty_id : entity_id option) : bool =
           match v with
           | Nil -> true
           | Ref id -> (match empty_id with Some e -> id = e | None -> false)
-          | String s -> String.trim s = ""
+          | String s -> Unicode.trim s = ""
           | List [] | Vector [] | Set [] | Map [] -> true
           | _ -> false)
        raw
@@ -2229,7 +2229,7 @@ let eid_clause_match db (eid : entity_id) (c : compiled_clause) (empty_id : enti
 
 (* view/title-matches-input? *)
 let title_matches_input db (eid : entity_id) (input : string) : bool =
-  String.trim input = ""
+  Unicode.trim input = ""
   || (match indexed_attr_value db eid "block/title" with
       | Some (String t) -> contains_substring (lowercase t) (lowercase input)
       | Some v -> contains_substring (lowercase (js_str v)) (lowercase input)
@@ -2239,7 +2239,7 @@ let title_matches_input db (eid : entity_id) (input : string) : bool =
 let filter_eids db (eids : entity_id list) (filters : view_filters) (input : string) :
     entity_id list =
   let clauses = filters.vf_clauses in
-  if String.trim input = "" && clauses = [] then eids
+  if Unicode.trim input = "" && clauses = [] then eids
   else begin
     let compiled = List.map (compile_filter_clause db) clauses in
     let empty_id = Db_class.ident_eid db "logseq.property/empty-placeholder" in
@@ -2839,7 +2839,7 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
           | No_entities -> []
         in
         let filtered =
-          if filters.vf_present || String.trim input <> "" then
+          if filters.vf_present || Unicode.trim input <> "" then
             match build_fast_filter_pred db filters input with
             | Some p -> List.filter p entities
             | None -> List.filter (fun e -> row_matched db e filters input) entities
@@ -2854,7 +2854,7 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
         let group_by_page = group_by_ident = Some "block/page" in
         let linked_fast =
           feat_type = Some "linked-references" && group_by_page && list_view
-          && (not filters.vf_present) && String.trim input = ""
+          && (not filters.vf_present) && Unicode.trim input = ""
         in
         let group_values (ent : entity) : group_key list =
           let pvalue =
