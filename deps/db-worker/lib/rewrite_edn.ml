@@ -138,3 +138,37 @@ let dissoc (s : string) (key : string) : string =
 
 let dissoc_many (s : string) (keys : string list) : string =
   List.fold_left dissoc s keys
+
+(* rewrite/assoc — replace a top-level key's value, or append a new
+   key/value pair before the closing '}', preserving other whitespace
+   verbatim. [key] is the bare keyword name (no ':'), [value_text] is
+   printed EDN. *)
+let assoc (s : string) (key : string) (value_text : string) : string =
+  ignore (parse_top_map s);
+  let n = String.length s in
+  let i0 = skip_ws s 0 in
+  let rec loop i =
+    let i = skip_ws s i in
+    if i >= n then raise (Invalid "eof in map")
+    else if s.[i] = '}' then None
+    else
+      let key_start = i in
+      let key_end = scan_node s i in
+      let key_str = String.sub s key_start (key_end - key_start) in
+      let i' = skip_ws s key_end in
+      let val_end = scan_node s i' in
+      let kl =
+        if String.length key_str > 0 && key_str.[0] = ':' then
+          String.sub key_str 1 (String.length key_str - 1)
+        else key_str
+      in
+      if kl = key then Some (i', val_end) else loop val_end
+  in
+  match loop (i0 + 1) with
+  | Some (vstart, vend) ->
+      String.sub s 0 vstart ^ value_text ^ String.sub s vend (n - vend)
+  | None ->
+      let close = String.rindex s '}' in
+      String.sub s 0 close
+      ^ " :" ^ key ^ " " ^ value_text
+      ^ String.sub s close (n - close)

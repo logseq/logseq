@@ -18,6 +18,7 @@ val sleep : float -> unit t
 val timeout : 'a t -> float -> 'a t
 val wait : unit -> 'a t * 'a resolver
 val wakeup : 'a resolver -> 'a -> unit
+val reject : 'a resolver -> exn -> unit
 val is_pending : 'a t -> bool
 val async : (unit -> unit t) -> unit
 val on_any : 'a t -> ('a -> unit) -> (exn -> unit) -> unit

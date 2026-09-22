@@ -55,3 +55,27 @@ let write_text_atomic path contents =
 type file_stat = { mtime_ms : float option; birthtime_ms : float option }
 
 let stat _path = Db_worker_effect.pure None
+
+let append_text path contents =
+  wrap (fun () ->
+      let oc =
+        open_out_gen [ Open_wronly; Open_append; Open_creat; Open_text ] 0o644 path
+      in
+      output_string oc contents;
+      close_out oc)
+
+let write_file_exclusive path contents =
+  wrap (fun () ->
+      let oc =
+        open_out_gen [ Open_wronly; Open_creat; Open_excl; Open_text ] 0o644 path
+      in
+      output_string oc contents;
+      close_out oc)
+
+let rename src dst = wrap (fun () -> Unix.rename src dst)
+let is_directory path = wrap (fun () -> Sys.is_directory path)
+
+let check_read_write path =
+  wrap (fun () -> Unix.access path [ Unix.R_OK; Unix.W_OK ])
+
+let realpath path = wrap (fun () -> Unix.realpath path)
