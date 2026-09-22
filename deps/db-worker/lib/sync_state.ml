@@ -36,6 +36,9 @@ type client =
   ; last_ws_message_ts : float ref
   ; online_users : Wire.t list ref
   ; ws_state : string ref (* "inactive" | "connecting" | "open" | "closed" | "stopped" *)
+  ; conn_gen : int ref (* connection generation — bumped on stop/connect;
+                          ws event handlers ignore events from an older
+                          generation (cljs detach-ws-handlers! before close) *)
   }
 
 let new_client repo : client =
@@ -54,6 +57,7 @@ let new_client repo : client =
   ; last_ws_message_ts = ref (Clock.now_ms ())
   ; online_users = ref []
   ; ws_state = ref "closed"
+  ; conn_gen = ref 0
   }
 
 (* worker-state/*db-sync-client — a single active client *)

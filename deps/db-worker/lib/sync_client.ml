@@ -247,6 +247,10 @@ and stop_client (client : Sync_state.client) : unit =
   clear_stale_ws_loop_timer client;
   ignore (Sync_apply.clear_upload_response_timeout client);
   clear_reconnect_timer client.reconnect;
+  (* cljs detach-ws-handlers! — invalidate this ws's handlers so the close
+     event (which still fires, no detach on the OCaml ws surface) can't
+     schedule a reconnect that tears down a later client *)
+  incr client.conn_gen;
   match client.ws with
   | Some ws ->
       update_online_users client [];
@@ -280,10 +284,13 @@ and connect repo (client : Sync_state.client) (url : string)
   | Some token' ->
 
       let updated = { client with Sync_state.ws = None } in
+      incr client.conn_gen;
+      let gen = !(client.conn_gen) in
       Web_socket.connect
         ~url:(Sync_transport.append_token url (Some token'))
         ~on_event:(fun event ->
-           match event with
+           if !(updated.conn_gen) = gen then
+             match event with
            | Web_socket.Open ->
                reset_reconnect updated;
                touch_last_ws_message updated;
