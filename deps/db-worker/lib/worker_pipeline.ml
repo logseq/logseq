@@ -439,7 +439,11 @@ let replace_sub_all (s : string) (sub : string) : string =
 let remove_inline_page_class_from_title (block : entity) (page_tag : entity)
     : string =
   let raw =
-    Ldb.string_value block "block/raw-title" |> Option.value ~default:""
+    (* cljs (:block/raw-title block) — entity-plus alias that falls back
+       to :block/title (and journal title), not a plain attr read *)
+    match Ldb.raw_title block.db block with
+    | Some (String s) -> s
+    | _ -> ""
   in
   let uuid =
     Ldb.string_value page_tag "block/uuid" |> Option.value ~default:""

@@ -9,6 +9,16 @@ open Datascript
 let ent_of_id db (id : entity_id) : entity option = entity db (Entity_id id)
 let ent_of_ref db (r : entity_ref) : entity option = entity db r
 
+(* cljs entity-attr on a :_reverse attr scans the forward attr's datoms
+   (db/-search) — it never requires :db/index. The engine's entity_attr
+   routes reverse refs through the AVET index which does, so do the same
+   scan over the AEVT index here. *)
+let reverse_attr_values (db : db) (id : entity_id) (a : attr) : value list =
+  datoms db Aevt ~a:(reverse_ref a) ~v:(Ref id) ()
+  |> Seq.map (fun (d : datom) -> Ref d.e)
+  |> List.of_seq
+  |> List.sort Util.compare_value
+
 (* cljs (get entity attr) over forward and :_reverse attrs. entity_attr
    materializes ref values into tx_entities — unwrap their :db/id back to
    Ref so ref attrs keep working (cljs yields {:db/id ...} maps). *)
@@ -18,12 +28,14 @@ let values (e : entity) (a : attr) : value list =
     | Some (Entity_id id) -> Some (Ref id)
     | _ -> None
   in
-  match entity_attr e a with
-  | Some (One_value v) -> [ v ]
-  | Some (Many_values vs) -> vs
-  | Some (One_entity te) -> List.filter_map Fun.id [ db_id_ref te ]
-  | Some (Many_entities tes) -> List.filter_map db_id_ref tes
-  | _ -> []
+  if is_reverse_ref a then reverse_attr_values e.db e.id a
+  else
+    match entity_attr e a with
+    | Some (One_value v) -> [ v ]
+    | Some (Many_values vs) -> vs
+    | Some (One_entity te) -> List.filter_map Fun.id [ db_id_ref te ]
+    | Some (Many_entities tes) -> List.filter_map db_id_ref tes
+    | _ -> []
 
 let value (e : entity) (a : attr) : value option =
   match values e a with v :: _ -> Some v | [] -> None
