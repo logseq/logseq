@@ -172,3 +172,40 @@ let () =
 let () =
   Dispatcher.register "thread-api/get-db-sync-config" (fun _ ->
       pure' (Worker_state.db_sync_config ()))
+
+(* :thread-api/undo-redo-* — undo_redo.ml state machine *)
+let repo_arg_u args =
+  match List.nth_opt args 0 with
+  | Some (Wire.String s) -> s
+  | _ -> invalid_arg "first arg must be repo name"
+
+let () =
+  Dispatcher.register "thread-api/undo-redo-set-pending-editor-info"
+    (fun args ->
+       let repo = repo_arg_u args in
+       Undo_redo.set_pending_editor_info repo (List.nth_opt args 1);
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-record-editor-info"
+    (fun args ->
+       let repo = repo_arg_u args in
+       (match List.nth_opt args 1 with
+        | Some info -> Undo_redo.record_editor_info repo info
+        | None -> ());
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-record-ui-state"
+    (fun args ->
+       let repo = repo_arg_u args in
+       (match List.nth_opt args 1 with
+        | Some s -> Undo_redo.record_ui_state repo s
+        | None -> ());
+       Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-undo" (fun args ->
+      Db_worker_effect.pure (Undo_redo.undo (repo_arg_u args)));
+  Dispatcher.register "thread-api/undo-redo-redo" (fun args ->
+      Db_worker_effect.pure (Undo_redo.redo (repo_arg_u args)));
+  Dispatcher.register "thread-api/undo-redo-clear-history" (fun args ->
+      Undo_redo.clear_history (repo_arg_u args);
+      Db_worker_effect.pure Wire.nil);
+  Dispatcher.register "thread-api/undo-redo-get-debug-state" (fun args ->
+      Db_worker_effect.pure
+        (Undo_redo.get_debug_state (repo_arg_u args)))
