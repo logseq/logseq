@@ -52,11 +52,13 @@ let () = Printexc.record_backtrace true
 
 let run (name : string) (f : unit -> unit) : unit =
   Printf.eprintf "RUN: %s\n%!" name;
-  try f ()
-  with e ->
-    incr failures;
-    Printf.eprintf "FAIL: %s raised %s\n%s\n%!" name (Printexc.to_string e)
-      (Printexc.get_backtrace ())
+  let t0 = Unix.gettimeofday () in
+  (try f ()
+   with e ->
+     incr failures;
+     Printf.eprintf "FAIL: %s raised %s\n%s\n%!" name (Printexc.to_string e)
+       (Printexc.get_backtrace ()));
+  Printf.eprintf "DONE: %s %.1fs\n%!" name (Unix.gettimeofday () -. t0)
 
 (* cljs graph-export-type: :graph unless LOGSEQ_EXPORT_HUMAN=1 *)
 let graph_export_type =
