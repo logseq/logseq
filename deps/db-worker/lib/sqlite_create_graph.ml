@@ -518,7 +518,7 @@ let import_tx (db : db) (import_type : value) : tx_op list =
 (* ---------- create-graph/build-initial-files ---------- *)
 
 let build_initial_files (config_content : string) : BM.t list =
-  let now = Instant (Int64.to_int (Date_time_util.time_ms ())) in
+  let now = Instant (Date_time_util.time_ms ()) in
   let file (name : string) (content : string) : BM.t =
     [ "block/uuid", Uuid (Common_uuid.gen_uuid "builtin-block-uuid" ("logseq/" ^ name))
     ; "file/path", String ("logseq/" ^ name)

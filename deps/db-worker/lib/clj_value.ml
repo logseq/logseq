@@ -30,7 +30,7 @@ let map_get_int (m : value) (a : attr) : int option =
   match map_get m a with
   | Int n -> Some n
   | Float f -> Some (int_of_float f)
-  | Instant n -> Some n
+  | Instant n -> Some (Int64.to_int n)
   | _ -> None
 
 let map_get_bool (m : value) (a : attr) : bool option =
