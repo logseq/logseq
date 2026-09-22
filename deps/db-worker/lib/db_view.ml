@@ -542,14 +542,12 @@ let get_unlinked_references db (id : entity_id) : entity list =
 let get_property_value_content db (v : value) : value option =
   match v with
   | Uuid u ->
-      (match entity db (Lookup_ref ("block/uuid", Uuid u)) with
-       | Some e ->
-           Option.map (fun s -> String s) (Ldb.property_value_content e)
+      (match Ldb.ent_of_ref db (Lookup_ref ("block/uuid", Uuid u)) with
+       | Some e -> Db_property.property_value_content e
        | None -> None)
   | Ref id ->
       (match Ldb.ent_of_id db id with
-       | Some e ->
-           Option.map (fun s -> String s) (Ldb.property_value_content e)
+       | Some e -> Db_property.property_value_content e
        | None -> None)
   | Keyword k -> Some (String (":" ^ k))
   | v -> Some v
@@ -1069,7 +1067,7 @@ let dp_pvc_of_value db (v : value) : value option =
   match v with
   | Ref id ->
       (match Ldb.ent_of_id db id with
-       | Some e -> Option.map (fun s -> String s) (Ldb.property_value_content e)
+       | Some e -> Db_property.property_value_content e
        | None -> None)
   | _ -> None
 
@@ -1780,17 +1778,32 @@ let compare_sort_values (a : value option) (b : value option) (asc_ : bool) : in
 let avet_first_window_sort_attrs =
   [ "block/updated-at"; "block/created-at"; "block/title"; "block/name" ]
 
-(* view/avet-take-eids — map :e → filter → distinct → drop → take *)
-let avet_take_eids (ds : datom list) (match_ : entity_id -> bool)
-    (row_limit : int option) (row_offset : int) : entity_id list =
+(* Test instrumentation: index datoms consumed by avet scans — mirrors
+   cljs view_test's instrumented d/datoms / d/rseek-datoms, keyed by
+   sort attr. *)
+let index_scans : (attr, int) Hashtbl.t = Hashtbl.create 7
+
+let index_scans_reset () = Hashtbl.reset index_scans
+
+(* view/avet-take-eids — map :e → filter → distinct → drop → take.
+   Consumes the index seq lazily so a small window does not scan the
+   whole index (cljs laziness). *)
+let avet_take_eids ~(scan_attr : attr) (ds : datom Seq.t)
+    (match_ : entity_id -> bool) (row_limit : int option)
+    (row_offset : int) : entity_id list =
   let seen = Hashtbl.create 31 in
+  let count () =
+    Hashtbl.replace index_scans scan_attr
+      (1 + Option.value ~default:0 (Hashtbl.find_opt index_scans scan_attr))
+  in
   let rec go ds off acc =
-    match ds with
-    | [] -> List.rev acc
-    | d :: tl ->
-        (match row_limit with
-         | Some l when List.length acc >= l -> List.rev acc
-         | _ ->
+    match row_limit with
+    | Some l when List.length acc >= l -> List.rev acc
+    | _ ->
+        (match Seq.uncons ds with
+         | None -> List.rev acc
+         | Some (d, tl) ->
+             count ();
              if Hashtbl.mem seen d.e || not (match_ d.e) then go tl off acc
              else begin
                Hashtbl.replace seen d.e ();
@@ -1814,17 +1827,17 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
       (match row_limit with
        | Some limit ->
            let ds =
-             if s_asc then List.of_seq (datoms db Avet ~a:s_id ())
-             else List.of_seq (rseek_datoms db Avet ~a:s_id ())
+             if s_asc then datoms db Avet ~a:s_id ()
+             else rseek_datoms db Avet ~a:s_id ()
            in
-           let matched = avet_take_eids ds match_ (Some limit) offset in
+           let matched = avet_take_eids ~scan_attr:s_id ds match_ (Some limit) offset in
            if List.length matched < limit then None else Some matched
        | None ->
            let ds =
-             List.of_seq (datoms db Avet ~a:s_id ())
-             |> (fun l -> if s_asc then l else List.rev l)
+             if s_asc then datoms db Avet ~a:s_id ()
+             else List.to_seq (List.rev (List.of_seq (datoms db Avet ~a:s_id ())))
            in
-           let matched = avet_take_eids ds match_ None offset in
+           let matched = avet_take_eids ~scan_attr:s_id ds match_ None offset in
            (match leftover with
             | None -> Some matched
             | Some ids ->

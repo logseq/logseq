@@ -19,7 +19,7 @@
    - initial_data_test.cljs get-block-and-children-has-children-flag:
      common-initial-data/get-block-and-children returns {:block :children}
      maps; OCaml Ldb.get_block_and_children returns a preorder entity list
-   - view_test.cljs (all 43 deftests): common-view/get-view-data is not ported
+   - view_test.cljs: ported to test_db_view_native.ml (all 42 deftests)
    - graph_dir_test.cljs repo->graph-dir-key*/decode-*-graph-dir-name/
      same-repo?: those fns are not in lib/graph_dir.ml
 
