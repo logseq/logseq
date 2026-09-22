@@ -13,6 +13,13 @@ let env name =
   | Node -> Js.Dict.get (Node.Process.process##env) name
   | _ -> None
 
+external os_homedir : unit -> string = "homedir" [@@mel.module "os"]
+
+let home_dir () =
+  match kind () with
+  | Node -> os_homedir ()
+  | Browser_worker | Native -> invalid_arg "home_dir: no home directory on this platform"
+
 type search_params
 
 external new_url_search_params : string -> search_params = "URLSearchParams"
@@ -44,3 +51,13 @@ let owner_source () =
        | None -> "unknown")
 
 let electron_owner () = String.equal (owner_source ()) "electron"
+
+external location_href : unit -> string = "location.href"
+  [@@mel.scope "globalThis"]
+
+let publishing () =
+  match kind () with
+  | Browser_worker ->
+      (try Graph_dir.contains_substring (location_href ()) "publishing=true"
+       with _ -> false)
+  | Node | Native -> false

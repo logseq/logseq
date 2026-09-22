@@ -47,6 +47,12 @@ external digest : subtle -> string -> T.Uint8Array.t -> array_buffer Js.Promise.
   = "digest"
 [@@mel.send]
 
+external verify : subtle -> string -> crypto_key -> T.Uint8Array.t -> T.Uint8Array.t -> bool Js.Promise.t
+  = "verify"
+[@@mel.send]
+
+external json_parse : string -> 'a = "JSON.parse" [@@mel.scope "JSON"]
+
 external get_random_values : T.Uint8Array.t -> T.Uint8Array.t = "getRandomValues"
   [@@mel.scope "crypto"]
 
@@ -201,6 +207,19 @@ module Rsa = struct
 
   let sign ~private_key:_ _ =
     Db_worker_effect.error (Failure "Crypto.Rsa.sign: not implemented yet")
+
+  (* cljs authorization/import-rsa-key + subtle.verify — RSASSA-PKCS1-v1_5
+     w/ SHA-256 against a JWK. *)
+  let verify_rs256_jwk ~jwk ~signature ~data =
+    let open Db_worker_effect.Infix in
+    task_of_promise
+      (js_import_key subtle "jwk" (json_parse jwk)
+         [%mel.obj { name = "RSASSA-PKCS1-v1_5"; hash = "SHA-256" }]
+         false [| "verify" |])
+    >>= fun key ->
+    task_of_promise
+      (verify subtle "RSASSA-PKCS1-v1_5" key (u8a_of_string signature)
+         (u8a_of_string data))
 end
 
 module Pbkdf2 = struct

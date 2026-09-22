@@ -1848,10 +1848,8 @@ let test_encode_decode_graph_dir_name_roundtrip () =
 let test_graph_storage_names_trim_surrounding_whitespace () =
   check "encode trims"
     (Graph_dir.encode_graph_dir_name "  space name  " = "space name");
-  (* LIB BUG: Graph_dir.pool_name trims before stripping logseq_db_, so
-     the space between the prefix and the name survives. cljs trims
-     after stripping, yielding "logseq-pool-space name". Asserted with
-     the cljs expectation — red until the lib is fixed. *)
+  (* cljs get-pool-name: replace-all prefix on the raw name, THEN trim,
+     so the space between prefix and name is trimmed away. *)
   check "pool-name trims"
     (Graph_dir.pool_name "  logseq_db_ space name  "
      = "logseq-pool-space name");
