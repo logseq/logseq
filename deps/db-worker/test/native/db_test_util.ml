@@ -440,6 +440,13 @@ let initial_data_edn =
 let create_conn () : conn =
   let conn = Datascript.create_conn ~schema:(schema ()) () in
   ignore (Datascript.transact_conn_string conn initial_data_edn);
+  (* cljs self-tags :logseq.class/Tag via :block/tags in build-new-class;
+     a separate tx is required since the ident cannot resolve inside its
+     own entity map in initial_data_edn. Without it Ldb.is_class on Tag
+     returns false and validate-tx-report rejects every tagged class. *)
+  ignore
+    (Datascript.transact_conn_string conn
+       "[[:db/add :logseq.class/Tag :block/tags :logseq.class/Tag]]");
   conn
 
 (* cljs (d/create-conn db-schema/schema) — schema only, no initial data.
