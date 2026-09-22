@@ -152,7 +152,7 @@ let append_lines (file_path : string) (source : string) (text : string) : unit =
            text
        in
        let lines =
-         if String.trim text = "" then [ "" ]
+         if Unicode.trim text = "" then [ "" ]
          else String.split_on_char '\n' text
        in
        List.iter

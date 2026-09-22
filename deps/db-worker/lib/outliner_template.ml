@@ -89,7 +89,7 @@ let dynamic_template_matches (content : string) : string list =
       | Some m ->
           let g =
             match m.Regexp.groups.(1) with
-            | Some s -> String.lowercase_ascii (String.trim s)
+            | Some s -> Unicode.lowercase (Unicode.trim s)
             | None -> ""
           in
           loop m.Regexp.last (g :: acc)
@@ -141,10 +141,10 @@ let resolve_string (content : string) (rules : (string * string) list) : string 
     ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
       match groups.(1) with
       | Some m ->
-          let m' = String.trim m in
+          let m' = Unicode.trim m in
           if m' = "" then ""
           else
-            let lowered = String.lowercase_ascii m' in
+            let lowered = Unicode.lowercase m' in
             (match List.assoc_opt lowered rules with
              | Some r -> r
              | None -> m')

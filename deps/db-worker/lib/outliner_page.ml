@@ -23,7 +23,7 @@ let url_p (s : string) : bool = Regexp.test url_re s
 (* ns-util/namespace-page? *)
 let namespace_page (page_name : string) : bool =
   String.contains page_name '/'
-  && String.trim page_name <> "/"
+  && Unicode.trim page_name <> "/"
   && not (String.length page_name >= 3 && String.sub page_name 0 3 = "../")
   && not (String.length page_name >= 2 && String.sub page_name 0 2 = "./")
   && not (url_p page_name)
@@ -45,7 +45,7 @@ let page_name_sanity_lc (s : string) : string = Ldb.page_name_sanity_lc s
 
 (* outliner-page/sanitize-title *)
 let sanitize_title (title : string) : string =
-  title |> String.trim |> Page_ref.get_page_name_exn |> remove_boundary_slashes
+  title |> Unicode.trim |> Page_ref.get_page_name_exn |> remove_boundary_slashes
 
 (* text/get-nested-page-name — first [[inner]] without nesting *)
 let get_nested_page_name (page_name : string) : string option =
@@ -245,7 +245,7 @@ let page_name_string_to_map (original_page_name : string) db
   in
   let base =
     (* :block.temp/original-page-name *)
-    if String.lowercase_ascii original_page_name <> String.lowercase_ascii original_page_name'
+    if Unicode.lowercase original_page_name <> Unicode.lowercase original_page_name'
     then Cljs_map.assoc base "block.temp/original-page-name" (Wire.String original_page_name)
     else base
   in
@@ -270,12 +270,12 @@ let page_name_string_to_map (original_page_name : string) db
   let base =
     if is_namespace then
       let namespace', _ = split_last "/" original_page_name' in
-      if String.trim namespace' <> "" then
+      if Unicode.trim namespace' <> "" then
         Cljs_map.assoc base "block/namespace"
           (Wire.Map
              [ (kw "block/name",
                 Wire.String
-                  (String.trim (page_name_sanity_lc namespace'))) ])
+                  (Unicode.trim (page_name_sanity_lc namespace'))) ])
       else base
     else base
   in
@@ -315,7 +315,7 @@ let page_name_to_map (original_page_name : string) db
   else
     let db_based = Sqlite_util.db_based_graph db in
     let original_page_name =
-      let s = String.trim original_page_name in
+      let s = Unicode.trim original_page_name in
       if db_based then sanitize_hashtag_name s else s
     in
     let page, _page_entity =
@@ -514,7 +514,7 @@ let split_namespace_pages db (page : Wire.t) (date_formatter : string option)
   if page_is_class_or_page && namespace_page title then begin
     let parts =
       String.split_on_char '/' title
-      |> List.map String.trim
+      |> List.map Unicode.trim
       |> List.filter (fun p -> p <> "")
     in
     let n = List.length parts in

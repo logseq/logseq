@@ -124,15 +124,15 @@ let client_id_allowed env client_id =
       env.cognito_client_ids
       |> Option.value ~default:""
       |> String.split_on_char ','
-      |> List.map String.trim
+      |> List.map Unicode.trim
       |> List.filter (fun s -> s <> "")
     in
     match env.cognito_client_id with
-    | Some primary when String.trim primary <> "" -> primary :: additional
+    | Some primary when Unicode.trim primary <> "" -> primary :: additional
     | _ -> additional
   in
   match client_id with
-  | Some cid when String.trim cid <> "" -> List.mem cid allowed
+  | Some cid when Unicode.trim cid <> "" -> List.mem cid allowed
   | _ -> false
 
 (* cljs truthiness for claim values (0, "", false, null are falsy). *)

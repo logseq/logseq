@@ -8,8 +8,8 @@ let uncountables : (string, bool) Hashtbl.t = Hashtbl.create 127
 let irregular_plurals : (string, string) Hashtbl.t = Hashtbl.create 63
 let irregular_singles : (string, string) Hashtbl.t = Hashtbl.create 63
 
-let lower = String.lowercase_ascii
-let upper = String.uppercase_ascii
+let lower = Unicode.lowercase
+let upper = Unicode.uppercase
 
 let is_upper s = s = upper s
 let is_lower s = s = lower s

@@ -12,7 +12,7 @@ let default_config_map ?export_heading_to_list ?export_keep_properties
     ?export_md_indent_style ?export_md_remove_options ?parse_outline_only
     (format : string) : (string * Wire.t) list =
   let cap =
-    match String.capitalize_ascii format with
+    match Unicode.capitalize format with
     | "Org" -> "Org"
     | _ -> "Markdown"
   in
@@ -56,7 +56,7 @@ let parse_json ~content ~config = Mldoc.parse_json ~content ~config
 let inline_parse_json ~text ~config = Mldoc.parse_inline_json ~text ~config
 
 let get_references ~text ~config : value =
-  if String.trim text = "" then Nil
+  if Unicode.trim text = "" then Nil
   else
     Common_util.json_clj_of_wire
       (Json.parse (Mldoc.get_references ~text ~config))
@@ -83,7 +83,7 @@ let remove_indentation_spaces (s : string) (level : int) (remove_first_line : bo
   let body =
     List.map
       (fun line ->
-        if String.trim (Common_util.safe_subs line 0 ~end_:level ()) = "" then
+        if Unicode.trim (Common_util.safe_subs line 0 ~end_:level ()) = "" then
           Common_util.safe_subs line level ()
         else Common_util.str_triml line)
       rest
@@ -190,7 +190,7 @@ let unclosed_script_markup (s : string) : bool =
 
 (* mldoc/split-macro-arguments *)
 let split_macro_arguments (s : string) : string list =
-  if String.trim s = "" then []
+  if Unicode.trim s = "" then []
   else
     let n = String.length s in
     let rec loop idx start page_ref_depth script_depth quoted escaped result =
@@ -210,9 +210,9 @@ let split_macro_arguments (s : string) : string list =
           loop (idx + 1) start page_ref_depth (script_depth - 1) quoted false result
         else if page_ref_depth = 0 && script_depth = 0 && c = ',' then
           loop (idx + 1) (idx + 1) page_ref_depth script_depth quoted false
-            (String.trim (String.sub s start (idx - start)) :: result)
+            (Unicode.trim (String.sub s start (idx - start)) :: result)
         else loop (idx + 1) start page_ref_depth script_depth quoted false result
-      else List.rev (String.trim (String.sub s start (n - start)) :: result)
+      else List.rev (Unicode.trim (String.sub s start (n - start)) :: result)
     in
     loop 0 0 0 0 false false []
 
@@ -343,7 +343,7 @@ let recover_inline_macros (inline_list : value list) : value list =
              | Some macro ->
                let prefix = String.sub content offset (idx - offset) in
                let result =
-                 if String.trim prefix <> "" || prefix <> "" then
+                 if Unicode.trim prefix <> "" || prefix <> "" then
                    Vector [ String "Plain"; String prefix ] :: result
                  else result
                in
@@ -422,7 +422,7 @@ let collect_page_properties (ast : value list) (config : string) : value list =
     let is_directive pair =
       match pair with
       | Vector [ Vector (String t :: _); _ ] ->
-        String.lowercase_ascii t = "directive"
+        Unicode.lowercase t = "directive"
       | _ -> false
     in
     let directives, others = List.partition is_directive ast in
@@ -445,7 +445,7 @@ let to_edn ~(content : value) ~(config : string) : value =
   match content with
   | String s ->
     (try
-       if String.trim s = "" then Vector []
+       if Unicode.trim s = "" then Vector []
        else
          let parsed =
            Common_util.json_clj_of_wire (Json.parse (parse_json ~content:s ~config))
@@ -496,7 +496,7 @@ let to_db_edn ~(content : string) ~(format : string) : value =
 (* mldoc/inline->edn *)
 let inline_to_edn (text : string) (config : string) : value list =
   try
-    if String.trim text = "" then []
+    if Unicode.trim text = "" then []
     else
       let parsed =
         Common_util.json_clj_of_wire

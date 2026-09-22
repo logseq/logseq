@@ -384,7 +384,7 @@ let rec resolve_start_graph_id repo : string option Db_worker_effect.t =
         | _ -> Db_worker_effect.pure None)
 
 and strip_db_version_prefix (s : string) : string =
-  let s = String.trim s in
+  let s = Unicode.trim s in
   let prefix = "logseq_db_" in
   if String.length s > String.length prefix
      && String.sub s 0 (String.length prefix) = prefix

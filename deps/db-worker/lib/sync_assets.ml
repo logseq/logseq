@@ -391,10 +391,10 @@ let enqueue_asset_sync repo client ~enqueue_asset_task ~current_client
      : unit)
 
 let header_opt name (headers : (string * string) list) =
-  let name = String.lowercase_ascii name in
+  let name = Unicode.lowercase name in
   match
     List.find_opt
-      (fun (k, _) -> String.lowercase_ascii k = name)
+      (fun (k, _) -> Unicode.lowercase k = name)
       headers
   with
   | Some (_, v) -> Some v
@@ -422,7 +422,7 @@ let download_remote_asset_impl repo graph_id asset_uuid asset_type
                 ~data:[ (Wire.Keyword "status", Wire.Int resp.status) ]);
          let total =
            match header_opt "content-length" resp.headers with
-           | Some s -> Option.value (int_of_string_opt (String.trim s)) ~default:0
+           | Some s -> Option.value (int_of_string_opt (Unicode.trim s)) ~default:0
            | None -> 0
          in
          notify_asset_progress repo asset_id "download" 0 total;

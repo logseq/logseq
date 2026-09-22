@@ -37,7 +37,7 @@ let entry_re = Regexp.compile "(\\d+)\\s+(\\d+)"
 
 (* parse-line — trimmed `re-matches` on "PID PORT", both positive. *)
 let parse_line (line : string) : entry option =
-  let trimmed = String.trim line in
+  let trimmed = Unicode.trim line in
   match Regexp.exec entry_re trimmed with
   | Some m ->
       (match m.Regexp.groups.(1), m.Regexp.groups.(2) with
