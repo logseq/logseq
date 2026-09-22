@@ -2951,4 +2951,5 @@ let () =
     ; "handler-comments", Test_handler_native.comments_cases
     ; "handler-property", Test_handler_native.property_cases
     ; "handler-transaction", Test_handler_native.transaction_cases
-    ; "undo-redo", Test_undo_redo_native.cases ]
+    ; "undo-redo", Test_undo_redo_native.cases
+    ; "db-listener", Test_db_listener_native.cases ]
