@@ -76,8 +76,15 @@ let built_in_has_ref_value (ident : attr) : bool =
 (* db-property-type/property-value-content?
    [block_type] is the property :type of the context (property's own type when
    called from closed-value-new-block, block's when from value-block). *)
+(* cljs reads :logseq.property/type via keyword get; the value is a keyword
+   on real entities but some intermediate maps carry it as a string *)
+let property_type_attr (m : Block_map.t) : string option =
+  match Block_map.attr_value m "logseq.property/type" with
+  | Some (Keyword t) | Some (String t) -> Some t
+  | _ -> None
+
 let property_value_content (block_type : string option) (property : Block_map.t) : bool =
-  let prop_type = Block_map.string_attr property "logseq.property/type" in
+  let prop_type = property_type_attr property in
   (match prop_type with
    | Some t -> List.mem t original_value_ref_property_types
    | None -> false)
@@ -181,7 +188,7 @@ let build_new_property ~(db_ident : string) ~(prop_schema : Block_map.t)
   in
   let prop_name = match title with Some t -> t | None -> name_of_ident db_ident' in
   let prop_type =
-    match Block_map.string_attr prop_schema "logseq.property/type" with
+    match property_type_attr prop_schema with
     | Some t -> t
     | None -> "default"
   in
@@ -190,21 +197,23 @@ let build_new_property ~(db_ident : string) ~(prop_schema : Block_map.t)
     | Some (Keyword ("many" | "db.cardinality/many")) -> "db.cardinality/many"
     | _ -> "db.cardinality/one"
   in
+  (* cljs (merge (dissoc prop-schema :db/cardinality) {...}) — the literal is
+     `over` so its :logseq.property/type Keyword wins over prop_schema's. *)
   Block_map.merge
     (Block_map.dissoc prop_schema [ "db/cardinality" ])
     [ "db/ident", Keyword db_ident'
-       ; "block/tags", Set [ Keyword "logseq.class/Property" ]
-       ; "logseq.property/type", Keyword prop_type
-       ; "block/name", String (Ldb.page_name_sanity_lc prop_name)
-       ; ( "block/uuid"
-         , Uuid
-             (match block_uuid with
-              | Some u -> u
-              | None -> Common_uuid.gen_uuid "db-ident-block-uuid" db_ident') )
-       ; "block/title", String prop_name
-       ; "db/index", Bool true
-       ; "db/cardinality", Keyword cardinality
-       ; "block/order", String (Db_order.gen_key_from_max ()) ]
+    ; "block/tags", Set [ Keyword "logseq.class/Property" ]
+    ; "logseq.property/type", Keyword prop_type
+    ; "block/name", String (Ldb.page_name_sanity_lc prop_name)
+    ; ( "block/uuid"
+      , Uuid
+          (match block_uuid with
+           | Some u -> u
+           | None -> Common_uuid.gen_uuid "db-ident-block-uuid" db_ident') )
+    ; "block/title", String prop_name
+    ; "db/index", Bool true
+    ; "db/cardinality", Keyword cardinality
+    ; "block/order", String (Db_order.gen_key_from_max ()) ]
   |> block_with_timestamps
   |> (fun m ->
       if ref_type || List.mem prop_type all_ref_property_types
@@ -291,7 +300,7 @@ let build_property_value_block ?(block_uuid : string option)
   ; "logseq.property/created-from-property", created_from
   ; "block/order", String (Db_order.gen_key_from_max ()) ]
   @ (if property_value_content
-          (Block_map.string_attr block "logseq.property/type") property
+          (property_type_attr block) property
      then [ "logseq.property/value", v ]
      else [ "block/title", v ])
   |> block_with_timestamps
