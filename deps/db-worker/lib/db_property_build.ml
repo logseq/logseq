@@ -107,7 +107,11 @@ let block_map_value (m : Block_map.t) : value =
 (* property-build/closed-value-new-block *)
 let closed_value_new_block (block_id : string) (block_type : string option)
     (v : value) (property : Block_map.t) : Block_map.t =
-  let property_id = Block_map.string_attr property "db/ident" in
+  let property_id =
+    match Block_map.attr_value property "db/ident" with
+    | Some (Keyword i) | Some (String i) -> Some i
+    | _ -> None
+  in
   let prop_ref : value =
     match property_id with Some i -> Ref_to (Ident i) | None -> Nil
   in
@@ -276,7 +280,9 @@ let build_property_value_block ?(block_uuid : string option)
     | None -> Common_uuid.gen_uuid "builtin-block-uuid" (str_of_value v)
   in
   let created_from : value =
-    if Block_map.string_attr property "db/ident" = Some "logseq.property/default-value"
+    if (match Block_map.attr_value property "db/ident" with
+        | Some (Keyword i) | Some (String i) -> i = "logseq.property/default-value"
+        | _ -> false)
     then block_id
     else
       match Block_map.attr_value property "db/id" with
