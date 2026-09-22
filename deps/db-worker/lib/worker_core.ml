@@ -23,6 +23,25 @@ let init () =
     ignore Endpoint_cli.api_get_page_data;
     ignore Endpoint_view.get_view_filter_data;
     ignore Endpoint_view.get_view_data;
+    ignore Endpoint_validate.validate_db_endpoint;
+    ignore Endpoint_validate.recompute_checksum_diagnostics;
+    (* cljs db.cljs *transact-fn validate hook + db-core
+       notify-invalid-data callback *)
+    Db_tx.validate_tx_report_fn
+    := Some
+         (fun (r : Datascript.tx_report) ->
+           let ok, errs =
+             Db_validate.validate_tx_report ~closed_schema:false
+               r.db_after r.tx_data
+           in
+           ( ok
+           , List.map
+               (fun (e : Db_validate.tx_entity_error) ->
+                 Ds_wire.edn_of_transit
+                   (Ds_wire.transit_of_value e.entity_map))
+               errs ));
+    Db_tx.transact_invalid_callback
+    := Some Worker_db_validate.notify_invalid_data;
     ignore Endpoint_state.cancel_ui_requests;
     ignore Endpoint_property.get_all_classes;
     ignore Endpoint_property.get_all_properties;

@@ -110,6 +110,15 @@ let close_client_ops_conn repo =
   | Some db -> Sqlite.close db; Hashtbl.remove client_ops_conns repo
   | None -> ()
 
+(* cljs get-client-ops-conn returns the open conn (if any) without
+   creating one — used by recompute-checksum-diagnostics. *)
+let client_ops_conn_opt repo : Sqlite.db option =
+  Hashtbl.find_opt client_ops_conns repo
+
+(* cljs logseq.db-sync/*repo->latest-remote-checksum atom *)
+let latest_remote_checksums : (string, string) Hashtbl.t =
+  Hashtbl.create 7
+
 (* worker-state/get-sqlite-conn [repo which-db] — :db main graph sqlite,
    :search the vector/search index db (search package owns the schema). *)
 let search_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
