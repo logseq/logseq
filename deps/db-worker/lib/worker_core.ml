@@ -32,6 +32,7 @@ let init () =
     ignore Endpoint_export.export_edn_endpoint;
     ignore Endpoint_export.import_edn_endpoint;
     ignore Endpoint_export.build_publishing_html;
+    ignore Endpoint_publish.build_publish_page_payload;
     (* cljs db.cljs *transact-fn validate hook + db-core
        notify-invalid-data callback *)
     Db_tx.validate_tx_report_fn
