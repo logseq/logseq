@@ -593,10 +593,12 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
          >>= fun snapshot_resp ->
          (if graph_e2ee then begin
             stage := "prepare-e2ee";
-            ignore
-              (Sync_deps.require "fetch_graph_aes_key_for_download"
-                 Sync_deps.fetch_graph_aes_key_for_download repo graph_id)
-          end);
+            Sync_deps.require "fetch_graph_aes_key_for_download"
+              Sync_deps.fetch_graph_aes_key_for_download repo graph_id
+            >>= fun _ -> Db_worker_effect.pure ()
+          end
+          else Db_worker_effect.pure ())
+         >>= fun () ->
          stage := "fetch-snapshot-stream";
          let url =
            match Wire.get "url" snapshot_resp with
@@ -606,7 +608,9 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
                  (Sync_util.ex_info "snapshot download missing url"
                     [ Wire.Keyword "repo", Wire.String repo ])
          in
-         Http_bytes.send_stream
+         (match !Sync_deps.http_send_stream with
+          | Some f -> f
+          | None -> Http_bytes.send_stream)
            { Http_bytes.url
            ; method_ = "GET"
            ; headers = Sync_util.auth_headers ()

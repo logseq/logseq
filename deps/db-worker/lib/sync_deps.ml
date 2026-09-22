@@ -210,3 +210,29 @@ let clear_history : (string -> unit) option ref = ref None
 
 (* platform capture-error reporting (:capture-error channel post) *)
 let capture_error : (string -> Wire.t -> Wire.t -> unit) option ref = ref None
+
+(* ---- network injection points (cljs rebinds sync-util/fetch-json and the
+   platform fetch in tests; identical code paths, no real network) ---- *)
+
+(* sync-util/fetch-json : url opts-schema -> wire *)
+let fetch_json :
+    (string ->
+     ?meth:string -> ?headers:(string * string) list -> ?body:string ->
+     ?response_schema:string -> ?error_schema:string -> unit ->
+     Wire.t Db_worker_effect.t)
+      option
+      ref =
+  ref None
+
+(* platform http stream : request -> on-response -> unit
+   on-response status headers read-fn; read-fn () -> string chunk option *)
+let http_send_stream :
+    (Http_bytes.request ->
+     (int ->
+      (string * string) list ->
+      (unit -> string option Db_worker_effect.t) ->
+      unit Db_worker_effect.t) ->
+     unit Db_worker_effect.t)
+      option
+      ref =
+  ref None
