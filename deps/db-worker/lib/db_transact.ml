@@ -591,6 +591,81 @@ let normalize_tx_data (tx_data : Wire.t list) : Wire.t list =
           | Wire.Int _ | Wire.Int64 _ -> false
           | _ -> not (is_empty_item m))
 
+(* cljs datascript transact-add: an explicit-tx [op e a v tx] resolves e
+   (and ref-typed v) through entid-strict at apply time — against the
+   evolving db-after, so entities created earlier in the same tx resolve.
+   The EDN reader only accepts plain entity ids there, so ref-shaped e/v
+   are deferred into a Call that resolves them at apply time. A string e
+   is a tempid: upstream drops the explicit tx in that branch. *)
+let unresolved_entity_ref (w : Wire.t) : 'a =
+  invalid_arg
+    ("unresolvable entity reference in tx-data: " ^ Ds_wire.edn_of_transit w)
+
+let entid_strict (db : db) (w : Wire.t) : entity_id =
+  match entity_ref_of_wire w with
+  | Some r -> (
+      match Datascript.entid_ref db r with
+      | Some id -> id
+      | None -> unresolved_entity_ref w)
+  | None -> unresolved_entity_ref w
+
+let tx_ref_attr (db : db) (attr : attr) : bool =
+  Schema.schema_attr_is_ref (Datascript.schema db) attr
+  || Db_normalize.entity_value_type_ref db attr
+
+let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
+    (t : Wire.t) : tx_op list option =
+  match op, t with
+  | Wire.Keyword ("db/add" | "db/retract"), Wire.Int tx -> (
+      let added = op = kw "db/add" in
+      let attr = match a with Wire.Keyword s -> s | _ -> "" in
+      match e with
+      | Wire.Int _ | Wire.Int64 _ -> None
+      | Wire.String s ->
+          Some
+            [ (if added
+               then Add (Temp_id s, attr, Ds_wire.value_of_transit v)
+               else
+                 Retract (Temp_id s, attr, Some (Ds_wire.value_of_transit v)))
+            ]
+      | _ ->
+          Some
+            [ Call
+                (fun db ->
+                   let eid = entid_strict db e in
+                   let v' =
+                     match v with
+                     (* cljs (and (ref? db a) (tempid? v)): a value tempid
+                        string resolves to its allocated eid — the entity's
+                        own add op runs earlier in the same tx, so its
+                        block/uuid or db/ident is already searchable *)
+                     | Wire.String s when tx_ref_attr db attr -> (
+                         match
+                           ( Datascript.entid db "block/uuid" (Uuid s)
+                           , Datascript.entid db "db/ident" (Keyword s) )
+                         with
+                         | Some id, _ | _, Some id -> Ref id
+                         | _ -> String s)
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _ | Wire.Uuid _
+                       when tx_ref_attr db attr -> Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ Raw_datom
+                       (Datascript.datom ~tx ~added ~e:eid ~a:attr ~v:v' ()) ])
+            ])
+  | _ -> None
+
+let tx_ops_of_tx_data (tx_data : Wire.t list) : tx_op list =
+  List.concat_map
+    (fun item ->
+       match item with
+       | Wire.Array [ op; e; a; v; t ] | Wire.List [ op; e; a; v; t ] -> (
+           match datom_form_tx_ops op e a v t with
+           | Some ops -> ops
+           | None -> Datascript.parse_tx_data_string (tx_edn [ item ]))
+       | _ -> Datascript.parse_tx_data_string (tx_edn [ item ]))
+    tx_data
+
 let transact (conn : conn) (tx_data : Wire.t list) (tx_meta : tx_meta)
     : tx_report option =
   let tx_data = normalize_tx_data tx_data in
@@ -603,13 +678,15 @@ let transact (conn : conn) (tx_data : Wire.t list) (tx_meta : tx_meta)
   | _ ->
       let flags = Db_tx.flags_of conn in
       let tx_meta =
-        (if flags.Db_tx.batch_tx
+        (* cljs transact-sync tags from *batch-tx-report?* (dynamic var
+           bound inside batch-transact!), not the conn :batch-tx? attr *)
+        (if !Db_tx.inside_batch_tx
          then ("batch-tx-report?", Bool true) :: tx_meta
          else tx_meta)
         |> fun m ->
         if flags.Db_tx.skip_store then ("skip-store?", Bool true) :: m else m
       in
-      let tx_ops = Datascript.parse_tx_data_string (tx_edn tx_data) in
+      let tx_ops = tx_ops_of_tx_data tx_data in
       Some (Db_tx.transact_sync conn tx_ops tx_meta)
 
 (* db.cljs batch-transact-with-temp-conn!. [f] receives the temp conn;
@@ -651,3 +728,6 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
            datoms
        in
        transact conn items tx_meta)
+
+(* test hook — cljs tests rebind ldb/transact! *)
+let transact_fn = ref transact
