@@ -678,4 +678,12 @@ let () =
   Dispatcher.register "thread-api/api-list-tags" (fun args ->
       with_conn args (fun db -> Db_worker_effect.pure (api_list_tags db (arg args 1))));
   Dispatcher.register "thread-api/api-list-pages" (fun args ->
-      with_conn args (fun db -> Db_worker_effect.pure (api_list_pages db (arg args 1))))
+      with_conn args (fun db -> Db_worker_effect.pure (api_list_pages db (arg args 1))));
+  Dispatcher.register "thread-api/api-build-upsert-nodes-edn" (fun args ->
+      with_conn args (fun db ->
+          let ops =
+            match arg args 1 with
+            | Some (Wire.Array xs | Wire.List xs) -> xs
+            | _ -> []
+          in
+          Db_worker_effect.pure (Api_tools.build_upsert_nodes_edn db ops)))
