@@ -423,6 +423,7 @@ let initial_data_idents_edn =
     {:db/ident :logseq.property.view/type}
     {:db/ident :logseq.property.view/feature-type}
     {:db/ident :block/alias}
+    {:db/ident :block/parent}
     {:db/ident :logseq.property/order-list-type}
     {:db/ident :logseq.property/created-by-ref}
     {:db/ident :logseq.property/query}
@@ -823,6 +824,17 @@ let initial_data_edn =
     {:db/ident :block/page
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000338\"
      :block/name \"node page\" :block/title \"Node page\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/hide? true
+     :logseq.property/type :entity
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :block/parent
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000334\"
+     :block/name \"node parent\" :block/title \"Node parent\"
      :block/created-at 0 :block/updated-at 0
 :block/tags #{:logseq.class/Property}
      :logseq.property/built-in? true

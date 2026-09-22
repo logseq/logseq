@@ -137,12 +137,15 @@ let tx_reject v =
   if not (List.mem reason tx_reject_reasons) then
     err (Printf.sprintf "tx-reject reason %s" reason) v;
   ignore (opt m "t" as_int);
-  ignore (opt m "success-tx-ids" uuid_seq);
-  ignore (opt m "failed-tx-id" as_uuid);
-  ignore (opt m "missing-block-uuids" uuid_seq);
   ignore (opt m "error-detail" as_str);
   ignore (opt m "data" as_str);
-  m
+  Wire.Map
+    (norm_field
+       (norm_field
+          (norm_field kvs "success-tx-ids"
+             (fun x -> Wire.Array (uuid_seq x)))
+          "failed-tx-id" (fun x -> Wire.Uuid (as_uuid x)))
+       "missing-block-uuids" (fun x -> Wire.Array (uuid_seq x)))
 
 let ws_type v = req v "type" as_str
 
