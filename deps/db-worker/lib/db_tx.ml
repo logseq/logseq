@@ -128,6 +128,24 @@ let normalize_tx (txs : tx_op list) : tx_op list =
 
 exception Invalid_tx of string
 
+(* cljs `d/with`: compute the report without committing or persisting.
+   "skip-store?" suppresses `persist_transact_tail` for storage-backed
+   dbs; the real tx_meta is restored on the returned report. *)
+let transact_report ~(tx_meta : tx_meta) (db : db) (tx_ops : tx_op list)
+    : tx_report =
+  let report =
+    transact ~tx_meta:(("skip-store?", Bool true) :: tx_meta) db tx_ops
+  in
+  { report with tx_meta }
+
+(* cljs commit: conn.db <- db_after, store-after-transact!, run-callbacks.
+   Replaying the report's tx-data as raw datoms through `transact_conn`
+   reproduces all three atomically. *)
+let commit_tx_report (conn : conn) (report : tx_report) : unit =
+  ignore
+    (transact_conn ~tx_meta:report.tx_meta conn
+       (List.map (fun d -> Raw_datom d) report.tx_data))
+
 let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
   Ldb.db_based_graph db
   && not
@@ -180,7 +198,7 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
   else begin
     let db = Conn.db conn in
     if should_run_pipeline conn db tx_meta then begin
-      let report0 = transact_report ~tx_meta db tx_ops in
+      let report0 = transact ~tx_meta db tx_ops in
       let report =
         match !transact_pipeline_fn with
         | Some f -> f report0
