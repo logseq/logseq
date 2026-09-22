@@ -960,7 +960,7 @@ let compare_order_paths (p1 : string option list) (p2 : string option list) : in
   List.compare Stdlib.compare p1 p2
 
 (* ldb/sort-page-random-blocks — possibly non-consecutive blocks of one page,
-   sorted by preorder path. *)
+   sorted by preorder path. cljs asserts all blocks share one :block/page. *)
 let sort_page_random_blocks _db (blocks : entity list) : entity list =
   let page_id =
     match blocks with
@@ -970,6 +970,14 @@ let sort_page_random_blocks _db (blocks : entity list) : entity list =
         | None -> invalid_arg "sort_page_random_blocks: block has no :block/page")
     | [] -> 0
   in
+  List.iter
+    (fun (b : entity) ->
+      match ref_ent b "block/page" with
+      | Some p when p.id = page_id -> ()
+      | _ ->
+          invalid_arg
+            "sort_page_random_blocks: blocks must be in a same page")
+    blocks;
   let sorted =
     blocks
     |> List.filter_map (fun b ->

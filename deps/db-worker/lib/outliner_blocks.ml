@@ -44,13 +44,22 @@ let rec compare_order_paths (a : string list) (b : string list) : int =
       let c = String.compare x y in
       if c <> 0 then c else compare_order_paths xs ys
 
-(* db.cljs sort-page-random-blocks *)
+(* db.cljs sort-page-random-blocks — cljs asserts all blocks share one
+   :block/page. *)
 let sort_page_random_blocks (_db : db) (blocks : entity list) : entity list =
   let page_id =
     match blocks with
     | b :: _ -> (match Ldb.ref_ent b "block/page" with Some p -> Some p.id | None -> None)
     | [] -> None
   in
+  List.iter
+    (fun (b : entity) ->
+       match page_id, Ldb.ref_ent b "block/page" with
+       | Some pid, Some p when p.id = pid -> ()
+       | _ ->
+           invalid_arg
+             "sort_page_random_blocks: blocks must be in a same page")
+    blocks;
   let with_paths =
     List.filter_map
       (fun b ->

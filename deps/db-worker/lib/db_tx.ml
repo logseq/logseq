@@ -308,8 +308,13 @@ let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
     transact_sync conn tx_ops tx_meta
 
 (* ldb/batch-transact-with-temp-conn! — batched txs on an isolated in-memory
-   conn (reads storage-backed data, never writes), then a single commit. *)
-let batch_transact_with_temp_conn ?(tx_meta : tx_meta = []) (conn : conn)
+   conn (reads storage-backed data, never writes), then a single commit.
+   cljs opts {:listen-db :before-commit}: listen-db receives each temp-conn
+   tx-report; before-commit runs after the batch fn, before the live
+   commit — throwing aborts without touching conn. *)
+let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
+    ?(listen_db : (tx_report -> unit) option)
+    ?(before_commit : (unit -> unit) option) (conn : conn)
     (f : conn -> unit) : tx_report option =
   (* cljs conn-from-db fork avoids d/store — strip storage so the temp
      conn can read but never write. *)
@@ -322,10 +327,16 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = []) (conn : conn)
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ [ r.tx_data ])
+        collected := !collected @ [ r.tx_data ];
+        match listen_db with
+        | Some l -> l r
+        | None -> ())
   in
   (try
      f temp;
+     (match before_commit with
+      | Some g -> g ()
+      | None -> ());
      let tx_data = List.concat !collected in
      unlisten temp key;
      if tx_data = [] then None
