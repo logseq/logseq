@@ -62,7 +62,8 @@ let prim_ok (p : prim) (v : value) : bool =
   match p with
   | PAny -> true
   | PInt -> (match v with Int _ -> true | _ -> false)
-  | PDouble -> (match v with Float _ -> true | _ -> false)
+  (* cljs double? is number? — JS numbers are all doubles, ints included *)
+  | PDouble -> (match v with Int _ | Float _ -> true | _ -> false)
   | PNumber -> (match v with Int _ | Float _ -> true | _ -> false)
   | PBoolean -> (match v with Bool _ -> true | _ -> false)
   | PString -> (match v with String _ -> true | _ -> false)
