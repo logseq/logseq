@@ -28,9 +28,6 @@
  (url "git+https://github.com/RCmerci/melange-transit.git")
  (package (name melange-transit)))
 (pin
- (url "git+https://github.com/RCmerci/melange-fest.git")
- (package (name melange-fest)))
-(pin
  (url "git+https://github.com/RCmerci/rrbvec.git")
  (package (name rrbvec)))
 
