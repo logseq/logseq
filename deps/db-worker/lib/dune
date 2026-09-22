@@ -1,0 +1,9 @@
+(library
+ (name logseq_db_worker)
+ (implements logseq_db_worker_spec)
+ (modes native byte melange)
+ (libraries
+  logseq_db_worker_platform_spec
+  datascript_ocaml)
+ (preprocess
+  (pps melange.ppx)))

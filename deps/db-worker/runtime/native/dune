@@ -1,0 +1,15 @@
+(library
+ (name logseq_db_worker_platform_native)
+ (implements logseq_db_worker_platform_spec)
+ (modes native byte)
+ (libraries
+  datascript-ocaml-native
+  datascript-ocaml-native.sqlite
+  melange-transit-native
+  rrbvec
+  sqlite3
+  unix
+  threads.posix
+  uunf
+  re
+  re.pcre))

@@ -1,0 +1,5 @@
+lib: [
+  "_build/install/default/lib/logseq-db-worker/META"
+  "_build/install/default/lib/logseq-db-worker/dune-package"
+  "_build/install/default/lib/logseq-db-worker/opam"
+]

@@ -1,0 +1,4 @@
+(lang dune 3.24)
+(name logseq-db-worker)
+(sections (lib .))
+(files (lib (META dune-package opam)))
