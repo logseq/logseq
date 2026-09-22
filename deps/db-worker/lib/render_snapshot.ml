@@ -430,72 +430,79 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
            else result)
          [ (kw "db/id", Wire.Int entity_id) ]
   in
-  let block' = attrs in
+  (* cljs assoc semantics: later keys replace earlier ones *)
+  let assoc key value map = (key, value) :: List.remove_assoc key map in
   let block' =
-    (kw "block/tx-id", Wire.Int block_tx_id)
-    :: ( kw "block.temp/refs-count"
-       , (match block_refs_count db entity_id with
+    assoc (kw "block/tx-id") (Wire.Int block_tx_id)
+      (assoc
+         (kw "block.temp/refs-count")
+         (match block_refs_count db entity_id with
           | Some n -> Wire.Int n
-          | None -> Wire.Nil) )
-    :: (kw "block.temp/has-children?",
-        Wire.Bool (block_has_children db entity_id))
-    :: ( kw "block.temp/positioned-properties"
-       , Wire.Map
-           (List.map
-              (fun (position, idents) ->
-                ( kw position
-                , Wire.Array
-                    (List.filter_map
-                       (fun ident ->
-                         match entity db (Ident ident) with
-                         | Some p ->
-                             Some (Property_maps.display_property_map db p)
-                         | None -> None)
-                       idents) ))
-              (block_positioned_property_idents_by_position db entity_id)) )
-    :: block'
+          | None -> Wire.Nil)
+         (assoc
+            (kw "block.temp/has-children?")
+            (Wire.Bool (block_has_children db entity_id))
+            (assoc
+               (kw "block.temp/positioned-properties")
+               (Wire.Map
+                  (List.map
+                     (fun (position, idents) ->
+                       ( kw position
+                       , Wire.Array
+                           (List.filter_map
+                              (fun ident ->
+                                match entity db (Ident ident) with
+                                | Some p ->
+                                    Some
+                                      (Property_maps.display_property_map db p)
+                                | None -> None)
+                              idents) ))
+                     (block_positioned_property_idents_by_position db entity_id)))
+               attrs)))
   in
   (* view-for + no sort-groups-desc? -> default true *)
   let block' =
     if
       List.mem_assoc (kw "logseq.property/view-for") block'
       && not (List.mem_assoc (kw "logseq.property.view/sort-groups-desc?") block')
-    then (kw "logseq.property.view/sort-groups-desc?", Wire.Bool true) :: block'
+    then assoc (kw "logseq.property.view/sort-groups-desc?") (Wire.Bool true) block'
     else block'
   in
   let block' =
     if property_entity db entity_id then
-      ( kw "property/closed-values"
-      , (match
-           List.find_opt
-             (fun (k, _) -> k = kw "property/closed-values")
-             (match Property_maps.display_property_map db block with
-              | Wire.Map kvs -> kvs
-              | _ -> [])
-         with
-         | Some (_, v) -> v
-         | None -> Wire.Array []) )
-      :: block'
+      let closed_values =
+        match
+          List.find_opt
+            (fun (k, _) -> k = kw "property/closed-values")
+            (match Property_maps.display_property_map db block with
+             | Wire.Map kvs -> kvs
+             | _ -> [])
+        with
+        | Some (_, v) -> v
+        | None -> Wire.Array []
+      in
+      assoc (kw "property/closed-values") closed_values block'
     else block'
   in
   let block' =
     match raw_title with
-    | Some t -> (kw "block/raw-title", Wire.String t) :: block'
+    | Some t -> assoc (kw "block/raw-title") (Wire.String t) block'
     | None -> block'
   in
   let block' =
     match display_title with
-    | Some t -> (kw "block/title", Wire.String t) :: block'
+    | Some t -> assoc (kw "block/title") (Wire.String t) block'
     | None -> block'
   in
   let block' =
     match order_list_type with
     | Some lt ->
-        ( kw "block.temp/order-list-index"
-        , (match Plain_value.order_list_index block lt with
+        assoc
+          (kw "block.temp/order-list-index")
+          (match Plain_value.order_list_index block lt with
            | Some w -> w
-           | None -> Wire.Nil) )
-        :: block'
+           | None -> Wire.Nil)
+          block'
     | None -> block'
   in
   Wire.Map block'
