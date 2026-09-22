@@ -49,9 +49,18 @@ let sync_conflicts_index_sql =
 
 let schema_ready : (string, unit) Hashtbl.t = Hashtbl.create 7
 
+(* every ":memory:" database shares the same filename — track readiness by
+   connection identity there *)
+let schema_ready_mem : Sqlite.db list ref = ref []
+
 let ensure_schema (db : Sqlite.db) =
   let f = Sqlite.filename db in
-  if not (Hashtbl.mem schema_ready f) then begin
+  let in_mem = f = ":memory:" in
+  let ready =
+    if in_mem then List.exists (fun d -> d == db) !schema_ready_mem
+    else Hashtbl.mem schema_ready f
+  in
+  if not ready then begin
     Sqlite.transaction db (fun () ->
         Sqlite.exec db ~sql:sync_meta_sql ~bind:[||];
         Sqlite.exec db ~sql:client_ops_sql ~bind:[||];
@@ -59,7 +68,8 @@ let ensure_schema (db : Sqlite.db) =
         Sqlite.exec db ~sql:pending_index_sql ~bind:[||];
         Sqlite.exec db ~sql:asset_index_sql ~bind:[||];
         Sqlite.exec db ~sql:sync_conflicts_index_sql ~bind:[||]);
-    Hashtbl.replace schema_ready f ()
+    if in_mem then schema_ready_mem := db :: !schema_ready_mem
+    else Hashtbl.replace schema_ready f ()
   end
 
 (* run! / rows / row helpers over the sync Sqlite surface *)
