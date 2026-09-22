@@ -23,9 +23,15 @@ let drop_key (k : string) (pairs : (Wire.t * Wire.t) list) =
 let assoc_wire k v pairs = (kw k, v) :: pairs
 
 (* otree/blocks->vec-tree-data — recursive :block/children assembly on
-   pulled maps; emits transit-ready wire maps. *)
-let vec_tree_data ~(include_root : bool) ~(root : pulled_entity option)
-    ~(root_id : entity_id) (blocks : pulled_entity list) : Wire.t list =
+   pulled maps; emits transit-ready wire maps. cljs opt
+   :keep-block-tx-id? keeps :block/tx-id on each emitted map
+   (default drops it). *)
+let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
+    ~(root : pulled_entity option) ~(root_id : entity_id)
+    (blocks : pulled_entity list) : Wire.t list =
+  let drop_tx_id pairs =
+    if keep_block_tx_id then pairs else drop_key "block/tx-id" pairs
+  in
   let parent_children : (entity_id, pulled_entity list) Hashtbl.t =
     Hashtbl.create 64
   in
@@ -49,7 +55,7 @@ let vec_tree_data ~(include_root : bool) ~(root : pulled_entity option)
     let children = children_of m.pulled_id (level + 1) in
     let pairs =
       match Ds_wire.transit_of_pulled m with
-      | Wire.Map pairs -> drop_key "block/tx-id" pairs
+      | Wire.Map pairs -> drop_tx_id pairs
       | _ -> []
     in
     Wire.Map
@@ -67,7 +73,7 @@ let vec_tree_data ~(include_root : bool) ~(root : pulled_entity option)
     | Some root_p ->
         let pairs =
           match Ds_wire.transit_of_pulled root_p with
-          | Wire.Map pairs -> drop_key "block/tx-id" pairs
+          | Wire.Map pairs -> drop_tx_id pairs
           | _ -> []
         in
         [ Wire.Map (assoc_wire "block/children" (Wire.List children) pairs) ]

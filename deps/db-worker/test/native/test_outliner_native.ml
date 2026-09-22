@@ -12,8 +12,8 @@
      deftests (the db-rebuild-block-refs-fn variant of the bulk test is
      not ported — no OCaml equivalent).
    - deps/outliner/test/logseq/outliner/tree_test.cljs —
-     blocks->vec-tree-data default-behavior asserts (:keep-block-tx-id?
-     option unported — vec_tree_data always drops block/tx-id).
+     blocks->vec-tree-data-preserves-caller-field-policy (both the
+     default and :keep-block-tx-id? variants).
    - deps/outliner/test/logseq/outliner/property_test.cljs — the 9
      deftests not covered by test_db_native.ml's endpoint group.
    - deps/outliner/test/logseq/outliner/validate_test.cljs —
@@ -1251,9 +1251,8 @@ let test_bulk_block_refs_preserve_datetime_and_content_rules () =
 (* ---------- tree_test.cljs ----------
 
    (deftest blocks->vec-tree-data-preserves-caller-field-policy ...)
-   The OCaml port (Outliner_tree.vec_tree_data) has no :keep-block-tx-id?
-   option — it always drops block/tx-id — so the renderer variant of the
-   cljs test is unported; the default-behavior asserts are kept. *)
+   covers both the default (tx-id dropped) and the renderer
+   (:keep-block-tx-id? true) call shapes. *)
 let test_blocks_vec_tree_data_preserves_caller_field_policy () =
   let child : pulled_entity =
     { pulled_id = 2
@@ -1274,7 +1273,16 @@ let test_blocks_vec_tree_data_preserves_caller_field_policy () =
          (Wire.get "block/level" (Wire.Map pairs) = Some (Wire.Int 1));
        check "blocks->vec-tree-data tx-id dropped"
          (Wire.get "block/tx-id" (Wire.Map pairs) = None)
-   | _ -> check "blocks->vec-tree-data vector" false)
+   | _ -> check "blocks->vec-tree-data vector" false);
+  let renderer_result =
+    Outliner_tree.vec_tree_data ~include_root:false
+      ~keep_block_tx_id:true ~root:None ~root_id:1 [ child ]
+  in
+  (match renderer_result with
+   | [ Wire.Map pairs ] ->
+       check "blocks->vec-tree-data keep-tx-id"
+         (Wire.get "block/tx-id" (Wire.Map pairs) = Some (Wire.Int 9))
+   | _ -> check "blocks->vec-tree-data keep-tx-id" false)
 
 (* ---------- property_test.cljs remainder ---------- *)
 
@@ -2138,7 +2146,7 @@ let pipeline_cases : unit Alcotest.test_case list =
     Alcotest.test_case "db-rebuild-block-refs-removes-recursive-self-ref" `Quick test_db_rebuild_block_refs_removes_recursive_self_ref;
     Alcotest.test_case "bulk-block-refs-preserve-datetime-and-content-rules" `Quick test_bulk_block_refs_preserve_datetime_and_content_rules ]
 
-(* tree_test.cljs (partial — :keep-block-tx-id? not ported) *)
+(* tree_test.cljs *)
 let tree_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "blocks->vec-tree-data-preserves-caller-field-policy" `Quick test_blocks_vec_tree_data_preserves_caller_field_policy ]
 
