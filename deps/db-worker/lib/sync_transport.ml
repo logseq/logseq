@@ -71,11 +71,16 @@ let uuid_like_to_string = function
        | _ -> Wire.Map kvs)
   | v -> v
 
+(* cljs (mapv uuid-like->string (or ids [])) — nil -> [], any other
+   non-seq value throws, same failure channel as a coerce rejection *)
 let normalize_string_list = function
-  | Wire.Array xs | Wire.List xs ->
+  | Wire.Array xs | Wire.List xs | Wire.Set xs ->
       Wire.Array (List.map uuid_like_to_string xs)
   | Wire.Nil -> Wire.Array []
-  | v -> v
+  | v ->
+      raise
+        (Db_sync_coerce.Coerce_error
+           ("tx/reject-field-not-seqable", v))
 
 (* normalize-legacy-tx-reject: stringify uuid-likes before schema coercion *)
 let normalize_legacy_tx_reject (m : Wire.t) : Wire.t =
@@ -139,7 +144,16 @@ let parse_message (raw : string) : Wire.t option =
   | v -> Some v
   | exception _ -> None
 
-(* tx/batch: stringify uuid tx-ids before JSON encoding *)
+(* cljs (str tx-id) — stringify any truthy tx-id before JSON encoding *)
+let str_of_wire (v : Wire.t) : string =
+  match v with
+  | Wire.String s | Wire.Uuid s | Wire.Keyword s -> s
+  | Wire.Int n -> string_of_int n
+  | Wire.Int64 n -> Int64.to_string n
+  | Wire.Float f -> Printf.sprintf "%g" f
+  | Wire.Bool b -> if b then "true" else "false"
+  | w -> Transit_codec.to_string w
+
 let normalize_tx_batch_ids = function
   | Wire.Map kvs as m ->
       (match Wire.get "type" m, Wire.get "txs" m with
@@ -151,7 +165,9 @@ let normalize_tx_batch_ids = function
                    (List.map
                       (fun entry ->
                          match Wire.get "tx-id" entry with
-                         | Some (Wire.Uuid u) ->
+                         | Some (Wire.Nil) | Some (Wire.Bool false)
+                         | None -> entry
+                         | Some tx_id ->
                              (match entry with
                               | Wire.Map kvs ->
                                   Wire.Map
@@ -159,11 +175,10 @@ let normalize_tx_batch_ids = function
                                        (fun (k, v) ->
                                           match k with
                                           | Wire.Keyword "tx-id" ->
-                                              (k, Wire.String u)
+                                              (k, Wire.String (str_of_wire tx_id))
                                           | _ -> (k, v))
                                        kvs)
-                              | _ -> entry)
-                         | _ -> entry)
+                              | _ -> entry))
                       entries)
              | v -> v
            in
