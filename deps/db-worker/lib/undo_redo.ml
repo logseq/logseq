@@ -397,10 +397,12 @@ let gen_undo_ops repo ~(tx_data : datom list) ~(tx_meta : (string * Wire.t) list
     !history_action_ops_provider repo tx_id
   in
   let forward_ops =
-    Option.bind pending_ops (List.assoc_opt "forward-outliner-ops")
+    Option.bind pending_ops
+      (List.assoc_opt "db-sync/forward-outliner-ops")
   in
   let inverse_ops =
-    Option.bind pending_ops (List.assoc_opt "inverse-outliner-ops")
+    Option.bind pending_ops
+      (List.assoc_opt "db-sync/inverse-outliner-ops")
   in
   if
     local_tx && Option.is_some outliner_op && gen_undo
@@ -443,12 +445,15 @@ let gen_undo_ops repo ~(tx_data : datom list) ~(tx_meta : (string * Wire.t) list
       ; ( "retracted-ids",
           Wire.Set (List.map (fun i -> Wire.Int i) retracted_ids) )
       ]
+      (* cljs puts both keys in data with nil values when the row has none;
+         an assoc-list nil entry is indistinguishable from absent, so only
+         non-nil values are kept *)
       @ (match forward_ops with
-         | Some v -> [ ("db-sync/forward-outliner-ops", v) ]
-         | None -> [])
+         | Some (Wire.Nil) | None -> []
+         | Some v -> [ ("db-sync/forward-outliner-ops", v) ])
       @ (match inverse_ops with
-         | Some v -> [ ("db-sync/inverse-outliner-ops", v) ]
-         | None -> [])
+         | Some (Wire.Nil) | None -> []
+         | Some v -> [ ("db-sync/inverse-outliner-ops", v) ])
     in
     let op : undo_op =
       (match editor_info with

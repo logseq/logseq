@@ -175,7 +175,7 @@ let with_worker_conns f =
   ignore
     (transact_conn_string conn
        (Printf.sprintf
-          "[{:block/uuid %s :block/title \"page 1\" :block/tags [:logseq.class/Page] :block/created-at %Ld :block/updated-at %Ld} \
+          "[{:block/uuid %s :block/title \"page 1\" :block/name \"page 1\" :block/tags [:logseq.class/Page] :block/created-at %Ld :block/updated-at %Ld} \
            {:block/uuid %s :block/title \"task\" :block/page [:block/uuid %s] :block/parent [:block/uuid %s] :block/order \"a1\" :block/created-at %Ld :block/updated-at %Ld} \
            {:block/uuid %s :block/title \"parent\" :block/page [:block/uuid %s] :block/parent [:block/uuid %s] :block/order \"a2\" :block/created-at %Ld :block/updated-at %Ld} \
            {:block/uuid %s :block/title \"child\" :block/page [:block/uuid %s] :block/parent {:db/id [:block/uuid %s]} :block/order \"a3\" :block/created-at %Ld :block/updated-at %Ld}]"

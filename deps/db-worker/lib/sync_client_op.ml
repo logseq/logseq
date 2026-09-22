@@ -408,9 +408,10 @@ let history_action_ops_by_tx_id repo (tx_id : string)
     : (string * Wire.t) list option =
   match get_local_tx_entry repo tx_id with
   | Some e ->
+      let ops_or_nil = function [] -> Wire.Nil | ops -> Wire.Array ops in
       Some
-        [ "db-sync/forward-outliner-ops", Wire.Array e.forward_outliner_ops
-        ; "db-sync/inverse-outliner-ops", Wire.Array e.inverse_outliner_ops ]
+        [ "db-sync/forward-outliner-ops", ops_or_nil e.forward_outliner_ops
+        ; "db-sync/inverse-outliner-ops", ops_or_nil e.inverse_outliner_ops ]
   | None -> None
 
 (* ---- asset ops ---- *)

@@ -1665,6 +1665,9 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
     match bs with
     | [] -> List.rev acc
     | block :: rest ->
+        (* cljs (get uuids (:block/uuid block)) — the uuids zipmap has an
+           entry for every block, so a block with a missing/nil :block/uuid
+           still gets the uuid minted for the nil key, not a passthrough *)
         let uuid' =
           match mget_uuid block "block/uuid" with
           | Some u -> List.assoc_opt u uuid_map
@@ -1892,7 +1895,13 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
             match e_opt with
             | Some e ->
                 let base =
+                  (* cljs (merge (into {} e) {:db/id (:db/id e) :block/title
+                     (or raw-title title)} b) — the merged map's :db/id is a
+                     plain int, not an entity marker, so later de/entity?
+                     checks must not treat merged blocks as entities *)
                   Block_map.of_entity e
+                  |> fun m ->
+                  Block_map.put m "db/id" (Int e.id)
                   |> fun m ->
                   (match Ldb.string_value e "block/raw-title" with
                    | Some rt -> Block_map.put m "block/title" (String rt)
