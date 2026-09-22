@@ -120,6 +120,7 @@ let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
 let close_db_aux repo =
   Worker_state.drop_datascript_conn repo;
   Worker_state.drop_pending_local_tx_count repo;
+  Endpoint_search.clear_search_index_builds repo;
   (match Worker_state.sqlite_conn repo with
    | Some db ->
        Sqlite.close db;
