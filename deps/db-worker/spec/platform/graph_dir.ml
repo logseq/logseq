@@ -43,39 +43,30 @@ let encode_graph_dir_name (graph_name : string) : string =
   |> fun s -> str_replace_all s "~" "%7E"
   |> fun s -> str_replace_all s "%" "~"
 
-(* repo->encoded-graph-dir-name: strip the logseq_db_ prefix first. *)
 let db_version_prefix = "logseq_db_"
 
-let repo_to_encoded_graph_dir_name (repo : string) : string option =
-  let key =
-    let trimmed = String.trim repo in
-    if
-      String.length trimmed > String.length db_version_prefix
-      && String.sub trimmed 0 (String.length db_version_prefix)
-         = db_version_prefix
-    then
-      String.sub trimmed
-        (String.length db_version_prefix)
-        (String.length trimmed - String.length db_version_prefix)
-    else trimmed
-  in
-  if key = "" then None else Some (encode_graph_dir_name key)
-
-(* repo->graph-dir-key — leading db-version-prefix strip + not-empty. *)
+(* repo->graph-dir-key — common-config/strip-leading-db-version-prefix
+   trims before AND after the leading prefix strip; not-empty. *)
 let repo_to_graph_dir_key (repo : string) : string option =
   let trimmed = String.trim repo in
   let key =
-    if
-      String.length trimmed > String.length db_version_prefix
-      && String.sub trimmed 0 (String.length db_version_prefix)
-         = db_version_prefix
-    then
-      String.sub trimmed
-        (String.length db_version_prefix)
-        (String.length trimmed - String.length db_version_prefix)
-    else trimmed
+    String.trim
+      (if
+         String.length trimmed > String.length db_version_prefix
+         && String.sub trimmed 0 (String.length db_version_prefix)
+            = db_version_prefix
+       then
+         String.sub trimmed
+           (String.length db_version_prefix)
+           (String.length trimmed - String.length db_version_prefix)
+       else trimmed)
   in
   if key = "" then None else Some key
+
+(* repo->encoded-graph-dir-name = repo->graph-dir-key |>
+   encode-graph-dir-name *)
+let repo_to_encoded_graph_dir_name (repo : string) : string option =
+  Option.map encode_graph_dir_name (repo_to_graph_dir_key repo)
 
 (* repo-identity / same-repo? — canonical repo comparison used by the
    daemon's bound-repo check. *)

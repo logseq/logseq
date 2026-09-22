@@ -194,8 +194,6 @@ let test_validate_block_title_unique_for_pages () =
   check "validate-block-title-unique-for-pages class entity" true
 
 (* ---------- deps/outliner/test/logseq/outliner/recycle_test.cljs ---------- *)
-(* The three apply-ops deftests are skipped: outliner.op/apply-ops! is not
-   ported. *)
 
 (* cljs (recycle-page db) *)
 let recycle_page_of db = Outliner_recycle.recycle_page db
