@@ -422,7 +422,18 @@ let initial_data_idents_edn =
     {:db/ident :logseq.property/query}
     {:db/ident :logseq.property/used-template}
     {:db/ident :logseq.property.comments/blocks}
-    {:db/ident :block/tags}]"
+    {:db/ident :block/tags}
+    {:db/ident :logseq.class/Tag}
+    {:db/ident :logseq.class/Root}
+    {:db/ident :logseq.class/Page}
+    {:db/ident :logseq.class/Property}
+    {:db/ident :logseq.class/Journal}
+    {:db/ident :logseq.class/Task}
+    {:db/ident :logseq.class/Card}
+    {:db/ident :logseq.class/Status}
+    {:db/ident :logseq.class/Query}
+    {:db/ident :logseq.class/Comments}
+    {:db/ident :logseq.class/Comment}]"
 
 (* cljs (db-test/create-conn) initial data: every built-in class/property
    is a full page entity (uuid + name + title + tags + built-in? +
@@ -430,74 +441,7 @@ let initial_data_idents_edn =
    emit. Only the ident entities the fixture machinery references are
    emitted. *)
 let initial_data_edn =
-  "[{:db/ident :logseq.class/Tag
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000201\"
-     :block/name \"tag\" :block/title \"Tag\"
-     :block/created-at 0 :block/updated-at 0
-     :logseq.property/built-in? true}
-    {:db/ident :logseq.class/Root
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000202\"
-     :block/name \"root tag\" :block/title \"Root Tag\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Page
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000203\"
-     :block/name \"page\" :block/title \"Page\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Root}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Property
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000204\"
-     :block/name \"property\" :block/title \"Property\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Root}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Journal
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000205\"
-     :block/name \"journal\" :block/title \"Journal\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Page}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Task
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000101\"
-     :block/name \"task\" :block/title \"Task\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Root}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Card
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000102\"
-     :block/name \"card\" :block/title \"Card\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Root}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.class/Status
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000206\"
-     :block/name \"status\" :block/title \"Status\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Tag}
-     :logseq.property.class/extends #{:logseq.class/Root}
-     :logseq.property/built-in? true
-
-     }
-    {:db/ident :logseq.property/background-color
+  "[{:db/ident :logseq.property/background-color
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000103\"
      :block/name \"background color\" :block/title \"Background color\"
      :block/created-at 0 :block/updated-at 0
@@ -551,6 +495,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :entity
 :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property/deleted-at
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000306\"
@@ -560,6 +505,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :datetime
 :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property/cardinality
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000307\"
@@ -578,6 +524,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :default
 :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property.class/enable-bidirectional?
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000309\"
@@ -587,6 +534,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :checkbox
 :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property.class/bidirectional-property-title
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000310\"
@@ -596,6 +544,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :string
 :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property.journal/title-format
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000311\"
@@ -607,6 +556,15 @@ let initial_data_edn =
 :db/index true
      :logseq.property/public? false
      }
+    {:db/ident :logseq.property/created-from-property
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000316\"
+     :block/name \"created from property\" :block/title \"Created from property\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     }
     {:db/ident :logseq.property/status
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"
      :block/name \"status\" :block/title \"Status\"
@@ -615,6 +573,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :default
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property/status.backlog
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a0\"
@@ -684,6 +643,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :entity
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property.class/properties
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000314\"
@@ -693,6 +653,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :property
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property.class/extends
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000315\"
@@ -702,15 +663,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :class
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true
-     }
-    {:db/ident :logseq.property/created-from-property
-     :block/uuid #uuid \"00000003-0000-4000-8000-000000000316\"
-     :block/name \"created from property\" :block/title \"Created from property\"
-     :block/created-at 0 :block/updated-at 0
-:block/tags #{:logseq.class/Property}
-     :logseq.property/built-in? true
-     :logseq.property/type :entity
-:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? true
      }
     {:db/ident :logseq.property/closed-values
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000317\"
@@ -729,6 +682,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :any
 :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property.history/block
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000319\"
@@ -774,6 +728,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :node
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property.reaction/emoji-id
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000324\"
@@ -783,6 +738,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :string
 :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property/view-for
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000325\"
@@ -792,6 +748,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :node
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property.view/type
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000326\"
@@ -801,6 +758,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :default
 :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :logseq.property.view/feature-type
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000327\"
@@ -810,6 +768,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :keyword
 :db/index true
+     :logseq.property/public? false
      }
     {:db/ident :block/alias
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000328\"
@@ -869,6 +828,7 @@ let initial_data_edn =
      :logseq.property/built-in? true
      :logseq.property/type :node
 :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
      :logseq.property/hide? true
      }
     {:db/ident :logseq.property.comments/blocks
@@ -883,6 +843,73 @@ let initial_data_edn =
      }
     {:db/ident :logseq.property/empty-placeholder
      :block/uuid #uuid \"00000004-1267-0549-0045-000000000000\"}
+    {:db/ident :logseq.class/Tag
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000201\"
+     :block/name \"tag\" :block/title \"Tag\"
+     :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true}
+    {:db/ident :logseq.class/Root
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000202\"
+     :block/name \"root tag\" :block/title \"Root Tag\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Page
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000203\"
+     :block/name \"page\" :block/title \"Page\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Property
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000204\"
+     :block/name \"property\" :block/title \"Property\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Journal
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000205\"
+     :block/name \"journal\" :block/title \"Journal\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Page}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Task
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000101\"
+     :block/name \"task\" :block/title \"Task\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Card
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000102\"
+     :block/name \"card\" :block/title \"Card\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+
+     }
+    {:db/ident :logseq.class/Status
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000206\"
+     :block/name \"status\" :block/title \"Status\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+
+     }
     {:db/ident :logseq.class/Query
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000207\"
      :block/name \"query\" :block/title \"Query\"
@@ -2171,12 +2198,6 @@ let initial_data_ident = initial_data_ident
    schema check on the slow path rejects ref-typed db/cardinality values
    produced by the edn parser. *)
 let initial_data_ops : tx_op list =
-  let ref_attr ?(card = "db.cardinality/many") ident =
-    initial_data_ident ident
-      [ "db/valueType", One_value (Keyword "db.type/ref")
-      ; "db/cardinality", One_value (Keyword card)
-      ]
-  in
   (* tempid-based refs: same-tx ident lookups don't resolve *)
   (* classes and properties are pages: page_attr_checks (name/title) +
      page_checks (uuid/created-at/updated-at) apply — match cljs built-ins
@@ -2260,6 +2281,19 @@ let initial_data_ops : tx_op list =
               @ extra)
       }
   in
+  let file_ent path =
+    (* cljs sqlite-util/build-initial-files shape *)
+    Datascript.Entity
+      { db_id = Some (Temp_id ("file-" ^ path))
+      ; attrs =
+          [ "block/uuid",
+            One_value (Uuid (Common_uuid.gen_uuid "builtin-block-uuid" path))
+          ; "file/path", One_value (String path)
+          ; "file/content", One_value (String "")
+          ; "file/created-at", One_value (Instant 1577836800000L)
+          ; "file/last-modified-at", One_value (Instant 1577836800000L) ]
+      }
+  in
   [ initial_data_ident "logseq.property" [] ]
   @ [ class_ident "logseq.class/Root"
     ; class_ident "logseq.class/Tag"
@@ -2301,15 +2335,19 @@ let initial_data_ops : tx_op list =
     ; property_ident ~typ:"keyword" "logseq.property/type"
     ; property_ident ~typ:"checkbox" "logseq.property/hide?"
     ; property_ident ~typ:"entity" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property/default-value"
     ; property_ident ~typ:"datetime" "logseq.property/deleted-at"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"keyword" "logseq.property/cardinality"
     ; property_ident ~typ:"checkbox"
         "logseq.property.class/enable-bidirectional?"
     ; property_ident ~typ:"string"
         "logseq.property.class/bidirectional-property-title"
     ; property_ident ~typ:"string" "logseq.property.journal/title-format"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"entity" ~ref_:true "logseq.property/classes"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"property" ~ref_:true
         "logseq.property.class/properties"
     ; property_ident ~typ:"class" ~ref_:true
@@ -2319,6 +2357,7 @@ let initial_data_ops : tx_op list =
     ; property_ident ~typ:"node" ~ref_:true
         "logseq.property/closed-values"
     ; property_ident ~typ:"any" ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property/value"
     ; (* cljs prod schema indexes logseq.property/public? — pipeline
          reference-attrs reads it through :avet *)
@@ -2329,14 +2368,19 @@ let initial_data_ops : tx_op list =
     ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
         "logseq.property/query"
     ; property_ident ~typ:"node" ~ref_:true
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property.comments/blocks"
     ; property_ident ~typ:"keyword" "logseq.property.node/display-type"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"class" ~ref_:true
         "logseq.property/template-applied-to"
     ; property_ident ~typ:"string" "logseq.property.reaction/emoji-id"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property.reaction/target"
     ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property/view-for"
     ; property_ident ~typ:"keyword" "logseq.property/view-context"
     ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
@@ -2348,22 +2392,30 @@ let initial_data_ops : tx_op list =
     ; property_ident ~typ:"default" "logseq.property.history/scalar-value"
     ; property_ident ~typ:"checkbox" "logseq.property/enable-history?"
     ; property_ident ~typ:"string" "logseq.property.code/lang"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
         ~extra:
           [ "logseq.property/enable-history?", One_value (Bool true) ]
         "logseq.property/status"
     ; property_ident ~typ:"datetime" "logseq.property/scheduled"
     ; property_ident ~typ:"number" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property.repeat/recur-frequency"
     ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property.repeat/recur-unit"
     ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property.repeat/repeat-type"
     ; property_ident ~typ:"checkbox" "logseq.property.repeat/repeated?"
     ; property_ident ~typ:"string" "logseq.property.asset/type"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"raw-number" "logseq.property.asset/size"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"string" "logseq.property.asset/checksum"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:[ "logseq.property/public?", One_value (Bool false) ]
         "logseq.property/used-template"
     ; closed_value "logseq.property/status" "logseq.property/status.backlog"
     ; closed_value "logseq.property/status" "logseq.property/status.todo"
@@ -2376,10 +2428,23 @@ let initial_data_ops : tx_op list =
         "logseq.property.repeat/recur-unit.day"
     ; closed_value "logseq.property.repeat/repeat-type"
         "logseq.property.repeat/repeat-type.double-plus"
-    ; (* block/tags ident entity — cljs update-properties-in-ents wraps the
-         value into a [property v opts] tuple for validation; ident must
-         redeclare its schema or the install wipes the attr spec *)
-      ref_attr "block/tags"
+    ; (* block/tags is a cljs built-in property (type :class, cardinality
+         many, :attribute :block/tags). update-properties-in-ents wraps the
+         tag value into a [property v opts] tuple whose dispatch reads
+         :logseq.property/type off this entity, so it must carry the full
+         property shape like cljs build-new-property emits *)
+      property_ident ~typ:"class" ~ref_:true
+        ~extra:[ "db/index", One_value (Bool true) ]
+        "block/tags"
+    ; (* cljs build-initial-files — file entities are part of
+         build-db-initial-data; :file/path is unique-identity, so the
+         importer's default-save-file upserts onto config.edn, which must
+         already carry block/uuid + file/created-at like cljs *)
+      file_ent "logseq/config.edn"
+    ; file_ent "logseq/custom.css"
+    ; file_ent "logseq/custom.js"
+    ; file_ent "logseq/publish.css"
+    ; file_ent "logseq/publish.js"
     ]
 
 
