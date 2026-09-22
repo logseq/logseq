@@ -145,3 +145,337 @@ let () =
     get_comment_threads_for_block;
   Dispatcher.register "thread-api/get-comment-thread-block-uuids"
     get_comment_thread_block_uuids
+
+(* ---- write side: ensure-comments-area / delete-comment ---- *)
+
+let tagged_with (block : entity) (ident : string) : bool =
+  Ldb.has_tag block ident
+
+let comments_area_p (block : entity) : bool =
+  tagged_with block comments_tag_ident
+
+let comment_block_p (block : entity) : bool =
+  tagged_with block "logseq.class/Comment"
+  ||
+  (match Ldb.ref_ent block "block/parent" with
+   | Some p -> comments_area_p p
+   | None -> false)
+
+let comment_target_block_p (block : entity) : bool =
+  not (comments_area_p block || comment_block_p block)
+
+let block_uuid_of (block : entity) : string option =
+  match Ldb.value block "block/uuid" with
+  | Some (Uuid u) -> Some u
+  | _ -> None
+
+let block_lookup_ref (block : entity) : Wire.t =
+  match block_uuid_of block with
+  | Some u -> Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+  | None -> Wire.Nil
+
+let comments_area_child (block : entity) : entity option =
+  List.find_opt comments_area_p
+    (Ldb.sort_by_order (Ldb.get_children block))
+
+let comments_area_title (block : entity) : string =
+  if Ldb.is_page block then "Comments on this page" else "Comments"
+
+let block_ref_uuid (block : entity) : string option = block_uuid_of block
+
+(* targets of an existing comments-area entity: live :comments/blocks
+   uuids as a set *)
+let comments_area_target_uuids (comments_area : entity) : string list =
+  Ldb.ref_ents comments_area comments_blocks_property
+  |> List.filter
+       (fun e -> not (Ldb.truthy (Ldb.value e "logseq.property/deleted-at")))
+  |> List.filter_map block_ref_uuid
+  |> List.sort_uniq String.compare
+
+type comments_area_resolution =
+  | Res_existing of entity * string option  (* area, missing target lookup uuid *)
+  | Res_insert of string * Wire.t           (* title, opts map *)
+  | Res_single of string                    (* single block: recurse as single *)
+
+(* resolve-comments-area — single block *)
+let resolve_comments_area db (block_ref : Wire.t) : comments_area_resolution option =
+  match block_ref_entity db (Ds_wire.value_of_transit block_ref) with
+  | None -> None
+  | Some block -> (
+      match comments_area_child block with
+      | Some comments_area ->
+          let missing_target =
+            if Ldb.ref_ents comments_area comments_blocks_property = [] then
+              block_uuid_of block
+            else None
+          in
+          Some (Res_existing (comments_area, missing_target))
+      | None ->
+          let insert_opts =
+            Wire.Map
+              [ (kw "block-uuid",
+                 (match block_uuid_of block with
+                  | Some u -> Wire.Uuid u
+                  | None -> Wire.Nil))
+              ; (kw "edit-block?", Wire.Bool false)
+              ; ( kw "other-attrs",
+                  Wire.Map
+                    [ (kw "block/tags", Wire.Set [ kw comments_tag_ident ])
+                    ; ( kw comments_blocks_property
+                      , Wire.Set [ block_lookup_ref block ] ) ] )
+              ; ( if Ldb.is_page block then (kw "start?", Wire.Bool true)
+                  else (kw "end?", Wire.Bool true) ) ]
+          in
+          Some (Res_insert (comments_area_title block, insert_opts)))
+
+(* resolve-comments-area-for-blocks — multi *)
+let resolve_comments_area_for_blocks db (block_refs : Wire.t list)
+    : comments_area_resolution option =
+  let blocks =
+    List.filter_map
+      (fun r -> block_ref_entity db (Ds_wire.value_of_transit r))
+      block_refs
+    |> List.filter comment_target_block_p
+  in
+  match List.rev blocks with
+  | [] -> None
+  | last_block :: _ -> (
+      if List.length blocks = 1 then
+        (* :single — delegate to single ensure *)
+        Option.map (fun u -> Res_single u) (block_uuid_of last_block)
+      else
+        let target_uuids =
+          List.sort_uniq String.compare
+            (List.filter_map block_uuid_of blocks)
+        in
+        let existing =
+          match blocks with
+          | first :: _ ->
+              List.find_opt
+                (fun (comments_area : entity) ->
+                   List.sort_uniq String.compare
+                     (comments_area_target_uuids comments_area)
+                   = target_uuids)
+                (Ldb.ref_ents first "logseq.property.comments/_blocks")
+          | [] -> None
+        in
+        match existing with
+        | Some comments_area -> Some (Res_existing (comments_area, None))
+        | None ->
+            let insert_opts =
+              Wire.Map
+                [ (kw "block-uuid",
+                   (match block_uuid_of last_block with
+                    | Some u -> Wire.Uuid u
+                    | None -> Wire.Nil))
+                ; (kw "sibling?", Wire.Bool true)
+                ; (kw "edit-block?", Wire.Bool false)
+                ; ( kw "other-attrs",
+                    Wire.Map
+                      [ (kw "block/tags", Wire.Set [ kw comments_tag_ident ])
+                      ; ( kw comments_blocks_property
+                        , Wire.Set (List.map block_lookup_ref blocks) ) ] ) ]
+            in
+            Some (Res_insert ("Comments", insert_opts)))
+
+(* insert-comments-area! — builds the area block and applies
+   insert-blocks via apply-ops! *)
+let insert_comments_area (conn : conn) (title : string) (opts : Wire.t)
+    : Wire.t option =
+  let db = Conn.db conn in
+  let target =
+    Option.bind (Cljs_map.get opts "block-uuid")
+      (fun w -> block_ref_entity db (Ds_wire.value_of_transit w))
+  in
+  match target with
+  | None -> None
+  | Some target ->
+      let children =
+        if Cljs_map.get opts "end?" = Some (Wire.Bool true) then
+          Ldb.sort_by_order (Ldb.get_children target)
+        else []
+      in
+      let insert_target, sibling =
+        if Cljs_map.get opts "sibling?" = Some (Wire.Bool true) then
+          (target, true)
+        else
+          match List.rev children with
+          | last :: _ -> (last, true)
+          | [] -> (target, false)
+      in
+      let comments_area_uuid = Common_uuid.new_block_id () in
+      let comments_area =
+        let base =
+          [ (kw "block/title", Wire.String title)
+          ; (kw "block/uuid", Wire.Uuid comments_area_uuid) ]
+        in
+        let other =
+          match Cljs_map.get opts "other-attrs" with
+          | Some (Wire.Map kvs) -> kvs
+          | _ -> []
+        in
+        Wire.Map (base @ other)
+      in
+      let insert_opts =
+        Wire.Map
+          [ (kw "sibling?", Wire.Bool sibling)
+          ; (kw "keep-uuid?", Wire.Bool true) ]
+      in
+      let target_uuid =
+        match block_uuid_of insert_target with
+        | Some u -> Wire.Uuid u
+        | None -> Wire.Nil
+      in
+      ignore
+        (Outliner_op.apply_ops conn
+           (Wire.Array
+              [ Wire.Array
+                  [ kw "insert-blocks"
+                  ; Wire.Array
+                      [ Wire.Array [ comments_area ]; target_uuid; insert_opts ] ] ])
+           Wire.Nil);
+      Option.bind
+        (entity (Conn.db conn) (Lookup_ref ("block/uuid", Uuid comments_area_uuid)))
+        (block_map (Conn.db conn))
+
+(* ensure-comments-area! *)
+let rec ensure_comments_area conn (block_ref : Wire.t) : Wire.t option =
+  match resolve_comments_area (Conn.db conn) block_ref with
+  | Some (Res_existing (comments_area, missing_target)) ->
+      (match missing_target with
+       | Some uuid ->
+           let target_ref =
+             match block_uuid_of comments_area with
+             | Some u -> Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+             | None -> Wire.Nil
+           in
+           ignore
+             (Db_transact.transact conn
+                [ Wire.Array
+                    [ kw "db/add"; target_ref
+                    ; kw comments_blocks_property
+                    ; Wire.Array [ kw "block/uuid"; Wire.Uuid uuid ] ] ]
+                [ ("outliner-op", Keyword "save-block") ])
+       | None -> ());
+      (match
+         Option.bind (block_uuid_of comments_area)
+           (fun u ->
+             entity (Conn.db conn) (Lookup_ref ("block/uuid", Uuid u)))
+       with
+       | Some e -> block_map (Conn.db conn) e
+       | None -> block_map (Conn.db conn) comments_area)
+  | Some (Res_insert (title, opts)) ->
+      insert_comments_area conn title opts
+  | Some (Res_single uuid) ->
+      ensure_comments_area conn (Wire.Uuid uuid)
+  | None -> None
+
+(* ensure-comments-area-for-blocks! *)
+let ensure_comments_area_for_blocks conn (block_refs : Wire.t list)
+    : Wire.t option =
+  match resolve_comments_area_for_blocks (Conn.db conn) block_refs with
+  | Some (Res_single uuid) ->
+      ensure_comments_area conn
+        (Wire.Uuid uuid)
+  | Some (Res_existing (comments_area, _)) ->
+      block_map (Conn.db conn) comments_area
+  | Some (Res_insert (title, opts)) ->
+      insert_comments_area conn title opts
+  | None -> None
+
+(* delete-comment! *)
+let delete_comment conn (comment_block_ref : Wire.t) : unit =
+  let db = Conn.db conn in
+  match block_ref_entity db (Ds_wire.value_of_transit comment_block_ref) with
+  | None -> ()
+  | Some comment_block ->
+      let targets =
+        match Ldb.ref_ent comment_block "block/parent" with
+        | Some comments_area when comments_area_p comments_area ->
+            let live_children =
+              List.filter
+                (fun c ->
+                  not (Ldb.truthy (Ldb.value c "logseq.property/deleted-at")))
+                (Ldb.get_children comments_area)
+            in
+            if List.length live_children <= 1 then
+              List.filter_map (block_map_with_children db)
+                [ comments_area ]
+            else List.filter_map (block_map db) [ comment_block ]
+        | _ -> List.filter_map (block_map db) [ comment_block ]
+      in
+      let target_uuids =
+        List.filter_map
+          (fun w ->
+            match w with
+            | Wire.Map kvs -> (
+                match
+                  List.find_opt
+                    (fun (k, _) ->
+                      match k with
+                      | Wire.Keyword "block/uuid" -> true
+                      | _ -> false)
+                    kvs
+                with
+                | Some (_, Wire.Uuid u) -> Some (Wire.Uuid u)
+                | _ -> None)
+            | _ -> None)
+          targets
+      in
+      (match target_uuids with
+       | [] -> ()
+       | _ ->
+           ignore
+             (Outliner_op.apply_ops conn
+                (Wire.Array
+                   [ Wire.Array
+                       [ kw "delete-blocks"
+                       ; Wire.Array
+                           [ Wire.Array target_uuids; Wire.Map [] ] ] ])
+                Wire.Nil))
+
+let () =
+  Dispatcher.register "thread-api/ensure-comments-area" (fun args ->
+      with_conn args (fun _db ->
+          match Worker_state.datascript_conn
+                  (match arg args 0 with
+                   | Some (Wire.String s) -> s
+                   | _ -> invalid_arg "repo")
+          with
+          | Some conn ->
+              Db_worker_effect.pure
+                (Option.value
+                   (ensure_comments_area conn
+                      (Option.value (arg args 1) ~default:Wire.Nil))
+                   ~default:Wire.Nil)
+          | None -> Db_worker_effect.pure Wire.Nil));
+  Dispatcher.register "thread-api/ensure-comments-area-for-blocks"
+    (fun args ->
+      with_conn args (fun _db ->
+          match Worker_state.datascript_conn
+                  (match arg args 0 with
+                   | Some (Wire.String s) -> s
+                   | _ -> invalid_arg "repo")
+          with
+          | Some conn ->
+              let block_refs =
+                match arg args 1 with
+                | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+                | _ -> []
+              in
+              Db_worker_effect.pure
+                (Option.value
+                   (ensure_comments_area_for_blocks conn block_refs)
+                   ~default:Wire.Nil)
+          | None -> Db_worker_effect.pure Wire.Nil));
+  Dispatcher.register "thread-api/delete-comment" (fun args ->
+      with_conn args (fun _db ->
+          match Worker_state.datascript_conn
+                  (match arg args 0 with
+                   | Some (Wire.String s) -> s
+                   | _ -> invalid_arg "repo")
+          with
+          | Some conn ->
+              delete_comment conn (Option.value (arg args 1) ~default:Wire.Nil);
+              Db_worker_effect.pure Wire.Nil
+          | None -> Db_worker_effect.pure Wire.Nil))
