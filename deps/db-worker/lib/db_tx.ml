@@ -34,14 +34,18 @@ type conn_flags =
   ; mutable skip_validate : bool
   }
 
-let conn_flags_tbl : (conn, conn_flags) Hashtbl.t = Hashtbl.create 8
+(* Flags are looked up by physical identity (==): a structural Hashtbl on
+   conn is unsound because conn's contents mutate as the db changes,
+   changing its hash and losing the flags between calls. Few conns exist
+   (live + temp), so an assoc list suffices. *)
+let conn_flags_list : (conn * conn_flags) list ref = ref []
 
 let flags_of (conn : conn) : conn_flags =
-  match Hashtbl.find_opt conn_flags_tbl conn with
-  | Some f -> f
+  match List.find_opt (fun (c, _) -> c == conn) !conn_flags_list with
+  | Some (_, f) -> f
   | None ->
     let f = { batch_tx = false; skip_store = false; skip_validate = false } in
-    Hashtbl.replace conn_flags_tbl conn f;
+    conn_flags_list := (conn, f) :: !conn_flags_list;
     f
 
 (* ---- ldb/transact! tx-data normalization ---- *)
@@ -220,6 +224,7 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           (match !transact_invalid_callback with
            | Some f -> f report errors
            | None -> ());
+
           raise
             (Invalid_tx
                (Printf.sprintf
@@ -269,6 +274,11 @@ let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
 let batch_transact_with_temp_conn ?(tx_meta : tx_meta = []) (conn : conn)
     (f : conn -> unit) : tx_report option =
   let temp = conn_from_db (Conn.db conn) in
+  (* cljs swap! temp-conn assoc :batch-tx? :skip-store? :skip-validate-db? *)
+  let fl = flags_of temp in
+  fl.batch_tx <- true;
+  fl.skip_store <- true;
+  fl.skip_validate <- true;
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
