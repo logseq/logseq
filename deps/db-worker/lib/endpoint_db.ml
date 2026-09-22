@@ -29,9 +29,10 @@ let q args =
              | query_t :: rest ->
                  let query_edn = Ds_wire.edn_text_of_arg query_t in
                  let inputs' = List.map Ds_wire.query_arg_of_transit rest in
-                 let rows = Datascript.q_string ~inputs:inputs' (Datascript.db conn) query_edn in
-                 Db_worker_effect.pure
-                   (Wire.Array (List.map (fun row -> Wire.Array (List.map Ds_wire.transit_of_query_result row)) rows)))
+                 let output =
+                   Datascript.q_return_map_string ~inputs:inputs' (Datascript.db conn) query_edn
+                 in
+                 Db_worker_effect.pure (Ds_wire.wire_of_query_output output))
         | _ -> invalid_arg "q expects an inputs vector"))
 
 let () = Dispatcher.register "thread-api/q" q
