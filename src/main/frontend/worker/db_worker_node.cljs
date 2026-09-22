@@ -4,6 +4,7 @@
             ["http" :as http]
             [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
+            [goog.object :as gobj]
             [logseq.db-worker.daemon :as daemon]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
@@ -652,8 +653,20 @@
                              (p/then (fn [_] (throw error))))))))
           (p/catch (fn [e] (throw e)))))))
 
+(defn- load-ocaml-db-worker!
+  "Loads the optional OCaml db-worker node bundle (deps/db-worker) as
+   `globalThis.LogseqDbWorker` when `db-worker-ocaml.cjs` sits next to this
+   script, and calls its `init()`. Absent bundle keeps the cljs worker
+   unchanged; a present-but-broken bundle fails fast."
+  []
+  (let [bundle-path (.resolve (js/require "path") js/__dirname "db-worker-ocaml.cjs")]
+    (when (.existsSync (js/require "fs") bundle-path)
+      (gobj/set js/globalThis "LogseqDbWorker" (js/require bundle-path))
+      (.init (gobj/get js/globalThis "LogseqDbWorker")))))
+
 (defn main
   []
+  (load-ocaml-db-worker!)
   (let [{:keys [root-dir repo help? version? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
