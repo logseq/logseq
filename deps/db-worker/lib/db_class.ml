@@ -191,7 +191,10 @@ let built_in_class_property (class_ : entity) (property : entity) : bool =
 
 (* db-class/get-structured-children — BFS over
    :logseq.property.class/extends, equivalent to the recursive
-   (class-extends ?p ?c) rule. *)
+   (class-extends ?p ?c) rule. Verified engine limitation
+   (datascript-ocaml @ 8db9e3c): bound :in args — even literal head
+   args — are dropped inside recursive rule calls, so the faithful
+   query returns children of every class, not just ?p's. *)
 let get_structured_children db (eid : entity_id) : entity_id list =
   let rec go seen frontier =
     match frontier with
@@ -367,12 +370,15 @@ let get_class_object_ids db (class_id : entity_id) : entity_id list =
 let get_class_objects db (class_id : entity_id) : entity list =
   List.filter_map (Ldb.ent_of_id db) (class_object_eids db class_id)
 
-(* rules/has-property-or-object-property? as a direct datom scan — the
-   recursive rule version produces wrong-direction results in this query
-   engine (same reason get-structured-children uses BFS). A block is a
-   property object of ?prop when it has the attr itself, or when it is
-   tagged with a class (or a class extending it, per class-extends) that
-   declares ?prop in :logseq.property.class/properties. *)
+(* rules/has-property-or-object-property? as a direct datom scan —
+   verified engine limitations (datascript-ocaml @ 8db9e3c): the
+   faithful rules query binds ?prop in attribute position
+   ([?b ?prop _]) and calls the recursive class-extends rule from an
+   or-branch, neither of which the engine evaluates correctly.
+   A block is a property object of ?prop when it has the attr itself,
+   or when it is tagged with a class (or a class extending it, per
+   class-extends) that declares ?prop in
+   :logseq.property.class/properties. *)
 let property_object_eids db (prop_ident : string) : entity_id list =
   let direct = eids_with_attr db prop_ident in
   let via_tags =
