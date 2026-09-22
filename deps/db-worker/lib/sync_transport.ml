@@ -151,7 +151,7 @@ let str_of_wire (v : Wire.t) : string =
   | Wire.String s | Wire.Uuid s | Wire.Keyword s -> s
   | Wire.Int n -> string_of_int n
   | Wire.Int64 n -> Int64.to_string n
-  | Wire.Float f -> Printf.sprintf "%g" f
+  | Wire.Float f -> Common_util.js_string_of_float f
   | Wire.Bool b -> if b then "true" else "false"
   | w -> Transit_codec.to_string w
 
