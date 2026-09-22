@@ -734,3 +734,32 @@ let private_built_in_page (e : entity) : bool =
   if is_property e then not (public_built_in_property e)
   else if is_class e || internal_page e then false
   else true
+
+(* common-initial-data/get-block-children-ids — all descendant ids
+   via :block/_parent (include-collapsed-children? default true,
+   pages always expand). *)
+let get_block_children_ids db ?(include_collapsed_children : bool option)
+    (block_eid : entity_id) : entity_id list =
+  let include_collapsed = Option.value include_collapsed_children ~default:true in
+  match ent_of_id db block_eid with
+  | None -> []
+  | Some _ ->
+      let seen = Hashtbl.create 64 in
+      let expand ids =
+        List.concat_map
+          (fun eid ->
+            match ent_of_id db eid with
+            | Some e when include_collapsed || not (truthy (value e "block/collapsed?")) || is_page e ->
+                ref_ids e "block/_parent"
+            | _ -> [])
+          ids
+      in
+      let rec loop ids =
+        let fresh = List.filter (fun id -> not (Hashtbl.mem seen id)) (expand ids) in
+        if fresh <> [] then begin
+          List.iter (fun id -> Hashtbl.replace seen id ()) fresh;
+          loop fresh
+        end
+      in
+      loop [ block_eid ];
+      Hashtbl.fold (fun id () acc -> id :: acc) seen []
