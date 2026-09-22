@@ -51,3 +51,7 @@ let write_text_atomic path contents =
       output_string oc contents;
       close_out oc;
       Unix.rename tmp path)
+
+type file_stat = { mtime_ms : float option; birthtime_ms : float option }
+
+let stat _path = Db_worker_effect.pure None

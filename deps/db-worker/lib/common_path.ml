@@ -1,0 +1,249 @@
+(* logseq.common.path — path/url helpers used by the graph-parser port.
+   1:1 port of the cljs fns; js/URL is implemented by a minimal
+   scheme://host/path parser sufficient for file://-style URLs. *)
+
+let starts_with (s : string) (prefix : string) : bool =
+  let n = String.length s and m = String.length prefix in
+  n >= m && String.sub s 0 m = prefix
+
+let ends_with (s : string) (suffix : string) : bool =
+  let n = String.length s and m = String.length suffix in
+  n >= m && String.sub s (n - m) m = suffix
+
+let safe_decode_uri_component (uri : string) : string =
+  match Common_util.decode_uri_component uri with
+  | Some s -> Unicode.nfc s
+  | None ->
+    Worker_log.error "decode-uri-component-failed" [ ("uri", uri) ];
+    uri
+
+let is_file_url (s : string) : bool =
+  starts_with s "memory://"  (* special memory fs *)
+  || starts_with s "assets://"  (* Electron asset, urlencoded *)
+  || starts_with s "file://" (* Electron files *)
+
+(* path/filename *)
+let filename (path : string) : string option =
+  let fname =
+    if ends_with path "/" then None
+    else
+      match List.rev (String.split_on_char '/' path) with
+      | last :: _ -> Some last
+      | [] -> Some path
+  in
+  match fname with
+  | Some f when is_file_url path -> Some (safe_decode_uri_component f)
+  | _ -> fname
+
+(* path/split-ext *)
+let split_ext (path : string) : string * string =
+  match filename path with
+  | None -> ("", "")
+  | Some fname ->
+    (match String.rindex_opt fname '.' with
+     | Some pos when pos <> 0 ->
+       (String.sub fname 0 pos,
+        String.lowercase_ascii (String.sub fname (pos + 1) (String.length fname - pos - 1)))
+     | _ -> (fname, ""))
+
+let file_stem path = fst (split_ext path)
+let file_ext path = snd (split_ext path)
+
+(* shared inner loop of path-join-internal / uri-path-join-internal *)
+let path_join_impl ~(encode : bool) (segments : string list) : string =
+  let segments = List.filter (fun s -> String.trim s <> "") segments in
+  let segments =
+    List.map
+      (fun s ->
+        Regexp.replace_all (Regexp.compile "[/\\\\]+")
+          ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> "/") s)
+      segments
+  in
+  let split_fn s =
+    if s = "/" then [ "" ] else String.split_on_char '/' s
+  in
+  let join_fn segs =
+    match segs with
+    | [] -> "."
+    | [ "" ] -> "/"
+    | _ -> String.concat "/" segs
+  in
+  let segments = List.filter (fun s -> s <> "") segments in
+  let parts =
+    List.concat_map split_fn segments
+    |> (if encode then List.map Common_util.encode_uri_component else Fun.id)
+  in
+  let rec reduce acc = function
+    | [] -> List.rev acc
+    | segment :: rest ->
+      let acc' =
+        match segment, acc with
+        | "", _ -> [ segment ]
+        | "..", last :: _ when last = ".." -> segment :: acc
+        | "..", "" :: _ -> acc
+        | "..", [] -> [ ".." ]
+        | "..", _ :: tl -> tl
+        | ".", _ -> acc
+        | _ -> segment :: acc
+      in
+      reduce acc' rest
+  in
+  join_fn (reduce [] parts)
+
+let path_join_internal segments = path_join_impl ~encode:false segments
+let uri_path_join_internal segments = path_join_impl ~encode:true segments
+
+(* Re.Pcre has no lookahead — capture the trailing / or end in group 2
+   and re-emit it. *)
+let win_drive_re = Regexp.compile "^/([a-zA-Z])%3[Aa](/|$)"
+
+let preserve_file_url_win_drive (scheme : string) (encoded_path : string) : string =
+  if scheme = "file:" then
+    Regexp.replace_all win_drive_re
+      ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
+        let tail = match groups.(2) with Some t -> t | None -> "" in
+        match groups.(1) with
+        | Some drive -> "/" ^ drive ^ ":" ^ tail
+        | None -> "/" ^ tail)
+      encoded_path
+  else encoded_path
+
+(* minimal js/URL for scheme://host/path forms *)
+type url_parts = { protocol : string; host : string; pathname : string }
+
+let scheme_re = Regexp.compile "^[a-zA-Z][a-zA-Z0-9_.+-]*:"
+
+let url_parse (s : string) : url_parts option =
+  match Regexp.exec scheme_re s with
+  | None -> None
+  | Some m ->
+    let scheme = Option.value ~default:"" m.groups.(0) in
+    let rest = String.sub s (String.length scheme) (String.length s - String.length scheme) in
+    if not (starts_with rest "//") then
+      Some { protocol = scheme; host = ""; pathname = rest }
+    else
+      let rest' = String.sub rest 2 (String.length rest - 2) in
+      (match Common_util.str_index_of rest' "/" with
+       | None -> Some { protocol = scheme; host = rest'; pathname = "" }
+       | Some i ->
+         Some { protocol = scheme; host = String.sub rest' 0 i;
+                pathname = String.sub rest' i (String.length rest' - i) })
+
+let custom_scheme_re = Regexp.compile "^[a-zA-Z0-9_+\\-.]+://"
+
+let url_join (base_url : string) (segments : string list) : string =
+  let custom_scheme =
+    match Regexp.exec custom_scheme_re base_url with
+    | Some m -> Option.value ~default:"" m.groups.(0)
+    | None -> ""
+  in
+  let custom_scheme_b = custom_scheme <> "" && custom_scheme <> "file://" in
+  let base_url =
+    if custom_scheme_b then
+      Regexp.replace (Regexp.compile (Common_util.escape_regex_chars custom_scheme))
+        ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> "file://")
+        base_url
+    else base_url
+  in
+  let url =
+    match url_parse (safe_decode_uri_component base_url) with
+    | Some u -> u
+    | None ->
+      Worker_log.error "Failed to construct URL in url-join"
+        [ ("base-url", base_url) ];
+      { protocol = "file:"; host = ""; pathname = "/" }
+  in
+  let scheme =
+    if custom_scheme_b then
+      Common_util.str_replace_all custom_scheme "//" ""
+    else url.protocol
+  in
+  let path = url.pathname in
+  let domain =
+    match url.host with
+    | "" -> if custom_scheme_b || starts_with path "/" then "" else "/"
+    | h -> h
+  in
+  let encoded_new_path =
+    uri_path_join_internal (path :: segments) |> preserve_file_url_win_drive scheme
+  in
+  scheme ^ "//" ^ domain ^ encoded_new_path
+
+(* path/path-join *)
+let path_join (base : string) (segments : string list) : string =
+  if is_file_url base then url_join base segments
+  else
+    let rejoined_path = path_join_internal (base :: segments) in
+    if base <> "" && starts_with base "//" (* Win path fix *)
+    then "/" ^ rejoined_path
+    else rejoined_path
+
+let path_normalize_internal (path : string) : string = path_join path []
+
+let url_normalize (origin_url : string) : string =
+  match url_parse (safe_decode_uri_component origin_url) with
+  | None ->
+    Worker_log.error "Failed to construct URL in url-normalize"
+      [ ("url", origin_url) ];
+    origin_url
+  | Some url ->
+    let scheme = url.protocol in
+    let domain = match url.host with "" -> "/" | h -> h in
+    let encoded_new_path =
+      uri_path_join_internal [ url.pathname ] |> preserve_file_url_win_drive scheme
+    in
+    scheme ^ "//" ^ domain ^ encoded_new_path
+
+(* path/path-normalize *)
+let path_normalize (path : string) : string =
+  Unicode.nfc
+    (if is_file_url path then url_normalize path else path_normalize_internal path)
+
+(* path/url-to-path *)
+let url_to_path (original_url : string) : string =
+  if is_file_url original_url then
+    let u = Common_util.str_replace_all (safe_decode_uri_component original_url) "assets://" "file://" in
+    match url_parse u with
+    | None ->
+      Worker_log.error "Failed to construct URL in url-to-path"
+        [ ("url", original_url) ];
+      original_url
+    | Some url ->
+      let path = url.pathname in
+      let host = url.host in
+      let path =
+        if starts_with path "///" then
+          String.sub path 2 (String.length path - 2)
+        else path
+      in
+      let path =
+        if Regexp.test (Regexp.compile "^/[a-zA-Z]:") path (* Win path fix *)
+        then String.sub path 1 (String.length path - 1)
+        else path
+      in
+      if String.trim host = "" then path else "//" ^ host ^ path
+  else original_url
+
+let file_url_or_path_to_path (s : string) : string =
+  if is_file_url s then url_to_path s else s
+
+(* path/parent *)
+let parent (path : string) : string option =
+  if String.contains path '/' then Some (path_normalize (path ^ "/..")) else None
+
+(* path/basename *)
+let basename (path : string) : string option =
+  let path = Regexp.replace_all (Regexp.compile "/+$")
+      ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> "") path in
+  filename path
+
+(* path/absolute? *)
+let absolute (p : string) : bool =
+  let p = path_normalize p in
+  is_file_url p
+  || starts_with p "/"
+  || Regexp.test (Regexp.compile "^[a-zA-Z]:[/\\\\]") p
+
+(* path/protocol-url? *)
+let protocol_url (p : string) : bool =
+  Regexp.test (Regexp.compile "^[a-zA-Z0-9_+\\-.]{2,}:") p && not (String.contains p ' ')

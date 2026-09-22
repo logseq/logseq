@@ -591,3 +591,87 @@ let property_closed_values (property : entity) : entity list =
          with
          | Some x, Some y -> String.compare x y
          | _ -> 0)
+
+(* db-property/built-in-closed-values — (value, db-ident) pairs per
+   property ident, used by the file->db translation (e.g. pdf hl-color). *)
+let built_in_closed_value_pairs : (string * (string * string) list) list =
+  [ ( "logseq.property.pdf/hl-color"
+    , [ ("yellow", "logseq.property/color.yellow")
+      ; ("red", "logseq.property/color.red")
+      ; ("green", "logseq.property/color.green")
+      ; ("blue", "logseq.property/color.blue")
+      ; ("purple", "logseq.property/color.purple") ] )
+  ; ( "logseq.property/status"
+    , [ ("Backlog", "logseq.property/status.backlog")
+      ; ("Todo", "logseq.property/status.todo")
+      ; ("Doing", "logseq.property/status.doing")
+      ; ("In Review", "logseq.property/status.in-review")
+      ; ("Done", "logseq.property/status.done")
+      ; ("Canceled", "logseq.property/status.canceled") ] )
+  ; ( "logseq.property/priority"
+    , [ ("Low", "logseq.property/priority.low")
+      ; ("Medium", "logseq.property/priority.medium")
+      ; ("High", "logseq.property/priority.high")
+      ; ("Urgent", "logseq.property/priority.urgent") ] )
+  ; ( "logseq.property.repeat/recur-unit"
+    , [ ("Minute", "logseq.property.repeat/recur-unit.minute")
+      ; ("Hour", "logseq.property.repeat/recur-unit.hour")
+      ; ("Day", "logseq.property.repeat/recur-unit.day")
+      ; ("Week", "logseq.property.repeat/recur-unit.week")
+      ; ("Month", "logseq.property.repeat/recur-unit.month")
+      ; ("Year", "logseq.property.repeat/recur-unit.year") ] )
+  ; ( "logseq.property.repeat/repeat-type"
+    , [ ("Advance from completion", "logseq.property.repeat/repeat-type.dotted-plus")
+      ; ("Advance from scheduled", "logseq.property.repeat/repeat-type.plus")
+      ; ( "Advance from scheduled, skip to future"
+        , "logseq.property.repeat/repeat-type.double-plus" ) ] )
+  ; ( "logseq.property.view/type"
+    , [ ("Table View", "logseq.property.view/type.table")
+      ; ("List View", "logseq.property.view/type.list")
+      ; ("Gallery View", "logseq.property.view/type.gallery") ] ) ]
+
+let built_in_closed_values (ident : string) : (string * string) list =
+  match List.assoc_opt ident built_in_closed_value_pairs with
+  | Some pairs -> pairs
+  | None -> []
+
+(* db-property/properties over a live entity (entity_attrs gives
+   (attr * tx_value) pairs — filter by key only). *)
+let properties_of_entity (e : Datascript.entity)
+    : (Datascript.attr * Datascript.tx_value) list =
+  List.filter (fun (k, _) -> property k) (Datascript.entity_attrs e)
+
+(* db-property/get-closed-property-values — same as
+   property_closed_values but looked up by property ident. *)
+let get_closed_property_values (db : Datascript.db) (property_ident : string)
+    : Datascript.entity list =
+  match Datascript.entity db (Datascript.Ident property_ident) with
+  | None -> []
+  | Some property -> property_closed_values property
+
+(* db-property/closed-value-content *)
+let closed_value_content (ent : Datascript.entity) : Datascript.value option =
+  match Ldb.value ent "block/title" with
+  | Some v -> Some v
+  | None -> Ldb.value ent "logseq.property/value"
+
+(* db-property/property-value-content — same lookup order as
+   closed-value-content. *)
+let property_value_content = closed_value_content
+
+(* db-property/get-closed-value-entity-by-name *)
+let get_closed_value_entity_by_name (db : Datascript.db) (db_ident : string)
+    (value_content : Datascript.value) : Datascript.entity option =
+  List.find_opt
+    (fun e ->
+      match closed_value_content e with
+      | Some v -> Datascript.Util.value_equal v value_content
+      | None -> false)
+    (get_closed_property_values db db_ident)
+
+(* db-property/create-user-property-ident-from-name *)
+let default_user_namespace = "user.property"
+
+let create_user_property_ident_from_name ?(user_namespace = default_user_namespace)
+    (property_name : string) : string =
+  Db_ident.create_db_ident_from_name ~user_namespace ~name_string:property_name

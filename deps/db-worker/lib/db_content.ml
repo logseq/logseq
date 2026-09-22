@@ -286,3 +286,154 @@ let clear_markdown_heading (s : string) : string =
     String.sub s !i (n - !i)
   end
   else s
+
+(* ---------- import-side ref rewriting ---------- *)
+
+(* The extracted-ref maps below are (attr * value) list tx maps, not
+   entities — the importer works on raw tx data before transacting. *)
+
+(* Keyword-keyed pairs out of a Map value; non-keyword keys are
+   unobservable to these fns so they are dropped. *)
+let pairs_of_map_value (m : value) : (attr * value) list =
+  match m with
+  | Map pairs ->
+      List.filter_map
+        (function Keyword k, v -> Some (k, v) | _ -> None)
+        pairs
+  | _ -> []
+
+let ref_map_get (m : (attr * value) list) (k : attr) : value option =
+  match List.assoc_opt k m with Some v -> Some v | None -> None
+
+let ref_map_string m k =
+  match ref_map_get m k with Some (String s) -> Some s | _ -> None
+
+let ref_map_uuid m =
+  match ref_map_get m "block/uuid" with Some (Uuid u) -> Some u | _ -> None
+
+(* db-content/sort-refs over extracted-ref maps — nested pages first. *)
+let sort_ref_maps (refs : (attr * value) list list) : (attr * value) list list =
+  let key m =
+    match ref_map_string m "block/title" with
+    | None -> (0, "")
+    | Some t -> ((if Regexp.test page_ref_without_nested_re t then 1 else 0), t)
+  in
+  List.sort
+    (fun a b ->
+      let (n1, t1) = key a and (n2, t2) = key b in
+      if n1 <> n2 then compare n2 n1 else compare t2 t1)
+    refs
+
+(* db-content/replace-tag-ref *)
+let replace_tag_ref (content : string) (page_name : string) (id : string) : string =
+  let page = if String.contains page_name ' ' then page_ref page_name else page_name in
+  let wrapped_id = page_ref id in
+  let page_name' = "#" ^ page in
+  let r = "#" ^ wrapped_id in
+  (* Re.Pcre has no lookahead — group 3 consumes the lookahead body
+     ([,.]* followed by terminator) and is re-emitted. *)
+  let re =
+    Regexp.compile
+      ("(^|\\s|\\()(" ^ Common_util.escape_regex_chars page_name'
+       ^ ")([,\\.\\)]*($|\\s|\\)))")
+  in
+  Regexp.replace_all re
+    ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
+      (match groups.(1) with Some l -> l | None -> "")
+      ^ r
+      ^ (match groups.(3) with Some t -> t | None -> ""))
+    content
+
+(* db-content/replace-page-ref *)
+let replace_page_ref (content : string) (page_name : string) (id : string) : string =
+  let page = page_ref page_name and wrapped_id = page_ref id in
+  let re =
+    Regexp.compile ("(^|[^#])" ^ Common_util.escape_regex_chars page)
+  in
+  Regexp.replace_all re
+    ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
+      (match groups.(1) with Some l -> l | None -> "") ^ wrapped_id)
+    content
+
+(* db-content/replace-page-ref-with-id *)
+let replace_page_ref_with_id ?(replace_tag = false) (content : string)
+    (page_name : string) (id : string) : string =
+  let page_name = replace_all page_name ~pattern:"HashTag-" ~replacement:"#" in
+  let content' = replace_page_ref content page_name id in
+  if replace_tag then replace_tag_ref content' page_name id else content'
+
+(* db-content/ref-replacement-title *)
+let ref_replacement_title (ref : (attr * value) list) : string option =
+  match ref_map_string ref "block.temp/original-page-name" with
+  | Some s when not (Common_util.uuid_string s) -> Some s
+  | _ -> ref_map_string ref "block/title"
+
+(* db-content/title-ref->id-ref — refs are raw values (maps or
+   [:block/uuid uuid] vectors) as they appear in extracted :block/refs. *)
+let title_ref_to_id_ref ?(replace_tag = true) (title : string) (refs : value list)
+    : string =
+  let ref_to_pairs (r : value) : (attr * value) list option =
+    match r with
+    | Map _ ->
+        let pairs = pairs_of_map_value r in
+        (match ref_map_string pairs "block.temp/original-page-name" with
+         | Some s when Common_util.uuid_string s ->
+             Some
+               (List.filter
+                  (fun (k, _) -> k <> "block.temp/original-page-name")
+                  pairs)
+         | _ -> Some pairs)
+    | Vector (Keyword "block/uuid" :: v :: _) ->
+        Some [ ("block/uuid", v); ("block/title", String "block/uuid") ]
+    | Tuple (Some (Keyword "block/uuid") :: Some v :: _) ->
+        Some [ ("block/uuid", v); ("block/title", String "block/uuid") ]
+    | _ -> None
+  in
+  let refs' =
+    refs
+    |> List.filter_map ref_to_pairs
+    |> List.filter (fun r ->
+           Option.is_some (ref_map_uuid r)
+           && Option.is_some (ref_map_string r "block/title"))
+    |> sort_ref_maps
+  in
+  List.fold_left
+    (fun content (ref_ : (attr * value) list) ->
+      match ref_map_uuid ref_, ref_replacement_title ref_ with
+      | Some u, Some t -> replace_page_ref_with_id ~replace_tag content t u
+      | _ -> content)
+    title
+    refs'
+
+(* db-content/replace-tags-with-id-refs *)
+let replace_tags_with_id_refs (content : string) (tags : (attr * value) list list)
+    : string =
+  String.trim
+    (List.fold_left
+       (fun content tag ->
+         match ref_map_uuid tag, ref_map_string tag "block/title" with
+         | Some u, Some t ->
+             let id_ref = page_ref u in
+             content
+             |> Common_util.replace_ignore_case ("#" ^ page_ref t) id_ref
+             |> Common_util.replace_ignore_case ("#" ^ t) id_ref
+         | _ -> content)
+       content
+       (sort_ref_maps tags))
+
+(* db-content/replace-tag-refs-with-page-refs — extracted-ref-map version
+   for the import pipeline (the entity version above serves endpoints). *)
+let replace_tag_refs_with_page_refs_maps (content : string)
+    (tags : (attr * value) list list) : string =
+  String.trim
+    (List.fold_left
+       (fun content tag ->
+         match ref_map_uuid tag with
+         | Some u ->
+             let id_ref = page_ref u in
+             content
+             |> Common_util.replace_ignore_case ("#" ^ id_ref) id_ref
+             |> Common_util.replace_ignore_case ("#" ^ id_ref) id_ref
+         | _ -> content)
+       content
+       (sort_ref_maps tags))

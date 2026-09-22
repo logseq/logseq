@@ -462,7 +462,7 @@ let build_properties_with_ref_values (prop_vals_tx_m : (attr * value) list)
 let build_new_class (block : Block_map.t) : Block_map.t =
   let ident =
     match Block_map.attr_value block "db/ident" with
-    | Some (Keyword i) -> Some i
+    | Some (Keyword i) | Some (String i) -> Some i
     | _ -> None
   in
   let tags =

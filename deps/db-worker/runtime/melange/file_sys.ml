@@ -44,3 +44,22 @@ let write_text_atomic path contents =
       let tmp = path ^ ".tmp" in
       Node.Fs.writeFileAsUtf8Sync tmp contents;
       renameSync tmp path)
+
+module Fs_stat = struct
+  external statSync : string -> < mtimeMs : float ; birthtimeMs : float > Js.t = "statSync"
+    [@@mel.module "fs"]
+end
+
+type file_stat = { mtime_ms : float option; birthtime_ms : float option }
+
+let stat path =
+  match Runtime_env.kind () with
+  | Runtime_env.Node ->
+    Db_worker_effect.catch
+      (wrap (fun () ->
+           let s = Fs_stat.statSync path in
+           Some
+             { mtime_ms = Some s##mtimeMs
+             ; birthtime_ms = Some s##birthtimeMs }))
+      (fun _ -> Db_worker_effect.pure None)
+  | _ -> Db_worker_effect.pure None
