@@ -604,3 +604,20 @@ let get_block_by_page_name_and_block_route_name args =
 let () =
   Dispatcher.register "thread-api/get-block-by-page-name-and-block-route-name"
     get_block_by_page_name_and_block_route_name
+
+(* :thread-api/get-block-refs — [:db/id? eid] → plain ref block maps *)
+let get_block_refs args =
+  with_conn args (fun db ->
+      let eid = Option.bind (arg args 1) Wire.as_int in
+      Db_worker_effect.pure
+        (match eid with
+         | Some eid ->
+             let res = Db_reference.get_linked_references db eid in
+             Wire.List
+               (List.filter_map
+                  (fun (b : entity) ->
+                    Some (plain_map_wire db b))
+                  res.Db_reference.ref_blocks)
+         | None -> Wire.nil))
+
+let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs

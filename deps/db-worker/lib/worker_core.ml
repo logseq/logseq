@@ -12,6 +12,7 @@ let init () =
     ignore Endpoint_read.get_block_parents;
     ignore Endpoint_read.get_alias_source_page;
     ignore Endpoint_read.get_bidirectional_properties;
+    ignore Endpoint_read.get_block_refs;
     initialized := true
   end
 
