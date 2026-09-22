@@ -148,6 +148,9 @@ let auth_headers () : (string * string) list =
 (* sync-util/fetch-json *)
 let fetch_json url ?(meth = "GET") ?(headers = []) ?body ?response_schema
     ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
+  match !Sync_deps.fetch_json with
+  | Some f -> f url ~meth ~headers ?body ?response_schema ~error_schema ()
+  | None ->
   let headers = auth_headers () @ headers in
   Http.send { Http.url; method_ = meth; headers; body } >>= fun resp ->
   let data =
