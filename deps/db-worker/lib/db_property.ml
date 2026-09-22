@@ -675,3 +675,9 @@ let default_user_namespace = "user.property"
 let create_user_property_ident_from_name ?(user_namespace = default_user_namespace)
     (property_name : string) : string =
   Db_ident.create_db_ident_from_name ~user_namespace ~name_string:property_name
+
+(* db-property/get-property-schema — select-keys over schema-properties *)
+let get_property_schema (m : Block_map.t) : Block_map.t =
+  List.filter
+    (fun (k, _) -> List.mem k Db_schema.schema_properties)
+    m

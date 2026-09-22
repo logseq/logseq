@@ -125,13 +125,15 @@ let journal_title_formatters (date_formatter : string option) : string list =
 
 (* ---- formatter lexer ---- *)
 
+(* Token widths recorded for the inverse (format) direction:
+   yy vs yyyy, MMM vs MMMM, E/EEE vs EEEE. *)
 type tok =
-  | TokYear
+  | TokYear of int
   | TokMonthNum
-  | TokMonthName
+  | TokMonthName of int
   | TokDay
   | TokDayOrd
-  | TokWeekday
+  | TokWeekday of int
   | TokLit of char
 
 let tokens_of_formatter (fmt : string) : tok list =
@@ -145,11 +147,11 @@ let tokens_of_formatter (fmt : string) : tok list =
     else
       match
         List.find_map Fun.id
-          [ try_at i "yyyy" TokYear; try_at i "yy" TokYear;
-            try_at i "MMMM" TokMonthName; try_at i "MMM" TokMonthName;
+          [ try_at i "yyyy" (TokYear 4); try_at i "yy" (TokYear 2);
+            try_at i "MMMM" (TokMonthName 4); try_at i "MMM" (TokMonthName 3);
             try_at i "MM" TokMonthNum; try_at i "dd" TokDay;
-            try_at i "do" TokDayOrd; try_at i "EEEE" TokWeekday;
-            try_at i "EEE" TokWeekday; try_at i "E" TokWeekday ]
+            try_at i "do" TokDayOrd; try_at i "EEEE" (TokWeekday 4);
+            try_at i "EEE" (TokWeekday 3); try_at i "E" (TokWeekday 3) ]
       with
       | Some (t, i') -> lex i' (t :: acc)
       | None -> lex (i + 1) (TokLit fmt.[i] :: acc)
@@ -190,7 +192,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
         (match tok with
          | TokLit c ->
              if i < n && s.[i] = c then go rest (i + 1) (y, m, d) else None
-         | TokYear ->
+         | TokYear _ ->
              try_num rest i (y, m, d) 8 (fun v (_, mm, dd) -> (v, mm, dd))
          | TokMonthNum ->
              try_num rest i (y, m, d) 2 (fun v (yy, _, dd) -> (yy, v, dd))
@@ -216,7 +218,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
                      | None ->
                          if has_suffix then go rest i' (y, m, v) else None)
                 | None -> None)
-         | TokMonthName ->
+         | TokMonthName _ ->
              let index_of names name =
                let rec find j =
                  if j >= Array.length names then -1
@@ -235,7 +237,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
              (match try_names month_long with
               | Some _ as r -> r
               | None -> try_names month_short)
-         | TokWeekday ->
+         | TokWeekday _ ->
              (match name_at i weekday_names with
               | Some (l, _) -> go rest (i + l) (y, m, d)
               | None -> None))
@@ -365,3 +367,60 @@ let valid_journal_title_with_slash (title : string) : bool =
 let ms_to_journal_day (ms : int64) : int =
   let c = Date_time.of_epoch_ms ms in
   (c.year * 10000) + (c.month * 100) + c.day
+
+(* ---------- journal title formatting ---------- *)
+
+let ordinal_suffix d =
+  if d >= 11 && d <= 13 then "th"
+  else match d mod 10 with
+       | 1 -> "st" | 2 -> "nd" | 3 -> "rd" | _ -> "th"
+
+(* Zeller-congruence weekday index aligned with weekday_names:
+   0 = Mon .. 6 = Sun. *)
+let weekday_index (y, m, d) =
+  let y', m' = if m < 3 then (y - 1, m + 12) else (y, m) in
+  let k = y' mod 100 and j = y' / 100 in
+  (* h: 0 = Saturday *)
+  let h =
+    (d + ((13 * (m' + 1)) / 5) + k + (k / 4) + (j / 4) + (5 * j)) mod 7
+  in
+  let h = ((h mod 7) + 7) mod 7 in
+  (h + 5) mod 7
+
+(* tf/format inverse of date_of_formatter for the tokenized
+   journal-title formatters. *)
+let formatter_of_date (fmt : string) (year, month, day : int * int * int)
+    : string =
+  let pad2 n = Printf.sprintf "%02d" n in
+  let b = Buffer.create 32 in
+  List.iter
+    (fun tok ->
+      match tok with
+      | TokLit c -> Buffer.add_char b c
+      | TokYear w ->
+          if w = 2 then Buffer.add_string b (pad2 (year mod 100))
+          else Buffer.add_string b (Printf.sprintf "%04d" year)
+      | TokMonthNum -> Buffer.add_string b (pad2 month)
+      | TokMonthName w ->
+          Buffer.add_string
+            b
+            (if w = 4 then month_long.(month - 1)
+             else month_short.(month - 1))
+      | TokDay -> Buffer.add_string b (pad2 day)
+      | TokDayOrd ->
+          Buffer.add_string
+            b
+            (string_of_int day ^ ordinal_suffix day)
+      | TokWeekday w ->
+          let i = weekday_index (year, month, day) in
+          Buffer.add_string
+            b
+            (if w = 4 then weekday_names.(i + 7) else weekday_names.(i)))
+    (tokens_of_formatter fmt);
+  Buffer.contents b
+
+(* common-date/int->journal-title *)
+let int_to_journal_title (day : int) (date_formatter : string) : string =
+  formatter_of_date
+    date_formatter
+    (day / 10000, (day / 100) mod 100, day mod 100)

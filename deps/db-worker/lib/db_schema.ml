@@ -198,3 +198,32 @@ let db_schema_attr (a : string) : bool = List.mem a db_schema_attrs
 let db_schema_ref_attrs =
   [ "block/parent"; "block/page"; "block/refs"; "block/tags"; "block/link";
     "block/alias"; "block/closed-value-property" ]
+
+(* cljs db-schema/schema — the full fixed schema map as an EDN string for
+   (d/create-conn db-schema/schema). *)
+let schema_edn =
+  "{:db/ident {:db/unique :db.unique/identity}
+    :kv/value {}
+    :block/uuid {:db/unique :db.unique/identity}
+    :block/parent {:db/valueType :db.type/ref :db/index true}
+    :block/order {:db/index true}
+    :block/collapsed? {}
+    :block/page {:db/valueType :db.type/ref :db/index true}
+    :block/refs {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    :block/link {:db/valueType :db.type/ref :db/index true}
+    :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    :block/created-at {:db/index true}
+    :block/updated-at {:db/index true}
+    :block/name {:db/index true}
+    :block/title {:db/index true}
+    :block/journal-day {:db/index true}
+    :block/tx-id {}
+    :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    :file/path {:db/unique :db.unique/identity}
+    :file/content {}
+    :file/created-at {}
+    :file/last-modified-at {}
+    :file/size {}}"
+
+let schema () : schema = Datascript.schema_of_edn_string schema_edn
