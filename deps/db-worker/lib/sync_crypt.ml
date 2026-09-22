@@ -2124,7 +2124,64 @@ let cancel_ui_requests context = cancel_all_ui_requests context
 
 (* Registered endpoints live in endpoint_crypt.ml — see its header for
    the thread-api names it wires up. *)
-let init () = ()
+let init () =
+  (* cljs binds these hooks via direct namespace references when
+     crypt.cljs is loaded; the OCaml port routes them through Sync_deps so
+     they must be wired here. *)
+  Sync_deps.graph_e2ee :=
+    Some
+      (fun (db : Datascript.db) ->
+        match Ldb.get_graph_rtc_e2ee db with
+        | Some (Datascript.Bool false) | None -> false
+        | Some _ -> true);
+  Sync_deps.ensure_graph_aes_key :=
+    Some
+      (fun repo ->
+        map
+          (fun o -> Option.value ~default:Wire.Nil o)
+          (!ensure_graph_aes_key_fn repo (!get_graph_id_fn repo)));
+  Sync_deps.encrypt_tx_data :=
+    Some
+      (fun key items ->
+        map Wire.as_seq
+          (encrypt_tx_data (Wire.String key) (Wire.Array items)));
+  Sync_deps.decrypt_tx_data :=
+    Some
+      (fun key items ->
+        map Wire.as_seq
+          (decrypt_tx_data (Wire.String key) (Wire.Array items)));
+  Sync_deps.encrypt_datoms :=
+    Some
+      (fun aes_key items ->
+        map Wire.as_seq
+          (!encrypt_datoms_fn aes_key (Wire.Array items)));
+  Sync_deps.decrypt_snapshot_datoms_batch :=
+    Some
+      (fun aes_key items ->
+        map Wire.as_seq
+          (!decrypt_snapshot_datoms_batch_fn aes_key (Wire.Array items)));
+  Sync_deps.encrypt_text_value :=
+    Some (fun key v -> !encrypt_text_value_fn key v);
+  Sync_deps.decrypt_text_value :=
+    Some
+      (fun key v ->
+        map
+          (fun w ->
+            match w with
+            | Wire.String s -> s
+            | _ ->
+                invalid_arg
+                  "sync_crypt: decrypted text value is not a string")
+          (!decrypt_text_value_fn key v));
+  Sync_deps.encrypt_bytes := Some (fun key b -> !encrypt_uint8array_fn key b);
+  Sync_deps.decrypt_bytes := Some (fun key w -> !decrypt_uint8array_fn key w);
+  Sync_deps.fetch_graph_aes_key_for_download :=
+    Some
+      (fun _repo graph_id ->
+        !fetch_graph_aes_key_for_download_fn (Some graph_id));
+  Sync_deps.preflight_upload_e2ee :=
+    Some (fun repo e2ee -> !preflight_upload_e2ee_fn repo e2ee);
+  Sync_deps.ensure_user_rsa_keys := Some (fun opts -> !ensure_user_rsa_keys_fn opts)
 
 let reset_hooks () =
   platform_env_fn := platform_env_impl;

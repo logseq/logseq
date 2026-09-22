@@ -486,4 +486,41 @@ let () =
          >>= fun _ -> Db_worker_effect.pure ());
   Sync_deps.rehydrate_large_titles :=
     Some
-      (fun repo graph_id -> rehydrate_large_titles_from_db repo graph_id)
+      (fun repo graph_id -> rehydrate_large_titles_from_db repo graph_id);
+  (* cljs binds these via direct namespace references (worker-undo-redo
+     and op/construct load alongside the sync namespaces); the OCaml
+     port routes them through Sync_deps. *)
+  Sync_deps.clear_history := Some Undo_redo.clear_history;
+  Sync_deps.gen_undo_ops :=
+    Some
+      (fun repo (r : Datascript.tx_report) tx_id ->
+        Undo_redo.gen_undo_ops repo ~tx_data:r.tx_data
+          ~tx_meta:
+            (List.map
+               (fun (a, v) -> (a, Ds_wire.transit_of_value v))
+               r.tx_meta)
+          ~db_before:r.db_before ~db_after:r.db_after ~tx_id
+          ~apply_history:(fun repo tx_id_opt undo pairs ->
+            let tx_meta =
+              List.filter_map
+                (fun (k, v) ->
+                  match k with
+                  | Wire.Keyword s -> Some (s, Ds_wire.value_of_transit v)
+                  | _ -> None)
+                pairs
+            in
+            let result =
+              Sync_apply.apply_history_action repo
+                (Option.value ~default:"" tx_id_opt) undo tx_meta
+            in
+            (match result with
+             | Wire.Map kvs ->
+                 List.filter_map
+                   (fun (k, v) ->
+                     match k with
+                     | Wire.Keyword s -> Some (s, v)
+                     | _ -> None)
+                   kvs
+             | _ -> [])));
+  Sync_deps.semantic_outliner_ops :=
+    Some (fun op -> List.mem op Outliner_op.semantic_outliner_op_names)
