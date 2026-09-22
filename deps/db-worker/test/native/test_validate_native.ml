@@ -47,10 +47,12 @@ let with_transact_pipeline (f : unit -> 'a) : 'a =
 let wire_kvs (w : Wire.t) : (Wire.t * Wire.t) list =
   match w with Wire.Map kvs -> kvs | _ -> []
 
-(* cljs (empty? (:errors (worker-db-validate/validate-db conn))) *)
+(* cljs (empty? (:errors (worker-db-validate/validate-db conn))) —
+   empty? is true for nil and empty collections; validate-db leaves
+   :errors nil when the graph is valid *)
 let errors_empty (result : Wire.t) : bool =
   match wire_get "errors" (wire_kvs result) with
-  | Some (Wire.Array []) | Some (Wire.List []) -> true
+  | Some (Wire.Array []) | Some (Wire.List []) | Some Wire.Nil | None -> true
   | _ -> false
 
 let db_error_count (db : db) : int =

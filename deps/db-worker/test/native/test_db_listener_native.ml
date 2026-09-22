@@ -290,7 +290,15 @@ let test_builds_one_delta () =
         check "one broadcast" (List.length broadcasts = 1);
         (match broadcasts with
          | [ b ] ->
-             let payload = Transit_codec.of_string b.payload in
+             (* cljs spies on broadcast-to-clients! args — it captures the
+                `data` argument directly. The native spy sits at the
+                post-message boundary, whose payload is the transit-encoded
+                [kind data] array; unwrap the data element. *)
+             let payload =
+               match Transit_codec.of_string b.payload with
+               | Wire.Array [ _kind; data ] -> data
+               | other -> other
+             in
              (* transit roundtrip: cljs compares (:delta roundtripped)
                 — compare the delta field, not whole-payload equality
                 (sets may decode in different order) *)
