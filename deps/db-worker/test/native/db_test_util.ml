@@ -67,6 +67,24 @@ let rec edn_to_string = function
 
 let edn_map_to_string (m : (string * edn) list) = edn_to_string (Map m)
 
+(* Tx op row marker: a map whose only entry is this key is emitted as
+   [:db/add <eref> <attr> <v>] inside transact_maps, so op ops ride along in
+   the same tx right after the entity map they reference. Needed for raw map
+   values on non-ref attrs (e.g. :logseq.property/icon): datascript-ocaml
+   rejects {:attr {:k v}} entity-map form ("nested entity attribute requires
+   ref schema") where cljs tolerates it. *)
+let op_db_add_key = "db-worker.op/db-add"
+
+let op_db_add (eref : edn) (attr : string) (v : edn) : (string * edn) list =
+  [ op_db_add_key, Vec [ eref; Kw attr; v ] ]
+
+let tx_row_to_string (m : (string * edn) list) =
+  match m with
+  | [ (k, Vec [ eref; Kw attr; v ]) ] when k = op_db_add_key ->
+      Printf.sprintf "[:db/add %s :%s %s]" (edn_to_string eref) attr
+        (edn_to_string v)
+  | _ -> edn_map_to_string m
+
 (* assoc-list helpers over attr maps (cljs map semantics: later wins) *)
 let assoc' m k v = (k, v) :: List.remove_assoc k m
 let merge' a b = List.fold_left (fun acc (k, v) -> assoc' acc k v) a b
@@ -1019,7 +1037,9 @@ let build_closed_value_block ~block_uuid ~block_type ~value ~property_ident
         then [ "logseq.property/value", Str value ]
         else [ "block/title", Str value ])
      @ (match db_ident with Some i -> [ "db/ident", Kw i ] | None -> [])
-     @ (match icon with Some m -> [ "logseq.property/icon", Map m ] | None -> [])
+     @ (match icon with
+        | Some m -> [ "logseq.property/icon", Map m ]
+        | None -> [])
      @ timestamps ()
      @ [ "block/order", Str (gen_order_key ()) ])
     extra
@@ -1361,12 +1381,20 @@ let build_property_tx ~(prop_name : string) ~(decl : property_decl)
                 | None -> []))
         in
         let cv_blocks =
-          List.map
+          List.concat_map
             (fun (cv : closed_value_decl) ->
               let uuid = match cv.cv_uuid with Some u -> u | None -> gen_uuid () in
-              build_closed_value_block ~block_uuid:uuid ~block_type:decl.p_type
-                ~value:cv.cv_value ~property_ident:db_ident ~db_ident:cv.cv_ident
-                ~icon:cv.cv_icon ~extra:cv.cv_properties)
+              let m =
+                build_closed_value_block ~block_uuid:uuid ~block_type:decl.p_type
+                  ~value:cv.cv_value ~property_ident:db_ident ~db_ident:cv.cv_ident
+                  ~icon:None ~extra:cv.cv_properties
+              in
+              (* icon must land via [:db/add] — entity-map form crashes on
+                 non-ref attrs; see op_db_add *)
+              match cv.cv_icon with
+              | Some icon_m ->
+                  [ m; op_db_add (Vec [ Kw "block/uuid"; Uuid uuid ]) "logseq.property/icon" (Map icon_m) ]
+              | None -> [ m ])
             closed_values
         in
         prop_m, cv_blocks
@@ -1655,7 +1683,7 @@ let build_blocks_tx (options : create_options)
 let transact_maps conn (txs : (string * edn) list list) =
   ignore
     (Datascript.transact_conn_string conn
-       ("[" ^ String.concat " " (List.map edn_map_to_string txs) ^ "]"))
+       ("[" ^ String.concat " " (List.map tx_row_to_string txs) ^ "]"))
 
 let create_conn_with_blocks ?(options = default_options)
     ?(properties = []) ?(classes = []) ?(pages_and_blocks = [])

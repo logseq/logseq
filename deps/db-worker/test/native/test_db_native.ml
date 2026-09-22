@@ -2946,4 +2946,8 @@ let () =
     ; "outliner-cut-paste-prop", Test_outliner_native.cut_paste_cases
     ; "outliner-pipeline", Test_outliner_native.pipeline_cases
     ; "outliner-tree", Test_outliner_native.tree_cases
-    ; "outliner-property", Test_outliner_native.property_cases ]
+    ; "outliner-property", Test_outliner_native.property_cases
+    ; "handler-block", Test_handler_native.block_cases
+    ; "handler-comments", Test_handler_native.comments_cases
+    ; "handler-property", Test_handler_native.property_cases
+    ; "handler-transaction", Test_handler_native.transaction_cases ]
