@@ -528,4 +528,9 @@ let () =
                    kvs
              | _ -> [])));
   Sync_deps.semantic_outliner_ops :=
-    Some (fun op -> List.mem op Outliner_op.semantic_outliner_op_names)
+    Some (fun op -> List.mem op Outliner_op.semantic_outliner_op_names);
+  (* cljs db-listener hoists :db-sync and :update-checksum out of the
+     deferred handlers: update-checksum first, then
+     db-sync/handle-local-tx!, then the main-thread sync pipeline. *)
+  Db_listener.update_checksum := update_local_sync_checksum;
+  Db_listener.persist_local_tx := (fun repo r -> Sync_apply.handle_local_tx repo r)
