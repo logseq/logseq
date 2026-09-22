@@ -205,15 +205,14 @@ let property_value_tx_m (new_block : BM.t) (properties : (attr * value) list)
       (fun (k, v) ->
         match ref_type_of k with
         | Some t ->
-          (* cljs {:db/ident k :logseq.property/type t}; String values are
-             required by the ported readers, and "db/id" gives the
+          (* cljs {:db/ident k :logseq.property/type t}; "db/id" gives the
              created-from-property fallback the same ident ref the cljs
              {:db/ident k} nested map resolves to. *)
           Some
             ( Map
                 [ Keyword "db/ident", String k
                 ; Keyword "db/id", Ref_to (Ident k)
-                ; Keyword "logseq.property/type", String t ]
+                ; Keyword "logseq.property/type", Keyword t ]
             , v )
         | None -> None)
       properties

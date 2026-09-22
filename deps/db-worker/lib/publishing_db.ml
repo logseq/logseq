@@ -102,7 +102,7 @@ let get_aliases_for_page_ids (db : db) (page_ids : entity_id list) : IntSet.t =
   else
     q_string db
       ~inputs:
-        [ Arg_collection (List.map (fun i -> Result_entity i) page_ids)
+        [ Arg_scalar (Result_value (Set (List.map (fun i -> Int i) page_ids)))
         ; alias_rules () ]
       "[:find [?e ...]
         :in $ ?pages %
