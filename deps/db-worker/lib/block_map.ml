@@ -53,10 +53,15 @@ let blank_title (m : t) : bool =
 
 (* Values that act as entity refs: Ref, Ref_to, Int, Map{db/id},
    lookup vectors [ :block/uuid u ], and idents (Keyword). *)
+(* Negative ids are cljs datascript tempids; the engine takes them as
+   Temp_id, never Entity_id *)
+let id_ref_of (n : entity_id) : entity_ref =
+  if n < 0 then Temp_id (string_of_int n) else Entity_id n
+
 let entity_ref_of_value (v : value) : entity_ref option =
   match v with
-  | Ref n -> Some (Entity_id n)
-  | Int n -> Some (Entity_id n)
+  | Ref n -> Some (id_ref_of n)
+  | Int n -> Some (id_ref_of n)
   | Ref_to r -> Some r
   | Keyword s -> Some (Ident s)
   | String s -> Some (Temp_id s)
@@ -64,8 +69,8 @@ let entity_ref_of_value (v : value) : entity_ref option =
     Some (Lookup_ref (a, v'))
   | Map kvs ->
     (match List.find_opt (fun (k, _) -> k = Keyword "db/id") kvs with
-     | Some (_, Int n) -> Some (Entity_id n)
-     | Some (_, Ref n) -> Some (Entity_id n)
+     | Some (_, Int n) -> Some (id_ref_of n)
+     | Some (_, Ref n) -> Some (id_ref_of n)
      | _ ->
        (match List.find_opt (fun (k, _) -> k = Keyword "block/uuid") kvs with
         | Some (_, Uuid u) -> Some (Lookup_ref ("block/uuid", Uuid u))
@@ -176,10 +181,10 @@ let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
   let ref_ok = Ldb.ref_attr db a in
   match v with
   | Nil -> None
-  | Ref n -> Some (One_entity (tx_entity_of_ref (Entity_id n)))
+  | Ref n -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
   | Ref_to r -> Some (One_entity (tx_entity_of_ref r))
   | Keyword s when ref_ok -> Some (One_entity (tx_entity_of_ref (Ident s)))
-  | Int n when ref_ok -> Some (One_entity (tx_entity_of_ref (Entity_id n)))
+  | Int n when ref_ok -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
   | Map kvs ->
     (match tx_entity_of_map kvs with
      | Some te -> Some (One_entity te)
