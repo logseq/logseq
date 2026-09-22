@@ -43,7 +43,7 @@ let split_ext (path : string) : string * string =
     (match String.rindex_opt fname '.' with
      | Some pos when pos <> 0 ->
        (String.sub fname 0 pos,
-        String.lowercase_ascii (String.sub fname (pos + 1) (String.length fname - pos - 1)))
+        Unicode.lowercase (String.sub fname (pos + 1) (String.length fname - pos - 1)))
      | _ -> (fname, ""))
 
 let file_stem path = fst (split_ext path)
@@ -51,7 +51,7 @@ let file_ext path = snd (split_ext path)
 
 (* shared inner loop of path-join-internal / uri-path-join-internal *)
 let path_join_impl ~(encode : bool) (segments : string list) : string =
-  let segments = List.filter (fun s -> String.trim s <> "") segments in
+  let segments = List.filter (fun s -> Unicode.trim s <> "") segments in
   let segments =
     List.map
       (fun s ->
@@ -247,7 +247,7 @@ let url_to_path (original_url : string) : string =
         then String.sub path 1 (String.length path - 1)
         else path
       in
-      if String.trim host = "" then path else "//" ^ host ^ path
+      if Unicode.trim host = "" then path else "//" ^ host ^ path
   else original_url
 
 let file_url_or_path_to_path (s : string) : string =

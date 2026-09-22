@@ -102,7 +102,7 @@ let to_new_properties (content : string) : string =
                        (Common_util.safe_subs text 1 ()) with
                | Some (k, v) ->
                  let k = Common_util.str_replace_all k "_" "-" in
-                 let compare_k = String.lowercase_ascii k in
+                 let compare_k = Unicode.lowercase k in
                  let k =
                    if List.mem compare_k [ "id"; "custom_id"; "custom-id" ]
                    then "id"
@@ -111,7 +111,7 @@ let to_new_properties (content : string) : string =
                  let k =
                    if compare_k = "last-modified-at" then "updated-at" else k
                  in
-                 k ^ colons ^ " " ^ String.trim v
+                 k ^ colons ^ " " ^ Unicode.trim v
                | None -> text)
       in
       let after = List.filteri (fun i _ -> i > end_idx) lines in
@@ -141,13 +141,13 @@ let remove_properties (format : string) (content : string) : string =
         split_with (line :: acc) rest
       | rest -> (List.rev acc, rest)
     and starts_with_upper s prefix =
-      Common_util.str_starts_with (String.uppercase_ascii s) prefix
+      Common_util.str_starts_with (Unicode.uppercase s) prefix
     in
     let title_lines, properties_body = split_with [] lines in
     let rec drop_body = function
       | line :: rest
-        when (not (starts_with_upper (String.trim line) properties_end))
-             || String.trim line = "" ->
+        when (not (starts_with_upper (Unicode.trim line) properties_end))
+             || Unicode.trim line = "" ->
         drop_body rest
       | rest -> rest
     in
@@ -161,7 +161,7 @@ let remove_properties (format : string) (content : string) : string =
             (Regexp.compile ":END:\\s?")
             ~replacement:"" first
         in
-        if String.trim line = "" then rest else line :: rest
+        if Unicode.trim line = "" then rest else line :: rest
       | _ -> body
     in
     String.concat "\n" (title_lines @ body)
@@ -184,7 +184,7 @@ let remove_logbook (content : string) : string =
   let acc, _in =
     List.fold_left
       (fun (acc, in_logbook) line ->
-        let upper = String.uppercase_ascii (String.trim line) in
+        let upper = Unicode.uppercase (Unicode.trim line) in
         if Common_util.str_starts_with upper ":LOGBOOK:" then (acc, true)
         else if in_logbook && Common_util.str_starts_with upper ":END:" then
           (acc, false)
@@ -204,13 +204,13 @@ let remove_deadline_scheduled (content : string) : string =
     let rest_lines =
       List.filter_map
         (fun line ->
-          let upper = String.uppercase_ascii (Common_util.str_triml line) in
+          let upper = Unicode.uppercase (Common_util.str_triml line) in
           if
             Common_util.str_starts_with upper "DEADLINE: "
             || Common_util.str_starts_with upper "SCHEDULED: "
           then
             let cleaned =
-              String.trim
+              Unicode.trim
                 (Common_util.regex_replace re ~replacement:"" line)
             in
             if cleaned = "" then None else Some cleaned

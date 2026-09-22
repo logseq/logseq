@@ -630,7 +630,7 @@ let fuzzy_search_multi ?(limit = 20) ~extract_fns data query =
            extract_fns
            |> List.filter_map (fun f ->
                   match f item with
-                  | Some s when String.length (String.trim s) > 0 -> Some s
+                  | Some s when String.length (Unicode.trim s) > 0 -> Some s
                   | _ -> None)
          in
          let best =

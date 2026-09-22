@@ -23,7 +23,7 @@ let pretty_print_merge (s : string) (m : (string * string) list) : string =
 let get_git_sha () : string option =
   match Node_process.spawn_stdout "git" [ "rev-parse"; "--short"; "HEAD" ] with
   | Some (0, out) ->
-      let s = String.trim out in
+      let s = Unicode.trim out in
       if s = "" then None else Some s
   | _ -> None
 

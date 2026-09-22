@@ -133,7 +133,7 @@ let block_search_content (block : entity) : string option =
     | Some t -> t
     | None -> Option.value ~default:"" (Ldb.string_value block "block/name")
   in
-  let raw = String.trim raw in
+  let raw = Unicode.trim raw in
   if raw = "" then None
   else begin
     (* cljs (recur-replace-uuid-in-block-title (assoc block :block/title
@@ -149,7 +149,7 @@ let block_search_content (block : entity) : string option =
         String.sub content 0 publish_search_max_length
       else content
     in
-    Some (String.trim content)
+    Some (Unicode.trim content)
   end
 
 let collect_search_blocks (blocks : entity list) (page_eid : entity_id)

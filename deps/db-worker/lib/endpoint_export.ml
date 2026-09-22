@@ -179,7 +179,7 @@ let export_client_ops_db_binary args =
         ; "/client-ops//db.sqlite"
         ; "client-ops-/db.sqlite"
         ; "/client-ops-/db.sqlite" ]
-        |> List.filter (fun s -> String.trim s <> "")
+        |> List.filter (fun s -> Unicode.trim s <> "")
         |> List.fold_left (fun acc s -> if List.mem s acc then acc else acc @ [ s ]) []
       in
       let rec try_export = function
@@ -215,7 +215,7 @@ let import_db_binary args =
                | _ -> 0))
     | _ -> invalid_arg "import-db-binary: missing data arg"
   in
-  if String.trim repo = "" then Db_worker_effect.pure Wire.Nil
+  if Unicode.trim repo = "" then Db_worker_effect.pure Wire.Nil
   else begin
     Endpoint_lifecycle.close_db_aux repo;
     Db_worker_effect.bind

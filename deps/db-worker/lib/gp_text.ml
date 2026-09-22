@@ -4,7 +4,7 @@ open Datascript
 
 (* text/get-file-basename = page-ref/get-file-basename (node-path basename) *)
 let get_file_basename (path : string) : string =
-  if String.trim path = "" then ""
+  if Unicode.trim path = "" then ""
   else
     let path = Common_util.str_replace_all path "+" "/" in
     (match List.rev (String.split_on_char '/' path) with
@@ -13,7 +13,7 @@ let get_file_basename (path : string) : string =
 
 (* node-path .name = basename without ext *)
 let get_file_rootname (path : string) : string =
-  if String.trim path = "" then ""
+  if Unicode.trim path = "" then ""
   else
     let path = Common_util.str_replace_all path "+" "/" in
     let base = get_file_basename path in
@@ -54,7 +54,7 @@ let remove_level_spaces (text : string) (format : string) (block_pattern : strin
   match format with
   | "" -> text
   | _ ->
-    if String.trim text = "" then ""
+    if Unicode.trim text = "" then ""
     else if format = "markdown" && Common_util.str_starts_with text "---" then text
     else remove_level_spaces_aux text block_pattern space trim_left
 
@@ -96,7 +96,7 @@ let extract_refs_from_mldoc_ast (v : value list) : value =
   v
   |> List.filter (fun ast -> not (Gp_mldoc.ast_link ast))
   |> List.filter_map get_ref_from_ast
-  |> List.map String.trim
+  |> List.map Unicode.trim
   |> List.filter (fun s -> s <> "")
   |> Common_util.distinct_by Fun.id
   |> fun xs -> Set (List.map (fun s -> String s) xs)
@@ -105,7 +105,7 @@ let extract_refs_from_mldoc_ast (v : value list) : value =
 let sep_by_comma (s : string) : string list =
   Common_util.str_replace_all s "，" ","
   |> String.split_on_char ','
-  |> List.map String.trim
+  |> List.map Unicode.trim
   |> List.filter (fun s -> s <> "")
   |> Common_util.distinct_by Fun.id
 
@@ -154,7 +154,7 @@ let kw_name_string (k : attr) : string =
 (* text/parse-property *)
 let parse_property (k : attr) (v : string) (mldoc_references_ast : value list)
     (config_state : (attr * value) list) : value =
-  let v' = String.trim v in
+  let v' = Unicode.trim v in
   let unparsed =
     Gp_property.unparsed_built_in_properties ()
     @ (match List.assoc_opt "ignored-page-references-keywords" config_state with

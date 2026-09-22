@@ -31,7 +31,7 @@ let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
         | None -> None
         | Some q_ent -> (
             match Ldb.value q_ent "block/title" with
-            | Some (String s) when String.trim s <> "" -> Some s
+            | Some (String s) when Unicode.trim s <> "" -> Some s
             | _ -> None))
   in
   let parsed = Option.bind query_text (Db_query_dsl.parse db) in

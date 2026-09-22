@@ -613,7 +613,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
   | "rename-page", [ page_uuid; new_title ] ->
       let page_uuid = Option.value (uuid_of_wire page_uuid) ~default:"" in
       (match kw_value new_title with
-       | Some t when String.trim t = "" ->
+       | Some t when Unicode.trim t = "" ->
            raise (Invalid_outliner_op "Page name shouldn't be blank")
        | Some t ->
            ignore

@@ -29,7 +29,7 @@ let file_needs_lazy_read (file : BM.t) : bool =
    | None -> false)
   &&
   match BM.attr_value file "file/content" with
-  | Some (String s) -> String.trim s = ""
+  | Some (String s) -> Unicode.trim s = ""
   | _ -> true
 
 (* ui-request/<request :read-import-file {:path} — resolves to a file map *)

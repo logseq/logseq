@@ -4,7 +4,7 @@
 (* db-asset/asset-path->type *)
 let asset_path_to_type (path : string) : string =
   let ext = Gp_node_path.extname path in
-  if String.length ext > 1 then String.lowercase_ascii (String.sub ext 1 (String.length ext - 1))
+  if String.length ext > 1 then Unicode.lowercase (String.sub ext 1 (String.length ext - 1))
   else ""
 
 (* db-asset/asset-name->title *)
