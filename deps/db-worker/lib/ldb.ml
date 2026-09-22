@@ -482,27 +482,20 @@ let get_built_in_page db (title : string) : entity option =
   let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
   entity db (Lookup_ref ("block/uuid", Uuid u))
 
-(* common-initial-data/get-block-full-children-ids — BFS over raw
-   block/_parent (cljs uses the :parent rule which reads raw datoms).
-   Verified engine limitation (datascript-ocaml @ 8db9e3c): bound :in
-   args — even literal head args — are dropped inside recursive rule
-   calls, so [:find [?c ...] :in $ ?id % :where (parent ?id ?c)] with
-   the :parent rules returns children of every parent. *)
+(* common-initial-data/get-block-full-children-ids — the recursive
+   :parent rule, as in cljs. *)
 let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
-  let module S = Set.Make (Int) in
-  let rec go visited queue acc =
-    match queue with
-    | [] -> List.rev acc
-    | id :: rest ->
-      let children =
-        List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref id) ())
-        |> List.filter_map (fun (d : datom) ->
-             if S.mem d.e visited then None else Some d.e)
-      in
-      let visited' = List.fold_left (fun v c -> S.add c v) visited children in
-      go visited' (rest @ children) (List.rev_append (List.rev children) acc)
+  let rules_edn =
+    "[[(parent ?p ?c) [?c :block/parent ?p]] \
+      [(parent ?p ?c) [?t :block/parent ?p] (parent ?t ?c)]]"
   in
-  go (S.singleton block_eid) [ block_eid ] []
+  q_string db
+    "[:find [?c ...] :in $ ?id % :where (parent ?id ?c)]"
+    ~inputs:
+      [ Arg_scalar (Result_entity block_eid);
+        Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn)) ]
+  |> List.filter_map
+       (fun row -> match row with [ Result_entity c ] -> Some c | _ -> None)
 
 let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_id list =
   let tag_set = tag_idents in
