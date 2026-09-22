@@ -168,7 +168,7 @@ let search_index_input_idle repo : bool =
   if node_runtime () then true
   else
     let idle_opt, fresh =
-      match Worker_state.thread_atom "search-input-idle-status" with
+      match Worker_state.thread_atom "thread-atom/search-input-idle-status" with
       | Some status -> (
           match Wire.get repo status with
           | Some entry ->
