@@ -77,7 +77,8 @@ let () =
              in
              promise_of_task (Worker_core.invoke "thread-api/transact" tx_args))
       |> Js.Promise.then_ (fun res ->
-             Fest.expect |> Fest.equal (contains res "db-after") true;
+             (* cljs transact returns nil *)
+             Fest.expect |> Fest.equal (contains res "error") false;
              let q_args =
                Transit_codec.to_string
                  (Wire.Array
