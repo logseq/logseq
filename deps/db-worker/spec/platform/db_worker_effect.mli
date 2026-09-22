@@ -12,6 +12,10 @@ val all : 'a t list -> 'a list t
 val catch : 'a t -> (exn -> 'a t) -> 'a t
 val finally : 'a t -> (unit -> unit t) -> 'a t
 val sleep : float -> unit t
+
+(* promesa p/timeout — reject with Failure "timeout" when the task has
+   not settled within ms. *)
+val timeout : 'a t -> float -> 'a t
 val wait : unit -> 'a t * 'a resolver
 val wakeup : 'a resolver -> 'a -> unit
 val is_pending : 'a t -> bool

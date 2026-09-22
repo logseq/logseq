@@ -124,3 +124,11 @@ let sleep span =
   (* No event loop on native yet; block briefly. Used only by tests. *)
   ignore (Unix.select [] [] [] (span /. 1000.));
   pure ()
+
+let timeout task _ms =
+  (* No event loop on native — a still-pending task can never settle,
+     so it always times out like p/timeout would. *)
+  match task.state with
+  | Resolved value -> pure value
+  | Rejected exn -> error exn
+  | Pending -> error (Failure "timeout")
