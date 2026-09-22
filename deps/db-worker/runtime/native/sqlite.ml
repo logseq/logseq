@@ -2,6 +2,8 @@
 type db =
   { handle : Sqlite3.db
   ; filename : string
+  ; mutable tx_depth : int
+  ; mutable savepoint_seq : int
   }
 
 type bind =
@@ -36,7 +38,7 @@ let check rc context =
 
 let open_db ~path =
   let handle = Sqlite3.db_open path in
-  { handle; filename = path }
+  { handle; filename = path; tx_depth = 0; savepoint_seq = 0 }
 
 let prepare_pool ~name:_ = Db_worker_effect.pure ()
 let open_db_pool ~name:_ ~path = open_db ~path
@@ -85,15 +87,41 @@ let query t ~sql ~bind =
   ignore (Sqlite3.finalize stmt);
   List.rev !rows
 
+(* cljs platform/node.cljs with-transaction: BEGIN at depth 0,
+   SAVEPOINT __logseq_tx_N when nested. *)
 let transaction t f =
-  exec t ~sql:"begin" ~bind:[||];
-  match f () with
-  | result ->
-      exec t ~sql:"commit" ~bind:[||];
-      result
-  | exception exn ->
-      exec t ~sql:"rollback" ~bind:[||];
-      raise exn
+  let outermost = t.tx_depth = 0 in
+  let savepoint =
+    if outermost then ""
+    else begin
+      t.savepoint_seq <- t.savepoint_seq + 1;
+      Printf.sprintf "__logseq_tx_%d" t.savepoint_seq
+    end
+  in
+  exec t ~sql:(if outermost then "begin" else "SAVEPOINT " ^ savepoint)
+    ~bind:[||];
+  t.tx_depth <- t.tx_depth + 1;
+  Fun.protect
+    ~finally:(fun () -> t.tx_depth <- t.tx_depth - 1)
+    (fun () ->
+      match f () with
+      | result ->
+          exec t
+            ~sql:
+              (if outermost then "commit" else "RELEASE SAVEPOINT " ^ savepoint)
+            ~bind:[||];
+          result
+      | exception exn ->
+          (if outermost then
+             (try exec t ~sql:"rollback" ~bind:[||] with _ -> ())
+           else begin
+             (try
+                exec t ~sql:("ROLLBACK TO SAVEPOINT " ^ savepoint) ~bind:[||]
+              with _ -> ());
+             (try exec t ~sql:("RELEASE SAVEPOINT " ^ savepoint) ~bind:[||]
+              with _ -> ())
+           end);
+          raise exn)
 
 let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
 

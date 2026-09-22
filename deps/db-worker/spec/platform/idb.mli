@@ -13,7 +13,7 @@ val keys : unit -> string list Db_worker_effect.t
 val init : unit -> unit Db_worker_effect.t
 
 (* Binary values (cached AES keys etc). Browser stores Uint8Array
-   (structured-clone), node the transit "uint8array" tag, native raw
-   bytes. *)
+   (structured-clone); node and native share the transit "uint8array"
+   tag inside kv-store.json. *)
 val get_binary : string -> string option Db_worker_effect.t
 val set_binary : string -> string -> unit Db_worker_effect.t
