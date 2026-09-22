@@ -148,3 +148,78 @@ let block_route_resolution db (ref_v : value) (route_name : string)
           candidates
       in
       Some { page; candidates; block }
+
+(* --- recur-replace-uuid-in-block-title (content.cljs) --- *)
+
+let id_or_tag_ref_re =
+  Regexp.compile
+    "(#?)\\[\\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\]\\]"
+
+let title_ref_replacement id_to_title ~match_ ~groups ~offset:_ ~input:_ =
+  let hash_prefix = match groups.(0) with Some s -> s | None -> "" in
+  let id = match groups.(1) with Some s -> s | None -> "" in
+  match List.assoc_opt id id_to_title with
+  | Some ref_title ->
+      if hash_prefix = "#" && not (String.contains ref_title ' ') then
+        "#" ^ ref_title
+      else hash_prefix ^ page_ref ref_title
+  | None -> match_
+
+let replace_title_refs_once content id_to_title =
+  Regexp.replace id_or_tag_ref_re
+    ~f:(title_ref_replacement id_to_title)
+    content
+
+let ref_to_title_entry replace_block_refs (ref_ : entity) =
+  match Ldb.value ref_ "block/uuid", Ldb.string_value ref_ "block/title" with
+  | Some (Uuid u), Some t when replace_block_refs || Ldb.is_page ref_ ->
+      Some (u, t)
+  | _ -> None
+
+let uuid_of (e : entity) =
+  match Ldb.value e "block/uuid" with Some (Uuid u) -> Some u | _ -> None
+
+let block_ref_id_to_title (ent : entity) max_depth replace_block_refs =
+  let rec loop frontier seen id_to_title depth =
+    if depth >= max_depth || frontier = [] then id_to_title
+    else begin
+      let new_refs =
+        List.filter
+          (fun (e : entity) ->
+            match uuid_of e with
+            | Some u -> not (List.mem u seen)
+            | None -> false)
+          frontier
+      in
+      let seen' =
+        seen @ List.filter_map uuid_of new_refs
+      in
+      let id_to_title' =
+        id_to_title
+        @ List.filter_map (ref_to_title_entry replace_block_refs) new_refs
+      in
+      let next =
+        List.concat_map (fun e -> Ldb.ref_ents e "block/refs") new_refs
+      in
+      loop next seen' id_to_title' (depth + 1)
+    end
+  in
+  loop (Ldb.ref_ents ent "block/refs") [] [] 0
+
+(* db-content/recur-replace-uuid-in-block-title *)
+let recur_replace_uuid_in_block_title ?(max_depth = 10)
+    ?(replace_block_refs = true) (ent : entity) : string option =
+  match Ldb.string_value ent "block/title" with
+  | Some title when Regexp.test id_ref_re title ->
+      let id_to_title =
+        block_ref_id_to_title ent max_depth replace_block_refs
+      in
+      let rec loop result depth =
+        if depth >= max_depth || not (Regexp.test id_ref_re result) then result
+        else begin
+          let next = replace_title_refs_once result id_to_title in
+          if next = result then result else loop next (depth + 1)
+        end
+      in
+      Some (loop title 0)
+  | other -> other

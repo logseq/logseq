@@ -13,6 +13,11 @@ let init () =
     ignore Endpoint_read.get_alias_source_page;
     ignore Endpoint_read.get_bidirectional_properties;
     ignore Endpoint_read.get_block_refs;
+    ignore Endpoint_read.get_page_blocks_tree;
+    ignore Endpoint_comment.get_comment_threads_for_block;
+    ignore Endpoint_comment.get_comment_thread_block_uuids;
+    ignore Endpoint_cli.cli_list_properties;
+    ignore Endpoint_cli.api_get_page_data;
     initialized := true
   end
 
