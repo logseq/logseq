@@ -275,7 +275,9 @@ let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
    conn (reads storage-backed data, never writes), then a single commit. *)
 let batch_transact_with_temp_conn ?(tx_meta : tx_meta = []) (conn : conn)
     (f : conn -> unit) : tx_report option =
-  let temp = conn_from_db (Conn.db conn) in
+  (* cljs conn-from-db fork avoids d/store — strip storage so the temp
+     conn can read but never write. *)
+  let temp = conn_from_db { (Conn.db conn) with storage_ref = None } in
   (* cljs swap! temp-conn assoc :batch-tx? :skip-store? :skip-validate-db? *)
   let fl = flags_of temp in
   fl.batch_tx <- true;
