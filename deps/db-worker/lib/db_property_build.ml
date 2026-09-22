@@ -190,9 +190,9 @@ let build_new_property ~(db_ident : string) ~(prop_schema : Block_map.t)
     | Some (Keyword ("many" | "db.cardinality/many")) -> "db.cardinality/many"
     | _ -> "db.cardinality/one"
   in
-  Block_map.dissoc prop_schema [ "db/cardinality" ]
-  |> Block_map.merge
-       [ "db/ident", Keyword db_ident'
+  Block_map.merge
+    (Block_map.dissoc prop_schema [ "db/cardinality" ])
+    [ "db/ident", Keyword db_ident'
        ; "block/tags", Set [ Keyword "logseq.class/Property" ]
        ; "logseq.property/type", Keyword prop_type
        ; "block/name", String (Ldb.page_name_sanity_lc prop_name)
