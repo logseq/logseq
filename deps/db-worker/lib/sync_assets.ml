@@ -194,6 +194,9 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
            ; Wire.Keyword "asset-uuid", Wire.String asset_uuid
            ; Wire.Keyword "graph-id", str_or graph_id ])
 
+(* test hook — cljs tests rebind upload-remote-asset! *)
+let upload_remote_asset_fn = ref upload_remote_asset
+
 let drop_asset_op repo asset_uuid reason data ~current_client ~broadcast_rtc_state
     : unit Db_worker_effect.t =
   Worker_log.warn "db-sync/drop-asset-op"
@@ -281,13 +284,13 @@ let process_asset_op repo graph_id (asset_op : Wire.t)
              Db_worker_effect.pure ()
          | Some _, Some at, Some cs ->
              Db_worker_effect.catch
-               (upload_remote_asset repo (Some graph_id) asset_uuid (Some at) (Some cs)
+               (!upload_remote_asset_fn repo (Some graph_id) asset_uuid (Some at) (Some cs)
                 >>= fun () ->
                 (match entity (Conn.db conn)
                         (Lookup_ref ("block/uuid", Uuid asset_uuid)) with
                  | Some _ ->
                      ignore
-                       (Db_transact.transact conn
+                       (!Db_transact.transact_fn conn
                           [ Wire.Map
                               [ Wire.Keyword "block/uuid", Wire.Uuid asset_uuid
                               ; Wire.Keyword "logseq.property.asset/remote-metadata"
