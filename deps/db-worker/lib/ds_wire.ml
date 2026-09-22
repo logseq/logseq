@@ -100,7 +100,7 @@ let rec transit_of_value (v : value) : Wire.t =
   | Bool b -> Wire.Bool b
   | Keyword s -> Wire.Keyword s
   | Uuid s -> Wire.Uuid s
-  | Instant ms -> Wire.Date_ms ms
+  | Instant ms -> Wire.Int64 ms
   | Regex s -> Wire.String s
   | Ref n -> Wire.Int n
   | List vs -> Wire.List (List.map transit_of_value vs)
@@ -296,6 +296,31 @@ and transit_of_schema (schema : schema) : Wire.t =
               (List.filter_map (fun f -> Option.map (fun (k, v) -> (Wire.Keyword k, v)) f) fields)
           ))
        schema)
+
+let wire_map_of_pairs pairs =
+  Wire.Map
+    (List.map
+       (fun (k, r) -> (transit_of_value k, transit_of_query_result r))
+       pairs)
+
+(* cljs (apply d/q ...) honours the :find spec: relation -> #{[row]},
+   collection -> #{value}, tuple -> [value], scalar -> value;
+   :keys/:syms/:strs produce result maps instead of tuples. *)
+let wire_of_query_output (output : query_output) : Wire.t =
+  match output with
+  | Query_scalar (Some r) -> transit_of_query_result r
+  | Query_scalar None -> Wire.nil
+  | Query_collection rs -> Wire.Set (List.map transit_of_query_result rs)
+  | Query_tuple (Some rs) -> Wire.Array (List.map transit_of_query_result rs)
+  | Query_tuple None -> Wire.nil
+  | Query_relation rows ->
+      Wire.Set
+        (List.map
+           (fun row -> Wire.Array (List.map transit_of_query_result row))
+           rows)
+  | Query_relation_maps rows -> Wire.Set (List.map wire_map_of_pairs rows)
+  | Query_tuple_map (Some pairs) -> wire_map_of_pairs pairs
+  | Query_tuple_map None -> Wire.nil
 
 (* ---- tx_report -> transit ---- *)
 
