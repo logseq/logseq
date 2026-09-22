@@ -244,7 +244,7 @@ let block_subtree_entities (root : entity) : entity list =
       if Int_set.mem e.id seen then loop rest seen result
       else begin
         let children =
-          Ldb.ref_ents e "block/_raw-parent" |> List.filter block_entity
+          Ldb.ref_ents e "block/_parent" |> List.filter block_entity
         in
         loop (rest @ children) (Int_set.add e.id seen) (e :: result)
       end
