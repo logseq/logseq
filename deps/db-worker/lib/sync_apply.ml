@@ -1118,18 +1118,6 @@ let template_parent_ref (parent : Wire.t) : Wire.t =
       | _ -> parent)
   | _ -> parent
 
-(* cljs distinct — dedupe preserving first-occurrence order *)
-let distinct_stable (xs : 'a list) : 'a list =
-  let seen = Hashtbl.create 16 in
-  List.filter
-    (fun x ->
-       if Hashtbl.mem seen x then false
-       else begin
-         Hashtbl.add seen x ();
-         true
-       end)
-    xs
-
 (* cljs truthy — anything but nil/false *)
 let wire_truthy (v : Wire.t option) : bool =
   match v with
@@ -2400,12 +2388,14 @@ let remote_sync_conflicts (db : db)
                     | _ -> None)
                 | _ -> None)
              tx_data)
-    |> distinct_stable
+    (* cljs distinct — first-occurrence order *)
+    |> Sync_state.distinct_by Fun.id
 
 let broadcast_sync_conflicts repo conflicts : unit =
   (* cljs (distinct (map :block-uuid conflicts)) — first-occurrence order *)
   let uuids =
-    List.map (fun (u, _, _, _) -> u) conflicts |> distinct_stable
+    List.map (fun (u, _, _, _) -> u) conflicts
+    |> Sync_state.distinct_by Fun.id
   in
   List.iter
     (fun block_uuid ->

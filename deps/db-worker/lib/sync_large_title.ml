@@ -242,7 +242,8 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                      | None -> None)
                  | _ -> None)
               txs
-            |> List.sort_uniq compare
+            (* cljs distinct — first-occurrence order *)
+            |> Sync_state.distinct_by Fun.id
         | None ->
             large_title_object_datoms db
             |> Seq.filter_map (fun (d : datom) ->
@@ -250,7 +251,7 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                    match large_title_object_wire_of obj_wire with
                    | Some _ -> Some (Wire.Int d.e, obj_wire)
                    | None -> None)
-            |> List.of_seq |> List.sort_uniq compare
+            |> List.of_seq |> Sync_state.distinct_by Fun.id
       in
       match items with
       | [] -> Db_worker_effect.pure ()
