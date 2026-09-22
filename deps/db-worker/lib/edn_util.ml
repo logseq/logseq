@@ -27,7 +27,15 @@ let rec value_of_edn (Edn_parser.Any v) : value =
   | Edn_parser.Map kvs ->
     Map (List.map (fun (k, v) -> (value_of_edn k, value_of_edn v)) (Array.to_list kvs))
   | Edn_parser.Set xs -> Set (List.map value_of_edn (Array.to_list xs))
-  | Edn_parser.Tagged (t, v) -> Tuple [ Some (Symbol t); Some (value_of_edn v) ]
+  | Edn_parser.Tagged (t, v) ->
+      (match t, value_of_edn v with
+       (* cljs reader literals: #uuid -> uuid, #inst -> date *)
+       | "uuid", String s -> Uuid s
+       | "inst", String s -> (
+           match Date_time_util.epoch_ms_of_iso s with
+           | Some ms -> Instant ms
+           | None -> invalid_arg "edn_util: unparseable #inst literal")
+       | _ -> Tuple [ Some (Symbol t); Some (value_of_edn v) ])
 
 (* edn/read-string: reads the first form *)
 let read_string (s : string) : value = value_of_edn (Edn_parser.of_edn_string s)
