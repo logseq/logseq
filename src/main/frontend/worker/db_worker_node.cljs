@@ -667,7 +667,9 @@
   (let [bundle-path (.resolve (js/require "path") js/__dirname "db-worker-ocaml.cjs")]
     (when (.existsSync (js/require "fs") bundle-path)
       (gobj/set js/globalThis "LogseqDbWorker" (js/require bundle-path))
-      (.init (gobj/get js/globalThis "LogseqDbWorker")))))
+      (.init (gobj/get js/globalThis "LogseqDbWorker"))
+      (when-let [set-post-fn (gobj/get (gobj/get js/globalThis "LogseqDbWorker") "set_post_fn")]
+        (set-post-fn handle-event!)))))
 
 (defn main
   []
