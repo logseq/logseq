@@ -17,10 +17,17 @@ let add_rtc_log type' m =
   let entry =
     match m with
     | Wire.Map kvs ->
+        (* cljs (assoc m :type ... :created-at ...) replaces existing keys *)
         Wire.Map
-          (kvs
+          (List.filter
+             (fun (k, _) ->
+                not
+                  (Wire.key_matches "type" k
+                   || Wire.key_matches "created-at" k))
+             kvs
            @ [ Wire.Keyword "type", Wire.Keyword type'
-             ; Wire.Keyword "created-at", Wire.Date_ms (Int64.of_float (Clock.now_ms ())) ])
+             ; Wire.Keyword "created-at"
+             , Wire.Date_ms (Int64.of_float (Clock.now_ms ())) ])
     | _ -> invalid_arg "rtc-log: m must be a map"
   in
   rtc_log := entry;

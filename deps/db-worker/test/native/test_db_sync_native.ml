@@ -133,6 +133,8 @@ let preserve_state (f : unit -> 'a) : 'a =
   let ck_prev = Hashtbl.copy Sync_state.latest_remote_checksums in
   let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
   let flush_prev = !(Sync_apply.flush_pending_fn) in
+  let client_prev = !(Sync_state.db_sync_client) in
+  let dev_or_test_prev = !(Sync_state.dev_or_test) in
   let module SD = Sync_deps in
   let sd_encrypt_tx = !(SD.encrypt_tx_data)
   and sd_decrypt_tx = !(SD.decrypt_tx_data)
@@ -200,6 +202,8 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.reset Sync_state.latest_remote_checksums;
       Hashtbl.iter
         (Hashtbl.replace Sync_state.latest_remote_checksums) ck_prev;
+      Sync_state.db_sync_client := client_prev;
+      Sync_state.dev_or_test := dev_or_test_prev;
       Sync_apply.prepare_upload_tx_entries_fn := prep_prev;
       Sync_apply.flush_pending_fn := flush_prev;
       SD.encrypt_tx_data := sd_encrypt_tx;
@@ -1326,6 +1330,437 @@ let test_flush_pending_reports_upload_response_timeout () =
               check "no events when ws closed" (!events = []));
           ignore (Sync_apply.mark_pending_txs_false test_repo [ tx_id ])))
 
+(* cljs start-active-client-flushes-pending-local-txs-test *)
+let test_start_active_client_flushes_pending_local_txs () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let repo = test_repo in
+      let broadcasts = ref 0 in
+      Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> incr broadcasts);
+      Sync_state.db_sync_client := Some client;
+      Worker_state.set_db_sync_config
+        (wire_map
+           [ "ws-url", Wire.String "wss://sync.example.test/sync/%s" ]);
+      Sync_client_op.update_graph_uuid repo (Some "graph-1");
+      seed_client_op_txs repo
+        [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add
+                     (block_uuid_lookup (entity_block_uuid child1))
+                     "block/title"
+                     (Wire.String "pending active client flush") ])
+            tx_id ];
+      await_unit (Sync_client.start repo);
+      await_task !(client.Sync_state.send_queue);
+      check "1 broadcast" (!broadcasts = 1);
+      check "local-tx 0" (Sync_client_op.get_local_tx repo = Some 0);
+      check "latest-remote-tx 0"
+        (Hashtbl.find_opt Sync_apply.repo_latest_remote_tx repo = Some 0);
+      check "pending txs"
+        (List.map
+           (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+           (Sync_apply.pending_txs repo ())
+         = [ tx_id ]);
+      check "no sync error" (!(client.Sync_state.last_sync_error) = None);
+      (match !sent with
+       | first :: _ ->
+           check "tx/batch" (str_field "type" first = "tx/batch");
+           check "tx-ids"
+             (List.map (str_field "tx-id") (payload_txs first) = [ tx_id ])
+       | [] -> Alcotest.fail "nothing sent");
+      check "inflight" (!(client.Sync_state.inflight) = [ tx_id ]))
+
+(* cljs receive-queue-failure-updates-last-sync-error-test *)
+let test_receive_queue_failure_updates_last_sync_error () =
+  preserve_state (fun () ->
+      let client = mk_client () in
+      let rejected =
+        Dispatcher.Exn_info
+          ( "tx-rejected"
+          , [ kw "type", kw "db-sync/tx-rejected"
+            ; kw "reason", Wire.String "db transact failed" ] )
+      in
+      Sync_client.enqueue_receive_message client (fun () -> raise rejected);
+      await_unit !(client.Sync_state.receive_queue);
+      match !(client.Sync_state.last_sync_error) with
+      | None -> Alcotest.fail "last-sync-error not set"
+      | Some last_error ->
+          check "code"
+            (Wire.get "code" last_error = Some (kw "tx-rejected"));
+          check "message"
+            (Wire.get "message" last_error
+             = Some (Wire.String "tx-rejected"));
+          (match Wire.get "data" last_error with
+           | Some data ->
+               check "data type"
+                 (Wire.get "type" data
+                  = Some (kw "db-sync/tx-rejected"));
+               check "data reason"
+                 (Wire.get "reason" data
+                  = Some (Wire.String "db transact failed"))
+           | None -> Alcotest.fail "no error data"))
+
+(* cljs temp-conn-batch-preserves-cardinality-one-schema-test *)
+let test_temp_conn_batch_preserves_cardinality_one_schema () =
+  let conn, _ops, _p, child1, _c2, _c3 = setup_parent_child () in
+  let child_uuid =
+    match Ldb.value child1 "block/uuid" with
+    | Some (Uuid s) -> s
+    | _ -> failwith "child has no block/uuid"
+  in
+  ignore
+    (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+         ignore
+           (Db_tx.transact temp
+              [ Add
+                  ( Lookup_ref ("block/uuid", Uuid child_uuid)
+                  , "block/order", String "a-test") ])));
+  let child_after =
+    Option.get
+      (Datascript.entity (Datascript.db conn)
+         (Lookup_ref ("block/uuid", Uuid child_uuid)))
+  in
+  let errors = Db_validate.validate_local_db (Datascript.db conn) in
+  check "order"
+    (Ldb.value child_after "block/order" = Some (String "a-test"));
+  check "no validation errors" (errors = [])
+
+(* cljs prepare-upload-tx-entries-drops-empty-txs-test *)
+let test_prepare_upload_tx_entries_drops_empty_txs () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let empty_tx_id = fresh_uuid () in
+      let valid_tx_id = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"transact" empty_tx_id
+            ; seed_tx ~created_at:2 ~outliner_op:"save-block"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add
+                         (block_uuid_lookup (entity_block_uuid child1))
+                         "block/title" (Wire.String "valid-title") ])
+                valid_tx_id ];
+          let pending = Sync_apply.pending_txs test_repo () in
+          let tx_entries, drop_tx_ids, drop_txs =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
+              pending
+          in
+          check "drop ids" (drop_tx_ids = [ empty_tx_id ]);
+          check "drop txs"
+            (drop_txs
+             = [ Wire.Map
+                   [ kw "tx-id", Wire.String empty_tx_id
+                   ; kw "outliner-op", kw "transact"
+                   ; kw "reason", kw "empty-tx-data" ] ]);
+          check "tx entries"
+            (List.map (str_field "tx-id") tx_entries = [ valid_tx_id ])))
+
+(* cljs large-block-insert-upload-tx *)
+let large_block_insert_upload_tx (page_uuid : string) (parent_uuid : string)
+    (block_count : int) : Wire.t list =
+  List.init block_count Fun.id
+  |> List.concat_map (fun idx ->
+         let block_uuid = fresh_uuid () in
+         let eid = block_uuid in
+         [ Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/uuid"
+             ; Wire.Uuid block_uuid; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/title"
+             ; Wire.String ("large-client-block-" ^ string_of_int idx)
+             ; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/page"
+             ; Wire.Array [ kw "block/uuid"; Wire.Uuid page_uuid ]
+             ; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/parent"
+             ; Wire.Array [ kw "block/uuid"; Wire.Uuid parent_uuid ]
+             ; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/order"
+             ; Wire.String "a0"; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/created-at"
+             ; Wire.Int idx; Wire.Int idx ]
+         ; Wire.Array
+             [ kw "db/add"; Wire.String eid; kw "block/updated-at"
+             ; Wire.Int idx; Wire.Int idx ] ])
+
+(* cljs prepare-upload-tx-entries-keeps-large-client-op-test *)
+let test_prepare_upload_tx_entries_keeps_large_client_op () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let uuid_of (e : entity) : string =
+        match Ldb.value e "block/uuid" with
+        | Some (Uuid s) -> s
+        | _ -> failwith "entity has no block/uuid"
+      in
+      let page_uuid =
+        match Ldb.value parent "block/page" with
+        | Some (Ref id) -> (
+            match Ldb.ent_of_id parent.db id with
+            | Some page -> uuid_of page
+            | None -> failwith "parent has no page entity")
+        | _ -> failwith "parent has no block/page"
+      in
+      let parent_uuid = uuid_of parent in
+      let tx_data =
+        large_block_insert_upload_tx page_uuid parent_uuid 120
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+                ~tx_data_v:(Wire.Array tx_data) tx_id ];
+          let pending = Sync_apply.pending_txs test_repo () in
+          let tx_entries, drop_tx_ids, _drop_txs =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
+              pending
+          in
+          check "no drops" (drop_tx_ids = []);
+          check "1 entry" (List.length tx_entries = 1);
+          (match tx_entries with
+           | [ e ] ->
+               check "tx-id" (str_field "tx-id" e = tx_id);
+               check "tx-data"
+                 (Wire.get "tx-data" e = Some (Wire.Array tx_data))
+           | _ -> Alcotest.fail "expected one tx entry")))
+
+(* cljs sync-counts-counts-only-true-pending-local-ops-test *)
+let test_sync_counts_counts_only_true_pending_local_ops () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~pending:false (fresh_uuid ())
+            ; seed_tx ~created_at:2 ~pending:false (fresh_uuid ())
+            ; seed_tx ~created_at:3 (fresh_uuid ()) ];
+          match Sync_apply.sync_counts test_repo with
+          | Some counts ->
+              check "pending-local 1"
+                (Wire.get "pending-local" counts = Some (Wire.Int 1))
+          | None -> Alcotest.fail "no sync counts"))
+
+(* cljs sync-counts-reports-stored-local-checksum-test *)
+let test_sync_counts_reports_stored_local_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 42;
+          Hashtbl.replace Sync_apply.repo_latest_remote_checksum test_repo
+            "fresh";
+          List.iter
+            (fun cached_checksum ->
+               Hashtbl.replace Sync_state.client_ops_conns test_repo
+                 (new_client_ops_db ());
+               Worker_state.drop_pending_local_tx_count test_repo;
+               Sync_client_op.update_local_tx test_repo 42;
+               Sync_client_op.update_graph_uuid test_repo (Some "graph-1");
+               (match cached_checksum with
+                | Some c -> Sync_client_op.update_local_checksum test_repo c
+                | None -> ());
+               let counts =
+                 Option.get (Sync_apply.sync_counts test_repo)
+               in
+               let client = mk_client () in
+               let payload =
+                 Sync_presence.rtc_state_payload
+                   ~sync_counts:(fun _ -> Some counts) client
+               in
+               (match cached_checksum with
+                | Some c ->
+                    check "local-checksum"
+                      (Wire.get "local-checksum" counts
+                       = Some (Wire.String c))
+                | None ->
+                    check "local-checksum nil"
+                      (wire_nil_or_absent
+                         (Wire.get "local-checksum" counts)));
+               check "graph-id"
+                 (Wire.get "graph-id" counts = Some (Wire.String "graph-1"));
+               check "graph-uuid"
+                 (Wire.get "graph-uuid" payload
+                  = Some (Wire.String "graph-1")))
+            [ Some "stale"; None ]))
+
+(* pull/ok test prelude: conns wired + e2ee disabled + remote state reset *)
+let with_pull_ok_prelude (f : unit -> 'a) : 'a =
+  Hashtbl.remove Sync_apply.repo_latest_remote_tx test_repo;
+  Sync_deps.graph_e2ee := Some (fun _ -> false);
+  Sync_deps.ensure_graph_aes_key :=
+    Some (fun _ -> Db_worker_effect.pure Wire.Nil);
+  f ()
+
+(* cljs pull-ok-with-older-remote-tx-is-ignored-test *)
+let test_pull_ok_with_older_remote_tx_is_ignored () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_id = parent.id in
+      let stale_tx =
+        Transit_codec.to_string
+          (Wire.Array
+             [ db_add (Wire.Int parent_id) "block/title"
+                 (Wire.String "stale-title") ])
+      in
+      let raw_message =
+        msg_json
+          [ "type", Wire.String "pull/ok"; "t", Wire.Int 4
+          ; "checksum", Wire.String "ignored"
+          ; ( "txs"
+            , Wire.Array
+                [ wire_map
+                    [ "t", Wire.Int 4; "tx", Wire.String stale_tx ] ] ) ]
+      in
+      let client = mk_client () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_pull_ok_prelude (fun () ->
+              Sync_client_op.update_local_tx test_repo 5;
+              Sync_handle_message.handle_message test_repo client
+                raw_message;
+              let parent' =
+                Option.get
+                  (Ldb.ent_of_id (Datascript.db conn) parent_id)
+              in
+              check "title unchanged"
+                (Ldb.value parent' "block/title"
+                 = Some (String "parent"));
+              check "local tx 5"
+                (Sync_client_op.get_local_tx test_repo = Some 5))))
+
+(* cljs pull-ok-out-of-order-stale-response-is-ignored-test *)
+let test_pull_ok_out_of_order_stale_response_is_ignored () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_id = parent.id in
+      let new_tx =
+        Transit_codec.to_string
+          (Wire.Array
+             [ db_add (Wire.Int parent_id) "block/title"
+                 (Wire.String "remote-new-title") ])
+      in
+      let stale_tx =
+        Transit_codec.to_string
+          (Wire.Array
+             [ db_add (Wire.Int parent_id) "block/title"
+                 (Wire.String "stale-title") ])
+      in
+      let new_checksum =
+        Db_sync_checksum.recompute_checksum
+          (Datascript.db_with
+             [ Add
+                 ( Entity_id parent_id, "block/title"
+                 , String "remote-new-title") ]
+             (Datascript.db conn))
+      in
+      let raw_new =
+        msg_json
+          [ "type", Wire.String "pull/ok"; "t", Wire.Int 2
+          ; "checksum", Wire.String new_checksum
+          ; ( "txs"
+            , Wire.Array
+                [ wire_map [ "t", Wire.Int 2; "tx", Wire.String new_tx ] ]
+            ) ]
+      in
+      let raw_stale =
+        msg_json
+          [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+          ; "checksum", Wire.String "ignored"
+          ; ( "txs"
+            , Wire.Array
+                [ wire_map
+                    [ "t", Wire.Int 1; "tx", Wire.String stale_tx ] ] ) ]
+      in
+      let client = mk_client () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_pull_ok_prelude (fun () ->
+              Sync_handle_message.handle_message test_repo client raw_new;
+              Sync_handle_message.handle_message test_repo client
+                raw_stale;
+              let parent' =
+                Option.get
+                  (Ldb.ent_of_id (Datascript.db conn) parent_id)
+              in
+              check "new title"
+                (Ldb.value parent' "block/title"
+                 = Some (String "remote-new-title"));
+              check "local tx 2"
+                (Sync_client_op.get_local_tx test_repo = Some 2))))
+
+(* cljs pull-ok-does-not-anchor-remote-checksum-before-verify-test *)
+let test_pull_ok_does_not_anchor_remote_checksum_before_verify () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_id = parent.id in
+      let remote_tx_data =
+        [ Add (Entity_id parent_id, "block/title",
+               String "remote-checksum-anchor") ]
+      in
+      let local_checksum_after_remote =
+        Db_sync_checksum.recompute_checksum
+          (Datascript.db_with remote_tx_data (Datascript.db conn))
+      in
+      let remote_checksum = "bad-remote-checksum" in
+      let remote_tx_wire =
+        Transit_codec.to_string
+          (Wire.Array
+             [ db_add (Wire.Int parent_id) "block/title"
+                 (Wire.String "remote-checksum-anchor") ])
+      in
+      let raw_message =
+        msg_json
+          [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+          ; "checksum", Wire.String remote_checksum
+          ; ( "txs"
+            , Wire.Array
+                [ wire_map
+                    [ "t", Wire.Int 1; "tx", Wire.String remote_tx_wire ] ]
+            ) ]
+      in
+      let client = mk_client () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_pull_ok_prelude (fun () ->
+              Sync_state.dev_or_test := true;
+              Sync_client_op.update_local_checksum test_repo
+                (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+              let listen_key =
+                Datascript.listen conn "pull-ok-checksum"
+                  (fun (r : tx_report) ->
+                     if r.tx_data <> []
+                        && not (Db_tx.flags_of conn).Db_tx.batch_tx
+                     then
+                       Sync_client.update_local_sync_checksum test_repo r)
+              in
+              Fun.protect
+                ~finally:(fun () ->
+                    Datascript.unlisten conn listen_key)
+                (fun () ->
+                    Sync_handle_message.handle_message test_repo client
+                      raw_message;
+                    let parent' =
+                      Option.get
+                        (Ldb.ent_of_id (Datascript.db conn) parent_id)
+                    in
+                    check "title"
+                      (Ldb.value parent' "block/title"
+                       = Some (String "remote-checksum-anchor"));
+                    check "local tx 1"
+                      (Sync_client_op.get_local_tx test_repo = Some 1);
+                    check "local checksum"
+                      (Sync_client_op.get_local_checksum test_repo
+                       = Some local_checksum_after_remote);
+                    let captured = !(Sync_log_and_state.rtc_log) in
+                    check "rtc-log type"
+                      (Wire.get "type" captured
+                       = Some (kw "rtc.log/checksum-mismatch"));
+                    check "local-checksum"
+                      (Wire.get "local-checksum" captured
+                       = Some (Wire.String local_checksum_after_remote));
+                    check "remote-checksum"
+                      (Wire.get "remote-checksum" captured
+                       = Some (Wire.String remote_checksum))))))
+
 (*__TESTS__*)
 
 let () =
@@ -1368,4 +1803,30 @@ let () =
             "flush-pending-keeps-oversized-tempid-group-in-one-request"
             `Quick test_flush_pending_keeps_oversized_tempid_group_in_one_request
         ; Alcotest.test_case "flush-pending-reports-upload-response-timeout"
-            `Quick test_flush_pending_reports_upload_response_timeout ] ) ]
+            `Quick test_flush_pending_reports_upload_response_timeout
+        ; Alcotest.test_case
+            "start-active-client-flushes-pending-local-txs"
+            `Quick test_start_active_client_flushes_pending_local_txs
+        ; Alcotest.test_case
+            "receive-queue-failure-updates-last-sync-error"
+            `Quick test_receive_queue_failure_updates_last_sync_error
+        ; Alcotest.test_case
+            "temp-conn-batch-preserves-cardinality-one-schema"
+            `Quick test_temp_conn_batch_preserves_cardinality_one_schema
+        ; Alcotest.test_case "prepare-upload-tx-entries-drops-empty-txs"
+            `Quick test_prepare_upload_tx_entries_drops_empty_txs
+        ; Alcotest.test_case "prepare-upload-tx-entries-keeps-large-client-op"
+            `Quick test_prepare_upload_tx_entries_keeps_large_client_op
+        ; Alcotest.test_case
+            "sync-counts-counts-only-true-pending-local-ops"
+            `Quick test_sync_counts_counts_only_true_pending_local_ops
+        ; Alcotest.test_case "sync-counts-reports-stored-local-checksum"
+            `Quick test_sync_counts_reports_stored_local_checksum
+        ; Alcotest.test_case "pull-ok-with-older-remote-tx-is-ignored"
+            `Quick test_pull_ok_with_older_remote_tx_is_ignored
+        ; Alcotest.test_case "pull-ok-out-of-order-stale-response-is-ignored"
+            `Quick test_pull_ok_out_of_order_stale_response_is_ignored
+        ; Alcotest.test_case
+            "pull-ok-does-not-anchor-remote-checksum-before-verify"
+            `Quick test_pull_ok_does_not_anchor_remote_checksum_before_verify
+        ] ) ]

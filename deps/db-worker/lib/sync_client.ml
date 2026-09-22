@@ -134,7 +134,9 @@ let enqueue_receive_message (client : Sync_state.client)
   client.receive_queue :=
     Db_worker_effect.catch prev (fun _ -> Db_worker_effect.pure ())
     >>= fun () ->
-    Db_worker_effect.catch (task ()) (fun error ->
+    Db_worker_effect.catch
+      (try task () with e -> Db_worker_effect.error e)
+      (fun error ->
          Sync_util.set_last_sync_error client error;
          Worker_log.error "db-sync/ws-handle-message-failed"
            [ "repo", client.repo; "error", Printexc.to_string error ];
