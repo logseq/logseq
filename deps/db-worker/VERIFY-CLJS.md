@@ -160,7 +160,7 @@ blocks all persistence immediately after.
 | `frontend.worker.db-worker-node-test` (cljs-only control) | 51 tests / **0 failures** |
 | worker + cli + handler suites, cljs-only (`db-worker-test`, `db-core-test`, `cli.common.db-worker-test`, `handler.worker-test`) | 178 tests / 2 failures — `export-client-ops-db-binary` normalized-path assertions (cljs-side, pre-existing, unrelated to seam) |
 | `frontend.handler.db-based.property-test` + `page-test` (cljs-only) | 7 tests / 1 failure — `set-block-property-resolves-numeric-block-id-test`, "non-class tag insert should not set a tag property directly" (pre-existing on this branch; file untouched by OCaml work) |
-| `dune runtest` | all green except known engine-owned `frontend 7 recur-replace-uuid-in-block-title-test` |
+| `dune runtest` | 2 failures: known engine-owned `frontend 7 recur-replace-uuid-in-block-title-test`, plus `db_test 23 get-block-alias-bidirectional-rule` — introduced by upstream `fbdf1ba491` ("restore faithful rule/:in queries"), fails in the fixture's `[:block/uuid ...]` lookup-ref resolution on `block/alias`; unrelated to this commit (not in its code path) |
 | `node scripts/node-smoke.cjs` | 9/15 — create-or-open-db hits Blocker 2 |
 
 ## Commands
