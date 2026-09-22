@@ -438,7 +438,10 @@ module SSet = Set.Make (String)
 
 let remote_txs_retract_entity_block_uuid_suffixes (remote_txs : Wire.t list)
     : SSet.t list =
-  let _, suffixes_rev =
+  (* cljs reduces over (reverse remote-txs) prepending each accumulated
+     delete set, so the resulting list is already aligned with the forward
+     remote-txs order: suffix i = deletes from tx i through the last tx. *)
+  let _, suffixes =
     List.fold_left
       (fun (deleted, suffixes) remote_tx ->
          let tx_items =
@@ -457,7 +460,7 @@ let remote_txs_retract_entity_block_uuid_suffixes (remote_txs : Wire.t list)
          (deleted', deleted' :: suffixes))
       (SSet.empty, []) (List.rev remote_txs)
   in
-  List.rev suffixes_rev
+  suffixes
 
 let tx_item_missing_deleted_block_ref (db : db) (deleted : SSet.t)
     (item : Wire.t) : bool =
@@ -1389,9 +1392,16 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       let title_str =
         match title with Wire.String s -> s | _ -> ""
       in
+      let opts = opts_wire_map opts in
+      let opt_bool k =
+        match Wire.get k opts with
+        | Some (Wire.Bool b) -> b
+        | _ -> false
+      in
       let page_uuid =
-        match Wire.get "uuid" (opts_wire_map opts) with
+        match Wire.get "uuid" opts with
         | Some (Wire.Uuid u) -> Some u
+        | Some (Wire.String u) when Sync_state.uuid_string u -> Some u
         | _ -> None
       in
       let existing_page =
@@ -1418,7 +1428,46 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
           in
           Some (Wire.Array [ title_v; uuid_v ]))
       | _ ->
-          ignore (Outliner_page.create_bang conn title_str ());
+          (* cljs (outliner-page/create! conn title opts) — opts carries
+             :uuid/:tags/:properties/flags; keep them on replay so the
+             recreated page keeps the wire uuid *)
+          ignore
+            (Outliner_page.create_bang conn title_str
+               ~opts:(fun () ->
+                  Outliner_page.create db title_str
+                    ?uuid:page_uuid
+                    ?tags:
+                      (match Wire.get "tags" opts with
+                       | Some w -> Some (tx_items_of w)
+                       | None -> None)
+                    ?properties:
+                      (match Wire.get "properties" opts with
+                       | Some (Wire.Map kvs) ->
+                           Some
+                             (List.filter_map
+                                (fun (k, v) ->
+                                   match kw_str k with
+                                   | Some s -> Some (s, v)
+                                   | None -> None)
+                                kvs)
+                       | _ -> None)
+                    ~persist_op:
+                      (match Wire.get "persist-op?" opts with
+                       | Some (Wire.Bool b) -> b
+                       | _ -> true)
+                    ~class_:(opt_bool "class?")
+                    ~journal:(opt_bool "journal?")
+                    ~today_journal:(opt_bool "today-journal?")
+                    ~split_namespace:
+                      (match Wire.get "split-namespace?" opts with
+                       | Some (Wire.Bool b) -> b
+                       | _ -> true)
+                    ?class_ident_namespace:
+                      (match Wire.get "class-ident-namespace" opts with
+                       | Some (Wire.String s) -> Some s
+                       | _ -> None)
+                    ())
+               ());
           None)
   | "delete-page", [ page_uuid; opts ] ->
       (match page_uuid with
@@ -1517,8 +1566,10 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
          | _ -> None)
       tx_data
   in
+  (* cljs block-descendants: (sort-by :block/order (:block/_raw-parent b))
+     — raw children incl. closed-value/created-from-property, order-sorted *)
   let rec descendants (block : entity) : entity list =
-    Ldb.parent_children block
+    Ldb.sort_by_order (Ldb.ref_ents block "block/_parent")
     |> List.concat_map (fun child -> child :: descendants child)
   in
   List.concat_map
@@ -1844,12 +1895,16 @@ let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
           |> drop_stale_adds_after_remote_entity_delete
         in
         let tx_data =
+          (* cljs (cond->> tx-data ... (tx-data-has-block-uuid-ref? tx-data)
+             (drop-missing-block-ref-ops db)): the test sees the pre-drop
+             tx-data, while drop runs on the post-drop value *)
+          let has_uuid_ref = tx_data_has_block_uuid_ref tx_data in
           let d =
             if not (SSet.is_empty deleted_block_uuids) then
               drop_stale_deleted_block_ref_ops db deleted_block_uuids tx_data
             else tx_data
           in
-          if tx_data_has_block_uuid_ref d then
+          if has_uuid_ref then
             drop_missing_block_ref_ops db d
           else d
         in
@@ -2076,20 +2131,24 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
             , Transit_codec.to_string (Wire.Array drop_txs) ];
           ignore (mark_pending_txs_false repo drop_tx_ids)
         end;
+        let e2ee =
+          tx_entries <> []
+          &&
+          match Worker_state.datascript_conn repo with
+          | Some c ->
+              Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee
+                (Conn.db c)
+          | None -> false
+        in
         Db_worker_effect.catch
-          ((if tx_entries <> []
-              &&
-              match Worker_state.datascript_conn repo with
-              | Some c ->
-                  Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee
-                    (Conn.db c)
-              | None -> false
-            then
+          ((if e2ee then
               Sync_deps.require "ensure_graph_aes_key"
                 Sync_deps.ensure_graph_aes_key repo
             else Db_worker_effect.pure Wire.Nil)
            >>= fun aes_key ->
-           (if tx_entries <> [] && aes_key = Wire.Nil then
+           (* cljs: (when (and (seq tx-entries) (graph-e2ee? repo)
+                               (nil? aes-key)) (fail-fast ...)) *)
+           (if e2ee && aes_key = Wire.Nil then
               Sync_util.fail_fast "db-sync/missing-field"
                 (Wire.Map
                    [ kw "repo", Wire.String repo
