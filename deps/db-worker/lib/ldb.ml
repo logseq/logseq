@@ -993,3 +993,27 @@ let get_non_consecutive_blocks db (blocks : entity list) : entity list =
   |> List.filter_map (fun i ->
       if not (consecutive_block db arr.(i) arr.(i + 1)) then Some arr.(i)
       else None)
+
+(* db/get-page-parents — walk :block/parent chain to the root. *)
+let get_page_parents (node : entity) : entity list =
+  let rec loop (current : entity option) (parents : entity list) =
+    match current with
+    | Some p when not (List.exists (fun e -> e.id = p.id) parents) ->
+        loop (ref_ent p "block/parent") (parents @ [ p ])
+    | _ -> parents
+  in
+  loop (ref_ent node "block/parent") []
+
+(* db/build-favorite-tx — tx for a favorite block in the favorite page. *)
+let build_favorite_tx (favorite_uuid : string) : (attr * value) list =
+  [ ("block/link", Vector [ Keyword "block/uuid"; Uuid favorite_uuid ])
+  ; ("block/title", String "") ]
+
+(* db/get-all-properties — all entities tagged logseq.class/Property. *)
+let get_all_properties (db : db) : entity list =
+  match entity db (Ident "logseq.class/Property") with
+  | None -> []
+  | Some class_ent ->
+      datoms db Avet ~a:"block/tags" ~v:(Ref class_ent.id) ()
+      |> Seq.filter_map (fun d -> ent_of_id db d.e)
+      |> List.of_seq
