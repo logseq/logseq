@@ -9,7 +9,7 @@
      thread-api/export-blocks-as-format  (fail-fast — see below)
      thread-api/export-edn
      thread-api/import-edn
-     thread-api/build-publishing-html    (fail-fast until publishing port)
+     thread-api/build-publishing-html    (via Publishing_html/Publishing_db)
    init () wiring: Worker_core.init touches
      Endpoint_export.export_get_debug_datoms
      Endpoint_export.export_get_all_page_content
@@ -222,14 +222,16 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
 
 let () = Sync_deps.batch_import_edn_fn := Some import_edn_data
 
-(* :thread-api/build-publishing-html [repo options]
-   Requires logseq.publishing.html/db (deps/publishing) which is not yet
-   ported — fail fast until endpoint_publish.ml lands. *)
+(* :thread-api/build-publishing-html [repo options] *)
 let build_publishing_html args =
-  let _repo = repo_of args in
-  invalid_arg
-    "build-publishing-html is unavailable: logseq.publishing.* is not yet \
-     ported"
+  let repo = repo_of args in
+  let options_v = value_arg args 1 in
+  match Worker_state.datascript_conn repo with
+  | None -> Db_worker_effect.pure Wire.Nil
+  | Some conn ->
+      Db_worker_effect.pure
+        (Ds_wire.transit_of_value
+           (Publishing_html.build_html (Datascript.db conn) options_v))
 
 let () =
   Dispatcher.register "thread-api/build-publishing-html" build_publishing_html
