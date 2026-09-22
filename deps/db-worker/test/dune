@@ -44,14 +44,24 @@
   logseq_db_worker_platform_native
   unix))
 
+(executable
+ (name test_render_native)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  unix))
+
 (rule
  (alias runtest)
  (deps
   (:test_bin ./test_worker_native.exe)
   (:test_query_bin ./test_query_native.exe)
-  (:test_sync_bin ./test_sync_native.exe))
+  (:test_sync_bin ./test_sync_native.exe)
+  (:test_render_bin ./test_render_native.exe))
  (action
   (progn
    (run %{test_bin})
    (run %{test_query_bin})
-   (run %{test_sync_bin}))))
+   (run %{test_sync_bin})
+   (run %{test_render_bin}))))
