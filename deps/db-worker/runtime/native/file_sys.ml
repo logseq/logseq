@@ -74,6 +74,26 @@ let write_file_exclusive path contents =
 
 let rename src dst = wrap (fun () -> Unix.rename src dst)
 let is_directory path = wrap (fun () -> Sys.is_directory path)
+let is_file path =
+  wrap (fun () -> (Unix.stat path).Unix.st_kind = Unix.S_REG)
+
+let copy_file src dst =
+  wrap (fun () ->
+      let ic = open_in_bin src in
+      let oc = open_out_bin dst in
+      let buf = Bytes.create 65536 in
+      let rec loop () =
+        match input ic buf 0 65536 with
+        | 0 -> ()
+        | n ->
+          output oc buf 0 n;
+          loop ()
+      in
+      loop ();
+      close_in ic;
+      close_out oc)
+
+let symlink ~target ~link = wrap (fun () -> Unix.symlink target link)
 
 let check_read_write path =
   wrap (fun () -> Unix.access path [ Unix.R_OK; Unix.W_OK ])

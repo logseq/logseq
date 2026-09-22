@@ -222,7 +222,26 @@ let write_file_exclusive path contents =
 
 let rename src dst = wrap (fun () -> renameSync src dst)
 
+module Fs_stat_extra = struct
+  external is_file : Js.Json.t -> bool = "isFile" [@@mel.send]
+  external copyFileSync : string -> string -> unit = "copyFileSync"
+    [@@mel.module "fs"]
+  external symlinkSync : string -> string -> unit = "symlinkSync"
+    [@@mel.module "fs"]
+end
+
 let is_directory path = wrap (fun () -> Fs_more.is_dir (Fs_more.statSync_obj path))
+
+let is_file path =
+  wrap (fun () -> Fs_stat_extra.is_file (Fs_more.statSync_obj path))
+
+let copy_file src dst =
+  if is_browser () then unsupported "copy_file"
+  else wrap (fun () -> Fs_stat_extra.copyFileSync src dst)
+
+let symlink ~target ~link =
+  if is_browser () then unsupported "symlink"
+  else wrap (fun () -> Fs_stat_extra.symlinkSync target link)
 
 (* fs.constants.R_OK | W_OK *)
 let check_read_write path =

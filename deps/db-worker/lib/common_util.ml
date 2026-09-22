@@ -96,7 +96,7 @@ let decode_uri_component (s : string) : string option =
         Buffer.add_char buf c;
         go (i + 1)
   in
-  (try go n with _ -> ok := false);
+  (try go 0 with _ -> ok := false);
   if !ok then Some (Buffer.contents buf) else None
 
 (* JS encodeURIComponent *)

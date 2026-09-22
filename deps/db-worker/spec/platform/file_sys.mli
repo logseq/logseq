@@ -27,6 +27,15 @@ val rename : string -> string -> unit Db_worker_effect.t
 (* statSync().isDirectory(); errors on missing paths like node. *)
 val is_directory : string -> bool Db_worker_effect.t
 
+(* statSync().isFile(); errors on missing paths like node. *)
+val is_file : string -> bool Db_worker_effect.t
+
+(* copyFileSync — copies a single file; parent dir must exist. *)
+val copy_file : string -> string -> unit Db_worker_effect.t
+
+(* symlinkSync — creates [link] pointing to [target]. *)
+val symlink : target:string -> link:string -> unit Db_worker_effect.t
+
 (* accessSync R_OK|W_OK. *)
 val check_read_write : string -> unit Db_worker_effect.t
 
