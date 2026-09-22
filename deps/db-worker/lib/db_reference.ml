@@ -178,9 +178,7 @@ let expand_to_top_refs db top_ref_ids matched_ref_ids : IdSet.t =
   !result
 
 (* common-initial-data/get-block-alias — the bidirectional :alias
-   rule, then distinct. Note: :in scalars must be passed as
-   Result_value (Ref e); the engine drops Arg_scalar (Result_entity e)
-   bindings. *)
+   rule, then distinct. *)
 let get_block_alias db (eid : entity_id) : entity_id list =
   let rules_edn =
     "[[(alias ?e2 ?e1) [?e2 :block/alias ?e1]] \
@@ -189,7 +187,7 @@ let get_block_alias db (eid : entity_id) : entity_id list =
   q_string db
     "[:find [?e ...] :in $ ?eid % :where (alias ?eid ?e)]"
     ~inputs:
-      [ Arg_scalar (Result_value (Ref eid));
+      [ Arg_scalar (Result_entity eid);
         Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn)) ]
   |> List.filter_map
        (fun row -> match row with [ Result_entity e ] -> Some e | _ -> None)
