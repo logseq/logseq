@@ -172,7 +172,7 @@ let entity_checksum_tuples db eid e2ee : Tuple_set.t =
 let value_str = function
   | String s | Keyword s | Symbol s | Uuid s -> Some s
   | Int n -> Some (string_of_int n)
-  | Float f -> Some (string_of_float f)
+  | Float f -> Some (Common_util.js_string_of_float f)
   | Bool b -> Some (string_of_bool b)
   | Nil -> None
   | other -> Some (Ds_wire.edn_of_transit (Ds_wire.transit_of_value other))

@@ -158,7 +158,7 @@ let mapcatv f xs = List.concat_map f xs
 let removev p xs = List.filter (fun x -> not (p x)) xs
 
 (* clojure.string bits used below *)
-let str_blank (s : string) = String.trim s = ""
+let str_blank (s : string) = Unicode.trim s = ""
 let str_triml = Common_util.str_triml
 let str_trimr = Common_util.str_trimr
 
@@ -194,7 +194,7 @@ let zero_pad (v : value) : string =
     match v with
     | String s -> s
     | Int n -> string_of_int n
-    | Float f -> Printf.sprintf "%g" f
+    | Float f -> Common_util.js_string_of_float f
     | _ -> ""
   in
   if String.length s = 1 then "0" ^ s else s
@@ -223,7 +223,7 @@ let repetition_to_string (repetition : value) : string =
         | String s -> s
         | _ -> ""
       in
-      kind ^ ns ^ String.lowercase_ascii (String.sub duration 0 1)
+      kind ^ ns ^ Unicode.lowercase (String.sub duration 0 1)
   | _ -> ""
 
 (* timestamp-to-string — {:date {:year :month :day} :time {:hour :min}

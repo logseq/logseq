@@ -420,7 +420,7 @@ and str_of (v : value) : string =
   match v with
   | String s -> s
   | Int n -> string_of_int n
-  | Float f -> Printf.sprintf "%g" f
+  | Float f -> Common_util.js_string_of_float f
   | _ -> ""
 
 and inline_latex_fragment ~st:_ (ast_content : value) : simple_ast list =
