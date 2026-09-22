@@ -1011,8 +1011,14 @@ let db_based_build_between_three_arg (e : query_form) : built option =
                       vec_
                         [
                           vec_ [ sym "?b"; kw k; sym "?v" ];
-                          vec_ [ list_ [ sym ">="; sym "?v"; QueryFormInt (Int64.to_int start) ] ];
-                          vec_ [ list_ [ sym "<"; sym "?v"; QueryFormInt (Int64.to_int stop) ] ];
+                          vec_
+                            [ list_
+                                [ sym ">="; sym "?v"
+                                ; QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms start)) ] ];
+                          vec_
+                            [ list_
+                                [ sym "<"; sym "?v"
+                                ; QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms stop)) ] ];
                         ];
                     brules = [] }
             | _ -> None)

@@ -61,10 +61,12 @@ and prim =
 let prim_ok (p : prim) (v : value) : bool =
   match p with
   | PAny -> true
-  | PInt -> (match v with Int _ -> true | _ -> false)
+  (* Instant is the int64 value rep: epoch-ms and other integers that do
+     not fit `int` (32-bit on melange) — cljs int?/number? accept them *)
+  | PInt -> (match v with Int _ | Instant _ -> true | _ -> false)
   (* cljs double? is number? — JS numbers are all doubles, ints included *)
-  | PDouble -> (match v with Int _ | Float _ -> true | _ -> false)
-  | PNumber -> (match v with Int _ | Float _ -> true | _ -> false)
+  | PDouble -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
+  | PNumber -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
   | PBoolean -> (match v with Bool _ -> true | _ -> false)
   | PString -> (match v with String _ -> true | _ -> false)
   | PKeyword -> (match v with Keyword _ -> true | _ -> false)

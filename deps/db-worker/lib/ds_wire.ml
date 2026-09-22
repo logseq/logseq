@@ -21,14 +21,21 @@ let escape_string s =
     s;
   Buffer.contents b
 
-let edn_int64 n = Int64.to_string n
-
-let edn_date ms =
-  (* #inst "..." — ISO 8601 from epoch millis, mode-agnostic
+let iso_of_ms ms =
+  (* ISO 8601 from epoch millis, mode-agnostic
      (civil-from-days algorithm, no platform time API). *)
   let total_seconds = Int64.div ms 1000L in
-  let day_secs = Int64.rem total_seconds 86400L in
-  let days = Int64.to_int (Int64.div total_seconds 86400L) in
+  let total_seconds =
+    if ms < 0L && Int64.rem ms 1000L <> 0L then Int64.sub total_seconds 1L
+    else total_seconds
+  in
+  let day_rem = Int64.rem total_seconds 86400L in
+  let day_secs, days =
+    if day_rem < 0L then
+      Int64.add day_rem 86400L, Int64.to_int (Int64.sub (Int64.div total_seconds 86400L) 1L)
+    else
+      day_rem, Int64.to_int (Int64.div total_seconds 86400L)
+  in
   let hh = Int64.to_int (Int64.div day_secs 3600L) in
   let mm = Int64.to_int (Int64.div (Int64.rem day_secs 3600L) 60L) in
   let ss = Int64.to_int (Int64.rem day_secs 60L) in
@@ -42,7 +49,11 @@ let edn_date ms =
   let d = doy - (((153 * mp) + 2) / 5) + 1 in
   let m = if mp < 10 then mp + 3 else mp - 9 in
   let y = if m <= 2 then y + 1 else y in
-  Printf.sprintf "#inst \"%04d-%02d-%02dT%02d:%02d:%02d.000Z\"" y m d hh mm ss
+  let ms_part = Int64.to_int (Int64.rem ms 1000L) in
+  let ms_part = if ms_part < 0 then ms_part + 1000 else ms_part in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ" y m d hh mm ss ms_part
+
+let edn_date ms = "#inst \"" ^ iso_of_ms ms ^ "\""
 
 let rec edn_of_transit (t : Wire.t) =
   match t with
@@ -50,7 +61,9 @@ let rec edn_of_transit (t : Wire.t) =
   | Wire.Bool b -> if b then "true" else "false"
   | Wire.String s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Int n -> string_of_int n
-  | Wire.Int64 n -> edn_int64 n
+  (* int64 has no int-width EDN literal; #inst is the only literal the
+     reader widens to int64, and Instant is the int64 value rep *)
+  | Wire.Int64 n -> edn_date n
   | Wire.Float f -> Printf.sprintf "%.17g" f
   | Wire.Binary s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Keyword s -> ":" ^ s
@@ -112,7 +125,7 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
   | Wire.Int n -> Int n
-  | Wire.Int64 n -> Int (Int64.to_int n)
+  | Wire.Int64 n -> Instant n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s

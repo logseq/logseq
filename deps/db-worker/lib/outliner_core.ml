@@ -154,7 +154,7 @@ let direct_op_entry (outliner_op : string) (args : value list) : value option =
 
 (* common-util/block-with-timestamps *)
 let block_with_timestamps (block : Block_map.t) : Block_map.t =
-  let updated_at = Int (Int64.to_int (Date_time_util.time_ms ())) in
+  let updated_at = Instant (Date_time_util.time_ms ()) in
   let block = Block_map.put block "block/updated-at" updated_at in
   if not (Block_map.mem block "block/created-at") then
     Block_map.put block "block/created-at" updated_at
@@ -162,7 +162,7 @@ let block_with_timestamps (block : Block_map.t) : Block_map.t =
 
 let block_with_updated_at (block : Block_map.t) : Block_map.t =
   Block_map.put block "block/updated-at"
-    (Int (Int64.to_int (Date_time_util.time_ms ())))
+    (Instant (Date_time_util.time_ms ()))
 
 (* ---------- filter-top-level-blocks ---------- *)
 
@@ -240,7 +240,7 @@ let remove_orphaned_page_refs (db : db) (db_id : entity_id) (txs_state : txs_sta
 let update_page_when_save_block (txs_state : txs_state) (block_entity : entity) : unit =
   match Ldb.ref_ent block_entity "block/page" with
   | Some e ->
-      let now = Int (Int64.to_int (Date_time_util.time_ms ())) in
+      let now = Instant (Date_time_util.time_ms ()) in
       let m =
         [ ("db/id", Ref e.id); ("block/updated-at", now) ]
       in

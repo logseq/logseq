@@ -281,7 +281,7 @@ let page_name_string_to_map (original_page_name : string) db
   in
   let base =
     if with_timestamp && Option.is_none page_entity then
-      let now = Wire.Int64 (Int64.of_float (Clock.now_ms ())) in
+      let now = Wire.Date_ms (Int64.of_float (Clock.now_ms ())) in
       Cljs_map.assoc_list base
         [ "block/created-at", now; "block/updated-at", now ]
     else base
@@ -1344,7 +1344,7 @@ let delete_conn (conn : conn) (page_uuid : string) (opts : Wire.t) : Wire.t =
                             | None -> None)
                          ; (match now_ms with
                             | Some ms ->
-                                Some (Keyword "now-ms", Int (Int64.to_int ms))
+                                Some (Keyword "now-ms", Instant ms)
                             | None -> None) ]) ]))
         in
         if rename then

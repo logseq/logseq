@@ -126,10 +126,10 @@ let toggle_reaction (conn : conn) (target_uuid : string) (emoji_id : string)
              conn [ RetractEntity (Entity_id existing.id) ]);
            true
        | None ->
-           let now = Int64.to_int (Date_time_util.time_ms ()) in
+           let now = Date_time_util.time_ms () in
            let attrs =
              [ ("block/uuid", One_value (Uuid (Common_uuid.new_block_id ())))
-             ; ("block/created-at", One_value (Int now))
+             ; ("block/created-at", One_value (Instant now))
              ; ("logseq.property.reaction/emoji-id", One_value (String emoji_id))
              ; ("logseq.property.reaction/target", One_entity { db_id = Some (Entity_id target.id); attrs = [] }) ]
            in

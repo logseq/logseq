@@ -305,7 +305,7 @@ let add_missing_timestamps ?(file_created_at : int64 option)
     else if file_created_at <> None then file_created_at
     else updated_at
   in
-  let msv ms = Int (Int64.to_int ms) in
+  let msv ms = Instant ms in
   let block =
     if file_times || journal_ref_page || getv block "block/updated-at" = None
     then BM.put block "block/updated-at" (msv (Option.get updated_at))
@@ -1441,7 +1441,7 @@ let find_or_create_deadline_scheduled_value (value : value option)
     in
     let time_ms = deadline_scheduled_time_ms value in
     ( (match time_ms with
-       | Some ms -> Some (intv (Int64.to_int ms))
+       | Some ms -> Some (Instant ms)
        | None -> None)
     , (match existing_uuid with Some _ -> [] | None -> [ journal_page ]) )
 
@@ -4157,7 +4157,7 @@ let complete_block_tx_data (db : db) (block_src : BM.t)
   let prepared =
     match journal_page_created_at with
     | Some ms ->
-      BM.put block_after_assets "block/created-at" (Int (Int64.to_int ms))
+      BM.put block_after_assets "block/created-at" (Instant ms)
     | None -> block_after_assets
   in
   let block' =
@@ -4325,7 +4325,7 @@ let build_new_page_or_class (m : BM.t) (db : db)
     match get_string m "block/name" with
     | Some n ->
       (match Hashtbl.find_opt options.journal_created_ats n with
-       | Some ms -> BM.put m "block/created-at" (Int (Int64.to_int ms))
+       | Some ms -> BM.put m "block/created-at" (Instant ms)
        | None -> m)
     | None -> m
   in
@@ -4583,11 +4583,11 @@ let build_existing_page (m : BM.t) (db : db) (page_uuid : string)
     if file_times then
       let m =
         match pick_opt options.file_created_at options.file_updated_at with
-        | Some ms -> BM.put m "block/created-at" (Int (Int64.to_int ms))
+        | Some ms -> BM.put m "block/created-at" (Instant ms)
         | None -> m
       in
       match pick_opt options.file_updated_at options.file_created_at with
-      | Some ms -> BM.put m "block/updated-at" (Int (Int64.to_int ms))
+      | Some ms -> BM.put m "block/updated-at" (Instant ms)
       | None -> m
     else m
   in
@@ -4834,12 +4834,12 @@ let build_pages_tx (conn : conn) (pages : BM.t list) (blocks : BM.t list)
            let p =
              match apply_file_times, file_page_created_at with
              | true, Some ms ->
-               BM.put p "block/created-at" (Int (Int64.to_int ms))
+               BM.put p "block/created-at" (Instant ms)
              | _ -> p
            in
            (match apply_file_times, file_page_updated_at with
             | true, Some ms ->
-              BM.put p "block/updated-at" (Int (Int64.to_int ms))
+              BM.put p "block/updated-at" (Instant ms)
             | _ -> p))
     |> fun ps -> sanitize_page_aliases_for_import ps import_state
   in
@@ -5352,12 +5352,12 @@ let extract_pages_and_blocks (db : db) (file : string) (content : string)
       | Some ms ->
         if options.file_created_at <> None || options.file_updated_at <> None
         then
-          BM.put node "block/created-at" (Int (Int64.to_int ms))
+          BM.put node "block/created-at" (Instant ms)
         else node
       | None -> node
     in
     match options.file_updated_at with
-    | Some ms -> BM.put node "block/updated-at" (Int (Int64.to_int ms))
+    | Some ms -> BM.put node "block/updated-at" (Instant ms)
     | None -> node
   in
   let extract_opts : Gp_block.extract_options =
