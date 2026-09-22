@@ -179,45 +179,6 @@ let built_in_class_property (class_ : entity) (property : entity) : bool =
         | None -> false)
    | _ -> false)
 
-(* ---------- rules (logseq.db.frontend.rules/rules) ---------- *)
-
-(* The :class-extends clause of rules/rules, passed to queries through
-   the % input — same EDN text the cljs side uses. *)
-let class_extends_rules_edn =
-  "[[(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]] \
-   [(class-extends ?p ?c) [?t :logseq.property.class/extends ?p] \
-   (class-extends ?t ?c)]]"
-
-(* The :alias clause of rules/rules. *)
-let alias_rules_edn =
-  "[[(alias ?e2 ?e1) [?e2 :block/alias ?e1]] \
-   [(alias ?e2 ?e1) [?e1 :block/alias ?e2]]]"
-
-(* :has-property-or-object-property + its :deps
-   (:object-has-class-property -> :class-extends), exactly what
-   rules/extract-rules returns for
-   (extract-rules db-query-dsl-rules [:has-property-or-object-property]
-                  {:deps rules-dependencies}). *)
-let property_objects_rules_edn =
-  "[[(has-property-or-object-property? ?b ?prop) \
-     [?prop-e :db/ident ?prop] \
-     (or [?b ?prop _] (object-has-class-property? ?b ?prop))] \
-   [(object-has-class-property? ?b ?prop) \
-     [?prop-e :db/ident ?prop] \
-     [?t :logseq.property.class/properties ?prop-e] \
-     [?b :block/tags ?tc] \
-     (or [(= ?t ?tc)] (class-extends ?t ?c))] \
-   [(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]] \
-   [(class-extends ?p ?c) [?t :logseq.property.class/extends ?p] \
-    (class-extends ?t ?c)]]"
-
-let lazy_rules edn =
-  lazy (Parser.parse_rules (Parser.read_edn edn))
-
-let class_extends_rules = lazy_rules class_extends_rules_edn
-let alias_rules = lazy_rules alias_rules_edn
-let property_objects_rules = lazy_rules property_objects_rules_edn
-
 (* db-class/get-structured-children — BFS over
    :logseq.property.class/extends, equivalent to the recursive
    (class-extends ?p ?c) rule. *)
@@ -395,6 +356,33 @@ let get_class_object_ids db (class_id : entity_id) : entity_id list =
 (* db-class/get-class-objects *)
 let get_class_objects db (class_id : entity_id) : entity list =
   List.filter_map (Ldb.ent_of_id db) (class_object_eids db class_id)
+
+(* rules/has-property-or-object-property? as a direct datom scan — the
+   recursive rule version produces wrong-direction results in this query
+   engine (same reason get-structured-children uses BFS). A block is a
+   property object of ?prop when it has the attr itself, or when it is
+   tagged with a class (or a class extending it, per class-extends) that
+   declares ?prop in :logseq.property.class/properties. *)
+let property_object_eids db (prop_ident : string) : entity_id list =
+  let direct = eids_with_attr db prop_ident in
+  let via_tags =
+    match ident_eid db prop_ident with
+    | Some prop_eid ->
+        List.map (fun (d : datom) -> d.e)
+          (List.of_seq
+             (datoms db Avet ~a:"logseq.property.class/properties"
+                ~v:(Ref prop_eid) ()))
+        |> List.concat_map
+             (fun cid -> cid :: get_structured_children db cid)
+        |> List.sort_uniq compare
+        |> List.concat_map
+             (fun tag_id ->
+                List.map (fun (d : datom) -> d.e)
+                  (List.of_seq
+                     (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
+    | None -> []
+  in
+  List.sort_uniq compare (direct @ via_tags)
 
 (* db-class/build-new-class — creates a fresh :db/ident via
    create-user-class-ident-from-name then sqlite-util/build-new-class. *)

@@ -651,16 +651,8 @@ let get_entities db ~feat_type ~index_attr ~view_for_id
              | _ -> None
            in
            Entities
-             (q_string db
-                ~inputs:
-                  [ Arg_rules (Lazy.force Db_class.property_objects_rules)
-                  ; Arg_scalar (Result_attr prop_ident) ]
-                "[:find [?b ...] :in $ % ?prop :where \
-                 (has-property-or-object-property? ?b ?prop)]"
-              |> List.filter_map (function
-                   | [ Result_entity id ] -> non_hidden id
-                   | [ Result_value (Int id) ] -> non_hidden id
-                   | _ -> None))
+             (Db_class.property_object_eids db prop_ident
+              |> List.filter_map non_hidden)
        | None -> No_entities)
   | Some "linked-references" ->
       (match view_for_id with
