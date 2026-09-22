@@ -15,9 +15,6 @@
    cljs deftest names are kept as OCaml test names.
 
    Skipped cljs cases (unported dependency):
-   - batch-transact-without-pages-date-* /
-     test-batch-transact-clears-stale-tx-tail-*: batch-transact! storage
-     tail internals are not ported
    - get-bidirectional-properties-performance-* and
      get-latest-journals-bounded-scan: ^:long tests that count d/entity /
      d/datoms calls via with-redefs — no OCaml equivalent
@@ -597,6 +594,49 @@ let test_batch_transact_with_temp_conn_before_commit () =
   let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
   check "batch-transact before-commit leaves live conn"
     (Ldb.string_value e "block/title" = Some "old")
+
+(* (deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
+   ...) — cljs uses an IStorage make-storage + d/restore-conn; the OCaml
+   counterparts are Datascript.memory_storage + restore_conn. Inner batch
+   txs carry the skip-store? tx-meta (cljs conn-level :skip-store? flag),
+   so only the final batch snapshot persists. *)
+let test_batch_transact_clears_stale_tx_tail () =
+  let block_uuid = Uuid "00000001-2026-0421-0000-000000000000" in
+  let schema =
+    Datascript.schema_of_edn_string
+      "{:block/uuid {:db/unique :db.unique/identity}}"
+  in
+  let storage = Datascript.memory_storage () in
+  let conn = Datascript.create_conn ~schema ~storage () in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add (Entity_id 28446, "block/uuid", block_uuid) ]);
+  ignore
+    (Db_tx.batch_transact conn (fun bc ->
+       ignore
+         (Datascript.transact_conn ~tx_meta:[ "skip-store?", Bool true ] bc
+            [ Retract (Entity_id 28446, "block/uuid", Some block_uuid) ]);
+       ignore
+         (Datascript.transact_conn ~tx_meta:[ "skip-store?", Bool true ] bc
+            [ Add (Entity_id 28447, "block/uuid", block_uuid) ])));
+  ignore
+    (Datascript.transact_conn conn
+       [ Add (Entity_id 1, "filler", String "x") ]);
+  let stale =
+    List.exists
+      (List.exists (fun (d : datom) ->
+         d.e = 28446 && d.a = "block/uuid" && d.v = block_uuid))
+      (Datascript.Storage.restore_tail_groups storage)
+  in
+  check "stale pre-batch datoms absent from tail" (not stale);
+  let restored = Option.get (Datascript.restore_conn storage) in
+  let es =
+    List.of_seq
+      (Datascript.datoms (Datascript.db restored) Avet ~a:"block/uuid"
+         ~v:block_uuid ())
+    |> List.map (fun (d : datom) -> d.e)
+  in
+  check "restored uuid datoms" (es = [ 28447 ])
 
 (* (deftest sort-page-random-blocks ...) — two cljs testings *)
 let test_sort_page_random_blocks () =
@@ -3054,6 +3094,7 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "batch-transact-with-temp-conn-preserves-retracts-test" `Quick test_batch_transact_with_temp_conn_preserves_retracts_test;
     Alcotest.test_case "batch-transact-with-temp-conn-preserves-cardinality-one-schema-test" `Quick test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test;
     Alcotest.test_case "test-batch-transact!" `Quick test_batch_transact_;
+    Alcotest.test_case "test-batch-transact-clears-stale-tx-tail-before-next-store-tail" `Quick test_batch_transact_clears_stale_tx_tail;
     Alcotest.test_case "sort-page-random-blocks" `Quick test_sort_page_random_blocks;
     Alcotest.test_case "sort-page-random-blocks-bounded-traversal" `Quick test_sort_page_random_blocks_bounded_traversal;
     Alcotest.test_case "batch-transact-with-temp-conn-before-commit-can-abort-live-commit" `Quick test_batch_transact_with_temp_conn_before_commit;
