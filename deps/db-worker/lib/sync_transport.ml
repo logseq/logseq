@@ -10,23 +10,29 @@ let contains s sub =
   in
   lsub = 0 || go 0
 
-let replace_first s pat rep =
+let replace_all s pat rep =
   let ls = String.length s and lp = String.length pat in
+  let b = Buffer.create ls in
   let rec go i =
-    if i + lp > ls then None
-    else if String.sub s i lp = pat then
-      Some (String.sub s 0 i ^ rep ^ String.sub s (i + lp) (ls - i - lp))
-    else go (i + 1)
+    if i + lp > ls then Buffer.add_substring b s i (ls - i)
+    else if String.sub s i lp = pat then begin
+      Buffer.add_string b rep;
+      go (i + lp)
+    end else begin
+      Buffer.add_char b s.[i];
+      go (i + 1)
+    end
   in
-  go 0
+  go 0;
+  Buffer.contents b
 
 let ends_with s suffix =
   let ls = String.length s and lf = String.length suffix in
   ls >= lf && String.sub s (ls - lf) lf = suffix
 
 let format_ws_url base graph_id =
-  if contains base "%s" then
-    Option.value (replace_first base "%s" graph_id) ~default:base
+  (* cljs string/replace — every %s, not just the first *)
+  if contains base "%s" then replace_all base "%s" graph_id
   else if ends_with base "/" then base ^ graph_id
   else base ^ "/" ^ graph_id
 
