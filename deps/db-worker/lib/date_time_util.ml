@@ -360,3 +360,8 @@ let valid_journal_title_with_slash (title : string) : bool =
       Ns_util.str_contains fmt "/"
       && Option.is_some (date_of_formatter fmt (capitalize_all title)))
     built_in_journal_title_formatters
+
+(* date-time-util/ms->journal-day — local date as yyyymmdd int. *)
+let ms_to_journal_day (ms : int64) : int =
+  let c = Date_time.of_epoch_ms ms in
+  (c.year * 10000) + (c.month * 100) + c.day
