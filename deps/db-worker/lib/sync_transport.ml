@@ -60,7 +60,8 @@ let append_token url token =
       url ^ sep ^ "token=" ^ uri_encode token
   | None -> url
 
-let ws_open ws = Web_socket.ready_state ws = 1
+let ws_open (ws : Sync_state.ws_endpoint) =
+  Sync_state.ws_endpoint_ready_state ws = 1
 
 (* uuid-like -> string (legacy tx/reject fields) *)
 let uuid_like_to_string = function
@@ -192,11 +193,13 @@ let normalize_tx_batch_ids = function
        | _ -> m)
   | m -> m
 
-let send ws (message : Wire.t) : unit Db_worker_effect.t =
+let send (ws : Sync_state.ws_endpoint) (message : Wire.t)
+    : unit Db_worker_effect.t =
   if ws_open ws then
     match coerce_ws_client_message message with
     | Some coerced ->
-        Web_socket.send ws (Json_codec.encode (normalize_tx_batch_ids coerced))
+        Sync_state.ws_endpoint_send ws
+          (Json_codec.encode (normalize_tx_batch_ids coerced))
     | None ->
         Worker_log.error "db-sync/ws-request-invalid"
           [ ("message", Json_codec.encode message) ];

@@ -34,7 +34,7 @@ let update_user_presence (client : Sync_state.client) (user_id : string)
 let get_user_uuid () : string option =
   Sync_auth.get_user_uuid (Sync_state.id_token ())
 
-let send (ws : Web_socket.t) (message : Wire.t) : unit =
+let send (ws : Sync_state.ws_endpoint) (message : Wire.t) : unit =
   ignore (Sync_transport.send ws message)
 
 let ws_open = Sync_transport.ws_open

@@ -100,7 +100,8 @@ let reverse_tx_data (db_before : db) (db_after : db) (tx_data : datom list)
 
 let ws_open = Sync_transport.ws_open
 
-let send (ws : Web_socket.t) (message : Wire.t) : unit Db_worker_effect.t =
+let send (ws : Sync_state.ws_endpoint) (message : Wire.t)
+    : unit Db_worker_effect.t =
   Sync_transport.send ws message
 
 let tx_items_of (w : Wire.t) : Wire.t list =
@@ -897,6 +898,10 @@ let large_upload_progress (tx_entries : Wire.t list) : Wire.t list =
                       ~default:Wire.Nil ) ])
        | _ -> None)
     tx_entries
+
+(* test hook — cljs tests rebind prepare-upload-tx-entries (the
+   upload-side counterpart of download_remote_asset_fn). *)
+let prepare_upload_tx_entries_fn = ref prepare_upload_tx_entries
 
 let pending_txs repo ?limit () : Sync_client_op.local_tx_entry list =
   Sync_client_op.get_pending_local_txs repo ?limit ()
@@ -2169,7 +2174,7 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
         let conn = Option.get conn in
         let ws = Option.get ws in
         let tx_entries, drop_tx_ids, drop_txs =
-          prepare_upload_tx_entries ~repo (Some conn) batch
+          !prepare_upload_tx_entries_fn ~repo (Some conn) batch
         in
         if drop_tx_ids <> [] then begin
           Worker_log.info "db-sync/drop-tx-ids"
@@ -2303,9 +2308,13 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
                [ "repo", repo; "error", Printexc.to_string error ];
              Db_worker_effect.pure ())
 
+(* test hook — cljs tests rebind flush-pending! to a no-op to isolate
+   message handlers (hello/pull-ok) from the upload path. *)
+let flush_pending_fn = ref flush_pending
+
 let enqueue_flush_pending repo (client : Sync_state.client) : unit =
   Sync_state.enqueue_catching client.send_queue
-    (fun () -> flush_pending repo client)
+    (fun () -> !flush_pending_fn repo client)
     ~on_error:(fun e ->
        Worker_log.error "db-sync/flush-pending-queue-failed"
          [ "repo", repo; "error", Printexc.to_string e ];

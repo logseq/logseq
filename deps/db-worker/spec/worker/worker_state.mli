@@ -48,7 +48,9 @@ val merge_context : Wire.t -> unit
 val set_context : Wire.t -> unit
 
 (* worker-state/*state — repo-less app state keyed by qualified
-   keyword name ("git/current-repo", auth tokens, :config, ...). *)
+   keyword name ("git/current-repo", auth tokens, :config, ...).
+   `app_state` exposes the table itself for test snapshot/restore. *)
+val app_state : (string, Wire.t) Hashtbl.t
 val state_get : string -> Wire.t option
 val merge_state : Wire.t -> unit
 

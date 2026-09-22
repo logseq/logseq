@@ -30,13 +30,19 @@ let http_base_url (config : Wire.t) : string option =
            else Some base
        | None -> None)
 
-let id_token_expired (token : string option) : bool =
+let id_token_expired_impl (token : string option) : bool =
   match token with
   | Some t ->
       (match Sync_util.jwt_exp t with
        | Some exp_s -> exp_s *. 1000. <= Sync_state.time_ms ()
        | None -> true)
   | None -> true
+
+(* test seam — cljs with-redefs [sync-auth/id-token-expired?] *)
+let id_token_expired_fn = ref id_token_expired_impl
+
+let id_token_expired (token : string option) : bool =
+  !id_token_expired_fn token
 
 let oauth_token_url () : string option =
   match Worker_state.state_get "auth/oauth-token-url" with

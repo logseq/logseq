@@ -368,10 +368,27 @@ let process_asset_ops repo (client : Sync_state.client)
       Db_worker_effect.pure ()
   | _ -> Db_worker_effect.pure ()
 
-let enqueue_asset_sync repo (client : Sync_state.client) ~enqueue_asset_task
+let enqueue_asset_sync_impl repo (client : Sync_state.client) ~enqueue_asset_task
     ~current_client ~broadcast_rtc_state =
   enqueue_asset_task client (fun () ->
       process_asset_ops repo client ~current_client ~broadcast_rtc_state)
+
+(* test hook — cljs tests rebind enqueue-asset-sync! (same convention as
+   download_remote_asset_fn). *)
+let enqueue_asset_sync_fn :
+    (string -> Sync_state.client ->
+     enqueue_asset_task:(Sync_state.client ->
+                         (unit -> unit Db_worker_effect.t) -> unit) ->
+     current_client:(string -> Sync_state.client option) ->
+     broadcast_rtc_state:(Sync_state.client -> unit) -> unit) ref =
+  ref enqueue_asset_sync_impl
+
+let enqueue_asset_sync repo client ~enqueue_asset_task ~current_client
+    ~broadcast_rtc_state =
+  ignore
+    (!enqueue_asset_sync_fn repo client ~enqueue_asset_task ~current_client
+       ~broadcast_rtc_state
+     : unit)
 
 let header_opt name (headers : (string * string) list) =
   let name = String.lowercase_ascii name in
@@ -534,7 +551,7 @@ let remote_asset_download_candidates db : (string * string) list =
   |> List.sort (fun (a, _) (b, _) -> compare a b)
 
 (* download-remote-assets-if-missing! *)
-let download_remote_assets_if_missing repo graph_id candidates :
+let download_remote_assets_if_missing_impl repo graph_id candidates :
     Wire.t Db_worker_effect.t =
   let candidates =
     List.filter (fun (_, t) -> t <> "") candidates
@@ -599,14 +616,28 @@ let remote_asset_download_candidates_in_tx db (tx_data : datom list)
     tx_data
   |> List.sort_uniq compare
 
+(* download-remote-assets-if-missing! — rebindable like
+   download_remote_asset_fn so tests can stub the download path. *)
+let download_remote_assets_if_missing_fn =
+  ref download_remote_assets_if_missing_impl
+
+let download_remote_assets_if_missing repo graph_id candidates =
+  !download_remote_assets_if_missing_fn repo graph_id candidates
+
 (* download-missing-remote-assets! *)
-let download_missing_remote_assets repo graph_id : Wire.t Db_worker_effect.t =
+let download_missing_remote_assets_impl repo graph_id : Wire.t Db_worker_effect.t =
   match Worker_state.datascript_conn repo with
   | Some conn ->
-      download_remote_assets_if_missing repo graph_id
+      !download_remote_assets_if_missing_fn repo graph_id
         (remote_asset_download_candidates (Conn.db conn))
   | None ->
       Db_worker_effect.error
         (Sync_util.ex_info "datascript connection not found"
            [ Wire.Keyword "repo", Wire.String repo
            ; Wire.Keyword "graph-id", Wire.String graph_id ])
+
+let download_missing_remote_assets_fn =
+  ref download_missing_remote_assets_impl
+
+let download_missing_remote_assets repo graph_id =
+  !download_missing_remote_assets_fn repo graph_id

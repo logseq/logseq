@@ -20,9 +20,56 @@ type upload_request =
   ; mutable timer : Timers.timer option
   }
 
+(* ws endpoint — a real ws or a fake driver installed by tests (the cljs
+   fake-websocket driver equivalent). *)
+type fake_ws_state =
+  { mutable fake_ready_state : int
+  ; fake_on_send : string -> unit
+  ; fake_on_close : unit -> unit
+  }
+
+type ws_endpoint =
+  | Real_ws of Web_socket.t
+  | Fake_ws of fake_ws_state
+
+let fake_ws ~ready_state ~on_send ~on_close () : ws_endpoint =
+  Fake_ws { fake_ready_state = ready_state
+          ; fake_on_send = on_send
+          ; fake_on_close = on_close }
+
+let set_fake_ws_ready_state (e : ws_endpoint) (state : int) : unit =
+  match e with
+  | Fake_ws f -> f.fake_ready_state <- state
+  | Real_ws _ -> ()
+
+let ws_endpoint_ready_state (e : ws_endpoint) : int =
+  match e with
+  | Real_ws ws -> Web_socket.ready_state ws
+  | Fake_ws f -> f.fake_ready_state
+
+let ws_endpoint_send (e : ws_endpoint) (payload : string)
+    : unit Db_worker_effect.t =
+  match e with
+  | Real_ws ws -> Web_socket.send ws payload
+  | Fake_ws f -> f.fake_on_send payload; Db_worker_effect.pure ()
+
+let ws_endpoint_close (e : ws_endpoint) : unit Db_worker_effect.t =
+  match e with
+  | Real_ws ws -> Web_socket.close ws
+  | Fake_ws f ->
+      f.fake_ready_state <- 3;
+      f.fake_on_close ();
+      Db_worker_effect.pure ()
+
+let same_ws_endpoint (a : ws_endpoint) (b : ws_endpoint) : bool =
+  match a, b with
+  | Real_ws x, Real_ws y -> x == y
+  | Fake_ws x, Fake_ws y -> x == y
+  | _ -> false
+
 type client =
   { repo : string
-  ; mutable ws : Web_socket.t option
+  ; mutable ws : ws_endpoint option
   ; mutable graph_id : string option
   ; send_queue : unit Db_worker_effect.t ref
   ; receive_queue : unit Db_worker_effect.t ref
