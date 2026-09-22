@@ -476,10 +476,15 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
   match (http_base (), Worker_state.datascript_conn repo) with
   | Some base, Some source_conn when base <> "" ->
       let graph_e2ee =
+        (* cljs normalize-graph-e2ee? (crypt/graph-e2ee? repo) : nil -> true,
+           else (true? v) — the dep's truthy semantics (missing -> false) do
+           NOT apply here *)
         match Worker_state.datascript_conn repo with
         | Some conn -> (
-            try Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee (Conn.db conn)
-            with _ -> true)
+            match Ldb.get_graph_rtc_e2ee (Conn.db conn) with
+            | None -> true
+            | Some (Datascript.Bool b) -> b
+            | Some _ -> false)
         | None -> true
       in
       create_remote_graph repo ~graph_e2ee ~graph_ready_for_use:false
