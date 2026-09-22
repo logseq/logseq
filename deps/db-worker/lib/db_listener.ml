@@ -426,3 +426,19 @@ let () =
           Db_worker_effect.map (fun _ -> ())
             (Markdown_mirror.handle_tx_report repo r
                { Markdown_mirror.default_opts with defer = true })))
+
+(* cljs platform/post-message! :capture-error {:error msg :payload data
+   :extra extra} — broadcast on the shared service channel. *)
+let capture_error (api : string) (payload : Wire.t) (extra : Wire.t) : unit =
+  Broadcast.to_clients ~kind:"capture-error"
+    ~transit_payload:
+      (Transit_codec.to_string
+         (Wire.Array
+            [ kw "capture-error"
+            ; Wire.Map
+                [ kw "error", Wire.String api
+                ; kw "payload", payload
+                ; kw "extra", extra ] ]))
+
+(* sync-deps: capture-error reporting *)
+let () = Sync_deps.capture_error := Some capture_error

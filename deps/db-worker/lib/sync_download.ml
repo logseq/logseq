@@ -708,3 +708,6 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
         (Sync_util.ex_info "db-sync missing graph download info"
            [ Wire.Keyword "repo", Wire.String repo
            ; Wire.Keyword "graph-id", Wire.String graph_id ])
+
+(* sync-deps: platform streaming http transport *)
+let () = Sync_deps.http_send_stream := Some Http_bytes.send_stream

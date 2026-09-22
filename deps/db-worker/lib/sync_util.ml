@@ -145,12 +145,10 @@ let auth_headers () : (string * string) list =
   | None -> raise (ex_info "Empty token" [])
   | Some token -> [ "authorization", "Bearer " ^ token ]
 
-(* sync-util/fetch-json *)
-let fetch_json url ?(meth = "GET") ?(headers = []) ?body ?response_schema
-    ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
-  match !Sync_deps.fetch_json with
-  | Some f -> f url ~meth ~headers ?body ?response_schema ~error_schema ()
-  | None ->
+(* sync-util/fetch-json — the platform impl wired as the default
+   Sync_deps.fetch_json hook; tests may override the hook. *)
+let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
+    ?response_schema ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
   let headers = auth_headers () @ headers in
   Http.send { Http.url; method_ = meth; headers; body } >>= fun resp ->
   let data =
@@ -180,6 +178,17 @@ let fetch_json url ?(meth = "GET") ?(headers = []) ?body ?response_schema
          [ kw "status", Wire.Int resp.status
          ; kw "url", Wire.String url
          ; kw "body", body ])
+
+let fetch_json url ?(meth = "GET") ?(headers = []) ?body ?response_schema
+    ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
+  match !Sync_deps.fetch_json with
+  | Some f -> f url ~meth ~headers ?body ?response_schema ~error_schema ()
+  | None ->
+      fetch_json_default url ~meth ~headers ?body ?response_schema
+        ~error_schema ()
+
+(* sync-deps: platform JSON fetch *)
+let () = Sync_deps.fetch_json := Some fetch_json_default
 
 (* worker-common/parse-jwt — decode the payload segment *)
 let b64_alphabet =

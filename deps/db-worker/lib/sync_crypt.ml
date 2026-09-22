@@ -2184,7 +2184,27 @@ let init () =
         !fetch_graph_aes_key_for_download_fn (Some graph_id));
   Sync_deps.preflight_upload_e2ee :=
     Some (fun repo e2ee -> !preflight_upload_e2ee_fn repo e2ee);
-  Sync_deps.ensure_user_rsa_keys := Some (fun opts -> !ensure_user_rsa_keys_fn opts)
+  Sync_deps.ensure_user_rsa_keys := Some (fun opts -> !ensure_user_rsa_keys_fn opts);
+  (* crypt/<grant-graph-access! — the hook carries a user-uid list; each
+     uid maps to one grant call, sequentially *)
+  Sync_deps.grant_graph_access :=
+    Some
+      (fun repo graph_id user_uids ->
+        let rec loop = function
+          | [] -> pure ()
+          | uid :: rest ->
+              let email =
+                match uid with
+                | Wire.String s -> s
+                | _ ->
+                    invalid_arg
+                      "sync_crypt/grant_graph_access: expected email string"
+              in
+              bind
+                (!grant_graph_access_fn repo (Some graph_id) email)
+                (fun () -> loop rest)
+        in
+        loop user_uids)
 
 let reset_hooks () =
   platform_env_fn := platform_env_impl;

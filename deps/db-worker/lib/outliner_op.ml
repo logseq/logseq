@@ -715,3 +715,203 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
           ignore (Db_tx.transact conn' tx_ops)
       | _ -> ()));
   !result_ref
+
+(* ---------- Sync_deps hook wiring ----------
+   cljs callers of the outliner !-fns see the committed tx-report (the
+   ldb/transact! result); the ported *_conn fns discard it, so each
+   adapter recovers the commit via Db_tx.last_report_during. The
+   (string * value) opts list is a Block_map — the cljs opts map. *)
+
+let report_of (conn : conn) (f : unit -> 'a) : tx_report =
+  match Db_tx.last_report_during conn f with
+  | Some r -> r
+  | None -> Db_tx.empty_report conn
+
+let () =
+  (* outliner-op/apply-ops! conn ops opts *)
+  Sync_deps.outliner_apply_ops :=
+    Some
+      (fun conn ops opts ->
+        report_of conn (fun () ->
+            ignore
+              (apply_ops conn (Wire.Array ops) (Block_map.to_transit opts))));
+  (* outliner-core/save-block! conn block opts *)
+  Sync_deps.outliner_save_block :=
+    Some
+      (fun conn block opts ->
+        report_of conn (fun () ->
+            ignore
+              (Outliner_core.save_block_conn conn (block_map_of_wire block)
+                 (save_opts_of (Block_map.to_transit opts)) opts)));
+  (* outliner-core/insert-blocks! conn blocks target-block opts *)
+  Sync_deps.outliner_insert_blocks :=
+    Some
+      (fun conn blocks target_block_id opts ->
+        let opts_wire = Block_map.to_transit opts in
+        report_of conn (fun () ->
+            match
+              Option.bind (uuid_of_wire target_block_id)
+                (entity_of_uuid (Conn.db conn))
+            with
+            | Some target_block ->
+                ignore
+                  (Outliner_core.insert_blocks_conn conn
+                     (List.map block_map_of_wire (get_block_ids blocks))
+                     (Block_map.of_entity target_block)
+                     (insert_opts_of opts_wire)
+                     (block_map_of_wire opts_wire))
+            | None -> ()));
+  (* outliner-core/move-blocks! conn block-ids target-block sibling? —
+     the cljs op carries the flag as {:sibling? bool} in its opts map *)
+  Sync_deps.outliner_move_blocks :=
+    Some
+      (fun conn block_ids target_block_id sibling ->
+        let opts_wire =
+          Wire.Map [ (Wire.Keyword "sibling?", Wire.Bool sibling) ]
+        in
+        report_of conn (fun () ->
+            let db = Conn.db conn in
+            let blocks = entities_of_uuids db (get_block_ids block_ids) in
+            match Option.bind (uuid_of_wire target_block_id) (entity_of_uuid db)
+            with
+            | Some target_block when blocks <> [] ->
+                Outliner_core.move_blocks_conn conn blocks target_block
+                  (insert_opts_of opts_wire)
+                  (block_map_of_wire opts_wire)
+            | _ -> ()));
+  (* outliner-core/move-blocks-up-down! conn block-ids up? — the cljs
+     fn takes no opts; the hook's map is unused *)
+  Sync_deps.outliner_move_blocks_up_down :=
+    Some
+      (fun conn block_ids up _opts ->
+        report_of conn (fun () ->
+            match entities_of_uuids (Conn.db conn) (get_block_ids block_ids)
+            with
+            | [] -> ()
+            | blocks -> Outliner_core.move_blocks_up_down_conn conn blocks up));
+  (* outliner-core/indent-outdent-blocks! conn block-ids indent? opts *)
+  Sync_deps.outliner_indent_outdent_blocks :=
+    Some
+      (fun conn block_ids indent opts ->
+        let opts_wire = Block_map.to_transit opts in
+        report_of conn (fun () ->
+            let db = Conn.db conn in
+            match entities_of_uuids db (get_block_ids block_ids) with
+            | [] -> ()
+            | blocks ->
+                let parent_original, opts' =
+                  resolve_indent_outdent_opts db opts_wire
+                in
+                Outliner_core.indent_outdent_blocks_conn conn blocks indent
+                  ?parent_original (block_map_of_wire opts')));
+  (* outliner-core/delete-blocks! conn block-ids opts *)
+  Sync_deps.outliner_delete_blocks :=
+    Some
+      (fun conn block_ids opts ->
+        report_of conn (fun () ->
+            let blocks =
+              entities_of_uuids (Conn.db conn) (get_block_ids block_ids)
+            in
+            ignore
+              (Outliner_core.delete_blocks_conn conn
+                 (List.map Block_map.of_entity blocks) opts)));
+  (* outliner-op apply-template-op! — arg is the [template-id
+     target-block-id] pair, opts the cljs opts map *)
+  Sync_deps.outliner_apply_template :=
+    Some
+      (fun conn arg opts ->
+        let template_id, target_block_id =
+          match arg with
+          | Wire.Array (t :: b :: _) | Wire.List (t :: b :: _) -> (t, b)
+          | w -> (w, Wire.Nil)
+        in
+        let result_ref = ref None in
+        report_of conn (fun () ->
+            apply_template_op conn result_ref template_id target_block_id
+              (Block_map.to_transit opts)));
+  (* outliner-page/create! conn title opts *)
+  Sync_deps.outliner_page_create :=
+    Some
+      (fun conn title opts ->
+        let bool_opt a = Option.value (Block_map.bool_attr opts a) ~default:false
+        in
+        let str_opt a =
+          Option.bind (Block_map.attr_value opts a) (function
+            | String s | Keyword s | Symbol s -> Some s
+            | _ -> None)
+        in
+        let tags =
+          match Block_map.attr_value opts "tags" with
+          | Some (Vector xs) | Some (List xs) | Some (Set xs) ->
+              Some (List.map Ds_wire.transit_of_value xs)
+          | _ -> None
+        in
+        let properties =
+          match Block_map.attr_value opts "properties" with
+          | Some (Map kvs) ->
+              Some
+                (List.filter_map
+                   (fun (k, v) ->
+                     match k with
+                     | Keyword s | String s ->
+                         Some (s, Ds_wire.transit_of_value v)
+                     | _ -> None)
+                   kvs)
+          | _ -> None
+        in
+        report_of conn (fun () ->
+            ignore
+              (Outliner_page.create_bang conn title
+                 ~opts:(fun () ->
+                   Outliner_page.create (Conn.db conn) title
+                     ?uuid:(str_opt "uuid") ?tags ?properties
+                     ~persist_op:
+                       (Option.value
+                          (Block_map.bool_attr opts "persist-op?")
+                          ~default:true)
+                     ~class_:(bool_opt "class?")
+                     ~journal:(bool_opt "journal?")
+                     ~today_journal:(bool_opt "today-journal?")
+                     ~split_namespace:(bool_opt "split-namespace?")
+                     ?class_ident_namespace:
+                       (str_opt "class-ident-namespace")
+                     ())
+                 ())));
+  (* outliner-page/delete! conn page-uuid opts *)
+  Sync_deps.outliner_page_delete :=
+    Some
+      (fun conn page_uuid opts ->
+        report_of conn (fun () ->
+            ignore
+              (Outliner_page.delete_conn conn page_uuid
+                 (Block_map.to_transit opts))));
+  (* outliner-property/upsert-property! conn property-id schema opts *)
+  Sync_deps.outliner_upsert_property :=
+    Some
+      (fun conn property_id schema opts ->
+        let property_id =
+          match property_id with
+          | Ident s when s <> "" -> Some s
+          | _ -> None
+        in
+        let property_name =
+          Option.bind (Block_map.attr_value opts "property-name") (function
+            | String s | Keyword s | Symbol s -> Some s
+            | _ -> None)
+        in
+        let properties =
+          match Block_map.attr_value opts "properties" with
+          | Some (Map kvs) ->
+              List.filter_map
+                (fun (k, v) ->
+                  match k with
+                  | Keyword s | String s ->
+                      Some (s, Ds_wire.transit_of_value v)
+                  | _ -> None)
+                kvs
+          | _ -> []
+        in
+        report_of conn (fun () ->
+            ignore
+              (Outliner_property.upsert_property conn property_id
+                 (Wire.Map schema) ~property_name ~properties)))
