@@ -15,7 +15,8 @@ let rec value_of_edn (Edn_parser.Any v) : value =
   | Edn_parser.Char u -> String (let b = Buffer.create 4 in Buffer.add_utf_8_uchar b u; Buffer.contents b)
   | Edn_parser.Symbol s -> Symbol s
   | Edn_parser.Keyword k -> Keyword (Edn_parser.keyword_to_string k)
-  | Edn_parser.Int n -> Int (Int64.to_int n)
+  | Edn_parser.Int n ->
+      if Int64.abs n <= Int64.of_int max_int then Int (Int64.to_int n) else Instant n
   | Edn_parser.Bigint s -> Int (int_of_string_opt s |> Option.value ~default:0)
   | Edn_parser.Float f -> Float f
   | Edn_parser.Decimal s -> Float (float_of_string_opt s |> Option.value ~default:0.0)

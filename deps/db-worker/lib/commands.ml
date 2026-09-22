@@ -415,7 +415,7 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
        | Some next_time_long ->
            let journal_day =
              Outliner_pipeline.get_journal_day_from_long db
-               (Int (Int64.to_int next_time_long))
+               (Instant next_time_long)
            in
            let page_uuid, page_txs =
              match journal_day with
@@ -456,7 +456,7 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                | Some u ->
                    Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
                | None -> None
-             else Some (Int (Int64.to_int next_time_long))
+             else Some (Instant next_time_long)
            in
            default_value_tx_data @ page_txs
            @ (match value with

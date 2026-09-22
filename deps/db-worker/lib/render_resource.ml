@@ -1071,7 +1071,7 @@ let rec form_of_wire (t : Wire.t) : query_form =
   | Wire.Nil -> QueryFormNil
   | Wire.Bool b -> QueryFormBool b
   | Wire.Int n -> QueryFormInt n
-  | Wire.Int64 n -> QueryFormInt (Int64.to_int n)
+  | Wire.Int64 n -> QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms n))
   | Wire.Float f -> QueryFormFloat f
   | Wire.String s -> QueryFormString s
   | Wire.Binary s -> QueryFormString s
@@ -1082,9 +1082,7 @@ let rec form_of_wire (t : Wire.t) : query_form =
        with _ -> QueryFormFloat (float_of_string s))
   | Wire.Big_decimal s -> QueryFormFloat (float_of_string s)
   | Wire.Date_ms ms ->
-      let iso = Ds_wire.edn_date ms in
-      let inner = String.sub iso 7 (String.length iso - 8) in
-      QueryFormTagged ("inst", QueryFormString inner)
+      QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms ms))
   | Wire.Uuid s -> QueryFormTagged ("uuid", QueryFormString s)
   | Wire.Uri s -> QueryFormString s
   | Wire.Array xs -> QueryFormVector (List.map form_of_wire xs)
