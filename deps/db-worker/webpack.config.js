@@ -15,7 +15,7 @@ var NodeConfig = {
     filename: 'db-worker-ocaml.cjs',
     library: { type: 'commonjs-module' },
   },
-  externals: { 'node:sqlite': 'commonjs node:sqlite' },
+  externals: { 'node:sqlite': 'commonjs node:sqlite', keytar: 'commonjs keytar' },
   resolve: { extensions: ['.js'] },
 };
 
@@ -39,7 +39,7 @@ var BrowserConfig = {
     // detection (see runtime/melange/sqlite.ml is_node); stub them
     // out so the shared melange modules bundle for browser.
     new webpack.IgnorePlugin({
-      resourceRegExp: /^(node:sqlite|fs)$/,
+      resourceRegExp: /^(node:sqlite|fs|keytar)$/,
     }),
   ],
 };
