@@ -18,9 +18,6 @@
    Skipped cljs cases (unported dependency):
    - initial_data_test.cljs get-initial-data*/restore-*: sqlite storage layer
      is not ported
-   - initial_data_test.cljs get-block-and-children-has-children-flag:
-     common-initial-data/get-block-and-children returns {:block :children}
-     maps; OCaml Ldb.get_block_and_children returns a preorder entity list
    - view_test.cljs: ported to test_db_view_native.ml (all 42 deftests)
 
    cljs (d/transact! conn tx-maps-or-datoms) -> Datascript.transact_conn /
@@ -748,6 +745,77 @@ let test_mldoc_schema () =
        (ok Mldoc_schema.nested_link_schema
           {|{"content":"a","children":[["Nope","x"]]}|}))
 
+(* (deftest get-block-and-children-has-children-flag ...)
+   cljs common-initial-data/get-block-and-children returns {:block :children}
+   maps with :block.temp/has-children? — the same wire shape as
+   Endpoint_block.get_block_and_children with children? false. *)
+let test_get_block_and_children_has_children_flag () =
+  let open Db_test_util in
+  let gb_children_false =
+    { Endpoint_block.gb_all = false
+    ; Endpoint_block.gb_children = false
+    ; Endpoint_block.gb_properties = []
+    ; Endpoint_block.gb_render_data = None
+    ; Endpoint_block.gb_root_render_data = false
+    ; Endpoint_block.gb_include_collapsed_children = false
+    ; Endpoint_block.gb_include_property_block = false }
+  in
+  let has_children_flag result =
+    match result with
+    | Wire.Map m -> (
+        match Plain_value.map_get "block" m with
+        | Some b ->
+            Plain_value.map_get "block.temp/has-children?" (Wire.as_map b)
+        | None -> None)
+    | _ -> None
+  in
+  (* "Top-level block with children has :block.temp/has-children? true" *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "test-page" };
+            blocks =
+              [ { default_block with
+                  b_title = Some "parent"
+                ; b_children =
+                    [ { default_block with b_title = Some "child1" };
+                      { default_block with b_title = Some "child2" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let parent = Option.get (find_block_by_content db "parent") in
+  let parent_uuid =
+    match Ldb.value parent "block/uuid" with
+    | Some (Uuid u) -> u
+    | _ -> ""
+  in
+  check "get-block-and-children-has-children-flag true"
+    (has_children_flag
+       (Endpoint_block.get_block_and_children db (Uuid parent_uuid)
+          gb_children_false)
+     = Some (Wire.Bool true));
+  (* "Top-level block without children has :block.temp/has-children? false" *)
+  let conn2 =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "test-page2" };
+            blocks =
+              [ { default_block with b_title = Some "leaf-block" } ] } ]
+      ()
+  in
+  let db2 = db_of conn2 in
+  let leaf = Option.get (find_block_by_content db2 "leaf-block") in
+  let leaf_uuid =
+    match Ldb.value leaf "block/uuid" with
+    | Some (Uuid u) -> u
+    | _ -> ""
+  in
+  check "get-block-and-children-has-children-flag false"
+    (has_children_flag
+       (Endpoint_block.get_block_and_children db2 (Uuid leaf_uuid)
+          gb_children_false)
+     = Some (Wire.Bool false))
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "delete-blocks-removes-reactions" `Quick test_delete_blocks_removes_reactions;
     Alcotest.test_case "delete-blocks-expands-property-value-children" `Quick test_delete_blocks_expands_property_value_children;
@@ -768,4 +836,5 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "url?" `Quick test_url;
     Alcotest.test_case "graph-dir" `Quick test_graph_dir;
     Alcotest.test_case "client-id-allowed?" `Quick test_client_id_allowed;
-    Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema ]
+    Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema;
+    Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag ]
