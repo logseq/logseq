@@ -56,6 +56,32 @@
          ocaml-worker))))
 
 #?(:cljs
+   (defn ocaml-registered?
+     "true when the optional OCaml db-worker claims `qualified-kw-str`."
+     [qualified-kw-str]
+     (some? (ocaml-db-worker qualified-kw-str))))
+
+#?(:cljs
+   (defn <ocaml-invoke
+     "Invoke the OCaml db-worker `qualified-kw-str` with decoded `args`.
+     Resolves to the decoded result; rejects with the decoded error when the
+     reply is a tagged `error`/`js/Error` transit value — the same contract
+     as calling a cljs thread-api fn directly. Throws synchronously when the
+     OCaml worker does not claim the endpoint."
+     [qualified-kw-str args]
+     (let [ocaml-worker (or (ocaml-db-worker qualified-kw-str)
+                            (throw (ex-info (str "not registered on OCaml db-worker: "
+                                                 qualified-kw-str)
+                                            {:thread-api qualified-kw-str})))]
+       (-> (.invoke ocaml-worker qualified-kw-str (ldb/write-transit-str args))
+           (p/then (fn [transit-str]
+                     (let [result (ldb/read-transit-str transit-str)]
+                       (when (or (instance? ExceptionInfo result)
+                                 (instance? js/Error result))
+                         (throw result))
+                       result)))))))
+
+#?(:cljs
    (defn remote-function
      "Return a promise whose value is a transit string."
      [qualified-kw-str args-transit-str]

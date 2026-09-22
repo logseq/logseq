@@ -868,7 +868,12 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
+     (if (thread-api/ocaml-registered? "thread-api/create-or-open-db")
+       ;; The OCaml worker owns the graph conn and db.sqlite exclusively;
+       ;; opening the cljs conn would deadlock on its exclusive sqlite lock.
+       (thread-api/<ocaml-invoke "thread-api/create-or-open-db"
+                                [repo (dissoc opts :close-other-db?)])
+       (<create-or-open-db! repo (dissoc opts :close-other-db?))))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
@@ -1010,7 +1015,9 @@
           _ (when-not (:import-type start-opts)
               (start-db! repo start-opts))]
     (when-not (:import-type start-opts)
-      (assert (some? (worker-state/get-datascript-conn repo))))
+      (assert (or (some? (worker-state/get-datascript-conn repo))
+                  ;; OCaml worker owns the conn instead of worker-state
+                  (thread-api/ocaml-registered? "thread-api/create-or-open-db"))))
     nil))
 
 (def broadcast-data-types

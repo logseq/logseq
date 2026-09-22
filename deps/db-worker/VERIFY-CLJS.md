@@ -6,16 +6,23 @@ Date: 2026-09-22. Scope: `remote-function` dispatch seam, node bundle
 ## TL;DR
 
 The dispatch seam itself is correct (registration check, transit round-trip,
-tagged-error → thrown ex-info → HTTP status mapping all verified). E2E is
-**blocked** by one seam-side architecture gap and one datascript-ocaml engine
-bug, both characterized below.
+tagged-error → thrown ex-info → HTTP status mapping all verified). The
+double-open architecture gap (Blocker 1) is **fixed**: `start-db!`/
+`on-become-master` now delegate graph open to OCaml when it claims
+`thread-api/create-or-open-db`, so the OCaml worker owns `db.sqlite`
+exclusively. E2E is now blocked only by the datascript-ocaml Instant codec
+engine bug (Blocker 2), which fires inside OCaml's bootstrap transact on
+first graph open.
 
-- cljs-only daemon tests: **51 tests / 302 assertions / 0 failures**.
-- Same suite with `db-worker-ocaml.cjs` loaded: **13 failures**, every one
-  cascading from `Sqlite.Sqlite_error(database is locked)` on
-  `thread-api/create-or-open-db`.
-- `dune runtest`: all green except the known engine-owned
-  `frontend 7 recur-replace-uuid-in-block-title-test`.
+- cljs-only daemon tests: **51 tests / 302 assertions / 0 failures** —
+  unchanged with the delegation in place (`ocaml-registered?` is inert
+  without `globalThis.LogseqDbWorker`).
+- Same suite with `db-worker-ocaml.cjs` loaded: daemon startup aborts
+  (`startup-close-failed` → `.exit 1`) on Blocker 2 — the delegation
+  correctly surfaces the OCaml error as a rejection through
+  `init-service`, which start-daemon treats as fatal.
+- `dune runtest`: 2 failures, both documented below (one engine-owned,
+  one from upstream `fbdf1ba491`).
 - `node scripts/node-smoke.cjs`: 9/15; create-or-open-db fails on the
   Instant-encode engine bug below.
 
@@ -80,29 +87,66 @@ In `deps/db-worker/` unless noted:
 - `scripts/node-smoke.cjs` (new): 15-assert bundle smoke — registered/invoke
   round-trip, error transit shape, missing-conn semantics.
 
-## Blocker 1 — cljs and OCaml both open `db.sqlite` exclusively
+## Blocker 1 — FIXED: cljs and OCaml both opened `db.sqlite` exclusively
 
-For every `create-or-open-db` invoke, `build-proxy-object` first runs
-`<init-service!` → `on-become-master` → `start-db!` → cljs
-`<create-or-open-db!`, which opens `graphs/<enc>/db.sqlite` with
-`PRAGMA locking_mode=exclusive` (+WAL, `wal_autocheckpoint=0`). Only then
-does the invoke reach `remote-function` → OCaml `create_or_open_db` → opens
-the same file → `SQLITE_BUSY` (`database is locked`) → tagged error → 500.
+Was: `build-proxy-object` ran `<init-service!` → `on-become-master` →
+`start-db!` → cljs `<create-or-open-db!` opened `graphs/<enc>/db.sqlite`
+with `PRAGMA locking_mode=exclusive` before the invoke reached OCaml →
+`SQLITE_BUSY` on every OCaml open.
 
-Evidence: the suite is 0-failures with the .cjs moved aside; 13 failures
-with it loaded, all `database is locked` or cascade (`:db/missing-connection`,
-`repo-locked`, `graph not opened`).
+Fix (approved single-owner delegation):
 
-Deeper than locking: two conns can't share the datoms file at all — cljs
-persists its own kvs flushes and would overwrite/diverge OCaml's. So e2e
-needs a single-owner decision, e.g. when
-`LogseqDbWorker.registered("thread-api/create-or-open-db")`, `start-db!` /
-`on-become-master` delegates to OCaml `invoke` and skips the cljs conn
-(including the `get-datascript-conn` assert). Consequence: unregistered
-cljs endpoints (20 today — imports, exports, publishing, ensure-id, a-api,
-search-index progress) would have no datascript conn at all until ported,
-so full e2e depends on finishing that port anyway. Left unimplemented —
-it's a design call in `db_core.cljs`, not a small seam tweak.
+- `thread_api.cljc`: new public `ocaml-registered?` and `<ocaml-invoke`
+  helpers. `<ocaml-invoke` encodes args via `ldb/write-transit-str`, calls
+  `LogseqDbWorker.invoke`, decodes the reply with `ldb/read-transit-str`
+  and **throws** when the result decodes to `ExceptionInfo`/`js/Error`
+  (`read-transit-str` returns the error as a value; the wire contract is
+  identical to calling a cljs thread-api fn directly). It throws
+  synchronously when the endpoint isn't registered — callers must gate
+  with `ocaml-registered?` first.
+- `db_core.cljs` `start-db!`: when
+  `ocaml-registered? "thread-api/create-or-open-db"`, delegates graph open
+  via `<ocaml-invoke` instead of cljs `<create-or-open-db!` — the cljs
+  sqlite pool/datascript conn/search-db/client-ops-db are never opened;
+  the OCaml worker owns `db.sqlite` exclusively. The cljs path is
+  untouched and runs verbatim when the bundle is absent.
+- `db_core.cljs` `on-become-master`: the
+  `(assert (some? (get-datascript-conn repo)))` check now also accepts
+  `ocaml-registered?` — the conn lives in OCaml `worker-state`, not cljs's.
+
+The resulting flow calls OCaml `create_or_open_db` twice per open — once
+via delegation inside `init-service`, once via `remote-function`
+dispatch — matching the cljs shape (cljs `start-db!` opened the conn,
+then `def-thread-api :thread-api/create-or-open-db` returned
+`{:schema ...}` on the existing conn). OCaml `create_or_open_db` is
+idempotent (early-returns `{:schema}` when `worker_state` already holds
+the repo's conn), so this is safe.
+
+### cljs conn-reader audit (who lost their conn)
+
+`worker-state/get-datascript-conn`/`get-sqlite-conn` now return nil under
+OCaml ownership. Reachability audit of every cljs reader outside
+`def-thread-api`:
+
+- **No-op readers**: `close-other-dbs!`, `close-db!`, `close-db-aux!`
+  iterate cljs `*sqlite-conns` — empty → harmless. Caveat: internal cljs
+  `close-db!` calls (e.g. `init-service` graph-switch) do **not** close
+  OCaml's conns; OCaml `worker_state` keeps them per-repo and a later
+  `create-or-open-db` reuses them. Closing OCaml conns on graph switch
+  would need an OCaml `close-db` dispatch added to `close-db!` — not done
+  here.
+- **Endpoint-scoped readers** (reachable only through def-thread-api):
+  all of `handler/*.cljs`, `publish.cljs`, `undo_redo.cljs`,
+  `sync*.cljs`/`deps/sync/*` helpers, `<invalidate-search-db!`,
+  `db-sync-dbs-open?`, `<create-or-open-db!` internals
+  (`initial-data-exists?`, `check-and-fix-schema!`, `listen-db-changes!`,
+  export/backup defs). The 20 unregistered endpoints will legitimately
+  error `:db/missing-connection` until ported — expected per task spec.
+- **Debug-only reader**: `frontend.worker.debug/get-conn` (REPL helper)
+  returns nil under OCaml — `db` console helpers won't see OCaml's conn.
+- **Daemon-side**: `db_worker_node.cljs` never reads `worker-state`
+  conns; its graph lifecycle (`lifecycle/admit`, `assert-lock-owner!`,
+  `write-guard-fn`) is a separate storage layer unaffected by this change.
 
 ## Blocker 2 — datascript-ocaml storage codec can't encode Instant (engine bug)
 
@@ -135,8 +179,13 @@ Three problems:
 
 Expected fix (engine side): `Instant -> Transit.Date` (Int64 ms), make the
 `Instant` type carry int64, `Uuid -> Transit.Uuid`. Reported, not worked
-around — per task scope. Currently masked in the daemon by Blocker 1 but
-blocks all persistence immediately after.
+around — per task scope (fix is landing in datascript-ocaml separately).
+Now the **sole remaining e2e blocker**: with Blocker 1 fixed, OCaml
+`create_or_open_db` runs its bootstrap `transact_conn` → kvs persist →
+Instant encode → throw → tagged error → the delegated `start-db!`
+propagates it as a rejection → daemon `start-daemon!` aborts via
+`startup-close-failed` → `.exit 1`, so the OCaml-loaded daemon suite
+currently cannot enumerate tests at all.
 
 ## Still-unported gaps (documented, not regressions)
 
@@ -156,8 +205,9 @@ blocks all persistence immediately after.
 
 | Suite | Result |
 |---|---|
-| `frontend.worker.db-worker-node-test` (OCaml loaded) | 51 tests / 13 failures — all cascade from Blocker 1 |
-| `frontend.worker.db-worker-node-test` (cljs-only control) | 51 tests / **0 failures** |
+| `frontend.worker.db-worker-node-test` (OCaml loaded, before Blocker-1 fix) | 51 tests / 13 failures — all `database is locked` cascade |
+| `frontend.worker.db-worker-node-test` (OCaml loaded, after fix) | process exits at daemon startup (`startup-close-failed`) — Blocker 2 Instant codec bug surfaces as a fatal init rejection; single remaining blocker |
+| `frontend.worker.db-worker-node-test` (cljs-only control) | 51 tests / **0 failures** — cljs path byte-identical |
 | worker + cli + handler suites, cljs-only (`db-worker-test`, `db-core-test`, `cli.common.db-worker-test`, `handler.worker-test`) | 178 tests / 2 failures — `export-client-ops-db-binary` normalized-path assertions (cljs-side, pre-existing, unrelated to seam) |
 | `frontend.handler.db-based.property-test` + `page-test` (cljs-only) | 7 tests / 1 failure — `set-block-property-resolves-numeric-block-id-test`, "non-class tag insert should not set a tag property directly" (pre-existing on this branch; file untouched by OCaml work) |
 | `dune runtest` | 2 failures: known engine-owned `frontend 7 recur-replace-uuid-in-block-title-test`, plus `db_test 23 get-block-alias-bidirectional-rule` — introduced by upstream `fbdf1ba491` ("restore faithful rule/:in queries"), fails in the fixture's `[:block/uuid ...]` lookup-ref resolution on `block/alias`; unrelated to this commit (not in its code path) |
