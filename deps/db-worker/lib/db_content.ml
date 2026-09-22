@@ -156,8 +156,9 @@ let id_or_tag_ref_re =
     "(#?)\\[\\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\]\\]"
 
 let title_ref_replacement id_to_title ~match_ ~groups ~offset:_ ~input:_ =
-  let hash_prefix = match groups.(0) with Some s -> s | None -> "" in
-  let id = match groups.(1) with Some s -> s | None -> "" in
+  (* spec regexp groups: groups.(0) is the whole match, captures start at 1 *)
+  let hash_prefix = match groups.(1) with Some s -> s | None -> "" in
+  let id = match groups.(2) with Some s -> s | None -> "" in
   match List.assoc_opt id id_to_title with
   | Some ref_title ->
       if hash_prefix = "#" && not (String.contains ref_title ' ') then
