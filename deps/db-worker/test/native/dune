@@ -30,3 +30,20 @@
   (:test_bin ./test_create_graph_native.exe))
  (action
   (run %{test_bin})))
+
+(executable
+ (name test_search_native)
+ (modes native)
+ (modules test_search_native db_test_util)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  datascript_ocaml
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_search_native.exe))
+ (action
+  (run %{test_bin})))

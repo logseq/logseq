@@ -126,3 +126,16 @@ let sleep span =
     (Js.Global.setTimeout ~f:(fun () -> wakeup resolver ()) (int_of_float span)
        : Js.Global.timeoutId);
   task
+
+let timeout task ms =
+  let result, resolver = wait () in
+  on_state task (function
+    | Pending -> ()
+    | Resolved value -> wakeup resolver value
+    | Rejected exn -> reject resolver exn);
+  ignore
+    (Js.Global.setTimeout
+       ~f:(fun () -> reject resolver (Failure "timeout"))
+       (int_of_float ms)
+       : Js.Global.timeoutId);
+  result

@@ -58,4 +58,5 @@
   mirage-crypto-rng
   mirage-crypto-pk
   kdf
-  x509))
+  x509
+  uucp))
