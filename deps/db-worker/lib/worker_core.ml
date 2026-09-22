@@ -38,6 +38,8 @@ let init () =
     ignore Endpoint_property.validate_block_tag;
     ignore Endpoint_property.validate_property_value;
     ignore Endpoint_crypt.arg;
+    ignore Endpoint_block.get_blocks;
+    ignore Render_resource.get_render_snapshots;
     ignore Endpoint_search.clear_search_index_builds;
     ignore Endpoint_sync.pure_nil;
     ignore Sync_crypt.init;
