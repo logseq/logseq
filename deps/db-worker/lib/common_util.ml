@@ -61,7 +61,7 @@ let timestamp_ms (v : value) : int64 option =
     match v with
     | Float f -> Some (Int64.of_float f)
     | Int n -> Some (Int64.of_int n)
-    | Instant n -> Some (Int64.of_int n)
+    | Instant n -> Some n
     | _ -> None
   in
   match ms with
@@ -278,14 +278,14 @@ let rec value_of_wire (w : Wire.t) : value =
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
   | Wire.Int n -> Int n
-  | Wire.Int64 n -> Instant (Int64.to_int n)
+  | Wire.Int64 n -> Instant n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
   | Wire.Symbol s -> Symbol s
   | Wire.Big_decimal s -> Float (float_of_string s)
   | Wire.Big_int s -> Int (int_of_string s)
-  | Wire.Date_ms n -> Instant (Int64.to_int n)
+  | Wire.Date_ms n -> Instant n
   | Wire.Uuid s -> Uuid s
   | Wire.Uri s -> String s
   | Wire.Array xs -> Vector (List.map value_of_wire xs)
