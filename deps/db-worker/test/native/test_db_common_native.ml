@@ -579,7 +579,7 @@ let test_latest_journals_stays_within_journal_day_index () =
   check "latest-journals-stays-within-journal-day-index days"
     (List.map
        (fun (e : entity) -> Ldb.value e "block/journal-day")
-       (Ldb.get_latest_journals db)
+       (List.of_seq (Ldb.get_latest_journals db))
      = [ Some (Int 20240101) ]);
   let j_e =
     Option.get
@@ -590,7 +590,7 @@ let test_latest_journals_stays_within_journal_day_index () =
   in
   ignore (Db_tx.transact conn [ retract_entity j_e.e ]);
   check "latest-journals-stays-within-journal-day-index empty"
-    (Ldb.get_latest_journals (db_of conn) = [])
+    (List.of_seq (Ldb.get_latest_journals (db_of conn)) = [])
 
 (* ---------- initial_data_refs_test.cljs ---------- *)
 

@@ -15,9 +15,6 @@
    cljs deftest names are kept as OCaml test names.
 
    Skipped cljs cases (unported dependency):
-   - get-bidirectional-properties-performance-* and
-     get-latest-journals-bounded-scan: ^:long tests that count d/entity /
-     d/datoms calls via with-redefs — no OCaml equivalent
    - plural tests: none exist under deps/common/test
    - id-ref->title-ref / content-id-ref->page tests: none exist in
      deps/db test dirs
@@ -263,6 +260,78 @@ let test_get_bidirectional_properties_ignores_recycled_entities () =
   check "get-bidirectional-properties-ignores-recycled-entities"
     (Ldb.get_bidirectional_properties (db_of conn) target.id = [])
 
+(* cljs bidirectional-perf-conn: n Person pages each pointing all given
+   properties at the Target page. *)
+let bidirectional_perf_conn n property_titles =
+  let open Db_test_util in
+  let properties =
+    List.map
+      (fun t ->
+        ( t
+        , { default_property with
+            p_type = "node"
+          ; p_property_classes = [ "Person" ] } ))
+      property_titles
+  in
+  let person_properties =
+    List.map
+      (fun t -> (t, build_page_ref ~title:"Target" ()))
+      property_titles
+  in
+  create_conn_with_blocks
+    ~properties
+    ~classes:
+      [ ( "Person"
+        , { default_class with
+            c_properties =
+              [ "logseq.property.class/enable-bidirectional?", Bool true ] } )
+      ]
+    ~pages_and_blocks:
+      ({ page = { default_page with pg_title = Some "Target" }; blocks = [] }
+       :: List.init n (fun i ->
+              { page =
+                  { default_page with
+                    pg_title = Some (Printf.sprintf "Person %d" i)
+                  ; pg_tags = [ "Person" ]
+                  ; pg_properties = person_properties };
+                blocks = [] }))
+    ()
+
+(* (deftest ^:long get-bidirectional-properties-performance-single-property
+   ...) — cljs counts (d/entity db keyword) lookups; Ldb.attr_lookups is
+   the same counter on Ident refs. *)
+let test_get_bidirectional_properties_performance_single_property () =
+  let conn = bidirectional_perf_conn 400 [ "friend" ] in
+  let db = db_of conn in
+  let target = Option.get (block_by_title db "Target") in
+  Ldb.attr_lookups := 0;
+  let result = Ldb.get_bidirectional_properties db target.id in
+  check "get-bidirectional-properties-performance-single-property groups"
+    (List.length result = 1);
+  check "get-bidirectional-properties-performance-single-property entities"
+    (match result with
+     | [ g ] -> List.length g.entities = 400
+     | _ -> false);
+  check "get-bidirectional-properties-performance-single-property bounded"
+    (!Ldb.attr_lookups <= 8)
+
+(* (deftest ^:long get-bidirectional-properties-performance-multi-property
+   ...) *)
+let test_get_bidirectional_properties_performance_multi_property () =
+  let conn = bidirectional_perf_conn 300 [ "friend"; "colleague" ] in
+  let db = db_of conn in
+  let target = Option.get (block_by_title db "Target") in
+  Ldb.attr_lookups := 0;
+  let result = Ldb.get_bidirectional_properties db target.id in
+  check "get-bidirectional-properties-performance-multi-property groups"
+    (List.length result = 1);
+  check "get-bidirectional-properties-performance-multi-property entities"
+    (match result with
+     | [ g ] -> List.length g.entities = 300
+     | _ -> false);
+  check "get-bidirectional-properties-performance-multi-property bounded"
+    (!Ldb.attr_lookups <= 12)
+
 (* ---------- src/test/frontend/worker/db_core_test.cljs ---------- *)
 
 (* (deftest get-block-parents-returns-parents ...) *)
@@ -349,6 +418,37 @@ let test_get_latest_journals_returns_worker_maps () =
   check "get-latest-journals-returns-worker-maps raw-titles"
     (List.map (fun m -> wire_string_field "block/raw-title" m) maps
      = [ Some "Jan 2nd, 2024" ])
+
+(* (deftest get-latest-journals-bounded-scan ...) — take 1 must realize
+   O(requested) journal-day datoms, not O(total journals).
+   Ldb.journal_day_scans mirrors the cljs wrap-scan counter. *)
+let test_get_latest_journals_bounded_scan () =
+  let conn = Db_test_util.create_conn () in
+  let journal_count = 50 in
+  let journal_id =
+    match Datascript.entity (db_of conn) (Ident "logseq.class/Journal") with
+    | Some e -> e.id
+    | None -> failwith "logseq.class/Journal ident missing"
+  in
+  ignore
+    (Datascript.transact_conn conn
+       (List.init journal_count (fun i ->
+            let title = Printf.sprintf "journal %d" i in
+            Entity
+              { db_id = None
+              ; attrs =
+                  [ "block/uuid", One_value (Uuid (Db_test_util.gen_uuid ()))
+                  ; "block/title", One_value (String title)
+                  ; "block/name", One_value (String title)
+                  ; "block/journal-day", One_value (Int (20240101 + i))
+                  ; "block/tags", One_value (Ref journal_id) ] })));
+  Ldb.journal_day_scans := 0;
+  let realized =
+    Ldb.get_latest_journals (db_of conn) |> Seq.take 1 |> List.of_seq
+  in
+  check "get-latest-journals-bounded-scan count" (List.length realized = 1);
+  check "get-latest-journals-bounded-scan bounded"
+    (!Ldb.journal_day_scans < journal_count)
 
 (* (deftest q-executes-datascript-query ...) *)
 let test_q_executes_datascript_query () =
@@ -3085,7 +3185,10 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-bidirectional-properties-ignores-recycled-entities" `Quick test_get_bidirectional_properties_ignores_recycled_entities;
     Alcotest.test_case "get-block-parents-returns-parents" `Quick test_get_block_parents_returns_parents;
     Alcotest.test_case "get-block-refs-returns-linked-references" `Quick test_get_block_refs_returns_linked_references;
+    Alcotest.test_case "get-bidirectional-properties-performance-single-property" `Quick test_get_bidirectional_properties_performance_single_property;
+    Alcotest.test_case "get-bidirectional-properties-performance-multi-property" `Quick test_get_bidirectional_properties_performance_multi_property;
     Alcotest.test_case "get-latest-journals-returns-worker-maps" `Quick test_get_latest_journals_returns_worker_maps;
+    Alcotest.test_case "get-latest-journals-bounded-scan" `Quick test_get_latest_journals_bounded_scan;
     Alcotest.test_case "q-executes-datascript-query" `Quick test_q_executes_datascript_query;
     Alcotest.test_case "get-class-extends" `Quick test_get_class_extends;
     Alcotest.test_case "q-returns-nil-for-nonexistent-conn" `Quick test_q_returns_nil_for_nonexistent_conn;
