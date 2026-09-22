@@ -442,7 +442,8 @@ let initial_data_idents_edn =
     {:db/ident :logseq.class/Status}
     {:db/ident :logseq.class/Query}
     {:db/ident :logseq.class/Comments}
-    {:db/ident :logseq.class/Comment}]"
+    {:db/ident :logseq.class/Comment}
+    {:db/ident :logseq.class/Asset}]"
 
 (* cljs (db-test/create-conn) initial data: every built-in class/property
    is a full page entity (uuid + name + title + tags + built-in? +
@@ -1002,6 +1003,14 @@ let initial_data_edn =
      :logseq.property.class/extends #{:logseq.class/Root}
      :logseq.property/built-in? true
      }
+    {:db/ident :logseq.class/Asset
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000208\"
+     :block/name \"asset\" :block/title \"Asset\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+     }
     {:db/ident :logseq.class/Tag
      :block/tags #{:logseq.class/Tag}
      :logseq.property.class/extends #{:logseq.class/Root}}
@@ -1142,6 +1151,39 @@ let initial_data_edn =
      :logseq.property/type :datetime
      :logseq.property/hide? true
 :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.asset/type
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000349\"
+     :block/name \"file type\" :block/title \"File Type\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :string
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.asset/checksum
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000350\"
+     :block/name \"file checksum\" :block/title \"File checksum\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :string
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.asset/remote-metadata
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000351\"
+     :block/name \"file remote metadata\" :block/title \"File remote metadata\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :map
+     :logseq.property/hide? true
+:db/cardinality :db.cardinality/one
      :logseq.property/public? false
      }
     {:block/uuid #uuid \"00000004-4879-1153-0006-000000000000\"

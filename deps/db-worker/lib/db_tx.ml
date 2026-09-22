@@ -40,6 +40,13 @@ type conn_flags =
    (live + temp), so an assoc list suffices. *)
 let conn_flags_list : (conn * conn_flags) list ref = ref []
 
+(* cljs *batch-tx-report?* — a dynamic var bound only while the
+   batch-transact! body runs; inner ldb/transact! reports read it when
+   tagging :batch-tx-report? in tx-meta. The conn :batch-tx? flag is a
+   separate conn attribute (nesting guard): a stale :batch-tx? must not
+   tag reports. *)
+let inside_batch_tx : bool ref = ref false
+
 let flags_of (conn : conn) : conn_flags =
   match List.find_opt (fun (c, _) -> c == conn) !conn_flags_list with
   | Some (_, f) -> f
@@ -301,7 +308,7 @@ let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
   else
     let flags = flags_of conn in
     let tx_meta =
-      (if flags.batch_tx then ("batch-tx-report?", Bool true) :: tx_meta
+      (if !inside_batch_tx then ("batch-tx-report?", Bool true) :: tx_meta
        else tx_meta)
       |> fun m -> if flags.skip_store then ("skip-store?", Bool true) :: m else m
     in
@@ -380,9 +387,14 @@ let batch_transact ?(tx_meta : tx_meta = [])
   in
   flags.skip_store <- true;
   flags.batch_tx <- true;
+  (* cljs (binding [*batch-tx-report?* true] (batch-tx-fn conn)) — bound
+     only around the body so inner reports are tagged. *)
+  let prev_inside = !inside_batch_tx in
+  inside_batch_tx := true;
   let batch_error =
     try f conn; None with e -> Some e
   in
+  inside_batch_tx := prev_inside;
   let batch_tx_data = !collected in
   collected := [];
   match batch_error with

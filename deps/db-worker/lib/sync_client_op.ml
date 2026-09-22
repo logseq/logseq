@@ -204,8 +204,11 @@ let adjust_pending_local_tx_count repo delta =
   let base = get_pending_local_tx_count repo in
   Worker_state.set_pending_local_tx_count repo (max 0 (base + delta))
 
+(* cljs (exists? js/process) — any non-browser runtime (node daemon,
+   native binary) counts as an RTC-capable context *)
 let rtc_db_graph repo =
-  Runtime_env.kind () = Runtime_env.Node || get_graph_uuid repo <> None
+  Runtime_env.kind () <> Runtime_env.Browser_worker
+  || get_graph_uuid repo <> None
 
 (* ---- pending local txs ---- *)
 
