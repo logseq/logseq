@@ -142,13 +142,12 @@ let with_report ~tx_meta (db : db) (tx_ops : tx_op list) : tx_report =
   { report with db_after = { report.db_after with storage_ref = db.storage_ref } }
 
 (* cljs compare-and-set! + dc/store-after-transact! + dc/run-callbacks —
-   re-apply the pipeline's final datoms through the conn so listeners see
-   exactly the validated tx_data and storage persists the tail once.
+   install the pipeline's report as-is so listeners see its tempids
+   (including :db/current-tx) and storage persists its tail once.
    Single-threaded worker: the CAS can never fail, matching the shape kept
    in transact_sync below. *)
 let commit_tx_report (conn : conn) (report : tx_report) : tx_report =
-  transact_conn ~tx_meta:report.tx_meta conn
-    (List.map (fun d -> Raw_datom d) report.tx_data)
+  Datascript.apply_report conn report
 
 let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
   Ldb.db_based_graph db
