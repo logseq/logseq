@@ -168,7 +168,12 @@ let block_with_updated_at (block : Block_map.t) : Block_map.t =
 
 let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list =
   let block_ids =
-    List.filter_map (fun m -> mget_int m "db/id") blocks
+    List.filter_map
+      (fun m ->
+        match mget m "db/id" with
+        | Some v -> id_of_value v
+        | None -> None)
+      blocks
   in
   let parent_ids =
     List.filter_map
@@ -1360,6 +1365,14 @@ let uuid_for_insert (db : db) (keep_uuid : bool) (outliner_op : string option)
 (* get-target-block *)
 let get_target_block (db : db) (blocks : Block_map.t list)
     (target_block : entity) (opts : insert_opts) : (entity * bool) option =
+  (* cljs (d/entity db (:db/id target-block)) / [:block/uuid ...] —
+     re-resolve the target on the current db; the caller's entity may
+     be bound to an older db snapshot (stale attr reads). *)
+  let target_block =
+    match Ldb.ent_of_id db target_block.id with
+    | Some e -> e
+    | None -> target_block
+  in
   let linked = Ldb.ref_ent target_block "block/link" in
   let library_ = Ldb.is_library target_block in
   let up_down = opts.outliner_op = Some "move-blocks-up-down" in
@@ -1602,7 +1615,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
   let id_to_new_uuid =
     List.filter_map
       (fun (b, bu) ->
-        match mget_int b "db/id" with
+        match mget b "db/id" |> Option.map id_of_value |> Option.join with
         | Some id -> (
             match List.assoc_opt (Option.value ~default:"" bu) uuid_map with
             | Some uu -> Some (id, uu)
@@ -1630,8 +1643,13 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
         match List.assoc_opt u uuid_map with
         | Some uu -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid uu)))
         | None -> None)
+    (* cljs: entity -> id->new-uuid remap (nil when outside the inserted set);
+       integer -> passthrough *)
+    | Ref id | Ref_to (Entity_id id) -> (
+        match List.assoc_opt id id_to_new_uuid with
+        | Some u -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+        | None -> None)
     | Int id -> Some (Int id)
-    | Ref id -> Some (Ref id)
     | _ ->
         failwith
           (Printf.sprintf "[insert-blocks] illegal lookup")
@@ -1700,11 +1718,13 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
              in
              let result =
                let merged =
-                 (* cljs: entity -> keep level; map -> merge block into m *)
+                 (* cljs: de/entity? -> assoc level only; plain map (incl. maps
+                    carrying a :db/id key, e.g. clipboard blocks) -> merge.
+                    of_entity marks entity blocks with (db/id, Ref _). *)
                  match mget block "db/id" with
-                 | Some (Int id) when Ldb.ent_of_id db id <> None ->
+                 | Some (Ref id) when Ldb.ent_of_id db id <> None ->
                      m @ [ ("block/level", (match mget block "block/level" with Some v -> v | None -> Nil)) ]
-                 | _ -> block @ m
+                 | _ -> Block_map.merge block m
                in
                match template_ref_uuids with
                | [] -> merged
@@ -1754,7 +1774,8 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
                  | d -> d
                else db
              in
-             loop db' (idx + 1) rest ((result, page_txs) :: acc)
+             loop db' (idx + 1) rest
+               ((update_property_ref_when_paste result uuid_map, page_txs) :: acc)
          | None -> loop db (idx + 1) rest ((block, []) :: acc))
   in
   let entries = loop db 0 blocks [] in
@@ -1805,8 +1826,36 @@ let rewrite_tx_op (id_to_new_uuid : (entity_id * string) list) (op : tx_op)
                     | One_value v -> One_value (rewrite_value id_to_new_uuid v)
                     | Many_values vs ->
                         Many_values (List.map (rewrite_value id_to_new_uuid) vs)
-                    | One_entity t -> One_entity t
-                    | Many_entities ts -> Many_entities ts
+                    (* cljs walk/prewalk: (de/entity? f) -> id->new-uuid
+                       remap; entity values inside tx are remapped too
+                       (e.g. user.property/* refs to inserted value
+                       blocks). Misses keep the raw eid like cljs
+                       (:db/id f). *)
+                    | One_entity t -> (
+                        match t.db_id with
+                        | Some (Entity_id id) -> (
+                            match List.assoc_opt id id_to_new_uuid with
+                            | Some u ->
+                                One_value
+                                  (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+                            | None -> One_entity t)
+                        | _ -> One_entity t)
+                    | Many_entities ts ->
+                        Many_values
+                          (List.map
+                             (fun (t : tx_entity) ->
+                               match t.db_id with
+                               | Some (Entity_id id) -> (
+                                   match List.assoc_opt id id_to_new_uuid with
+                                   | Some u ->
+                                       Ref_to (Lookup_ref ("block/uuid", Uuid u))
+                                   | None -> Ref id)
+                               | Some (Lookup_ref _ as r) -> Ref_to r
+                               | Some (Ident s) -> Ref_to (Ident s)
+                               | Some (Temp_id s) -> Ref_to (Temp_id s)
+                               | Some CurrentTx -> Ref_to CurrentTx
+                               | None -> Ref 0)
+                             ts)
                   in
                   Some (a, tv'))
               te.attrs

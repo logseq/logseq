@@ -65,10 +65,15 @@ let () =
                       Wire.String repo;
                       Wire.Array
                         [
-                          Wire.Array
+                          Wire.Map
                             [
-                              Wire.Keyword "db/add"; Wire.Int (-1); Wire.Keyword "block/name";
-                              Wire.String "hello";
+                              ( Wire.Keyword "block/name", Wire.String "hello" );
+                              ( Wire.Keyword "block/title", Wire.String "t" );
+                              ( Wire.Keyword "block/uuid", Wire.Uuid "00000000-0000-0000-0000-000000000099" );
+                              ( Wire.Keyword "block/created-at", Wire.Int 1 );
+                              ( Wire.Keyword "block/updated-at", Wire.Int 1 );
+                              ( Wire.Keyword "block/tags"
+                              , Wire.Set [ Wire.Keyword "logseq.class/Page" ] );
                             ];
                         ];
                       Wire.Nil;
