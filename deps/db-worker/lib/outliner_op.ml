@@ -80,7 +80,12 @@ let insert_opts_of (opts : Wire.t) : Outliner_core.insert_opts =
   ; outliner_op = Option.bind (Cljs_map.get opts "outliner-op") kw_value
   ; outliner_real_op = Option.bind (Cljs_map.get opts "outliner-real-op") kw_value
   ; replace_empty_target = opt_bool opts "replace-empty-target?"
-  ; update_timestamps = opt_bool opts "update-timestamps?"
+  ; replace_empty_target_specified =
+      Option.is_some (Cljs_map.get opts "replace-empty-target?")
+  ; update_timestamps =
+      Option.value
+        (Option.bind (Cljs_map.get opts "update-timestamps?") bool_of_wire)
+        ~default:true
   ; insert_template = opt_bool opts "insert-template?"
   ; created_from_property =
       Option.map Ds_wire.value_of_transit
@@ -158,30 +163,26 @@ let apply_insert_blocks_op conn result_ref (blocks : Wire.t list)
             Ds_wire.transit_of_tx_result r.tx_data r.tx_meta)
           r
 
-(* template-children-blocks *)
+(* template-children-blocks — cljs takes rest of get-block-and-children
+   (children only); the first child carries
+   :logseq.property/used-template = template's db/id *)
 let template_children_blocks (db : db) (template_id : Wire.t)
     : Block_map.t list =
-  match template_id with
-  | Wire.Array [ Wire.Keyword "block/uuid"; u ] | Wire.Array [ Wire.String "block/uuid"; u ] -> (
-      match uuid_of_wire u with
+  match uuid_of_wire template_id with
+  | None -> []
+  | Some uuid -> (
+      match entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
       | None -> []
-      | Some uuid -> (
-          match entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
-          | None -> []
-          | Some template ->
-              let blocks =
-                Ldb.get_block_and_children db ~include_property_block:true
-                  uuid
-              in
-              (match blocks with
-               | [] -> []
-               | first :: rest ->
-                   let first_m =
-                     Block_map.put (Block_map.of_entity first)
-                       "logseq.property/used-template" (Ref template.id)
-                   in
-                   first_m :: List.map Block_map.of_entity rest)))
-  | _ -> []
+      | Some template -> (
+          match
+            Ldb.get_block_and_children db ~include_property_block:true
+              uuid
+          with
+          | _root :: first_child :: others ->
+              Block_map.put (Block_map.of_entity first_child)
+                "logseq.property/used-template" (Ref template.id)
+              :: List.map Block_map.of_entity others
+          | _ -> []))
 
 (* apply-template-op! *)
 let apply_template_op conn result_ref (template_id : Wire.t)

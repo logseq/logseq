@@ -1239,6 +1239,7 @@ type insert_opts =
   ; outliner_op : string option
   ; outliner_real_op : string option
   ; replace_empty_target : bool
+  ; replace_empty_target_specified : bool
   ; update_timestamps : bool
   ; insert_template : bool
   ; created_from_property : value option }
@@ -1254,6 +1255,7 @@ let default_insert_opts =
   ; outliner_op = None
   ; outliner_real_op = None
   ; replace_empty_target = false
+  ; replace_empty_target_specified = false
   ; update_timestamps = true
   ; insert_template = false
   ; created_from_property = None }
@@ -1535,6 +1537,41 @@ let assign_temp_id (blocks : Block_map.t list) (target_block : entity)
         Block_map.put block "db/id" (Int db_id))
     blocks
 
+(* entity-util/has-tag? on a block map's :block/tags values, then page?.
+   cljs checks the map itself, so tags resolve for blocks not yet in db. *)
+let value_is_tag_ident (db : db) (v : value) (ident : string) : bool =
+  match v with
+  | Keyword s | String s -> s = ident
+  | Map _ -> (
+      match map_key_of v "db/ident" with
+      | Some (Keyword s) | Some (String s) -> s = ident
+      | _ -> false)
+  | Ref id -> (
+      match Ldb.ent_of_id db id with
+      | Some e -> Ldb.ident_of e = Some ident
+      | None -> false)
+  | Ref_to (Ident s) -> s = ident
+  | Ref_to (Lookup_ref ("db/ident", Keyword s))
+  | Ref_to (Lookup_ref ("db/ident", String s)) -> s = ident
+  | Ref_to (Lookup_ref ("block/uuid", Uuid u)) -> (
+      match entity db (Lookup_ref ("block/uuid", Uuid u)) with
+      | Some e -> Ldb.ident_of e = Some ident
+      | None -> false)
+  | _ -> false
+
+let block_map_is_page (db : db) (m : Block_map.t) : bool =
+  let tags =
+    match mget m "block/tags" with
+    | Some (Vector vs) | Some (List vs) | Some (Set vs) -> vs
+    | Some v -> [ v ]
+    | None -> []
+  in
+  List.exists
+    (fun ident ->
+      List.exists (fun t -> value_is_tag_ident db t ident) tags)
+    [ "logseq.class/Page"; "logseq.class/Journal"; "logseq.class/Tag"
+    ; "logseq.class/Property" ]
+
 (* insert-blocks-aux — uuids/id maps + per-block tx entries *)
 let insert_blocks_aux (db : db) (blocks : Block_map.t list)
     (target_block : entity) (opts : insert_opts) :
@@ -1560,13 +1597,18 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
       | _ -> uuid_map
     else uuid_map
   in
+  (* cljs id->new-uuid maps db/id -> (get uuids block-uuid), i.e. the
+     post-replace-empty-target uuid map *)
   let id_to_new_uuid =
     List.filter_map
-      (fun (b, uu) ->
+      (fun (b, bu) ->
         match mget_int b "db/id" with
-        | Some id -> Some (id, uu)
+        | Some id -> (
+            match List.assoc_opt (Option.value ~default:"" bu) uuid_map with
+            | Some uu -> Some (id, uu)
+            | None -> None)
         | None -> None)
-      (List.combine blocks uuids)
+      (List.combine blocks block_uuids)
   in
   let get_new_id (lookup : value) : value option =
     match lookup with
@@ -1696,12 +1738,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
                | _ -> Block_map.dissoc result [ "db/id" ]
              in
              let page_ =
-               (match mget_int result "db/id" with
-                | Some id -> (
-                    match Ldb.ent_of_id db id with
-                    | Some e -> Ldb.is_page e
-                    | None -> false)
-                | None -> false)
+               block_map_is_page db result
                || Option.is_some (mget result "block/name")
              in
              let result =
@@ -1853,17 +1890,14 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
       match get_target_block db blocks tb opts with
       | None -> ({ tx_data = []; tx_meta = [] }, [])
       | Some (target_block, sibling) ->
+          let target_title = Ldb.string_value target_block "block/title" in
+          let title_blank =
+            target_title <> None && str_blank target_title
+          in
           let replace_empty_target =
-            if
-              Option.is_some (if opts.replace_empty_target then Some () else None)
-              && str_blank (Ldb.string_value target_block "block/title")
-              && Ldb.string_value target_block "block/title" <> None
+            if opts.replace_empty_target_specified && title_blank
             then opts.replace_empty_target
-            else
-              sibling
-              && str_blank (Ldb.string_value target_block "block/title")
-              && Ldb.string_value target_block "block/title" <> None
-              && List.length blocks > 1
+            else sibling && title_blank && List.length blocks > 1
           in
           if
             blocks <> []
@@ -2324,15 +2358,12 @@ let ldb_transact (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta) : unit 
 
 let transact_move_blocks (conn : conn) (blocks : entity list)
     (target_block : entity) (sibling : bool) (created_from_property : value option)
-    (outliner_op : string option) (top_level : entity list) : unit =
+    (opts_map : value) (outliner_op : string option) (top_level : entity list)
+    : unit =
   let uuids_of =
     List.filter_map (fun (b : entity) -> Ldb.uuid_value b "block/uuid") top_level
   in
-  let opts_entry =
-    match created_from_property with
-    | Some v -> Map [ Keyword "created-from-property", v ]
-    | None -> Map []
-  in
+  let opts_entry = opts_map in
   let tx_meta =
     [ ( "outliner-ops"
       , Vector
@@ -2379,8 +2410,22 @@ let transact_move_blocks (conn : conn) (blocks : entity list)
         blocks)
   |> ignore
 
+(* cljs move-blocks callers pass a literal opts map like
+   {:outliner-op o :sibling? s :up? u :indent? i} which is recorded in
+   :outliner-ops tx-meta; rebuild that map from insert_opts. *)
+let move_opts_map (opts : insert_opts) : value =
+  Map
+    (List.filter_map
+       (fun x -> x)
+       [ (match opts.outliner_op with
+          | Some o -> Some (Keyword "outliner-op", Keyword o)
+          | None -> None)
+       ; Some (Keyword "sibling?", Bool opts.sibling)
+       ; Some (Keyword "up?", Bool opts.up)
+       ; Some (Keyword "indent?", Bool opts.indent) ])
+
 let move_blocks (conn : conn) (blocks : entity list) (target_block : entity)
-    (opts : insert_opts) : tx_result option =
+    (opts : insert_opts) (opts_map : value) : tx_result option =
   List.iter
     (fun (b : entity) ->
       if Outliner_validate.built_in_entity b then
@@ -2436,7 +2481,7 @@ let move_blocks (conn : conn) (blocks : entity list) (target_block : entity)
           in
           if not move_parents_to_child then begin
             transact_move_blocks conn blocks target_block sibling
-              opts.created_from_property opts.outliner_op top_level;
+              opts.created_from_property opts_map opts.outliner_op top_level;
             None
           end
           else None
@@ -2489,8 +2534,8 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
                       (Ldb.value first_block "logseq.property/created-from-property")
                     && left_sibling = None)
             then
-              move_blocks conn top_level ll
-                { opts with sibling = sibling_; up = true }
+              let opts' = { opts with sibling = sibling_; up = true } in
+              move_blocks conn top_level ll opts' (move_opts_map opts')
             else None
         | None -> None)
     | [] -> None
@@ -2521,11 +2566,12 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
                    (Ldb.value last_top "logseq.property/created-from-property")
                  && Ldb.get_right_sibling last_top = None)
             then
+              let opts' = { opts with sibling = sibling_; up = false } in
               move_blocks conn
                 (List.filter_map
                    (fun (b : entity) -> Ldb.ent_of_id db b.id)
                    blocks)
-                r { opts with sibling = sibling_; up = false }
+                r opts' (move_opts_map opts')
             else None
         | None -> None)
     | [] -> None
@@ -2583,9 +2629,12 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                    | Some id -> (
                        match Ldb.ent_of_id db id with
                        | Some last_child ->
+                           let opts' =
+                             { opts with sibling = true; indent = true }
+                           in
                            let r =
-                             move_blocks conn blocks' last_child
-                               { opts with sibling = true; indent = true }
+                             move_blocks conn blocks' last_child opts'
+                               (move_opts_map opts')
                            in
                            let collapsed_tx =
                              if
@@ -2606,8 +2655,11 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                             | None, None -> None)
                        | None -> None)
                    | None ->
-                       move_blocks conn blocks' left
-                         { opts with sibling = false; indent = true }))
+                       let opts' =
+                         { opts with sibling = false; indent = true }
+                       in
+                       move_blocks conn blocks' left opts'
+                         (move_opts_map opts')))
         else
           match parent_original with
           | Some parent_original ->
@@ -2638,8 +2690,9 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                 | [] -> List.rev acc
               in
               let blocks' = take_while [] blocks' in
-              move_blocks conn blocks' parent_original
-                { opts with sibling = true; indent = false }
+              let opts' = { opts with sibling = true; indent = false } in
+              move_blocks conn blocks' parent_original opts'
+                (move_opts_map opts')
           | None -> (
               match parent with
               | None -> None
@@ -2657,8 +2710,10 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                     | [] -> List.rev acc
                   in
                   let blocks' = take_while [] top_level in
+                  let opts' = { opts with sibling = true } in
                   let result =
-                    move_blocks conn blocks' parent { opts with sibling = true }
+                    move_blocks conn blocks' parent opts'
+                      (move_opts_map opts')
                   in
                   if logical_outdenting then result
                   else
@@ -2678,12 +2733,16 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                              | Some id -> (
                                  match Ldb.ent_of_id db id with
                                  | Some ldc ->
-                                     move_blocks conn right_siblings ldc
+                                     let opts' =
                                        { opts with sibling = true }
+                                     in
+                                     move_blocks conn right_siblings ldc
+                                       opts' (move_opts_map opts')
                                  | None -> result)
                              | None ->
+                                 let opts' = { opts with sibling = false } in
                                  move_blocks conn right_siblings last_top
-                                   { opts with sibling = false }))))
+                                   opts' (move_opts_map opts')))))
 
 (* ---------- op-transact! + public ! fns ---------- *)
 
@@ -2756,7 +2815,9 @@ let move_blocks_conn (conn : conn) (blocks : entity list) (target_block : entity
   let opts = { opts with outliner_op = Some outliner_op } in
   ignore
     (op_transact "move-blocks"
-       (fun () -> move_blocks conn blocks target_block opts)
+       (fun () ->
+         move_blocks conn blocks target_block opts
+           (map_value_of_block_map opts_entry))
        [ Ref 0
        ; Vector (List.map entity_arg blocks)
        ; entity_arg target_block
