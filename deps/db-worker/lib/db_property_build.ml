@@ -95,7 +95,7 @@ let property_value_content (block_type : string option) (property : Block_map.t)
 
 (* common-util/block-with-timestamps *)
 let block_with_timestamps (m : Block_map.t) : Block_map.t =
-  let now = Int (Int64.to_int (Date_time_util.time_ms ())) in
+  let now = Instant (Date_time_util.time_ms ()) in
   let m = Block_map.put m "block/updated-at" now in
   if Block_map.mem m "block/created-at" then m
   else Block_map.put m "block/created-at" now

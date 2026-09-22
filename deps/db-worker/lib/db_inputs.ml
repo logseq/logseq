@@ -226,7 +226,7 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
              (Int
                 (Date_time_util.date_to_int
                    (Date_time_util.plus Days 1 (Date_time_util.today_ms ()))))
-       | "right-now-ms" -> Some (Int (Int64.to_int (Date_time_util.time_ms ())))
+       | "right-now-ms" -> Some (Instant (Date_time_util.time_ms ()))
        | _ -> None)
   | Today_time ->
       let hh, mm, ss, ms =
@@ -236,10 +236,9 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
         | _ -> get_ts_units "" (String.sub (kw_name k) 6 (String.length (kw_name k) - 6))
       in
       Some
-        (Int
-           (Int64.to_int
-              (Date_time_util.date_at_local_ms
-                 (Date_time_util.today_ms ()) hh mm ss ms)))
+        (Instant
+           (Date_time_util.date_at_local_ms
+              (Date_time_util.today_ms ()) hh mm ss ms))
   | Relative_date ->
       let name = kw_name k in
       let relative_to = get_relative_date k in
@@ -259,9 +258,8 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
            in
            let hh, mm, ss, ms = get_ts_units direction ts in
            Some
-             (Int
-                (Int64.to_int
-                   (Date_time_util.date_at_local_ms offset_date hh mm ss ms)))
+             (Instant
+                (Date_time_util.date_at_local_ms offset_date hh mm ss ms))
        | _ -> invalid_arg ("invalid relative date-time input: " ^ k))
   | Deprecated_relative_date ->
       resolve_keyword_input db (old_to_new_relative_date_format k) ctx

@@ -511,7 +511,7 @@ let kv (k : string) (v : value) : BM.t =
 let import_tx (db : db) (import_type : value) : tx_op list =
   [ entity_tx db (kv "logseq.kv/import-type" import_type)
   ; entity_tx db
-      (kv "logseq.kv/imported-at" (Int (Int64.to_int (Date_time_util.time_ms ()))))
+      (kv "logseq.kv/imported-at" (Instant (Date_time_util.time_ms ())))
   ]
   @ List.map
       (fun ident -> RetractEntity (Ident ident))
@@ -561,7 +561,7 @@ let initial_tx_data
     ; kv "logseq.kv/schema-version" db_schema_version
     ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
     ; kv "logseq.kv/graph-created-at"
-        (Int (Int64.to_int (Date_time_util.time_ms ())))
+        (Instant (Date_time_util.time_ms ()))
     ; (* Empty property value used by db.type/ref properties *)
       [ "db/ident", Keyword "logseq.property/empty-placeholder"
       ; "block/uuid"

@@ -826,15 +826,15 @@ let ensure_comments_blocks_property_on_tag_additions (report : tx_report)
 (* ---------- created-by ---------- *)
 
 let gen_created_by_block (claims : Worker_util.jwt_claims) : Block_map.t =
-  let now = Int64.to_int (Date_time_util.time_ms ()) in
+  let now = Date_time_util.time_ms () in
   [ "block/uuid", Uuid claims.sub
   ; "block/name",
     String (Option.value ~default:"" claims.username)
   ; "block/title",
     String (Option.value ~default:"" claims.username)
   ; "block/tags", Keyword "logseq.class/Page"
-  ; "block/created-at", Int now
-  ; "block/updated-at", Int now
+  ; "block/created-at", Instant now
+  ; "block/updated-at", Instant now
   ; "logseq.property.user/name",
     String (Option.value ~default:"" claims.username)
   ; "logseq.property.user/email",
