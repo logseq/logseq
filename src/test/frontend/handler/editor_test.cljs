@@ -1346,8 +1346,8 @@
        :stopped? @stopped?})))
 
 (deftest keydown-not-matched-handler-skips-bracket-autopair-during-ime
-  ;; #12966: native window keydown events are invisible to goog-event-is-composing?,
-  ;; so Japanese IME `[` → 「 was swallowed by [] autopair.
+  ;; #12966: these listeners receive native window events, which the old
+  ;; goog-event check couldn't see; Japanese IME `[` → 「 was swallowed by [] autopair.
   (testing "IME process keyCode 229 must not autopair"
     (is (= {:content nil :stopped? false}
            (keydown-bracket-autopair-result {:key "[" :key-code 229 :composing? false}))))

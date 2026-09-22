@@ -3621,7 +3621,7 @@
                (if (mobile-util/native-android?)
                  (gobj/get e "key")
                  (event-code e))
-               ;; #3440 #12966 — native window keyup events
+               ;; #3440 #12966
                (util/native-event-is-composing? e)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
