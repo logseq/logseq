@@ -24,6 +24,7 @@ env:
   # This is the latest node version we can run.
   NODE_VERSION: '24'
   BABASHKA_VERSION: '1.12.215'
+  OCAML_VERSION: '5.1.1'
 
 jobs:
   build:
@@ -58,6 +59,11 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Clojure cache
         uses: actions/cache@v4
         id: clojure-deps
@@ -89,10 +95,16 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
+      - name: Fetch OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true frontend.worker.handler.transaction/OUTLINER-PERF-LOGGING true}}" --debug && pnpm webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true frontend.worker.handler.transaction/OUTLINER-PERF-LOGGING true}}" --debug && pnpm db-worker:build
 
       - name: Upload E2E test build
         uses: actions/upload-artifact@v4

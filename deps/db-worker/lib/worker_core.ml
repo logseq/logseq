@@ -99,3 +99,176 @@ let init () =
 let invoke name transit_args =
   init ();
   Dispatcher.invoke_transit name transit_args
+
+(* ==== graph service routing ====
+   cljs db-core: *service, broadcast-data-types, on-become-master,
+   <init-service! and the build-proxy-object wrappers that sit in
+   front of remote-function. In a standalone worker these are the
+   functions exposed through Comlink as remoteInvoke /
+   remoteInvokeBinary. *)
+
+module E = Db_worker_effect
+
+(* cljs [graph, service-or-promise]; a resolved promise is swapped
+   back in so subsequent calls skip re-election. *)
+type service_slot =
+  | Pending of Shared_service.service E.t
+  | Ready of Shared_service.service
+
+let service_cell : (string * service_slot) option ref = ref None
+
+(* cljs broadcast-data-types — slave clients forward broadcasts with
+   these type strings to their own UI thread. *)
+let broadcast_data_types =
+  [ "sync-db-changes"
+  ; "sync-conflicts-updated"
+  ; "notification"
+  ; "log"
+  ; "add-repo"
+  ; "rtc-log"
+  ; "rtc-sync-state" ]
+
+let edn_of_opt = function
+  | Some w -> Ds_wire.edn_of_transit w
+  | None -> "nil"
+
+(* cljs db-core's `target` (fns {remoteInvoke, remoteInvokeBinary}).
+   Only "remoteInvoke" flows through the service proxy and slave
+   channels, and args stay at the transit-string level end to end:
+   [method-str, transit-args] -> transit-string result. *)
+let target (name : string) (args : Wire.t list) : Wire.t E.t =
+  match name, args with
+  | "remoteInvoke",
+    Wire.String method_str :: Wire.String transit_args :: _ ->
+      E.map (fun s -> Wire.String s) (invoke method_str transit_args)
+  | _ -> E.error (Failure ("invalid service target invoke: " ^ name))
+
+(* cljs on-become-master — runs inside the elected master client only. *)
+let on_become_master (repo : string) (start_opts : Wire.t) : unit E.t =
+  Worker_log.info "db-worker/on-become-master-start"
+    [ "repo", repo
+    ; "import-type", edn_of_opt (Wire.get "import-type" start_opts) ];
+  E.bind (Sqlite.init ()) (fun () ->
+      match Wire.get "import-type" start_opts with
+      | Some w when w <> Wire.Nil -> E.pure ()
+      | _ ->
+          E.bind
+            (Endpoint_lifecycle.create_or_open_db
+               [ Wire.String repo; start_opts ])
+            (fun _ ->
+               (* cljs asserts the datascript conn opened *)
+               assert (Worker_state.datascript_conn repo <> None);
+               E.pure ()))
+
+(* cljs <init-service! — per-graph shared-service creation. *)
+let init_service (graph : string option) (start_opts : Wire.t)
+    : Shared_service.service option E.t =
+  match graph with
+  | None ->
+      (match !service_cell with
+       | Some (prev, _) ->
+           Endpoint_lifecycle.close_db_aux prev;
+           E.pure None
+       | None -> E.pure None)
+  | Some g ->
+      (match !service_cell with
+       | Some (prev, Ready s) when prev = g -> E.pure (Some s)
+       | Some (prev, Pending p) when prev = g ->
+           E.map (fun s -> Some s) p
+       | _ ->
+           let prev_graph =
+             match !service_cell with
+             | Some (prev, _) ->
+                 Endpoint_lifecycle.close_db_aux prev;
+                 prev
+             | None -> "nil"
+           in
+           Worker_log.info "db-worker/init-service"
+             [ "graph", g
+             ; "prev-graph", prev_graph
+             ; "import-type",
+               edn_of_opt (Wire.get "import-type" start_opts) ];
+           let service_effect =
+             Shared_service.create_service ~service_name:g ~target
+               ~on_become_master_handler:(fun _service_name ->
+                  on_become_master g start_opts)
+               ~broadcast_data_types
+               ~import:
+                 (match Wire.get "import-type?" start_opts with
+                  | Some w when w <> Wire.Nil -> true
+                  | _ -> false)
+               ()
+           in
+           service_cell := Some (g, Pending service_effect);
+           E.map
+             (fun service ->
+                (match !service_cell with
+                 | Some (g', Pending p')
+                   when g' = g && p' == service_effect ->
+                     service_cell := Some (g, Ready service)
+                 | _ -> ());
+                Some service)
+             service_effect)
+
+(* cljs platform/post-message! — self.postMessage of a transit
+   [type-kw data] pair; deliberately bypasses the extra_poster
+   channel relay (worker-util/post-message posts to self only). *)
+let post_message (type_str : string) (data : Wire.t) : unit =
+  Comlink.post_message
+    (Transit_codec.to_string (Wire.Array [ Wire.Keyword type_str; data ]))
+
+(* cljs build-proxy-object remoteInvoke — per-call routing in front
+   of remote-function. Returns the transit-string result. *)
+let remote_invoke (method_str : string) (transit_args : string)
+    : string E.t =
+  init ();
+  let via_proxy (service : Shared_service.service) : string E.t =
+    E.bind service.status_ready (fun () ->
+        E.bind
+          (service.proxy
+             [ Wire.String method_str; Wire.String transit_args ])
+          (fun result ->
+            match result with
+            | Wire.String s -> E.pure s
+            | _ ->
+                E.error
+                  (Failure "remoteInvoke: non-string result from service")))
+  in
+  if method_str = "thread-api/create-or-open-db" then
+    (* payload is the decoded [graph opts] vector *)
+    let graph, opts =
+      match Transit_codec.of_string transit_args with
+      | Wire.Array (g :: o :: _) | Wire.List (g :: o :: _) ->
+          ((match g with
+            | Wire.String s -> Some s
+            | _ -> None),
+           o)
+      | _ -> (None, Wire.Nil)
+    in
+    E.bind (init_service graph opts) (fun service_opt ->
+        match service_opt with
+        | Some service ->
+            post_message "record-worker-client-id"
+              (Wire.Map
+                 [ Wire.Keyword "client-id", Wire.String service.client_id ]);
+            via_proxy service
+        | None -> invoke method_str transit_args)
+  else if method_str = "thread-api/sync-app-state" then
+    invoke method_str transit_args
+  else
+    match !service_cell with
+    | None -> invoke method_str transit_args
+    | Some (_, Pending p) ->
+        E.bind p (fun service -> via_proxy service)
+    | Some (_, Ready service) -> via_proxy service
+
+(* cljs remote-binary-function — bypasses the service entirely;
+   the binary payload crosses as a raw byte string, the result comes
+   back as Wire.Binary (converted to Uint8Array by the js entry). *)
+let remote_invoke_binary (method_str : string) (repo : string)
+    (payload : string option) : Wire.t E.t =
+  init ();
+  Dispatcher.invoke method_str
+    (match payload with
+     | Some p -> [ Wire.String repo; Wire.Binary p ]
+     | None -> [ Wire.String repo ])

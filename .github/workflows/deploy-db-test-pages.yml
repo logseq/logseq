@@ -8,6 +8,7 @@ env:
   CLOJURE_VERSION: "1.12.4.1618"
   NODE_VERSION: '24'
   JAVA_VERSION: "21"
+  OCAML_VERSION: '5.1.1'
 
 jobs:
   build-and-deploy:
@@ -55,8 +56,19 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Set Build Environment Variables
         run: |
@@ -65,7 +77,7 @@ jobs:
 
       - name: Build Released-Web
         run: |
-          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && pnpm webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && pnpm db-worker:build
           rsync -avz --exclude node_modules --exclude android --exclude ios --exclude mobile ./static/ ./public/
           ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
           sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js

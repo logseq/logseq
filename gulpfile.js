@@ -191,12 +191,18 @@ const common = {
   syncWorkersToMobile () {
     return gulp.src([
       path.join(outputPath, 'js/db-worker.js'),
+      // importScripts("worker.js") (lightning-fs/pfs) and the
+      // sqlite-wasm VFS assets resolve relative to the worker URL.
+      path.join(outputPath, 'js/worker.js'),
+      path.join(outputPath, 'js/assets/**'),
     ], { base: outputJsPath }).pipe(gulp.dest(mobileJsPath))
   },
 
   keepSyncWorkersToMobile () {
     return gulp.watch([
       path.join(outputPath, 'js/db-worker.js'),
+      path.join(outputPath, 'js/worker.js'),
+      path.join(outputPath, 'js/assets/**'),
     ], { ignoreInitial: false }, common.syncWorkersToMobile)
   },
 
@@ -272,7 +278,7 @@ const prepareElectronMaker = async () => {
   cp.execSync('pnpm db-worker-node:bundle', {
     stdio: 'inherit',
   })
-  cp.execSync('pnpm webpack-app-build', {
+  cp.execSync('pnpm db-worker:build', {
     stdio: 'inherit',
   })
   cp.execSync('pnpm cli:release', {
@@ -324,6 +330,7 @@ exports.electronMakerUnsigned = async () => {
 }
 
 exports.cap = common.runCapWithLocalDevServerEntry
+exports.syncWorkersToMobile = common.syncWorkersToMobile
 exports.clean = common.clean
 exports.watch = gulp.series(
   common.syncResourceFile,

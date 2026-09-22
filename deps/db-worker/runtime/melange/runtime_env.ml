@@ -3,10 +3,16 @@ type kind =
   | Node
   | Native
 
+(* globalThis.process — a plain property read (no module import) so
+   the browser bundle doesn't need the node "process" shim and
+   detection stays correct under bundlers. *)
+external process_global : 'a Js.Undefined.t = "process"
+  [@@mel.scope "globalThis"]
+
 let kind () =
-  match Js.typeof Node.Process.process with
-  | "undefined" -> Browser_worker
-  | _ -> Node
+  match Js.Undefined.toOption process_global with
+  | None -> Browser_worker
+  | Some _ -> Node
 
 let env name =
   match kind () with
@@ -28,8 +34,10 @@ external new_url_search_params : string -> search_params = "URLSearchParams"
 external get_param : search_params -> string -> string Js.Nullable.t = "get"
   [@@mel.send]
 
+(* globalThis.location — dedicated workers have self.location but
+   no window object; the main thread never loads this bundle. *)
 external location_search : unit -> string = "location.search"
-  [@@mel.scope "window"]
+  [@@mel.scope "globalThis"]
 
 let search_param_true name =
   try
