@@ -333,9 +333,9 @@ let handle_presence (client : Sync_state.client) (message : Wire.t) =
 
 let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
     remote_checksum =
-  (match remote_tx with
-   | Wire.Nil -> ()
-   | t -> require_non_negative t (context ~repo ~typ:"tx/batch/ok" ()));
+  (* cljs (require-non-negative remote-tx) — unconditional, :t missing/nil
+     fail-fasts *)
+  require_non_negative remote_tx (context ~repo ~typ:"tx/batch/ok" ());
   Sync_apply.ack_upload_response repo client;
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let current_local_tx = Option.value (Sync_client_op.get_local_tx repo) ~default:0 in
@@ -414,11 +414,13 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
     (remote_tx : Wire.t) (remote_checksum : Wire.t option)
     (message : Wire.t) : unit =
   clear_pending_pull client;
+  (* cljs (> remote-tx local-tx) throws on a missing/nil :t before the
+     branch is entered *)
+  require_non_negative remote_tx (context ~repo ~typ:"pull/ok" ());
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let local_tx_n = Option.value local_tx ~default:0 in
   if remote_tx_n > local_tx_n then begin
     let txs = Wire.get "txs" message in
-    require_non_negative remote_tx (context ~repo ~typ:"pull/ok" ());
     (match txs with
      | Some t -> require_seq t (context ~repo ~typ:"pull/ok" ~field:"txs" ())
      | None -> require_seq Wire.Nil
@@ -513,9 +515,7 @@ end
 
 let handle_changed repo (client : Sync_state.client) (local_tx : int option)
     (remote_tx : Wire.t) =
-  (match remote_tx with
-   | Wire.Nil -> ()
-   | t -> require_non_negative t (context ~repo ~typ:"changed" ()));
+  require_non_negative remote_tx (context ~repo ~typ:"changed" ());
   broadcast_rtc_state client;
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   match local_tx with
