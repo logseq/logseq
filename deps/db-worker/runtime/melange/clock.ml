@@ -15,3 +15,6 @@ let localtime_ms ms =
     int_of_float (Js.Date.getDate d),
     int_of_float (Js.Date.getHours d),
     int_of_float (Js.Date.getMinutes d) )
+
+let iso_string_ms ms =
+  Js.Date.toISOString (Js.Date.fromFloat ms)

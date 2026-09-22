@@ -61,6 +61,31 @@ let repo_to_encoded_graph_dir_name (repo : string) : string option =
   in
   if key = "" then None else Some (encode_graph_dir_name key)
 
+(* repo->graph-dir-key — leading db-version-prefix strip + not-empty. *)
+let repo_to_graph_dir_key (repo : string) : string option =
+  let trimmed = String.trim repo in
+  let key =
+    if
+      String.length trimmed > String.length db_version_prefix
+      && String.sub trimmed 0 (String.length db_version_prefix)
+         = db_version_prefix
+    then
+      String.sub trimmed
+        (String.length db_version_prefix)
+        (String.length trimmed - String.length db_version_prefix)
+    else trimmed
+  in
+  if key = "" then None else Some key
+
+(* repo-identity / same-repo? — canonical repo comparison used by the
+   daemon's bound-repo check. *)
+let repo_identity = repo_to_graph_dir_key
+
+let same_repo (a : string) (b : string) : bool =
+  match repo_identity a, repo_identity b with
+  | Some a', Some b' -> a' = b'
+  | _ -> false
+
 (* worker-util/get-pool-name: "logseq-pool-" + graph with all
    db-version-prefix occurrences removed, "/" "\\" ":" -> "_" *)
 let pool_name repo =

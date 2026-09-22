@@ -12,3 +12,11 @@ let localtime_ms ms =
     t.Unix.tm_mday,
     t.Unix.tm_hour,
     t.Unix.tm_min )
+
+let iso_string_ms ms =
+  let secs = ms /. 1000. in
+  let t = Unix.gmtime secs in
+  let millis = int_of_float ((secs -. Float.of_int (int_of_float secs)) *. 1000.) in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ"
+    (t.Unix.tm_year + 1900) (t.Unix.tm_mon + 1) t.Unix.tm_mday
+    t.Unix.tm_hour t.Unix.tm_min t.Unix.tm_sec millis

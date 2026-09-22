@@ -14,3 +14,21 @@ type file_stat = { mtime_ms : float option; birthtime_ms : float option }
 
 (* node fs.statSync; None when unavailable (browser) or on error. *)
 val stat : string -> file_stat option Db_worker_effect.t
+
+(* appendFileSync utf8. *)
+val append_text : string -> string -> unit Db_worker_effect.t
+
+(* openSync 'wx' + write + close — fails EEXIST when the file exists. *)
+val write_file_exclusive : string -> string -> unit Db_worker_effect.t
+
+(* renameSync. *)
+val rename : string -> string -> unit Db_worker_effect.t
+
+(* statSync().isDirectory(); errors on missing paths like node. *)
+val is_directory : string -> bool Db_worker_effect.t
+
+(* accessSync R_OK|W_OK. *)
+val check_read_write : string -> unit Db_worker_effect.t
+
+(* realpathSync — canonical path with symlinks resolved. *)
+val realpath : string -> string Db_worker_effect.t

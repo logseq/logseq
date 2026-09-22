@@ -12,3 +12,9 @@ let invoke name transit_args =
         (fun exn -> reject exn [@u]))
 
 let registered name = Dispatcher.registered name
+
+(* Node daemon entry (cljs db_worker_node/main): takes over argv
+   parsing, graph-lifecycle admission, the http+SSE surface and
+   graceful shutdown. Only called when the bundle is run as the
+   db-worker-node process replacement. *)
+let main () = Db_worker_node.main ()

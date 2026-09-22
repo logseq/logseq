@@ -5,8 +5,9 @@ type level =
   | Warn
   | Error
 
-let min_level = ref Info
-let set_min_level level = min_level := level
+let min_level_ref = ref Info
+let set_min_level level = min_level_ref := level
+let min_level () = !min_level_ref
 
 let level_rank = function
   | Trace -> 0
@@ -27,15 +28,21 @@ let ring : entry Queue.t = Queue.create ()
 
 let entries () = List.of_seq (Queue.to_seq ring)
 
+let entry_sink = ref (fun _ -> ())
+let set_entry_sink = function
+  | Some f -> entry_sink := f
+  | None -> entry_sink := (fun _ -> ())
+
 let log level message fields =
   let entry =
     { level; message; fields; time_ms = Clock.now_ms () }
   in
   Queue.add entry ring;
+  !entry_sink entry;
   while Queue.length ring > 1000 do
     ignore (Queue.pop ring)
   done;
-  if level_rank level >= level_rank !min_level then begin
+  if level_rank level >= level_rank !min_level_ref then begin
     let fields_str =
       fields |> List.map (fun (k, v) -> k ^ "=" ^ v) |> String.concat " "
     in

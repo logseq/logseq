@@ -63,3 +63,49 @@ let stat path =
              ; birthtime_ms = Some s##birthtimeMs }))
       (fun _ -> Db_worker_effect.pure None)
   | _ -> Db_worker_effect.pure None
+
+module Fs_more = struct
+  external appendFileSync : string -> string -> unit = "appendFileSync"
+    [@@mel.module "fs"]
+
+  external openSync : string -> string -> int = "openSync" [@@mel.module "fs"]
+  external writeFileSync_fd : int -> string -> unit = "writeFileSync"
+    [@@mel.module "fs"]
+
+  external closeSync : int -> unit = "closeSync" [@@mel.module "fs"]
+  external realpathSync : string -> string = "realpathSync" [@@mel.module "fs"]
+  external accessSync : string -> int -> unit = "accessSync" [@@mel.module "fs"]
+  external statSync_obj : string -> Js.Json.t = "statSync" [@@mel.module "fs"]
+  external is_dir : Js.Json.t -> bool = "isDirectory" [@@mel.send]
+  external fs_constants : Js.Json.t = "constants" [@@mel.scope "fs"]
+  external const_int : Js.Json.t -> string -> int = "" [@@mel.get_index]
+end
+
+let append_text path contents =
+  wrap (fun () -> Fs_more.appendFileSync path contents)
+
+(* openSync 'wx' — exclusive create, fails EEXIST like the cljs
+   server-list lock file. *)
+let write_file_exclusive path contents =
+  wrap (fun () ->
+      let fd = Fs_more.openSync path "wx" in
+      try
+        Fs_more.writeFileSync_fd fd contents;
+        Fs_more.closeSync fd
+      with exn ->
+        Fs_more.closeSync fd;
+        raise exn)
+
+let rename src dst = wrap (fun () -> renameSync src dst)
+
+let is_directory path = wrap (fun () -> Fs_more.is_dir (Fs_more.statSync_obj path))
+
+(* fs.constants.R_OK | W_OK *)
+let check_read_write path =
+  wrap (fun () ->
+      let c = Fs_more.fs_constants in
+      Fs_more.accessSync path
+        (Fs_more.const_int c "R_OK" lor Fs_more.const_int c "W_OK"))
+
+let realpath path = wrap (fun () -> Fs_more.realpathSync path)
+
