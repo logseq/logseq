@@ -547,7 +547,7 @@ let execute_remove_page_id mode invoke_config repo ~force id =
   bind
     (pull invoke_config repo page_selector (Edn_util.int64 id))
     (fun entity ->
-      if not (has_id entity) then
+      if not (has_id entity && has_name entity) then
         pure
           (Cli_result.error ~command:Command_id.Remove_page mode
              (Error.make Error.Page_not_found "page not found"))
