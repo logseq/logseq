@@ -5,19 +5,58 @@
 
 let () = Dispatcher.register "thread-api/init" (fun _ -> Db_worker_effect.pure Wire.nil)
 
-let db_path repo =
+(* cljs node storage keeps each graph at
+   <graphs-dir>/<encoded-graph>/db.sqlite (platform/node.cljs repo-dir),
+   where <encoded-graph> is graph-dir/repo->encoded-graph-dir-name. *)
+let db_dir repo =
   let base =
     match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
     | Some dir -> dir
     | None -> "."
   in
-  let name = String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo in
-  Filename.concat base (name ^ ".sqlite")
+  match Graph_dir.repo_to_encoded_graph_dir_name repo with
+  | Some dir -> Filename.concat base dir
+  | None -> base
 
-(* :thread-api/list-db -> repo names with open dbs *)
+let db_path repo = Filename.concat (db_dir repo) "db.sqlite"
+
+(* :thread-api/list-db -> [{:name repo} ...]
+   cljs <list-all-dbs lists every graph dir under the storage root and
+   returns {:name "logseq_db_<decoded-key>"}. On pooled runtimes there is
+   no directory to scan; the open conns are the only record. *)
 let () =
   Dispatcher.register "thread-api/list-db" (fun _ ->
-      Db_worker_effect.pure (Wire.Array (List.map Wire.string (Worker_state.repos ()))))
+      let entry_map name = Wire.Map [ Wire.Keyword "name", Wire.String name ] in
+      if Sqlite.pooled_runtime () then
+        Db_worker_effect.pure
+          (Wire.Array (List.map entry_map (Worker_state.repos ())))
+      else
+        let base =
+          match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+          | Some dir -> dir
+          | None -> "."
+        in
+        Db_worker_effect.bind (File_sys.readdir base) (fun entries ->
+            let rec with_dbs acc = function
+              | [] -> Db_worker_effect.pure (List.rev acc)
+              | dir :: rest ->
+                  Db_worker_effect.bind
+                    (File_sys.exists
+                       (Filename.concat (Filename.concat base dir) "db.sqlite"))
+                    (fun ok ->
+                      if ok then with_dbs (dir :: acc) rest
+                      else with_dbs acc rest)
+            in
+            Db_worker_effect.bind (with_dbs [] entries) (fun dirs ->
+                let names =
+                  List.filter_map
+                    (fun dir ->
+                      Option.map
+                        (fun key -> entry_map ("logseq_db_" ^ key))
+                        (Graph_dir.decode_canonical_graph_dir_key dir))
+                    dirs
+                in
+                Db_worker_effect.pure (Wire.Array names))))
 
 (* :thread-api/db-exists [repo] *)
 let () =
@@ -66,6 +105,11 @@ let create_or_open_db args =
            Db_worker_effect.bind
              (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
              (fun () ->
+           let ensure_dir =
+             if Sqlite.pooled_runtime () then Db_worker_effect.pure ()
+             else File_sys.mkdir_p (db_dir repo)
+           in
+           Db_worker_effect.bind ensure_dir (fun () ->
            let db =
              match Worker_state.sqlite_conn repo with
              | Some db -> db
@@ -86,13 +130,55 @@ let create_or_open_db args =
              match Datascript.restore_conn storage with
              | Some conn -> conn
              | None ->
-                 let schema =
-                   match Wire.get "schema" opts with
-                   | Some t -> Datascript.schema_of_edn_string (Ds_wire.edn_text_of_arg t)
-                   | None -> []
-                 in
-                 Datascript.create_conn ~schema ~storage ()
+                 (* cljs get-storage-conn always uses db-schema/schema *)
+                 Datascript.create_conn ~schema:(Db_schema.schema ()) ~storage ()
            in
+           (* cljs <create-or-open-db!: on a fresh graph (no initial data,
+              not a sync-download) transact build-db-initial-data; run
+              db-migrate on every open. *)
+           let sync_download = opt_bool "sync-download-graph?" false opts in
+           let initial_data_exists =
+             let db = Datascript.db conn in
+             (match Ldb.ent_of_ref db (Datascript.Ident "logseq.class/Root") with
+              | Some _ -> true
+              | None -> false)
+             && (match Ldb.ent_of_ref db (Datascript.Ident "logseq.kv/db-type") with
+                 | Some e -> Ldb.value e "kv/value" = Some (Datascript.String "db")
+                 | None -> false)
+           in
+           (if not (initial_data_exists || sync_download) then
+              let config_content =
+                match Wire.get "config" opts with
+                | Some (Wire.String c) -> c
+                | _ -> Templates.config_edn
+              in
+              let opt_str name =
+                match Wire.get name opts with
+                | Some (Wire.String s) -> Some s
+                | _ -> None
+              in
+              let tx =
+                Sqlite_create_graph.initial_tx_data
+                  ~db:(Datascript.db conn)
+                  ~config_content
+                  ?import_type:
+                    (Option.map Ds_wire.value_of_transit
+                       (Wire.get "import-type" opts))
+                  ?graph_git_sha:(opt_str "graph-git-sha")
+                  ?creating_remote_graph:
+                    (match Wire.get "creating-remote-graph?" opts with
+                     | Some (Wire.Bool b) -> Some b
+                     | _ -> None)
+                  ()
+              in
+              ignore
+                (Datascript.transact_conn conn tx
+                   ~tx_meta:[ "initial-db?", Datascript.Bool true ]));
+           (if not sync_download then
+              (* cljs then runs handle-migrate-result-local-txs! /
+                 maybe-enqueue-built-in-sync-repair! and recycle-gc — they
+                 need the client-ops db + sync plumbing, not yet ported. *)
+              ignore (Db_migrate.migrate conn));
            Worker_state.set_datascript_conn repo conn;
            Db_listener.listen_db_changes repo conn;
            (match Worker_state.datascript_conn repo with
@@ -111,7 +197,7 @@ let create_or_open_db args =
                        [
                          (Wire.Keyword "type", Wire.Keyword "db/missing-connection");
                          (Wire.Keyword "repo", Wire.String repo);
-                       ] )))))
+                       ] ))))))
   | _ -> invalid_arg "create-or-open-db expects (repo opts)"
 
 let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
@@ -148,7 +234,7 @@ let () =
       | Wire.String repo :: _ ->
           let (_ : int) = Endpoint_state.cancel_ui_requests Wire.Nil in
           close_db_aux repo;
-          File_sys.remove (db_path repo)
+          File_sys.remove (db_dir repo)
           |> Db_worker_effect.map (fun () -> Wire.nil)
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 

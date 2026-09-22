@@ -16,7 +16,7 @@ let registered_names () = Hashtbl.fold (fun k _ acc -> k :: acc) handlers []
 
 let invoke name args =
   match Hashtbl.find_opt handlers name with
-  | Some f -> f args
+  | Some f -> (try f args with exn -> Db_worker_effect.error exn)
   | None -> Db_worker_effect.error (Not_implemented name)
 
 (* ex-info equivalent: message + structured data map that survives

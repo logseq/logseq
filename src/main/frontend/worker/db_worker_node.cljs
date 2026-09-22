@@ -596,6 +596,11 @@
                   _ (reset! *admission admission)
                   root-dir (.-root admission)
                   server-list-file (server-list-file-path root-dir)
+                  _ (do
+                      ;; storage roots for the optional OCaml db-worker
+                      ;; (db-worker-ocaml.cjs); inert when it isn't loaded.
+                      (set! (.. js/process -env -LOGSEQ_WORKER_DB_DIR) (.-graphsDir storage))
+                      (set! (.. js/process -env -LOGSEQ_WORKER_KV_DIR) root-dir))
                   proxy* (atom nil)]
           (-> (p/let [_ (do
                          (db-worker-log/install! {:root-dir root-dir :storage storage
