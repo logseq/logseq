@@ -802,3 +802,153 @@ let () =
                        | _ -> Wire.Array [])
                   | None -> Wire.Array [])
              | None -> Wire.Array [])))
+
+(* :thread-api/set-page-favorite / :thread-api/reorder-favorites —
+   handler/graph.cljs write side *)
+
+let kw' s = Wire.Keyword s
+
+let favorite_page_ops db (page_block_uuid : string) : Wire.t =
+  match
+    ( entity db (Lookup_ref ("block/uuid", Uuid page_block_uuid))
+    , favorite_page db )
+  with
+  | Some _, Some page ->
+      let fav =
+        Wire.Map
+          [ (kw' "block/link",
+             Wire.Array [ kw' "block/uuid"; Wire.Uuid page_block_uuid ])
+          ; (kw' "block/title", Wire.String "") ]
+      in
+      let page_uuid =
+        match Ldb.value page "block/uuid" with
+        | Some (Uuid u) -> Wire.Uuid u
+        | _ -> Wire.Nil
+      in
+      Wire.Array
+        [ Wire.Array
+            [ kw' "insert-blocks"
+            ; Wire.Array
+                [ Wire.Array [ fav ]; page_uuid; Wire.Map [] ] ] ]
+  | _ -> Wire.Array []
+
+let unfavorite_page_ops db (page_block_uuid : string) : Wire.t =
+  match favorite_block db page_block_uuid with
+  | Some block ->
+      let uuid =
+        match Ldb.value block "block/uuid" with
+        | Some (Uuid u) -> Wire.Uuid u
+        | _ -> Wire.Nil
+      in
+      Wire.Array
+        [ Wire.Array
+            [ kw' "delete-blocks"
+            ; Wire.Array [ Wire.Array [ uuid ]; Wire.Map [] ] ] ]
+  | _ -> Wire.Array []
+
+let () =
+  Dispatcher.register "thread-api/set-page-favorite" (fun args ->
+      with_conn args (fun db ->
+          let conn =
+            match arg args 0 with
+            | Some (Wire.String r) -> Worker_state.datascript_conn r
+            | _ -> None
+          in
+          match conn with
+          | None -> Db_worker_effect.pure Wire.Nil
+          | Some conn ->
+              let uuid =
+                match arg args 1 with
+                | Some (Wire.Uuid u) -> Some u
+                | Some (Wire.String s) when Ldb.is_uuid_string s -> Some s
+                | _ -> None
+              in
+              let favorite_b =
+                match arg args 2 with
+                | Some (Wire.Bool b) -> b
+                | _ -> false
+              in
+              (match uuid with
+               | None -> ()
+               | Some u ->
+                   let favorited = Option.is_some (favorite_block db u) in
+                   let ops =
+                     if favorite_b && not favorited then
+                       favorite_page_ops db u
+                     else if (not favorite_b) && favorited then
+                       unfavorite_page_ops db u
+                     else Wire.Array []
+                   in
+                   (match ops with
+                    | Wire.Array [] -> ()
+                    | _ ->
+                        ignore
+                          (Outliner_op.apply_ops conn ops Wire.Nil)));
+              Db_worker_effect.pure Wire.Nil))
+
+let () =
+  Dispatcher.register "thread-api/reorder-favorites" (fun args ->
+      with_conn args (fun db ->
+          let conn =
+            match arg args 0 with
+            | Some (Wire.String r) -> Worker_state.datascript_conn r
+            | _ -> None
+          in
+          match conn with
+          | None -> Db_worker_effect.pure Wire.Nil
+          | Some conn ->
+              let uuids =
+                match arg args 1 with
+                | Some w -> Wire.as_seq w
+                | None -> []
+              in
+              let page_block_ids =
+                List.filter_map
+                  (fun w ->
+                    match w with
+                    | Wire.Uuid u -> (
+                        match entity db (Lookup_ref ("block/uuid", Uuid u)) with
+                        | Some e -> Some e.id
+                        | None -> None)
+                    | Wire.String s when Ldb.is_uuid_string s -> (
+                        match entity db (Lookup_ref ("block/uuid", Uuid s)) with
+                        | Some e -> Some e.id
+                        | None -> None)
+                    | _ -> None)
+                  uuids
+              in
+              let ops =
+                match favorite_page db with
+                | None -> []
+                | Some page ->
+                    let current =
+                      Ldb.sort_by_order (page_block_entities db page.id)
+                    in
+                    List.filter_map
+                      (fun (page_block_id, block) ->
+                        let link_id =
+                          match Ldb.ref_ids block "block/link" with
+                          | [ id ] -> Some id
+                          | _ -> None
+                        in
+                        if link_id <> Some page_block_id then
+                          let m = Ds_wire.entity_map_wire block in
+                          let m =
+                            Cljs_map.assoc m "block/link"
+                              (Wire.Int page_block_id)
+                          in
+                          Some
+                            (Wire.Array
+                               [ kw' "save-block"
+                               ; Wire.Array [ m; Wire.Nil ] ])
+                        else None)
+                      (List.combine page_block_ids current
+                         |> List.filteri (fun i _ ->
+                                i < List.length current))
+              in
+              (match ops with
+               | [] -> ()
+               | _ ->
+                   ignore
+                     (Outliner_op.apply_ops conn (Wire.Array ops) Wire.Nil));
+              Db_worker_effect.pure Wire.Nil))
