@@ -147,7 +147,8 @@ let with_report ~tx_meta (db : db) (tx_ops : tx_op list) : tx_report =
    Single-threaded worker: the CAS can never fail, matching the shape kept
    in transact_sync below. *)
 let commit_tx_report (conn : conn) (report : tx_report) : tx_report =
-  apply_report conn report
+  transact_conn ~tx_meta:report.tx_meta conn
+    (List.map (fun d -> Raw_datom d) report.tx_data)
 
 let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
   Ldb.db_based_graph db
