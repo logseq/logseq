@@ -393,7 +393,8 @@ let with_explicit_ref_fields (pairs : (Wire.t * Wire.t) list)
     : (Wire.t * Wire.t) list =
   let m = ref pairs in
   let add k v = m := (kw k, v) :: !m in
-  let add_opt k = function Some v -> add k v | None -> () in
+  (* cljs assoc's these keys unconditionally — nil values are emitted *)
+  let add_opt k v = add k (Option.value ~default:Wire.Nil v) in
   let alias_source =
     match map_get "block/_alias" pairs with
     | Some (Wire.Array (v :: _)) -> Some v

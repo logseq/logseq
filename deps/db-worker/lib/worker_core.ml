@@ -21,6 +21,8 @@ let init () =
     ignore Endpoint_comment.get_comment_thread_block_uuids;
     ignore Endpoint_cli.cli_list_properties;
     ignore Endpoint_cli.api_get_page_data;
+    ignore Endpoint_view.get_view_filter_data;
+    ignore Endpoint_view.get_view_data;
     ignore Endpoint_state.cancel_ui_requests;
     ignore Endpoint_property.get_all_properties;
     ignore Endpoint_query.query_dsl_query;
