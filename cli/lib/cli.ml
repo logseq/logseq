@@ -280,31 +280,34 @@ let parse_args : type marker.
     app_context ->
     (raw_argv, marker) state ->
     (parsed_argv, not_final) state Error.build_result =
- fun app (Raw_argv_state input) ->
-  let input =
-    match input.stdin with
-    | Some _ -> input
-    | None when stdin_required_for_show_id input.argv ->
-        { input with stdin = Some (read_stdin_all ()) }
-    | None -> input
-  in
-  let options, positional = parse_tokens input.argv in
-  let mode = output_mode_of_options options in
-  let help =
-    if option_present "version" options then None
-    else help_group app.registry options positional
-  in
-  match help with
-  | Some group ->
-      Command_registry.render_help ~group app.registry
-      |> set_pending_message_output mode;
-      Error (Error.unknown_command "")
-  | None -> (
-      match parse_request app input with
-      | Ok request -> Ok (Parsed_argv_state (input, request))
-      | Error err ->
-          set_pending_error_output mode err;
-          Error err)
+ fun app state ->
+  match state with
+  | Raw_argv_state input -> (
+      let input =
+        match input.stdin with
+        | Some _ -> input
+        | None when stdin_required_for_show_id input.argv ->
+            { input with stdin = Some (read_stdin_all ()) }
+        | None -> input
+      in
+      let options, positional = parse_tokens input.argv in
+      let mode = output_mode_of_options options in
+      let help =
+        if option_present "version" options then None
+        else help_group app.registry options positional
+      in
+      match help with
+      | Some group ->
+          Command_registry.render_help ~group app.registry
+          |> set_pending_message_output mode;
+          Error (Error.unknown_command "")
+      | None -> (
+          match parse_request app input with
+          | Ok request -> Ok (Parsed_argv_state (input, request))
+          | Error err ->
+              set_pending_error_output mode err;
+              Error err))
+  | _ -> assert false
 
 let resolve_request_config app request input =
   Cli_config.resolve ~defaults:app.defaults ~env:(env_lookup input.env)
@@ -348,8 +351,9 @@ let resolve_config : type marker.
     app_context ->
     (parsed_argv, marker) state ->
     (resolved_config, not_final) state Error.build_result Cli_effect.t =
- fun app (Parsed_argv_state (input, request)) ->
-  Cli_effect.map
+ fun app -> function
+  | Parsed_argv_state (input, request) ->
+      Cli_effect.map
     (fun result ->
       match result with
       | Error err ->
@@ -386,6 +390,7 @@ let resolve_config : type marker.
                 (Resolved_config_state
                    ({ config with Cli_config.profile_session }, request))))
     (resolve_request_config app request input)
+  | _ -> assert false
 
 let build_request_action app request config =
   match request.Cli_request.command with
@@ -401,8 +406,9 @@ let build_action : type marker.
     app_context ->
     (resolved_config, marker) state ->
     (built_action, not_final) state Error.build_result Cli_effect.t =
- fun app (Resolved_config_state (config, request)) ->
-  Cli_effect.map
+ fun app -> function
+  | Resolved_config_state (config, request) ->
+      Cli_effect.map
     (fun result ->
       match result with
       | Error err ->
@@ -421,21 +427,25 @@ let build_action : type marker.
               Error err
           | Ok () -> Ok (Built_action_state (config, action))))
     (build_request_action app request config)
+  | _ -> assert false
 
 let execute_action : type marker.
     app_context ->
     (built_action, marker) state ->
     (executed_action, final) state Error.build_result Cli_effect.t =
- fun app (Built_action_state (config, action)) ->
-  Cli_effect.map
-    (fun result ->
-      Ok (Executed_action_state (config, with_registry_metadata app result)))
-    (Cli_action.execute action config)
+ fun app -> function
+  | Built_action_state (config, action) ->
+      Cli_effect.map
+        (fun result ->
+          Ok (Executed_action_state (config, with_registry_metadata app result)))
+        (Cli_action.execute action config)
+  | _ -> assert false
 
 let format_cli_result result config = Format_types.format_result result config
 
-let format_result _ (Executed_action_state (config, result)) =
-  format_cli_result result config
+let format_result _ = function
+  | Executed_action_state (config, result) -> format_cli_result result config
+  | _ -> assert false
 
 let result_exit_code result = Cli_result.exit_code result
 let write_stdout_line output = if output <> "" then print_string (output ^ "\n")
@@ -467,3 +477,4 @@ let final_effect : type phase. (phase, final) state -> int Cli_effect.t =
       flush stdout;
       flush stderr;
       Cli_effect.pure output.exit_code
+  | _ -> assert false
