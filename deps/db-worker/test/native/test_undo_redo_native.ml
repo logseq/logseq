@@ -43,16 +43,7 @@
    (:memory: would collide in Sync_client_op's filename-keyed schema_ready
    cache across fixtures).
 
-   Known lib/engine bugs hit by these tests (no workarounds — left red):
-     - UNPORTED DEPENDENCY: the op-construct package
-       (deps/outliner/src/logseq/outliner/op/construct.cljc, ~1300 lines)
-       has no OCaml port. Sync_deps.derive_history_outliner_ops,
-       outliner_apply_ops and rewrite_block_title_with_retracted_refs
-       are never bound in lib/, so Sync_apply.persist_local_tx raises
-       "sync_deps: not wired: derive_history_outliner_ops" on every
-       local tx. Every history-recording case in this file fails there —
-       they should flip green once op-construct is ported and wired.
-       (worker-ui-state-roundtrips passes: it never transacts.)
+   Known lib/engine bugs hit by these tests (no workarounds):
      - Sqlite_build.create_blocks :build/children emits :block/parent as
        a same-tx forward lookup-ref {:db/id [:block/uuid u]}; under
        Db_tx.transact the attr is silently dropped and Db_validate then

@@ -9,7 +9,9 @@
    - deps/db/test/logseq/db/common/initial_data_refs_test.cljs — both deftests
    - deps/common/test/logseq/common/util/page_ref_test.cljs — page-ref?
    - deps/common/test/logseq/common/util_test.cljs — url? are-case
-   - deps/common/test/logseq/common/graph_dir_test.cljs — the ported cases
+   - deps/common/test/logseq/common/graph_dir_test.cljs —
+     repo->encoded-graph-dir-name + graph-name-whitespace-boundaries
+     (the other deftests are in test_common_native.ml)
 
    cljs deftest names are kept as OCaml test names.
 
@@ -20,8 +22,6 @@
      common-initial-data/get-block-and-children returns {:block :children}
      maps; OCaml Ldb.get_block_and_children returns a preorder entity list
    - view_test.cljs: ported to test_db_view_native.ml (all 42 deftests)
-   - graph_dir_test.cljs repo->graph-dir-key*/decode-*-graph-dir-name/
-     same-repo?: those fns are not in lib/graph_dir.ml
 
    cljs (d/transact! conn tx-maps-or-datoms) -> Datascript.transact_conn /
    transact_conn_string; cljs (ldb/transact! conn txs) -> Db_tx.transact. *)
@@ -665,7 +665,9 @@ let test_url () =
     ; "prop:: value", false
     ; "a:", false ]
 
-(* graph_dir_test.cljs — the cases whose fns are ported *)
+(* graph_dir_test.cljs — repo->encoded-graph-dir-name + the
+   graph-name-whitespace-boundaries deftest (the other 4 deftests are
+   ported in test_common_native.ml's graph_dir_test group) *)
 let test_graph_dir () =
   check "repo->encoded-graph-dir-name-encodes-special-characters foo/bar"
     (Graph_dir.repo_to_encoded_graph_dir_name "logseq_db_foo/bar"
@@ -673,9 +675,32 @@ let test_graph_dir () =
   check "repo->encoded-graph-dir-name-encodes-special-characters space"
     (Graph_dir.repo_to_encoded_graph_dir_name "logseq_db_space name"
      = Some "space name");
+  List.iter
+    (fun repo ->
+      check
+        (Printf.sprintf "whitespace key %S" repo)
+        (Graph_dir.repo_to_graph_dir_key repo = Some "demo");
+      check
+        (Printf.sprintf "whitespace encoded %S" repo)
+        (Graph_dir.repo_to_encoded_graph_dir_name repo = Some "demo");
+      check
+        (Printf.sprintf "same-repo? %S" repo)
+        (Graph_dir.same_repo "demo" repo))
+    [ "  demo  "; "  logseq_db_demo  "; "logseq_db_ demo " ];
   check "graph-name-whitespace-boundaries encode"
     (Graph_dir.encode_graph_dir_name " \tspace name/child\n "
-     = "space name~2Fchild")
+     = "space name~2Fchild");
+  check "repo->graph-dir-key blank"
+    (Graph_dir.repo_to_graph_dir_key "   " = None);
+  List.iter
+    (fun dir ->
+      check
+        (Printf.sprintf "decode rejects %S" dir)
+        (Graph_dir.decode_graph_dir_name dir = None))
+    [ " alpha "; "   "; "~20alpha"; "alpha~20"; "%20alpha"; "alpha%20" ];
+  check "decode-legacy normalizes diagnostic name"
+    (Graph_dir.decode_legacy_graph_dir_name "%20old++name%20"
+     = Some "old/name")
 
 (* logseq.common.authorization — client-id-allowed? env bindings *)
 let test_client_id_allowed () =
