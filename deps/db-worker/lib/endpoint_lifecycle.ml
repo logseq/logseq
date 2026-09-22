@@ -149,3 +149,63 @@ let () =
       match args with
       | Wire.String _ :: _ -> Db_worker_effect.pure Wire.nil
       | _ -> invalid_arg "release-access-handles expects repo")
+
+(* :thread-api/reset-db [repo db-transit] — handler/maintenance.cljs *)
+let () =
+  Dispatcher.register "thread-api/reset-db" (fun args ->
+      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      (match Worker_state.datascript_conn repo with
+       | None -> Db_worker_effect.pure Wire.nil
+       | Some conn ->
+           (match Option.bind (List.nth_opt args 1) Wire.as_string with
+            | Some transit ->
+                let sdb =
+                  Ds_wire.serializable_db_of_transit (Transit_codec.of_string transit)
+                in
+                let new_db = Datascript.from_serializable sdb in
+                (* cljs swaps the old conn's eavt storage onto the new db so
+                   kvs persistence keeps writing to the same sqlite file. *)
+                let new_db' =
+                  match Datascript.storage (Datascript.db conn) with
+                  | Some st -> { new_db with storage_ref = Some st }
+                  | None -> new_db
+                in
+                ignore
+                  (Datascript.reset_conn
+                     ~tx_meta:[ "reset-conn!", Bool true ]
+                     conn new_db');
+                Db_worker_effect.pure Wire.nil
+            | None -> Db_worker_effect.pure Wire.nil)))
+
+(* :thread-api/gc-graph [repo] — handler/maintenance.cljs *)
+let () =
+  Dispatcher.register "thread-api/gc-graph" (fun args ->
+      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      (match Worker_state.sqlite_conn repo, Worker_state.datascript_conn repo with
+       | Some db, Some conn ->
+           Graph_gc.gc_kvs_table ~full_gc:true db;
+           Sqlite.exec db ~sql:"VACUUM" ~bind:[||];
+           let tx_edn =
+             Printf.sprintf
+               "[{:db/ident :logseq.kv/graph-last-gc-at :kv/value %d}]"
+               (int_of_float (Clock.now_ms ()))
+           in
+           ignore
+             (Datascript.transact_conn_string
+                ~tx_meta:[ "skip-validate-db?", Bool true; "persist-op?", Bool false ]
+                conn tx_edn);
+           Db_worker_effect.pure Wire.nil
+       | _ -> Db_worker_effect.pure Wire.nil))
+
+(* :thread-api/backup-db-sqlite [repo dst-path] — sqlite backup to dst-path *)
+let () =
+  Dispatcher.register "thread-api/backup-db-sqlite" (fun args ->
+      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      (match Worker_state.sqlite_conn repo with
+       | None -> invalid_arg ("graph not opened: " ^ repo)
+       | Some db ->
+           (match Option.bind (List.nth_opt args 1) Wire.as_string with
+            | Some dst ->
+                Sqlite.backup db ~dst_path:dst;
+                Db_worker_effect.pure Wire.nil
+            | None -> Db_worker_effect.pure Wire.nil)))

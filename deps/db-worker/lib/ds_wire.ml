@@ -356,3 +356,82 @@ let wire_key (t : Wire.t) : string =
   | Wire.Float x -> Printf.sprintf "%.17g" x
   | Wire.Uuid s -> s
   | _ -> Transit_codec.to_string t
+
+(* ---- transit -> serializable_db (decode of transit_of_serializable_db /
+   cljs d/transit-read DB payload) ---- *)
+
+let rec datom_of_transit (t : Wire.t) : datom =
+  match t with
+  | Wire.Tagged ("datascript/Datom", rep) -> datom_of_transit rep
+  | Wire.Array [ e; a; v; tx ] | Wire.List [ e; a; v; tx ] ->
+      let e' =
+        match e with Wire.Int n -> n | _ -> invalid_arg "datom e must be int"
+      in
+      let a' =
+        match a with Wire.Keyword s -> s | _ -> invalid_arg "datom a must be keyword"
+      in
+      let tx' =
+        match tx with Wire.Int n -> n | _ -> invalid_arg "datom tx must be int"
+      in
+      { e = e'; a = a'; v = value_of_transit v; tx = abs tx'; added = tx' >= 0 }
+  | _ -> invalid_arg "datom_of_transit: unexpected shape"
+
+let schema_attr_of_transit (v : Wire.t) : schema_attr =
+  let bool_field k = match Wire.get k v with Some (Wire.Bool b) -> b | _ -> false in
+  let value_type_of_kw = function
+    | Wire.Keyword "db.type/ref" -> Some RefType
+    | Wire.Keyword "db.type/tuple" -> Some TupleType
+    | Wire.Keyword "db.type/string" -> Some StringType
+    | Wire.Keyword "db.type/keyword" -> Some KeywordType
+    | Wire.Keyword "db.type/number" -> Some NumberType
+    | Wire.Keyword "db.type/uuid" -> Some UuidType
+    | Wire.Keyword "db.type/instant" -> Some InstantType
+    | _ -> None
+  in
+  { cardinality =
+      (match Wire.get "db/cardinality" v with
+       | Some (Wire.Keyword "db.cardinality/many") -> Many
+       | _ -> One);
+    unique =
+      (match Wire.get "db/unique" v with
+       | Some (Wire.Keyword "db.unique/value") -> Some Value
+       | Some (Wire.Keyword "db.unique/identity") -> Some Identity
+       | _ -> None);
+    indexed = bool_field "db/index";
+    is_component = bool_field "db/isComponent";
+    no_history = bool_field "db/noHistory";
+    doc = Option.bind (Wire.get "db/doc" v) Wire.as_string;
+    value_type = Option.bind (Wire.get "db/valueType" v) value_type_of_kw;
+    tuple_attrs =
+      Option.map
+        (fun w -> List.filter_map Wire.as_keyword (Wire.as_seq w))
+        (Wire.get "db/tupleAttrs" v);
+    tuple_types =
+      Option.map
+        (fun w -> List.filter_map value_type_of_kw (Wire.as_seq w))
+        (Wire.get "db/tupleTypes" v) }
+
+let schema_of_transit (t : Wire.t) : schema =
+  match t with
+  | Wire.Map kvs ->
+      List.filter_map
+        (fun (k, v) ->
+           match k with
+           | Wire.Keyword a -> Some (a, schema_attr_of_transit v)
+           | _ -> None)
+        kvs
+  | _ -> []
+
+let serializable_db_of_transit (t : Wire.t) : serializable_db =
+  let body =
+    match t with Wire.Tagged ("datascript/DB", rep) -> rep | other -> other
+  in
+  let datoms =
+    match Wire.get "datoms" body with
+    | Some w -> List.map datom_of_transit (Wire.as_seq w)
+    | None -> []
+  in
+  { serializable_schema = schema_of_transit body;
+    serializable_datoms = datoms;
+    serializable_max_eid = 0;
+    serializable_max_tx = 0 }
