@@ -2952,4 +2952,5 @@ let () =
     ; "handler-property", Test_handler_native.property_cases
     ; "handler-transaction", Test_handler_native.transaction_cases
     ; "undo-redo", Test_undo_redo_native.cases
-    ; "db-listener", Test_db_listener_native.cases ]
+    ; "db-listener", Test_db_listener_native.cases
+    ; "render-delta", Test_render_delta_native.cases ]
