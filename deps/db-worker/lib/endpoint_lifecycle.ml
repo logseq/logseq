@@ -3,7 +3,12 @@
    create the datascript conn, register per-repo state. *)
 
 
-let () = Dispatcher.register "thread-api/init" (fun _ -> Db_worker_effect.pure Wire.nil)
+(* cljs thread-api/init -> init-sqlite-module!: read the publishing
+   env flag, then load sqlite-wasm (no-op where opens are per-db). *)
+let () =
+  Dispatcher.register "thread-api/init" (fun _ ->
+      Worker_state.set_publishing (Runtime_env.publishing ());
+      Db_worker_effect.map (fun () -> Wire.nil) (Sqlite.init ()))
 
 (* cljs node storage keeps each graph at
    <graphs-dir>/<encoded-graph>/db.sqlite (platform/node.cljs repo-dir),
@@ -21,42 +26,19 @@ let db_dir repo =
 let db_path repo = Filename.concat (db_dir repo) "db.sqlite"
 
 (* :thread-api/list-db -> [{:name repo} ...]
-   cljs <list-all-dbs lists every graph dir under the storage root and
-   returns {:name "logseq_db_<decoded-key>"}. On pooled runtimes there is
-   no directory to scan; the open conns are the only record. *)
+   cljs <list-all-dbs: platform :list-graphs returns decoded graph
+   names without the prefix (browser OPFS ".logseq-pool-*" dirs; node
+   graph dirs); each is re-prefixed into {:name "logseq_db_<name>"}. *)
 let () =
   Dispatcher.register "thread-api/list-db" (fun _ ->
       let entry_map name = Wire.Map [ Wire.Keyword "name", Wire.String name ] in
-      if Sqlite.pooled_runtime () then
-        Db_worker_effect.pure
-          (Wire.Array (List.map entry_map (Worker_state.repos ())))
-      else
-        let base =
-          match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-          | Some dir -> dir
-          | None -> "."
-        in
-        Db_worker_effect.bind (File_sys.readdir base) (fun entries ->
-            let rec with_dbs acc = function
-              | [] -> Db_worker_effect.pure (List.rev acc)
-              | dir :: rest ->
-                  Db_worker_effect.bind
-                    (File_sys.exists
-                       (Filename.concat (Filename.concat base dir) "db.sqlite"))
-                    (fun ok ->
-                      if ok then with_dbs (dir :: acc) rest
-                      else with_dbs acc rest)
-            in
-            Db_worker_effect.bind (with_dbs [] entries) (fun dirs ->
-                let names =
-                  List.filter_map
-                    (fun dir ->
-                      Option.map
-                        (fun key -> entry_map ("logseq_db_" ^ key))
-                        (Graph_dir.decode_canonical_graph_dir_key dir))
-                    dirs
-                in
-                Db_worker_effect.pure (Wire.Array names))))
+      Db_worker_effect.map
+        (fun graph_names ->
+          Wire.Array
+            (List.map
+               (fun name -> entry_map ("logseq_db_" ^ name))
+               graph_names))
+        (Sqlite.list_graphs ()))
 
 (* :thread-api/db-exists [repo] *)
 let () =
@@ -65,6 +47,8 @@ let () =
       | Wire.String repo :: _ ->
           let exists = Option.is_some (Worker_state.sqlite_conn repo) in
           if exists then Db_worker_effect.pure (Wire.Bool true)
+          else if Sqlite.pooled_runtime () then
+            Db_worker_effect.map (fun e -> Wire.Bool e) (Sqlite.db_exists ~repo)
           else
             File_sys.exists (db_path repo)
             |> Db_worker_effect.map (fun e -> Wire.Bool e)
@@ -202,7 +186,8 @@ let create_or_open_db args =
 
 let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
 
-(* close-db-aux!: drop conns, clear pending counts, close sqlite. *)
+(* close-db-aux!: drop conns, clear pending counts, close sqlite —
+   cljs close-db! then pauseVfs + forget-storage-pool! on browser. *)
 let close_db_aux repo =
   Worker_state.drop_datascript_conn repo;
   Worker_state.drop_pending_local_tx_count repo;
@@ -211,7 +196,11 @@ let close_db_aux repo =
    | Some db ->
        Sqlite.close db;
        Worker_state.drop_sqlite_conn repo
-   | None -> ())
+   | None -> ());
+  if Sqlite.pooled_runtime () then begin
+    Sqlite.pause_vfs ~repo;
+    Sqlite.drop_pool ~repo
+  end
 
 let close_db_handler args =
   match args with
@@ -234,16 +223,21 @@ let () =
       | Wire.String repo :: _ ->
           let (_ : int) = Endpoint_state.cancel_ui_requests Wire.Nil in
           close_db_aux repo;
-          File_sys.remove (db_dir repo)
+          (* cljs unsafe-unlink-db: pool.removeVfs on browser; node
+             clears the repo dir. *)
+          (if Sqlite.pooled_runtime () then Sqlite.remove_vfs ~repo
+           else File_sys.remove (db_dir repo))
           |> Db_worker_effect.map (fun () -> Wire.nil)
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 
-(* :thread-api/release-access-handles [repo] — pauses the OPFS pool on
-   browser; node/native storage holds no access handles. *)
+(* :thread-api/release-access-handles [repo] — cljs pauses the OPFS
+   pool's access handles; node/native storage holds none. *)
 let () =
   Dispatcher.register "thread-api/release-access-handles" (fun args ->
       match args with
-      | Wire.String _ :: _ -> Db_worker_effect.pure Wire.nil
+      | Wire.String repo :: _ ->
+          if Sqlite.pooled_runtime () then Sqlite.pause_vfs ~repo;
+          Db_worker_effect.pure Wire.nil
       | _ -> invalid_arg "release-access-handles expects repo")
 
 (* :thread-api/reset-db [repo db-transit] — handler/maintenance.cljs *)

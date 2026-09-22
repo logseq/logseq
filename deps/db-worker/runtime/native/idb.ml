@@ -31,3 +31,5 @@ let get_binary key =
 let set_binary key value =
   Db_worker_effect.bind (File_sys.mkdir_p (dir ())) (fun () ->
       File_sys.write_binary (key_path key) value)
+
+let init () = Db_worker_effect.pure ()

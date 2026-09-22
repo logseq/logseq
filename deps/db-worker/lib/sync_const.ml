@@ -14,15 +14,12 @@ let ignore_attrs_when_syncing : string list =
   ; "logseq.property.asset/last-visit-page"
   ]
 
+(* derived from kv-entity/kv-entities :rtc/ignore-entity-when-init-upload *)
 let ignore_entities_when_init_upload : string list =
-  [ "logseq.kv/graph-uuid"
-  ; "logseq.kv/local-graph-uuid"
-  ; "logseq.kv/graph-local-tx"
-  ; "logseq.kv/remote-schema-version"
-  ; "logseq.kv/latest-code-lang"
-  ; "logseq.kv/graph-backup-folder"
-  ; "logseq.kv/graph-last-gc-at"
-  ]
+  List.filter_map
+    (fun (kw, (c : Kv_entity.kv_config)) ->
+      if c.Kv_entity.rtc_ignore_entity_when_init_upload then Some kw else None)
+    Kv_entity.kv_entities
 
 let encrypt_attr_set : string list = [ "block/title"; "block/name" ]
 

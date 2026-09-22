@@ -114,14 +114,13 @@ let built_in_journal_title_formatters =
     "yyyy-MM-dd EEE"; "yyyy-MM-dd EEEE"; "yyyy_MM_dd"; "yyyyMMdd";
     "yyyy\xE5\xB9\xB4MM\xE6\x9C\x88dd\xE6\x97\xA5" (* yyyy年MM月dd日 *) ]
 
-(* common-date/journal-title-formatters *)
+(* common-date/journal-title-formatters — cljs (distinct (cons f
+   built-in)) keeps the first occurrence, so f always leads even when it
+   duplicates a built-in. *)
 let journal_title_formatters (date_formatter : string option) : string list =
   match date_formatter with
   | None -> built_in_journal_title_formatters
-  | Some f ->
-      if List.mem f built_in_journal_title_formatters then
-        built_in_journal_title_formatters
-      else f :: built_in_journal_title_formatters
+  | Some f -> f :: List.filter (fun x -> x <> f) built_in_journal_title_formatters
 
 (* ---- formatter lexer ---- *)
 
