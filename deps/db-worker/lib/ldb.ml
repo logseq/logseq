@@ -409,9 +409,9 @@ let get_right_sibling (block : entity) : entity option =
       then sibling_for_property_children block parent `Right
       else ordinary_sibling block `Right
 
-(* ldb/get-down *)
+(* ldb/get-down — raw :block/_parent, first by :block/order *)
 let get_down (block : entity) : entity option =
-  match sort_by_order (parent_children block) with
+  match sort_by_order (ref_ents block "block/_parent") with
   | first :: _ -> Some first
   | [] -> None
 
@@ -424,7 +424,7 @@ let ref_v_to_ref = function
 (* ldb/has-children? *)
 let has_children db (ref_v : value) : bool =
   match entity db (ref_v_to_ref ref_v) with
-  | Some e -> Option.is_some ((match sort_by_order (parent_children e) with _ :: _ -> Some (Bool true) | [] -> None))
+  | Some e -> ref_ents e "block/_parent" <> []
   | None -> false
 
 (* ldb/get-key-value — :kv/value of the kv entity named by ident. *)
@@ -556,16 +556,23 @@ let get_page_blocks db (page_id : entity_id) : pulled_entity list =
   |> pull_many_string db "[*]"
   |> List.filter_map (fun x -> x)
 
-(* ldb/get-block-last-direct-child-id — last :block/_parent child by
-   :block/order (not-collapsed? defaults to false for our callers). *)
-let get_block_last_direct_child_id db (block_id : entity_id) : entity_id option =
+(* ldb/collapsed-and-has-children? *)
+let collapsed_and_has_children db (block : entity) : bool =
+  truthy (value block "block/collapsed?") && has_children db (Ref block.id)
+
+(* ldb/get-block-last-direct-child-id — last raw :block/_parent child by
+   :block/order; not-collapsed? skips blocks that are collapsed w/ children. *)
+let get_block_last_direct_child_id db ?(not_collapsed = false)
+    (block_id : entity_id) : entity_id option =
   match ent_of_id db block_id with
   | None -> None
   | Some block ->
-      let children = sort_by_order (parent_children block) in
-      (match List.rev children with
-       | last :: _ -> Some last.id
-       | [] -> None)
+      if not_collapsed && collapsed_and_has_children db block then None
+      else
+        let children = sort_by_order (ref_ents block "block/_parent") in
+        (match List.rev children with
+         | last :: _ -> Some last.id
+         | [] -> None)
 
 (* ldb/get-block-and-children — preorder list of entity and its
    descendants. include-property-block? also walks each child's
@@ -812,3 +819,177 @@ let get_block_children_ids db ?(include_collapsed_children : bool option)
       in
       loop [ block_eid ];
       Hashtbl.fold (fun id () acc -> id :: acc) seen []
+
+(* ldb/get-library-page — built-in "Library" page *)
+let get_library_page db : entity option = get_built_in_page db "Library"
+
+(* ---------- entity-util predicates (cont.) ---------- *)
+
+let uuid_value (e : entity) (a : attr) : string option =
+  match value e a with Some (Uuid u) -> Some u | _ -> None
+
+(* entity-util/object? — has any :block/tags *)
+let is_object (e : entity) : bool = values e "block/tags" <> []
+
+(* common-config/library-page-name / quick-add-page-name *)
+let library_page_name = "Library"
+let quick_add_page_name = "Quick add"
+
+(* sqlite-create-graph/built-in-pages-names *)
+let built_in_pages_names = [ library_page_name; quick_add_page_name; "Contents" ]
+
+(* db-db/library? — built-in page titled "Library" *)
+let is_library (e : entity) : bool =
+  built_in e && string_value e "block/title" = Some library_page_name
+
+(* db-db/inline-tag? — "#[[uuid]]" occurs in the raw title *)
+let inline_tag (raw_title : string) (tag_uuid : string) : bool =
+  Ns_util.str_contains raw_title ("#" ^ Page_ref.to_page_ref tag_uuid)
+
+(* ---------- page / orphan helpers ---------- *)
+
+(* ldb/page-empty? — no raw :block/_parent children *)
+let page_empty (db : db) (page_id : entity_id) : bool =
+  match entity db (Entity_id page_id) with
+  | None -> false
+  | Some page -> ref_ents page "block/_parent" = []
+
+(* ldb/get-first-child — first raw :block/_parent child by :block/order *)
+let get_first_child db (id : entity_id) : entity option =
+  match entity db (Entity_id id) with
+  | Some e ->
+      (match sort_by_order (ref_ents e "block/_parent") with
+       | c :: _ -> Some c
+       | [] -> None)
+  | None -> None
+
+(* ldb/get-orphaned-pages — pages with no refs left, empty or containing a
+   lone placeholder block, not built-in/property/journal-named/hidden. *)
+let get_orphaned_pages db
+    ?(empty_ref_f = fun (page : entity) -> ref_ids page "block/_refs" = [])
+    ?(built_in_pages_names = built_in_pages_names) (pages : string list)
+    : entity list =
+  let built_in_lower = List.map String.lowercase_ascii built_in_pages_names in
+  List.filter_map
+    (fun page_name ->
+      match get_page db (String page_name) with
+      | Some page when not (hidden page) ->
+          let name' = Option.value (string_value page "block/name") ~default:"" in
+          if
+            empty_ref_f page
+            && (page_empty db page.id
+                ||
+                (match get_first_child db page.id with
+                 | Some first_child ->
+                     List.length (ref_ids page "block/_page") = 1
+                     &&
+                     (match string_value first_child "block/title" with
+                      | Some t -> List.mem (String.trim t) [ ""; "-"; "*" ]
+                      | None -> false)
+                 | None -> false))
+            && not (List.mem name' built_in_lower)
+            && not (is_property page)
+            && not (Ns_util.str_contains name' "/" && not (is_journal page))
+            && not (Option.is_some (value page "block/properties"))
+          then Some page
+          else None
+      | _ -> None)
+    pages
+
+(* ---------- block ordering ---------- *)
+
+(* ldb/block-order-path — :block/order chain root-first, from the page's
+   top-level down to [block]; None when unreachable from the page. *)
+let block_order_path (page_id : entity_id) (block : entity) : string option list option =
+  let rec aux (b : entity) (path : string option list) : string option list option =
+    if
+      Option.is_some (value b "logseq.property/created-from-property")
+      || Option.is_some (value b "block/closed-value-property")
+    then None
+    else
+      match ref_ent b "block/parent" with
+      | None -> None
+      | Some parent ->
+          let path = string_value b "block/order" :: path in
+          if parent.id = page_id then Some (List.rev path) else aux parent path
+  in
+  aux block []
+
+let compare_order_paths (p1 : string option list) (p2 : string option list) : int =
+  List.compare Stdlib.compare p1 p2
+
+(* ldb/sort-page-random-blocks — possibly non-consecutive blocks of one page,
+   sorted by preorder path. *)
+let sort_page_random_blocks _db (blocks : entity list) : entity list =
+  let page_id =
+    match blocks with
+    | b :: _ -> (
+        match ref_ent b "block/page" with
+        | Some p -> p.id
+        | None -> invalid_arg "sort_page_random_blocks: block has no :block/page")
+    | [] -> 0
+  in
+  let sorted =
+    blocks
+    |> List.filter_map (fun b ->
+        Option.map (fun p -> (p, b)) (block_order_path page_id b))
+    |> List.stable_sort (fun (p1, _) (p2, _) -> compare_order_paths p1 p2)
+    |> List.map snd
+  in
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun (b : entity) ->
+      if Hashtbl.mem seen b.id then false
+      else begin
+        Hashtbl.add seen b.id ();
+        true
+      end)
+    sorted
+
+(* ldb/last-child-block? — child (or its chain) is the right-most sibling.
+   Child may be collapsed. *)
+let rec last_child_block db (parent_id : entity_id) (child_id : entity_id) : bool =
+  match entity db (Entity_id child_id) with
+  | None -> false
+  | Some child ->
+      if parent_id = child_id then true
+      else
+        (match get_right_sibling child with
+         | Some _ -> false
+         | None ->
+             (match ref_ent child "block/parent" with
+              | Some p -> last_child_block db parent_id p.id
+              | None -> false))
+
+(* ldb/consecutive-block? — block-1 and block-2 are adjacent in page order:
+   same page and one is the left sibling of, or last-descendant-left of,
+   the other. *)
+let consecutive_block db (b1 : entity) (b2 : entity) : bool =
+  let same_page (x : entity) (y : entity) =
+    match ref_ent x "block/page", ref_ent y "block/page" with
+    | Some p, Some q -> p.id = q.id
+    | None, None -> true
+    | _ -> false
+  in
+  let aux (x : entity) (y : entity) =
+    same_page x y
+    &&
+    (match get_left_sibling y with
+     | Some ls -> ls.id = x.id
+     | None -> false
+     | exception _ -> false)
+    || (match get_left_sibling y with
+        | Some prev_sibling -> last_child_block db prev_sibling.id x.id
+        | None -> false)
+  in
+  (aux b1 b2) || (aux b2 b1)
+
+(* ldb/get-non-consecutive-blocks — each block whose right neighbor in the
+   given order isn't consecutive with it. *)
+let get_non_consecutive_blocks db (blocks : entity list) : entity list =
+  let arr = Array.of_list blocks in
+  let n = Array.length arr in
+  List.init (n - 1) (fun i -> i)
+  |> List.filter_map (fun i ->
+      if not (consecutive_block db arr.(i) arr.(i + 1)) then Some arr.(i)
+      else None)

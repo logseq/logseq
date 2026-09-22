@@ -223,3 +223,18 @@ let recur_replace_uuid_in_block_title ?(max_depth = 10)
       in
       Some (loop title 0)
   | other -> other
+
+(* common-util/clear-markdown-heading — strip leading "#"s + whitespace *)
+let clear_markdown_heading (s : string) : string =
+  let n = String.length s in
+  let i = ref 0 in
+  while !i < n && s.[!i] = '#' do
+    incr i
+  done;
+  if !i > 0 && !i < n && (s.[!i] = ' ' || s.[!i] = '\t') then begin
+    while !i < n && (s.[!i] = ' ' || s.[!i] = '\t') do
+      incr i
+    done;
+    String.sub s !i (n - !i)
+  end
+  else s
