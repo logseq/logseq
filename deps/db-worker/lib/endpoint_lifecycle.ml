@@ -86,6 +86,7 @@ let create_or_open_db args =
                  Datascript.create_conn ~schema ~storage ()
            in
            Worker_state.set_datascript_conn repo conn;
+           Db_listener.listen_db_changes repo conn;
            (match Worker_state.datascript_conn repo with
             | Some conn ->
                 Db_worker_effect.pure

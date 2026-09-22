@@ -6,3 +6,6 @@ val exists : string -> bool Db_worker_effect.t
 val mkdir_p : string -> unit Db_worker_effect.t
 val readdir : string -> string list Db_worker_effect.t
 val remove : string -> unit Db_worker_effect.t
+
+(* write-then-rename, matching cljs storage/write-text-atomic!. *)
+val write_text_atomic : string -> string -> unit Db_worker_effect.t

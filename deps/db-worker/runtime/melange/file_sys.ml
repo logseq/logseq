@@ -36,3 +36,11 @@ let readdir path = wrap (fun () -> Array.to_list (Node.Fs.readdirSync path))
 
 let remove path =
   wrap (fun () -> Fs_ext.rmSync path [%mel.obj { recursive = true; force = true }])
+
+external renameSync : string -> string -> unit = "renameSync" [@@mel.module "fs"]
+
+let write_text_atomic path contents =
+  wrap (fun () ->
+      let tmp = path ^ ".tmp" in
+      Node.Fs.writeFileAsUtf8Sync tmp contents;
+      renameSync tmp path)

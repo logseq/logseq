@@ -1,5 +1,10 @@
 type t = Re.re
 
+type re_match =
+  { groups : string option array
+  ; offset : int
+  ; last : int }
+
 (* JS \uXXXX escape -> literal UTF-8 bytes (Re.Pcre classes do not
    support \x escapes). Regex metacharacters stay backslash-escaped so
    they keep their literal meaning in both contexts. *)
@@ -63,6 +68,15 @@ let compile s =
 
 let test t s = Re.execp t s
 
+let re_match_of_group g =
+  let offset, last = Re.Group.offset g 0 in
+  { groups = Array.init (Re.Group.nb_groups g) (Re.Group.get_opt g)
+  ; offset
+  ; last }
+
+let exec ?(pos = 0) t s =
+  Option.map re_match_of_group (Re.exec_opt ~pos t s)
+
 let replace t ~f s =
   match Re.exec_opt t s with
   | None -> s
@@ -75,3 +89,24 @@ let replace t ~f s =
       String.sub s 0 offset
       ^ rep
       ^ String.sub s stop (String.length s - stop)
+
+let replace_all t ~f s =
+  let b = Buffer.create (String.length s) in
+  let rec loop pos =
+    match Re.exec_opt ~pos t s with
+    | None -> Buffer.add_string b (String.sub s pos (String.length s - pos))
+    | Some g ->
+        let m = re_match_of_group g in
+        let match_ =
+          match m.groups with [||] -> "" | xs -> Option.value ~default:"" xs.(0)
+        in
+        Buffer.add_string b (String.sub s pos (m.offset - pos));
+        Buffer.add_string b (f ~match_ ~groups:m.groups ~offset:m.offset ~input:s);
+        (* empty match: emit one char and advance, as JS /g does *)
+        if m.last = m.offset && m.last < String.length s then begin
+          Buffer.add_char b s.[m.last];
+          loop (m.last + 1)
+        end else if m.last > m.offset then loop m.last
+  in
+  loop 0;
+  Buffer.contents b
