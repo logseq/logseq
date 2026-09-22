@@ -1,0 +1,8 @@
+{
+  "name": "logseq-db-worker",
+  "private": true,
+  "description": "npm dependencies for running melange-emitted node tests (see test/dune).",
+  "dependencies": {
+    "transit-js": "^0.8.874"
+  }
+}

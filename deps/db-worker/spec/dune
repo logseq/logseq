@@ -9,7 +9,7 @@
   (:standard
    \ dispatcher worker_state graph_store worker_core))
  (virtual_modules
-  db_worker_effect runtime_env clock timers worker_log uuid_gen
+  db_worker_effect runtime_env clock date_time timers worker_log uuid_gen
   transit_codec sqlite ordered_kv file_sys http web_socket crypto idb
   comlink storage_codec unicode regexp))
 
@@ -20,7 +20,7 @@
  (libraries logseq_db_worker_platform_spec datascript_ocaml)
  (modules
   (:standard
-   \ wire db_worker_effect runtime_env clock timers worker_log uuid_gen
+   \ wire db_worker_effect runtime_env clock date_time timers worker_log uuid_gen
    transit_codec sqlite ordered_kv file_sys http web_socket crypto idb
    comlink storage_codec unicode regexp))
  (virtual_modules dispatcher worker_state graph_store worker_core))
