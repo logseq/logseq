@@ -223,7 +223,9 @@ let apply_template_op conn result_ref (template_id : Wire.t)
                    ()))
         (Outliner_template.dynamic_template_journal_days blocks);
       let blocks =
-        Outliner_template.resolve_dynamic_template_blocks db target blocks
+        (* @conn re-read: journal pages created above must be visible *)
+        Outliner_template.resolve_dynamic_template_blocks (Conn.db conn)
+          target blocks
       in
       (match blocks with
        | [] -> ()

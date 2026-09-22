@@ -35,18 +35,7 @@
      template_children_blocks when "template-blocks" is absent, so the
      apply-template tests pass empty opts.
 
-   Red-by-lib-bug (documented, no workarounds):
-   - Db_validate.validate_tx_report rejects card-many :block/refs/-tags
-     Set values inside the [prop v opts] entity-map tuple ("invalid
-     dispatch value"), so transacts that go through the full validate
-     path raise Db_tx.Invalid_tx. Tests hitting this are red; the real
-     datoms are clean (:block/refs -> Ref eid).
-   - OCaml insert_blocks reuses the template child's eid for
-     :apply-template blocks (cljs assigns fresh tempids), so the same-eid
-     :block/uuid retract+assert trips filter_deleted_blocks and the
-     pipeline epilogue skips rebuild_block_refs + block/tx-id stamping —
-     the apply-template tests stay red on the resolved-title/refs
-     assertions. *)
+   *)
 
 open Datascript
 

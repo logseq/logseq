@@ -2729,7 +2729,11 @@ let property_cases =
 (* (deftest apply-outliner-ops-returns-stored-delta-and-canonical-editor-rows-test ...) *)
 let test_apply_outliner_ops_returns_stored_delta_and_canonical_editor_rows () =
   let repo = "transaction-handler-test" in
-  let conn = Datascript.create_conn () in
+  (* cljs (d/create-conn) + with-redefs apply-ops! stub — the real op
+     never runs. OCaml invokes the real endpoint with a real no-op op,
+     so the conn needs the schema for [:block/uuid u] lookup-refs to
+     resolve empty instead of raising "not marked as :db/unique". *)
+  let conn = Datascript.create_conn ~schema:(Db_test_util.schema ()) () in
   let perf_id = "11111111-1111-1111-1111-111111111111" in
   let first_row_uuid = "22222222-2222-2222-2222-222222222222" in
   let second_row_uuid = "33333333-3333-3333-3333-333333333333" in
@@ -2781,8 +2785,9 @@ let test_apply_outliner_ops_returns_stored_delta_and_canonical_editor_rows () =
              ; Wire.Array
                  [ Wire.Array
                      [ kw "move-blocks-up-down"
-                     ; Wire.Array [ Wire.Uuid first_row_uuid ]
-                     ; Wire.Bool false ] ]
+                     ; Wire.Array
+                         [ Wire.Array [ Wire.Uuid first_row_uuid ]
+                         ; Wire.Bool false ] ] ]
              ; Wire.Map
                  [ (kw "affected-block-uuids", Wire.Set [])
                  ; (kw "editor-row-uuids", Wire.Array editor_row_uuids)
