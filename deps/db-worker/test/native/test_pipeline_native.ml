@@ -29,18 +29,29 @@
      reference-attrs cache tests assert the observable outcomes only.
    - cljs pins t/now for the reschedule test; OCaml computes the expected
      journal day from the real clock (commands/utc_now uses
-     Date_time_util.time_ms, not overridable). *)
+     Date_time_util.time_ms, not overridable).
+   - cljs passes pre-computed :template-blocks to the :apply-template op;
+     OCaml apply_template_op derives the same block maps via
+     template_children_blocks when "template-blocks" is absent, so the
+     apply-template tests pass empty opts.
+
+   Red-by-lib-bug (documented, no workarounds):
+   - Db_validate.validate_tx_report rejects card-many :block/refs/-tags
+     Set values inside the [prop v opts] entity-map tuple ("invalid
+     dispatch value"), so transacts that go through the full validate
+     path raise Db_tx.Invalid_tx. Tests hitting this are red; the real
+     datoms are clean (:block/refs -> Ref eid).
+   - OCaml insert_blocks reuses the template child's eid for
+     :apply-template blocks (cljs assigns fresh tempids), so the same-eid
+     :block/uuid retract+assert trips filter_deleted_blocks and the
+     pipeline epilogue skips rebuild_block_refs + block/tx-id stamping —
+     the apply-template tests stay red on the resolved-title/refs
+     assertions. *)
 
 open Datascript
 
-let failures = ref 0
-
 let check (name : string) (ok : bool) =
-  if ok then ()
-  else begin
-    incr failures;
-    Printf.eprintf "FAIL: %s\n" name
-  end
+  Alcotest.(check bool) name true ok
 
 let db_of = Datascript.db
 
@@ -110,7 +121,7 @@ let uuid_of (e : entity) : string =
   | _ -> failwith "entity has no uuid"
 
 (* ---------- nested-insert-keeps-parent-revision-test ---------- *)
-let () =
+let test_nested_insert_keeps_parent_revision_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -168,7 +179,7 @@ let () =
     (revision db_before page = revision (db_of conn) page)
 
 (* ---------- top-level-insert-keeps-page-revision-test ---------- *)
-let () =
+let test_top_level_insert_keeps_page_revision_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -199,8 +210,91 @@ let () =
   check "top-level-insert-keeps-page-revision page"
     (revision db_before page = revision (db_of conn) page)
 
+(* ---------- referenced-entity-content-change-invalidates-owning-block-test
+   cljs builds the fixture reports with d/with; Datascript.with_tx is the
+   same non-committing transact. ---------- *)
+let test_referenced_entity_content_change_invalidates_owning_block_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~properties:
+        [ "logseq.property/order-list-type", Db_test_util.default_property ]
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks = [ { default_block with b_title = Some "ordered" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "ordered")
+  in
+  let value_uuid = Common_uuid.new_block_id () in
+  let value_report =
+    Datascript.with_tx (db_of conn)
+      [ Entity
+          { db_id = None
+          ; attrs =
+              [ "block/uuid", One_value (Uuid value_uuid)
+              ; "block/title", One_value (String "before")
+              ; "logseq.property/created-from-property",
+                ref_ent_attr (Ident "logseq.property/order-list-type") ] } ]
+  in
+  let db_with_value = value_report.db_after in
+  let value =
+    match
+      entity db_with_value (Lookup_ref ("block/uuid", Uuid value_uuid))
+    with
+    | Some v -> v
+    | None -> failwith "referenced value entity missing"
+  in
+  let reference_report =
+    Datascript.with_tx db_with_value
+      [ add block.id "logseq.property/order-list-type"
+          (Ref_to (Entity_id value.id)) ]
+  in
+  let db_before = reference_report.db_after in
+  let tx_report =
+    Datascript.with_tx ~tx_meta:[] db_before
+      [ add value.id "block/title" (String "number") ]
+  in
+  let result = Worker_pipeline.transact_pipeline tx_report in
+  check "referenced-entity content revises owning block"
+    (revision db_before block <> revision result.db_after block)
+
+(* ---------- referenced-entity-timestamp-change-does-not-revise-rendered-blocks-test
+   ---------- *)
+let test_referenced_entity_timestamp_change_does_not_revise_rendered_blocks_test
+    () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks = [ { default_block with b_title = Some "owner" } ] } ]
+      ()
+  in
+  let page = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
+  let owner =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "owner")
+  in
+  ignore
+    (Datascript.transact_conn conn
+       [ add owner.id "block/refs" (Ref_to (Entity_id page.id))
+       ; add page.id "block/tx-id" (Int 10)
+       ; add owner.id "block/tx-id" (Int 10) ]);
+  let db_before = db_of conn in
+  let tx_report =
+    Datascript.with_tx ~tx_meta:[] db_before
+      [ add page.id "block/updated-at"
+          (Int (Int64.to_int (Date_time_util.time_ms ()))) ]
+  in
+  let result = Worker_pipeline.transact_pipeline tx_report in
+  check "referenced-entity timestamp keeps page revision"
+    (revision db_before page = revision result.db_after page);
+  check "referenced-entity timestamp keeps owner revision"
+    (revision db_before owner = revision result.db_after owner)
+
 (* ---------- property-assignment-revises-block-only-test ---------- *)
-let () =
+let test_property_assignment_revises_block_only_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -231,7 +325,7 @@ let () =
     (revision db_before page = revision (db_of conn) page)
 
 (* ---------- collapsed-state-revises-parent-test ---------- *)
-let () =
+let test_collapsed_state_revises_parent_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -251,7 +345,7 @@ let () =
     (revision db_before parent <> revision (db_of conn) parent)
 
 (* ---------- direct-page-update-revises-page-test ---------- *)
-let () =
+let test_direct_page_update_revises_page_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -275,7 +369,7 @@ let () =
 (* ---------- direct-child-visibility-keeps-its-membership-owner-revision-test
    block-handler/direct-children-membership is not ported; the revision
    assertions are kept, membership assertions dropped. ---------- *)
-let () =
+let test_direct_child_visibility_keeps_its_membership_owner_revision_test () =
   List.iter
     (fun (label, attr, mk_value) ->
       let conn =
@@ -350,7 +444,7 @@ let () =
 (* ---------- temp-inner-mutations-enter-the-pipeline-once-at-the-final-live-commit-test
    cljs records pipeline-metas via a wrapper fn and listens for live
    reports; OCaml mirrors that with the same ref + Datascript.listen. ---- *)
-let () =
+let test_temp_inner_mutations_enter_the_pipeline_once_at_the_final_live_commit_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -433,7 +527,7 @@ let () =
    | [] -> check "temp-inner-mutations canonical revision" false)
 
 (* ---------- test-built-in-page-updates-that-should-be-reverted ---------- *)
-let () =
+let test_test_built_in_page_updates_that_should_be_reverted () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -544,7 +638,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- ensure-query-property-on-tag-additions-test ---------- *)
-let () =
+let test_ensure_query_property_on_tag_additions_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -604,7 +698,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- ensure-comments-blocks-property-on-tag-additions-test ---------- *)
-let () =
+let test_ensure_comments_blocks_property_on_tag_additions_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -646,7 +740,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- imported-data-rebuilds-block-refs-in-the-formal-pipeline-test ---- *)
-let () =
+let test_imported_data_rebuilds_block_refs_in_the_formal_pipeline_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -694,7 +788,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- permanent-delete-recycled-page-with-transact-pipeline-test ---- *)
-let () =
+let test_permanent_delete_recycled_page_with_transact_pipeline_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -736,7 +830,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- recycle-ops-return-apply-result-test ---------- *)
-let () =
+let test_recycle_ops_return_apply_result_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -774,7 +868,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- permanent-delete-recycled-page-removes-blocks-parented-by-page-test ---- *)
-let () =
+let test_permanent_delete_recycled_page_removes_blocks_parented_by_page_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -822,7 +916,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- permanent-delete-recycled-block-with-transact-pipeline-test ---- *)
-let () =
+let test_permanent_delete_recycled_block_with_transact_pipeline_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -868,7 +962,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- code-block-tag-addition-preserves-explicit-code-lang-test ---- *)
-let () =
+let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -959,7 +1053,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- journal-name-title-updates-throw-in-transact-pipeline-test ---- *)
-let () =
+let test_journal_name_title_updates_throw_in_transact_pipeline_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1021,7 +1115,7 @@ let () =
    | None -> check "non-journal title allowed" false)
 
 (* ---------- legacy-journal-reference-does-not-update-protected-attributes-test ---- *)
-let () =
+let test_legacy_journal_reference_does_not_update_protected_attributes_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1095,7 +1189,7 @@ let () =
        Db_tx.transact_pipeline_fn := Some (fun r -> r))
 
 (* ---------- create-journal-page-name-uses-default-formatter-test ---- *)
-let () =
+let test_create_journal_page_name_uses_default_formatter_test () =
   let conn = Db_test_util.create_pipeline_conn () in
   ignore
     (Datascript.transact_conn conn
@@ -1130,8 +1224,181 @@ let () =
         | None -> check "create-journal title uses configured format" false)
    | None -> check "create-journal title uses configured format" false)
 
+(* ---------- apply-template-today-dynamic-variable-persists-journal-ref-test
+   cljs passes pre-computed :template-blocks (get-block-and-children rest +
+   :logseq.property/used-template on the first child); OCaml apply_template_op
+   derives the same block maps via template_children_blocks when
+   "template-blocks" is absent from the op opts. ---------- *)
+let test_apply_template_today_dynamic_variable_persists_journal_ref_test () =
+  let today = ms_to_journal_day (Date_time_util.time_ms ()) in
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some today }
+            ; blocks = [ { default_block with b_title = Some "target block" } ] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Templates" }
+            ; blocks =
+                [ { default_block with
+                    b_title = Some "template root"
+                  ; b_children =
+                      [ { default_block with
+                          b_title = Some "date <% today %>" } ] } ] } ]
+      ()
+  in
+  let today_page =
+    Option.get
+      (Db_test_util.find_journal_by_journal_day (db_of conn) today)
+  in
+  let template_root =
+    Option.get
+      (Db_test_util.find_block_by_content (db_of conn) "template root")
+  in
+  let target_block =
+    Option.get
+      (Db_test_util.find_block_by_content (db_of conn) "target block")
+  in
+  Db_tx.transact_pipeline_fn := Some Worker_pipeline.transact_pipeline;
+  (try
+     ignore
+       (Outliner_op.apply_ops conn
+          (Wire.List
+             [ Wire.List
+                 [ Wire.Keyword "apply-template"
+                 ; Wire.List
+                     [ Wire.Uuid (uuid_of template_root)
+                     ; Wire.Uuid (uuid_of target_block)
+                     ; Wire.Map [] ] ] ])
+          (Wire.Map []));
+     let expected_raw =
+       "date " ^ Page_ref.to_page_ref (uuid_of today_page)
+     in
+     (match
+        Db_test_util.find_block_by_content (db_of conn) expected_raw
+      with
+      | Some b ->
+          check "apply-template-today inserted exists" true;
+          check "apply-template-today raw-title"
+            (raw_block_title (db_of conn) (Some b) = Some expected_raw);
+          check "apply-template-today resolved title"
+            (ent_title b
+             = Some
+                 ("date "
+                  ^ Page_ref.to_page_ref
+                      (Option.get (ent_title today_page))));
+          check "apply-template-today refs"
+            (List.map uuid_of (Ldb.ref_ents b "block/refs")
+             = [ uuid_of today_page ])
+      | None ->
+          check "apply-template-today inserted exists" false;
+          check "apply-template-today raw-title" false;
+          check "apply-template-today resolved title" false;
+          check "apply-template-today refs" false)
+   with e ->
+     Db_tx.transact_pipeline_fn := Some (fun r -> r);
+     raise e);
+  Db_tx.transact_pipeline_fn := Some (fun r -> r)
+
+(* ---------- apply-template-tomorrow-dynamic-variable-creates-missing-journal-ref-test
+   Same :template-blocks derivation note as the today variant. ---------- *)
+let test_apply_template_tomorrow_dynamic_variable_creates_missing_journal_ref_test
+    () =
+  let today = ms_to_journal_day (Date_time_util.time_ms ()) in
+  let tomorrow =
+    ms_to_journal_day (Int64.add (Date_time_util.time_ms ()) 86_400_000L)
+  in
+  let journal_title_format = "yyyy-MM-dd" in
+  let expected_tomorrow_title =
+    Ldb.journal_title_of_day tomorrow journal_title_format
+  in
+  let expected_tomorrow_name = default_journal_page_name tomorrow in
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some today }
+            ; blocks = [ { default_block with b_title = Some "target block" } ] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Templates" }
+            ; blocks =
+                [ { default_block with
+                    b_title = Some "template root"
+                  ; b_children =
+                      [ { default_block with
+                          b_title = Some "date <% tomorrow %>" } ] } ] } ]
+      ()
+  in
+  let template_root =
+    Option.get
+      (Db_test_util.find_block_by_content (db_of conn) "template root")
+  in
+  let target_block =
+    Option.get
+      (Db_test_util.find_block_by_content (db_of conn) "target block")
+  in
+  Db_tx.transact_pipeline_fn := Some (fun r -> Worker_pipeline.transact_pipeline r);
+  (try
+     ignore
+       (transact conn
+          [ Add
+              ( Ident "logseq.class/Journal"
+              , "logseq.property.journal/title-format"
+              , String journal_title_format ) ]);
+     check "apply-template-tomorrow journal absent"
+       (Db_test_util.find_journal_by_journal_day (db_of conn) tomorrow
+        = None);
+     ignore
+       (Outliner_op.apply_ops conn
+          (Wire.List
+             [ Wire.List
+                 [ Wire.Keyword "apply-template"
+                 ; Wire.List
+                     [ Wire.Uuid (uuid_of template_root)
+                     ; Wire.Uuid (uuid_of target_block)
+                     ; Wire.Map [] ] ] ])
+          (Wire.Map []));
+     (match
+        Db_test_util.find_journal_by_journal_day (db_of conn) tomorrow
+      with
+      | Some tomorrow_page ->
+          check "apply-template-tomorrow journal title"
+            (ent_title tomorrow_page = Some expected_tomorrow_title);
+          check "apply-template-tomorrow journal name"
+            (Ldb.string_value tomorrow_page "block/name"
+             = Some expected_tomorrow_name);
+          let expected_raw =
+            "date " ^ Page_ref.to_page_ref (uuid_of tomorrow_page)
+          in
+          (match
+             Db_test_util.find_block_by_content (db_of conn) expected_raw
+           with
+           | Some b ->
+               check "apply-template-tomorrow inserted exists" true;
+               check "apply-template-tomorrow raw-title"
+                 (raw_block_title (db_of conn) (Some b) = Some expected_raw);
+               check "apply-template-tomorrow resolved title"
+                 (ent_title b
+                  = Some
+                      ("date "
+                       ^ Page_ref.to_page_ref
+                           (Option.get (ent_title tomorrow_page))));
+               check "apply-template-tomorrow refs"
+                 (List.map uuid_of (Ldb.ref_ents b "block/refs")
+                  = [ uuid_of tomorrow_page ])
+           | None ->
+               check "apply-template-tomorrow inserted exists" false;
+               check "apply-template-tomorrow raw-title" false;
+               check "apply-template-tomorrow resolved title" false;
+               check "apply-template-tomorrow refs" false)
+      | None -> check "apply-template-tomorrow journal title" false)
+   with e ->
+     Db_tx.transact_pipeline_fn := Some (fun r -> r);
+     raise e);
+  Db_tx.transact_pipeline_fn := Some (fun r -> r)
+
 (* ---------- built-in-tag-must-not-convert-page-child-block-to-class-test ---- *)
-let () =
+let test_built_in_tag_must_not_convert_page_child_block_to_class_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1215,7 +1482,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- tag-template-insertion-resolves-dynamic-variable-test ---- *)
-let () =
+let test_tag_template_insertion_resolves_dynamic_variable_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1283,7 +1550,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- tag-template-insertion-creates-missing-journal-ref-test ---- *)
-let () =
+let test_tag_template_insertion_creates_missing_journal_ref_test () =
   let today = ms_to_journal_day (Date_time_util.time_ms ()) in
   let tomorrow =
     ms_to_journal_day (Int64.add (Date_time_util.time_ms ()) 86_400_000L)
@@ -1378,7 +1645,7 @@ let () =
 (* ---------- tag-template-journal-ref-survives-cli-upsert-property-history-tx-test
    cljs uses outliner-op/apply-ops! with :insert-blocks + :batch-set-property;
    OCaml runs the same three txs: insert-blocks, status property, tags. ---- *)
-let () =
+let test_tag_template_journal_ref_survives_cli_upsert_property_history_tx_test () =
   let today = ms_to_journal_day (Date_time_util.time_ms ()) in
   let tomorrow =
     ms_to_journal_day (Int64.add (Date_time_util.time_ms ()) 86_400_000L)
@@ -1477,7 +1744,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- import-tx-skips-property-history-recording-test ---- *)
-let () =
+let test_import_tx_skips_property_history_recording_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1517,7 +1784,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- empty-tag-template-on-asset-allows-asset-create-test ---- *)
-let () =
+let test_empty_tag_template_on_asset_allows_asset_create_test () =
   let mk_conn template_children =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1628,7 +1895,7 @@ let () =
 (* ---------- journal-tag-template-applied-on-repeating-task-reschedule-test
    cljs pins t/now to 2026-09-20 12:00; OCaml uses the real clock, so the
    expected next day is computed as today + recur-frequency (6 days). ---- *)
-let () =
+let test_journal_tag_template_applied_on_repeating_task_reschedule_test () =
   let scheduled_ms = Date_time_util.time_ms () in
   let expected_next_day =
     ms_to_journal_day (Int64.add scheduled_ms (Int64.of_int (6 * 86_400_000)))
@@ -1744,7 +2011,7 @@ let () =
 (* ---------- interleaved-graphs-reuse-their-own-reference-attrs-test
    cljs counts d/datoms scans via with-redefs; no OCaml equivalent — the
    observable cache-correctness outcome is asserted. ---- *)
-let () =
+let test_interleaved_graphs_reuse_their_own_reference_attrs_test () =
   let conns =
     List.map
       (fun title ->
@@ -1786,7 +2053,7 @@ let () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 (* ---------- ordinary-transactions-reuse-cached-reference-attrs-test ---- *)
-let () =
+let test_ordinary_transactions_reuse_cached_reference_attrs_test () =
   let conn =
     Db_test_util.create_pipeline_conn_with_blocks
       ~pages_and_blocks:
@@ -1820,10 +2087,37 @@ let () =
      raise e);
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
-let () =
-  if !failures > 0 then begin
-    Printf.eprintf "%d translated pipeline test assertion(s) failed\n"
-      !failures;
-    exit 1
-  end
-  else Printf.printf "test_pipeline_native: all assertions passed\n"
+
+let cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "nested-insert-keeps-parent-revision-test" `Quick test_nested_insert_keeps_parent_revision_test;
+    Alcotest.test_case "top-level-insert-keeps-page-revision-test" `Quick test_top_level_insert_keeps_page_revision_test;
+    Alcotest.test_case "referenced-entity-content-change-invalidates-owning-block-test" `Quick test_referenced_entity_content_change_invalidates_owning_block_test;
+    Alcotest.test_case "referenced-entity-timestamp-change-does-not-revise-rendered-blocks-test" `Quick test_referenced_entity_timestamp_change_does_not_revise_rendered_blocks_test;
+    Alcotest.test_case "property-assignment-revises-block-only-test" `Quick test_property_assignment_revises_block_only_test;
+    Alcotest.test_case "collapsed-state-revises-parent-test" `Quick test_collapsed_state_revises_parent_test;
+    Alcotest.test_case "direct-page-update-revises-page-test" `Quick test_direct_page_update_revises_page_test;
+    Alcotest.test_case "direct-child-visibility-keeps-its-membership-owner-revision-test" `Quick test_direct_child_visibility_keeps_its_membership_owner_revision_test;
+    Alcotest.test_case "temp-inner-mutations-enter-the-pipeline-once-at-the-final-live-commit-test" `Quick test_temp_inner_mutations_enter_the_pipeline_once_at_the_final_live_commit_test;
+    Alcotest.test_case "test-built-in-page-updates-that-should-be-reverted" `Quick test_test_built_in_page_updates_that_should_be_reverted;
+    Alcotest.test_case "ensure-query-property-on-tag-additions-test" `Quick test_ensure_query_property_on_tag_additions_test;
+    Alcotest.test_case "ensure-comments-blocks-property-on-tag-additions-test" `Quick test_ensure_comments_blocks_property_on_tag_additions_test;
+    Alcotest.test_case "imported-data-rebuilds-block-refs-in-the-formal-pipeline-test" `Quick test_imported_data_rebuilds_block_refs_in_the_formal_pipeline_test;
+    Alcotest.test_case "permanent-delete-recycled-page-with-transact-pipeline-test" `Quick test_permanent_delete_recycled_page_with_transact_pipeline_test;
+    Alcotest.test_case "recycle-ops-return-apply-result-test" `Quick test_recycle_ops_return_apply_result_test;
+    Alcotest.test_case "permanent-delete-recycled-page-removes-blocks-parented-by-page-test" `Quick test_permanent_delete_recycled_page_removes_blocks_parented_by_page_test;
+    Alcotest.test_case "permanent-delete-recycled-block-with-transact-pipeline-test" `Quick test_permanent_delete_recycled_block_with_transact_pipeline_test;
+    Alcotest.test_case "code-block-tag-addition-preserves-explicit-code-lang-test" `Quick test_code_block_tag_addition_preserves_explicit_code_lang_test;
+    Alcotest.test_case "journal-name-title-updates-throw-in-transact-pipeline-test" `Quick test_journal_name_title_updates_throw_in_transact_pipeline_test;
+    Alcotest.test_case "legacy-journal-reference-does-not-update-protected-attributes-test" `Quick test_legacy_journal_reference_does_not_update_protected_attributes_test;
+    Alcotest.test_case "create-journal-page-name-uses-default-formatter-test" `Quick test_create_journal_page_name_uses_default_formatter_test;
+    Alcotest.test_case "apply-template-today-dynamic-variable-persists-journal-ref-test" `Quick test_apply_template_today_dynamic_variable_persists_journal_ref_test;
+    Alcotest.test_case "apply-template-tomorrow-dynamic-variable-creates-missing-journal-ref-test" `Quick test_apply_template_tomorrow_dynamic_variable_creates_missing_journal_ref_test;
+    Alcotest.test_case "built-in-tag-must-not-convert-page-child-block-to-class-test" `Quick test_built_in_tag_must_not_convert_page_child_block_to_class_test;
+    Alcotest.test_case "tag-template-insertion-resolves-dynamic-variable-test" `Quick test_tag_template_insertion_resolves_dynamic_variable_test;
+    Alcotest.test_case "tag-template-insertion-creates-missing-journal-ref-test" `Quick test_tag_template_insertion_creates_missing_journal_ref_test;
+    Alcotest.test_case "tag-template-journal-ref-survives-cli-upsert-property-history-tx-test" `Quick test_tag_template_journal_ref_survives_cli_upsert_property_history_tx_test;
+    Alcotest.test_case "import-tx-skips-property-history-recording-test" `Quick test_import_tx_skips_property_history_recording_test;
+    Alcotest.test_case "empty-tag-template-on-asset-allows-asset-create-test" `Quick test_empty_tag_template_on_asset_allows_asset_create_test;
+    Alcotest.test_case "journal-tag-template-applied-on-repeating-task-reschedule-test" `Quick test_journal_tag_template_applied_on_repeating_task_reschedule_test;
+    Alcotest.test_case "interleaved-graphs-reuse-their-own-reference-attrs-test" `Quick test_interleaved_graphs_reuse_their_own_reference_attrs_test;
+    Alcotest.test_case "ordinary-transactions-reuse-cached-reference-attrs-test" `Quick test_ordinary_transactions_reuse_cached_reference_attrs_test ]

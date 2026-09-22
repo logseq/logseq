@@ -2960,4 +2960,5 @@ let () =
     ; "misc-publish", Test_misc_native.publish_cases
     ; "misc-state", Test_misc_native.state_cases
     ; "misc-worker-util", Test_misc_native.worker_util_cases
-    ; "render-resource", Test_render_resource_native.cases ]
+    ; "render-resource", Test_render_resource_native.cases
+    ; "pipeline", Test_pipeline_native.cases ]
