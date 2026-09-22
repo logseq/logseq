@@ -329,34 +329,64 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = []) (conn : conn)
      unlisten temp key;
      raise e)
 
-(* ldb/batch-transact! — batch on the real conn, deferring store + validate
-   until the final commit. Not nestable. *)
+(* ldb/batch-transact! — batch on the real conn: inner transacts run
+   with :skip-store?/:batch-tx-report? tx-meta, then the aggregated
+   tx-data commits once via a synthesized report. apply_report is the
+   conn's install+store-tail+notify path — the same epilogue cljs
+   performs manually with d/store + tail bookkeeping + run-callbacks.
+   On error cljs does a plain reset! back to db-before (silent, no
+   store, no callbacks); an empty-tx-data apply_report restores the db
+   and listeners all skip empty reports — the closest public
+   equivalent. Not nestable. *)
 exception Batch_tx_nested
 
-let batch_transact ?(tx_meta : tx_meta = []) (conn : conn)
-    (f : conn -> unit) : tx_report option =
+let batch_transact ?(tx_meta : tx_meta = [])
+    ?(listen_db : (tx_report -> unit) option) (conn : conn)
+    (f : conn -> unit) : tx_report =
   let flags = flags_of conn in
+  let db_before = Conn.db conn in
   if flags.batch_tx then raise Batch_tx_nested;
-  let collected : datom list list ref = ref [] in
+  let collected : datom list ref = ref [] in
   let key =
     listen conn "batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ [ r.tx_data ])
+        collected := !collected @ r.tx_data;
+        match listen_db with
+        | Some l -> l r
+        | None -> ())
+  in
+  let cleanup () =
+    unlisten conn key;
+    flags.skip_store <- false;
+    flags.batch_tx <- false
   in
   flags.skip_store <- true;
   flags.batch_tx <- true;
-  (try
-     f conn;
-     flags.skip_store <- false;
-     flags.batch_tx <- false;
-     unlisten conn key;
-     let tx_data = List.concat !collected in
-     if tx_data = [] then None
-     else
-       Some
-         (transact ~tx_meta conn
-            (List.map (fun d -> Raw_datom d) tx_data))
-   with e ->
-     flags.skip_store <- false;
-     flags.batch_tx <- false;
-     unlisten conn key;
-     raise e)
+  let batch_error =
+    try f conn; None with e -> Some e
+  in
+  let batch_tx_data = !collected in
+  collected := [];
+  match batch_error with
+  | Some e ->
+      cleanup ();
+      (try
+         ignore
+           (commit_tx_report conn
+              { db_before = Conn.db conn
+              ; db_after = db_before
+              ; tx_meta
+              ; tx_data = []
+              ; tempids = [] })
+       with _ -> ());
+      raise e
+  | None ->
+      cleanup ();
+      let report =
+        { db_before
+        ; db_after = Conn.db conn
+        ; tx_meta = ("batch-final-tx-report?", Bool true) :: tx_meta
+        ; tx_data = batch_tx_data
+        ; tempids = [] }
+      in
+      if batch_tx_data <> [] then ignore (commit_tx_report conn report);
+      report
