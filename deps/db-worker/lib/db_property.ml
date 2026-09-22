@@ -637,10 +637,20 @@ let built_in_closed_values (ident : string) : (string * string) list =
   | None -> []
 
 (* db-property/properties over a live entity (entity_attrs gives
-   (attr * tx_value) pairs — filter by key only). *)
+   (attr * tx_value) pairs — filter by key only). cljs iterates (into {} e)
+   which only surfaces forward attrs, so reverse attrs (:ns/_name) are
+   excluded here too. *)
 let properties_of_entity (e : Datascript.entity)
     : (Datascript.attr * Datascript.tx_value) list =
-  List.filter (fun (k, _) -> property k) (Datascript.entity_attrs e)
+  List.filter
+    (fun (k, _) ->
+      let local =
+        match String.rindex_opt k '/' with
+        | Some i -> String.sub k (i + 1) (String.length k - i - 1)
+        | None -> k
+      in
+      local <> "" && local.[0] <> '_' && property k)
+    (Datascript.entity_attrs e)
 
 (* db-property/get-closed-property-values — same as
    property_closed_values but looked up by property ident. *)
