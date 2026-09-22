@@ -12,7 +12,7 @@
   db_worker_effect runtime_env clock date_time timers worker_log uuid_gen
   transit_codec sqlite ordered_kv file_sys http http_bytes web_socket crypto idb
   comlink storage_codec unicode regexp compression asset_store broadcast
-  json secret_store
+  vector_index embedding json secret_store
 
 (library
  (name logseq_db_worker_spec)
@@ -22,7 +22,6 @@
  (modules
   (:standard
    \ wire db_worker_effect runtime_env clock date_time timers worker_log uuid_gen
-  transit_codec sqlite ordered_kv file_sys http http_bytes web_socket crypto idb
   comlink storage_codec unicode regexp compression asset_store broadcast
-  json secret_store
+  vector_index embedding json secret_store
  (virtual_modules dispatcher worker_state graph_store worker_core))
