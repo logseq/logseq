@@ -103,10 +103,10 @@
 (defn- warm-miss
   [store slot-key slot]
   (let [warm (:warm store)
-        ;; LRUCache tracks usage order in :lru; peek is the eviction victim.
+        ;; Keyword lookup reads cached entries; the lru field holds eviction order.
         victim (when (and (>= (count warm) warm-cache-size)
                           (not (cache/has? warm slot-key)))
-                 (first (peek (:lru warm))))
+                 (first (peek (.-lru ^cache/LRUCache warm))))
         store (update store :warm cache/miss slot-key slot)]
     (if victim
       (reindex-slot store victim (cache/lookup warm victim) nil)
