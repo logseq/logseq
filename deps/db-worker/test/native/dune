@@ -5,6 +5,7 @@
   logseq_db_worker
   logseq_db_worker_platform_native
   datascript_ocaml
+  alcotest
   unix))
 
 (rule

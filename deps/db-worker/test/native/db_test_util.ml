@@ -338,12 +338,61 @@ let schema () = Datascript.schema_of_edn_string schema_edn
    :logseq.property/classes values, and the logseq.property* idents used as
    values (journal title-format) or whose :db/valueType makes their attrs
    ref-typed in datascript. *)
+(* cljs build-new-property gives every property entity :db/index true and
+   :db/valueType :db.type/ref for ref-typed properties — mirrored on the
+   property idents below so :avet lookups work like the cljs conn. *)
 let initial_data_edn =
   "[{:db/ident :logseq.class/Root}
-    {:db/ident :logseq.class/Page}
-    {:db/ident :logseq.class/Tag}
-    {:db/ident :logseq.class/Property}
-    {:db/ident :logseq.class/Journal}
+    ;; cljs build-initial-classes gives every class entity a :block/title
+    ;; (name of its ident) and :block/tags #{:logseq.class/Tag} — needed
+    ;; so ref->val resolves class refs and tag-membership queries behave
+    ;; like cljs.
+    ;; NOTE: datascript-ocaml resolves idents only against entities
+    ;; already applied in the tx, so :logseq.class/Tag must precede every
+    ;; class that tags itself with it. cljs also self-tags Tag; omitted
+    ;; here because the ident cannot resolve inside its own entity map.
+    {:db/ident :logseq.class/Tag :block/title \"Tag\"}
+    {:db/ident :logseq.class/Page :block/title \"Page\" :block/tags #{:logseq.class/Tag}}
+    {:db/ident :logseq.class/Property :block/title \"Property\" :block/tags #{:logseq.class/Tag}}
+    {:db/ident :logseq.class/Journal :block/title \"Journal\" :block/tags #{:logseq.class/Tag}}
+    {:db/ident :logseq.class/Task
+     :block/title \"Task\" :block/name \"task\"
+     :block/uuid #uuid \"00000000-0000-4000-8000-000000000101\"
+     :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}}
+    {:db/ident :logseq.class/Card
+     :block/title \"Card\" :block/name \"card\"
+     :block/uuid #uuid \"00000000-0000-4000-8000-000000000102\"
+     :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}}
+    ;; cljs build-bootstrap-property for :logseq.property/background-color
+    ;; (built-in?, Property tag) — the validate tests resolve its title.
+    {:db/ident :logseq.property/background-color
+     :block/title \"Background color\" :block/name \"background color\"
+     :block/uuid #uuid \"00000000-0000-4000-8000-000000000103\"
+     :block/tags #{:logseq.class/Property}
+     :logseq.property/type :default
+     :logseq.property/hide? true
+     :logseq.property/built-in? true
+     :db/index true
+     :db/cardinality :db.cardinality/one}
+    ;; cljs build-bootstrap-property tags every built-in property entity
+    ;; :logseq.class/Property; :block/tags is the public? one that
+    ;; has-property/property rules return for every tagged node. Its
+    ;; db/* datoms must be present because datascript recomputes the attr
+    ;; schema from the ident entity's own datoms.
+    ;; NOTE: cljs also sets :logseq.property/public? true here. The OCaml
+    ;; fixture omits it so the rules' public check takes the `missing?`
+    ;; branch — Avet literal-Bool lookups return no rows in
+    ;; datascript-ocaml (reported bug), so the `public? true` clause can
+    ;; never match. The asserted results are the same either way.
+    {:db/ident :block/tags
+     :block/tags #{:logseq.class/Property}
+     :logseq.property/type :class
+     :block/title \"Tags\"
+     :db/index true
+     :db/cardinality :db.cardinality/many
+     :db/valueType :db.type/ref}
     {:db/ident :logseq.property}
     {:db/ident :logseq.property/public? :db/index true}
     {:db/ident :logseq.property/default-value :db/index true}
@@ -351,25 +400,51 @@ let initial_data_edn =
     {:db/ident :logseq.property/cardinality :db/index true}
     {:db/ident :logseq.property/type :db/index true}
     {:db/ident :logseq.property/hide? :db/index true}
+    {:db/ident :logseq.property/built-in? :db/index true}
     {:db/ident :logseq.property/description :db/index true
      :block/tags #{:logseq.class/Property}
      :logseq.property/type :default}
-    {:db/ident :logseq.property.class/enable-bidirectional?}
-    {:db/ident :logseq.property.class/bidirectional-property-title}
-    {:db/ident :logseq.property.journal/title-format}
-    {:db/ident :logseq.property/classes :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :logseq.property.class/properties :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :logseq.property.class/extends :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :logseq.property/created-from-property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
-    {:db/ident :logseq.property/closed-values :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :logseq.property/value :db/cardinality :db.cardinality/one}
+    {:db/ident :logseq.property.class/enable-bidirectional? :db/index true}
+    {:db/ident :logseq.property.class/bidirectional-property-title :db/index true}
+    {:db/ident :logseq.property.journal/title-format :db/index true}
+    {:db/ident :logseq.property/status :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property/classes :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    {:db/ident :logseq.property.class/properties :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    {:db/ident :logseq.property.class/extends :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    ;; cljs (sqlite-util/kv :logseq.kv/db-type 'db') — marks the graph as
+    ;; db-based so Db_tx routes through the transact pipeline like the
+    ;; cljs create-conn.
+    {:db/ident :logseq.kv/db-type :kv/value \"db\"}
+    {:db/ident :logseq.property/created-from-property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property/closed-values :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true}
+    {:db/ident :logseq.property/value :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.history/block :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.history/property :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.history/ref-value :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.history/scalar-value :db/index true}
+    {:db/ident :logseq.property.reaction/target :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.reaction/emoji-id :db/index true}
+    {:db/ident :logseq.property/view-for :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true}
+    {:db/ident :logseq.property.view/type :db/index true}
+    {:db/ident :logseq.property.view/feature-type :db/index true}
     {:db/ident :block/alias :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    {:db/ident :block/tags :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}]"
+    {:db/ident :block/tags :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    {:db/ident :logseq.class/Status}
+    ;; cljs build-recycle-page — the built-in Recycle page every graph gets.
+    {:block/uuid #uuid \"00000004-1514-5003-0003-000000000000\"
+     :block/name \"recycle\" :block/title \"Recycle\"
+     :block/tags [:logseq.class/Page]
+     :logseq.property/hide? true :logseq.property/built-in? true}]"
 
 let create_conn () : conn =
   let conn = Datascript.create_conn ~schema:(schema ()) () in
   ignore (Datascript.transact_conn_string conn initial_data_edn);
   conn
+
+(* cljs (d/create-conn db-schema/schema) — schema only, no initial data.
+   Used by the worker thread-api tests which seed their own entities. *)
+let create_conn_bare () : conn =
+  Datascript.create_conn ~schema:(schema ()) ()
 
 (* ---------- build input decls (OCaml-friendly mirrors of the EDN maps) ---------- *)
 
@@ -1109,14 +1184,29 @@ let build_page_tx ~(page : (string * edn) list) ~(all_idents : string StringMap.
       (List.map (fun i -> Map [ "db/ident", Kw i ]) tag_idents
        @ if add_page_tag then [ Kw "logseq.class/Page" ] else [])
   in
-  let page' = dissoc' page [ "build/tags"; "build/properties"; "build/keep-uuid?" ] in
+  (* cljs build-pages-and-blocks-tx: the default page map carries
+     :block/tags #{:logseq.class/Page}; a journal page's expand-journal
+     :block/tags #{:logseq.class/Journal} (or an explicit page attr) wins
+     over the default. *)
+  let page' =
+    match get' (dissoc' page [ "build/tags"; "build/properties"; "build/keep-uuid?" ]) "block/tags" with
+    | Some _ -> dissoc' page [ "build/tags"; "build/properties"; "build/keep-uuid?" ]
+    | None ->
+        assoc'
+          (dissoc' page [ "build/tags"; "build/properties"; "build/keep-uuid?" ])
+          "block/tags" (Set_ [ Kw "logseq.class/Page" ])
+  in
   let final =
     merge' page'
       (timestamps ()
        @ (match properties @ List.map (fun e -> e.pv_key, e.pv_ref) pvalue_entries with
           | [] -> []
           | props -> block_properties props page_uuids all_idents ~translate_values)
-       @ [ "block/tags", tags_value ])
+       @ (* cljs build-page-tx emits :block/tags only when :build/tags is
+            present *)
+         (match tag_idents with
+          | [] -> []
+          | _ -> [ "block/tags", tags_value ]))
   in
   List.concat_map (fun e -> e.pv_txs) pvalue_entries @ [ final ]
 
