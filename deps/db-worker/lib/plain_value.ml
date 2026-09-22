@@ -319,10 +319,8 @@ let entity_forward_map ?(properties : attr list option)
     | None -> Ldb.value e "block/name"
   in
   let list_type = order_list_type e in
-  let datoms =
-    List.of_seq (datoms db Eavt ~e:e.id ())
-    |> List.filter (fun (d : datom) -> keep d.a)
-  in
+  let all_datoms = List.of_seq (datoms db Eavt ~e:e.id ()) in
+  let datoms = List.filter (fun (d : datom) -> keep d.a) all_datoms in
   let m =
     List.fold_left
       (fun acc (d : datom) ->
@@ -338,8 +336,10 @@ let entity_forward_map ?(properties : attr list option)
   in
   let m =
     if include_derived then
+      (* cljs computes own-property-keys over all of the entity's datoms,
+         not the properties/exclude-attrs filtered `datoms` binding. *)
       let own_property_keys =
-        datoms
+        all_datoms
         |> List.map (fun (d : datom) -> d.a)
         |> List.sort_uniq compare
         |> List.filter db_property_pred
