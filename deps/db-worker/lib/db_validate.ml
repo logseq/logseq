@@ -20,7 +20,15 @@ let explain_db ~closed ctx (ents : value) : Malli.error list =
   Malli.explain ctx (schema_for ~closed) ents
 
 let map_value_of_ent_map (m : ent_map) : value =
-  Map (List.map (fun (a, v) -> (Keyword a, v)) m)
+  (* cljs stores :logseq.property/type datoms as keywords; the OCaml db
+     convention keeps them as String, so normalize back here *)
+  Map
+    (List.map
+       (fun (a, v) ->
+         match a, v with
+         | "logseq.property/type", String s -> Keyword a, Keyword s
+         | _ -> Keyword a, v)
+       m)
 
 type tx_entity_error =
   { entity_map : value (* :entity-map — Map value *)
