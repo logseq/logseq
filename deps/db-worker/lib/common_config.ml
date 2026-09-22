@@ -35,9 +35,9 @@ let db_version_prefix = "logseq_db_"
 (* cljs common-config/strip-leading-db-version-prefix: trim, strip
    exactly one leading db prefix, trim again. *)
 let strip_leading_db_version_prefix s =
-  let trimmed = String.trim s in
+  let trimmed = Unicode.trim s in
   let n = String.length db_version_prefix in
-  String.trim
+  Unicode.trim
     (if
        String.length trimmed >= n
        && String.sub trimmed 0 n = db_version_prefix
@@ -84,7 +84,9 @@ let local_relative_asset (s : string) : bool =
 let local_protocol_asset (s : string) : bool =
   Common_util.str_starts_with s asset_protocol
 
-let protocol_path (s : string) : bool = Common_path.protocol_url s
+(* config/protocol-path? — (new js/URL s) parses; .-protocol is set on
+   every parsed URL. Not path/protocol-url?'s 2+-char loose check. *)
+let protocol_path (s : string) : bool = Ns_util.url_parses s
 
 let remove_asset_protocol (s : string) : string =
   if local_protocol_asset s then

@@ -7,29 +7,12 @@ open Datascript
 
 (* ---------- property/type.cljs ---------- *)
 
-(* db-property-type/url? — approximation of (new js/URL s) parseability:
-   any <scheme>:<rest> where scheme is [A-Za-z][A-Za-z0-9+.-]* parses
-   successfully under the WHATWG URL spec. *)
-let url (s : string) : bool =
-  let is_scheme_start c =
-    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-  in
-  let is_scheme_char c =
-    is_scheme_start c || (c >= '0' && c <= '9')
-    || c = '+' || c = '-' || c = '.'
-  in
-  let n = String.length s in
-  n > 0 && is_scheme_start s.[0]
-  && begin
-       let rec go i =
-         i < n && (s.[i] = ':' || (is_scheme_char s.[i] && go (i + 1)))
-       in
-       go 1
-     end
+(* db-property-type/url? — (new js/URL s) parseability *)
+let url (s : string) : bool = Ns_util.url_parses s
 
 (* common-util/macro? (db-property-type/macro-url?) *)
 let macro_url (s : string) : bool =
-  let t = String.trim s in
+  let t = Unicode.trim s in
   String.length t >= 4 && String.sub t 0 2 = "{{"
   && String.sub t (String.length t - 2) 2 = "}}"
 
@@ -81,7 +64,7 @@ let url_entity db v =
   | Some ent ->
       (match Ldb.string_value ent "block/title" with
        | Some title ->
-           String.trim title = "" || url title || macro_url title
+           Unicode.trim title = "" || url title || macro_url title
        | None -> false)
   | None -> false
 
@@ -704,9 +687,9 @@ let validate_property_value_aux_value db ~new_closed_value (property : entity)
     (value : value) ~(many : bool) : string option =
   validate_property_value_aux db ~new_closed_value property value ~many
 
-(* fail-parse-double *)
+(* fail-parse-double — cljs parse-double = js/parseFloat *)
 let fail_parse_double (v_str : string) : float =
-  match float_of_string_opt v_str with
+  match Common_util.parse_float v_str with
   | Some f -> f
   | None ->
       raise
@@ -1239,7 +1222,7 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
       v
   | _ when property_type = "page" ->
       (match v with
-       | Wire.String s when String.trim s <> "" ->
+       | Wire.String s when Unicode.trim s <> "" ->
            (match Ldb.get_page db (String s) with
             | Some page when Ldb.is_page page -> Wire.Int page.id
             | _ ->
@@ -1260,7 +1243,8 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
       let v' =
         match v with
         | Wire.String s when number_property ->
-            (match float_of_string_opt s with
+            (* cljs (parse-double v) = js/parseFloat — NaN -> nil *)
+            (match Common_util.parse_float s with
              | Some f -> Wire.Float f
              | None -> Wire.Nil)
         | _ -> v
@@ -2094,7 +2078,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
   in
   let icon' =
     match icon with
-    | Wire.String s when String.trim s = "" -> Wire.Nil
+    | Wire.String s when Unicode.trim s = "" -> Wire.Nil
     | _ -> icon
   in
   let prop_type =
@@ -2208,7 +2192,7 @@ let upsert_closed_value conn (property_id : string)
   (match ent_property_type property with
    | Some t when List.mem t Db_schema.closed_value_property_types ->
        let value' =
-         match value with Wire.String s -> Wire.String (String.trim s) | _ -> value
+         match value with Wire.String s -> Wire.String (Unicode.trim s) | _ -> value
        in
        let resolved_value = convert_property_input_string None property value' in
        let validate_message =
@@ -2292,7 +2276,7 @@ let upsert_closed_value conn (property_id : string)
               (fun conn ->
                  Db_transact.transact conn tx_data [] |> ignore;
                  match description with
-                 | Some desc when String.trim desc <> "" ->
+                 | Some desc when Unicode.trim desc <> "" ->
                      let existing_desc =
                        match id with
                        | Some u ->
@@ -2340,7 +2324,7 @@ let add_existing_values_to_closed_values conn (property_id : string)
   let db = Datascript.db conn in
   match entity db (Ident property_id) with
   | Some property ->
-      let values' = List.filter (fun s -> String.trim s <> "") values in
+      let values' = List.filter (fun s -> Unicode.trim s <> "") values in
       (match values' with
        | [] -> ()
        | _ ->
