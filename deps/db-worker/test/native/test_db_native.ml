@@ -15,14 +15,6 @@
    cljs deftest names are kept as OCaml test names.
 
    Skipped cljs cases (unported dependency):
-   - sort-page-random-blocks (2 cases): ldb/sort-page-random-blocks not
-     ported
-   - test-batch-transact!: cljs asserts db validation throws on
-     class->property conversion; the OCaml port has no default
-     validate-tx-report wired (Db_tx.validate_tx_report_fn = None), so
-     the throw assertion has no counterpart
-   - batch-transact-with-temp-conn-before-commit-can-abort-live-commit:
-     Db_tx.batch_transact_with_temp_conn has no :before-commit opt arg
    - batch-transact-without-pages-date-* /
      test-batch-transact-clears-stale-tx-tail-*: batch-transact! storage
      tail internals are not ported
@@ -543,6 +535,131 @@ let test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test () 
   let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
   check "batch-transact-with-temp-conn-preserves-cardinality-one-schema"
     (Ldb.string_value e "block/order" = Some "a1")
+
+(* (deftest test-batch-transact! ...)
+   cljs asserts db validation throws on class->property conversion;
+   validation is wired by Worker_core.init (validate-tx-report ->
+   Db_validate.validate_tx_report). The batch form then succeeds because
+   the retract cancels the bad datom before the final commit. *)
+let test_batch_transact_ () =
+  let conn = Db_test_util.create_conn () in
+  let class_to_property_tx =
+    [ Entity
+        { db_id = None
+        ; attrs =
+            [ "db/ident", One_value (Keyword "logseq.class/Task")
+            ; "block/tags",
+              One_value (Ref_to (Ident "logseq.class/Property")) ] } ]
+  in
+  (match Db_tx.transact conn class_to_property_tx with
+   | _ -> check "test-batch-transact! rejects class->property" false
+   | exception _ -> ());
+  let prop_eid = (ident_ent_exn (db_of conn) "logseq.class/Property").id in
+  ignore
+    (Db_tx.batch_transact_with_temp_conn conn (fun temp ->
+       ignore (Db_tx.transact temp class_to_property_tx);
+       ignore
+         (Db_tx.transact temp
+            [ Retract
+                (Ident "logseq.class/Task", "block/tags",
+                 Some (Ref prop_eid)) ])))
+(* (deftest batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test
+   ...) — before-commit runs after the temp work and before the live conn
+   is modified; throwing aborts the commit *)
+let test_batch_transact_with_temp_conn_before_commit () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks = [ { default_block with b_title = Some "old" } ] } ]
+      ()
+  in
+  let block =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "old")
+  in
+  let block_id = block.id in
+  let uuid = uuid_of block in
+  let module Abort = struct exception Abort_before_commit end in
+  (try
+     ignore
+       (Db_tx.batch_transact_with_temp_conn conn
+          ~before_commit:(fun () ->
+            raise Abort.Abort_before_commit)
+          (fun temp ->
+            ignore
+              (Db_tx.transact temp
+                 [ Add
+                     (Lookup_ref ("block/uuid", Uuid uuid), "block/title",
+                      String "new") ])));
+     check "batch-transact before-commit abort throws" false
+   with Abort.Abort_before_commit -> ());
+  let e = ent_of_ref_exn (db_of conn) (Entity_id block_id) in
+  check "batch-transact before-commit leaves live conn"
+    (Ldb.string_value e "block/title" = Some "old")
+
+(* (deftest sort-page-random-blocks ...) — two cljs testings *)
+let test_sort_page_random_blocks () =
+  (* non-consecutive blocks are sorted in page preorder *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks =
+                [ { default_block with b_title = Some "b1";
+                    b_children =
+                      [ { default_block with b_title = Some "b1-1" };
+                        { default_block with b_title = Some "b1-2" } ] };
+                  { default_block with b_title = Some "b2" };
+                  { default_block with b_title = Some "b3";
+                    b_children =
+                      [ { default_block with b_title = Some "b3-1" } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let pick title =
+    Option.get (Db_test_util.find_block_by_content db title)
+  in
+  let shuffled =
+    [ pick "b3-1"; pick "b2"; pick "b1-2"; pick "b1" ]
+  in
+  let sorted_titles =
+    List.map (fun e -> Ldb.string_value e "block/title")
+      (Ldb.sort_page_random_blocks db shuffled)
+  in
+  check "sort-page-random-blocks preorder"
+    (sorted_titles = [ Some "b1"; Some "b1-2"; Some "b2"; Some "b3-1" ])
+
+(* cljs bounds ldb/sort-by-order calls by the picked count; the OCaml port
+   sorts by ancestor :block/order paths instead, so the bound is on entity
+   lookups (Ldb.entity_lookups) — it must not traverse the whole page. *)
+let test_sort_page_random_blocks_bounded_traversal () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page 1" };
+              blocks =
+                List.init 2000 (fun i ->
+                    { default_block with
+                      b_title = Some (Printf.sprintf "b%d" i) }) } ]
+      ()
+  in
+  let db = db_of conn in
+  let pick title =
+    Option.get (Db_test_util.find_block_by_content db title)
+  in
+  let picks = [ pick "b7"; pick "b1000"; pick "b1999" ] in
+  Ldb.entity_lookups := 0;
+  let sorted_titles =
+    List.map (fun e -> Ldb.string_value e "block/title")
+      (Ldb.sort_page_random_blocks db picks)
+  in
+  check "sort-page-random-blocks bounded order"
+    (sorted_titles = [ Some "b7"; Some "b1000"; Some "b1999" ]);
+  check "sort-page-random-blocks bounded lookups"
+    (!Ldb.entity_lookups <= 10)
 
 (* (deftest validated-transact-retries-when-live-conn-changes-before-commit-test
    ...) *)
@@ -2936,6 +3053,10 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "pull-returns-entity-data" `Quick test_pull_returns_entity_data;
     Alcotest.test_case "batch-transact-with-temp-conn-preserves-retracts-test" `Quick test_batch_transact_with_temp_conn_preserves_retracts_test;
     Alcotest.test_case "batch-transact-with-temp-conn-preserves-cardinality-one-schema-test" `Quick test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test;
+    Alcotest.test_case "test-batch-transact!" `Quick test_batch_transact_;
+    Alcotest.test_case "sort-page-random-blocks" `Quick test_sort_page_random_blocks;
+    Alcotest.test_case "sort-page-random-blocks-bounded-traversal" `Quick test_sort_page_random_blocks_bounded_traversal;
+    Alcotest.test_case "batch-transact-with-temp-conn-before-commit-can-abort-live-commit" `Quick test_batch_transact_with_temp_conn_before_commit;
     Alcotest.test_case "validated-transact-retries-when-live-conn-changes-before-commit-test" `Quick test_validated_transact_retries_when_live_conn_changes_before_commit_test;
     Alcotest.test_case "fix-db-transact-runs-pipeline-without-recursive-validation-test" `Quick test_fix_db_transact_runs_pipeline_without_recursive_validation_test;
     Alcotest.test_case "transact-new-graph-refs-skips-pipeline-test" `Quick test_transact_new_graph_refs_skips_pipeline_test;
