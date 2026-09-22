@@ -419,14 +419,42 @@ let tx_item_block_uuid (db : db) (v : Wire.t) : string option =
       | None -> None)
   | _ -> None
 
-let tx_item_entity (item : Wire.t) : Wire.t = item_nth item 1
+(* cljs tx items may be (d/datom ...) records: [e a v tx] with added =
+   (pos? tx). On the wire they arrive as #datascript/Datom tagged values,
+   and after the wire->value->wire sanitize round-trip as
+   [datascript/Datom [e a v tx]] vectors *)
+let datom_item_parts (item : Wire.t) : (Wire.t * Wire.t * int) option =
+  let rep =
+    match item with
+    | Wire.Tagged ("datascript/Datom", rep) -> Some rep
+    | Wire.Array [ Wire.Symbol "datascript/Datom"; rep ]
+    | Wire.List [ Wire.Symbol "datascript/Datom"; rep ] -> Some rep
+    | _ -> None
+  in
+  match rep with
+  | Some (Wire.Array [ e; a; _; Wire.Int tx ])
+  | Some (Wire.List [ e; a; _; Wire.Int tx ]) -> Some (e, a, tx)
+  | _ -> None
 
-let tx_item_attr (item : Wire.t) : Wire.t = item_nth item 2
+let tx_item_entity (item : Wire.t) : Wire.t =
+  match datom_item_parts item with
+  | Some (e, _, _) -> e
+  | None -> item_nth item 1
 
-let tx_item_add (item : Wire.t) : bool = item_nth item 0 = kw "db/add"
+let tx_item_attr (item : Wire.t) : Wire.t =
+  match datom_item_parts item with
+  | Some (_, a, _) -> a
+  | None -> item_nth item 2
+
+let tx_item_add (item : Wire.t) : bool =
+  match datom_item_parts item with
+  | Some (_, _, tx) -> tx > 0
+  | None -> item_nth item 0 = kw "db/add"
 
 let tx_item_retract (item : Wire.t) : bool =
-  item_nth item 0 = kw "db/retract"
+  match datom_item_parts item with
+  | Some (_, _, tx) -> tx <= 0
+  | None -> item_nth item 0 = kw "db/retract"
 
 let block_uuid_lookup_ref_value (v : Wire.t) : string option =
   match v with
