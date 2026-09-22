@@ -435,3 +435,66 @@ let serializable_db_of_transit (t : Wire.t) : serializable_db =
     serializable_datoms = datoms;
     serializable_max_eid = 0;
     serializable_max_tx = 0 }
+
+(* tx ops back to cljs tx-data forms — the *result* of insert-blocks /
+   apply-template carries the transacted entries, not the tx_report. *)
+
+let rec transit_of_tx_entity (e : tx_entity) : Wire.t =
+  let attrs =
+    List.map
+      (fun (a, v) -> (Wire.Keyword a, transit_of_tx_value v))
+      e.attrs
+  in
+  let head =
+    match e.db_id with
+    | Some r -> [ (Wire.Keyword "db/id", transit_of_entity_ref r) ]
+    | None -> []
+  in
+  Wire.Map (head @ attrs)
+
+and transit_of_tx_value (v : tx_value) : Wire.t =
+  match v with
+  | One_value v -> transit_of_value v
+  | Many_values vs -> Wire.Set (List.map transit_of_value vs)
+  | One_entity e -> transit_of_tx_entity e
+  | Many_entities es -> Wire.Array (List.map transit_of_tx_entity es)
+
+let transit_of_tx_op (op : tx_op) : Wire.t =
+  let kw_ s = Wire.Keyword s in
+  match op with
+  | Add (e, a, v) ->
+      Wire.Array
+        [ kw_ "db/add"; transit_of_entity_ref e; kw_ a; transit_of_value v ]
+  | Retract (e, a, Some v) ->
+      Wire.Array
+        [ kw_ "db/retract"; transit_of_entity_ref e; kw_ a; transit_of_value v ]
+  | Retract (e, a, None) | RetractAttr (e, a) ->
+      Wire.Array [ kw_ "db/retract"; transit_of_entity_ref e; kw_ a ]
+  | RetractEntity e ->
+      Wire.Array [ kw_ "db/retractEntity"; transit_of_entity_ref e ]
+  | CompareAndSet (e, a, old_v, new_v) ->
+      Wire.Array
+        [ kw_ "db/cas"; transit_of_entity_ref e; kw_ a
+        ; (match old_v with Some v -> transit_of_value v | None -> Wire.Nil)
+        ; transit_of_value new_v ]
+  | Entity e -> transit_of_tx_entity e
+  | Raw_datom d ->
+      Wire.Array
+        [ (if d.added then kw_ "db/add" else kw_ "db/retract")
+        ; Wire.Int d.e; kw_ d.a; transit_of_value d.v ]
+  | InstallTxFn (ident, _) ->
+      (* cljs form is [fn-ref & args]; the OCaml closure has no wire rep *)
+      Wire.Array [ transit_of_entity_ref ident ]
+  | CallIdent (ident, args) ->
+      Wire.Array
+        (transit_of_entity_ref ident :: List.map transit_of_value args)
+  | Call _ -> Wire.Nil
+
+let transit_of_tx_meta (meta : tx_meta) : Wire.t =
+  Wire.Map
+    (List.map (fun (a, v) -> (Wire.Keyword a, transit_of_value v)) meta)
+
+let transit_of_tx_result (tx_data : tx_op list) (tx_meta : tx_meta) : Wire.t =
+  Wire.Map
+    [ (Wire.Keyword "tx-data", Wire.Array (List.map transit_of_tx_op tx_data))
+    ; (Wire.Keyword "tx-meta", transit_of_tx_meta tx_meta) ]

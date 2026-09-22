@@ -152,7 +152,11 @@ let apply_insert_blocks_op conn result_ref (blocks : Wire.t list)
         Outliner_core.insert_blocks_conn conn blocks target_bm
           (insert_opts_of opts) (block_map_of_wire opts)
       in
-      result_ref := Option.map (fun _ -> Wire.Nil) r
+      result_ref :=
+        Option.map
+          (fun (r : Outliner_core.tx_result) ->
+            Ds_wire.transit_of_tx_result r.tx_data r.tx_meta)
+          r
 
 (* template-children-blocks *)
 let template_children_blocks (db : db) (template_id : Wire.t)
@@ -245,7 +249,11 @@ let apply_template_op conn result_ref (template_id : Wire.t)
              Outliner_core.insert_blocks_conn conn blocks
                (Block_map.of_entity target) opts' opts_entry
            in
-           result_ref := Option.map (fun _ -> Wire.Nil) r)
+           result_ref :=
+             Option.map
+               (fun (r : Outliner_core.tx_result) ->
+                 Ds_wire.transit_of_tx_result r.tx_data r.tx_meta)
+               r)
 
 (* resolve-indent-outdent-opts — resolves :parent-original uuid to
    entity; missing parent throws *)
