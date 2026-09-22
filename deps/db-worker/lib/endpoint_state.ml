@@ -163,27 +163,8 @@ let () =
                    ])
               trimmed)))
 
-(* :thread-api/set-db-sync-config [config] — strip auth keys. *)
-let db_sync_auth_keys =
-  [ "auth-token"; "oauth-token-url"; "oauth-domain"; "oauth-client-id" ]
-
-let () =
-  Dispatcher.register "thread-api/set-db-sync-config" (fun args ->
-      (match args with
-       | (Wire.Map kvs) :: _ ->
-           Worker_state.set_db_sync_config
-             (Wire.Map
-                (List.filter
-                   (fun (k, _) ->
-                     not (List.mem (Ds_wire.wire_key k) db_sync_auth_keys))
-                   kvs))
-       | _ -> ());
-      pure' Wire.nil)
-
-(* :thread-api/get-db-sync-config [] *)
-let () =
-  Dispatcher.register "thread-api/get-db-sync-config" (fun _ ->
-      pure' (Worker_state.db_sync_config ()))
+(* :thread-api/get|set-db-sync-config — registered once in
+   endpoint_sync.ml (sanitized via Sync_state.non_auth_db_sync_config). *)
 
 (* :thread-api/undo-redo-* — undo_redo.ml state machine *)
 let repo_arg_u args =
