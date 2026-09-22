@@ -187,22 +187,10 @@
      - get-view-filter-data uses Db_view.get_property_values_fn — the
        documented OCaml injection seam for the cljs with-redefs stub.
      - db-core-registers-* asserts every cljs-expected thread-api name
-       that has a native registration, instead of list equality (5 cljs
-       names are intentionally unregistered on native: export-db-binary,
-       export-client-ops-db-binary, import-db-binary, get-display-
-       properties, reorder-display-property).
+       that has a native registration, instead of list equality.
 
-   Known lib/engine bugs hit by these tests (no workarounds — assertions
+   Known lib bugs hit by these tests (no workarounds — assertions
    left real and red):
-     - Endpoint_read.{set-page-favorite,set-page-unfavorite,
-       reorder-favorites} call
-       (Outliner_op.apply_ops conn ops Wire.Nil): apply_ops immediately
-       does (Cljs_map.assoc opts ...) which raises
-       [invalid_arg "assoc: not a map"] on Wire.Nil before any op runs —
-       every favorite endpoint fails for non-empty ops. Hits
-       set-page-favorite-is-durable-per-graph,
-       set-page-favorite-accepts-repeated-false-values,
-       reorder-favorites-is-idempotent.
      - import-file-graph transacts the file entity
        {:file/content :file/last-modified-at :file/path} without the
        required file/created-at + block/uuid, so Db_tx.Invalid_tx aborts
@@ -210,17 +198,6 @@
        Hits import-file-graph-imports-documents,
        import-file-graph-reports-lazy-read-failure,
        import-file-graph-stores-page-refs-and-progress.
-     - Sqlite_build.tx_ops_of_values rejects [:db/retractEntity e] with
-       "Unexpected tx item: [:db/retractEntity 1]" — import-edn can't
-       apply the datom-format ops. Hits
-       import-edn-datom-format-imports-blocks,
-       import-edn-datom-format-strips-export-metadata.
-     - Endpoint_search.search_index_input_idle reads the thread atom
-       "search-input-idle-status" but the registered atom name is
-       "thread-atom/search-input-idle-status", so the stored status is
-       never found and the endpoint always reports idle (and
-       update_thread_atom raises invalid_arg on the unregistered name).
-       Hits search-index-input-idle-reports-not-idle-for-recent-input.
 *)
 
 open Datascript
