@@ -25,6 +25,13 @@ let init () =
     ignore Endpoint_view.get_view_data;
     ignore Endpoint_validate.validate_db_endpoint;
     ignore Endpoint_validate.recompute_checksum_diagnostics;
+    ignore Endpoint_export.export_get_debug_datoms;
+    ignore Endpoint_export.export_get_all_page_content;
+    ignore Endpoint_export.export_get_blocks_data;
+    ignore Endpoint_export.export_blocks_as_format;
+    ignore Endpoint_export.export_edn_endpoint;
+    ignore Endpoint_export.import_edn_endpoint;
+    ignore Endpoint_export.build_publishing_html;
     (* cljs db.cljs *transact-fn validate hook + db-core
        notify-invalid-data callback *)
     Db_tx.validate_tx_report_fn
