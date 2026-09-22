@@ -42,7 +42,20 @@ let opt_bool opts name ~default =
   | _ -> default
 
 let entity_of_arg db (v : Wire.t) : entity option =
-  try entity db (Ds_wire.entity_ref_of_transit v) with _ -> None
+  (* cljs accepts entity, eid, lookup-ref, ident — and plain {:db/id n} maps *)
+  match v with
+  | Wire.Map _ ->
+      (match Wire.get "db/id" v with
+       | Some (Wire.Int id) -> Ldb.ent_of_id db id
+       | Some (Wire.Int64 id) -> Ldb.ent_of_id db (Int64.to_int id)
+       | _ -> None)
+  | Wire.Tagged ("datascript/Entity", m) ->
+      (match Wire.get "db/id" m with
+       | Some (Wire.Int id) -> Ldb.ent_of_id db id
+       | Some (Wire.Int64 id) -> Ldb.ent_of_id db (Int64.to_int id)
+       | _ -> None)
+  | _ ->
+      (try entity db (Ds_wire.entity_ref_of_transit v) with _ -> None)
 
 let eid_of_arg db (v : Wire.t) : entity_id option =
   match v with
@@ -343,13 +356,61 @@ let get_property_values_of_option db (property_ident : string) (option : Wire.t)
   in
   Wire.Array (Db_view.get_property_values db property_ident ~view_id ~query_entity_ids)
 
+(* cljs property-node-selector-* read `property` as either an entity or a
+   plain map {:db/ident :logseq.property/type :db/valueType
+   :logseq.property/classes} — read the fields uniformly. *)
+type prop_view =
+  { pv_ident : string
+  ; pv_type : string option
+  ; pv_value_type : string option
+  ; pv_classes : entity list }
+
+let string_of_keyword_wire (v : Wire.t option) : string option =
+  match v with
+  | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+  | _ -> None
+
+let prop_view_of_entity (e : entity) : prop_view =
+  { pv_ident = ident_of e
+  ; pv_type =
+      (match Ldb.value e "logseq.property/type" with
+       | Some (Keyword k) -> Some k
+       | _ -> None)
+  ; pv_value_type =
+      (match Ldb.value e "db/valueType" with
+       | Some (Keyword k) -> Some k
+       | _ -> None)
+  ; pv_classes = Ldb.ref_ents e "logseq.property/classes" }
+
+let prop_view_of_arg db (v : Wire.t) : prop_view option =
+  match entity_of_arg db v with
+  | Some e -> Some (prop_view_of_entity e)
+  | None ->
+      (match v with
+       | Wire.Map _ ->
+           (match string_of_keyword_wire (Wire.get "db/ident" v) with
+            | Some ident ->
+                Some
+                  { pv_ident = ident
+                  ; pv_type =
+                      string_of_keyword_wire
+                        (Wire.get "logseq.property/type" v)
+                  ; pv_value_type =
+                      string_of_keyword_wire (Wire.get "db/valueType" v)
+                  ; pv_classes =
+                      (match Wire.get "logseq.property/classes" v with
+                       | Some cs ->
+                           List.filter_map (entity_of_arg db) (Wire.as_seq cs)
+                       | None -> []) }
+            | None -> None)
+       | _ -> None)
+
 (* handler property-node-selector-values *)
-let property_node_selector_values db (property : entity) (option : Wire.t)
+let property_node_selector_values db (property : prop_view) (option : Wire.t)
     : Wire.t =
-  let ident = ident_of property in
-  let values = get_property_values_of_option db ident option in
-  match Ldb.value property "db/valueType" with
-  | Some (Keyword "db.type/ref") ->
+  let values = get_property_values_of_option db property.pv_ident option in
+  match property.pv_value_type with
+  | Some "db.type/ref" ->
       (match values with
        | Wire.Array choices ->
            Wire.Array
@@ -384,18 +445,18 @@ let property_node_selector_values db (property : entity) (option : Wire.t)
   | _ -> values
 
 (* handler broad-scoped-node-property? *)
-let broad_scoped_node_property (property : entity) (classes : entity list) :
-    bool =
-  Ldb.value property "logseq.property/type" = Some (Keyword "node")
+let broad_scoped_node_property (property : prop_view) (classes : entity list)
+    : bool =
+  property.pv_type = Some "node"
   && List.exists
        (fun (c : entity) -> Ldb.ident_of c = Some "logseq.class/Page")
        classes
 
 (* handler property-node-selector-initial-choices *)
-let property_node_selector_initial_choices db (property : entity)
+let property_node_selector_initial_choices db (property : prop_view)
     (non_root_classes : entity list) (option : Wire.t) : Wire.t =
-  match Ldb.value property "logseq.property/type" with
-  | Some (Keyword "property") -> Wire.nil
+  match property.pv_type with
+  | Some "property" -> Wire.nil
   | _ ->
       if non_root_classes <> [] then
         if broad_scoped_node_property property non_root_classes then
@@ -421,9 +482,7 @@ let property_node_selector_initial_choices db (property : entity)
 (* handler property-node-selector-data *)
 let property_node_selector_data db (option : Wire.t) : Wire.t =
   let property =
-    match Wire.get "property" option with
-    | Some p -> entity_of_arg db p
-    | None -> None
+    Option.bind (Wire.get "property" option) (prop_view_of_arg db)
   in
   let block =
     match Wire.get "block" option with
@@ -433,7 +492,7 @@ let property_node_selector_data db (option : Wire.t) : Wire.t =
   match property with
   | None -> Wire.nil
   | Some property ->
-      let property_ident = ident_of property in
+      let property_ident = property.pv_ident in
       let all_classes =
         get_all_class_entities db ~except_root_class:false
           ~except_private_tags:false ~except_extends_hidden_tags:false
@@ -448,10 +507,8 @@ let property_node_selector_data db (option : Wire.t) : Wire.t =
         get_all_classes_maps db ~except_root_class:false
           ~except_private_tags:true ~except_extends_hidden_tags:true
       in
-      let classes = Ldb.ref_ents property "logseq.property/classes" in
-      let class_pred =
-        Ldb.value property "logseq.property/type" = Some (Keyword "class")
-      in
+      let classes = property.pv_classes in
+      let class_pred = property.pv_type = Some "class" in
       let tag_class =
         List.find_opt
           (fun (c : entity) -> Ldb.ident_of c = Some "logseq.class/Tag")
