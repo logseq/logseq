@@ -2963,4 +2963,5 @@ let () =
     ; "render-resource", Test_render_resource_native.cases
     ; "pipeline", Test_pipeline_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
-    ; "graph-view", Test_graph_view_native.cases ]
+    ; "graph-view", Test_graph_view_native.cases
+    ; "db-core", Test_db_core_native.cases ]
