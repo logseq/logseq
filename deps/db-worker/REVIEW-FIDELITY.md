@@ -208,7 +208,7 @@ section-C items.
 ## Confirmed & fixed
 
 1. **Stale ws event can kill a live reconnect — high** — commit
-   `aea704e1f0`.
+   `c1d78e3110`.
    - cljs: `client.cljs` calls `detach-ws-handlers!` before `.close()` in
      `stop-client!`, so a late Close event from the old socket never
      reaches `schedule-reconnect`.
@@ -222,7 +222,7 @@ section-C items.
      handlers capture the generation at install and ignore events from an
      older generation (`sync_client.ml`).
 2. **`sanitize_template_block` diverged on `uuid?`/truthiness — low** —
-   commit `6b8081dc91` (`sync_apply.ml` vs `apply_txs.cljs:1384-1400`).
+   commit `e903eed815` (`sync_apply.ml` vs `apply_txs.cljs:1384-1400`).
    - cljs reads `(or (:block/uuid m) ...)` — any truthy value wins raw;
      `uuid?` is only checked when assoc'ing back, so a non-uuid
      `:block/uuid` (string, number) stays verbatim in the output block.
@@ -239,26 +239,26 @@ section-C items.
      instead of cljs `when` truthiness (`block/uuid` = `false`/`nil`
      wrongly counted as present).
 3. **Missing/nil `:t` tolerated where cljs fail-fasts — low** — commit
-   `d53ccb4838` (`sync_handle_message.ml`).
+   `511891c532` (`sync_handle_message.ml`).
    - `tx/batch/ok` and `changed` skipped `require_non_negative` on nil
      `:t`; cljs `(require-non-negative remote-tx)` is unconditional.
    - `pull/ok` evaluated `remote_tx_n = 0` and silently skipped the body;
      cljs `(> remote-tx local-tx)` throws on nil before the branch.
 4. **`format_ws_url` replaced only the first `%s` — low** — commit
-   `21807b7838` (`sync_transport.ml` vs `transport.cljs:15`).
+   `191f3dd426` (`sync_transport.ml` vs `transport.cljs:15`).
    cljs `string/replace` replaces every occurrence.
-5. **`transact-failed` logging absent — low** — commit `4adac1cd2f`
+5. **`transact-failed` logging absent — low** — commit `d4a4723e97`
    (`db_tx.ml` vs `db.cljs:185-190`). cljs `transact-sync` logs
    `transact-failed` with tx-meta + error on the catch path, gated by
    `db-sync/suppress-transact-failed-log?` and the stale-rebase
    `entity-id/missing` suppression; rethrows. OCaml propagated silently.
 6. **`errors_humanized` dropped on the error path — low** — commit
-   `c0c27242ac` (`worker_core.ml` vs `db_core.cljs:1078-1091`).
+   `986f183308` (`worker_core.ml` vs `db_core.cljs:1078-1091`).
    `notify-invalid-data` serializes `{:entity-map, :errors}`; the adapter
    sent only `entity-map`, so `:capture-error` consumers lose the
    humanized errors.
 7. **`sort_uniq` vs cljs `distinct` ordering — low** — commits
-   `6b8081dc91` + `d0e7b1ef37` (`sync_apply.ml`,
+   `e903eed815` + `99a18b8d2e` (`sync_apply.ml`,
    `sync_large_title.ml:245,254`). cljs `distinct` keeps first-occurrence
    order at `apply_txs.cljs:1209,1214` and `large_title.cljs:171,178`;
    `sort_uniq` re-sorted. Now `Sync_state.distinct_by Fun.id`.
@@ -327,12 +327,14 @@ section-C items.
 
 ### P2-D. Engine pin drift — operational
 - `datascript-ocaml` was pinned at upstream `main`; upstream `c215a55`
-  widened `Instant` to `int64`, breaking `ds_wire.ml`. Re-pinned all
-  three packages to `#1013dcf` (newest commit with `Instant of int` AND
-  `apply_report`). Recommend the blueprint/maintenance pin to a sha.
-- `test_db_native.exe test` baseline: 29 failures / 187, identical
-  before and after this pass (translated-suite baseline at pin
-  `#1013dcf`, engine-side, not introduced by these changes).
+  widened `Instant` to `int64`, breaking `ds_wire.ml` mid-session.
+  Concurrent commit `debca7ea5e` ported the lib to `int64`, so the
+  packages are now pinned at `#ee483e6` (upstream HEAD with `int64`
+  Instant AND `apply_report`). Recommend the blueprint/maintenance pin
+  to a sha rather than a moving branch.
+- `test_db_native.exe test` baseline: 23 failures / 187 at pin
+  `#ee483e6` (29 at `#1013dcf`), a strict subset of the pre-pass
+  baseline — engine-side failures, none introduced by these changes.
 
 ## Verified faithful (pass 2 spot-checks, no divergence)
 - `handle_pull_ok` e2ee envelope: `graph_e2ee` → `ensure_graph_aes_key`
