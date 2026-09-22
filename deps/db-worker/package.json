@@ -4,5 +4,8 @@
   "description": "npm dependencies for running melange-emitted node tests (see test/dune).",
   "dependencies": {
     "transit-js": "^0.8.874"
+  },
+  "scripts": {
+    "build": "dune build && webpack -c webpack.config.js"
   }
 }
