@@ -6,9 +6,10 @@
      args, all-pages / single-page / root-blocks branches).
    - get_debug_datoms: cljs `get-debug-datoms` — datoms with url values and
      sensitive title/name values scrubbed.
-   - export-blocks-as-format is NOT ported: its :markdown path depends on the
-     npm mldoc lib (gp-mldoc/->db-edn), which only exists for JS targets.
-     Endpoint_export registers a fail-fast handler for it.
+   - export_blocks_as_format: cljs `export-blocks-as-format` — ->db-edn via
+     Gp_mldoc.to_db_edn, then the handler.export text pipeline
+     (Export_common_impl / Export_text_impl) for :markdown; other formats
+     raise (cljs unsupported-format throw).
 
    init() wiring: none — called by Endpoint_export. *)
 
@@ -210,3 +211,116 @@ let get_debug_datoms (conn : conn) : datom list =
                    else Some d
                | None -> Some d)
            | _ -> Some d))
+
+(* cljs worker/export.cljs content->ast — ->db-edn output with pos
+   stripped and Properties asts removed. *)
+let content_to_ast ~(content : string) : Export_common_impl.block_ast list =
+  if String.trim content = "" then []
+  else
+    Gp_mldoc.to_db_edn ~content ~format:"markdown"
+    |> Clj_value.coll_items
+    |> List.map Export_common_impl.remove_block_ast_pos
+    |> List.filter (fun a -> not (Export_common_impl.properties_block_ast a))
+
+(* cljs block-ast — single block rendered at init-level 1 then parsed. *)
+let block_ast_resolver db ~(ctx : Export_file.context) (block_uuid : string)
+    : Export_common_impl.block_ast list =
+  match List.nth_opt (Ldb.get_block_and_children db block_uuid) 0 with
+  | None -> []
+  | Some root ->
+      let content =
+        Export_file.tree_to_file_content db root
+          ~opts:{ Export_file.default_tree_opts with init_level = Some 1 }
+          ~ctx
+      in
+      content_to_ast ~content
+
+(* cljs block-children-content — follows :block/link, renders the whole
+   subtree (open-blocks-only drops collapsed descendants). *)
+let block_children_ast_resolver db ~(ctx : Export_file.context)
+    (block_uuid : string) : Export_common_impl.block_ast list =
+  match List.nth_opt (Ldb.get_block_and_children db block_uuid) 0 with
+  | None -> []
+  | Some block ->
+      let link = Ldb.ref_ent block "block/link" in
+      let root = match link with Some l -> l | None -> block in
+      (match Ldb.value root "block/uuid" with
+       | Some (Uuid u) ->
+           let content =
+             Export_file.block_to_content db ~block_uuid:u
+               ~opts:
+                 { Export_file.default_tree_opts with
+                   init_level = Some 1
+                 ; link = link <> None }
+               ~ctx
+           in
+           content_to_ast ~content
+       | _ -> [])
+
+(* cljs page-ast — page's children content. *)
+let page_ast_resolver db ~(ctx : Export_file.context) (page_name : string)
+    : Export_common_impl.block_ast list =
+  match Ldb.get_page db (String page_name) with
+  | None -> []
+  | Some page ->
+      (match Ldb.value page "block/uuid" with
+       | Some (Uuid u) ->
+           let content =
+             Export_file.block_to_content db ~block_uuid:u
+               ~opts:Export_file.default_tree_opts ~ctx
+           in
+           content_to_ast ~content
+       | _ -> [])
+
+(* cljs export-blocks-as-format — :markdown -> export-text/export-helper;
+   anything else throws the same ex-info. *)
+let export_blocks_as_format (db : db) (root_block_uuids_or_page_uuid : value)
+    (format_type : value) (options_v : value) (content_config_v : value)
+    : string =
+  let remove_options =
+    List.filter_map
+      (function Keyword k -> Some k | String k -> Some k | _ -> None)
+      (Clj_value.coll_items (Clj_value.map_get options_v "remove-options"))
+  in
+  let include_properties = not (List.mem "property" remove_options) in
+  let open_blocks_only =
+    Clj_value.truthy
+      (Clj_value.get_in options_v [ "other-options"; "open-blocks-only" ])
+  in
+  let opts_v =
+    Map
+      [ Keyword "open-blocks-only?", Bool open_blocks_only
+      ; Keyword "include-properties?", Bool include_properties ]
+  in
+  let export_data =
+    get_blocks_export_data db root_block_uuids_or_page_uuid opts_v
+      content_config_v
+  in
+  let content = Clj_value.map_get export_data "content" in
+  let format_v = Clj_value.map_get export_data "format" in
+  let ctx = context_of_value content_config_v in
+  let resolvers : Export_common_impl.resolvers =
+    { block_ast = block_ast_resolver db ~ctx
+    ; block_children_ast = block_children_ast_resolver db ~ctx
+    ; page_ast = page_ast_resolver db ~ctx }
+  in
+  (match format_type with
+   | Keyword "markdown" ->
+       Export_text_impl.export_helper ~resolvers
+         ~content:(match content with String s -> s | _ -> "")
+         ~format:
+           (match format_v with
+            | Keyword f -> f
+            | String f -> f
+            | _ -> "markdown")
+         ~options:options_v
+   | _ ->
+       raise
+         (Dispatcher.Exn_info
+            ( "Unsupported worker export format"
+            , [ ( Wire.Keyword "format-type"
+                , Ds_wire.transit_of_value format_type )
+              ; ( Wire.Keyword "message"
+                , Wire.String
+                    "Use :thread-api/export-get-blocks-data and format outside \
+                     the DB worker." ) ] )))

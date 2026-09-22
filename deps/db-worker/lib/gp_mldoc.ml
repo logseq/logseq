@@ -472,6 +472,21 @@ let get_default_config ~repo:_ ~format : string = default_config format
 let to_edn_format ~(content : string) ~(format : string) : value =
   to_edn ~content:(String content) ~config:(default_config format)
 
+(* gp-mldoc/get-default-config for a DB-backed repo: default-config-map
+   plus the db-based? overrides enable_drawers/parse_marker/parse_priority
+   (mldoc.cljc get-default-config). *)
+let db_default_config (format : string) : string =
+  Json.stringify
+    (wire_obj
+       (default_config_map format
+        @ [ ("enable_drawers", Wire.Bool false)
+          ; ("parse_marker", Wire.Bool false)
+          ; ("parse_priority", Wire.Bool false) ]))
+
+(* gp-mldoc/->db-edn — ->edn with the db-based default config. *)
+let to_db_edn ~(content : string) ~(format : string) : value =
+  to_edn ~content:(String content) ~config:(db_default_config format)
+
 (* mldoc/inline->edn *)
 let inline_to_edn (text : string) (config : string) : value list =
   try

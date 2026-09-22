@@ -277,3 +277,70 @@ let get_max_order db : string option =
   match Seq.uncons (Datascript.rseek_datoms db Avet ~a:"block/order" ()) with
   | Some (d, _) -> (match d.Datascript.v with String s -> Some s | _ -> None)
   | None -> None
+
+open Datascript
+
+(* :block/order of an entity (absent attr is nil, like cljs). *)
+let order_of (e : entity) : string option =
+  match Ldb.value e "block/order" with
+  | Some (String s) -> Some s
+  | _ -> None
+
+(* cljs compare on nil|string: nil sorts before any string. *)
+let compare_order (a : string option) (b : string option) : int =
+  match a, b with
+  | None, None -> 0
+  | None, Some _ -> -1
+  | Some _, None -> 1
+  | Some x, Some y -> String.compare x y
+
+(* entities tagged :logseq.class/Property, sorted by :block/order. *)
+let property_entities (db : db) : entity list =
+  match Datascript.entity db (Ident "logseq.class/Property") with
+  | None -> []
+  | Some property_class ->
+      Datascript.datoms db Avet ~a:"block/tags" ~v:(Ref property_class.id) ()
+      |> List.of_seq
+      |> List.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
+      |> List.stable_sort (fun a b -> compare_order (order_of a) (order_of b))
+
+(* db-order/get-prev-order — nearest :block/order below the value's.
+   [property] narrows the search to its :property/closed-values. *)
+let get_prev_order (db : db) (property : entity option) (value_id : entity_id)
+    : string option =
+  let value_order =
+    match Datascript.entity db (Entity_id value_id) with
+    | Some v -> order_of v
+    | None -> None
+  in
+  let pick (candidates : entity list) =
+    List.find_map
+      (fun (e : entity) ->
+        if compare_order (order_of e) value_order < 0 && e.id <> value_id
+        then order_of e
+        else None)
+      candidates
+  in
+  match property with
+  | Some property -> pick (List.rev (Ldb.ref_ents property "property/closed-values"))
+  | None -> pick (List.rev (property_entities db))
+
+(* db-order/get-next-order — nearest :block/order above the value's. *)
+let get_next_order (db : db) (property : entity option) (value_id : entity_id)
+    : string option =
+  let value_order =
+    match Datascript.entity db (Entity_id value_id) with
+    | Some v -> order_of v
+    | None -> None
+  in
+  let pick (candidates : entity list) =
+    List.find_map
+      (fun (e : entity) ->
+        if compare_order (order_of e) value_order > 0 && e.id <> value_id
+        then order_of e
+        else None)
+      candidates
+  in
+  match property with
+  | Some property -> pick (Ldb.ref_ents property "property/closed-values")
+  | None -> pick (property_entities db)

@@ -696,3 +696,45 @@ let get_property_schema (m : Block_map.t) : Block_map.t =
 (* property-type/all-ref-property-types *)
 let all_ref_property_types = Db_schema.all_ref_property_types
 
+
+(* db-property/normalize-sorted-entities-block-order — tx-data giving each
+   run of entities sharing one :block/order fresh gen-n-keys orders. *)
+let normalize_sorted_entities_block_order (sorted_entities : entity list)
+    : value list =
+  (* partition-by :block/order *)
+  let parts =
+    let order_key (e : entity) = Db_order.order_of e in
+    let rec group acc cur = function
+      | [] -> List.rev (match cur with [] -> acc | _ -> List.rev cur :: acc)
+      | x :: rest ->
+          (match cur with
+           | y :: _ when order_key y = order_key x -> group acc (x :: cur) rest
+           | _ -> group (List.rev cur :: acc) [ x ] rest)
+    in
+    match sorted_entities with
+    | [] -> []
+    | x :: rest -> group [] [ x ] rest
+  in
+  let _, tx_data =
+    List.fold_left
+      (fun (start_order, tx_data) ents ->
+        let n = List.length ents in
+        if n > 1 then
+          let orders =
+            Db_order.gen_n_keys n start_order
+              (Db_order.order_of (List.hd ents))
+          in
+          let tx_data' =
+            tx_data
+            @ List.map2
+                (fun order (ent : entity) ->
+                  Map
+                    [ kw "db/id", Int ent.id
+                    ; kw "block/order", String order ])
+                orders ents
+          in
+          (List.nth_opt orders (n - 1), tx_data')
+        else (Db_order.order_of (List.hd ents), tx_data))
+      (None, []) parts
+  in
+  tx_data

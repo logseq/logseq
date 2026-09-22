@@ -30,3 +30,12 @@ val backup : db -> dst_path:string -> unit
 val filename : db -> string
 (* True when opens go through named pools (browser OPFS). *)
 val pooled_runtime : unit -> bool
+
+(* Raw db-file ops used by the binary export/import endpoints (cljs
+   platform/{browser,node} storage :export-file/:import-db). On pooled
+   runtimes [name] selects the prepared OPFS pool and the ops go through
+   OpfsSAHPoolDb .exportFile/.importDb; elsewhere [path] resolves under
+   [dir] with a leading '/' stripped (cljs platform/node.cljs
+   pool-path). Binary payloads are byte strings. *)
+val export_file : name:string -> dir:string -> path:string -> string Db_worker_effect.t
+val import_db : name:string -> dir:string -> path:string -> string -> unit Db_worker_effect.t
