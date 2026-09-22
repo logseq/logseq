@@ -409,3 +409,13 @@ let build_new_class db ?(ident_namespace : string option) (page_m : Wire.t)
   in
   Sqlite_util.build_new_class
     (Cljs_map.assoc page_m "db/ident" (Wire.Keyword db_ident))
+
+(* db-class/logseq-class? — kw whose namespace is "logseq.class" *)
+let logseq_class_kw (kw : string) : bool =
+  match String.rindex_opt kw '/' with
+  | Some i -> String.sub kw 0 i = "logseq.class"
+  | None -> false
+
+(* db-class/user-class-namespace? — namespace string contains ".class" *)
+let user_class_namespace (s : string) : bool =
+  Ns_util.str_contains s ".class"

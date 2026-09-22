@@ -437,3 +437,20 @@ let replace_tag_refs_with_page_refs_maps (content : string)
          | _ -> content)
        content
        (sort_ref_maps tags))
+
+(* cljs get-matched-ids — distinct uuids captured by id-ref-pattern. *)
+let get_matched_ids (content : string) : string list =
+  let rec loop pos acc =
+    match Regexp.exec ~pos id_ref_re content with
+    | None -> List.rev acc
+    | Some m ->
+        let uuid =
+          match m.Regexp.groups.(1) with
+          | Some u -> u
+          | None -> ""
+        in
+        loop m.Regexp.last (uuid :: acc)
+  in
+  List.fold_left
+    (fun acc u -> if u <> "" && not (List.mem u acc) then acc @ [ u ] else acc)
+    [] (loop 0 [])
