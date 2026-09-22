@@ -2078,9 +2078,14 @@ let restore_recycled_page invoke_config repo page_uuid =
              |])))
 
 let pull_created_page invoke_config repo name create_result =
+  let result_value =
+    match Edn_util.get create_result "result" with
+    | Some value -> value
+    | None -> create_result
+  in
   let uuid_value =
     match
-      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
+      (Edn_util.as_vector result_value, Edn_util.as_list result_value)
     with
     | Some values, _ -> Vec.nth_opt values 1
     | _, Some values -> Vec.nth_opt values 1
