@@ -97,7 +97,12 @@ let create_import_rows_db repo : Sqlite.db Db_worker_effect.t =
   File_sys.exists path >>= fun exists ->
   (if exists then File_sys.remove path else Db_worker_effect.pure ())
   >>= fun () ->
-  let db = Sqlite.open_db ~path in
+  Sqlite.prepare_pool ~name:(Graph_dir.pool_name ("download-import-" ^ repo))
+  >>= fun () ->
+  let db =
+    Sqlite.open_db_pool ~name:(Graph_dir.pool_name ("download-import-" ^ repo))
+      ~path:(if Sqlite.pooled_runtime () then "/download-import.sqlite" else path)
+  in
   Graph_store.create_kvs_table db;
   Db_worker_effect.pure db
 
