@@ -1790,10 +1790,22 @@ let apply_history_action repo (tx_id : string) (undo : bool)
             ; kw "reason", kw "missing-history-action"
             ; kw "tx-id", Wire.String tx_id ]
       | Some (outliner_op, forward_ops, inverse_ops, tx, reversed_tx) ->
+          let action_wire =
+            Wire.Map
+              [ ( kw "outliner-op"
+                , match outliner_op with
+                    | Some o -> Ds_wire.transit_of_value o
+                    | None -> Nil )
+              ; kw "forward-outliner-ops", Wire.Array forward_ops
+              ; kw "inverse-outliner-ops", Wire.Array inverse_ops
+              ; kw "tx", tx
+              ; kw "reversed-tx", reversed_tx ]
+          in
           if outliner_op = Some (Keyword "fix") then
             Wire.Map
               [ kw "applied?", Wire.Bool false
-              ; kw "reason", kw "unsupported-history-action" ]
+              ; kw "reason", kw "unsupported-history-action"
+              ; kw "action", action_wire ]
           else
             let ops =
               (if undo then inverse_ops else forward_ops)
@@ -1852,7 +1864,8 @@ let apply_history_action repo (tx_id : string) (undo : bool)
              | [] ->
                  Wire.Map
                    [ kw "applied?", Wire.Bool false
-                   ; kw "reason", kw "unsupported-history-action" ]
+                   ; kw "reason", kw "unsupported-history-action"
+                   ; kw "action", action_wire ]
              | _ -> (
                  try
                    if ops <> [] then
@@ -1877,7 +1890,8 @@ let apply_history_action repo (tx_id : string) (undo : bool)
                        [ "repo", repo; "error", Printexc.to_string e ];
                    Wire.Map
                      [ kw "applied?", Wire.Bool false
-                     ; kw "reason", reason ])))
+                     ; kw "reason", reason
+                     ; kw "action", action_wire ])))
 
 let fix_tx (conn : conn) (tx_report : tx_report) (tx_meta : tx_meta) : unit =
   Db_sync_order.fix_duplicate_orders conn tx_report.tx_data tx_meta
