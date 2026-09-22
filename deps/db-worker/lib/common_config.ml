@@ -43,6 +43,26 @@ let strip_leading_db_version_prefix s =
        && String.sub trimmed 0 n = db_version_prefix
      then String.sub trimmed n (String.length trimmed - n)
      else trimmed)
+
+(* canonicalize-db-version-repo — trim, strip every leading db prefix
+   (trimming between rounds), re-prepend exactly one. *)
+let canonicalize_db_version_repo (s : string) : string option =
+  let trimmed = String.trim s in
+  if trimmed = "" then None
+  else
+    let n = String.length db_version_prefix in
+    let rec strip name =
+      if
+        String.length name >= n && String.sub name 0 n = db_version_prefix
+      then
+        strip
+          (String.trim
+             (String.sub name n (String.length name - n)))
+      else name
+    in
+    let stripped = strip trimmed in
+    if stripped = "" then None else Some (db_version_prefix ^ stripped)
+
 let file_version_prefix = "logseq_local_"
 let default_graphs_dir = "~/logseq/graphs"
 let local_assets_dir = "assets"

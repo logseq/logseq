@@ -206,7 +206,9 @@ module Fs_more = struct
   external realpathSync : string -> string = "realpathSync" [@@mel.module "fs"]
   external accessSync : string -> int -> unit = "accessSync" [@@mel.module "fs"]
   external statSync_obj : string -> Js.Json.t = "statSync" [@@mel.module "fs"]
+  external lstatSync_obj : string -> Js.Json.t = "lstatSync" [@@mel.module "fs"]
   external is_dir : Js.Json.t -> bool = "isDirectory" [@@mel.send]
+  external is_symbolic_link_obj : Js.Json.t -> bool = "isSymbolicLink" [@@mel.send]
   external fs_constants : Js.Json.t = "constants" [@@mel.scope "fs"]
   external const_int : Js.Json.t -> string -> int = "" [@@mel.get_index]
 end
@@ -257,4 +259,8 @@ let check_read_write path =
         (Fs_more.const_int c "R_OK" lor Fs_more.const_int c "W_OK"))
 
 let realpath path = wrap (fun () -> Fs_more.realpathSync path)
+
+let is_symbolic_link path =
+  if is_browser () then unsupported "isSymbolicLink"
+  else wrap (fun () -> Fs_more.is_symbolic_link_obj (Fs_more.lstatSync_obj path))
 

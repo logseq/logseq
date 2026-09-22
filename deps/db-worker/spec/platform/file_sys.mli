@@ -41,3 +41,6 @@ val check_read_write : string -> unit Db_worker_effect.t
 
 (* realpathSync — canonical path with symlinks resolved. *)
 val realpath : string -> string Db_worker_effect.t
+
+(* lstatSync().isSymbolicLink(). *)
+val is_symbolic_link : string -> bool Db_worker_effect.t
