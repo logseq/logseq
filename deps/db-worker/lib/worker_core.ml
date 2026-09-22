@@ -46,8 +46,15 @@ let init () =
            ( ok
            , List.map
                (fun (e : Db_validate.tx_entity_error) ->
+                 (* cljs {:entity-map m' :errors humanized} — the
+                    notify-invalid-data payload includes both *)
                  Ds_wire.edn_of_transit
-                   (Ds_wire.transit_of_value e.entity_map))
+                   (Ds_wire.transit_of_value
+                      (Datascript.Map
+                         [ ( Datascript.Keyword "entity-map"
+                           , e.entity_map )
+                         ; ( Datascript.Keyword "errors"
+                           , e.errors_humanized ) ])))
                errs ));
     Db_tx.transact_invalid_callback
     := Some Worker_db_validate.notify_invalid_data;
