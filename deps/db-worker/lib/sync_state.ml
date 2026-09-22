@@ -167,7 +167,7 @@ let online () : bool =
   match Runtime_env.kind () with
   | Runtime_env.Native -> true
   | _ ->
-      (match Worker_state.thread_atom "online-event" with
+      (match Worker_state.thread_atom "thread-atom/online-event" with
        | Some (Wire.Bool false) -> false
        | _ -> true)
 
