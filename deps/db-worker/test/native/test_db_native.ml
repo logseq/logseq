@@ -2938,4 +2938,12 @@ let () =
     ; "endpoint", endpoint_cases
     ; "common", Test_db_common_native.cases
     ; "frontend", Test_db_frontend_native.cases
-    ; "outliner", Test_outliner_native.cases ]
+    ; "outliner", Test_outliner_native.cases
+    ; "outliner-op", Test_outliner_native.op_cases
+    ; "outliner-page", Test_outliner_native.page_cases
+    ; "outliner-core", Test_outliner_native.core_cases
+    ; "outliner-copy-paste", Test_outliner_native.copy_paste_cases
+    ; "outliner-cut-paste-prop", Test_outliner_native.cut_paste_cases
+    ; "outliner-pipeline", Test_outliner_native.pipeline_cases
+    ; "outliner-tree", Test_outliner_native.tree_cases
+    ; "outliner-property", Test_outliner_native.property_cases ]

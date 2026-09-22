@@ -288,6 +288,7 @@ let built_in_property_type (k : string) : string option =
   | "logseq.property/public?" -> Some "checkbox"
   | "logseq.property/icon" -> Some "map"
   | "logseq.property/default-value" -> Some "entity"
+  | "logseq.property/query" -> Some "default"
   | _ -> None
 
 (* ---------- schema ---------- *)
@@ -342,19 +343,23 @@ let schema () = Datascript.schema_of_edn_string schema_edn
    :db/valueType :db.type/ref for ref-typed properties — mirrored on the
    property idents below so :avet lookups work like the cljs conn. *)
 let initial_data_edn =
-  "[{:db/ident :logseq.class/Root}
-    ;; cljs build-initial-classes gives every class entity a :block/title
-    ;; (name of its ident) and :block/tags #{:logseq.class/Tag} — needed
-    ;; so ref->val resolves class refs and tag-membership queries behave
-    ;; like cljs.
-    ;; NOTE: datascript-ocaml resolves idents only against entities
-    ;; already applied in the tx, so :logseq.class/Tag must precede every
-    ;; class that tags itself with it. cljs also self-tags Tag; omitted
-    ;; here because the ident cannot resolve inside its own entity map.
-    {:db/ident :logseq.class/Tag :block/title \"Tag\"}
-    {:db/ident :logseq.class/Page :block/title \"Page\" :block/tags #{:logseq.class/Tag}}
-    {:db/ident :logseq.class/Property :block/title \"Property\" :block/tags #{:logseq.class/Tag}}
-    {:db/ident :logseq.class/Journal :block/title \"Journal\" :block/tags #{:logseq.class/Tag}}
+  "[{:db/ident :logseq.class/Tag :block/title \"Tag\"}
+    ;; cljs build-new-class gives EVERY class entity (including Root and
+    ;; Tag itself) :block/tags #{:logseq.class/Tag}, plus a default
+    ;; :logseq.property.class/extends :logseq.class/Root for non-Root
+    ;; classes with no explicit extends (Journal's own extends is Page).
+    ;; datascript-ocaml resolves idents only against entities already
+    ;; applied in the tx, so :logseq.class/Tag precedes every class that
+    ;; tags itself with it, and Tag's self-tag is asserted by a second
+    ;; map below (the ident cannot resolve inside its own entity map).
+    {:db/ident :logseq.class/Root :block/title \"Root Tag\" :block/name \"root tag\"
+     :block/tags #{:logseq.class/Tag}}
+    {:db/ident :logseq.class/Page :block/title \"Page\" :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}}
+    {:db/ident :logseq.class/Property :block/title \"Property\" :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}}
+    {:db/ident :logseq.class/Journal :block/title \"Journal\" :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Page}}
     {:db/ident :logseq.class/Task
      :block/title \"Task\" :block/name \"task\"
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000101\"
@@ -406,7 +411,10 @@ let initial_data_edn =
      :logseq.property/type :default}
     {:db/ident :logseq.property.class/enable-bidirectional? :db/index true :logseq.property/type :checkbox}
     {:db/ident :logseq.property.class/bidirectional-property-title :db/index true :logseq.property/type :string}
-    {:db/ident :logseq.property.journal/title-format :db/index true :logseq.property/type :string}
+    ;; cljs built-in marks journal/title-format public? false (filtered
+    ;; out of positioned properties).
+    {:db/ident :logseq.property.journal/title-format :db/index true :logseq.property/type :string
+     :logseq.property/public? false}
     {:db/ident :logseq.property/status :db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true :logseq.property/type :default}
     {:db/ident :logseq.property/classes :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :entity}
     {:db/ident :logseq.property.class/properties :db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/index true :logseq.property/type :property}
@@ -430,13 +438,86 @@ let initial_data_edn =
     {:db/ident :block/alias :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     {:db/ident :block/tags :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     {:db/ident :logseq.class/Status}
+    ;; cljs built-ins exercised by the op/pipeline/property tests:
+    ;; order-list-type + used-template + query are default/node ref-typed
+    ;; (value blocks), created-by-ref is an entity ref, Query is the
+    ;; built-in class behind #Query pages.
+    {:db/ident :logseq.property/order-list-type :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/type :default :logseq.property/hide? true}
+    {:db/ident :logseq.property/created-by-ref :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/type :entity :logseq.property/hide? true}
+    {:db/ident :logseq.property/query :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/type :default :logseq.property/public? true
+     :logseq.property/hide? true}
+    {:db/ident :logseq.property/used-template :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/type :node :logseq.property/hide? true}
+    {:db/ident :logseq.class/Query :block/title \"Query\" :block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property.class/properties #{:logseq.property/query}}
+    ;; Tag's self-tag (cljs build-new-class tags every class entity, Tag
+    ;; included): a second map for the same ident upserts onto it, since
+    ;; the ident cannot resolve inside its own entity map above.
+    {:db/ident :logseq.class/Tag :block/tags #{:logseq.class/Tag}}
+    ;; cljs build-new-page + mark-block-as-built-in for
+    ;; built-in-pages-names (Library, Quick add, Contents); Quick add is
+    ;; also :logseq.property/hide? true in cljs.
+    {:block/uuid #uuid \"00000004-1031-2047-0034-000000000000\"
+     :block/name \"library\" :block/title \"Library\"
+     :block/tags #{:logseq.class/Page}
+     :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true}
+    {:block/uuid #uuid \"00000004-2007-8570-0009-000000000000\"
+     :block/name \"quick add\" :block/title \"Quick add\"
+     :block/tags #{:logseq.class/Page}
+     :block/created-at 0 :block/updated-at 0
+     :logseq.property/hide? true :logseq.property/built-in? true}
+    {:block/uuid #uuid \"00000004-1871-9210-0097-000000000000\"
+     :block/name \"contents\" :block/title \"Contents\"
+     :block/tags #{:logseq.class/Page}
+     :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true}
     ;; cljs build-recycle-page — the built-in Recycle page every graph gets.
     {:block/uuid #uuid \"00000004-1514-5003-0003-000000000000\"
      :block/name \"recycle\" :block/title \"Recycle\"
      :block/tags [:logseq.class/Page]
      :block/created-at 0 :block/updated-at 0
-     :logseq.property/hide? true :logseq.property/built-in? true}]"
+     :logseq.property/hide? true :logseq.property/built-in? true}
+    ;; cljs build-db-initial-data's empty ref placeholder + initial files
+    ;; (build-initial-files, config-content \"\") — needed by
+    ;; delete-blocks-rejects-built-in-entities.
+    {:db/ident :logseq.property/empty-placeholder
+     :block/uuid #uuid \"00000004-1267-0549-0045-000000000000\"}
+    {:block/uuid #uuid \"00000004-1675-4395-0028-000000000000\"
+     :file/path \"logseq/config.edn\" :file/content \"\"
+     :file/created-at 0 :file/last-modified-at 0}
+    {:block/uuid #uuid \"00000004-1345-1192-0017-000000000000\"
+     :file/path \"logseq/custom.css\" :file/content \"\"
+     :file/created-at 0 :file/last-modified-at 0}
+    {:block/uuid #uuid \"00000004-1360-2645-0098-000000000000\"
+     :file/path \"logseq/custom.js\" :file/content \"\"
+     :file/created-at 0 :file/last-modified-at 0}
+    {:block/uuid #uuid \"00000004-1904-0402-0048-000000000000\"
+     :file/path \"logseq/publish.css\" :file/content \"\"
+     :file/created-at 0 :file/last-modified-at 0}
+    {:block/uuid #uuid \"00000004-4879-1153-0006-000000000000\"
+     :file/path \"logseq/publish.js\" :file/content \"\"
+     :file/created-at 0 :file/last-modified-at 0}
+    ;; cljs built-in property (node/many, hide?, public? false) — the
+    ;; range-comments tests transact :logseq.property.comments/blocks refs.
+    {:db/ident :logseq.property.comments/blocks :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/many :db/index true
+     :logseq.property/type :node :logseq.property/hide? true
+     :logseq.property/public? false}]"
 
+(* cljs (db-test/create-conn). NOTE: Sqlite_create_graph.initial_tx_data
+   (the full cljs build-db-initial-data port) is NOT used here: the
+   db-query-dsl `tags` rule never terminates against its ~180-entity seed
+   (engine blowup, reported), and Db_validate.validate_db reports 183
+   errors on the lib's own initial_tx_data output anyway. *)
 let create_conn () : conn =
   let conn = Datascript.create_conn ~schema:(schema ()) () in
   ignore (Datascript.transact_conn_string conn initial_data_edn);
@@ -1590,9 +1671,10 @@ let create_conn_with_blocks ?(options = default_options)
 (* ---------- finders (db-test helpers) ---------- *)
 
 let query_one_id (db : db) (q : string) (input : value) : entity option =
+  (* first result only — cljs find-* helpers use (ffirst (d/q ...)) *)
   match Datascript.q_string ~inputs:[ Arg_scalar (Result_value input) ] db q with
-  | [ [ Result_entity id ] ] -> Ldb.ent_of_id db id
-  | [ [ Result_value (Int id) ] ] -> Ldb.ent_of_id db id
+  | (Result_entity id :: _) :: _ -> Ldb.ent_of_id db id
+  | (Result_value (Int id) :: _) :: _ -> Ldb.ent_of_id db id
   | _ -> None
 
 (* db-test/find-block-by-content — blocks only ([?b :block/page]) *)
@@ -1859,3 +1941,69 @@ let create_pipeline_conn_with_blocks ?(options = default_options)
   transact_maps conn init_tx;
   if block_props_tx <> [] then transact_maps conn block_props_tx;
   conn
+
+(* cljs db-test/readable-properties — an entity's properties dereferenced
+   for assertions: block/tags and logseq.property.class/extends map to
+   ident lists, single entity values to db/ident or
+   property-value-content, entity sets to content lists, scalars pass
+   through as transit values. *)
+let readable_properties (e : entity) : Wire.t =
+  let ident_or_content (x : entity) : string =
+    match Ldb.ident_of x with
+    | Some i -> i
+    | None -> Option.value (Ldb.property_value_content x) ~default:""
+  in
+  (* entity_attrs returns the raw datom view (Ref values, not the
+     materialized *_entity variants), so ref-typed attrs are detected by
+     their values and dereferenced via ref_ents — cljs readable-properties
+     resolves entity values to db/ident or property-value-content. *)
+  let is_ref_tv = function
+    | One_value (Ref _) -> true
+    | Many_values vs -> List.for_all (function Ref _ -> true | _ -> false) vs && vs <> []
+    | One_entity _ | Many_entities _ -> true
+    | _ -> false
+  in
+  entity_attrs e
+  |> List.filter_map (fun (attr, tv) ->
+       match is_ref_tv tv with
+       | true ->
+           let es = Ldb.ref_ents e attr in
+           if attr = "block/tags"
+              || attr = "logseq.property.class/extends"
+           then
+             Some
+               ( Wire.Keyword attr
+               , Wire.List
+                   (List.map
+                      (fun (x : entity) ->
+                        Wire.String
+                          (Option.value (Ldb.ident_of x) ~default:""))
+                      es) )
+           else
+             Some
+               ( Wire.Keyword attr
+                 , (match tv with
+                    | One_value _ | One_entity _ ->
+                        (match es with
+                         | [ x ] -> Wire.String (ident_or_content x)
+                         | _ -> Wire.Nil)
+                    | _ ->
+                        Wire.List
+                          (List.map
+                             (fun x -> Wire.String (ident_or_content x))
+                             es)) )
+       | false -> (
+           match tv with
+           | One_value v ->
+               Some (Wire.Keyword attr, Ds_wire.transit_of_value v)
+           | Many_values vs ->
+               Some
+                 ( Wire.Keyword attr
+                 , Wire.List (List.map Ds_wire.transit_of_value vs) )
+           | _ -> None))
+  |> fun pairs -> Wire.Map pairs
+
+(* cljs (get (readable-properties e) attr) *)
+let readable_property (e : entity) (attr : string) : Wire.t option =
+  Wire.get attr (readable_properties e)
+
