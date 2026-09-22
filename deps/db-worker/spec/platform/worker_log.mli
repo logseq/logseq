@@ -6,6 +6,7 @@ type level =
   | Error
 
 val set_min_level : level -> unit
+val min_level : unit -> level
 val log : level -> string -> (string * string) list -> unit
 val trace : string -> (string * string) list -> unit
 val debug : string -> (string * string) list -> unit
@@ -22,3 +23,8 @@ type entry = {
 }
 
 val entries : unit -> entry list
+
+(* Optional sink invoked for every logged entry (before the
+   level check), used by the db-worker-node file logger the same way
+   the cljs daemon's glogi handler appends to the log file. *)
+val set_entry_sink : (entry -> unit) option -> unit
