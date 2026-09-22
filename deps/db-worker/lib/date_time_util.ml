@@ -87,8 +87,8 @@ let capitalize_all (s : string) : string =
   |> List.map (fun w ->
          if w = "" then w
          else
-           String.uppercase_ascii (String.sub w 0 1)
-           ^ String.lowercase_ascii (String.sub w 1 (String.length w - 1)))
+           Unicode.uppercase (String.sub w 0 1)
+           ^ Unicode.lowercase (String.sub w 1 (String.length w - 1)))
   |> String.concat " "
 
 let month_short =
@@ -177,7 +177,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
       (fun best name ->
         let l = String.length name in
         if ends_at i l
-           && String.lowercase_ascii (String.sub s i l) = String.lowercase_ascii name
+           && Unicode.lowercase (String.sub s i l) = Unicode.lowercase name
         then match best with
              | Some (bl, _) when bl >= l -> best
              | _ -> Some (l, name)
@@ -207,7 +207,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
                let i' = i + l in
                let has_suffix =
                  ends_at i' 2
-                 && (let suf = String.lowercase_ascii (String.sub s i' 2) in
+                 && (let suf = Unicode.lowercase (String.sub s i' 2) in
                      suf = "st" || suf = "nd" || suf = "rd" || suf = "th")
                in
                (match v with
@@ -221,7 +221,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
              let index_of names name =
                let rec find j =
                  if j >= Array.length names then -1
-                 else if String.lowercase_ascii names.(j) = String.lowercase_ascii name then j + 1
+                 else if Unicode.lowercase names.(j) = Unicode.lowercase name then j + 1
                  else find (j + 1)
                in
                find 0
@@ -265,7 +265,7 @@ let date_of_formatter (fmt : string) (s : string) : (int * int * int) option =
    midnight ms of the parsed date, or None. *)
 let parse_journal_title ?(formatters = built_in_journal_title_formatters)
     (title : string) : int64 option =
-  if String.trim title = "" then None
+  if Unicode.trim title = "" then None
   else
     let title' = capitalize_all title in
     List.find_map
@@ -290,6 +290,15 @@ let valid_journal_title ?(formatters = built_in_journal_title_formatters)
     (title : string) : bool =
   Option.is_some (parse_journal_title ~formatters title)
 
+(* Days-from-civil (Howard Hinnant) — days since 1970-01-01 UTC. *)
+let days_from_civil (y : int) (mo : int) (d : int) : int =
+  let y' = if mo <= 2 then y - 1 else y in
+  let era = (if y' >= 0 then y' else y' - 399) / 400 in
+  let yoe = y' - (era * 400) in
+  let doy = ((153 * (if mo > 2 then mo - 3 else mo + 9)) + 2) / 5 + d - 1 in
+  let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
+  (era * 146097) + doe - 719468
+
 (* Inverse of the #inst writer: parse "YYYY-MM-DDTHH:MM:SS[.sss]Z"
    (UTC, timezone suffix ignored) back to epoch ms. Used to convert
    transit Date query literals — rare, but keeps wire fidelity. *)
@@ -313,12 +322,7 @@ let epoch_ms_of_iso (s : string) : int64 option =
           parse_int 11 13, parse_int 14 16, parse_int 17 19 )
       with
       | Some y, Some mo, Some d, Some h, Some mi, Some sec ->
-          let y' = if mo <= 2 then y - 1 else y in
-          let era = (if y' >= 0 then y' else y' - 399) / 400 in
-          let yoe = y' - (era * 400) in
-          let doy = ((153 * (if mo > 2 then mo - 3 else mo + 9)) + 2) / 5 + d - 1 in
-          let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
-          let days = (era * 146097) + doe - 719468 in
+          let days = days_from_civil y mo d in
           let frac =
             match find 19 '.' with
             | Some dot ->
@@ -331,14 +335,272 @@ let epoch_ms_of_iso (s : string) : int64 option =
                 else 0
             | None -> 0
           in
+          (* offset suffix after the seconds/fraction: 'Z', or
+             ±HH[:MM|MM] — cljs js/Date honors it *)
+          let offset_min =
+            let rec scan i =
+              if i >= n then 0
+              else
+                match s.[i] with
+                | 'Z' -> 0
+                | '+' | '-' ->
+                    let sign = if s.[i] = '-' then -1 else 1 in
+                    let rec skip_digits j =
+                      if j < n && s.[j] >= '0' && s.[j] <= '9' then
+                        skip_digits (j + 1)
+                      else j
+                    in
+                    let j1 = skip_digits (i + 1) in
+                    let hh =
+                      try int_of_string (String.sub s (i + 1) (j1 - i - 1))
+                      with _ -> 0
+                    in
+                    let mm =
+                      if j1 < n && s.[j1] = ':' then
+                        let j2 = skip_digits (j1 + 1) in
+                        try
+                          int_of_string (String.sub s (j1 + 1) (j2 - j1 - 1))
+                        with _ -> 0
+                      else if j1 - i - 1 >= 4 then
+                        (* +HHMM form: last two digits are minutes *)
+                        hh mod 100
+                      else 0
+                    in
+                    let hh = if j1 - i - 1 >= 4 then hh / 100 else hh in
+                    sign * ((hh * 60) + mm)
+                | _ -> scan (i + 1)
+            in
+            scan 19
+          in
           Some
-            (Int64.add
-               (Int64.mul
-                  (Int64.of_int
-                     (((days * 86400) + (h * 3600) + (mi * 60) + sec)))
-                  1000L)
-               (Int64.of_int frac))
+            (Int64.sub
+               (Int64.add
+                  (Int64.mul
+                     (Int64.of_int
+                        (((days * 86400) + (h * 3600) + (mi * 60) + sec)))
+                     1000L)
+                  (Int64.of_int frac))
+               (Int64.of_int (offset_min * 60000)))
       | _ -> None
+
+(* js/Date.parse — covers the formats V8 accepts: ISO
+   "YYYY-MM-DD[ T]HH:MM[:SS[.fff]][Z|±HH:MM|±HHMM]" (date-only = UTC
+   midnight; datetime without offset = local), "YYYY/MM/DD" and
+   "MM/DD/YYYY" (local), and month-name forms "Jan 15 2024" /
+   "15 Jan 2024" / "Mon, 15 Jan 2024 10:00:00 GMT". Pure numeric strings
+   ("1704067200000") are NaN in V8 — they do not parse here. *)
+let js_date_parse (s0 : string) : int64 option =
+  let s = Unicode.trim s0 in
+  let is_digit c = c >= '0' && c <= '9' in
+  let all_digits s = s <> "" && String.for_all is_digit s in
+  let month_names =
+    [| "january"; "february"; "march"; "april"; "may"; "june"; "july"
+     ; "august"; "september"; "october"; "november"; "december" |]
+  in
+  let month_of w =
+    let w = String.lowercase_ascii w in
+    let rec go i =
+      if i >= 12 then None
+      else if
+        w = String.sub month_names.(i) 0 3 || w = month_names.(i)
+      then Some (i + 1)
+      else go (i + 1)
+    in
+    go 0
+  in
+  (* split a "HH:MM[:SS[.fff]]" time token, stripping an embedded tz
+     suffix (Z/GMT.../±HH:MM) *)
+  let time_and_tz (t : string) : (int64 * int option) option =
+    let n = String.length t in
+    let tz_start =
+      let rec find i =
+        if i >= n then n
+        else
+          match t.[i] with
+          | 'Z' | '+' | '-' -> i
+          | 'G' | 'U' when i > 0 && t.[i - 1] <> ':' -> i
+          | _ -> find (i + 1)
+      in
+      find 0
+    in
+    let tz =
+      if tz_start >= n then None
+      else
+        let tzs = String.sub t tz_start (n - tz_start) in
+        let tzs =
+          let l = String.lowercase_ascii tzs in
+          if l = "gmt" || l = "utc" then "Z" else tzs
+        in
+        let tzs =
+          let l = String.lowercase_ascii tzs in
+          if
+            String.length l > 3
+            && (String.sub l 0 3 = "gmt" || String.sub l 0 3 = "utc")
+          then String.sub tzs 3 (String.length tzs - 3)
+          else tzs
+        in
+        (match tzs with
+         | "Z" -> Some 0
+         | _ when String.length tzs > 1 && (tzs.[0] = '+' || tzs.[0] = '-') ->
+             let sign = if tzs.[0] = '-' then -1 else 1 in
+             let body = String.sub tzs 1 (String.length tzs - 1) in
+             let hh, mm =
+               match String.split_on_char ':' body with
+               | [ h; m ] ->
+                   ((try int_of_string h with _ -> -1),
+                    (try int_of_string m with _ -> -1))
+               | [ h ] ->
+                   let h = try int_of_string h with _ -> -1 in
+                   if String.length body >= 4 then (h / 100, h mod 100)
+                   else (h, 0)
+               | _ -> (-1, -1)
+             in
+             if hh < 0 || mm < 0 || hh > 23 || mm > 59 then None
+             else Some (sign * ((hh * 60) + mm))
+         | _ -> None)
+    in
+    let tstr =
+      let body = String.sub t 0 tz_start in
+      if String.length body > 0 && not (is_digit body.[0]) then ""
+      else body
+    in
+    match String.split_on_char ':' tstr with
+    | [ h; m ] | [ h; m; _ ] when all_digits h && all_digits m ->
+        let sec_str, frac =
+          match String.split_on_char ':' tstr with
+          | [ _; _; s' ] ->
+              let dot = try String.index s' '.' with Not_found -> -1 in
+              if dot >= 0 then
+                ( String.sub s' 0 dot
+                , String.sub s' (dot + 1) (String.length s' - dot - 1) )
+              else (s', "")
+          | _ -> ("", "")
+        in
+        let sec = if sec_str = "" then 0 else
+          if all_digits sec_str then int_of_string sec_str else -1 in
+        let frac_ms =
+          if frac = "" then 0
+          else if all_digits frac then
+            let f = String.sub frac 0 (min 3 (String.length frac)) in
+            int_of_string f
+            * int_of_float (10. ** float_of_int (3 - String.length f))
+          else -1
+        in
+        if sec < 0 || frac_ms < 0 then None
+        else
+          let h = int_of_string h and m = int_of_string m in
+          if h > 24 || m > 59 || sec > 59 then None
+          else
+            Some
+              ( Int64.of_int ((((h * 60) + m) * 60 + sec) * 1000 + frac_ms)
+              , tz )
+    | _ -> None
+  in
+  (* numeric date token "a-b-c"/"a/b/c" — year-first when a is 4 digits
+     or > 31; otherwise US m/d/y. Returns (y, m, d, iso) where iso=true
+     only for '-' separators (V8 treats slash dates as local). *)
+  let date_fields (t : string) : (int * int * int * bool) option =
+    let sep =
+      if String.contains t '-' then '-'
+      else if String.contains t '/' then '/'
+      else ' '
+    in
+    if sep = ' ' then None
+    else
+      match String.split_on_char sep t with
+      | [ a; b; c ] when all_digits a && all_digits b && all_digits c ->
+          if String.length a >= 4 || int_of_string a > 31 then
+            Some (int_of_string a, int_of_string b, int_of_string c,
+                  sep = '-')
+          else
+            Some (int_of_string c, int_of_string a, int_of_string b,
+                  false)
+      | _ -> None
+  in
+  let tokens =
+    String.split_on_char ' ' s
+    |> List.filter (fun t -> t <> "")
+    |> List.concat_map (fun t ->
+           (* ISO 'T' separator sits between digits *)
+           match String.index_opt t 'T' with
+           | Some i
+             when i > 0 && i < String.length t - 1
+                  && is_digit t.[i - 1] && is_digit t.[i + 1] ->
+               [ String.sub t 0 i
+               ; String.sub t (i + 1) (String.length t - i - 1) ]
+           | _ -> [ t ])
+    |> List.filter (fun t -> t <> "")
+    |> List.map (fun t ->
+           if
+             String.length t > 0
+             && (t.[String.length t - 1] = ',')
+           then String.sub t 0 (String.length t - 1)
+           else t)
+  in
+  let tokens =
+    (* drop a leading weekday name ("Mon," / "Monday") *)
+    match tokens with
+    | w :: rest
+      when List.mem
+             (String.lowercase_ascii
+                (if String.length w > 3 then String.sub w 0 3 else w))
+             [ "mon"; "tue"; "wed"; "thu"; "fri"; "sat"; "sun" ] -> rest
+    | _ -> tokens
+  in
+  let year, month, day, iso_dash, time_ms, tz =
+    List.fold_left
+      (fun (y, mo, d, iso, t, tz) tok ->
+        match date_fields tok with
+        | Some (yy, mm, dd, iso') -> (Some yy, Some mm, Some dd, iso', t, tz)
+        | None ->
+            (match month_of tok with
+             | Some mm -> (y, Some mm, d, iso, t, tz)
+             | None ->
+                 if String.contains tok ':' then
+                   (match time_and_tz tok with
+                    | Some (ms, tz') -> (y, mo, d, iso, Some ms, tz')
+                    | None -> (y, mo, d, iso, t, tz))
+                 else if all_digits tok then
+                   let n = int_of_string tok in
+                   if String.length tok >= 4 || n > 31 then
+                     (Some n, mo, d, iso, t, tz)
+                   else if d = None then (y, mo, Some n, iso, t, tz)
+                   else (Some n, mo, d, iso, t, tz)
+                 else
+                   (* bare tz token *)
+                   (match String.lowercase_ascii tok with
+                    | "z" | "gmt" | "utc" -> (y, mo, d, iso, t, Some 0)
+                    | _ -> (y, mo, d, iso, t, tz))))
+      (None, None, None, false, None, None)
+      tokens
+  in
+  match year, month, day with
+  | Some y, Some mo, Some d ->
+      (match tz, time_ms, iso_dash with
+       | Some off, _, _ ->
+           let utc_ms =
+             Int64.add (Int64.mul (Int64.of_int (days_from_civil y mo d))
+                          86400000L)
+               (Option.value time_ms ~default:0L)
+           in
+           Some (Int64.sub utc_ms (Int64.of_int (off * 60000)))
+       | None, None, true ->
+           (* ISO date-only ("YYYY-MM-DD") is UTC midnight *)
+           Some (Int64.mul (Int64.of_int (days_from_civil y mo d))
+                  86400000L)
+       | _ ->
+           (* everything else without an offset is local time *)
+           let ms = Option.value time_ms ~default:0L in
+           Some
+             (Date_time.to_epoch_ms
+                { Date_time.year = y; month = mo; day = d
+                ; hour = Int64.to_int (Int64.div ms 3600000L)
+                ; minute =
+                    Int64.to_int (Int64.div (Int64.rem ms 3600000L) 60000L)
+                ; second =
+                    Int64.to_int (Int64.div (Int64.rem ms 60000L) 1000L)
+                ; ms = Int64.to_int (Int64.rem ms 1000L) }))
+  | _ -> None
 
 (* date-time-util/default-journal-title-formatter *)
 let default_journal_title_formatter = "MMM do, yyyy"
@@ -350,7 +612,7 @@ let safe_journal_title_formatters (date_formatter : string option) : string list
   ; default
   ; "yyyy-MM-dd"
   ; "yyyy_MM_dd" ]
-  |> List.filter (fun s -> String.trim s <> "")
+  |> List.filter (fun s -> Unicode.trim s <> "")
   |> List.fold_left (fun acc f -> if List.mem f acc then acc else acc @ [ f ]) []
 
 (* common-date/valid-journal-title-with-slash? — parses under a slash

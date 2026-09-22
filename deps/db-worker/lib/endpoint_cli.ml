@@ -297,9 +297,9 @@ let cli_list_tasks db (opts : Wire.t option) : Wire.t =
      |> List.filter (fun e ->
             match content with
             | Some c ->
-                let needle = String.lowercase_ascii c in
+                let needle = Unicode.lowercase c in
                 (match Ldb.string_value e "block/title" with
-                 | Some t -> str_contains (String.lowercase_ascii t) needle
+                 | Some t -> str_contains (Unicode.lowercase t) needle
                  | None -> false)
             | None -> true)
      |> List.map (fun e -> Wire.Map (minimal_task_item e)))
@@ -411,7 +411,8 @@ let parse_time (t : Wire.t option) : float option =
   | Some (Wire.Int n) -> Some (float_of_int n)
   | Some (Wire.Float f) -> Some f
   | Some (Wire.String s) ->
-      (try Some (float_of_string s) with _ -> None)
+      (* cljs (js/Date.parse value) — ISO/US/month-name date strings *)
+      Option.map Int64.to_float (Date_time_util.js_date_parse s)
   | _ -> None
 
 let cli_list_pages db (opts : Wire.t option) : Wire.t =

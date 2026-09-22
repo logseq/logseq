@@ -61,8 +61,10 @@ let match_relative_date_time (name : string) : bool =
   | Some (_, _, _, Some suffix) ->
       let suffix = String.sub suffix 1 (String.length suffix - 1) in
       (* suffix after the '-' *)
-      if suffix = "" then true
-      else if suffix = "ms" || suffix = "start" || suffix = "end" then true
+      (* cljs dispatch regex allows an empty optional group after the
+         '-', but the resolve re-find requires a non-empty ts, so "+7d-"
+         is dispatched then resolves to nil (unresolved). *)
+      if suffix = "ms" || suffix = "start" || suffix = "end" then true
       else
         let l = String.length suffix in
         (l = 2 || l = 4 || l = 6 || l = 9)
@@ -195,7 +197,7 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
       (match k with
        | "current-page" ->
            (match ctx.current_page_fn () with
-            | Some title -> Some (String (String.lowercase_ascii title))
+            | Some title -> Some (String (Unicode.lowercase title))
             | None -> None)
        | "query-page" ->
            (match current_block_ent db ctx with
@@ -274,6 +276,6 @@ let resolve_input (db : db) (input : value) (ctx : context) : value =
        | None -> input)
   | String s when Page_ref.is_page_ref s ->
       (match Page_ref.get_page_name s with
-       | Some name -> String (String.lowercase_ascii name)
+       | Some name -> String (Unicode.lowercase name)
        | None -> input)
   | _ -> input

@@ -537,7 +537,7 @@ let get_timestamp_property (form : query_form) : string option =
        | QueryFormKeyword _ | QueryFormSymbol _ | QueryFormString _ ->
            let p =
              name_of_form property_name
-             |> String.lowercase_ascii
+             |> Unicode.lowercase
              |> String.map (fun c -> if c = '_' then '-' else c)
            in
            if property_kw p then Some p
@@ -625,7 +625,7 @@ let between_rewrite (s : string) : string =
         let argstr = String.sub s (i + 8) (j - i - 8) in
         let parts =
           String.split_on_char ' ' argstr
-          |> List.filter (fun p -> String.trim p <> "")
+          |> List.filter (fun p -> Unicode.trim p <> "")
           |> List.map (fun value ->
                  let firstc = if String.length value > 0 then String.make 1 value.[0] else "" in
                  let starts_offset = firstc = "+" || firstc = "-" in
@@ -802,8 +802,8 @@ let resolve_dynamic_template (content : string) ~current_page_title ~today_day :
         in
         match find (i + 3) with
         | Some j ->
-            let matched = String.trim (String.sub content (i + 2) (j - i - 2)) in
-            let key = String.lowercase_ascii matched in
+            let matched = Unicode.trim (String.sub content (i + 2) (j - i - 2)) in
+            let key = Unicode.lowercase matched in
             let rep =
               if matched = "" then ""
               else
@@ -832,7 +832,7 @@ let resolve_dynamic_template (content : string) ~current_page_title ~today_day :
 (* ->journal-day-int / ->timestamp — inputs are keyword/symbol/string forms *)
 
 let to_journal_day_int (input : query_form) : int option =
-  let input = String.lowercase_ascii (name_of_form input) in
+  let input = Unicode.lowercase (name_of_form input) in
   match input with
   | "today" -> Some (Date_time_util.date_to_int (Date_time_util.today_ms ()))
   | "yesterday" ->
@@ -860,7 +860,7 @@ let to_journal_day_int (input : query_form) : int option =
       let len = String.length input in
       if len < 1 then None
       else
-        (match int_of_string_opt (String.sub input 0 (len - 1)) with
+        (match Common_util.parse_long (String.sub input 0 (len - 1)) with
          | Some duration ->
              let kind = input.[len - 1] in
              let p =
@@ -876,7 +876,7 @@ let to_journal_day_int (input : query_form) : int option =
          | None -> None)
 
 let to_timestamp (input : query_form) : int64 option =
-  let input = String.lowercase_ascii (name_of_form input) in
+  let input = Unicode.lowercase (name_of_form input) in
   match input with
   | "now" -> Some (Date_time_util.time_ms ())
   | "today" -> Some (Date_time_util.today_ms ())
@@ -899,7 +899,7 @@ let to_timestamp (input : query_form) : int64 option =
       let len = String.length input in
       if len < 1 then None
       else
-        (match int_of_string_opt (String.sub input 0 (len - 1)) with
+        (match Common_util.parse_long (String.sub input 0 (len - 1)) with
          | Some duration ->
              let p =
                match input.[len - 1] with
@@ -916,9 +916,7 @@ let to_timestamp (input : query_form) : int64 option =
 (* cljs str of a number: integral doubles print without decimal point *)
 let str_of_number = function
   | Int n -> string_of_int n
-  | Float f ->
-      if Float.is_integer f then Int64.to_string (Int64.of_float f)
-      else Printf.sprintf "%g" f
+  | Float f -> Common_util.js_string_of_float f
   | _ -> assert false
 
 (* ============ build-query ============ *)
@@ -1262,8 +1260,8 @@ let build_priority (e : query_form) : built option =
                     (* string/capitalize — first char up, rest down *)
                     if n = "" then n
                     else
-                      String.uppercase_ascii (String.sub n 0 1)
-                      ^ String.lowercase_ascii (String.sub n 1 (String.length n - 1)))
+                      Unicode.uppercase (String.sub n 0 1)
+                      ^ Unicode.lowercase (String.sub n 1 (String.length n - 1)))
              |> List.sort_uniq compare
              |> List.map str
            in
@@ -1375,12 +1373,12 @@ let rec build_query (e : query_form) (env : env) (level : int)
   let fe_name =
     match fe with
     | Some f when is_list f -> None (* list fe stays a form *)
-    | Some (QueryFormSymbol s) -> Some (String.lowercase_ascii (name_of_form (sym s)))
-    | Some (QueryFormKeyword s) -> Some (String.lowercase_ascii (name_of_form (kw s)))
+    | Some (QueryFormSymbol s) -> Some (Unicode.lowercase (name_of_form (sym s)))
+    | Some (QueryFormKeyword s) -> Some (Unicode.lowercase (name_of_form (kw s)))
     | Some other ->
         (match other with
-         | QueryFormString s -> Some (String.lowercase_ascii s)
-         | f -> Some (String.lowercase_ascii (Ds_wire.edn_of_query_form f)))
+         | QueryFormString s -> Some (Unicode.lowercase s)
+         | f -> Some (Unicode.lowercase (Ds_wire.edn_of_query_form f)))
     | None -> None
   in
   let fe_sym name = fe_name = Some name && (match fe with Some (QueryFormSymbol _ | QueryFormKeyword _) -> true | _ -> false) in
@@ -1522,7 +1520,7 @@ type parsed =
 (* query-dsl/parse *)
 let parse ?(cards : bool = false) (db : db) (s : string) : parsed option =
   ignore cards;
-  if String.trim s = "" then None
+  if Unicode.trim s = "" then None
   else
     let s =
       if String.length s > 0 && s.[0] = '#' then
