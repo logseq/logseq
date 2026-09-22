@@ -953,8 +953,16 @@ let expected_stale_rebase_error (error : exn) : bool =
         , List.assoc_opt (Wire.Keyword "attribute") kvs )
     | _ -> (None, None)
   in
+  (* datascript raises bare invalid_arg where cljs datascript attaches
+     ex-data: "Nothing found for entity id" = :entity-id/missing;
+     "unique constraint" = :transact/unique. The cljs check narrows the
+     latter to :block/uuid, but in a rebase-reverse context block/uuid is
+     the only db.unique attribute that can conflict. *)
   match error with
   | Dispatcher.Exn_info (msg, _) when msg = "invalid rebase op" -> true
+  | Invalid_argument msg
+    when msg = "unique constraint"
+         || Common_util.str_starts_with msg "Nothing found for entity id" -> true
   | _ ->
       err = Some (kw "entity-id/missing")
       || (err = Some (kw "transact/unique") && attr = Some (kw "block/uuid"))
@@ -1672,8 +1680,11 @@ let resolve_temp_id (db : db) (datom_v : Wire.t) : Wire.t =
       Wire.Array [ op; e'; a; v'; t ]
   | _ -> datom_v
 
+(* cljs reverse-history-action! — returns the ldb/transact! report (truthy,
+   kept by reverse-local-txs!) or nil for a no-op :fix row (dropped). Some
+   (report option) = keep; None = drop *)
 let reverse_history_action (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) : unit =
+    (local_tx : Sync_client_op.local_tx_entry) : tx_report option option =
   let tx_data = tx_items_of local_tx.reversed_tx in
   match tx_data with
   | [] ->
@@ -1685,7 +1696,8 @@ let reverse_history_action (conn : conn)
              ; kw "outliner-op"
              , (match local_tx.outliner_op with
                 | Some o -> kw o
-                | None -> Wire.Nil) ])
+                | None -> Wire.Nil) ]);
+      None
   | tx_data ->
       let db = Conn.db conn in
       let tx_data' =
@@ -1699,7 +1711,7 @@ let reverse_history_action (conn : conn)
           expand_block_retracts_to_descendants db tx_data'
         else tx_data'
       in
-      ignore
+      Some
         (Db_transact.transact conn tx_data'
            [ ( "outliner-op"
              , match local_tx.outliner_op with
@@ -1711,14 +1723,19 @@ let reverse_history_action (conn : conn)
 let expected_stale_reverse_skip (_repo : string) (e : exn) : bool =
   expected_stale_rebase_error e
 
+type reverse_local_tx_result =
+  | Reversed of tx_report option
+  | Reverse_failed of string
+
 let reverse_local_txs (conn : conn)
     (local_txs : Sync_client_op.local_tx_entry list)
-    : (string * string) list =
+    : reverse_local_tx_result list =
   List.rev local_txs
   |> List.mapi (fun index local_tx ->
          try
-           reverse_history_action conn local_tx;
-           None
+           match reverse_history_action conn local_tx with
+           | Some r -> Some (Reversed r)
+           | None -> None
          with e ->
            if expected_stale_rebase_error e then begin
              Worker_log.info "db-sync/skip-stale-reverse-local-tx"
@@ -1727,7 +1744,7 @@ let reverse_local_txs (conn : conn)
                ; "outliner-op"
                , Option.value local_tx.outliner_op ~default:""
                ; "error", Printexc.to_string e ];
-             Some (local_tx.tx_id, "failed")
+             Some (Reverse_failed local_tx.tx_id)
            end
            else begin
              Worker_log.error "reverse-local-tx-error"
