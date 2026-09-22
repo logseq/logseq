@@ -36,10 +36,13 @@ let hidden_tags = [ "logseq.class/Page"; "logseq.class/Root"; "logseq.class/Asse
 type built_in_class =
   { ident : string
   ; title : string
-  ; properties : string list
-  ; schema_properties : string list
+  ; properties : (string * value) list (* cljs :properties map *)
+  ; schema_properties : string list (* cljs [:schema :properties] *)
   ; schema_required_properties : string list
   }
+
+let icon id =
+  Map [ Keyword "type", Keyword "tabler-icon"; Keyword "id", String id ]
 
 let built_in_classes =
   [ { ident = "logseq.class/Root"; title = "Root Tag"; properties = [];
@@ -52,10 +55,12 @@ let built_in_classes =
       schema_properties = []; schema_required_properties = [] }
   ; { ident = "logseq.class/Journal"; title = "Journal";
       properties =
-        [ "logseq.property.class/extends"; "logseq.property.journal/title-format" ];
+        [ "logseq.property.class/extends", Keyword "logseq.class/Page"
+        ; "logseq.property.journal/title-format", String "MMM do, yyyy" ];
       schema_properties = []; schema_required_properties = [] }
   ; { ident = "logseq.class/Whiteboard"; title = "Whiteboard";
-      properties = [ "logseq.property.class/extends" ];
+      properties =
+        [ "logseq.property.class/extends", Keyword "logseq.class/Page" ];
       schema_properties = []; schema_required_properties = [] }
   ; { ident = "logseq.class/Task"; title = "Task"; properties = [];
       schema_properties =
@@ -63,24 +68,30 @@ let built_in_classes =
           "logseq.property/deadline"; "logseq.property/scheduled" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Comments"; title = "Comments";
-      properties = [ "logseq.property.class/hide-from-node"; "logseq.property/icon" ];
+      properties =
+        [ "logseq.property.class/hide-from-node", Bool true
+        ; "logseq.property/icon", icon "message-circle" ];
       schema_properties = [ "logseq.property.comments/blocks" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Comment"; title = "Comment";
-      properties = [ "logseq.property.class/hide-from-node" ];
+      properties = [ "logseq.property.class/hide-from-node", Bool true ];
       schema_properties = []; schema_required_properties = [] }
   ; { ident = "logseq.class/Query"; title = "Query";
-      properties = [ "logseq.property/icon" ];
+      properties = [ "logseq.property/icon", icon "search" ];
       schema_properties = [ "logseq.property/query" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Card"; title = "Card"; properties = [];
       schema_properties = [ "logseq.property.fsrs/state"; "logseq.property.fsrs/due" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Cards"; title = "Cards";
-      properties = [ "logseq.property/icon"; "logseq.property.class/extends" ];
+      properties =
+        [ "logseq.property/icon", icon "search"
+        ; "logseq.property.class/extends", Keyword "logseq.class/Query" ];
       schema_properties = []; schema_required_properties = [] }
   ; { ident = "logseq.class/Asset"; title = "Asset";
-      properties = [ "logseq.property.class/hide-from-node"; "logseq.property.view/type" ];
+      properties =
+        [ "logseq.property.class/hide-from-node", Bool true
+        ; "logseq.property.view/type", Keyword "logseq.property.view/type.gallery" ];
       schema_properties =
         [ "logseq.property.asset/type"; "logseq.property.asset/size";
           "logseq.property.asset/checksum" ];
@@ -88,20 +99,20 @@ let built_in_classes =
         [ "logseq.property.asset/type"; "logseq.property.asset/size";
           "logseq.property.asset/checksum" ] }
   ; { ident = "logseq.class/Code-block"; title = "Code";
-      properties = [ "logseq.property.class/hide-from-node" ];
+      properties = [ "logseq.property.class/hide-from-node", Bool true ];
       schema_properties =
         [ "logseq.property.node/display-type"; "logseq.property.code/lang" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Quote-block"; title = "Quote";
-      properties = [ "logseq.property.class/hide-from-node" ];
+      properties = [ "logseq.property.class/hide-from-node", Bool true ];
       schema_properties = [ "logseq.property.node/display-type" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Math-block"; title = "Math";
-      properties = [ "logseq.property.class/hide-from-node" ];
+      properties = [ "logseq.property.class/hide-from-node", Bool true ];
       schema_properties = [ "logseq.property.node/display-type" ];
       schema_required_properties = [] }
   ; { ident = "logseq.class/Pdf-annotation"; title = "PDF Annotation";
-      properties = [ "logseq.property.class/hide-from-node" ];
+      properties = [ "logseq.property.class/hide-from-node", Bool true ];
       schema_properties =
         [ "logseq.property/ls-type"; "logseq.property.pdf/hl-color";
           "logseq.property/asset"; "logseq.property.pdf/hl-page";
@@ -112,7 +123,7 @@ let built_in_classes =
           "logseq.property/asset"; "logseq.property.pdf/hl-page";
           "logseq.property.pdf/hl-value" ] }
   ; { ident = "logseq.class/Template"; title = "Template"; properties = [];
-      schema_properties = [ "logseq.property/template-applied-to" ];
+      schema_properties = [ "logseq.property.template-applied-to" ];
       schema_required_properties = [] }
   ]
 
@@ -123,12 +134,9 @@ let built_in_class (ident : string) : built_in_class option =
 let page_children_classes =
   List.filter_map
     (fun c ->
-       (* cljs checks (:properties m :logseq.property.class/extends) =
-          :logseq.class/Page — only Journal and Whiteboard extend Page via
-          top-level :properties; Cards extends Query, not Page. *)
-       if c.ident = "logseq.class/Journal" || c.ident = "logseq.class/Whiteboard"
-       then Some c.ident
-       else None)
+       match List.assoc_opt "logseq.property.class/extends" c.properties with
+       | Some (Keyword "logseq.class/Page") -> Some c.ident
+       | _ -> None)
     built_in_classes
 
 (* db-class/page-classes *)
@@ -165,7 +173,9 @@ let private_create_page_tag ?(ident : string option) ~(title : string option) ()
    outliner_property to avoid a cyclic dep; see there). *)
 let built_in_class_property_pairs : (string * string) list =
   List.concat_map
-    (fun c -> List.map (fun p -> (c.ident, p)) ("block/tags" :: c.properties))
+    (fun c ->
+      List.map (fun p -> (c.ident, p))
+        ("block/tags" :: List.map fst c.properties))
     built_in_classes
 
 (* logseq.db.frontend.db/built-in-class-property? *)
