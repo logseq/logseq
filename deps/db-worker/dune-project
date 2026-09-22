@@ -1,0 +1,55 @@
+(lang dune 3.23)
+(using melange 1.0)
+(name logseq-db-worker)
+(generate_opam_files true)
+(source (github logseq/logseq))
+(authors "Logseq contributors")
+(maintainers https://github.com/logseq/issues)
+(license AGPL-3.0-or-later)
+(homepage https://logseq.com)
+(documentation https://docs.logseq.com)
+
+(pin
+ (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (package (name datascript_ocaml)))
+(pin
+ (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (package (name datascript-ocaml-melange)))
+(pin
+ (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (package (name datascript-ocaml-native)))
+(pin
+ (url "git+https://github.com/logseq/persistent-sorted-set-ocaml.git")
+ (package (name persistent_sorted_set_ocaml)))
+(pin
+ (url "git+https://github.com/logseq/melange-edn.git")
+ (package (name melange-edn)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git")
+ (package (name melange-transit)))
+(pin
+ (url "git+https://github.com/logseq/melange-fest.git")
+ (package (name melange-fest)))
+(pin
+ (url "git+https://github.com/logseq/rrbvec.git")
+ (package (name rrbvec)))
+
+(package
+ (name logseq-db-worker)
+ (allow_empty)
+ (synopsis "OCaml implementation of the Logseq DB worker")
+ (description
+  "Replacement for the frontend.worker.* ClojureScript worker. Exposes the\nsame Comlink + transit remoteInvoke protocol backed by datascript-ocaml.")
+ (depends
+  ocaml
+  melange
+  datascript_ocaml
+  datascript-ocaml-melange
+  datascript-ocaml-native
+  melange-transit
+  melange-edn
+  melange-fest
+  melange-fetch
+  melange-webapi
+  rrbvec
+  sqlite3))
