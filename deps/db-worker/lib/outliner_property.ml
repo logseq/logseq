@@ -1110,7 +1110,7 @@ let create_property_text_block conn ~(block_id : Wire.t option)
               match Ldb.ident_of property with
               | Some i -> Wire.Keyword i
               | None -> Wire.Int property.id))
-        ; (kw "block/order", Wire.String (Db_order.gen_key ())) ]
+        ; (kw "block/order", Wire.String (Db_order.gen_key_from_max ())) ]
     in
     let m = Cljs_map.assoc m value_key value' in
     Sqlite_util.block_with_timestamps m
@@ -2174,7 +2174,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
           in
           let m = Sqlite_util.block_with_timestamps m in
           Cljs_map.assoc m "block/order"
-            (Wire.String (Db_order.gen_key ?left:max_order ()))
+            (Wire.String (Db_order.gen_key max_order None))
         in
         [ new_block
         ; Wire.Map

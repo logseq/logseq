@@ -64,7 +64,7 @@ let build_new_property ?(title : string option) ?(block_uuid : string option)
         (Wire.Keyword "db/cardinality",
          Wire.Keyword
            (if many then "db.cardinality/many" else "db.cardinality/one"));
-        (Wire.Keyword "block/order", Wire.String (Db_order.gen_key ())) ]
+        (Wire.Keyword "block/order", Wire.String (Db_order.gen_key_from_max ())) ]
   in
   let block =
     if ref_type || List.mem prop_type Db_schema.all_ref_property_types then
