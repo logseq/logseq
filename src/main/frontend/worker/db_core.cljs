@@ -516,8 +516,20 @@
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search client-ops]} (get @*sqlite-conns repo)]
-    (close-db-aux! repo db search client-ops)))
+  (let [ocaml-close (when (thread-api/ocaml-registered? "thread-api/close-db")
+                      ;; the OCaml worker owns its own conn maps
+                      (thread-api/<ocaml-invoke "thread-api/close-db" [repo]))
+        {:keys [db search client-ops]} (get @*sqlite-conns repo)]
+    (close-db-aux! repo db search client-ops)
+    (when ocaml-close
+      ;; callers that ignore the return value can't surface a rejection
+      ;; themselves; log it here and still return the promise so p/let
+      ;; callers observe the failure
+      (p/catch ocaml-close
+               (fn [error]
+                 (log/error :db-worker/ocaml-close-db-failed
+                            {:repo repo :error error})))
+      ocaml-close)))
 
 (defn- <invalidate-search-db!
   [repo]
