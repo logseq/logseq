@@ -11,8 +11,8 @@ let block_with_updated_at (block : Wire.t) : Wire.t =
     (Wire.Date_ms (Int64.of_float (Clock.now_ms ())))
 
 (* initial-data/get-block-full-children-ids — nested children incl.
-   collapsed and property-value children; Ldb BFS stands in for the
-   :parent rule (see its comment for the verified engine limitation). *)
+   collapsed and property-value children, via the :parent rule
+   (shared with Ldb). *)
 let get_block_full_children_ids db (eid : entity_id) : entity_id list =
   Ldb.get_block_full_children_ids db eid
 

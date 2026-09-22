@@ -189,26 +189,22 @@ let built_in_class_property (class_ : entity) (property : entity) : bool =
         | None -> false)
    | _ -> false)
 
-(* db-class/get-structured-children — BFS over
-   :logseq.property.class/extends, equivalent to the recursive
-   (class-extends ?p ?c) rule. Verified engine limitation
-   (datascript-ocaml @ 8db9e3c): bound :in args — even literal head
-   args — are dropped inside recursive rule calls, so the faithful
-   query returns children of every class, not just ?p's. *)
+(* rules.cljc :class-extends *)
+let class_extends_rules_edn =
+  "[[(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]] \
+    [(class-extends ?p ?c) [?t :logseq.property.class/extends ?p] \
+     (class-extends ?t ?c)]]"
+
+(* db-class/get-structured-children — the recursive (class-extends)
+   rule query plus cljs (remove #{eid}). *)
 let get_structured_children db (eid : entity_id) : entity_id list =
-  let rec go seen frontier =
-    match frontier with
-    | [] -> seen
-    | eid :: rest ->
-        let children =
-          List.of_seq
-            (datoms db Avet ~a:"logseq.property.class/extends" ~v:(Ref eid) ())
-          |> List.map (fun (d : datom) -> d.e)
-          |> List.filter (fun id -> not (List.mem id seen))
-        in
-        go (seen @ children) (rest @ children)
-  in
-  go [ eid ] [ eid ]
+  q_string db
+    "[:find [?c ...] :in $ ?p % :where (class-extends ?p ?c)]"
+    ~inputs:
+      [ Arg_scalar (Result_entity eid);
+        Arg_rules (Parser.parse_rules (Parser.read_edn class_extends_rules_edn)) ]
+  |> List.filter_map
+       (fun row -> match row with [ Result_entity c ] -> Some c | _ -> None)
   |> List.filter (fun id -> id <> eid)
 
 (* db-class/get-class-extends — breadth-first walk of
@@ -370,40 +366,33 @@ let get_class_object_ids db (class_id : entity_id) : entity_id list =
 let get_class_objects db (class_id : entity_id) : entity list =
   List.filter_map (Ldb.ent_of_id db) (class_object_eids db class_id)
 
-(* rules/has-property-or-object-property? as a direct datom scan —
-   verified engine limitations (datascript-ocaml @ 8db9e3c): the
-   faithful rules query binds ?prop in attribute position
-   ([?b ?prop _]) and calls the recursive class-extends rule from an
-   or-branch, neither of which the engine evaluates correctly.
-   A block is a property object of ?prop when it has the attr itself,
-   or when it is tagged with a class (or a class extending it, per
-   class-extends) that declares ?prop in
-   :logseq.property.class/properties. *)
+(* view.cljs :property-objects — the
+   has-property-or-object-property? rules query (with
+   object-has-class-property? and class-extends deps, as
+   rules/extract-rules resolves). Callers apply hidden filtering. *)
 let property_object_eids db (prop_ident : string) : entity_id list =
-  (* the rules query scans by attr alone, so Aevt — a user property is not
-     :db/index'ed and would throw on Avet *)
-  let direct =
-    List.map (fun (d : datom) -> d.e)
-      (List.of_seq (datoms db Aevt ~a:prop_ident ()))
+  let rules_edn =
+    "[[(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]] \
+     [(class-extends ?p ?c) [?t :logseq.property.class/extends ?p] \
+      (class-extends ?t ?c)] \
+     [(object-has-class-property? ?b ?prop) \
+      [?prop-e :db/ident ?prop] \
+      [?t :logseq.property.class/properties ?prop-e] \
+      [?b :block/tags ?tc] \
+      (or [(= ?t ?tc)] (class-extends ?t ?tc))] \
+     [(has-property-or-object-property? ?b ?prop) \
+      [?prop-e :db/ident ?prop] \
+      (or [?b ?prop _] \
+          (object-has-class-property? ?b ?prop))]]"
   in
-  let via_tags =
-    match ident_eid db prop_ident with
-    | Some prop_eid ->
-        List.map (fun (d : datom) -> d.e)
-          (List.of_seq
-             (datoms db Avet ~a:"logseq.property.class/properties"
-                ~v:(Ref prop_eid) ()))
-        |> List.concat_map
-             (fun cid -> cid :: get_structured_children db cid)
-        |> List.sort_uniq compare
-        |> List.concat_map
-             (fun tag_id ->
-                List.map (fun (d : datom) -> d.e)
-                  (List.of_seq
-                     (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
-    | None -> []
-  in
-  List.sort_uniq compare (direct @ via_tags)
+  q_string db
+    "[:find [?b ...] :in $ % ?prop :where \
+     (has-property-or-object-property? ?b ?prop)]"
+    ~inputs:
+      [ Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn));
+        Arg_scalar (Result_value (Keyword prop_ident)) ]
+  |> List.filter_map
+       (fun row -> match row with [ Result_entity b ] -> Some b | _ -> None)
 
 (* db-class/build-new-class — creates a fresh :db/ident via
    create-user-class-ident-from-name then sqlite-util/build-new-class. *)

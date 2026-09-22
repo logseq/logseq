@@ -2720,9 +2720,7 @@ let test_alias_selector_initial_choice_keeps_page_and_owner_data_test () =
 (* ---------- rule/:in-predicate query sites ----------
    Semantics of the functions whose cljs originals use recursive rules,
    the bidirectional :alias rule, collection :in bindings and :in-bound
-   predicate clauses — regardless of whether the OCaml port can use the
-   faithful query or a verified-equivalent scan (see lib comments for
-   the engine limitations that remain @ datascript-ocaml 8db9e3c). *)
+   predicate clauses. *)
 
 (* db-class/get-structured-children — (class-extends) closure *)
 let test_get_structured_children_recursive () =

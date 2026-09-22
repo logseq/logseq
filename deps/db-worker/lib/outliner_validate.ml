@@ -44,9 +44,7 @@ let is_page_tags tags =
 
 (* outliner-validate/find-other-ids-with-title-and-tags — the three cljs
    query variants: built-in exclusion for properties, same-parent when
-   the entity has a parent, plain otherwise. Note: entity :in args must
-   be passed as Result_value (Ref e); the engine drops
-   Arg_scalar (Result_entity e) bindings. *)
+   the entity has a parent, plain otherwise. *)
 let find_other_ids db ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id list =
   let q =
     if is_property then
@@ -73,13 +71,13 @@ let find_other_ids db ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id 
     ~inputs:
       [ Arg_scalar
           (match eid with
-           | Some id -> Result_value (Ref id)
+           | Some id -> Result_entity id
            | None -> Result_value Nil)
       ; Arg_scalar
           (match title with
            | Some t -> Result_value (String t)
            | None -> Result_value Nil)
-      ; Arg_collection (List.map (fun id -> Result_value (Ref id)) tag_ids) ]
+      ; Arg_collection (List.map (fun id -> Result_entity id) tag_ids) ]
   |> List.filter_map
        (fun row -> match row with [ Result_entity b ] -> Some b | _ -> None)
 
