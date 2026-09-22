@@ -47,12 +47,12 @@ let encrypt_text_value : (Wire.t -> string -> string Db_worker_effect.t) option 
 let decrypt_text_value : (Wire.t -> string -> string Db_worker_effect.t) option ref =
   ref None
 
-(* crypt/<encrypt-uint8array : aes-key bytes -> bytes *)
-let encrypt_bytes : (Wire.t -> string -> string Db_worker_effect.t) option ref =
+(* crypt/<encrypt-uint8array : aes-key bytes -> [iv encrypted-bytes] *)
+let encrypt_bytes : (Wire.t -> string -> Wire.t Db_worker_effect.t) option ref =
   ref None
 
-(* crypt/<decrypt-uint8array : aes-key bytes -> bytes *)
-let decrypt_bytes : (Wire.t -> string -> string Db_worker_effect.t) option ref =
+(* crypt/<decrypt-uint8array : aes-key [iv encrypted-bytes] -> bytes *)
+let decrypt_bytes : (Wire.t -> Wire.t -> string Db_worker_effect.t) option ref =
   ref None
 
 (* crypt/<fetch-graph-aes-key-for-download : repo graph-id -> aes-key *)
@@ -64,8 +64,9 @@ let fetch_graph_aes_key_for_download :
 let preflight_upload_e2ee : (string -> bool -> unit Db_worker_effect.t) option ref =
   ref None
 
-(* crypt/ensure-user-rsa-keys! : repo -> promise *)
-let ensure_user_rsa_keys : (string -> unit Db_worker_effect.t) option ref = ref None
+(* crypt/ensure-user-rsa-keys! : opts-map -> promise *)
+let ensure_user_rsa_keys : (Wire.t -> Wire.t Db_worker_effect.t) option ref =
+  ref None
 
 (* crypt/<grant-graph-access! : repo graph-id user-uids -> promise *)
 let grant_graph_access :

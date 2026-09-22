@@ -379,9 +379,9 @@ let () =
          Db_worker_effect.pure ());
   Sync_deps.ensure_user_rsa_keys :=
     Some
-      (fun _repo ->
+      (fun _opts ->
          calls := "ensure-rsa" :: !calls;
-         Db_worker_effect.pure ());
+         Db_worker_effect.pure Wire.Nil);
   Fun.protect
     (fun () ->
       set_sync_config "https://sync.example.test";
@@ -426,9 +426,9 @@ let () =
          Db_worker_effect.pure ());
   Sync_deps.ensure_user_rsa_keys :=
     Some
-      (fun _repo ->
+      (fun _opts ->
          calls := "ensure-rsa" :: !calls;
-         Db_worker_effect.pure ());
+         Db_worker_effect.pure Wire.Nil);
   Fun.protect
     (fun () ->
       set_sync_config "https://sync.example.test";
