@@ -2420,7 +2420,7 @@ let delete_closed_value conn (property_id : string) (value_block_id : string)
 let class_add_property conn (class_id : string) (property_id : string) : unit =
   let db = Datascript.db conn in
   if property_id <> "logseq.property/empty-placeholder" then
-    match entity db (Ident class_id) with
+    match entity db (Lookup_ref ("block/uuid", Uuid class_id)) with
     | Some class_ ->
         if Ldb.is_class class_ then
           match entity db (Ident property_id) with
@@ -2438,7 +2438,7 @@ let class_add_property conn (class_id : string) (property_id : string) : unit =
 (* class-remove-property! *)
 let class_remove_property conn (class_id : string) (property_id : string) : unit =
   let db = Datascript.db conn in
-  match entity db (Ident class_id) with
+  match entity db (Lookup_ref ("block/uuid", Uuid class_id)) with
   | Some class_ when Ldb.is_class class_ ->
       (match entity db (Ident property_id) with
        | Some property when Ldb.is_property property ->
