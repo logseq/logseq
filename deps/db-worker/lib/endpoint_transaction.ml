@@ -41,8 +41,10 @@ let maybe_run_recycle_gc (conn : conn) : unit =
        ignore
          (Db_tx.transact conn
             [ Entity
-                { db_id = Some (Ident recycle_gc_kv)
-                ; attrs = [ ("kv/value", One_value (Float now)) ] } ]
+                { db_id = None
+                ; attrs =
+                    [ ("db/ident", One_value (Keyword recycle_gc_kv))
+                    ; ("kv/value", One_value (Float now)) ] } ]
             ~tx_meta:
               [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] ))
 
