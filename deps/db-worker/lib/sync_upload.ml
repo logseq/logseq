@@ -341,7 +341,9 @@ let create_remote_graph_aux repo ~graph_e2ee ~graph_ready_for_use
            ; Wire.Keyword "field", Wire.Keyword "auth-token" ]);
       (if graph_e2ee then
          Sync_deps.require "ensure_user_rsa_keys"
-           Sync_deps.ensure_user_rsa_keys repo
+           Sync_deps.ensure_user_rsa_keys
+           (Wire.kw_map [ "ensure-server?", Wire.Bool true ])
+         >>= fun _ -> Db_worker_effect.pure ()
        else Db_worker_effect.pure ())
       >>= fun () ->
       let schema_version =

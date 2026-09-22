@@ -148,7 +148,7 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
               Sync_deps.require "encrypt_bytes" Sync_deps.encrypt_bytes key asset_bytes
               >>= fun encrypted ->
               Db_worker_effect.pure
-                (Transit_codec.to_string (Wire.Binary encrypted)))
+                (Transit_codec.to_string encrypted))
          >>= fun payload ->
          let total = String.length payload in
          notify_asset_progress repo asset_id "upload" 0 total;
@@ -406,11 +406,7 @@ let download_remote_asset repo graph_id asset_uuid asset_type
          (match aes_key with
           | None -> write_asset_bytes repo asset_id at body
           | Some key ->
-              let untransited =
-                match Transit_codec.of_string body with
-                | Wire.Binary b -> b
-                | _ -> body
-              in
+              let untransited = Transit_codec.of_string body in
               Sync_deps.require "decrypt_bytes" Sync_deps.decrypt_bytes key untransited
               >>= fun decrypted -> write_asset_bytes repo asset_id at decrypted))
         (fun e ->
