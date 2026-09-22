@@ -58,7 +58,7 @@ let blank_title (m : t) : bool =
 let id_ref_of (n : entity_id) : entity_ref =
   if n < 0 then Temp_id (string_of_int n) else Entity_id n
 
-let entity_ref_of_value (v : value) : entity_ref option =
+let rec entity_ref_of_value (v : value) : entity_ref option =
   match v with
   | Ref n -> Some (id_ref_of n)
   | Int n -> Some (id_ref_of n)
@@ -69,9 +69,15 @@ let entity_ref_of_value (v : value) : entity_ref option =
     Some (Lookup_ref (a, v'))
   | Map kvs ->
     (match List.find_opt (fun (k, _) -> k = Keyword "db/id") kvs with
-     | Some (_, Int n) -> Some (id_ref_of n)
-     | Some (_, Ref n) -> Some (id_ref_of n)
-     | _ ->
+     | Some (_, v) ->
+         (match entity_ref_of_value v with
+          | Some r -> Some r
+          | None ->
+            (match List.find_opt (fun (k, _) -> k = Keyword "block/uuid") kvs with
+             | Some (_, Uuid u) -> Some (Lookup_ref ("block/uuid", Uuid u))
+             | Some (_, String u) -> Some (Lookup_ref ("block/uuid", Uuid u))
+             | _ -> None))
+     | None ->
        (match List.find_opt (fun (k, _) -> k = Keyword "block/uuid") kvs with
         | Some (_, Uuid u) -> Some (Lookup_ref ("block/uuid", Uuid u))
         | Some (_, String u) -> Some (Lookup_ref ("block/uuid", Uuid u))
@@ -156,8 +162,44 @@ let of_entity (e : entity) : t =
   in
   ("db/id", Ref e.id) :: attrs
 
+(* Schema attributes declared by entities inside the same tx — cljs
+   resolves them on the progressively updated schema during transact, but
+   tx values are converted once up front, so the declarations are
+   collected beforehand. *)
+type schema_hint =
+  { ref_attrs : attr list
+  ; many_attrs : attr list
+  ; unique_attrs : attr list }
+
+let empty_hint = { ref_attrs = []; many_attrs = []; unique_attrs = [] }
+
+let schema_hint_of_bms (ms : t list) : schema_hint =
+  List.fold_left
+    (fun hint m ->
+      match attr_value m "db/ident" with
+      | Some (Keyword i) | Some (String i) ->
+        let is_ref =
+          match attr_value m "db/valueType" with
+          | Some (Keyword "db.type/ref") | Some (String "db.type/ref") -> true
+          | _ -> false
+        and is_many =
+          match attr_value m "db/cardinality" with
+          | Some (Keyword "db.cardinality/many")
+          | Some (String "db.cardinality/many") -> true
+          | _ -> false
+        and is_unique = attr_value m "db/unique" <> None in
+        { ref_attrs = (if is_ref then i :: hint.ref_attrs else hint.ref_attrs)
+        ; many_attrs = (if is_many then i :: hint.many_attrs else hint.many_attrs)
+        ; unique_attrs =
+            (if is_unique then i :: hint.unique_attrs else hint.unique_attrs) }
+      | _ -> hint)
+    empty_hint ms
+
 (* block map value -> tx_value, resolving refs by attr schema *)
-let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
+let rec value_to_tx_value
+          (db : db) ?(hint : schema_hint option) (a : attr) (v : value)
+  : tx_value option =
+  let hint = match hint with Some h -> h | None -> empty_hint in
   let tx_entity_of_ref (r : entity_ref) : tx_entity =
     { db_id = Some r; attrs = [] }
   and tx_entity_of_map (kvs : (value * value) list) : tx_entity option =
@@ -169,7 +211,7 @@ let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
           | Keyword "db/id" | String "db/id" ->
             (attrs, entity_ref_of_value (Map [ (k, v) ]) )
           | Keyword a | String a ->
-            (match value_to_tx_value db a (normalize_value v) with
+            (match value_to_tx_value db ~hint a (normalize_value v) with
              | Some tv -> ((a, tv) :: attrs, db_id)
              | None -> (attrs, db_id))
           | _ -> (attrs, db_id))
@@ -178,7 +220,11 @@ let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
     if attrs = [] && db_id = None then None
     else Some { db_id; attrs = List.rev attrs }
   in
-  let ref_ok = Ldb.ref_attr db a in
+  let ref_ok = Ldb.ref_attr db a || List.mem a hint.ref_attrs
+  and many_ok = Ldb.many_attr db a || List.mem a hint.many_attrs
+  and unique_of (a' : attr) : bool =
+    Ldb.unique_attr db a' || List.mem a' hint.unique_attrs
+  in
   match v with
   | Nil -> None
   | Ref n -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
@@ -189,6 +235,13 @@ let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
     (match tx_entity_of_map kvs with
      | Some te -> Some (One_entity te)
      | None -> None)
+  (* cljs datascript maybe-wrap-multival: a [:a v] pair stays a single
+     (lookup-ref) value unless the outer attr is :db.cardinality/many and
+     the head attr is not :db/unique — transact resolves the pair against
+     the live schema *)
+  | (List [ Keyword a'; _ ] | Vector [ Keyword a'; _ ]) as v
+      when unique_of a' || not many_ok ->
+    Some (One_value v)
   | List vs | Vector vs | Set vs ->
     let items = List.map (normalize_value) vs in
     let all_refs =
@@ -199,22 +252,41 @@ let rec value_to_tx_value (db : db) (a : attr) (v : value) : tx_value option =
     if all_refs && items <> [] then
       Some (Many_entities
               (List.map (fun x -> tx_entity_of_ref (Option.get (entity_ref_of_value x))) items))
+    else if ref_ok then
+      (* collections on a ref attr can carry nested entity maps (cljs
+         resolves e.g. [{:db/ident k} {:db/ident k2 :block/order o}] as
+         entities via upsert) — keep their attrs through tx_entity_of_map *)
+      let tes =
+        List.map
+          (fun x ->
+            match entity_ref_of_value x with
+            | Some r -> Some (tx_entity_of_ref r)
+            | None ->
+                (match x with
+                 | Map kvs -> tx_entity_of_map kvs
+                 | _ -> None))
+          items
+      in
+      if List.for_all Option.is_some tes then
+        Some (Many_entities (List.filter_map Fun.id tes))
+      else Some (Many_values items)
     else
       Some (Many_values items)
   | _ -> Some (One_value v)
 
-let to_tx_entity (db : db) (m : t) : tx_entity =
+let to_tx_entity (db : db) ?(hint : schema_hint option) (m : t) : tx_entity =
   let db_id = ref_attr m "db/id" in
   let attrs =
     List.filter_map
       (fun (a, v) ->
         if a = "db/id" then None
         else
-          match value_to_tx_value db a v with
+          match value_to_tx_value db ?hint a v with
           | Some tv -> Some (a, tv)
           | None -> None)
       m
   in
   { db_id; attrs }
 
-let to_tx_op (db : db) (m : t) : tx_op = Entity (to_tx_entity db m)
+let to_tx_op (db : db) ?(hint : schema_hint option) (m : t) : tx_op =
+  Entity (to_tx_entity db ?hint m)

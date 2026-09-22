@@ -72,6 +72,16 @@ let many_attr (db : db) (a : attr) : bool =
        | Some e -> value e "db/cardinality" = Some (Keyword "db.cardinality/many")
        | None -> false)
 
+(* cljs db/is-attr? :db/unique — static schema OR the attr entity's own
+   :db/unique. *)
+let unique_attr (db : db) (a : attr) : bool =
+  match Schema.schema_attr_by_name (schema db) a with
+  | Some sa -> sa.unique <> None
+  | None ->
+      (match entity db (Ident a) with
+       | Some e -> value e "db/unique" <> None
+       | None -> false)
+
 (* ---------- entity-util predicates ---------- *)
 
 (* entity-util/has-tag? *)

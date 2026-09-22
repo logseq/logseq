@@ -387,10 +387,15 @@ let build_property_values_tx_m ?(pure = false) ?(pvalue_map = false)
         (buuid, props)
       in
       let key : attr =
-        match Block_map.string_attr property_map "original-property-id" with
+        let attr_string a =
+          match Block_map.attr_value property_map a with
+          | Some (Keyword s) | Some (String s) -> Some s
+          | _ -> None
+        in
+        match attr_string "original-property-id" with
         | Some i -> i
         | None ->
-          (match Block_map.string_attr property_map "db/ident" with
+          (match attr_string "db/ident" with
            | Some i -> i
            | None -> invalid_arg "Key in map must have a :db/ident")
       in
