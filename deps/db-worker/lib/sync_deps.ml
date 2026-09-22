@@ -196,3 +196,17 @@ let create_or_open_db :
 let rehydrate_large_titles :
     (string -> string -> unit Db_worker_effect.t) option ref =
   ref None
+
+(* ---- worker-undo-redo / platform hooks (owned by other packages) ---- *)
+
+(* worker-undo-redo/gen-undo-ops! : repo tx-report tx-id apply-history-action!
+   -> unit *)
+let gen_undo_ops :
+    (string -> Datascript.tx_report -> string -> unit) option ref =
+  ref None
+
+(* worker-undo-redo/clear-history! : repo -> unit *)
+let clear_history : (string -> unit) option ref = ref None
+
+(* platform capture-error reporting (:capture-error channel post) *)
+let capture_error : (string -> Wire.t -> Wire.t -> unit) option ref = ref None
