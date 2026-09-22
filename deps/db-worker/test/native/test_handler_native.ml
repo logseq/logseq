@@ -65,12 +65,6 @@
      the cljs test calls the handler fn which returns the same maps.
 
    Known lib bugs surfaced (asserted cljs-faithfully; left red):
-   - Render_snapshot.block_revision collapses any non-Int :block/tx-id
-     to 0 before valid_revision sees it, so canonical-block /
-     direct-children-membership do NOT throw on :block/tx-id
-     1.5/false/"invalid" the way cljs does (missing-revisions test,
-     non-numeric-tx-id case of requires-a-uuid test). The -1 case
-     throws correctly.
    - Db_property_build.build_property_values_tx_m reads
      original-property-id / db/ident via Block_map.string_attr
      (String-only) while Sqlite_build.build_property_map_for_pvalue_tx
@@ -89,23 +83,6 @@
      values (e.g. :build/closed-values :uuid -> "closed-value requires
      :uuid"). Avoided by using the Db_test_util DSL; the tagged-literal
      handling in edn_util is a lib bug to fix.
-  - Render_snapshot's positioned_property_meta reads
-    "logseq.property/hide-empty-value?" but the real attr is
-    logseq.property/hide-empty-value (no ?), so hide_empty is always
-    false and unset hide-empty properties (priority) get positioned
-    where cljs hides them (block-left / unset-priority cases).
-  - Render_snapshot.renderer_raw_title reads the literal stored
-    block/raw-title attr when block/title contains "[[", but cljs
-    resolves (:block/raw-title e) via entity-plus, which falls back to
-    the stored :block/title. So a block transacted with only
-    :block/title "Reference [[uuid]]" reports no :block/raw-title
-    (raw-title-is-id-ref case). Ldb.raw_title has the correct
-    entity-plus logic and is what callers should use.
-  - Transit_codec's reader cache desyncs on roundtrip:
-    of_string (to_string blocks) replaces "high" (a plain string in
-    user.property/priority) with Int 197 and shifts later ^N refs,
-    so transit roundtrip 0 (canonical-blocks snapshot) fails
-    (transit-safe-pure-results test).
   - Outliner_op.apply_ops does (Cljs_map.assoc opts "local-tx?" ...)
     unconditionally; when callers pass Wire.Nil opts it raises
     "assoc: not a map". Endpoint_comment.insert_comments_area and

@@ -29,9 +29,10 @@
       :logseq.property/view-context :page :logseq.property/public? true}
    - the logseq.class/Asset class entity (cljs initial-data includes it;
      the OCaml seed only lists it in the pipeline initial_data_ops).
-   - the four built-in pages' :block/created-at (the OCaml seed hardcodes
-     0 while cljs build-new-page assigns real epoch-ms; the time-filter
-     test needs them above the test values so created-at-min = 1000).
+   - built-in pages' :block/created-at (the OCaml seed hardcodes 0 while
+     cljs build-new-page assigns real epoch-ms; the time-filter test needs
+     them above the test values so created-at-min = 1000 — applied via
+     stamp_zero_created_at on every entity still carrying 0).
    - db/ident entities for :block/parent, :block/page and
      :block/created-at, plus the "Extends" title on
      logseq.property.class/extends — cljs built-in-properties emits these
@@ -50,35 +51,7 @@
    [:db/add [:block/uuid u] :logseq.property/icon {...}] transact
    (same convention as test_handler_native).
 
-   All 20 deftests are ported; none skipped.
-
-   Known OCaml lib divergences (lib/ untouched per task rules —
-   Graph_view.datoms-for-v only accepts Keyword/Ref/Int values, and
-   string_map_of_value_map only maps String values):
-
-   1. Bool-valued avet lookups always return [] — cljs d/datoms matches
-      on :v for any value type. Every entity-ids-with-v "…" (Bool true)
-      scan in Graph_view is dead code:
-      - invisible_id_set ("logseq.property/hide?" / "deleted-at" /
-        "exclude-from-graph-view") — a page flagged
-        exclude-from-graph-view still renders and links (fails
-        global-all-pages-graph-excludes-hidden-and-excluded-page-links).
-      - excluded_from_graph propagation through block/parent also can't
-        see Bool flags (fails
-        tags-and-objects-graph-respects-exclude-from-graph-view flag).
-      - hidden_name_page_ids in the all-pages path — built-in class
-        pages seeded with :logseq.property/hide? true (Root Tag, Task,
-        Card) are not filtered (contributes to the
-        global-all-pages-time-filter-keeps-visible-node-links failure).
-   2. db/ident datom values are Keyword, not String — so
-      string_map_of_value_map over "db/ident" always yields an empty
-      map:
-      - ident_by_id in build_node_context is empty -> :db-ident never
-        emitted on tag nodes (fails
-        tags-and-objects-graph-adds-db-ident-to-tag-nodes).
-      - ident_by_name_page_id in the all-pages path is empty -> the
-        Db_class.internal_tags filter never applies (contributes to
-        the time-filter test failure alongside bug 1). *)
+   All 20 deftests are ported; none skipped. *)
 
 open Datascript
 open Test_shared
@@ -296,18 +269,27 @@ let asset_class_pre_txs : (string * Db_test_util.edn) list list =
     ; "logseq.property.class/extends",
       Db_test_util.Set_ [ Db_test_util.Kw "logseq.class/Root" ] ] ]
 
-(* cljs build-new-page gives built-in pages real epoch-ms created-at; the
-   OCaml seed hardcodes 0 which would sit under created-at-min. Upsert a
-   large value so the time-filter semantics match cljs. *)
-let builtin_created_at_pre_txs : (string * Db_test_util.edn) list list =
-  List.map
-    (fun uuid ->
-       [ "block/uuid", Db_test_util.Uuid uuid
-       ; "block/created-at", Db_test_util.Int 1_700_000_000_000 ])
-    [ "00000004-1031-2047-0034-000000000000" (* Library *)
-    ; "00000004-2007-8570-0009-000000000000" (* Quick add *)
-    ; "00000004-1871-9210-0097-000000000000" (* Contents *)
-    ; "00000004-1514-5003-0003-000000000000" (* Recycle *) ]
+(* cljs build-new-page/block-with-timestamps gives every seed entity a real
+   epoch-ms created-at; the OCaml seed hardcodes 0 which would sit under
+   created-at-min. Stamp a large value on any entity still carrying 0 so the
+   time-filter semantics match cljs. *)
+let stamp_zero_created_at (conn : conn) =
+  let db = db_of conn in
+  let zeros =
+    datoms db Eavt ~a:"block/created-at" ()
+    |> Seq.filter (fun (d : datom) -> d.v = Int 0)
+    |> List.of_seq
+  in
+  if zeros <> [] then
+    transact_string conn
+      ("["
+       ^ String.concat " "
+           (List.map
+              (fun (d : datom) ->
+                Printf.sprintf "[:db/add %d :block/created-at 1700000000000]"
+                  d.e)
+              zeros)
+       ^ "]")
 
 (* ---------- tests ---------- *)
 
@@ -475,8 +457,9 @@ let test_global_all_pages_time_filter_keeps_visible_node_links () =
             ()
         ; pb "Middle" ~extra:[ "block/created-at", Int 2000 ] ()
         ; pb "Late" ~extra:[ "block/created-at", Int 3000 ] () ]
-      ~pre_txs:builtin_created_at_pre_txs ()
+      ()
   in
+  stamp_zero_created_at conn;
   let result =
     global_graph ~view_mode:"all-pages" ~orphan_pages:true
       ~created_at_filter:1000 (db_of conn)

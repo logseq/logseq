@@ -389,12 +389,18 @@ let schema () = Datascript.schema_of_edn_string schema_edn
    already applied, in tx order — a later tx upserts each ident to its
    full cljs-faithful shape below). *)
 let initial_data_idents_edn =
-  "[    {:db/ident :logseq.property/type}
-    {:db/ident :logseq.property/hide?}
-    {:db/ident :logseq.property/built-in?}
-    {:db/ident :logseq.property/public?}
+  (* cljs build-initial-properties txs each bootstrap property's :db/index
+     before any value datoms on that attr (the built-in? marks are emitted
+     last, after :logseq.property/built-in? is itself indexed). Emitting
+     :db/index here keeps every tx2 value datom on these non-ref attrs
+     avet-indexed like the cljs conn; datascript indexes datoms against the
+     schema at the moment they are transacted. *)
+  "[    {:db/ident :logseq.property/type :db/index true}
+    {:db/ident :logseq.property/hide? :db/index true}
+    {:db/ident :logseq.property/built-in? :db/index true}
+    {:db/ident :logseq.property/public? :db/index true}
     {:db/ident :logseq.property/default-value}
-    {:db/ident :logseq.property/deleted-at}
+    {:db/ident :logseq.property/deleted-at :db/index true}
     {:db/ident :logseq.property/cardinality}
     {:db/ident :logseq.property/description}
     {:db/ident :logseq.property.class/enable-bidirectional?}

@@ -430,7 +430,9 @@ let block_status_history (db : db) (block_id : int) : history_item list =
        [?history :logseq.property.history/property :logseq.property/status] \
        [?history :logseq.property.history/ref-value ?status] \
        [?history :block/created-at ?created-at]]"
-      ~inputs:[ Arg_scalar (Result_entity block_id) ]
+      (* Ref not Result_entity — the engine drops Arg_scalar Result_entity
+         inputs, leaving ?block-id unbound and returning every history row *)
+      ~inputs:[ Arg_scalar (Result_value (Ref block_id)) ]
   in
   rows
   |> List.filter_map (fun row ->

@@ -1217,7 +1217,7 @@ let test_block_breadcrumb_resource_includes_ref_titles () =
        (quid ref_uuid));
   (match
      get_in
-       (call_resource db resource_key).value
+       (call_resource (db_of conn) resource_key).value
        [ kw "ref-titles"; wu ref_uuid ]
    with
    | Some (Wire.String "Updated title") -> check "updated ref title" true

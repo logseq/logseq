@@ -2593,50 +2593,47 @@ let linked_references_page_list_view_data db (view : entity option)
 (* view/get-query-properties — query is the wire form of the option *)
 let get_query_properties db (query : Wire.t option) (entities : entity list) :
     Wire.t option =
-  match query with
-  | None -> None
-  | Some q ->
-      let props =
-        match q with
-        | Wire.Array ((Wire.Keyword "find" | Wire.Symbol "find") :: expr :: _)
-        | Wire.List ((Wire.Keyword "find" | Wire.Symbol "find") :: expr :: _) ->
-            (match expr with
-             | Wire.Array ((Wire.Symbol "pull" | Wire.Keyword "pull") :: _ :: p :: _)
-             | Wire.List ((Wire.Symbol "pull" | Wire.Keyword "pull") :: _ :: p :: _) ->
-                 Some p
-             | _ -> None)
-        | _ -> None
-      in
-      let is_star = function
-        | Wire.Array [ (Wire.Symbol "*" | Wire.Keyword "*") ]
-        | Wire.List [ (Wire.Symbol "*" | Wire.Keyword "*") ] -> true
-        | _ -> false
-      in
-      (match props with
-       | Some p when not (is_star p) ->
-           (match p with
-            | Wire.Array _ | Wire.List _ -> Some p
-            | _ -> Some (Wire.Array [ p ]))
-       | _ ->
-           let keys =
-             List.concat_map
-               (fun (e : entity) ->
-                  List.map (fun (d : datom) -> d.a)
-                    (List.of_seq (datoms db Eavt ~e:e.id ())))
-               entities
-           in
-           let seen = Hashtbl.create 31 in
-           let keys =
-             List.filter
-               (fun a ->
-                  if Hashtbl.mem seen a then false
-                  else begin
-                    Hashtbl.replace seen a ();
-                    true
-                  end)
-               keys
-           in
-           Some (Wire.Array (List.map (fun a -> Wire.Keyword a) keys)))
+  let props =
+    match query with
+    | Some (Wire.Array ((Wire.Keyword "find" | Wire.Symbol "find") :: expr :: _))
+    | Some (Wire.List ((Wire.Keyword "find" | Wire.Symbol "find") :: expr :: _)) ->
+        (match expr with
+         | Wire.Array ((Wire.Symbol "pull" | Wire.Keyword "pull") :: _ :: p :: _)
+         | Wire.List ((Wire.Symbol "pull" | Wire.Keyword "pull") :: _ :: p :: _) ->
+             Some p
+         | _ -> None)
+    | _ -> None
+  in
+  let is_star = function
+    | Wire.Array [ (Wire.Symbol "*" | Wire.Keyword "*") ]
+    | Wire.List [ (Wire.Symbol "*" | Wire.Keyword "*") ] -> true
+    | _ -> false
+  in
+  (match props with
+   | Some p when not (is_star p) ->
+       (match p with
+        | Wire.Array _ | Wire.List _ -> Some p
+        | _ -> Some (Wire.Array [ p ]))
+   | _ ->
+       let keys =
+         List.concat_map
+           (fun (e : entity) ->
+              List.map (fun (d : datom) -> d.a)
+                (List.of_seq (datoms db Eavt ~e:e.id ())))
+           entities
+       in
+       let seen = Hashtbl.create 31 in
+       let keys =
+         List.filter
+           (fun a ->
+              if Hashtbl.mem seen a then false
+              else begin
+                Hashtbl.replace seen a ();
+                true
+              end)
+           keys
+       in
+       Some (Wire.Array (List.map (fun a -> Wire.Keyword a) keys)))
 
 (* view/get-view-data *)
 let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =

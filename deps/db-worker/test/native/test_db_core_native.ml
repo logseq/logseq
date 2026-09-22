@@ -187,10 +187,22 @@
      - get-view-filter-data uses Db_view.get_property_values_fn — the
        documented OCaml injection seam for the cljs with-redefs stub.
      - db-core-registers-* asserts every cljs-expected thread-api name
-       that has a native registration, instead of list equality.
+       that has a native registration, instead of list equality (5 cljs
+       names are intentionally unregistered on native: export-db-binary,
+       export-client-ops-db-binary, import-db-binary, get-display-
+       properties, reorder-display-property).
 
-   Known lib bugs hit by these tests (no workarounds — assertions
+   Known lib/engine bugs hit by these tests (no workarounds — assertions
    left real and red):
+     - Endpoint_read.{set-page-favorite,set-page-unfavorite,
+       reorder-favorites} call
+       (Outliner_op.apply_ops conn ops Wire.Nil): apply_ops immediately
+       does (Cljs_map.assoc opts ...) which raises
+       [invalid_arg "assoc: not a map"] on Wire.Nil before any op runs —
+       every favorite endpoint fails for non-empty ops. Hits
+       set-page-favorite-is-durable-per-graph,
+       set-page-favorite-accepts-repeated-false-values,
+       reorder-favorites-is-idempotent.
      - import-file-graph transacts the file entity
        {:file/content :file/last-modified-at :file/path} without the
        required file/created-at + block/uuid, so Db_tx.Invalid_tx aborts
@@ -198,6 +210,17 @@
        Hits import-file-graph-imports-documents,
        import-file-graph-reports-lazy-read-failure,
        import-file-graph-stores-page-refs-and-progress.
+     - Sqlite_build.tx_ops_of_values rejects [:db/retractEntity e] with
+       "Unexpected tx item: [:db/retractEntity 1]" — import-edn can't
+       apply the datom-format ops. Hits
+       import-edn-datom-format-imports-blocks,
+       import-edn-datom-format-strips-export-metadata.
+     - Endpoint_search.search_index_input_idle reads the thread atom
+       "search-input-idle-status" but the registered atom name is
+       "thread-atom/search-input-idle-status", so the stored status is
+       never found and the endpoint always reports idle (and
+       update_thread_atom raises invalid_arg on the unregistered name).
+       Hits search-index-input-idle-reports-not-idle-for-recent-input.
 *)
 
 open Datascript
@@ -539,13 +562,14 @@ let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
       ()
   in
   register_conn conn;
+  let b = Option.get (entity_at_uuid (db_of conn) u2) in
   let ops =
     Wire.Array
       [ Wire.Array
           [ kw "indent-outdent-blocks"
           ; Wire.Array
-              [ Wire.Array [ Wire.Uuid u2 ]
-              ; Wire.Bool false
+              [ Wire.Array [ Wire.Int b.id ]
+              ; Wire.Bool true
               ; Wire.Map
                   [ kw "parent-original"
                   , Wire.Map [ kw "block/uuid", Wire.Uuid missing ] ] ] ] ]
@@ -1862,17 +1886,19 @@ let seed_favorites_page conn =
     (transact_maps conn
        [ [ "block/uuid", Uuid "11111111-ffff-1111-ffff-111111111111"
          ; "block/title", Str favorites_page
-         ; "block/name", Str favorites_page ] ])
+         ; "block/name", Str favorites_page
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ])
 
 let test_set_page_favorite () =
-  let conn = create_conn_bare () in
+  let conn = create_conn () in
   let page_uuid = "77777777-7777-7777-7777-777777777777" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid page_uuid
          ; "block/title", Str "fav page"
-         ; "block/name", Str "fav page" ] ]);
+         ; "block/name", Str "fav page"
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
   register_conn conn;
   let page = Option.get (entity_at_uuid (db_of conn) page_uuid) in
   ignore
@@ -1898,14 +1924,15 @@ let test_set_page_favorite () =
 
 (* (deftest set-page-favorite-is-idempotent ...) *)
 let test_set_page_favorite_repeated_false () =
-  let conn = create_conn_bare () in
+  let conn = create_conn () in
   let page_uuid = "77777777-8888-7777-7777-777777777777" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid page_uuid
          ; "block/title", Str "fav page 2"
-         ; "block/name", Str "fav page 2" ] ]);
+         ; "block/name", Str "fav page 2"
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
   register_conn conn;
   ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.String page_uuid; Wire.Bool true ]);
   ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.String page_uuid; Wire.Bool false ]);
@@ -1914,15 +1941,17 @@ let test_set_page_favorite_repeated_false () =
 
 (* (deftest reorder-favorites-mutates-worker-db ...) *)
 let test_reorder_favorites () =
-  let conn = create_conn_bare () in
+  let conn = create_conn () in
   let fav_uuid = "11111111-ffff-1111-ffff-111111111111"
   and u1 = "88888888-1111-0000-0000-000000000001"
   and u2 = "88888888-2222-0000-0000-000000000002" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
-       [ [ "block/uuid", Uuid u1; "block/title", Str "f1"; "block/name", Str "f1" ]
-       ; [ "block/uuid", Uuid u2; "block/title", Str "f2"; "block/name", Str "f2" ] ]);
+       [ [ "block/uuid", Uuid u1; "block/title", Str "f1"; "block/name", Str "f1"
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
+       ; [ "block/uuid", Uuid u2; "block/title", Str "f2"; "block/name", Str "f2"
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid "88888888-3333-0000-0000-000000000003"
@@ -1946,7 +1975,7 @@ let test_reorder_favorites () =
         match Ldb.ref_ids fb "block/link" with [ id ] -> Some id | _ -> None)
       (Ldb.sort_by_order
          (List.filter_map (Ldb.ent_of_id (db_of conn))
-            (Ldb.ref_ids fav "block/_page")))
+            (Ldb.ref_ids fav "block/_parent")))
   in
   check "reorder favorites" (linked = [ pid2; pid1 ])
 
@@ -2167,27 +2196,25 @@ let test_import_edn_datom_format () =
   let conn = create_pipeline_conn () in
   Worker_state.set_datascript_conn repo conn;
   let export_conn = Sqlite_export.create_conn () in
+  let page_uuid = "bbbbbbbb-1111-0000-0000-000000000000" in
   let u = "bbbbbbbb-1111-0000-0000-000000000001" in
-  let page_u = "bbbbbbbb-2222-0000-0000-000000000002" in
   ignore
     (transact_maps export_conn
-       [ [ "block/uuid", Uuid page_u
-         ; "block/name", Str "imported-page"
-         ; "block/title", Str "imported page"
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1
+       [ [ "db/id", Str "imported-page"; "block/uuid", Uuid page_uuid
+         ; "block/name", Str "imported page"; "block/title", Str "Imported page"
+         ; "block/created-at", Int 1; "block/updated-at", Int 1
          ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
-       ; [ "block/uuid", Uuid u
+       ; [ "block/uuid", Uuid u; "block/page", Str "imported-page"
+         ; "block/parent", Str "imported-page"; "block/order", Str "a0"
          ; "block/title", Str "imported"
-         ; "block/page", Vec [ Kw "block/uuid"; Uuid page_u ]
-         ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_u ]
-         ; "block/order", Str "a0"
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1 ] ]);
+         ; "block/created-at", Int 1; "block/updated-at", Int 1 ] ]);
   let export_edn = graph_export_of export_conn in
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
    | Wire.Map m ->
+       (match wire_get "error" m with
+        | Some e -> ignore e
+        | None -> ());
        check "import-edn no error" (wire_get "error" m = None);
        check "import-edn tx-count" (wire_get "tx-count" m <> None)
    | _ -> check "import-edn non-nil" (result <> Wire.Nil))

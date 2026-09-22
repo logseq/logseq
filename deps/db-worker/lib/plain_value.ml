@@ -352,9 +352,8 @@ let entity_forward_map ?(properties : attr list option)
   let m =
     match raw_title with
     | Some v ->
-        field "block/title" (Ds_wire.transit_of_value v)
-        :: field "block/raw-title" (Ds_wire.transit_of_value v)
-        :: m
+        let m = assoc "block/title" (Ds_wire.transit_of_value v) m in
+        assoc "block/raw-title" (Ds_wire.transit_of_value v) m
     | None -> m
   in
   let m =

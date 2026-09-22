@@ -172,10 +172,11 @@ let transit_of_datom (d : datom) : Wire.t =
 
 (* ---- query results ---- *)
 
+(* cljs pull emits exactly the pattern's attrs — :db/id only appears when
+   :db/id or * was requested (the engine then includes it in pulled_attrs). *)
 let rec transit_of_pulled (p : pulled_entity) : Wire.t =
   let entries =
-    (Wire.Keyword "db/id", Wire.Int p.pulled_id)
-    :: List.map
+    List.map
          (fun (k, v) ->
             let key =
               match k with

@@ -380,7 +380,12 @@ let get_class_objects db (class_id : entity_id) : entity list =
    class-extends) that declares ?prop in
    :logseq.property.class/properties. *)
 let property_object_eids db (prop_ident : string) : entity_id list =
-  let direct = eids_with_attr db prop_ident in
+  (* the rules query scans by attr alone, so Aevt — a user property is not
+     :db/index'ed and would throw on Avet *)
+  let direct =
+    List.map (fun (d : datom) -> d.e)
+      (List.of_seq (datoms db Aevt ~a:prop_ident ()))
+  in
   let via_tags =
     match ident_eid db prop_ident with
     | Some prop_eid ->

@@ -598,7 +598,23 @@ let block_line_info db (block : entity) marker : block_line_info =
   in
   let status =
     if has_status_datoms || is_task then
-      Option.bind (Ldb.value block "logseq.property/status") (status_marker db)
+      (* cljs lookup-kv-with-default-value: a missing status datom falls
+         back to the property's :logseq.property/default-value. *)
+      let status_value =
+        match Ldb.value block "logseq.property/status" with
+        | Some _ as v -> v
+        | None ->
+            (match entity db (Ident "logseq.property/status") with
+             | Some prop ->
+                 (match Ldb.value prop "logseq.property/default-value" with
+                  | Some (Keyword k) ->
+                      Option.map
+                        (fun (e : entity) -> Ref e.id)
+                        (entity db (Ident k))
+                  | v -> v)
+             | None -> None)
+      in
+      Option.bind status_value (status_marker db)
     else None
   in
   { first_line_fragment = block_first_line_fragment block
@@ -680,8 +696,7 @@ let rec decorate_rendered_content db content line_infos (opts : opts)
                     in
                     let out'' =
                       List.rev_append
-                        (List.rev
-                           (decorate_block_line db info line ~spaces ~title opts))
+                        (decorate_block_line db info line ~spaces ~title opts)
                         out'
                     in
                     loop more rest_infos out'' true None
@@ -884,10 +899,14 @@ let mirror_page repo db (page_id : entity_id) (opts : opts)
                  let path = mirror_path repo relative_path in
                  let content = render_page_content db page opts in
                  write_if_changed path content
-                 >>= fun (status, _reason) ->
+                 >>= fun (status, reason) ->
                  Db_worker_effect.pure
                    (result_wire status (Some repo) (Some page)
-                      [ (Wire.Keyword "path", Wire.String path) ]))
+                      ([ (Wire.Keyword "path", Wire.String path) ]
+                       @ (match reason with
+                          | "" -> []
+                          | r ->
+                              [ (Wire.Keyword "reason", Wire.Keyword r) ]))))
 
 let deleted_page (page : entity option) : bool =
   match page with

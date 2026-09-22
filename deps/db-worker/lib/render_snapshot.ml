@@ -167,11 +167,11 @@ let render_tag_class_page (db : db) (block : entity) : bool =
          (Entity_view.of_entity block)
    | None -> false)
 
-(* db-property/property? — user-visible property ident *)
+(* cljs direct-block-property-ids — db-property/property? *)
 let direct_block_property_ids (db : db) (block_id : entity_id) : string list =
   datoms db Eavt ~e:block_id ()
   |> Seq.filter_map (fun (d : datom) ->
-       if Db_property.internal_property d.a then Some d.a else None)
+       if Db_property.property d.a then Some d.a else None)
   |> List.of_seq
   |> List.sort_uniq String.compare
 

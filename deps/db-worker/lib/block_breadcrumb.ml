@@ -183,16 +183,22 @@ let compute_shallow_ref_identity db (ref_id : entity_id option) : (attr * value)
   (match ref_ident with
    | Some v -> (match v with Keyword _ -> () | _ -> fail "Invalid canonical block reference ident" "")
    | None -> ());
-  [ ("db/id", Int ref_id) ]
-  @ (match ref_uuid with Some u -> [ ("block/uuid", u) ] | None -> [])
-  @ (match ref_ident with Some k -> [ ("db/ident", k) ] | None -> [])
-  @ (match ref_title with Some t -> [ ("block/title", t) ] | None -> [])
-  @ (match ref_name with Some n -> [ ("block/name", n) ] | None -> [])
-  @ (match tag_ids with
-     | [] -> []
-     | ids -> [ ("block/tags",
-              List (List.map (fun id -> Map (List.map (fun (a, v) -> (Keyword a, v)) (tag_summary db id))) ids)) ])
-  @ (if page_ref_identity collected then [] else property_or_asset_extras db collected)
+  let base =
+    [ ("db/id", Int ref_id) ]
+    @ (match ref_uuid with Some u -> [ ("block/uuid", u) ] | None -> [])
+    @ (match ref_ident with Some k -> [ ("db/ident", k) ] | None -> [])
+    @ (match ref_title with Some t -> [ ("block/title", t) ] | None -> [])
+    @ (match ref_name with Some n -> [ ("block/name", n) ] | None -> [])
+    @ (match tag_ids with
+       | [] -> []
+       | ids -> [ ("block/tags",
+                List (List.map (fun id -> Map (List.map (fun (a, v) -> (Keyword a, v)) (tag_summary db id))) ids)) ])
+  in
+  (* cljs merge: extra pairs replace same-attr base pairs *)
+  List.fold_left
+    (fun acc (a, v) -> (a, v) :: List.remove_assoc a acc)
+    base
+    (if page_ref_identity collected then [] else property_or_asset_extras db collected)
 
 (* cljs *ref-identity-cache* — bound per batch; one per breadcrumb
    call here (still dedupes refs shared across ancestors/refs). *)
