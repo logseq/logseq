@@ -22,16 +22,16 @@
  (url "git+https://github.com/logseq/persistent-sorted-set-ocaml.git")
  (package (name persistent_sorted_set_ocaml)))
 (pin
- (url "git+https://github.com/logseq/melange-edn.git")
+ (url "git+https://github.com/RCmerci/melange-edn.git")
  (package (name melange-edn)))
 (pin
- (url "git+https://github.com/logseq/melange-transit.git")
+ (url "git+https://github.com/RCmerci/melange-transit.git")
  (package (name melange-transit)))
 (pin
- (url "git+https://github.com/logseq/melange-fest.git")
+ (url "git+https://github.com/RCmerci/melange-fest.git")
  (package (name melange-fest)))
 (pin
- (url "git+https://github.com/logseq/rrbvec.git")
+ (url "git+https://github.com/RCmerci/rrbvec.git")
  (package (name rrbvec)))
 
 (package
