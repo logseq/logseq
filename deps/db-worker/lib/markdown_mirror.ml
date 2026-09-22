@@ -8,7 +8,9 @@ open Datascript
 
 let invalid_file_name_chars_re = Regexp.compile "[<>:\"|?*\\\\/]"
 
-let ascii_control_re = Regexp.compile "[\\x00-\\x1F]"
+(* \u escapes (not \xNN) — Regexp.translate expands them to the raw
+   bytes, which Re.Pcre accepts inside a character class. *)
+let ascii_control_re = Regexp.compile "[\\u0000-\\u001F]"
 
 let trailing_space_or_dot_re = Regexp.compile "[ \\.]+$"
 
