@@ -365,7 +365,10 @@ let validate_ops (raw_entries : Wire.t list) : unit =
              when List.length args = List.length specs
                   && List.for_all2 arg_ok specs args ->
                ()
-           | _ -> raise (Invalid_outliner_op "invalid op args"))
+           | _ ->
+               raise
+                 (Invalid_outliner_op
+                    ("invalid op args: " ^ Transit_codec.to_string entry)))
       | None -> raise (Invalid_outliner_op "invalid op"))
     raw_entries
 

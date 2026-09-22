@@ -294,6 +294,22 @@ let request_asset_download repo asset_uuid : unit =
 
 (* ---- history op helpers ---- *)
 
+(* op-construct impls — this module is the sole caller of these slots,
+   so binding them here keeps Outliner_op_construct in the link closure
+   (cljs binds them via direct namespace refs loaded alongside sync). *)
+let () =
+  Sync_deps.derive_history_outliner_ops :=
+    Some Outliner_op_construct.derive_history_outliner_ops;
+  Sync_deps.rewrite_block_title_with_retracted_refs :=
+    Some Outliner_op_construct.rewrite_block_title_with_retracted_refs;
+  Sync_deps.assert_no_numeric_entity_ids :=
+    Some
+      (fun conn ops stage ->
+         Outliner_op_construct.assert_no_numeric_entity_ids
+           (Datascript.Conn.db conn) ops stage);
+  Sync_deps.semantic_outliner_ops :=
+    Some (fun op -> List.mem op Outliner_op.semantic_outliner_op_names)
+
 let derive_history_outliner_ops db_before db_after tx_data
     (tx_meta : tx_meta) : Wire.t list * Wire.t list =
   let tx_meta_wire =
