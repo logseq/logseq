@@ -126,13 +126,124 @@ let preserve_state (f : unit -> 'a) : 'a =
   let auth_token_prev = !(Sync_util.auth_token_fn) in
   let id_token_expired_prev = !(Sync_auth.id_token_expired_fn) in
   let parse_jwt_prev = !(Sync_util.parse_jwt_fn) in
+  let remote_tx_prev = Hashtbl.copy Sync_apply.repo_latest_remote_tx in
+  let remote_ck_prev = Hashtbl.copy Sync_apply.repo_latest_remote_checksum in
+  let stopped_prev = Hashtbl.copy Sync_apply.repo_upload_stopped in
+  let large_up_prev = Hashtbl.copy Sync_apply.repo_large_upload_progress in
+  let ck_prev = Hashtbl.copy Sync_state.latest_remote_checksums in
+  let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
+  let flush_prev = !(Sync_apply.flush_pending_fn) in
+  let module SD = Sync_deps in
+  let sd_encrypt_tx = !(SD.encrypt_tx_data)
+  and sd_decrypt_tx = !(SD.decrypt_tx_data)
+  and sd_aes_key = !(SD.ensure_graph_aes_key)
+  and sd_e2ee = !(SD.graph_e2ee)
+  and sd_enc_datoms = !(SD.encrypt_datoms)
+  and sd_dec_snap = !(SD.decrypt_snapshot_datoms_batch)
+  and sd_enc_text = !(SD.encrypt_text_value)
+  and sd_dec_text = !(SD.decrypt_text_value)
+  and sd_enc_bytes = !(SD.encrypt_bytes)
+  and sd_dec_bytes = !(SD.decrypt_bytes)
+  and sd_fetch_key = !(SD.fetch_graph_aes_key_for_download)
+  and sd_preflight = !(SD.preflight_upload_e2ee)
+  and sd_rsa = !(SD.ensure_user_rsa_keys)
+  and sd_grant = !(SD.grant_graph_access)
+  and sd_derive = !(SD.derive_history_outliner_ops)
+  and sd_semantic = !(SD.semantic_outliner_ops)
+  and sd_no_numeric = !(SD.assert_no_numeric_entity_ids)
+  and sd_rewr_title = !(SD.rewrite_block_title_with_retracted_refs)
+  and sd_apply_ops = !(SD.outliner_apply_ops)
+  and sd_page_create = !(SD.outliner_page_create)
+  and sd_page_delete = !(SD.outliner_page_delete)
+  and sd_upsert_prop = !(SD.outliner_upsert_property)
+  and sd_save_block = !(SD.outliner_save_block)
+  and sd_insert = !(SD.outliner_insert_blocks)
+  and sd_move = !(SD.outliner_move_blocks)
+  and sd_move_ud = !(SD.outliner_move_blocks_up_down)
+  and sd_indent = !(SD.outliner_indent_outdent_blocks)
+  and sd_del_blocks = !(SD.outliner_delete_blocks)
+  and sd_template = !(SD.outliner_apply_template)
+  and sd_trunc = !(SD.search_truncate_table)
+  and sd_import = !(SD.batch_import_edn_fn)
+  and sd_canonical = !(SD.canonical_blocks_fn)
+  and sd_close = !(SD.close_db)
+  and sd_unlink = !(SD.unlink_db)
+  and sd_inv_search = !(SD.invalidate_search_db)
+  and sd_open_db = !(SD.create_or_open_db)
+  and sd_rehydrate = !(SD.rehydrate_large_titles)
+  and sd_gen_undo = !(SD.gen_undo_ops)
+  and sd_clear_hist = !(SD.clear_history)
+  and sd_capture = !(SD.capture_error)
+  and sd_fetch_json = !(SD.fetch_json)
+  and sd_http_stream = !(SD.http_send_stream) in
   Fun.protect f ~finally:(fun () ->
       Hashtbl.reset Worker_state.app_state;
       Hashtbl.iter (Hashtbl.replace Worker_state.app_state) state_prev;
       Worker_state.set_db_sync_config cfg_prev;
       Sync_util.auth_token_fn := auth_token_prev;
       Sync_auth.id_token_expired_fn := id_token_expired_prev;
-      Sync_util.parse_jwt_fn := parse_jwt_prev)
+      Sync_util.parse_jwt_fn := parse_jwt_prev;
+      Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_apply.repo_latest_remote_tx) remote_tx_prev;
+      Hashtbl.reset Sync_apply.repo_latest_remote_checksum;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_apply.repo_latest_remote_checksum)
+        remote_ck_prev;
+      Hashtbl.reset Sync_apply.repo_upload_stopped;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_apply.repo_upload_stopped) stopped_prev;
+      Hashtbl.reset Sync_apply.repo_large_upload_progress;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_apply.repo_large_upload_progress)
+        large_up_prev;
+      Hashtbl.reset Sync_state.latest_remote_checksums;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_state.latest_remote_checksums) ck_prev;
+      Sync_apply.prepare_upload_tx_entries_fn := prep_prev;
+      Sync_apply.flush_pending_fn := flush_prev;
+      SD.encrypt_tx_data := sd_encrypt_tx;
+      SD.decrypt_tx_data := sd_decrypt_tx;
+      SD.ensure_graph_aes_key := sd_aes_key;
+      SD.graph_e2ee := sd_e2ee;
+      SD.encrypt_datoms := sd_enc_datoms;
+      SD.decrypt_snapshot_datoms_batch := sd_dec_snap;
+      SD.encrypt_text_value := sd_enc_text;
+      SD.decrypt_text_value := sd_dec_text;
+      SD.encrypt_bytes := sd_enc_bytes;
+      SD.decrypt_bytes := sd_dec_bytes;
+      SD.fetch_graph_aes_key_for_download := sd_fetch_key;
+      SD.preflight_upload_e2ee := sd_preflight;
+      SD.ensure_user_rsa_keys := sd_rsa;
+      SD.grant_graph_access := sd_grant;
+      SD.derive_history_outliner_ops := sd_derive;
+      SD.semantic_outliner_ops := sd_semantic;
+      SD.assert_no_numeric_entity_ids := sd_no_numeric;
+      SD.rewrite_block_title_with_retracted_refs := sd_rewr_title;
+      SD.outliner_apply_ops := sd_apply_ops;
+      SD.outliner_page_create := sd_page_create;
+      SD.outliner_page_delete := sd_page_delete;
+      SD.outliner_upsert_property := sd_upsert_prop;
+      SD.outliner_save_block := sd_save_block;
+      SD.outliner_insert_blocks := sd_insert;
+      SD.outliner_move_blocks := sd_move;
+      SD.outliner_move_blocks_up_down := sd_move_ud;
+      SD.outliner_indent_outdent_blocks := sd_indent;
+      SD.outliner_delete_blocks := sd_del_blocks;
+      SD.outliner_apply_template := sd_template;
+      SD.search_truncate_table := sd_trunc;
+      SD.batch_import_edn_fn := sd_import;
+      SD.canonical_blocks_fn := sd_canonical;
+      SD.close_db := sd_close;
+      SD.unlink_db := sd_unlink;
+      SD.invalidate_search_db := sd_inv_search;
+      SD.create_or_open_db := sd_open_db;
+      SD.rehydrate_large_titles := sd_rehydrate;
+      SD.gen_undo_ops := sd_gen_undo;
+      SD.clear_history := sd_clear_hist;
+      SD.capture_error := sd_capture;
+      SD.fetch_json := sd_fetch_json;
+      SD.http_send_stream := sd_http_stream)
 
 let with_db_sync_config (cfg : Wire.t) (f : unit -> 'a) : 'a =
   let prev = Worker_state.db_sync_config () in
@@ -304,20 +415,19 @@ let setup_parent_child () :
     conn * Sqlite.db * entity * entity * entity * entity =
   let conn =
     Db_test_util.create_conn_with_blocks
-      ~options:
-        { Db_test_util.default_options with
-          pages_and_blocks =
-            [ { Db_test_util.page = Db_test_util.default_page
-              ; blocks =
-                  [ { Db_test_util.default_block with
-                      b_title = Some "parent"
-                    ; b_children =
-                        [ { Db_test_util.default_block with
-                            b_title = Some "child 1" }
-                        ; { Db_test_util.default_block with
-                            b_title = Some "child 2" }
-                        ; { Db_test_util.default_block with
-                            b_title = Some "child 3" } ] } ] } ] } ()
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { Db_test_util.default_block with
+                  b_title = Some "parent"
+                ; b_children =
+                    [ { Db_test_util.default_block with
+                        b_title = Some "child 1" }
+                    ; { Db_test_util.default_block with
+                        b_title = Some "child 2" }
+                    ; { Db_test_util.default_block with
+                        b_title = Some "child 3" } ] } ] } ] ()
   in
   let ops = new_client_ops_db () in
   let find title =
@@ -329,25 +439,24 @@ let setup_two_parents () :
     conn * Sqlite.db * entity * entity * entity * entity =
   let conn =
     Db_test_util.create_conn_with_blocks
-      ~options:
-        { Db_test_util.default_options with
-          pages_and_blocks =
-            [ { Db_test_util.page = Db_test_util.default_page
-              ; blocks =
-                  [ { Db_test_util.default_block with
-                      b_title = Some "parent a"
-                    ; b_children =
-                        [ { Db_test_util.default_block with
-                            b_title = Some "a child 1" }
-                        ; { Db_test_util.default_block with
-                            b_title = Some "a child 2" } ] }
-                  ; { Db_test_util.default_block with
-                      b_title = Some "parent b"
-                    ; b_children =
-                        [ { Db_test_util.default_block with
-                            b_title = Some "b child 1" }
-                        ; { Db_test_util.default_block with
-                            b_title = Some "b child 2" } ] } ] } ] } ()
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page" }
+          ; blocks =
+              [ { Db_test_util.default_block with
+                  b_title = Some "parent a"
+                ; b_children =
+                    [ { Db_test_util.default_block with
+                        b_title = Some "a child 1" }
+                    ; { Db_test_util.default_block with
+                        b_title = Some "a child 2" } ] }
+              ; { Db_test_util.default_block with
+                  b_title = Some "parent b"
+                ; b_children =
+                    [ { Db_test_util.default_block with
+                        b_title = Some "b child 1" }
+                    ; { Db_test_util.default_block with
+                        b_title = Some "b child 2" } ] } ] } ] ()
   in
   let ops = new_client_ops_db () in
   let find title =
@@ -540,6 +649,114 @@ let rec wire_eq (a : Wire.t) (b : Wire.t) : bool =
 
 let wire_equal (a : Wire.t) (b : Wire.t) : bool = wire_eq a b
 
+(* ---------- upload/payload helpers ---------- *)
+
+let entity_block_uuid (e : entity) : Wire.t =
+  match Ldb.value e "block/uuid" with
+  | Some (Uuid _ as u) -> Ds_wire.transit_of_value u
+  | _ -> failwith "entity has no block/uuid"
+
+(* cljs [:block/uuid u] lookup ref *)
+let block_uuid_lookup (u : Wire.t) : Wire.t =
+  Wire.Array [ kw "block/uuid"; u ]
+
+(* cljs [:db/add e a v] *)
+let db_add (e : Wire.t) (a : string) (v : Wire.t) : Wire.t =
+  Wire.Array [ kw "db/add"; e; kw a; v ]
+
+let db_retract_entity (e : Wire.t) : Wire.t =
+  Wire.Array [ kw "db/retractEntity"; e ]
+
+(* cljs (:txs payload) *)
+let payload_txs (w : Wire.t) : Wire.t list =
+  match Wire.get "txs" w with
+  | Some (Wire.Array xs | Wire.List xs) -> xs
+  | _ -> []
+
+let str_field (name : string) (w : Wire.t) : string =
+  match Wire.get name w with
+  | Some (Wire.String s | Wire.Uuid s | Wire.Keyword s) -> s
+  | _ -> failwith (Printf.sprintf "missing string field %s" name)
+
+let wire_string_opt (w : Wire.t option) : string option =
+  match w with
+  | Some (Wire.String s | Wire.Uuid s | Wire.Keyword s) -> Some s
+  | _ -> None
+
+let wire_nil_or_absent (w : Wire.t option) : bool =
+  match w with None | Some Wire.Nil -> true | _ -> false
+
+let wire_tx_items (w : Wire.t) : Wire.t list =
+  match w with Wire.Array xs | Wire.List xs -> xs | _ -> []
+
+let list_sub (xs : 'a list) (start : int) (n : int) : 'a list =
+  List.filteri (fun i _ -> i >= start && i < start + n) xs
+
+let read_transit_str (s : string) : Wire.t = Transit_codec.of_string s
+
+(* a fake-ws client whose sends are captured as parsed JSON wire maps *)
+let sent_client () : Sync_state.client * Wire.t list ref =
+  let sent = ref [] in
+  let ws =
+    fake_ws ~on_send:(fun raw ->
+        sent := !sent @ [ Json_codec.parse raw ]) ()
+  in
+  (mk_client ~ws (), sent)
+
+(* set-timeout/clear-timeout capture — cljs (set! js/setTimeout ...) *)
+let with_timeout_capture
+    (f : (unit -> unit) option ref -> int option ref -> 'a) : 'a =
+  let cb = ref None in
+  let ms = ref None in
+  Native_test_hooks.install_timers
+    ~set_timeout:(fun n fn ->
+      cb := Some fn;
+      ms := Some n;
+      { Native_test_hooks.cancelled = false })
+    ~set_interval:(fun _ _ -> { Native_test_hooks.cancelled = false });
+  Fun.protect (fun () -> f cb ms)
+    ~finally:Native_test_hooks.restore_timers
+
+(* cljs shared flush-pending upload prelude: parent/child graph +
+   client-ops conn + capturing fake ws; the callback seeds txs (it needs
+   child1's uuid) and runs the scenario *)
+let with_large_upload
+    (f : Sync_state.client -> Wire.t list ref -> string -> entity -> 'a)
+    : 'a =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let sent = ref [] in
+      let ws =
+        fake_ws ~on_send:(fun raw ->
+            sent := !sent @ [ Json_codec.parse raw ]) ()
+      in
+      let client = mk_client ~ws () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* cljs with-redefs [worker-state/online? (constantly true)
+             sync-crypt/graph-e2ee? (constantly false)] — native online?
+             is always true *)
+          Sync_deps.graph_e2ee := Some (fun _ -> false);
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          Sync_client_op.update_local_tx test_repo 0;
+          f client sent tx_id child1))
+
+let payload_tx_entry (payload : Wire.t) : Wire.t =
+  match payload_txs payload with
+  | e :: _ -> e
+  | [] -> failwith "no txs in payload"
+
+(* cljs (:tx tx-entry) transit-read *)
+let uploaded_tx_of (tx_entry : Wire.t) : Wire.t list =
+  wire_tx_items (read_transit_str (str_field "tx" tx_entry))
+
+(* cljs ack-upload-response! + bump remote/local t + flush again *)
+let ack_and_reflush (client : Sync_state.client) (remote_tx : int) : unit =
+  Sync_apply.ack_upload_response test_repo client;
+  Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo remote_tx;
+  Sync_client_op.update_local_tx test_repo remote_tx;
+  await_unit (Sync_apply.flush_pending test_repo client)
+
 (* ---------- tests ---------- *)
 
 (* (deftest resolve-ws-token-refreshes-when-token-expired-test ...)
@@ -694,6 +911,421 @@ let test_presence_message_updates_other_user () =
              | _ -> false);
           check "1 broadcast" (List.length !broadcasts = 1)))
 
+
+(* (deftest ws-send-tx-batch-serializes-tx-id-as-uuid-string-test ...) *)
+let test_ws_send_tx_batch_serializes_tx_id_as_uuid_string () =
+  preserve_state (fun () ->
+      let sent_raw = ref None in
+      let ws = fake_ws ~on_send:(fun raw -> sent_raw := Some raw) () in
+      let tx_id = fresh_uuid () in
+      await_unit
+        (Sync_transport.send ws
+           (wire_map
+              [ "type", Wire.String "tx/batch"
+              ; "t-before", Wire.Int 99
+              ; "txs"
+                , Wire.Array
+                    [ wire_map
+                        [ "tx", Wire.String "[]"
+                        ; "tx-id", Wire.Uuid tx_id
+                        ; "outliner-op", kw "move-blocks" ] ] ]));
+      let payload = Json_codec.parse (Option.get !sent_raw) in
+      let payload_tx_id =
+        match payload_txs payload with
+        | e :: _ -> Wire.get "tx-id" e
+        | [] -> None
+      in
+      check "type tx/batch"
+        (Wire.get "type" payload = Some (Wire.String "tx/batch"));
+      check "tx-id serialized" (payload_tx_id = Some (Wire.String tx_id));
+      check "tx-id is string"
+        (match payload_tx_id with
+         | Some (Wire.String _) -> true
+         | _ -> false))
+
+(* (deftest coerce-ws-server-message-accepts-legacy-tx-reject-shape-test ...) *)
+let test_coerce_ws_server_message_accepts_legacy_tx_reject_shape () =
+  let failed_tx_id = fresh_uuid () in
+  let success_tx_id = fresh_uuid () in
+  let coerced =
+    Option.get
+      (Sync_transport.coerce_ws_server_message
+         (wire_map
+            [ "type", Wire.String "tx/reject"
+            ; "reason", Wire.String "db transact failed"
+            ; "t", Wire.Int 1392
+            ; "error-detail", Wire.String "legacy server detail"
+            ; "failed-tx-id", wire_map [ "uuid", Wire.String failed_tx_id ]
+            ; "success-tx-ids"
+              , Wire.Array
+                  [ wire_map [ "uuid", Wire.String success_tx_id ] ] ]))
+  in
+  check "type" (Wire.get "type" coerced = Some (Wire.String "tx/reject"));
+  check "error-detail"
+    (Wire.get "error-detail" coerced
+     = Some (Wire.String "legacy server detail"));
+  check "failed-tx-id"
+    (wire_string_opt (Wire.get "failed-tx-id" coerced) = Some failed_tx_id);
+  check "success-tx-ids"
+    (match Wire.get "success-tx-ids" coerced with
+     | Some (Wire.Array [ w ]) -> wire_string_opt (Some w) = Some success_tx_id
+     | _ -> false)
+
+(* (deftest flush-pending-honors-stop-upload-debug-flag-test ...) *)
+let test_flush_pending_honors_stop_upload_debug_flag () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let prepare_calls = ref 0 in
+      let send_calls = ref 0 in
+      let ws = fake_ws ~on_send:(fun _ -> incr send_calls) () in
+      let client = mk_client ~ws () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          Sync_client_op.update_local_tx test_repo 0;
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add
+                         (block_uuid_lookup (entity_block_uuid child1))
+                         "block/title"
+                         (Wire.String "pending upload debug gate test") ])
+                tx_id ];
+          (* cljs with-redefs [sync-apply/prepare-upload-tx-entries ...] *)
+          Sync_apply.prepare_upload_tx_entries_fn :=
+            (fun ?repo:_repo _conn _pending ->
+               incr prepare_calls;
+               ([], [], []));
+          ignore (Sync_apply.set_upload_stopped test_repo true);
+          await_unit (Sync_apply.flush_pending test_repo client);
+          check "prepare skipped" (!prepare_calls = 0);
+          check "no sends" (!send_calls = 0);
+          ignore (Sync_apply.set_upload_stopped test_repo false);
+          await_unit (Sync_apply.flush_pending test_repo client);
+          check "prepare ran once" (!prepare_calls = 1);
+          check "still no sends" (!send_calls = 0)))
+
+(* (deftest flush-pending-splits-large-upload-request-test ...) *)
+let test_flush_pending_splits_large_upload_request () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let split_tempid = "large-upload-request-split" in
+      let tx_data =
+        List.concat
+          [ List.init 4999 (fun _ ->
+                db_add child_ref "block/title"
+                  (Wire.String "large upload request split"))
+          ; [ db_add (Wire.String split_tempid) "block/uuid"
+                (Wire.Uuid (fresh_uuid ()))
+            ; db_add (Wire.String split_tempid) "block/title"
+                (Wire.String "grouped split tail") ] ]
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let payload = List.hd !sent in
+      let tx_entry = payload_tx_entry payload in
+      let uploaded_tx = uploaded_tx_of tx_entry in
+      check "type tx/batch"
+        (Wire.get "type" payload = Some (Wire.String "tx/batch"));
+      check "first chunk nil tx-id"
+        (wire_nil_or_absent (Wire.get "tx-id" tx_entry));
+      check "first chunk 4999" (List.length uploaded_tx = 4999);
+      check "inflight empty" (!(client.inflight) = []);
+      ack_and_reflush client 1;
+      let payload2 = List.nth !sent 1 in
+      let tx_entry2 = payload_tx_entry payload2 in
+      let uploaded2 = uploaded_tx_of tx_entry2 in
+      check "second tx/batch"
+        (Wire.get "type" payload2 = Some (Wire.String "tx/batch"));
+      check "second tx-id"
+        (wire_string_opt (Wire.get "tx-id" tx_entry2) = Some tx_id);
+      check "second chunk 2" (List.length uploaded2 = 2);
+      check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* (deftest flush-pending-retries-large-upload-chunk-until-server-ack-test ...) *)
+let test_flush_pending_retries_large_upload_chunk_until_server_ack () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let tx_data =
+        List.concat
+          [ List.init 5000 (fun _ ->
+                db_add child_ref "block/title"
+                  (Wire.String "large upload retry split"))
+          ; [ db_add child_ref "block/title"
+                (Wire.String "large upload retry tail") ] ]
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      await_unit (Sync_apply.flush_pending test_repo client);
+      check "2 sends" (List.length !sent = 2);
+      List.iter
+        (fun payload ->
+           let tx_entry = payload_tx_entry payload in
+           let uploaded_tx = uploaded_tx_of tx_entry in
+           check "type tx/batch"
+             (Wire.get "type" payload = Some (Wire.String "tx/batch"));
+           check "nil tx-id"
+             (wire_nil_or_absent (Wire.get "tx-id" tx_entry));
+           check "5000 chunk" (List.length uploaded_tx = 5000))
+        !sent)
+
+(* (deftest flush-pending-splits-large-upload-request-with-dependent-blocks-test
+   ...) *)
+let test_flush_pending_splits_large_upload_request_with_dependent_blocks () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let parent_uuid = fresh_uuid () in
+      let child_uuid = fresh_uuid () in
+      let parent_tempid = "large-upload-parent" in
+      let child_tempid = "large-upload-child" in
+      let parent_tx =
+        [ db_add (Wire.String parent_tempid) "block/uuid"
+            (Wire.Uuid parent_uuid)
+        ; db_add (Wire.String parent_tempid) "block/title"
+            (Wire.String "split parent")
+        ; db_add (Wire.String parent_tempid) "block/page" child_ref
+        ; db_add (Wire.String parent_tempid) "block/parent" child_ref
+        ; db_add (Wire.String parent_tempid) "block/order"
+            (Wire.String "a0")
+        ; db_add (Wire.String parent_tempid) "block/created-at"
+            (Wire.Int 1)
+        ; db_add (Wire.String parent_tempid) "block/updated-at"
+            (Wire.Int 1) ]
+      in
+      let child_tx =
+        [ db_add (Wire.String child_tempid) "block/uuid"
+            (Wire.Uuid child_uuid)
+        ; db_add (Wire.String child_tempid) "block/title"
+            (Wire.String "split child")
+        ; db_add (Wire.String child_tempid) "block/page" child_ref
+        ; db_add (Wire.String child_tempid) "block/parent"
+            (Wire.Uuid parent_uuid)
+        ; db_add (Wire.String child_tempid) "block/order"
+            (Wire.String "a1")
+        ; db_add (Wire.String child_tempid) "block/created-at"
+            (Wire.Int 2)
+        ; db_add (Wire.String child_tempid) "block/updated-at"
+            (Wire.Int 2) ]
+      in
+      let tx_data =
+        List.concat
+          [ List.init 4993 (fun _ ->
+                db_add child_ref "block/title"
+                  (Wire.String "large upload dependency split"))
+          ; parent_tx
+          ; child_tx ]
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let payload = List.hd !sent in
+      let tx_entry = payload_tx_entry payload in
+      check "type tx/batch"
+        (Wire.get "type" payload = Some (Wire.String "tx/batch"));
+      check "first chunk nil tx-id"
+        (wire_nil_or_absent (Wire.get "tx-id" tx_entry));
+      let first_uploaded_tx = uploaded_tx_of tx_entry in
+      check "first chunk 5000" (List.length first_uploaded_tx = 5000);
+      check "parent-tx tail"
+        (List.for_all2 wire_equal
+           (list_sub first_uploaded_tx 4993 7)
+           parent_tx);
+      ack_and_reflush client 1;
+      let payload2 = List.nth !sent 1 in
+      let tx_entry2 = payload_tx_entry payload2 in
+      let second_uploaded_tx = uploaded_tx_of tx_entry2 in
+      check "second tx/batch"
+        (Wire.get "type" payload2 = Some (Wire.String "tx/batch"));
+      check "second tx-id"
+        (wire_string_opt (Wire.get "tx-id" tx_entry2) = Some tx_id);
+      check "second chunk = child-tx"
+        (List.for_all2 wire_equal second_uploaded_tx child_tx);
+      check "concat = tx-data"
+        (List.for_all2 wire_equal
+           (first_uploaded_tx @ second_uploaded_tx)
+           tx_data);
+      check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* (deftest flush-pending-does-not-overgroup-existing-lookup-refs-test ...) *)
+let test_flush_pending_does_not_overgroup_existing_lookup_refs () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let tx_data =
+        List.init 5001 (fun _ ->
+            db_add child_ref "block/title"
+              (Wire.String "large upload existing lookup split"))
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let tx_entry = payload_tx_entry (List.hd !sent) in
+      let first_uploaded_tx = uploaded_tx_of tx_entry in
+      check "type tx/batch"
+        (Wire.get "type" (List.hd !sent) = Some (Wire.String "tx/batch"));
+      check "first chunk nil tx-id"
+        (wire_nil_or_absent (Wire.get "tx-id" tx_entry));
+      check "first chunk 5000" (List.length first_uploaded_tx = 5000);
+      ack_and_reflush client 1;
+      let payload2 = List.nth !sent 1 in
+      let tx_entry2 = payload_tx_entry payload2 in
+      let second_uploaded_tx = uploaded_tx_of tx_entry2 in
+      check "second tx/batch"
+        (Wire.get "type" payload2 = Some (Wire.String "tx/batch"));
+      check "second tx-id"
+        (wire_string_opt (Wire.get "tx-id" tx_entry2) = Some tx_id);
+      check "second chunk 1" (List.length second_uploaded_tx = 1);
+      check "concat = tx-data"
+        (List.for_all2 wire_equal
+           (first_uploaded_tx @ second_uploaded_tx)
+           tx_data);
+      check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* (deftest flush-pending-splits-large-delete-upload-request-test ...) *)
+let test_flush_pending_splits_large_delete_upload_request () =
+  with_large_upload (fun client sent tx_id child1 ->
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let tx_data =
+        List.init 5001 (fun _ -> db_retract_entity child_ref)
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"delete-blocks"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      let tx_entry = payload_tx_entry (List.hd !sent) in
+      let first_uploaded_tx = uploaded_tx_of tx_entry in
+      check "type tx/batch"
+        (Wire.get "type" (List.hd !sent) = Some (Wire.String "tx/batch"));
+      check "first chunk nil tx-id"
+        (wire_nil_or_absent (Wire.get "tx-id" tx_entry));
+      check "first chunk 5000" (List.length first_uploaded_tx = 5000);
+      ack_and_reflush client 1;
+      let payload2 = List.nth !sent 1 in
+      let tx_entry2 = payload_tx_entry payload2 in
+      let second_uploaded_tx = uploaded_tx_of tx_entry2 in
+      check "second tx/batch"
+        (Wire.get "type" payload2 = Some (Wire.String "tx/batch"));
+      check "second tx-id"
+        (wire_string_opt (Wire.get "tx-id" tx_entry2) = Some tx_id);
+      check "second chunk 1" (List.length second_uploaded_tx = 1);
+      check "concat = tx-data"
+        (List.for_all2 wire_equal
+           (first_uploaded_tx @ second_uploaded_tx)
+           tx_data);
+      check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* (deftest flush-pending-keeps-oversized-tempid-group-in-one-request-test ...) *)
+let test_flush_pending_keeps_oversized_tempid_group_in_one_request () =
+  with_large_upload (fun client sent tx_id _child1 ->
+      let tempid = "oversized-tempid-group" in
+      let tx_data =
+        List.init 5001 (fun idx ->
+            db_add (Wire.String tempid)
+              (Printf.sprintf "large-upload.group/attr-%d" idx)
+              (Wire.Int idx))
+      in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+            ~tx_data_v:(Wire.Array tx_data) tx_id ];
+      await_unit (Sync_apply.flush_pending test_repo client);
+      check "1 send" (List.length !sent = 1);
+      let payload = List.hd !sent in
+      let tx_entry = payload_tx_entry payload in
+      let uploaded_tx = uploaded_tx_of tx_entry in
+      check "type tx/batch"
+        (Wire.get "type" payload = Some (Wire.String "tx/batch"));
+      check "tx-id"
+        (wire_string_opt (Wire.get "tx-id" tx_entry) = Some tx_id);
+      check "5001 chunk" (List.length uploaded_tx = 5001);
+      check "whole tx-data"
+        (List.for_all2 wire_equal uploaded_tx tx_data);
+      check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* (deftest flush-pending-reports-upload-response-timeout-test ...) *)
+let test_flush_pending_reports_upload_response_timeout () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let sent = ref [] in
+      let events = ref [] in
+      let ws =
+        fake_ws ~on_send:(fun raw ->
+            sent := !sent @ [ Json_codec.parse raw ]) ()
+      in
+      let client = mk_client ~ws () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_deps.graph_e2ee := Some (fun _ -> false);
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          Sync_client_op.update_local_tx test_repo 0;
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add
+                         (block_uuid_lookup (entity_block_uuid child1))
+                         "block/title"
+                         (Wire.String "pending upload timeout report") ])
+                tx_id ];
+          (* cljs (set! js/setTimeout ...) + platform capture-error *)
+          Sync_deps.capture_error :=
+            Some
+              (fun msg data extra ->
+                 events := !events @ [ (msg, data, extra) ]);
+          with_timeout_capture (fun timeout_cb timeout_ms ->
+              await_unit (Sync_apply.flush_pending test_repo client);
+              check "type tx/batch"
+                (Wire.get "type" (List.hd !sent)
+                 = Some (Wire.String "tx/batch"));
+              check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]);
+              check "timeout 2min" (!timeout_ms = Some (2 * 60 * 1000));
+              check "timeout cb set" (!timeout_cb <> None);
+              (Option.get !timeout_cb) ();
+              check "1 event" (List.length !events = 1);
+              let msg, data, extra = List.hd !events in
+              check "source db-sync"
+                (Wire.get "source" data = Some (Wire.String "db-sync"));
+              check "operation"
+                (Wire.get "operation" data
+                 = Some (Wire.String "upload-tx-batch"));
+              check "repo"
+                (Wire.get "repo" data = Some (Wire.String test_repo));
+              check "graph-id"
+                (Wire.get "graph-id" data = Some (Wire.String "graph-1"));
+              check "tx-count" (Wire.get "tx-count" data = Some (Wire.Int 1));
+              check "outliner-op"
+                (Wire.get "outliner-op" data
+                 = Some (Wire.String "save-block"));
+              check "timeout-ms"
+                (Wire.get "timeout-ms" data = Some (Wire.Int (2 * 60 * 1000)));
+              check "extra tx-ids"
+                (Wire.get "tx-ids" extra
+                 = Some (Wire.Array [ Wire.String tx_id ]));
+              check "extra outliner-ops"
+                (Wire.get "outliner-ops" extra
+                 = Some (Wire.Array [ Wire.String "save-block" ]));
+              check "error message"
+                (msg = "Sync upload request did not get response");
+              events := [];
+              (* cljs (aset (:ws client) "readyState" 3) + second timeout *)
+              Sync_state.set_fake_ws_ready_state
+                (Option.get client.ws) 3;
+              Sync_apply.start_upload_response_timeout client
+                { Sync_state.tx_ids = [ tx_id ]
+                ; outliner_ops = [ "save-block" ]
+                ; large_upload_progress = []
+                ; t_before = Some 0
+                ; sent_at = 0.0
+                ; timer = None };
+              (Option.get !timeout_cb) ();
+              check "no events when ws closed" (!events = []));
+          ignore (Sync_apply.mark_pending_txs_false test_repo [ tx_id ])))
+
 (*__TESTS__*)
 
 let () =
@@ -709,4 +1341,31 @@ let () =
         ; Alcotest.test_case "presence-message-ignores-source-client"
             `Quick test_presence_message_ignores_source_client
         ; Alcotest.test_case "presence-message-updates-other-user"
-            `Quick test_presence_message_updates_other_user ] ) ]
+            `Quick test_presence_message_updates_other_user
+        ; Alcotest.test_case "ws-send-tx-batch-serializes-tx-id-as-uuid-string"
+            `Quick test_ws_send_tx_batch_serializes_tx_id_as_uuid_string
+        ; Alcotest.test_case
+            "coerce-ws-server-message-accepts-legacy-tx-reject-shape"
+            `Quick
+            test_coerce_ws_server_message_accepts_legacy_tx_reject_shape
+        ; Alcotest.test_case "flush-pending-honors-stop-upload-debug-flag"
+            `Quick test_flush_pending_honors_stop_upload_debug_flag
+        ; Alcotest.test_case "flush-pending-splits-large-upload-request"
+            `Quick test_flush_pending_splits_large_upload_request
+        ; Alcotest.test_case
+            "flush-pending-retries-large-upload-chunk-until-server-ack"
+            `Quick test_flush_pending_retries_large_upload_chunk_until_server_ack
+        ; Alcotest.test_case
+            "flush-pending-splits-large-upload-request-with-dependent-blocks"
+            `Quick
+            test_flush_pending_splits_large_upload_request_with_dependent_blocks
+        ; Alcotest.test_case
+            "flush-pending-does-not-overgroup-existing-lookup-refs"
+            `Quick test_flush_pending_does_not_overgroup_existing_lookup_refs
+        ; Alcotest.test_case "flush-pending-splits-large-delete-upload-request"
+            `Quick test_flush_pending_splits_large_delete_upload_request
+        ; Alcotest.test_case
+            "flush-pending-keeps-oversized-tempid-group-in-one-request"
+            `Quick test_flush_pending_keeps_oversized_tempid_group_in_one_request
+        ; Alcotest.test_case "flush-pending-reports-upload-response-timeout"
+            `Quick test_flush_pending_reports_upload_response_timeout ] ) ]
