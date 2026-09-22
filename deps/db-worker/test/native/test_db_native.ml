@@ -365,7 +365,9 @@ let test_q_executes_datascript_query () =
            Wire.Array
              [ Wire.String "[:find ?t :where [_ :block/title ?t]]" ] ])
   in
-  let rows = match res with Wire.Array r | Wire.List r -> r | _ -> [] in
+  let rows =
+    match res with Wire.Array r | Wire.List r | Wire.Set r -> r | _ -> []
+  in
   check "q-executes-datascript-query" (List.length rows = 2)
 
 (* (deftest get-class-extends ...) *)
