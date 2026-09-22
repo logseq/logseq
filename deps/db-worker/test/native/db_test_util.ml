@@ -357,19 +357,19 @@ let initial_data_edn =
     {:db/ident :logseq.class/Journal :block/title \"Journal\" :block/tags #{:logseq.class/Tag}}
     {:db/ident :logseq.class/Task
      :block/title \"Task\" :block/name \"task\"
-     :block/uuid #uuid \"00000000-0000-4000-8000-000000000101\"
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000101\"
      :block/tags #{:logseq.class/Tag}
      :logseq.property.class/extends #{:logseq.class/Root}}
     {:db/ident :logseq.class/Card
      :block/title \"Card\" :block/name \"card\"
-     :block/uuid #uuid \"00000000-0000-4000-8000-000000000102\"
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000102\"
      :block/tags #{:logseq.class/Tag}
      :logseq.property.class/extends #{:logseq.class/Root}}
     ;; cljs build-bootstrap-property for :logseq.property/background-color
     ;; (built-in?, Property tag) — the validate tests resolve its title.
     {:db/ident :logseq.property/background-color
      :block/title \"Background color\" :block/name \"background color\"
-     :block/uuid #uuid \"00000000-0000-4000-8000-000000000103\"
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000103\"
      :block/tags #{:logseq.class/Property}
      :logseq.property/type :default
      :logseq.property/hide? true
