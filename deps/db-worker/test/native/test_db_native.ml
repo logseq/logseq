@@ -2713,6 +2713,143 @@ let test_alias_selector_initial_choice_keeps_page_and_owner_data_test () =
         | _ -> check "alias-selector has initial choice" false)
    | _ -> check "alias-selector returns map" false)
 
+(* ---------- rule/:in-predicate query sites ----------
+   Semantics of the functions whose cljs originals use recursive rules,
+   the bidirectional :alias rule, collection :in bindings and :in-bound
+   predicate clauses — regardless of whether the OCaml port can use the
+   faithful query or a verified-equivalent scan (see lib comments for
+   the engine limitations that remain @ datascript-ocaml 8db9e3c). *)
+
+(* db-class/get-structured-children — (class-extends) closure *)
+let test_get_structured_children_recursive () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~classes:
+        [ "x", Db_test_util.default_class;
+          "y", Db_test_util.{ default_class with c_extends = [ "x" ] };
+          "z", Db_test_util.{ default_class with c_extends = [ "y" ] };
+          "w", Db_test_util.{ default_class with c_extends = [ "x" ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let class_id name =
+    match ent_ident db ("user.class/" ^ name) with
+    | Some c -> c.id
+    | None -> failwith ("class " ^ name ^ " missing")
+  in
+  let children =
+    Db_class.get_structured_children db (class_id "x") |> List.sort compare
+  in
+  check "get-structured-children includes transitive extends"
+    (children
+     = List.sort compare [ class_id "y"; class_id "z"; class_id "w" ]);
+  check "db-reference/structured-children delegates"
+    (Db_reference.structured_children db (class_id "x") |> List.sort compare
+     = children);
+  check "get-structured-children leaf is empty"
+    (Db_class.get_structured_children db (class_id "z") = [])
+
+(* common-initial-data/get-block-full-children-ids — (parent) closure *)
+let test_get_block_full_children_ids_parent_rule () =
+  let u_b1 = "5f6c1b2a-3d4e-4f5a-8b7c-9d0e1f2a3b4c" in
+  let u_b2 = "6a7d2c3b-4e5f-4a6b-9c8d-0e1f2a3b4c5d" in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "p" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1";
+                               b_uuid = Some u_b1;
+                               b_children =
+                                 [ Db_test_util.{ default_block with
+                                                  b_title = Some "b2";
+                                                  b_uuid = Some u_b2 } ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let b1 = Option.get (ent_uuid db u_b1) in
+  let b2 = Option.get (ent_uuid db u_b2) in
+  let page_id =
+    match Ldb.get_page db (String "p") with
+    | Some p -> p.id
+    | None -> failwith "page p missing"
+  in
+  check "get-block-full-children-ids page subtree"
+    (Ldb.get_block_full_children_ids db page_id |> List.sort compare
+     = List.sort compare [ b1.id; b2.id ]);
+  check "get-block-full-children-ids nested only"
+    (Ldb.get_block_full_children_ids db b1.id = [ b2.id ]);
+  check "outliner-blocks/get-block-full-children-ids delegates"
+    (Outliner_blocks.get_block_full_children_ids db page_id |> List.sort compare
+     = List.sort compare [ b1.id; b2.id ])
+
+(* common-initial-data/get-block-alias — bidirectional :alias rule *)
+let test_get_block_alias_bidirectional () =
+  let u_src = "7b8e3d4c-5f6a-4b7c-0d9e-1f2a3b4c5d6e" in
+  let u_alias = "8c9f4e5d-6a7b-4c8d-1e0f-2a3b4c5d6e7f" in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Source";
+                             pg_uuid = Some u_src;
+                             pg_extra =
+                               [ "block/alias",
+                                 Db_test_util.Vec
+                                   [ Db_test_util.Vec
+                                       [ Db_test_util.Kw "block/uuid";
+                                         Db_test_util.Uuid u_alias ] ] ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Alias";
+                             pg_uuid = Some u_alias };
+            Db_test_util.blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  let source = Option.get (ent_uuid db u_src) in
+  let alias = Option.get (ent_uuid db u_alias) in
+  check "get-block-alias forward"
+    (Db_reference.get_block_alias db source.id = [ alias.id ]);
+  check "get-block-alias backward"
+    (Db_reference.get_block_alias db alias.id = [ source.id ]);
+  check "db-view get-block-alias uses the rule query"
+    (Db_view.get_block_alias db alias.id = [ source.id ])
+
+(* view/property-objects — has-property-or-object-property? +
+   object-has-class-property? + class-extends rules *)
+let test_property_object_eids_rules () =
+  let u_direct = "9d0a5f6e-7b8c-4d9e-2f1a-3b4c5d6e7f8a" in
+  let u_tagged = "0e1b6a7f-8c9d-4e0f-3a2b-4c5d6e7f8a9b" in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties: [ "p1", Db_test_util.default_property ]
+      ~classes:
+        [ "c1",
+            Db_test_util.{ default_class with c_class_properties = [ "p1" ] };
+          "c2", Db_test_util.{ default_class with c_extends = [ "c1" ] } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "pg" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "direct";
+                               b_uuid = Some u_direct;
+                               b_properties =
+                                 [ "p1", Db_test_util.Str "v" ] };
+                Db_test_util.{ default_block with b_title = Some "tagged";
+                               b_uuid = Some u_tagged;
+                               b_tags = [ "c2" ] };
+                Db_test_util.{ default_block with b_title = Some "plain" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let direct = Option.get (ent_uuid db u_direct) in
+  let tagged = Option.get (ent_uuid db u_tagged) in
+  check "property-object-eids direct attr or tag-declared property"
+    (Db_class.property_object_eids db "user.property/p1" |> List.sort compare
+     = List.sort compare [ direct.id; tagged.id ])
+
 (* ---------- other translated cljs test modules ---------- *)
 
 let endpoint_cases : unit Alcotest.test_case list =
@@ -2789,7 +2926,11 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "batch-transact-with-temp-conn-preserves-cardinality-one-schema-test" `Quick test_batch_transact_with_temp_conn_preserves_cardinality_one_schema_test;
     Alcotest.test_case "validated-transact-retries-when-live-conn-changes-before-commit-test" `Quick test_validated_transact_retries_when_live_conn_changes_before_commit_test;
     Alcotest.test_case "fix-db-transact-runs-pipeline-without-recursive-validation-test" `Quick test_fix_db_transact_runs_pipeline_without_recursive_validation_test;
-    Alcotest.test_case "transact-new-graph-refs-skips-pipeline-test" `Quick test_transact_new_graph_refs_skips_pipeline_test ]
+    Alcotest.test_case "transact-new-graph-refs-skips-pipeline-test" `Quick test_transact_new_graph_refs_skips_pipeline_test;
+    Alcotest.test_case "get-structured-children-recursive-rule" `Quick test_get_structured_children_recursive;
+    Alcotest.test_case "get-block-full-children-ids-parent-rule" `Quick test_get_block_full_children_ids_parent_rule;
+    Alcotest.test_case "get-block-alias-bidirectional-rule" `Quick test_get_block_alias_bidirectional;
+    Alcotest.test_case "property-object-eids-rules" `Quick test_property_object_eids_rules ]
 
 let () =
   Alcotest.run "db-worker"

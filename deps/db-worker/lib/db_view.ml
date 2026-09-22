@@ -58,7 +58,7 @@ let has_datom db (e : entity_id) (a : attr) (v : value) : bool =
 (* ---------- common/initial-data.cljs ---------- *)
 
 (* common-initial-data/get-block-alias-ids — :block/alias in either
-   direction (same as the bidirectional :alias rule). *)
+   direction, (distinct (concat forward backward)) as in cljs. *)
 let get_block_alias_ids db (eid : entity_id) : entity_id list =
   let forward =
     List.filter_map
@@ -70,11 +70,14 @@ let get_block_alias_ids db (eid : entity_id) : entity_id list =
       (fun (d : datom) -> d.e)
       (List.of_seq (datoms db Avet ~a:"block/alias" ~v:(Ref eid) ()))
   in
-  forward @ backward
+  List.fold_left
+    (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
+    [] (forward @ backward)
 
-(* common-initial-data/get-block-alias *)
+(* common-initial-data/get-block-alias — the bidirectional :alias rule
+   query (shared with Db_reference). *)
 let get_block_alias db (eid : entity_id) : entity_id list =
-  get_block_alias_ids db eid
+  Db_reference.get_block_alias db eid
 
 (* common-initial-data/hidden-eid-pred — memoized ancestor walk over
    hide?/deleted-at. Returns a fresh predicate per call like cljs. *)

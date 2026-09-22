@@ -177,38 +177,30 @@ let expand_to_top_refs db top_ref_ids matched_ref_ids : IdSet.t =
     matched_ref_ids;
   !result
 
-(* common-initial-data/get-block-alias — entities aliased to/from id,
-   direct datom scan equivalent to the bidirectional :alias rule. *)
+(* common-initial-data/get-block-alias — the bidirectional :alias
+   rule, then distinct. Note: :in scalars must be passed as
+   Result_value (Ref e); the engine drops Arg_scalar (Result_entity e)
+   bindings. *)
 let get_block_alias db (eid : entity_id) : entity_id list =
-  let forward =
-    List.filter_map
-      (fun (d : datom) -> entid d.v)
-      (List.of_seq (datoms db Eavt ~e:eid ~a:"block/alias" ()))
+  let rules_edn =
+    "[[(alias ?e2 ?e1) [?e2 :block/alias ?e1]] \
+      [(alias ?e2 ?e1) [?e1 :block/alias ?e2]]]"
   in
-  let backward =
-    List.map
-      (fun (d : datom) -> d.e)
-      (List.of_seq (datoms db Avet ~a:"block/alias" ~v:(Ref eid) ()))
-  in
-  List.sort_uniq compare (forward @ backward)
+  q_string db
+    "[:find [?e ...] :in $ ?eid % :where (alias ?eid ?e)]"
+    ~inputs:
+      [ Arg_scalar (Result_value (Ref eid));
+        Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn)) ]
+  |> List.filter_map
+       (fun row -> match row with [ Result_entity e ] -> Some e | _ -> None)
+  (* cljs (distinct) — keep first occurrence *)
+  |> List.fold_left
+       (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
+       []
 
-(* db-class/get-structured-children — all classes extending eid,
-   BFS over :logseq.property.class/extends. *)
+(* db-class/get-structured-children — all classes extending eid. *)
 let structured_children db (eid : entity_id) : entity_id list =
-  let rec go seen frontier =
-    match frontier with
-    | [] -> seen
-    | eid :: rest ->
-        let children =
-          List.of_seq
-            (datoms db Avet ~a:"logseq.property.class/extends" ~v:(Ref eid) ())
-          |> List.map (fun (d : datom) -> d.e)
-          |> List.filter (fun id -> not (List.mem id seen))
-        in
-        go (seen @ children) (rest @ children)
-  in
-  go [ eid ] [ eid ]
-  |> List.filter (fun id -> id <> eid)
+  Db_class.get_structured_children db eid
 
 (* get-filters — linked-references includes/excludes entity ids. *)
 let get_filters (page : entity) : entity_id list * entity_id list =

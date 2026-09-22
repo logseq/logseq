@@ -11,22 +11,10 @@ let block_with_updated_at (block : Wire.t) : Wire.t =
     (Wire.Int64 (Int64.of_float (Clock.now_ms ())))
 
 (* initial-data/get-block-full-children-ids — nested children incl.
-   collapsed and property-value children, via the parent rule. *)
+   collapsed and property-value children; Ldb BFS stands in for the
+   :parent rule (see its comment for the verified engine limitation). *)
 let get_block_full_children_ids db (eid : entity_id) : entity_id list =
-  (* BFS over [:block/parent] — equivalent to the (parent ?id ?c) rule *)
-  let rec go seen frontier =
-    match frontier with
-    | [] -> seen
-    | eid :: rest ->
-        let children =
-          List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref eid) ())
-          |> List.map (fun (d : datom) -> d.e)
-          |> List.filter (fun id -> not (List.mem id seen))
-        in
-        go (seen @ children) (rest @ children)
-  in
-  go [ eid ] [ eid ]
-  |> List.filter (fun id -> id <> eid)
+  Ldb.get_block_full_children_ids db eid
 
 (* db.cljs block-order-path — order chain from block to page root *)
 let block_order_path (page_id : entity_id) (block : entity) : string list option =
