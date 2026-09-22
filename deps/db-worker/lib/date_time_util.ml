@@ -338,3 +338,25 @@ let epoch_ms_of_iso (s : string) : int64 option =
                   1000L)
                (Int64.of_int frac))
       | _ -> None
+
+(* date-time-util/default-journal-title-formatter *)
+let default_journal_title_formatter = "MMM do, yyyy"
+
+(* date-time-util/safe-journal-title-formatters *)
+let safe_journal_title_formatters (date_formatter : string option) : string list =
+  let default = default_journal_title_formatter in
+  [ (match date_formatter with Some f -> f | None -> "")
+  ; default
+  ; "yyyy-MM-dd"
+  ; "yyyy_MM_dd" ]
+  |> List.filter (fun s -> String.trim s <> "")
+  |> List.fold_left (fun acc f -> if List.mem f acc then acc else acc @ [ f ]) []
+
+(* common-date/valid-journal-title-with-slash? — parses under a slash
+   formatter (journal titles that legitimately contain "/") *)
+let valid_journal_title_with_slash (title : string) : bool =
+  List.exists
+    (fun fmt ->
+      Ns_util.str_contains fmt "/"
+      && Option.is_some (date_of_formatter fmt (capitalize_all title)))
+    built_in_journal_title_formatters
