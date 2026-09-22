@@ -462,3 +462,28 @@ let create_remote_graph repo ~graph_e2ee ~graph_ready_for_use =
 let stop_upload repo = Sync_apply.set_upload_stopped repo true
 let resume_upload repo = Sync_apply.set_upload_stopped repo false
 let upload_stopped repo = Sync_apply.upload_stopped repo
+
+(* Cross-package thread-fn hooks — the implementations are registered as
+   thread-api endpoints by endpoint_lifecycle / endpoint_search /
+   endpoint_sync (this package's rehydrate); dispatch by name so the sync
+   layer stays decoupled from their modules. *)
+let () =
+  Sync_deps.close_db :=
+    Some
+      (fun repo ->
+         Dispatcher.invoke "thread-api/db-sync-close-db" [ Wire.String repo ]
+         >>= fun _ -> Db_worker_effect.pure ());
+  Sync_deps.unlink_db :=
+    Some
+      (fun repo ->
+         Dispatcher.invoke "thread-api/unsafe-unlink-db" [ Wire.String repo ]
+         >>= fun _ -> Db_worker_effect.pure ());
+  Sync_deps.invalidate_search_db :=
+    Some
+      (fun repo ->
+         Dispatcher.invoke "thread-api/db-sync-invalidate-search-db"
+           [ Wire.String repo ]
+         >>= fun _ -> Db_worker_effect.pure ());
+  Sync_deps.rehydrate_large_titles :=
+    Some
+      (fun repo graph_id -> rehydrate_large_titles_from_db repo graph_id)
