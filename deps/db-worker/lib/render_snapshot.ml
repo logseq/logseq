@@ -214,7 +214,7 @@ let render_positioned_property db (block_id : entity_id)
   | None -> false
   | Some (_, property_position, public_, hide, hide_empty, default_) ->
       let property_value =
-        Endpoint_property.entity_direct_value db block_id property_id
+        Property_maps.entity_direct_value db block_id property_id
       in
       let empty_value = property_value = None && not default_ in
       public_
@@ -427,7 +427,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
                        (fun ident ->
                          match entity db (Ident ident) with
                          | Some p ->
-                             Some (Endpoint_property.display_property_map db p)
+                             Some (Property_maps.display_property_map db p)
                          | None -> None)
                        idents) ))
               (block_positioned_property_idents_by_position db entity_id)) )
@@ -447,7 +447,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
       , (match
            List.find_opt
              (fun (k, _) -> k = kw "property/closed-values")
-             (match Endpoint_property.display_property_map db block with
+             (match Property_maps.display_property_map db block with
               | Wire.Map kvs -> kvs
               | _ -> [])
          with

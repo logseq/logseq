@@ -17,6 +17,8 @@
      ignore Endpoint_property.convert_tag_to_page;
      ignore Endpoint_property.convert_page_to_tag;
      ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
+     ignore Endpoint_property.get_display_properties_endpoint;
+     ignore Endpoint_property.reorder_display_property;
 *)
 
 open Datascript
@@ -68,90 +70,21 @@ let eid_of_arg db (v : Wire.t) : entity_id option =
 let ident_of (e : entity) : string =
   match Ldb.ident_of e with Some i -> i | None -> ""
 
-(* select-keys over an entity->map wire value *)
-let select_keys_wire (keys : string list) (m : Wire.t) : Wire.t =
-  match m with
-  | Wire.Map pairs ->
-      Wire.Map
-        (List.filter_map
-           (fun k ->
-              match List.assoc_opt (kw k) pairs with
-              | Some v -> Some (kw k, v)
-              | None -> None)
-           keys)
-  | _ -> m
-
-let wire_assoc (k : string) (v : Wire.t) (m : Wire.t) : Wire.t =
-  match m with
-  | Wire.Map pairs ->
-      Wire.Map ((kw k, v) :: List.remove_assoc (kw k) pairs)
-  | _ -> m
-
 (* ---------- shared handler helpers ---------- *)
+(* Property-map helpers live in Property_maps (below Endpoint_property and
+   Display_properties to avoid a module cycle); alias them here so existing
+   Endpoint_property.X call sites keep working. *)
 
-(* handler entity-direct-map: select-keys of entity-forward-map *)
-let entity_direct_map db (e : entity) (keys : string list) : Wire.t =
-  select_keys_wire keys (Plain_value.entity_forward_map db e)
-
-let display_property_value_keys =
-  [ "db/id"; "db/ident"; "block/title"; "block/uuid"; "block/order"
-  ; "logseq.property/value"; "logseq.property/icon"
-  ; "logseq.property/choice-checkbox-state"
-  ; "logseq.property/choice-classes"; "logseq.property/deleted-at" ]
-
-let display_property_keys =
-  [ "db/id"; "db/ident"; "block/title"; "block/uuid"; "block/name"
-  ; "block/order"; "block/tags"; "db/cardinality"; "logseq.property/type"
-  ; "logseq.property/classes"; "logseq.property/icon"; "logseq.property/public?"
-  ; "logseq.property/built-in?"; "logseq.property/hide?"
-  ; "logseq.property/hide-empty-value"; "logseq.property/ui-position"
-  ; "logseq.property/view-context"; "logseq.property/scalar-default-value"
-  ; "logseq.property/default-value" ]
-
-(* entity-direct-value: first :v of eavt datoms for eid+attr *)
-let entity_direct_value db (eid : entity_id) (a : attr) : value option =
-  match Seq.uncons (datoms db Eavt ~e:eid ~a ()) with
-  | Some (d, _) -> Some d.v
-  | None -> None
-
-let display_property_description db (property : entity) : Wire.t option =
-  match entity_direct_value db property.id "logseq.property/description" with
-  | Some (Ref id) ->
-      (match Ldb.ent_of_id db id with
-       | Some desc ->
-           Some (entity_direct_map db desc [ "db/id"; "block/title"; "block/uuid" ])
-       | None -> None)
-  | _ -> None
-
-(* handler property-closed-values: reverse refs of
-   :block/closed-value-property, minus recycled, sorted by :block/order,
-   each as entity-direct-map *)
-let property_closed_values db (property : entity) : Wire.t =
-  Wire.Array
-    (List.map
-       (fun cv -> entity_direct_map db cv display_property_value_keys)
-       (Outliner_property.closed_values_of property))
-
-(* handler display-property-map* *)
-let display_property_map db (property : entity) : Wire.t =
-  let m = entity_direct_map db property display_property_keys in
-  let m =
-    match display_property_description db property with
-    | Some d -> wire_assoc "logseq.property/description" d m
-    | None -> m
-  in
-  match property_closed_values db property with
-  | Wire.Array (_ :: _ as cvs) ->
-      wire_assoc "property/closed-values" (Wire.Array cvs) m
-  | _ -> m
-
-(* handler property-plain-map: entity-forward-map + closed-values *)
-let property_plain_map db (property : entity) : Wire.t =
-  let m = Plain_value.entity_forward_map db property in
-  match property_closed_values db property with
-  | Wire.Array (_ :: _ as cvs) ->
-      wire_assoc "property/closed-values" (Wire.Array cvs) m
-  | _ -> m
+let select_keys_wire = Property_maps.select_keys_wire
+let wire_assoc = Property_maps.wire_assoc
+let entity_direct_map = Property_maps.entity_direct_map
+let display_property_value_keys = Property_maps.display_property_value_keys
+let display_property_keys = Property_maps.display_property_keys
+let entity_direct_value = Property_maps.entity_direct_value
+let display_property_description = Property_maps.display_property_description
+let property_closed_values = Property_maps.property_closed_values
+let display_property_map = Property_maps.display_property_map
+let property_plain_map = Property_maps.property_plain_map
 
 (* handler get-all-classes *)
 let get_all_class_entities db ~except_root_class ~except_private_tags
@@ -1052,3 +985,119 @@ let get_date_scheduled_or_deadlines_endpoint args =
 let () =
   Dispatcher.register "thread-api/get-date-scheduled-or-deadlines"
     get_date_scheduled_or_deadlines_endpoint
+
+(* :thread-api/get-display-properties [repo {:keys [block opts
+   show-empty-and-hidden-properties?]}] *)
+let get_display_properties_endpoint args =
+  let opts_v =
+    match arg args 1 with
+    | Some (Wire.Map _ as m) -> m
+    | _ -> Wire.Nil
+  in
+  with_conn args (fun db ->
+      match entity_of_arg db (Option.value ~default:Wire.Nil (Wire.get "block" opts_v)) with
+      | None -> pure Wire.nil
+      | Some block ->
+          let opts = Wire.get "opts" opts_v in
+          pure
+            (Display_properties.display_properties db block
+               ~gallery_view:(opt_bool opts "gallery-view?" ~default:false)
+               ~page_title:(opt_bool opts "page-title?" ~default:false)
+               ~sidebar_properties:(opt_bool opts "sidebar-properties?" ~default:false)
+               ~tag_dialog:(opt_bool opts "tag-dialog?" ~default:false)
+               ~publishing:(opt_bool opts "publishing?" ~default:false)
+               ~state_hide_empty_properties:
+                 (opt_bool opts "state-hide-empty-properties?" ~default:false)
+               ~show_empty_and_hidden_properties:
+                 (match Wire.get "show-empty-and-hidden-properties?" opts_v with
+                  | Some v -> Clj_value.truthy (Ds_wire.value_of_transit v)
+                  | None -> false)))
+
+let () =
+  Dispatcher.register "thread-api/get-display-properties"
+    get_display_properties_endpoint
+
+(* :thread-api/reorder-display-property [repo {:keys [block-id active-ident
+   over-ident direction property-idents]}] *)
+let reorder_display_property args =
+  let repo = repo_arg args in
+  let conn = Endpoint_transaction.require_conn repo in
+  let opts_v =
+    match arg args 1 with
+    | Some (Wire.Map _ as m) -> m
+    | _ -> Wire.Nil
+  in
+  let db = Datascript.db conn in
+  let property_idents =
+    match Wire.get "property-idents" opts_v with
+    | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+    | _ -> []
+  in
+  let sorted_properties =
+    Export_file.sort_properties
+      (List.filter_map (entity_of_arg db) property_idents)
+  in
+  let normalize_tx_data =
+    List.map Ds_wire.transit_of_value
+      (Db_property.normalize_sorted_entities_block_order sorted_properties)
+  in
+  let direction =
+    match Wire.get "direction" opts_v with
+    | Some (Wire.Keyword d) | Some (Wire.String d) -> d
+    | _ -> ""
+  in
+  let move_down = direction = "down" in
+  let over =
+    entity_of_arg db (Option.value ~default:Wire.Nil (Wire.get "over-ident" opts_v))
+  in
+  let active =
+    entity_of_arg db (Option.value ~default:Wire.Nil (Wire.get "active-ident" opts_v))
+  in
+  let order_of_eid (e : entity option) =
+    match e with
+    | Some e -> Db_order.order_of e
+    | None -> None
+  in
+  let over_order = order_of_eid over in
+  let over_id =
+    match over with Some e -> e.id | None -> -1
+  in
+  let new_order =
+    if move_down then
+      let next_order = Db_order.get_next_order db None over_id in
+      Db_order.gen_key over_order next_order
+    else
+      let prev_order = Db_order.get_prev_order db None over_id in
+      Db_order.gen_key prev_order over_order
+  in
+  let block_id =
+    match Wire.get "block-id" opts_v with
+    | Some (Wire.Int n) -> n
+    | Some (Wire.Int64 n) -> Int64.to_int n
+    | _ -> invalid_arg "reorder-display-property: missing block-id"
+  in
+  let active_uuid =
+    match active with
+    | Some e -> (
+        match Ldb.value e "block/uuid" with
+        | Some v -> Ds_wire.transit_of_value v
+        | None -> Wire.Nil)
+    | None -> Wire.Nil
+  in
+  let tx_data =
+    normalize_tx_data
+    @ [ Wire.Map
+          [ kw "block/uuid", active_uuid
+          ; kw "block/order", Wire.String new_order ]
+      ; Outliner_blocks.block_with_updated_at
+          (Wire.Map [ kw "db/id", Wire.Int block_id ]) ]
+  in
+  Worker_state.set_db_latest_tx_time repo;
+  ignore
+    (Db_transact.transact conn tx_data
+       [ ("outliner-op", Keyword "save-block") ]);
+  pure Wire.nil
+
+let () =
+  Dispatcher.register "thread-api/reorder-display-property"
+    reorder_display_property

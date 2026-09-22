@@ -44,6 +44,14 @@ module Opfs = struct
     -> Js.Json.t array array = "exec" [@@mel.send]
 
   external close : handle -> unit = "close" [@@mel.send]
+
+  (* PoolUtil methods — exportFile is sync (throws when the name is not in
+     the pool), importDb resolves a promise. *)
+  external export_file : pool -> string -> Js.Typed_array.Uint8Array.t = "exportFile"
+    [@@mel.send]
+
+  external import_db : pool -> string -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t = "importDb"
+    [@@mel.send]
 end
 
 type handle =
@@ -238,3 +246,73 @@ let backup t ~dst_path =
 let filename t = t.filename
 
 let pooled_runtime () = not (is_node ())
+
+(* --- raw db-file ops (cljs storage :export-file/:import-db) --- *)
+
+module U8 = Js.Typed_array.Uint8Array
+
+external u8a_get : U8.t -> int -> int = "" [@@mel.get_index]
+external u8a_set : U8.t -> int -> int -> unit = "" [@@mel.set_index]
+external u8a_length : U8.t -> int = "length" [@@mel.get]
+external new_u8a : int -> U8.t = "Uint8Array" [@@mel.new]
+
+let string_of_u8a a = String.init (u8a_length a) (fun i -> Char.chr (u8a_get a i))
+
+let u8a_of_string s =
+  let a = new_u8a (String.length s) in
+  String.iteri (fun i c -> u8a_set a i (Char.code c)) s;
+  a
+
+(* node fs binary helpers — latin1 encoding keeps the byte string 1:1
+   (Buffer.from/toString default to utf8, which would corrupt bytes). *)
+external readFileSync : string -> Node.Buffer.t = "readFileSync" [@@mel.module "fs"]
+
+external writeFileSync : string -> Node.Buffer.t -> unit = "writeFileSync"
+  [@@mel.module "fs"]
+
+external mkdirSync : string -> < recursive : bool > Js.t -> unit = "mkdirSync"
+  [@@mel.module "fs"]
+
+external dirname : string -> string = "dirname" [@@mel.module "path"]
+
+let node_pool_path dir path =
+  let stripped =
+    if String.length path > 0 && path.[0] = '/'
+    then String.sub path 1 (String.length path - 1)
+    else path
+  in
+  Filename.concat dir stripped
+
+let export_file ~name ~dir ~path =
+  if is_node () then
+    try
+      let b = readFileSync (node_pool_path dir path) in
+      Db_worker_effect.pure (Node.Buffer.toString ~encoding:`latin1 b)
+    with Js.Exn.Error e ->
+      Db_worker_effect.error (Failure (js_error_message e))
+  else
+    match Hashtbl.find_opt pools name with
+    | Some pool ->
+        (try Db_worker_effect.pure (string_of_u8a (Opfs.export_file pool path))
+         with Js.Exn.Error e ->
+           Db_worker_effect.error (Failure (js_error_message e)))
+    | None ->
+        Db_worker_effect.error
+          (Failure ("opfs pool not prepared: " ^ name))
+
+let import_db ~name ~dir ~path contents =
+  if is_node () then
+    try
+      let full = node_pool_path dir path in
+      mkdirSync (dirname full) [%obj { recursive = true }];
+      writeFileSync full (Node.Buffer.fromStringWithEncoding ~encoding:`latin1 contents);
+      Db_worker_effect.pure ()
+    with Js.Exn.Error e ->
+      Db_worker_effect.error (Failure (js_error_message e))
+  else
+    match Hashtbl.find_opt pools name with
+    | Some pool ->
+        task_of_promise (Opfs.import_db pool path (u8a_of_string contents))
+    | None ->
+        Db_worker_effect.error
+          (Failure ("opfs pool not prepared: " ^ name))
