@@ -398,3 +398,29 @@ let batch_transact ?(tx_meta : tx_meta = [])
       in
       if batch_tx_data <> [] then ignore (commit_tx_report conn report);
       report
+
+(* Runs [f] and returns the last tx-report committed on [conn] while it
+   ran — [None] when [f] committed nothing. The ported outliner ops
+   discard their transact results; Sync_deps hook adapters whose slot
+   type returns the tx-report recover the commit here (every commit on
+   conn notifies listeners through apply_report, including the final
+   commit of batch_transact_with_temp_conn). *)
+let last_report_during (conn : conn) (f : unit -> 'a) : tx_report option =
+  let last = ref None in
+  let key =
+    listen conn "db-tx/last-report" (fun (r : tx_report) -> last := Some r)
+  in
+  (try
+     let (_ : 'a) = f () in
+     ()
+   with e ->
+     unlisten conn key;
+     raise e);
+  unlisten conn key;
+  !last
+
+(* The empty-report shape [transact] returns for a no-op tx — used by
+   Sync_deps adapters whose op committed nothing. *)
+let empty_report (conn : conn) : tx_report =
+  { db_before = Conn.db conn; db_after = Conn.db conn; tx_data = []
+  ; tempids = []; tx_meta = [] }

@@ -305,3 +305,10 @@ let to_tx_entity (db : db) ?(hint : schema_hint option) (m : t) : tx_entity =
 
 let to_tx_op (db : db) ?(hint : schema_hint option) (m : t) : tx_op =
   Entity (to_tx_entity db ?hint m)
+
+(* cljs (into {} ...) back to a transit map with keyword keys — the
+   wire-map form the outliner op arg decoders (save_opts_of et al)
+   consume. *)
+let to_transit (m : t) : Wire.t =
+  Ds_wire.transit_of_value
+    (Map (List.map (fun (a, v) -> (Keyword a, v)) m))
