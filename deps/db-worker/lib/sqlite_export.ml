@@ -2069,8 +2069,15 @@ let build_nodes_export ~epuuids (db : db) (nodes : entity list)
   (merge_export_maps [ pages_export; pab_export ], pvalue_uuids)
 
 (* cljs build-view-nodes-export *)
-let build_view_nodes_export ~epuuids (db : db) (rows : value list)
+let build_view_nodes_export ~epuuids (db : db) (rows_v : value)
     (options : export_options) : value =
+  (* cljs iterates the rows collection; a map iterates as [k v]
+     MapEntry vectors, which group-by? then mapcat's the second item of *)
+  let rows =
+    match rows_v with
+    | Map kvs -> List.map (fun (k, v) -> Vector [ k; v ]) kvs
+    | _ -> coll_items rows_v
+  in
   let eids =
     if options.group_by then
       List.concat_map
@@ -2428,7 +2435,10 @@ let build_graph_files (db : db) (options : export_options) : value =
 
 (* cljs build-kv-values *)
 let build_kv_values (db : db) : value =
-  List.of_seq (datoms db Avet ~a:"kv/value" ())
+  (* cljs (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...]
+     :where [?b :kv/value]] db) — attr scan, aevt; :kv/value is
+     not :db/index *)
+  List.of_seq (datoms db Aevt ~a:"kv/value" ())
   |> List.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
   |> List.filter (fun e -> ident_of e <> Some "logseq.kv/schema-version")
   |> List.map (fun e ->
@@ -3118,7 +3128,7 @@ let build_export (db : db) (options_v : value) : value =
          | _ -> fail "Missing :page-id")
     | "view-nodes" ->
         build_view_nodes_export ~epuuids:options.epuuids db
-          (coll_items (bm_get options_m "rows"))
+          (bm_get options_m "rows")
           options
     | "selected-nodes" ->
         build_selected_nodes_export ~epuuids:options.epuuids db
