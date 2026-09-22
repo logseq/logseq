@@ -69,18 +69,22 @@ let normalize_online_users (users : Wire.t list) : Wire.t list =
   |> List.filter_map (fun u ->
          match Wire.get "user-id" u with
          | Some (Wire.String user_id) ->
+             (* cljs (or username name user-id) — first truthy, any type *)
+             let truthy = function
+               | Some (Wire.Nil) | None -> false
+               | Some (Wire.Bool false) -> false
+               | Some _ -> true
+             in
              let display_name =
-               match
-                 ( Wire.get "username" u
-                 , Wire.get "name" u )
-               with
-               | Some (Wire.String s), _ -> s
-               | _, Some (Wire.String s) -> s
-               | _ -> user_id
+               let username = Wire.get "username" u
+               and name = Wire.get "name" u in
+               if truthy username then Option.get username
+               else if truthy name then Option.get name
+               else Wire.String user_id
              in
              let base =
                [ Wire.Keyword "user/uuid", Wire.String user_id
-               ; Wire.Keyword "user/name", Wire.String display_name ]
+               ; Wire.Keyword "user/name", display_name ]
              in
              let base =
                match Wire.get "email" u with
@@ -144,8 +148,11 @@ let update_online_users ~broadcast (client : Sync_state.client)
   end
 
 let update_user_presence ~broadcast (client : Sync_state.client)
-    ~(user_id : string) ~(editing_block_uuid : string) =
-  if user_id <> "" && editing_block_uuid <> "" then begin
+    ~(user_id : string) ~(editing_block_uuid : string option) =
+  (* cljs (and user-id* editing-block-uuid) — truthy: nil blocks,
+     an empty string does not *)
+  match editing_block_uuid with
+  | Some editing_block_uuid -> begin
     client.online_users :=
       List.map
         (fun u ->
@@ -164,3 +171,4 @@ let update_user_presence ~broadcast (client : Sync_state.client)
         !(client.online_users);
     broadcast client
   end
+  | None -> ()
