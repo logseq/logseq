@@ -30,6 +30,15 @@
 (pin
  (url "git+https://github.com/RCmerci/rrbvec.git")
  (package (name rrbvec)))
+(pin
+ (url "git+https://github.com/logseq/angstrom#fork")
+ (package (name angstrom)))
+(pin
+ (url "git+https://github.com/logseq/xmlm#eb469d536e98c98f2754c0ff8813c92b3a17fe9f")
+ (package (name xmlm)))
+(pin
+ (url "git+https://github.com/logseq/mldoc")
+ (package (name mldoc)))
 
 (package
  (name logseq-db-worker)
@@ -40,6 +49,7 @@
  (depends
   ocaml
   melange
+  mldoc
   datascript_ocaml
   datascript-ocaml-melange
   datascript-ocaml-native
