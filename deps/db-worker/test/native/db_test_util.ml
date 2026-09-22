@@ -1605,3 +1605,250 @@ let find_journal_by_journal_day (db : db) (day : int) : entity option =
   query_one_id db
     "[:find [?page ...] :in $ ?journal-day :where [?page :block/journal-day ?journal-day]]"
     (Int day)
+
+
+(* ---------- pipeline fixture (richer built-ins) ---------- *)
+
+let initial_data_ident ident attrs =
+  Datascript.Entity
+    { db_id = None; attrs = ("db/ident", One_value (Keyword ident)) :: attrs }
+
+let initial_data_ident = initial_data_ident
+
+(* db-test/initial-data — cljs transacts ident entities in a first tx so
+   :db/valueType datoms land in the schema before test tx data resolves ref
+   values. Direct Entity tx_ops (not transact_conn_string): the strict
+   schema check on the slow path rejects ref-typed db/cardinality values
+   produced by the edn parser. *)
+let initial_data_ops : tx_op list =
+  let ref_attr ?(card = "db.cardinality/many") ident =
+    initial_data_ident ident
+      [ "db/valueType", One_value (Keyword "db.type/ref")
+      ; "db/cardinality", One_value (Keyword card)
+      ]
+  in
+  (* tempid-based refs: same-tx ident lookups don't resolve *)
+  (* classes and properties are pages: page_attr_checks (name/title) +
+     page_checks (uuid/created-at/updated-at) apply — match cljs built-ins
+     which carry db-ident-block-uuid uuids *)
+  let name_of ident =
+    let idx = String.rindex_opt ident '/' in
+    match idx with
+    | Some i -> String.sub ident (i + 1) (String.length ident - i - 1)
+    | None -> ident
+  in
+  let page_attrs ~uuid_seed ~title =
+    [ "block/uuid",
+      One_value (Uuid (Common_uuid.gen_uuid "db-ident-block-uuid" uuid_seed))
+    ; "block/name", One_value (String (Ldb.page_name_sanity_lc title))
+    ; "block/title", One_value (String title)
+    ; "block/created-at", One_value (Int 1700000000000)
+    ; "block/updated-at", One_value (Int 1700000000000) ]
+  in
+  let class_ident ?(title = "") ?(extends = []) ?(extra = []) ident =
+    let title =
+      if title = "" then String.capitalize_ascii (name_of ident) else title
+    in
+    Datascript.Entity
+      { db_id = Some (Temp_id ("cls-" ^ ident))
+      ; attrs =
+          ("db/ident", One_value (Keyword ident))
+          :: ("block/tags", One_value (Ref_to (Temp_id "cls-logseq.class/Tag")))
+          :: ("logseq.property/built-in?", One_value (Bool true))
+          :: (page_attrs ~uuid_seed:ident ~title
+              @ List.map
+                  (fun e ->
+                    "logseq.property.class/extends",
+                    One_value (Ref_to (Temp_id ("cls-" ^ e))))
+                  extends
+              @ extra)
+      }
+  in
+  (* closed-value blocks — cljs build-closed-value-block: page/parent/
+     closed-value-property/created-from-property all ref the property *)
+  let closed_value parent_ident ident =
+    Datascript.Entity
+      { db_id = Some (Temp_id ("cv-" ^ ident))
+      ; attrs =
+          ("db/ident", One_value (Keyword ident))
+          :: ("block/closed-value-property",
+              One_value (Ref_to (Temp_id ("prop-" ^ parent_ident))))
+          :: ("logseq.property/created-from-property",
+              One_value (Ref_to (Temp_id ("prop-" ^ parent_ident))))
+          :: ("block/page",
+              One_value (Ref_to (Temp_id ("prop-" ^ parent_ident))))
+          :: ("block/parent",
+              One_value (Ref_to (Temp_id ("prop-" ^ parent_ident))))
+          :: ("block/order", One_value (String (gen_order_key ())))
+          :: page_attrs ~uuid_seed:ident ~title:(name_of ident)
+      }
+  in
+  (* property ident entity — tagged logseq.class/Property like cljs built-ins *)
+  let property_ident ?(typ = "default") ?(ref_ = false)
+      ?(card = "db.cardinality/many") ?(extra = []) ident =
+    Datascript.Entity
+      { db_id = Some (Temp_id ("prop-" ^ ident))
+      ; attrs =
+          ("db/ident", One_value (Keyword ident))
+          :: ("block/tags",
+              One_value (Ref_to (Temp_id "cls-logseq.class/Property")))
+          :: ("logseq.property/built-in?", One_value (Bool true))
+          :: ("logseq.property/type", One_value (Keyword typ))
+          :: (page_attrs ~uuid_seed:ident ~title:(name_of ident)
+              @ (if ref_ then
+                   [ "db/valueType", One_value (Keyword "db.type/ref")
+                   ; "db/cardinality", One_value (Keyword card) ]
+                 else [])
+              @ extra)
+      }
+  in
+  [ initial_data_ident "logseq.property" [] ]
+  @ [ class_ident "logseq.class/Root"
+    ; class_ident "logseq.class/Tag"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Page"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Property"
+    ; class_ident
+        ~extends:[ "logseq.class/Page" ]
+        ~extra:
+          [ "logseq.property.journal/title-format",
+            One_value (String "MMM do, yyyy") ]
+        "logseq.class/Journal"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Task"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Comments"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Comment"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Query"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Card"
+    ; class_ident ~extends:[ "logseq.class/Page" ] "logseq.class/Whiteboard"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Asset"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Code-block"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Quote-block"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Math-block"
+    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Template"
+    ; (* Library built-in page — deterministic builtin-block-uuid like cljs *)
+      Datascript.Entity
+        { db_id = Some (Temp_id "lib-page")
+        ; attrs =
+            [ "block/uuid",
+              One_value
+                (Uuid (Common_uuid.gen_uuid "builtin-block-uuid" "Library"))
+            ; "block/name", One_value (String "library")
+            ; "block/title", One_value (String "Library")
+            ; "block/tags",
+              One_value (Ref_to (Temp_id "cls-logseq.class/Page"))
+            ; "logseq.property/built-in?", One_value (Bool true)
+            ; "block/created-at", One_value (Int 1700000000000)
+            ; "block/updated-at", One_value (Int 1700000000000)
+            ]
+        }
+    ; property_ident ~typ:"keyword" "logseq.property/type"
+    ; property_ident ~typ:"checkbox" "logseq.property/hide?"
+    ; property_ident ~typ:"entity" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property/default-value"
+    ; property_ident ~typ:"datetime" "logseq.property/deleted-at"
+    ; property_ident ~typ:"keyword" "logseq.property/cardinality"
+    ; property_ident ~typ:"checkbox"
+        "logseq.property.class/enable-bidirectional?"
+    ; property_ident ~typ:"string"
+        "logseq.property.class/bidirectional-property-title"
+    ; property_ident ~typ:"string" "logseq.property.journal/title-format"
+    ; property_ident ~typ:"entity" ~ref_:true "logseq.property/classes"
+    ; property_ident ~typ:"property" ~ref_:true
+        "logseq.property.class/properties"
+    ; property_ident ~typ:"class" ~ref_:true
+        "logseq.property.class/extends"
+    ; property_ident ~typ:"entity" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property/created-from-property"
+    ; property_ident ~typ:"node" ~ref_:true
+        "logseq.property/closed-values"
+    ; property_ident ~typ:"any" ~card:"db.cardinality/one"
+        "logseq.property/value"
+    ; (* cljs prod schema indexes logseq.property/public? — pipeline
+         reference-attrs reads it through :avet *)
+      property_ident ~typ:"checkbox" "logseq.property/public?"
+        ~extra:[ "db/index", One_value (Bool true) ]
+    ; property_ident ~typ:"checkbox" "logseq.property/publishing-public?"
+    ; property_ident ~typ:"checkbox" "logseq.property/built-in?"
+    ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property/query"
+    ; property_ident ~typ:"node" ~ref_:true
+        "logseq.property.comments/blocks"
+    ; property_ident ~typ:"keyword" "logseq.property.node/display-type"
+    ; property_ident ~typ:"class" ~ref_:true
+        "logseq.property/template-applied-to"
+    ; property_ident ~typ:"string" "logseq.property.reaction/emoji-id"
+    ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.reaction/target"
+    ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property/view-for"
+    ; property_ident ~typ:"keyword" "logseq.property/view-context"
+    ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.history/block"
+    ; property_ident ~typ:"property" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.history/property"
+    ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.history/ref-value"
+    ; property_ident ~typ:"default" "logseq.property.history/scalar-value"
+    ; property_ident ~typ:"checkbox" "logseq.property/enable-history?"
+    ; property_ident ~typ:"string" "logseq.property.code/lang"
+    ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        ~extra:
+          [ "logseq.property/enable-history?", One_value (Bool true) ]
+        "logseq.property/status"
+    ; property_ident ~typ:"datetime" "logseq.property/scheduled"
+    ; property_ident ~typ:"number" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.repeat/recur-frequency"
+    ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.repeat/recur-unit"
+    ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property.repeat/repeat-type"
+    ; property_ident ~typ:"checkbox" "logseq.property.repeat/repeated?"
+    ; property_ident ~typ:"string" "logseq.property.asset/type"
+    ; property_ident ~typ:"raw-number" "logseq.property.asset/size"
+    ; property_ident ~typ:"string" "logseq.property.asset/checksum"
+    ; property_ident ~typ:"node" ~ref_:true ~card:"db.cardinality/one"
+        "logseq.property/used-template"
+    ; closed_value "logseq.property/status" "logseq.property/status.backlog"
+    ; closed_value "logseq.property/status" "logseq.property/status.todo"
+    ; closed_value "logseq.property/status" "logseq.property/status.doing"
+    ; closed_value "logseq.property/status"
+        "logseq.property/status.in-review"
+    ; closed_value "logseq.property/status" "logseq.property/status.done"
+    ; closed_value "logseq.property/status" "logseq.property/status.canceled"
+    ; closed_value "logseq.property.repeat/recur-unit"
+        "logseq.property.repeat/recur-unit.day"
+    ; closed_value "logseq.property.repeat/repeat-type"
+        "logseq.property.repeat/repeat-type.double-plus"
+    ; (* block/tags ident entity — cljs update-properties-in-ents wraps the
+         value into a [property v opts] tuple for validation; ident must
+         redeclare its schema or the install wipes the attr spec *)
+      ref_attr "block/tags"
+    ]
+
+
+let create_pipeline_conn () : conn =
+  let conn = create_conn_bare () in
+  ignore (Datascript.transact_conn conn initial_data_ops);
+  (* sqlite-util/kv — cljs initial data marks the graph as db-based *)
+  ignore
+    (Datascript.transact_conn conn
+       [ Datascript.Entity
+           { db_id = None
+           ; attrs =
+               [ "db/ident", One_value (Keyword "logseq.kv/db-type")
+               ; "kv/value", One_value (String "db")
+               ]
+           }
+       ]);
+  conn
+
+(* create-conn-with-blocks on the pipeline fixture *)
+let create_pipeline_conn_with_blocks ?(options = default_options)
+    ?(properties = []) ?(classes = []) ?(pages_and_blocks = [])
+    ?(pre_txs : (string * edn) list list = []) () : conn =
+  let options = { options with properties; classes; pages_and_blocks } in
+  let init_tx, block_props_tx = build_blocks_tx options in
+  let conn = create_pipeline_conn () in
+  if pre_txs <> [] then transact_maps conn pre_txs;
+  transact_maps conn init_tx;
+  if block_props_tx <> [] then transact_maps conn block_props_tx;
+  conn

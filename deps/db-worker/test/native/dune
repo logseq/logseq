@@ -48,3 +48,20 @@
   (:test_bin ./test_search_native.exe))
  (action
   (run %{test_bin})))
+
+(executable
+ (name test_pipeline_native)
+ (modules test_pipeline_native db_test_util)
+ (modes native)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_native
+  datascript_ocaml
+  unix))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test_bin ./test_pipeline_native.exe))
+ (action
+  (run %{test_bin})))

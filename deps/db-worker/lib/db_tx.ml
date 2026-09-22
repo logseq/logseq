@@ -147,11 +147,7 @@ let with_report ~tx_meta (db : db) (tx_ops : tx_op list) : tx_report =
    Single-threaded worker: the CAS can never fail, matching the shape kept
    in transact_sync below. *)
 let commit_tx_report (conn : conn) (report : tx_report) : tx_report =
-  let conn_report =
-    transact_conn ~tx_meta:report.tx_meta conn
-      (List.map (fun (d : datom) -> Raw_datom d) report.tx_data)
-  in
-  { conn_report with tempids = report.tempids }
+  apply_report conn report
 
 let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
   Ldb.db_based_graph db
@@ -224,7 +220,6 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           (match !transact_invalid_callback with
            | Some f -> f report errors
            | None -> ());
-
           raise
             (Invalid_tx
                (Printf.sprintf
@@ -233,10 +228,16 @@ let rec transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
         end else
           transact_sync conn tx_ops tx_meta
       end
-      else if report.tx_data <> [] then begin
-        ignore (commit_tx_report conn report);
-        report
-      end else report
+      else if report.tx_data <> [] then
+        (* cljs compare-and-set! — conn must still hold the db the report
+           was computed from; a concurrent commit (e.g. inside the
+           pipeline fn) retries from the live db *)
+        if Conn.db conn == db then begin
+          ignore (commit_tx_report conn report);
+          report
+        end else
+          transact_sync conn tx_ops tx_meta
+      else report
     end else
       transact_conn ~tx_meta conn tx_ops
   end
