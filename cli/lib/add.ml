@@ -455,17 +455,14 @@ let property_query selector =
          |])
     ()
 
-let first_entity = function
-  | value -> (
-      match
-        (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
-      with
-      | Some values, _, _ when not (Vec.is_empty values) ->
-          Some (Vec.peek_front values)
-      | _, Some values, _ when not (Vec.is_empty values) ->
-          Some (Vec.peek_front values)
-      | _, _, Some _ -> Some value
-      | _ -> None)
+let rec first_entity value =
+  match Edn_util.as_seq value with
+  | Some values when not (Vec.is_empty values) ->
+      first_entity (Vec.peek_front values)
+  | _ -> (
+      match Edn_util.as_map value with
+      | Some _ -> Some value
+      | None -> None)
 
 let uuid_of_entity value =
   Option.bind (Edn_util.get value "block/uuid") Edn_util.as_string_like
@@ -557,9 +554,14 @@ let pull_property_by_name config repo name selector =
             |]))
 
 let pull_created_page config repo name create_result =
+  let result_value =
+    match Edn_util.get create_result "result" with
+    | Some value -> value
+    | None -> create_result
+  in
   let uuid_value =
     match
-      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
+      (Edn_util.as_vector result_value, Edn_util.as_list result_value)
     with
     | Some values, _ -> Vec.nth_opt values 1
     | _, Some values -> Vec.nth_opt values 1
