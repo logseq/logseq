@@ -1340,7 +1340,7 @@ type invoke_hooks_result =
 let invoke_hooks (_conn : conn) (tx_report : tx_report)
     : invoke_hooks_result =
   try
-    let pages, blocks = Ds_report.get_blocks_and_pages tx_report in
+    let blocks, pages = Ds_report.get_blocks_and_pages tx_report in
     let deleted_blocks =
       Outliner_pipeline.filter_deleted_blocks tx_report.tx_data
     in
