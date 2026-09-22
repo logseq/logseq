@@ -561,7 +561,9 @@ let parsed_remove_command options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
-                force = option_present "force" options;
+                force =
+                  Option.value (bool_option_value "force" options)
+                    ~default:false;
               }))
   | "tag" ->
       Some
