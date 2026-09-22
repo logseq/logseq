@@ -47,36 +47,6 @@ let entity_exists db (v : value) : bool =
   | Some r -> Option.is_some (entity db r)
   | None -> false
 
-(* db-property-type/class-entity? *)
-let class_entity db v =
-  match
-    ( match v with
-      | Ref id -> Ldb.ent_of_id db id
-      | _ -> None )
-  with
-  | Some e -> Ldb.is_class e
-  | None -> false
-
-(* db-property-type/property-entity? *)
-let property_entity db v =
-  match
-    ( match v with
-      | Ref id -> Ldb.ent_of_id db id
-      | _ -> None )
-  with
-  | Some e -> Ldb.is_property e
-  | None -> false
-
-(* db-property-type/page-entity? *)
-let page_entity db v =
-  match
-    ( match v with
-      | Ref id -> Ldb.ent_of_id db id
-      | _ -> None )
-  with
-  | Some e -> Ldb.is_page e
-  | None -> false
-
 let entity_of_value db (v : value) : entity option =
   match v with
   | Ref id | Int id -> Ldb.ent_of_id db id
@@ -85,6 +55,24 @@ let entity_of_value db (v : value) : entity option =
   | List [ Keyword a; x ] | Vector [ Keyword a; x ] ->
       entity db (Lookup_ref (a, x))
   | _ -> None
+
+(* db-property-type/class-entity? *)
+let class_entity db v =
+  match entity_of_value db v with
+  | Some e -> Ldb.is_class e
+  | None -> false
+
+(* db-property-type/property-entity? *)
+let property_entity db v =
+  match entity_of_value db v with
+  | Some e -> Ldb.is_property e
+  | None -> false
+
+(* db-property-type/page-entity? *)
+let page_entity db v =
+  match entity_of_value db v with
+  | Some e -> Ldb.is_page e
+  | None -> false
 
 (* db-property-type/url-entity? (new-closed-value? false,
    skip-strict-url-validate? unset) *)
