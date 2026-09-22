@@ -659,6 +659,13 @@ let tx_ops_of_tx_data (tx_data : Wire.t list) : tx_op list =
   List.concat_map
     (fun item ->
        match item with
+       (* cljs raw (d/datom ...) records in tx-data; the sanitize round-trip
+          flattens them to [datascript/Datom [e a v tx]] vectors *)
+       | Wire.Tagged ("datascript/Datom", _) ->
+           [ Raw_datom (Ds_wire.datom_of_transit item) ]
+       | Wire.Array [ Wire.Symbol "datascript/Datom"; rep ]
+       | Wire.List [ Wire.Symbol "datascript/Datom"; rep ] ->
+           [ Raw_datom (Ds_wire.datom_of_transit rep) ]
        | Wire.Array [ op; e; a; v; t ] | Wire.List [ op; e; a; v; t ] -> (
            match datom_form_tx_ops op e a v t with
            | Some ops -> ops
