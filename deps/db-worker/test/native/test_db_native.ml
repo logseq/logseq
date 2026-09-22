@@ -940,6 +940,7 @@ let test_upsert_property_2 () =
     | Some e ->
         (match Ldb.value e "block/updated-at" with
          | Some (Int t) -> float_of_int t
+         | Some (Instant t) -> Int64.to_float t
          | Some (Float t) -> t
          | _ -> 0.)
     | None -> failwith "num missing"
@@ -957,6 +958,7 @@ let test_upsert_property_2 () =
        check "upsert-property! bumps block/updated-at"
          ((match Ldb.value e "block/updated-at" with
            | Some (Int t) -> float_of_int t
+           | Some (Instant t) -> Int64.to_float t
            | Some (Float t) -> t
            | _ -> 0.)
           > old_updated_at)
