@@ -52,13 +52,10 @@ let coll_v = function
   | _ -> false
 let some_v = function Nil -> false | _ -> true
 
-(* db-property-type/url? — js/URL accepts any `scheme:` absolute URL whose
-   scheme is valid; we approximate the constructor with a scheme +
-   non-empty-rest check. *)
-let url_re = Regexp.compile "^[A-Za-z][A-Za-z0-9+.\\-]*:[^\\s]+$"
-
+(* db-property-type/url? — (new js/URL s) parseability; .-origin is only
+   checked non-nil, which holds for every parsed URL. *)
 let url (v : value) : bool =
-  match v with String s -> Regexp.test url_re s | _ -> false
+  match v with String s -> Ns_util.url_parses s | _ -> false
 
 (* db-property-type/macro-url? *)
 let macro_url (v : value) : bool =
@@ -145,7 +142,7 @@ let url_entity db (v : value) (opts : validate_opts) : bool =
          | Some title ->
              if opts.skip_strict_url_validate then true
              else
-               String.trim title = "" || url (String title) || macro_url (String title))
+               Unicode.trim title = "" || url (String title) || macro_url (String title))
     | None -> false
 
 (* ---------- per-type schema-fn dispatch ---------- *)

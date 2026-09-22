@@ -68,8 +68,8 @@ let distinct xs = distinct_by Fun.id xs
 let string_capitalize (s : string) : string =
   if s = "" then s
   else
-    String.uppercase_ascii (String.sub s 0 1)
-    ^ String.lowercase_ascii (String.sub s 1 (String.length s - 1))
+    Unicode.uppercase (String.sub s 0 1)
+    ^ Unicode.lowercase (String.sub s 1 (String.length s - 1))
 
 (* cljs (name kw) — after last "/" ; for strings the string itself *)
 let name_of_kw (s : string) : string =
@@ -1453,7 +1453,7 @@ let infer_property_schema (pair_values : value list) : BM.t =
         else
           (match pv with
            | Int _ | Float _ -> "number"
-           | String s when Ns_util.url s -> "url"
+           | String s when Ns_util.url_parses s -> "url"
            | Bool _ -> "checkbox"
            | _ -> "default")
     | None -> "default"
