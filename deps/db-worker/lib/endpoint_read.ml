@@ -640,3 +640,165 @@ let get_page_blocks_tree args =
 
 let () =
   Dispatcher.register "thread-api/get-page-blocks-tree" get_page_blocks_tree
+
+(* :thread-api/get-key-value [repo key] -> kv/value of the logseq.kv ident *)
+let get_key_value args =
+  with_conn args (fun db ->
+      Db_worker_effect.pure
+        (match Option.bind (arg args 1) Wire.as_string with
+         | Some key -> (match Ldb.get_key_value db key with
+             | Some v -> Ds_wire.transit_of_value v
+             | None -> Wire.nil)
+         | None -> Wire.nil))
+
+let () = Dispatcher.register "thread-api/get-key-value" get_key_value
+
+(* :thread-api/ensure-local-graph-uuid [repo] -> existing or newly transacted local uuid *)
+let ensure_local_graph_uuid args =
+  let repo = repo_arg args in
+  (match Worker_state.datascript_conn repo with
+   | None -> Db_worker_effect.pure Wire.nil
+   | Some conn ->
+       (match Ldb.get_graph_local_uuid (Datascript.db conn) with
+        | Some v -> Db_worker_effect.pure (Ds_wire.transit_of_value v)
+        | None ->
+            let uuid = "00000000" ^ String.sub (Uuid_gen.uuid ()) 8 28 in
+            let tx_edn =
+              Printf.sprintf "[{:db/ident :logseq.kv/local-graph-uuid :kv/value #uuid \"%s\"}]" uuid
+            in
+            ignore
+              (Datascript.transact_conn_string
+                 ~tx_meta:[ "graph-open/ensure-local-graph-uuid?", Bool true ]
+                 conn tx_edn);
+            Db_worker_effect.pure (Wire.Uuid uuid)))
+
+let () = Dispatcher.register "thread-api/ensure-local-graph-uuid" ensure_local_graph_uuid
+
+(* ---------- favorites + recent + block source (handler/graph.cljs) ---------- *)
+
+(* common-config/favorites-page-name *)
+let favorites_page_name = "$$$favorites"
+
+let favorite_page db = Ldb.get_page db (String favorites_page_name)
+
+(* avet :block/page entities (cljs ldb/get-page-blocks without pull). *)
+let page_block_entities db (page_id : entity_id) : entity list =
+  Datascript.datoms db Datascript.Avet ~a:"block/page" ~v:(Ref page_id) ()
+  |> Seq.map (fun (d : Datascript.datom) -> d.e)
+  |> List.of_seq
+  |> List.filter_map (Ldb.ent_of_id db)
+
+let favorite_block db (page_block_uuid : string) : entity option =
+  match entity db (Lookup_ref ("block/uuid", Uuid page_block_uuid)), favorite_page db with
+  | Some page_block, Some page ->
+      page_block_entities db page.id
+      |> List.find_opt (fun b -> Ldb.ref_ids b "block/link" = [ page_block.id ])
+  | _ -> None
+
+let () =
+  Dispatcher.register "thread-api/favorited-page?" (fun args ->
+      with_conn args (fun db ->
+          Db_worker_effect.pure
+            (match
+             Option.bind (arg args 1) (fun w ->
+                 match w with
+                 | Wire.Uuid u -> Some u
+                 | Wire.String s when Ldb.is_uuid_string s -> Some s
+                 | _ -> None)
+           with
+             | Some uuid -> Wire.Bool (Option.is_some (favorite_block db uuid))
+             | None -> Wire.Bool false)))
+
+let () =
+  Dispatcher.register "thread-api/get-favorite-pages" (fun args ->
+      with_conn args (fun db ->
+          Db_worker_effect.pure
+            (match favorite_page db with
+             | None -> Wire.nil
+             | Some page ->
+                 Ldb.ref_ents page "block/_parent"
+                 |> Ldb.sort_by_order
+                 |> List.filter_map (fun b ->
+                        match Ldb.ref_ent b "block/link" with
+                        | Some e when not (Ldb.recycled e) -> Some (plain_map_wire db e)
+                        | _ -> None)
+                 |> fun items -> Wire.Array items)))
+
+let () =
+  Dispatcher.register "thread-api/get-recent-pages" (fun args ->
+      with_conn args (fun db ->
+          let ids =
+            match arg args 1 with
+            | Some w -> Wire.as_seq w |> List.filter_map Wire.as_int
+            | None -> []
+          in
+          let ids = List.sort_uniq compare ids |> fun l -> List.filteri (fun i _ -> i < 20) l in
+          Db_worker_effect.pure
+            (Wire.Array
+               (List.filter_map
+                  (fun id ->
+                    match Ldb.ent_of_id db id with
+                    | Some e
+                      when Ldb.is_page e
+                           && not (Ldb.hidden e)
+                           && not
+                                ((Ldb.is_property e
+                                  && match Ldb.value e "logseq.property/hide?" with
+                                     | Some (Bool true) -> true | _ -> false)
+                                 || match Ldb.string_value e "block/title" with
+                                    | Some s -> String.trim s = "" | None -> true) ->
+                        Some (plain_map_wire db e)
+                    | _ -> None)
+                  ids))))
+
+(* :thread-api/get-block-source [repo id] — first :block/_alias entity's id *)
+let () =
+  Dispatcher.register "thread-api/get-block-source" (fun args ->
+      with_conn args (fun db ->
+          Db_worker_effect.pure
+            (match Option.bind (arg args 1) (fun w -> Some (Ds_wire.entity_ref_of_transit w)) with
+             | Some eref ->
+                 (match entity db eref with
+                  | Some e ->
+                      (match Ldb.ref_ids e "block/_alias" with
+                       | id :: _ -> Wire.Int id
+                       | [] -> Wire.nil)
+                  | None -> Wire.nil)
+             | None -> Wire.nil)))
+
+(* :thread-api/get-block-parents [repo id depth] — uuid chain up to depth (default 3) *)
+let () =
+  Dispatcher.register "thread-api/get-block-parents" (fun args ->
+      with_conn args (fun db ->
+          let depth =
+            match Option.bind (arg args 2) Wire.as_int with Some d -> d | None -> 3
+          in
+          Db_worker_effect.pure
+            (match Option.bind (arg args 1) (fun w -> Some (Ds_wire.entity_ref_of_transit w)) with
+             | Some eref ->
+                 (match entity db eref with
+                  | Some block ->
+                      (match Ldb.value block "block/uuid" with
+                       | Some (Uuid uuid) ->
+                           let parents =
+                             let rec loop uuid parents d =
+                               if d > depth then parents
+                               else
+                                 match
+                                   entity db (Lookup_ref ("block/uuid", Uuid uuid))
+                                 with
+                                 | Some cur ->
+                                     (match Ldb.ref_ent cur "block/parent" with
+                                      | Some parent ->
+                                          (match Ldb.value parent "block/uuid" with
+                                           | Some (Uuid pu) -> loop pu (parent :: parents) (d + 1)
+                                           | _ -> parent :: parents)
+                                      | None -> parents)
+                                 | None -> parents
+                             in
+                             loop uuid [] 1
+                           in
+                           Wire.Array (List.map Ds_wire.entity_map_wire parents)
+                       | _ -> Wire.Array [])
+                  | None -> Wire.Array [])
+             | None -> Wire.Array [])))
