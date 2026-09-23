@@ -186,6 +186,10 @@
     min-width: max-content;
   }
 
+  .cm-content.cm-lineWrapping {
+    min-width: 0;
+  }
+
   .cm-line {
     padding-right: var(--logseq-code-editor-line-padding-right);
   }

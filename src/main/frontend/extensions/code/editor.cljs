@@ -104,6 +104,7 @@
             ".cm-content" {"caretColor" "var(--ls-primary-text-color)"
                            "padding" "6px 0"
                            "minWidth" "max-content"}
+            ".cm-content.cm-lineWrapping" {"minWidth" "0"}
             ".cm-line" {"padding" "0 var(--logseq-code-editor-line-padding-right, 8.5rem) 0 12px"}
             ".cm-gutters" {"backgroundColor" "var(--ls-secondary-background-color)"
                            "border" "0"
@@ -764,6 +765,20 @@
              (not= (code-editor/get-value context) code))
     (code-editor/set-value! context code)))
 
+(defn- sync-editor-language!
+  "Re-resolve `:data-lang` when it changes on a mounted editor, e.g. the same
+   block open in the main page and sidebar: picking a language in one view must
+   update the other's highlighting too."
+  [context language-name]
+  (when context
+    (let [language-name (or language-name "plain-text")
+          language (or (plugin-language-by-name context language-name)
+                       (language-registry/language-by-name language-name)
+                       (language-registry/language-by-extension language-name))]
+      (when (and language
+                 (not (identical? language (:language @(:*state context)))))
+        (code-editor/set-language! context language-name)))))
+
 (hsx/defc editor
   [config id attr code options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
@@ -789,9 +804,10 @@
     (hooks/use-effect!
      (fn []
        (sync-editor-code! @editor-atom code)
+       (sync-editor-language! @editor-atom (:data-lang attr))
        (when calc?
          (set-calc-lines! (calc/eval-lines code))))
-     [id code calc?])
+     [id code calc? (:data-lang attr)])
     (hooks/use-effect!
      (fn []
        (reset! code-options options))
