@@ -206,11 +206,16 @@
     (util/stop e)
     (state/clear-editor-action!)
     (p/let [repo (state/get-current-repo)
+            convert-page-to-tag? (:convert-page-to-tag? chosen-result)
             chosen-result (<chosen-result repo chosen-result)
-            _ (when (and (:convert-page-to-tag? chosen-result)
+            _ (when (and convert-page-to-tag?
                          (entity/page? chosen-result)
                          (not (entity/class? chosen-result)))
                 (db-page-handler/convert-page-to-tag! chosen-result))
+            ;; Re-resolve after conversion so entity/class? reflects the post-conversion snapshot
+            chosen-result (if convert-page-to-tag?
+                            (<chosen-result repo chosen-result)
+                            chosen-result)
             target (when (and (:db/id chosen-result) (not (entity/class? chosen-result)))
                      (db-async/<get-alias-source-page repo (:db/id chosen-result)))
             chosen-result (if (and target (not (entity/class? chosen-result)) (entity/class? target)) target chosen-result)

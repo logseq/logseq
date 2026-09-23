@@ -313,6 +313,119 @@
       (finally
         (restore!)))))
 
+(deftest hashtag-convert-page-to-tag-uses-post-conversion-snapshot-test
+  (async done
+    (let [page-id #uuid "66666666-6666-6666-6666-666666666666"
+          page-entity {:db/id 4
+                       :block/uuid page-id
+                       :block/title "test"
+                       :block/name "test"
+                       :block/tags [{:db/ident :logseq.class/Page}]}
+          class-entity (assoc page-entity
+                              :db/ident :logseq.class.test
+                              :block/tags [{:db/ident :logseq.class/Tag}])
+          get-block-results (atom [page-entity class-entity])
+          input (doto (js-obj)
+                  (aset "value" "#test")
+                  (aset "selectionStart" 5)
+                  (aset "selectionEnd" 5)
+                  (aset "focus" (fn [])))
+          event (doto (js-obj)
+                  (aset "identifier" "auto-complete/select")
+                  (aset "preventDefault" (fn []))
+                  (aset "stopPropagation" (fn [])))
+          calls (atom [])
+          original-get-current-repo state/get-current-repo
+          original-get-editor-action state/get-editor-action
+          original-get-edit-content state/get-edit-content
+          original-clear-editor-action! state/clear-editor-action!
+          original-stop util/stop
+          original-<get-block db-async/<get-block
+          original-<get-alias-source-page db-async/<get-alias-source-page
+          original-get-selected-text editor-handler/get-selected-text
+          original-insert-command! editor-handler/insert-command!
+          original-convert-page-to-tag! db-page-handler/convert-page-to-tag!
+          original-tag-on-chosen-handler db-page-handler/tag-on-chosen-handler]
+      (set! state/get-current-repo (constantly "test"))
+      (set! state/get-editor-action (constantly :page-search-hashtag))
+      (set! state/get-edit-content (constantly ""))
+      (set! state/clear-editor-action!
+            (fn []
+              (swap! calls conj [:clear-editor-action])))
+      (set! util/stop
+            (fn [e]
+              (swap! calls conj [:stop e])))
+      (set! db-async/<get-block
+            (fn [repo id opts]
+              (swap! calls conj [:get-block repo id opts])
+              (let [result (first @get-block-results)]
+                (swap! get-block-results
+                       (fn [results]
+                         (if (next results) (next results) results)))
+                (p/resolved result))))
+      (set! db-async/<get-alias-source-page
+            (fn [repo id]
+              (swap! calls conj [:get-alias-source-page repo id])
+              (p/resolved nil)))
+      (set! editor-handler/get-selected-text (constantly nil))
+      (set! editor-handler/insert-command!
+            (fn [& args]
+              (swap! calls conj (into [:insert-command] args))
+              (p/resolved nil)))
+      (set! db-page-handler/convert-page-to-tag!
+            (fn [& args]
+              (swap! calls conj (into [:convert-page-to-tag] args))
+              (p/resolved nil)))
+      (set! db-page-handler/tag-on-chosen-handler
+            (fn [& args]
+              (swap! calls conj (into [:tag-on-chosen] args))
+              (p/resolved nil)))
+      (-> (try
+            ((page-handler/on-chosen-handler input "edit-input" 0 :markdown)
+             {:block/title "test"
+              :db/id 4
+              :block/uuid page-id
+              :convert-page-to-tag? true}
+             event)
+            (catch :default error
+              (p/rejected error)))
+          (p/then
+           (fn []
+             (let [convert-calls (filter #(= :convert-page-to-tag (first %)) @calls)
+                   get-block-calls (filter #(= :get-block (first %)) @calls)
+                   tag-call (some #(when (= :tag-on-chosen (first %)) %) @calls)
+                   insert-call (some #(when (= :insert-command (first %)) %) @calls)]
+               (is (= 1 (count convert-calls))
+                   "convert-page-to-tag! runs once for the pre-conversion page")
+               (is (= [page-entity] (subvec (first convert-calls) 1)))
+               (is (= 2 (count get-block-calls))
+                   "chosen-result is re-resolved after conversion")
+               (is (= ["test" class-entity true "#test" 5 "#test"]
+                      (subvec tag-call 1))
+                   "tag-on-chosen sees the post-conversion class snapshot")
+               (is (= [:insert-command "edit-input" "" :markdown
+                       {:last-pattern "#test"
+                        :end-pattern nil
+                        :command :page-ref}]
+                      insert-call)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! state/get-current-repo original-get-current-repo)
+             (set! state/get-editor-action original-get-editor-action)
+             (set! state/get-edit-content original-get-edit-content)
+             (set! state/clear-editor-action! original-clear-editor-action!)
+             (set! util/stop original-stop)
+             (set! db-async/<get-block original-<get-block)
+             (set! db-async/<get-alias-source-page original-<get-alias-source-page)
+             (set! editor-handler/get-selected-text original-get-selected-text)
+             (set! editor-handler/insert-command! original-insert-command!)
+             (set! db-page-handler/convert-page-to-tag! original-convert-page-to-tag!)
+             (set! db-page-handler/tag-on-chosen-handler original-tag-on-chosen-handler)
+             (done)))))))
+
 (deftest chosen-result-loads-uuid-result-through-worker-test
   (async done
     (let [tag-id #uuid "22222222-2222-2222-2222-222222222222"
