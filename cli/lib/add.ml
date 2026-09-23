@@ -454,7 +454,11 @@ let create_page config repo name uuid =
                 [|
                   Edn_util.string name;
                   Edn_util.map_vec
-                    (Vec.singleton (kw "uuid", Edn_util.uuid uuid));
+                    (Vec.of_array
+                       [|
+                         (kw "uuid", Edn_util.uuid uuid);
+                         (kw "split-namespace?", Edn_util.bool true);
+                       |]);
                 |]);
          |])
   in
@@ -512,31 +516,34 @@ let pull_property_by_name config repo name selector =
               Edn_util.string (normalized_lookup_name name);
             |]))
 
-let pull_created_page config repo name create_result =
-  let uuid_value =
-    match
-      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
-    with
-    | Some values, _ -> Vec.nth_opt values 1
-    | _, Some values -> Vec.nth_opt values 1
-    | _ -> None
+(* The apply-outliner-ops invoke returns {:result <op-result>}; the
+   create-page op result is [title page-uuid]. *)
+let created_page_uuid create_result =
+  let op_result =
+    match Edn_util.get create_result "result" with
+    | Some value -> value
+    | None -> create_result
   in
-  match uuid_value with
-  | Some uuid_value -> (
-      match Edn_util.as_string_like uuid_value with
-      | Some uuid ->
-          pull_entity config repo page_selector
-            (vector_vec
-               (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
-      | _ ->
-          pull_entity config repo page_selector
-            (vector_vec
-               (Vec.of_array
-                  [|
-                    kw "block/name";
-                    Edn_util.string (normalized_lookup_name name);
-                  |])))
-  | _ ->
+  match
+    (Edn_util.as_vector op_result, Edn_util.as_list op_result)
+  with
+  | Some values, _ -> (
+      match Vec.nth_opt values 1 with
+      | Some value -> Edn_util.as_string_like value
+      | None -> None)
+  | _, Some values -> (
+      match Vec.nth_opt values 1 with
+      | Some value -> Edn_util.as_string_like value
+      | None -> None)
+  | _ -> None
+
+let pull_created_page config repo name create_result =
+  match created_page_uuid create_result with
+  | Some uuid ->
+      pull_entity config repo page_selector
+        (vector_vec
+           (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
+  | None ->
       pull_entity config repo page_selector
         (vector_vec
            (Vec.of_array
@@ -894,15 +901,21 @@ let title_references title =
     | Some index -> String.trim (String.sub name 0 index)
     | None -> name
   in
+  (* Namespaced pages need a create-page op with split-namespace? — the
+     worker's inline page-map resolution rejects "/" titles. A [:block/name]
+     lookup routes them through materialize_name_lookups instead. *)
   let page_ref_map name =
-    Edn_util.map_vec
-      (Vec.of_array
-         [|
-           (kw "block/title", Edn_util.string name);
-           (kw "block/name", Edn_util.string (normalized_lookup_name name));
-           ( kw "block/tags",
-             Edn_util.vector_vec (Vec.singleton (kw "logseq.class/Page")) );
-         |])
+    if String.contains name '/' then
+      vector_vec (Vec.of_array [| kw "block/name"; Edn_util.string name |])
+    else
+      Edn_util.map_vec
+        (Vec.of_array
+           [|
+             (kw "block/title", Edn_util.string name);
+             (kw "block/name", Edn_util.string (normalized_lookup_name name));
+             ( kw "block/tags",
+               Edn_util.vector_vec (Vec.singleton (kw "logseq.class/Page")) );
+           |])
   in
   let tag_name_of_content content =
     match Js.Json.decodeArray content with
@@ -1039,8 +1052,16 @@ let rewrite_name_lookups ~target ids ops =
           with
           | Some "block/name", Some name -> (
               match find name with
-              | Some (uuid, id) ->
-                  if as_uuid then Edn_util.uuid uuid else Edn_util.int64 id
+              | Some (uuid, _) ->
+                  (* insert-blocks payloads may not carry numeric entity
+                     ids (the worker's op forwarding rejects them); every
+                     non-target position takes a [:block/uuid] lookup. *)
+                  if as_uuid then
+                    Edn_util.uuid uuid
+                  else
+                    vector_vec
+                      (Vec.of_array
+                         [| kw "block/uuid"; Edn_util.uuid uuid |])
               | None -> value)
           | _ -> Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false) items)
         else Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false) items))
@@ -1161,16 +1182,7 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
   let open Cli_effect in
   let names = block_name_lookups_in_ops ops in
   let created = ref Vec.empty in
-  let returned_uuid create_result =
-    match
-      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
-    with
-    | Some values, _ | _, Some values -> (
-        match Vec.nth_opt values 1 with
-        | Some value -> Edn_util.as_string_like value
-        | None -> None)
-    | _ -> None
-  in
+  let returned_uuid create_result = created_page_uuid create_result in
   let rec resolve_ids acc remaining =
     match Vec.pop_front remaining with
     | None -> pure (Ok acc)
@@ -1202,7 +1214,33 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                 bind (create_page invoke_config repo name our_uuid)
                   (fun create_result ->
                     bind
-                      (pull_created_page invoke_config repo name create_result)
+                      ((* A name pull misses namespaced pages: split-namespace
+                          gives the leaf its own title. Pull by uuid instead —
+                          the worker's returned uuid when it reports one (it
+                          differs from ours when the page already existed),
+                          else ours. *)
+                         let uuids =
+                           (match returned_uuid create_result with
+                            | Some uuid -> Vec.of_array [| uuid; our_uuid |]
+                            | None -> Vec.singleton our_uuid)
+                           |> unique
+                         in
+                         let rec try_uuid remaining =
+                           match Vec.pop_front remaining with
+                           | None ->
+                               pull_created_page invoke_config repo name create_result
+                           | Some (uuid, rest) ->
+                               bind
+                                 (pull_entity invoke_config repo page_selector
+                                    (vector_vec
+                                       (Vec.of_array
+                                          [| kw "block/uuid"; Edn_util.uuid uuid |])))
+                                 (fun entity ->
+                                   match found entity with
+                                   | Some _ -> pure entity
+                                   | None -> try_uuid rest)
+                         in
+                         try_uuid uuids)
                       (fun entity ->
                         match found entity with
                         | Some entry -> (
