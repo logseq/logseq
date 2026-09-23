@@ -19,6 +19,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.recycle :as outliner-recycle]))
 
@@ -1382,3 +1383,63 @@
                 "Stale Library :block/page is cleared"))))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest undo-library-move-restores-text-and-url-property-values-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1260
+  (doseq [[property-type property-key value-title]
+          [[:default :p-text "text property value"]
+           [:url :p-url "https://logseq.com"]]]
+    (testing (str (name property-type) " property value")
+      (let [conn (db-test/create-conn-with-blocks
+                  {:properties {property-key {:logseq.property/type property-type}}
+                   :pages-and-blocks
+                   [{:page {:block/title "page"}
+                     :blocks [{:block/title "node"
+                               :build/properties {property-key value-title}
+                               :build/children [{:block/title "child"}]}]}]})
+            property-ident (keyword "user.property" (name property-key))
+            node (db-test/find-block-by-content @conn "node")
+            library (ldb/get-library-page @conn)
+            value (get node property-ident)
+            value-uuid (:block/uuid value)
+            db-before @conn]
+        (assert library "Library page exists")
+        (is (= property-ident
+               (:db/ident (:logseq.property/created-from-property value))))
+        (with-transact-pipeline
+          #(outliner-core/move-blocks! conn [value] library {:sibling? false}))
+        (let [moved (d/entity @conn [:block/uuid value-uuid])]
+          (is (ldb/page? moved) "Library move promotes the value to a page")
+          (is (= (:db/id library) (:db/id (:block/parent moved))))
+          (is (nil? (:logseq.property/created-from-property moved))))
+        (let [tx-meta {:outliner-op :move-blocks
+                       :outliner-ops [[:move-blocks [[value-uuid]
+                                                     (:block/uuid library)
+                                                     {:sibling? false}]]]}
+              {:keys [inverse-outliner-ops]}
+              (op-construct/derive-history-outliner-ops db-before @conn [] tx-meta)]
+          (is (seq inverse-outliner-ops) "Forward Library move has an inverse op")
+          (is (= :move-blocks (ffirst inverse-outliner-ops)))
+          (is (= property-ident
+                 (get-in inverse-outliner-ops [0 1 2 :created-from-property]))
+              "Inverse still carries the original property identity after page promotion")
+          (with-transact-pipeline
+            #(outliner-op/apply-ops! conn inverse-outliner-ops {}))
+          (let [restored (d/entity @conn [:block/uuid value-uuid])
+                node' (d/entity @conn (:db/id node))]
+            (is (not (ldb/page? restored))
+                "Undo demotes the Library page back to a block")
+            (is (= property-ident
+                   (:db/ident (:logseq.property/created-from-property restored)))
+                "Undo restores the block as a property value")
+            (is (= (:db/id restored)
+                   (:db/id (get node' property-ident)))
+                "The node still owns the property value")
+            (is (= (:db/id node')
+                   (:db/id (:block/parent restored))))
+            (is (= ["child"]
+                   (->> (:block/_parent node')
+                        (remove :logseq.property/created-from-property)
+                        ldb/sort-by-order
+                        (mapv :block/title)))
+                "The restored value is not a normal child block")))))))

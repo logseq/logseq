@@ -901,6 +901,17 @@
     (some? created-from-property)
     (d/entity db created-from-property)))
 
+(defn- restore-property-value-from-page?
+  "Library moves promote a text/URL property value to a page. Undo must demote
+  that page back to a block before reattaching it as the property value."
+  [block restore-from-property]
+  (boolean (and restore-from-property (ldb/page? block))))
+
+(defn- demote-page-to-block-tx
+  [block]
+  [[:db/retract (:db/id block) :block/tags :logseq.class/Page]
+   [:db/retract (:db/id block) :block/name]])
+
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -1187,9 +1198,15 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
+        target-from-property (when sibling?
+                               (:logseq.property/created-from-property target-block))
+        restore-from-property (or target-from-property
+                                  (resolve-created-from-property db created-from-property))
+        demote-page? (restore-property-value-from-page? block restore-from-property)
         move-page-as-block-child? (and (not sibling?)
                                        (not (ldb/page? target-block))
-                                       (ldb/page? block))]
+                                       (ldb/page? block)
+                                       (not demote-page?))]
     (if (or target-without-parent? move-page-as-block-child?)
       (throw (ex-info "not-allowed-move-block-page"
                       {:reason (if target-without-parent?
@@ -1198,6 +1215,7 @@
       (let [first-block-page (:db/id (:block/page block))
             target-page (get-target-block-page target-block sibling?)
             not-same-page? (not= first-block-page target-page)
+            page-after-move? (and (ldb/page? block) (not demote-page?))
             block-order (if sibling?
                           (db-order/gen-key (:block/order target-block)
                                             (:block/order (ldb/get-right-sibling target-block)))
@@ -1210,20 +1228,18 @@
                                        (:db/id (:block/parent target-block))
                                        (:db/id target-block))
                        :block/order block-order}
-                       (not (ldb/page? block))
+                       (not page-after-move?)
                        (assoc :block/page target-page))]
-            children-page-tx (when (and not-same-page? (not (ldb/page? block)))
+            children-page-tx (when (and not-same-page? (not page-after-move?))
                                (let [children-ids (ldb/get-block-full-children-ids db (:db/id block))]
                                  (keep (fn [id]
                                          (let [child (d/entity db id)]
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            target-from-property (when sibling?
-                                   (:logseq.property/created-from-property target-block))
+            page-demote-tx (when demote-page?
+                             (demote-page-to-block-tx block))
             block-from-property (:logseq.property/created-from-property block)
-            restore-from-property (or target-from-property
-                                      (resolve-created-from-property db created-from-property))
             property-tx (let [retract-property-tx (when block-from-property
                                                     [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
                                                      [:db/retract (:db/id block) :logseq.property/created-from-property]])
@@ -1234,7 +1250,7 @@
                                                   [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
                                                    [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
                           (concat retract-property-tx add-property-tx))]
-        (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
+        (common-util/concat-without-nil tx-data children-page-tx page-demote-tx property-tx)))))
 
 (defn- transact-move-blocks!
   [conn blocks target-block sibling? opts outliner-op top-level-blocks]
