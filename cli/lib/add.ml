@@ -1122,29 +1122,78 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                created_uuids )))
 
 (* Best-effort cleanup of pages materialize_name_lookups created when the final
-   apply fails — page creation cannot join that transaction because the
-   insert-blocks schema requires a concrete uuid target and ref property values
-   require entity ids. *)
+   apply fails. Creation cannot join that transaction (insert-blocks requires a
+   concrete uuid target and ref property values require entity ids), and the
+   apply error is ambiguous — a timeout can fire after the worker committed, or
+   a concurrent client may own a returned page. To avoid destroying committed or
+   foreign content, each created page is re-pulled and only permanently removed
+   when it still holds no blocks. *)
 let rollback_pages invoke_config repo created_uuids =
   let open Cli_effect in
-  let ops =
-    Vec.map
-      (fun uuid ->
-        Edn_util.vector_vec
-          (Vec.of_array
-             [|
-               kw "delete-page";
-               Edn_util.vector_vec
-                 (Vec.of_array
-                    [| Edn_util.uuid uuid; Edn_util.map_vec Vec.empty |]);
-             |]))
-      created_uuids
+  let still_empty uuid =
+    bind
+      (pull_entity invoke_config repo
+         (vector_vec
+            (Vec.of_array
+               [|
+                 kw "db/id";
+                 Edn_util.map_vec
+                   (Vec.of_array
+                      [|
+                        ( kw "block/children",
+                          Edn_util.vector_vec (Vec.singleton (kw "db/id")) );
+                      |]);
+               |]))
+         (vector_vec
+            (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
+      (fun entity ->
+        match Edn_util.get entity "block/children" with
+        | Some children -> (
+            match Edn_util.as_seq children with
+            | Some items -> pure (Vec.is_empty items)
+            | None -> pure false)
+        | None -> pure (Option.is_some (Edn_util.as_map entity)))
   in
-  if Vec.is_empty ops then pure ()
-  else
-    catch
-      (map (fun _ -> ()) (apply_outliner_ops invoke_config repo ops))
-      (fun _ -> pure ())
+  let rec collect acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure acc
+    | Some (uuid, rest) ->
+        bind (still_empty uuid) (fun empty ->
+            collect (if empty then Vec.push_back acc uuid else acc) rest)
+  in
+  bind (collect Vec.empty created_uuids) (fun empty_uuids ->
+      if Vec.is_empty empty_uuids then pure ()
+      else
+        let ops =
+          empty_uuids
+          |> Vec.concat_map (fun uuid ->
+                 Vec.of_array
+                   [|
+                     Edn_util.vector_vec
+                       (Vec.of_array
+                          [|
+                            kw "delete-page";
+                            Edn_util.vector_vec
+                              (Vec.of_array
+                                 [|
+                                   Edn_util.uuid uuid;
+                                   Edn_util.map_vec Vec.empty;
+                                 |]);
+                          |]);
+                     Edn_util.vector_vec
+                       (Vec.of_array
+                          [|
+                            kw "recycle-delete-permanently";
+                            Edn_util.vector_vec
+                              (Vec.singleton (Edn_util.uuid uuid));
+                          |]);
+                   |])
+        in
+        catch
+          (map
+             (fun _ -> ())
+             (apply_outliner_ops invoke_config repo ops))
+          (fun _ -> pure ()))
 
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
