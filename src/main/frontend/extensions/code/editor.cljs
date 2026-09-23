@@ -315,14 +315,21 @@
    language compartment once it settles."
   [context descriptor]
   (when-let [load (:load descriptor)]
-    (let [result (load (api/language-descriptor->js descriptor))]
-      (-> (js/Promise.resolve result)
-          (.then (fn [extension]
-                   (reconfigure-language! context extension)))
-          (.catch (fn [error]
-                    (log/error :code-editor/language-load-failed
-                               {:id (:id descriptor)
-                                :error error})))))))
+    (-> (js/Promise.resolve nil)
+        (.then (fn [_]
+                 ;; Invoke inside the promise chain so a synchronous throw is
+                 ;; also routed through the .catch below.
+                 (load (api/language-descriptor->js descriptor))))
+        (.then (fn [extension]
+                 ;; Only reconfigure while this descriptor is still the
+                 ;; selected language; a slower load must not clobber a
+                 ;; newer selection.
+                 (when (identical? descriptor (:language @(:*state context)))
+                   (reconfigure-language! context extension))))
+        (.catch (fn [error]
+                  (log/error :code-editor/language-load-failed
+                             {:id (:id descriptor)
+                              :error error}))))))
 
 (defn- base-extensions
   []
@@ -379,6 +386,8 @@
 
 (declare enhancer-payload)
 
+(declare set-language-impl!)
+
 (defn- js-enhancer-payload
   [context]
   (api/enhancer-payload->js (enhancer-payload context)))
@@ -406,7 +415,16 @@
     (when-not (language-registry/valid-language-descriptor? descriptor)
       (throw (ex-info "Invalid CodeMirror 6 language descriptor"
                       {:descriptor descriptor})))
-    (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor))
+    (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor)
+    ;; The fence language was resolved before enhancers ran; if this
+    ;; registration now matches the requested name, re-resolve it.
+    (let [requested (:requested-language-name @(:*state context))
+          resolved (:language @(:*state context))]
+      (when (and requested
+                 (plugin-language-by-name context requested)
+                 (not= (:id resolved)
+                       (:id (plugin-language-by-name context requested))))
+        (set-language-impl! context requested))))
   context)
 
 (defn apply-enhancers!
@@ -468,7 +486,8 @@
                       :dispose-fns []
                       :language language
                       :plugin-extensions {}
-                      :plugin-languages {}})
+                      :plugin-languages {}
+                      :requested-language-name language-name})
         update-listener (.of (.-updateListener EditorView)
                              (fn [^js view-update]
                                (when (.-docChanged view-update)
