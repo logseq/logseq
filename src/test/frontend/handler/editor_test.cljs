@@ -593,7 +593,7 @@
         (#'editor/edit-last-block-after-inserted! {:blocks [inserted-block]})
         (is (= [[:schedule]
                 [:clear-when-saved]
-                [:edit-block inserted-block :max]]
+                [:edit-block inserted-block :max {:save-current-block? false}]]
                @calls))
         (catch :default error
           (is false (str error)))))))
