@@ -167,7 +167,8 @@ let notification_data (exn : exn) : Wire.t option =
       | _ -> Some w)
   | _ -> None
 
-let perf_time_ms () = Int64.to_float (Date_time_util.time_ms ())
+(* cljs perf-time-ms *)
+let perf_time_ms () = Clock.monotonic_ms ()
 
 (* :thread-api/apply-outliner-ops [repo ops opts] *)
 let apply_outliner_ops args : Wire.t Db_worker_effect.t =

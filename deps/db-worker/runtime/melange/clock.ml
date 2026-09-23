@@ -1,5 +1,17 @@
 let now_ms () = Js.Date.now ()
-let monotonic_ms () = Js.Date.now ()
+
+type perf
+
+external performance_ : perf Js.Undefined.t = "performance"
+  [@@mel.scope "globalThis"]
+
+external perf_now_ : perf -> float = "now" [@@mel.send]
+
+(* cljs perf-time-ms — performance.now() when available else Date.now() *)
+let monotonic_ms () =
+  match Js.Undefined.toOption performance_ with
+  | Some p -> perf_now_ p
+  | None -> Js.Date.now ()
 
 let today_int () =
   let d = Js.Date.make () in
