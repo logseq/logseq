@@ -43,3 +43,11 @@ let restore_http_fn : (unit -> unit) ref =
   ref (fun () -> failwith "Native_test_hooks.restore_http_fn not installed")
 
 let restore_http () = !restore_http_fn ()
+
+(* Http_bytes keeps its spec interface; it registers into these so the one
+   install_http call stubs both Http and Http_bytes. *)
+let install_http_bytes_fn :
+    ((http_req -> string Db_worker_effect.t) -> unit) ref =
+  ref (fun _ -> ())
+
+let restore_http_bytes_fn : (unit -> unit) ref = ref (fun () -> ())

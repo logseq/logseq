@@ -227,9 +227,9 @@ let prepare_upload_temp_sqlite repo graph_id (source_conn : conn)
              (fun ~repo ~graph_id ~title ~aes_key ->
                 Sync_large_title.upload_large_title ~repo ~graph_id ~title
                   ~aes_key
-                  ~http_base:
-                    (Option.value (http_base ()) ~default:""))
-           ~offloaded_title_eids:large_title_eids
+                  ~http_base:(Option.value (http_base ()) ~default:"")
+                  ~auth_headers:(Sync_auth.auth_headers ()))
+           ~offloaded_title_eids:large_title_eids ()
          >>= fun datoms' ->
          let kept, dropped = drop_oversized_upload_datoms datoms' in
          (match dropped with

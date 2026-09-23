@@ -36,6 +36,8 @@ let () =
       send_impl := (fun req ->
         Db_worker_effect.bind (s (req_to_hooks req)) (fun r ->
             Db_worker_effect.pure (resp_of_hooks r)));
-      send_binary_impl := (fun req -> sb (req_to_hooks req)));
+      send_binary_impl := (fun req -> sb (req_to_hooks req));
+      !Native_test_hooks.install_http_bytes_fn sb);
   Native_test_hooks.restore_http_fn := (fun () ->
-      send_impl := real_send; send_binary_impl := real_send_binary)
+      send_impl := real_send; send_binary_impl := real_send_binary;
+      !Native_test_hooks.restore_http_bytes_fn ())
