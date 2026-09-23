@@ -3,7 +3,7 @@
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [deftest is]]
             [clojure.string :as string]
-            [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block]
             [frontend.components.block.breadcrumb-model :as model]
             [frontend.components.header :as header]
             [frontend.db.hooks :as db-hooks]
