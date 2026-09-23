@@ -109,16 +109,21 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
+  (let [skip-ref-rebuild? (boolean (:skip-ref-rebuild? opts))
+        block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
                      :block/title value)
-        block' (-> (wrap-parse-block block)
-                   ;; :block/uuid might be changed when backspace/delete
-                   ;; a block that has been refed
-                   (assoc :block/uuid (:block/uuid block)))
+        block' (if skip-ref-rebuild?
+                 block
+                 (-> (wrap-parse-block block)
+                     ;; :block/uuid might be changed when backspace/delete
+                     ;; a block that has been refed
+                     (assoc :block/uuid (:block/uuid block))))
         opts' (assoc opts :outliner-op :save-block)]
     (ui-outliner-tx/transact!
      opts'
-     (outliner-save-block! block'))))
+     (if skip-ref-rebuild?
+       (outliner-save-block! block' :skip-ref-rebuild? true)
+       (outliner-save-block! block')))))
 
 (defn- latest-renderer-block
   [block]
@@ -1945,8 +1950,8 @@
                  (when (and (state/input-idle? repo :diff 450)
                           ;; don't auto-save block if it has tags
                             (not (re-find #"#\S+" value)))
-                   ; don't auto-save for page's properties block
-                   (save-current-block! {:skip-properties? true})))
+                   ;; Persist title only; parse refs/pages when the edit commits.
+                   (save-current-block! {:skip-ref-rebuild? true})))
                450))
       ;; Command / page-search triggers for the character just typed. This ran
       ;; in an effect of the editor box, which re-rendered on every keystroke.

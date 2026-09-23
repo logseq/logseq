@@ -124,6 +124,22 @@
         (is (= [cached-ref-uuid]
                (map :block/uuid (:block/refs result))))))))
 
+(deftest wrap-parse-block-incomplete-nested-page-ref-test
+  (testing "complete adjacent page refs stay separate"
+    (let [result (db-editor-handler/wrap-parse-block
+                  {:block/title "[[PageA]] [[PageB]]"})]
+      (is (= #{"PageA" "PageB"}
+             (set (keep :block/title (:block/refs result)))))))
+
+  (testing "deleting ]] after PageA is parsed as one nested page name (db-test#1267)"
+    (let [result (db-editor-handler/wrap-parse-block
+                  {:block/title "[[PageA [[PageB]]"})
+          ref-titles (set (keep :block/title (:block/refs result)))]
+      (is (= #{"PageA [[PageB"} ref-titles)
+          "Mid-edit text is parsed as a single page name, not PageA plus PageB")
+      (is (not (contains? ref-titles "PageA"))
+          "PageA is dropped while the closing brackets are missing"))))
+
 (deftest save-file-transacts-through-worker-test
   (async done
     (let [calls (atom [])]

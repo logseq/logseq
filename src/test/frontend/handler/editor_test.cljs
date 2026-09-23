@@ -302,6 +302,67 @@
                :outliner-op :save-block}]
              @tx-calls)))))
 
+(deftest save-block-if-changed-draft-skips-wrap-parse-block-test
+  (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title "[[PageA]] [[PageB]]"}
+        parse-calls (atom 0)
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [db ops opts]
+                                                   (reset! tx-calls [db ops opts])
+                                                   :tx)
+                  editor/wrap-parse-block (fn [parsed-block]
+                                            (swap! parse-calls inc)
+                                            parsed-block)
+                  frontend-outliner-op/save-block! (fn [saved-block opts]
+                                                     (swap! save-calls conj [saved-block opts]))]
+      (is (= :tx (editor/save-block-if-changed!
+                  block
+                  "[[PageA [[PageB]]"
+                  {:skip-ref-rebuild? true})))
+      (is (zero? @parse-calls)
+          "Idle auto-save must not parse wiki-links into refs/pages")
+      (is (= [[{:block/uuid block-uuid
+                :block/title "[[PageA [[PageB]]"}
+               {:skip-ref-rebuild? true}]]
+             @save-calls))
+      (is (= [nil
+              []
+              {:skip-ref-rebuild? true
+               :outliner-op :save-block}]
+             @tx-calls)))))
+
+(deftest edit-box-on-change-auto-save-skips-ref-rebuild-test
+  (let [block {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :block/title "[[PageA]] [[PageB]]"}
+        captured (atom nil)
+        original-set-timeout js/setTimeout]
+    (with-redefs [state/get-edit-block (constantly block)
+                  state/get-current-repo (constantly "repo")
+                  state/set-edit-content! (constantly nil)
+                  state/get-state (constantly nil)
+                  state/input-idle? (constantly true)
+                  block-handler/mark-last-input-time! (constantly nil)
+                  editor/handle-last-input (constantly nil)
+                  editor/save-current-block! (fn
+                                               ([] (reset! captured {}))
+                                               ([opts] (reset! captured opts)))]
+      (set! js/setTimeout (fn [f _] (f) 1))
+      (try
+        (editor/edit-box-on-change!
+         #js {:target #js {:value "[[PageA [[PageB]]"}}
+         block
+         "edit-id")
+        (finally
+          (set! js/setTimeout original-set-timeout)))
+      (is (= {:skip-ref-rebuild? true} @captured)
+          "Keystroke auto-save must defer ref/page rebuild until commit"))))
+
 (deftest save-current-block-compares-with-latest-renderer-snapshot-test
   (let [repo "latest-renderer-block"
         block-uuid #uuid "22222222-2222-2222-2222-222222222222"
