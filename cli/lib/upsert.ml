@@ -2079,20 +2079,30 @@ let closed_value_of_result ~property_type result text value =
                    logseq.property/value (int or float), urls in
                    block/title. *)
                 | "number" -> (
-                    let as_number v =
-                      match (Edn_util.as_int64 v, Edn_util.as_float v) with
-                      | Some n, _ -> Some (Int64.to_float n)
-                      | _, Some f -> Some f
-                      | _ -> None
+                    let stored =
+                      Edn_util.get value_entity "logseq.property/value"
                     in
                     match
-                      ( Option.bind
-                          (Edn_util.get value_entity "logseq.property/value")
-                          as_number,
-                        as_number value )
+                      ( Option.bind stored Edn_util.as_int64,
+                        Edn_util.as_int64 value )
                     with
-                    | Some stored, Some wanted -> Float.equal stored wanted
-                    | _ -> false)
+                    | Some stored, Some wanted -> Int64.equal stored wanted
+                    | _ -> (
+                        (* Float fallback only when either side is not an
+                           integer — Int64->float conversion would round
+                           distinct large integers together. *)
+                        let as_number v =
+                          match
+                            (Edn_util.as_int64 v, Edn_util.as_float v)
+                          with
+                          | Some n, _ -> Some (Int64.to_float n)
+                          | _, Some f -> Some f
+                          | _ -> None
+                        in
+                        match (Option.bind stored as_number, as_number value) with
+                        | Some stored, Some wanted ->
+                            Float.equal stored wanted
+                        | _ -> false))
                 | "url" -> (
                     let literal =
                       match
