@@ -1193,6 +1193,19 @@
            (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
            (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
+(defn- move-block-property-tx
+  [block target-block sibling? block-from-property restore-from-property]
+  (let [retract-property-tx (when block-from-property
+                              [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
+                               [:db/retract (:db/id block) :logseq.property/created-from-property]])
+        add-property-tx (when restore-from-property
+                          (let [owner-id (if sibling?
+                                           (:db/id (:block/parent target-block))
+                                           (:db/id target-block))]
+                            [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
+                             [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
+    (concat retract-property-tx add-property-tx)))
+
 (defn- move-block
   [db block target-block sibling? {:keys [created-from-property]}]
   (let [target-block (d/entity db (:db/id target-block))
@@ -1242,16 +1255,8 @@
             page-demote-tx (when demote-page?
                              (demote-page-to-block-tx block))
             block-from-property (:logseq.property/created-from-property block)
-            property-tx (let [retract-property-tx (when block-from-property
-                                                    [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
-                                                     [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when restore-from-property
-                                                (let [owner-id (if sibling?
-                                                                 (:db/id (:block/parent target-block))
-                                                                 (:db/id target-block))]
-                                                  [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
-                                                   [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
-                          (concat retract-property-tx add-property-tx))]
+            property-tx (move-block-property-tx block target-block sibling?
+                                               block-from-property restore-from-property)]
         (common-util/concat-without-nil tx-data children-page-tx page-demote-tx property-tx)))))
 
 (defn- transact-move-blocks!
