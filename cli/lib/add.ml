@@ -931,11 +931,6 @@ let metadata_ops block_uuids status tags properties =
    [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
    code blocks or verbatim markup. *)
 let title_references ~block_refs title =
-  let strip_alias name =
-    match String.index_opt name '|' with
-    | Some index -> String.trim (String.sub name 0 index)
-    | None -> name
-  in
   (* Namespaced pages need a create-page op with split-namespace? — the
      worker's inline page-map resolution rejects "/" titles. A [:block/name]
      lookup routes them through materialize_name_lookups instead. *)
@@ -978,7 +973,9 @@ let title_references ~block_refs title =
                                 Js.Json.decodeString url_parts.(1) )
                             with
                             | Some "Page_ref", Some name -> (
-                                match strip_alias name with
+                                (* mldoc has no | alias syntax — [[a|b]]
+                                   is a page literally named a|b. *)
+                                match String.trim name with
                                 | "" -> None
                                 | name -> Some name)
                             | _ -> None)
@@ -1021,7 +1018,7 @@ let title_references ~block_refs title =
                               Js.Json.decodeString url_parts.(1) )
                           with
                           | Some "Page_ref", Some name -> (
-                              match strip_alias name with
+                              match String.trim name with
                               | "" -> (refs, tag_names)
                               (* [[<uuid>]] is not a page name — the old
                                  extractor filtered it the same way. *)
@@ -1528,6 +1525,23 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                 let tag_names =
                                   if action.markdown_blocks then tag_names
                                   else Vec.empty
+                                in
+                                (* App semantics put tags in block/refs too
+                                   so the tag page's linked references list
+                                   the block; a [:block/name] lookup
+                                   resolves to the existing tag entity. *)
+                                let refs =
+                                  Vec.fold_left
+                                    (fun refs name ->
+                                      Vec.push_back refs
+                                        (vector_vec
+                                           (Vec.of_array
+                                              [|
+                                                kw "block/name";
+                                                Edn_util.string
+                                                  (normalized_lookup_name name);
+                                              |])))
+                                    refs tag_names
                                 in
                                 if
                                   Vec.is_empty refs && Vec.is_empty tag_names
