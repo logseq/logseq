@@ -264,7 +264,7 @@ let asset_class_pre_txs : (string * Db_test_util.edn) list list =
   [ [ "db/ident", Db_test_util.Kw "logseq.class/Asset"
     ; "block/title", Db_test_util.Str "Asset"
     ; "block/name", Db_test_util.Str "asset"
-    ; "block/uuid", Db_test_util.Uuid "00000003-0000-4000-8000-000000000103"
+    ; "block/uuid", Db_test_util.Uuid "00000003-0000-4000-8000-000000000208"
     ; "block/tags", Db_test_util.Set_ [ Db_test_util.Kw "logseq.class/Tag" ]
     ; "logseq.property.class/extends",
       Db_test_util.Set_ [ Db_test_util.Kw "logseq.class/Root" ] ] ]

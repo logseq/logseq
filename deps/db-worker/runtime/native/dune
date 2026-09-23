@@ -7,7 +7,7 @@
   angstrom
   datascript-ocaml-native
   datascript-ocaml-native.sqlite
-  melange-transit-native
+  melange-transit-core
   rrbvec
   sqlite3
   unix
@@ -17,6 +17,7 @@
   re
   re.pcre
   yojson
+  ptime
   digestif
   mirage-crypto
   mirage-crypto-rng.unix
