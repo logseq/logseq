@@ -302,7 +302,10 @@ html[data-theme='dark'] .logseq-code-editor,
 
   .extensions__code-calc {
     justify-self: end;
-    width: var(--logseq-code-calc-result-width, max-content);
+    /* The editor publishes the measured width as
+       --logseq-code-calc-result-width for the hover actions offset; the column
+       itself stays max-content so results keep their adaptive width. */
+    width: max-content;
     max-width: 32ch;
     overflow: hidden;
     padding: 6px 0 0 !important;

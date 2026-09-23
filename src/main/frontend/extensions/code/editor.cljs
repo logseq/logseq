@@ -58,9 +58,25 @@
       (.toggle (.-classList editor-host) "logseq-code-editor-has-vertical-scroll" has-vertical-scroll?)
       (.toggle (.-classList editor-host) "logseq-code-editor-has-horizontal-scroll" has-horizontal-scroll?))))
 
+(defn- update-calc-result-width!
+  "Calc results render in a second grid column to the right of the editor.
+   Publish its measured width as --logseq-code-calc-result-width on
+   .ls-code-editor-wrap so the hover actions reserve that space instead of
+   covering the results."
+  [^js view]
+  (when-let [^js wrap (.closest (.-dom view) ".ls-code-editor-wrap")]
+    (let [^js result-el (.querySelector wrap ".extensions__code-calc")]
+      (.setProperty (.-style wrap) "--logseq-code-calc-result-width"
+                    (str (if result-el (.-offsetWidth result-el) 0) "px")))))
+
+(defn- sync-layout-state!
+  [^js view]
+  (update-scroll-state! view)
+  (update-calc-result-width! view))
+
 (defn- schedule-scroll-state!
   [^js view]
-  (js/requestAnimationFrame #(update-scroll-state! view)))
+  (js/requestAnimationFrame #(sync-layout-state! view)))
 
 (defn- keymap-extension
   []
@@ -535,7 +551,7 @@
           (.observe observer editor-host))
         (swap! *state update :dispose-fns conj #(.disconnect observer))))
     (schedule-scroll-state! view)
-    (js/setTimeout #(update-scroll-state! view) 80)
+    (js/setTimeout #(sync-layout-state! view) 80)
     (gobj/set parent code-editor/context-property context)
     (gobj/set (.-dom view) code-editor/context-property context)
     context))
