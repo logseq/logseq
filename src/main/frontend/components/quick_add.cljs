@@ -4,7 +4,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.state :as state]
             [frontend.util :as util]
             [io.factorhouse.hsx.core :as hsx]
@@ -49,7 +49,7 @@
      (fn []
        (state/clear-selection!)
        (when-not (util/mobile?)
-         (editor-handler/quick-add-open-last-block!))
+         (editor-quick-add/quick-add-open-last-block!))
        #(state/clear-selection!))
      [])
     (when today-page
@@ -60,7 +60,7 @@
                            {:variant :default
                             :size :sm
                             :on-click (fn [_e]
-                                        (editor-handler/quick-add-blocks!))}
+                                        (editor-quick-add/quick-add-blocks!))}
                            (when-not mobile?
                              (if util/mac?
                                (shui/shortcut ["mod" "e"])

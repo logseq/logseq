@@ -18,6 +18,8 @@
             [frontend.db.async :as db-async]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.footer :as footer]
@@ -71,7 +73,7 @@
             {:drop (fn [_e files]
                      (when-let [id (state/get-edit-input-id)]
                        (let [format (get (state/get-edit-block) :block/format :markdown)]
-                         (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
+                         (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? true))))})
            (common-handler/listen-to-scroll! element)
            (when margin-less-pages? ;; makes sure full screen pages displaying without scrollbar
              (set! (.. element -scrollTop) 0)))
@@ -526,7 +528,7 @@
       :system-theme? system-theme?
       :preferred-language preferred-language
       :on-click (fn [e]
-                  (editor-handler/unhighlight-blocks!)
+                  (editor-format/unhighlight-blocks!)
                   (util/fix-open-external-with-shift! e))}
 
      [:main.theme-container-inner#app-container-wrapper
