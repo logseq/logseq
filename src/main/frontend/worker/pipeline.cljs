@@ -303,7 +303,7 @@
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
-                   (let [parent (:block/parent block-before)
+                   (let [parent (:block/parent block-after)
                          parent-page (when parent
                                        (loop [parent parent]
                                          (if (ldb/page? parent)
