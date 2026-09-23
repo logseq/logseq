@@ -136,23 +136,32 @@ let node_property_target_id db (value_id : entity_id) : entity_id =
        | _ -> value_id)
   | _ -> value_id
 
-(* attribute-value->plain *)
+(* attribute-value->plain — cljs ref-attr? takes only the attr; any numeric
+   stored value under a ref attr is an entity id, so Int/Float values
+   (e.g. restored datoms that kept their raw numeric tag) must summarize
+   exactly like Ref *)
 let attribute_value_to_plain db (a : attr) (v : value) : Wire.t =
-  if Ldb.ref_attr db a then
-    match v with
-    | Ref id ->
-        let property = entity db (Ident a) in
-        let ref_id =
-          match property with
-          | Some p
-            when Ldb.value p "logseq.property/type" = Some (Keyword "node") ->
-              node_property_target_id db id
-          | _ -> id
-        in
-        ref_value_summary db ref_id
-    | _ -> Ds_wire.transit_of_value v
-  else
-    Ds_wire.transit_of_value v
+  let eid_opt =
+    if Ldb.ref_attr db a then
+      match v with
+      | Ref id -> Some id
+      | Int id -> Some id
+      | Float f -> Some (int_of_float f)
+      | _ -> None
+    else None
+  in
+  match eid_opt with
+  | Some id ->
+      let property = entity db (Ident a) in
+      let ref_id =
+        match property with
+        | Some p
+          when Ldb.value p "logseq.property/type" = Some (Keyword "node") ->
+            node_property_target_id db id
+        | _ -> id
+      in
+      ref_value_summary db ref_id
+  | None -> Ds_wire.transit_of_value v
 
 (* number->letters / number->roman *)
 let number_to_letters n =
