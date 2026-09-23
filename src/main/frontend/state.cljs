@@ -31,7 +31,6 @@
 ;; handlers read these imperatively through the getters below, and every
 ;; write to the store re-evaluates every mounted subscription.
 (defonce ^:private *last-input-time (atom {}))
-(defonce ^:private *last-key-code (atom nil))
 (defonce ^:private *last-saved-cursor (atom {}))
 (defonce ^:private *ui-last-key-code (atom nil))
 
@@ -1864,7 +1863,6 @@ should be done through this fn in order to get global config and config defaults
             native-platform? (mobile-util/native-platform?)]
         (assert (and container-id (:block/uuid block))
                 "container-id or block uuid is missing")
-        (reset! *last-key-code nil)
         (swap-state!
          (fn [db]
            (cond-> (-> db
@@ -1889,10 +1887,6 @@ should be done through this fn in order to get global config and config defaults
 
             (when (and move-cursor? (not (block-component-editing?)))
               (cursor/move-cursor-to input pos))))))))
-
-(defn set-last-key-code!
-  [key-code]
-  (reset! *last-key-code key-code))
 
 (defn set-ui-last-key-code!
   [key-code]
