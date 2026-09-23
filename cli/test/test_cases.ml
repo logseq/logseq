@@ -1696,7 +1696,7 @@ let () =
             match !step with
             | 1
               when Js.String.includes ~search:"thread-api/q" body
-                   && Js.String.includes ~search:"inline note" body ->
+                   && Js.String.includes ~search:"inline-note" body ->
                 "[[\"^ \
                  \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/inline-note\",\"~:logseq.property/type\",\"default\"]]"
             | 2
@@ -1707,21 +1707,18 @@ let () =
             | 3
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
-                if Js.String.includes ~search:property_ident body then
-                  fail_test
-                    ("inline property should not be inserted with block: "
-                   ^ body);
-                "[]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
-                "[\"^ \",\"~:db/id\",10]"
-            | 5
-              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
-                     body ->
+                if not (Js.String.includes ~search:"insert-blocks" body) then
+                  fail_test ("missing insert-blocks op: " ^ body);
+                if not (Js.String.includes ~search:"batch-set-property" body)
+                then
+                  fail_test ("missing inline property op: " ^ body);
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing inline property ident: " ^ body);
                 if not (Js.String.includes ~search:"First note" body) then
                   fail_test ("missing inline property value: " ^ body);
                 "[]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
                   (Printf.sprintf "unexpected request at step %d: %s" !step body);
@@ -1741,19 +1738,17 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"First inline\" \"Inline Note\" \"First \
-                 note\"}]";
+                "- First inline\n  inline-note:: First note";
               |]
           in
           ignore (expect_cli_exit_zero "upsert block inline property" output);
-          if !step = 5 then Js.Promise.resolve pass
+          if !step = 4 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+              (Printf.sprintf "expected four invoke requests, got %d" !step)));
 
   test_promise "upsert block create sends page refs from block title" (fun () ->
       let step = ref 0 in
-      let ref_uuid = "22222222-2222-4222-8222-222222222222" in
       let captured_apply_body = ref None in
       let server =
         invoke_server (fun body ->
@@ -1765,16 +1760,11 @@ let () =
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\"]]"
             | 2
-              when Js.String.includes ~search:"thread-api/q" body
-                   && Js.String.includes ~search:"bar_page" body ->
-                "[[\"^ \",\"~:db/id\",88,\"~:block/uuid\",\"" ^ ref_uuid
-                ^ "\",\"~:block/name\",\"bar_page\",\"~:block/title\",\"bar_page\"]]"
-            | 3
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 captured_apply_body := Some body;
                 "[]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 3 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -1807,12 +1797,12 @@ let () =
                 failwith "missing captured apply body"
           in
           expect_named_contains "block refs attr" body "block/refs";
-          expect_named_contains "resolved page ref uuid" body ref_uuid;
-          expect_named_contains "resolved page ref title" body "bar_page";
-          if !step = 4 then Js.Promise.resolve pass
+          expect_named_contains "page ref title" body "bar_page";
+          expect_named_contains "page ref tag" body "logseq.class/Page";
+          if !step = 3 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected four invoke requests, got %d" !step)));
+              (Printf.sprintf "expected three invoke requests, got %d" !step)));
 
   test_promise "upsert block update resolves tag names from tag list" (fun () ->
       let step = ref 0 in
@@ -1875,42 +1865,39 @@ let () =
     (fun () ->
       let step = ref 0 in
       let ref_uuid = "22222222-2222-4222-8222-222222222222" in
-      let property_ident = "logseq.property.comments/blocks" in
+      let property_ident = "user.property/related" in
       let server =
         invoke_server (fun body ->
             incr step;
             match !step with
             | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"related" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/related\",\"~:logseq.property/type\",\"~:node\"]]"
+            | 2
               when Js.String.includes ~search:"thread-api/pull" body
                    && Js.String.includes ~search:ref_uuid body ->
                 "[\"^ \
                  \",\"~:db/id\",88,\"~:block/uuid\",\"22222222-2222-4222-8222-222222222222\"]"
-            | 2
+            | 3
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"home" body ->
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
-            | 3
-              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
-                     body ->
-                if Js.String.includes ~search:property_ident body then
-                  fail_test
-                    ("inline ref property should not be inserted with block: "
-                   ^ body);
-                "[]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
-                "[\"^ \",\"~:db/id\",10]"
-            | 5
+            | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:property_ident body) then
-                  fail_test ("missing comments blocks property ident: " ^ body);
+                  fail_test ("missing related property ident: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
                   fail_test
                     ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
                   (Printf.sprintf "unexpected request at step %d: %s" !step body);
@@ -1930,9 +1917,8 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"Comment area\" \
-                 :logseq.property.comments/blocks [[:block/uuid #uuid \
-                 \"22222222-2222-4222-8222-222222222222\"]]}]";
+                "- Comment area\n  related:: \
+                 22222222-2222-4222-8222-222222222222";
               |]
           in
           ignore
@@ -1943,52 +1929,50 @@ let () =
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
   test_promise
-    "upsert block create keeps inline tags out of property ops while resolving \
-     refs" (fun () ->
+    "upsert block create resolves inline tags and uuid property refs" (fun () ->
       let step = ref 0 in
       let ref_uuid = "22222222-2222-4222-8222-222222222222" in
-      let property_ident = "logseq.property.comments/blocks" in
-      let tag_ident = "logseq.class/Comments" in
+      let property_ident = "user.property/related" in
       let server =
         invoke_server (fun body ->
             incr step;
             match !step with
             | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"related" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/related\",\"~:logseq.property/type\",\"~:node\"]]"
+            | 2
               when Js.String.includes ~search:"thread-api/pull" body
                    && Js.String.includes ~search:ref_uuid body ->
                 "[\"^ \
                  \",\"~:db/id\",88,\"~:block/uuid\",\"22222222-2222-4222-8222-222222222222\"]"
-            | 2
+            | 3
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"home" body ->
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
-            | 3
-              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
-                     body ->
-                if Js.String.includes ~search:property_ident body then
-                  fail_test
-                    ("inline ref property should not be inserted with block: "
-                   ^ body);
-                if not (Js.String.includes ~search:tag_ident body) then
-                  fail_test ("missing inline tag in inserted block: " ^ body);
-                "[]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
-                "[\"^ \",\"~:db/id\",10]"
+            | 4 when Js.String.includes ~search:"thread-api/cli-list-tags" body
+              ->
+                "[[\"^ \
+                 \",\"~:db/id\",200,\"~:block/title\",\"Comments\"]]"
             | 5
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
+                if not (Js.String.includes ~search:"block/tags" body) then
+                  fail_test ("missing inline tag op: " ^ body);
+                if not (Js.String.includes ~search:"200" body) then
+                  fail_test ("missing resolved tag id: " ^ body);
                 if not (Js.String.includes ~search:property_ident body) then
-                  fail_test ("missing comments blocks property ident: " ^ body);
-                if Js.String.includes ~search:tag_ident body then
-                  fail_test
-                    ("block/tags leaked into inline property op: " ^ body);
+                  fail_test ("missing related property ident: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
                   fail_test
                     ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
+            | 6 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
                   (Printf.sprintf "unexpected request at step %d: %s" !step body);
@@ -2008,17 +1992,15 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"Comment area\" :block/tags \
-                 [:logseq.class/Comments] :logseq.property.comments/blocks \
-                 [[:block/uuid #uuid \
-                 \"22222222-2222-4222-8222-222222222222\"]]}]";
+                "- Comment area #Comments\n  related:: \
+                 22222222-2222-4222-8222-222222222222";
               |]
           in
           ignore (expect_cli_exit_zero "upsert block inline ref tags" output);
-          if !step = 5 then Js.Promise.resolve pass
+          if !step = 6 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+              (Printf.sprintf "expected six invoke requests, got %d" !step)));
 
   test_promise "update block resolves string update property names by title"
     (fun () ->

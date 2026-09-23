@@ -7,7 +7,7 @@ type opts = {
   tags_edn : string option;
   properties_edn : string option;
   content : string option;
-  blocks_edn : string option;
+  blocks_markdown : string option;
   blocks_file : Cli_primitive.path option;
 }
 
@@ -191,7 +191,7 @@ let invalid_options (opts : opts) =
     | None -> false
   in
   let has_blocks =
-    nonempty opts.blocks_edn || Option.is_some opts.blocks_file
+    nonempty opts.blocks_markdown || Option.is_some opts.blocks_file
   in
   let has_metadata = nonempty opts.tags_edn || nonempty opts.properties_edn in
   let invalid_target_uuid =
@@ -222,53 +222,6 @@ end
 let generate_uuid = Node_crypto.random_uuid
 let unique = Uuid_refs_types.unique_preserve_order
 
-let extract_page_refs title =
-  title |> Uuid_refs_types.extract_wiki_refs
-  |> Vec.filter_map (fun ref_title ->
-      let ref_title = String.trim ref_title in
-      if ref_title = "" || Cli_primitive.is_uuid_string ref_title then None
-      else Some ref_title)
-  |> unique
-
-let rec block_of_value raw =
-  match Edn_util.as_map raw with
-  | Some fields ->
-      let find key =
-        Vec.find_map
-          (fun (k, v) ->
-            match Edn_util.as_string_like k with
-            | Some k when k = key -> Some v
-            | _ -> None)
-          fields
-      in
-      let title =
-        match
-          ( Option.bind (find "block/title") Edn_util.as_string,
-            Option.bind (find "block/content") Edn_util.as_string )
-        with
-        | Some value, _ | _, Some value -> Some value
-        | _ -> None
-      in
-      let uuid = Option.bind (find "block/uuid") Edn_util.as_string_like in
-      let tags =
-        Option.value
-          (Option.map
-             (Vec.filter_map tag_of_value)
-             (Option.bind (find "block/tags") Edn_util.as_seq))
-          ~default:Vec.empty
-      in
-      let children =
-        Option.value
-          (Option.map (Vec.map block_of_value)
-             (Option.bind (find "block/children") Edn_util.as_seq))
-          ~default:Vec.empty
-      in
-      { (Block.make ?uuid ?title ~children ()) with tags; raw }
-  | None -> (
-      match Edn_util.as_string raw with
-      | Some title -> Block.make ~title ()
-      | None -> { (Block.make ()) with raw })
-
 let ensure_block_uuid block =
   match block.Block.uuid with
   | Some _ -> block
@@ -278,21 +231,16 @@ let rec ensure_block_uuids block =
   let children = Vec.map ensure_block_uuids block.Block.children in
   ensure_block_uuid { block with children }
 
-let parse_blocks_edn ~label text =
-  Error.bind (edn_value_of_string ~label text) (function value ->
-      (match Edn_util.as_vector value with
-      | Some values -> Ok (Vec.map block_of_value values)
-      | None ->
-          Error (Error.make Error.Invalid_blocks "blocks must be a vector")))
-
 let read_file path = Cli_unix.read_text_file path
 
 let read_blocks (opts : opts) args =
   match
-    (opts.blocks_edn, opts.blocks_file, Option.map String.trim opts.content)
+    ( opts.blocks_markdown,
+      opts.blocks_file,
+      Option.map String.trim opts.content )
   with
-  | Some text, _, _ -> parse_blocks_edn ~label:"blocks" text
-  | None, Some path, _ -> parse_blocks_edn ~label:"blocks" (read_file path)
+  | Some text, _, _ -> Markdown_blocks.of_markdown text
+  | None, Some path, _ -> Markdown_blocks.of_markdown (read_file path)
   | None, None, Some content when content <> "" ->
       Ok (Vec.singleton (Block.make ~title:content ()))
   | None, None, _ when not (Vec.is_empty args) ->
@@ -612,36 +560,55 @@ let ensure_page config repo page_name =
         | None -> pure (Error (page_not_found ())))
     | Error err -> pure (Error err))
 
-let resolve_add_target config (action : action) =
+(* Returns the EDN value usable as the insert-blocks op target plus the names
+   of pages that would be created (dry-run previews only). *)
+let resolve_add_target ~dry_run config (action : action) =
   let open Cli_effect in
+  let block_target lookup =
+    bind
+      (pull_entity config action.repo
+         (vector_vec
+            (Vec.of_array [| kw "db/id"; kw "block/uuid"; kw "block/title" |]))
+         lookup)
+      (fun block ->
+        match uuid_of_entity block with
+        | Some uuid -> pure (Ok (Edn_util.uuid uuid, Vec.empty))
+        | None ->
+            pure
+              (Error
+                 (Error.make Error.Target_not_found "target block not found")))
+  in
   match (action.target_id, action.target_uuid, action.target_page_name) with
-  | Some id, _, _ ->
-      bind
-        (pull_entity config action.repo
-           (vector_vec
-              (Vec.of_array [| kw "db/id"; kw "block/uuid"; kw "block/title" |]))
-           (Edn_util.int64 id))
-        (fun block ->
-          match uuid_of_entity block with
-          | Some uuid -> pure (Ok uuid)
-          | None ->
-              pure
-                (Error
-                   (Error.make Error.Target_not_found "target block not found")))
+  | Some id, _, _ -> block_target (Edn_util.int64 id)
   | None, Some uuid, _ ->
-      bind
-        (pull_entity config action.repo
-           (vector_vec
-              (Vec.of_array [| kw "db/id"; kw "block/uuid"; kw "block/title" |]))
-           (vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
-        (fun block ->
-          match uuid_of_entity block with
-          | Some uuid -> pure (Ok uuid)
-          | None ->
-              pure
-                (Error
-                   (Error.make Error.Target_not_found "target block not found")))
-  | None, None, Some page_name -> ensure_page config action.repo page_name
+      block_target
+        (vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
+  | None, None, Some page_name -> (
+      if dry_run then
+        bind
+          (pull_pages_by_name config action.repo page_name page_selector)
+          (fun result ->
+            match first_entity result with
+            | Some entity when recycled_entity entity ->
+                pure (Error (recycled_page_error ()))
+            | Some entity -> (
+                match uuid_of_entity entity with
+                | Some uuid -> pure (Ok (Edn_util.uuid uuid, Vec.empty))
+                | None -> pure (Error (page_not_found ())))
+            | None ->
+                pure
+                  (Ok
+                     ( vector_vec
+                         (Vec.of_array
+                            [|
+                              kw "block/name";
+                              Edn_util.string (normalized_lookup_name page_name);
+                            |]),
+                       Vec.singleton page_name )))
+      else
+        bind (ensure_page config action.repo page_name) (function
+          | Error err -> pure (Error err)
+          | Ok uuid -> pure (Ok (Edn_util.uuid uuid, Vec.empty))))
   | None, None, None ->
       pure
         (Error
@@ -907,188 +874,237 @@ let metadata_ops block_uuids status tags properties =
   if Vec.is_empty block_uuids then Vec.empty
   else Vec.append status_ops (Vec.append tag_ops property_ops)
 
-let page_ref_value entity fallback_title =
-  match uuid_of_entity entity with
-  | None -> None
-  | Some uuid ->
-      let fields =
-        Vec.of_array
-          [|
-            (kw "block/uuid", Edn_util.uuid uuid);
-            ( kw "block/title",
-              Edn_util.string
-                (Option.value
-                   (Edn_util.get_string entity "block/title")
-                   ~default:fallback_title) );
-          |]
-      in
-      let fields =
-        match Edn_util.get_string entity "block/name" with
-        | Some name ->
-            Vec.push_front fields (kw "block/name", Edn_util.string name)
-        | None -> fields
-      in
-      Some (Edn_util.map_vec fields)
-
-let resolve_title_page_refs invoke_config repo title =
-  let open Cli_effect in
-  let page_names = extract_page_refs title in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (page_name, rest) ->
-        bind (ensure_page_entity invoke_config repo page_name) (function
-          | Error err -> pure (Error err)
-          | Ok entity -> (
-              match page_ref_value entity page_name with
-              | Some ref_value -> loop (Vec.push_back acc ref_value) rest
-              | None -> pure (Error (page_not_found ()))))
+(* Mldoc.get_references on a block title returns the AST-level references:
+   [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
+   code blocks or verbatim markup. *)
+let title_references title =
+  let strip_alias name =
+    match String.index_opt name '|' with
+    | Some index -> String.trim (String.sub name 0 index)
+    | None -> name
   in
-  loop Vec.empty page_names
-
-let rec resolve_block_title_page_refs invoke_config repo block =
-  let open Cli_effect in
-  let title_refs =
-    match block.Block.title with
-    | Some title -> resolve_title_page_refs invoke_config repo title
-    | None -> pure (Ok Vec.empty)
+  let page_ref_map name =
+    Edn_util.map_vec
+      (Vec.of_array
+         [|
+           (kw "block/title", Edn_util.string name);
+           (kw "block/name", Edn_util.string (normalized_lookup_name name));
+           ( kw "block/tags",
+             Edn_util.vector_vec (Vec.singleton (kw "logseq.class/Page")) );
+         |])
   in
-  bind title_refs (function
-    | Error err -> pure (Error err)
-    | Ok refs ->
-        let rec resolve_children acc remaining =
-          match Vec.pop_front remaining with
-          | None -> pure (Ok acc)
-          | Some (child, rest) ->
-              bind (resolve_block_title_page_refs invoke_config repo child)
-                (function
-                | Error err -> pure (Error err)
-                | Ok child_refs ->
-                    resolve_children (Vec.append acc child_refs) rest)
-        in
-        bind (resolve_children Vec.empty block.Block.children) (function
-          | Error err -> pure (Error err)
-          | Ok child_refs ->
-              let own_refs =
-                match (block.Block.uuid, refs) with
-                | Some uuid, refs when not (Vec.is_empty refs) ->
-                    Vec.singleton (uuid, refs)
-                | _ -> Vec.empty
-              in
-              pure (Ok (Vec.append own_refs child_refs))))
-
-let resolve_blocks_title_page_refs invoke_config repo blocks =
-  let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (block, rest) ->
-        bind (resolve_block_title_page_refs invoke_config repo block) (function
-          | Error err -> pure (Error err)
-          | Ok refs -> loop (Vec.append acc refs) rest)
+  let tag_name_of_content content =
+    match Js.Json.decodeArray content with
+    | Some nodes -> (
+        Array.find_map
+          (fun node ->
+            match Js.Json.decodeArray node with
+            | Some parts when Array.length parts >= 2 -> (
+                match Js.Json.decodeString parts.(0) with
+                | Some "Plain" -> Js.Json.decodeString parts.(1)
+                | _ -> None)
+            | _ -> Js.Json.decodeString node)
+          nodes
+        |> function
+        | Some name when String.trim name <> "" -> Some (String.trim name)
+        | _ -> None)
+    | None -> None
   in
-  loop Vec.empty blocks
+  match Js.Json.decodeArray (Mldoc.references title) with
+  | None -> (Vec.empty, Vec.empty)
+  | Some items ->
+      Array.fold_left
+        (fun (refs, tag_names) item ->
+          match Js.Json.decodeArray item with
+          | Some pair when Array.length pair >= 2 -> (
+              match Js.Json.decodeString pair.(0) with
+              | Some "Tag" -> (
+                  match tag_name_of_content pair.(1) with
+                  | Some name -> (refs, Vec.push_back tag_names name)
+                  | None -> (refs, tag_names))
+              | Some "Link" -> (
+                  match Js.Json.decodeObject pair.(1) with
+                  | Some content -> (
+                      match
+                        Option.bind
+                          (Js.Dict.get content "url")
+                          Js.Json.decodeArray
+                      with
+                      | Some url_parts when Array.length url_parts >= 2 -> (
+                          match
+                            ( Js.Json.decodeString url_parts.(0),
+                              Js.Json.decodeString url_parts.(1) )
+                          with
+                          | Some "Page_ref", Some name -> (
+                              match strip_alias name with
+                              | "" -> (refs, tag_names)
+                              | name ->
+                                  ( Vec.push_back refs (page_ref_map name),
+                                    tag_names ))
+                          | Some "Block_ref", Some uuid ->
+                              ( Vec.push_back refs
+                                  (vector_vec
+                                     (Vec.of_array
+                                        [|
+                                          kw "block/uuid"; Edn_util.uuid uuid;
+                                        |])),
+                                tag_names )
+                          | _ -> (refs, tag_names))
+                      | _ -> (refs, tag_names))
+                  | None -> (refs, tag_names))
+              | _ -> (refs, tag_names))
+          | _ -> (refs, tag_names))
+        (Vec.empty, Vec.empty) items
 
-let execute_add_block action config mode =
+let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
     | Ok invoke_config ->
-        bind (resolve_add_target invoke_config action) (function
+        bind (resolve_add_target ~dry_run invoke_config action) (function
           | Error err ->
               pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
-          | Ok target_uuid ->
+          | Ok (target_lookup, would_create_pages) ->
               bind (resolve_tags config action.repo action.tags) (fun tags ->
-                  bind (resolve_properties config action.repo action.properties)
+                  bind
+                    (resolve_properties config action.repo action.properties)
                     (fun properties ->
-                      bind
-                        (resolve_blocks_title_page_refs invoke_config
-                           action.repo action.blocks) (function
-                        | Error err ->
-                            pure
-                              (Cli_result.error ~command:Command_id.Upsert_block
-                                 mode err)
-                        | Ok refs_by_uuid ->
-                            let block_uuids =
-                              collect_action_block_uuids action.blocks
-                            in
-                            let block_for_insert block =
-                              {
-                                block with
-                                Block.parent = None;
-                                children = Vec.empty;
-                              }
-                            in
-                            let block_value_for_insert block =
-                              let value =
-                                Edn_util.any
-                                  (Block.to_value (block_for_insert block))
-                              in
-                              match block.Block.uuid with
-                              | Some uuid -> (
-                                  match Vec.assoc_opt uuid refs_by_uuid with
-                                  | Some refs ->
-                                      Edn_util.assoc "block/refs"
-                                        (Edn_util.vector_vec refs) value
-                                  | None -> value)
-                              | None -> value
-                            in
-                            let insert_blocks target_uuid pos blocks =
-                              let insert_op =
-                                Edn_util.vector_vec
-                                  (Vec.of_array
-                                     [|
-                                       kw "insert-blocks";
-                                       Edn_util.vector_vec
-                                         (Vec.of_array
-                                            [|
-                                              Edn_util.vector_vec
-                                                (blocks
-                                                |> Vec.map (fun block ->
-                                                    block_value_for_insert block)
-                                                );
-                                              Edn_util.uuid target_uuid;
-                                              insert_opts pos;
-                                            |]);
-                                     |])
-                              in
-                              apply_outliner_ops invoke_config action.repo
-                                (Vec.singleton insert_op)
-                            in
-                            let rec insert_tree target_uuid pos blocks =
-                              if Vec.is_empty blocks then pure ()
-                              else
-                                bind (insert_blocks target_uuid pos blocks)
-                                  (fun _ ->
-                                    let rec insert_children remaining =
-                                      match Vec.pop_front remaining with
-                                      | None -> pure ()
-                                      | Some (block, rest) ->
-                                          bind
-                                            (insert_tree
-                                               (Option.get block.Block.uuid)
-                                               Block.Last_child
-                                               block.Block.children)
-                                            (fun () -> insert_children rest)
-                                    in
-                                    insert_children blocks)
-                            in
-                            bind
-                              (insert_tree target_uuid action.pos action.blocks)
-                              (fun () ->
-                                let metadata_ops =
-                                  metadata_ops block_uuids action.status tags
-                                    properties
+                      let flat_blocks = flatten_blocks action.blocks in
+                      let links =
+                        Vec.filter_map
+                          (fun block ->
+                            match (block.Block.uuid, block.title) with
+                            | Some uuid, Some title ->
+                                let refs, tag_names =
+                                  title_references title
                                 in
-                                bind
-                                  (if Vec.is_empty metadata_ops then
-                                     pure Edn_util.nil
-                                   else
-                                     apply_outliner_ops invoke_config
-                                       action.repo metadata_ops)
-                                  (fun _metadata_result ->
+                                if
+                                  Vec.is_empty refs && Vec.is_empty tag_names
+                                then None
+                                else Some (uuid, refs, tag_names)
+                            | _ -> None)
+                          flat_blocks
+                      in
+                      let block_tag_names =
+                        links
+                        |> Vec.concat_map (fun (_, _, names) -> names)
+                        |> unique
+                      in
+                      bind
+                        (resolve_tags config action.repo
+                           (Vec.map
+                              (fun name -> Selector.Tag_name name)
+                              block_tag_names))
+                        (fun block_tag_entities ->
+                          let tag_id_of_name name =
+                            Vec.find_map
+                              (fun (n, entity) ->
+                                if n = name then entity.Entity.id else None)
+                              (Vec.combine block_tag_names block_tag_entities)
+                          in
+                          let block_tag_ops =
+                            Vec.concat_map
+                              (fun (uuid, _, names) ->
+                                Vec.filter_map
+                                  (fun name ->
+                                    match tag_id_of_name name with
+                                    | Some tag_id ->
+                                        Some
+                                          (Edn_util.vector_vec
+                                             (Vec.of_array
+                                                [|
+                                                  kw "batch-set-property";
+                                                  Edn_util.vector_vec
+                                                    (Vec.of_array
+                                                       [|
+                                                         Edn_util.vector_vec
+                                                           (Vec.of_array
+                                                              [|
+                                                                Edn_util.uuid
+                                                                  uuid;
+                                                              |]);
+                                                         kw "block/tags";
+                                                         Edn_util.int64 tag_id;
+                                                         Edn_util.map_vec
+                                                           Vec.empty;
+                                                       |]);
+                                                |]))
+                                    | None -> None)
+                                  names)
+                              links
+                          in
+                          let block_uuids =
+                            collect_action_block_uuids action.blocks
+                          in
+                          let block_value_for_insert block =
+                            let value =
+                              Edn_util.any (Block.to_value block)
+                            in
+                            match block.Block.uuid with
+                            | Some uuid -> (
+                                match
+                                  Vec.find_map
+                                    (fun (u, refs, _) ->
+                                      if u = uuid && not (Vec.is_empty refs)
+                                      then Some refs
+                                      else None)
+                                    links
+                                with
+                                | Some refs ->
+                                    Edn_util.assoc "block/refs"
+                                      (Edn_util.vector_vec refs) value
+                                | None -> value)
+                            | None -> value
+                          in
+                          let insert_op =
+                            Edn_util.vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "insert-blocks";
+                                   Edn_util.vector_vec
+                                     (Vec.of_array
+                                        [|
+                                          Edn_util.vector_vec
+                                            (Vec.map block_value_for_insert
+                                               flat_blocks);
+                                          target_lookup;
+                                          insert_opts action.pos;
+                                        |]);
+                                 |])
+                          in
+                          let ops =
+                            Vec.append
+                              (Vec.singleton insert_op)
+                              (Vec.append
+                                 (metadata_ops block_uuids action.status tags
+                                    properties)
+                                 (Vec.append block_tag_ops extra_ops))
+                          in
+                          if dry_run then
+                            pure
+                              (Cli_result.ok ~command:Command_id.Upsert_block
+                                 mode
+                                 (Raw
+                                    (Edn_util.map_vec
+                                       (Vec.of_array
+                                          [|
+                                            (kw "dry-run", Edn_util.bool true);
+                                            ( kw "ops",
+                                              Edn_util.vector_vec ops );
+                                            ( kw "would-create-pages",
+                                              Edn_util.vector_vec
+                                                (would_create_pages
+                                                |> Vec.map (fun name ->
+                                                    Edn_util.string name)) );
+                                          |]))))
+                          else
+                            bind
+                              (apply_outliner_ops invoke_config action.repo
+                                 ops) (fun _apply_result ->
+                                match Edn_util.as_uuid target_lookup with
+                                | Some target_uuid ->
                                     bind
                                       (resolve_created_ids_or_target_error
                                          invoke_config action.repo target_uuid
@@ -1096,11 +1112,28 @@ let execute_add_block action config mode =
                                       | Error err ->
                                           pure
                                             (Cli_result.error
-                                               ~command:Command_id.Upsert_block
-                                               mode err)
+                                               ~command:
+                                                 Command_id.Upsert_block mode
+                                               err)
                                       | Ok ids ->
                                           pure
                                             (Cli_result.ok
-                                               ~command:Command_id.Upsert_block
-                                               mode
-                                               (Raw (result_ids ids)))))))))))
+                                               ~command:
+                                                 Command_id.Upsert_block mode
+                                               (Raw (result_ids ids))))
+                                | None ->
+                                    bind
+                                      (resolve_created_ids invoke_config
+                                         action.repo action.blocks) (function
+                                      | Error err ->
+                                          pure
+                                            (Cli_result.error
+                                               ~command:
+                                                 Command_id.Upsert_block mode
+                                               err)
+                                      | Ok ids ->
+                                          pure
+                                            (Cli_result.ok
+                                               ~command:
+                                                 Command_id.Upsert_block mode
+                                               (Raw (result_ids ids))))))))))

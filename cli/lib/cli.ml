@@ -39,7 +39,15 @@ let make_app ?version:_ () =
 
 let make_app_context = make_app
 let env_lookup env key = Vec.assoc_opt key env
-let is_option token = String.length token > 0 && token.[0] = '-'
+let is_option token =
+  let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+  let n = String.length token in
+  n > 1
+  && token.[0] = '-'
+  &&
+  match token.[1] with
+  | '-' -> n > 2 && is_alpha token.[2]
+  | c -> is_alpha c
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
@@ -75,7 +83,7 @@ let boolean_option = function
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" ->
+  | "upload-keys" | "dry-run" ->
       true
   | _ -> false
 

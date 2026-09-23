@@ -294,8 +294,8 @@ Inspect and edit commands:
   - CSV tokens are trimmed and empty tokens are ignored; if a provided filter becomes empty after normalization, CLI returns `invalid-options`.
 - `list asset [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list nodes tagged with `#Asset` (`:logseq.class/Asset`; defaults to `--sort updated-at --order desc`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
-- `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
-- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
+- `upsert block --blocks <markdown> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - insert blocks from a markdown outline (`- item` nesting; `key:: value` lines resolve to existing properties with values coerced per property schema; `#tag` resolves to existing tags; all blocks are written in a single transaction)
+- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - insert blocks from a markdown file
 - `upsert block --id <id>|--uuid <uuid> [--content <text>] [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
   - `--status` is not supported on `upsert block`; use `upsert task --status ...` for task status updates.
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
