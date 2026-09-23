@@ -99,6 +99,7 @@ type block_create = {
   tags : Selector.tag Rrbvec.t;
   properties : Property.assignment Rrbvec.t;
   blocks : Block.t Rrbvec.t;
+  markdown_blocks : bool;
   update_plan : Property.update_plan;
   dry_run : bool;
 }
@@ -463,6 +464,7 @@ let add_action_of_block_create (action : block_create) : Add.action =
     tags = action.tags;
     properties = action.properties;
     blocks = action.blocks;
+    markdown_blocks = action.markdown_blocks;
   }
 
 let block_create_of_add_action ~update_plan ~dry_run (action : Add.action) =
@@ -477,6 +479,7 @@ let block_create_of_add_action ~update_plan ~dry_run (action : Add.action) =
         tags = action.tags;
         properties = action.properties;
         blocks = action.blocks;
+        markdown_blocks = action.Add.markdown_blocks;
         update_plan;
         dry_run;
       })
@@ -1777,11 +1780,11 @@ let block_name_lookup_ref value =
   | _ -> None
 
 (* A `[:block/name]` property value (date refs coerced from markdown `key::`)
-   must resolve to an existing page. When it is missing, the page is created
-   through the worker's `create-page` op — which turns journal date titles
-   into proper journal entities — and re-pulled. Under --dry-run the lookup
-   ref is left in the ops preview and surfaced via would-create-pages. *)
-let resolve_block_name_ref ~dry_run invoke_config repo name value =
+   resolves to an existing page when possible. A missing page keeps the lookup
+   vec in the planned ops — Add.materialize_name_lookups creates it right
+   before apply, once all read-only validation has succeeded, and --dry-run
+   surfaces it via would-create-pages. *)
+let resolve_block_name_ref invoke_config repo name value =
   let open Cli_effect in
   bind
     (pull_entity_by_lookup invoke_config repo
@@ -1791,30 +1794,16 @@ let resolve_block_name_ref ~dry_run invoke_config repo name value =
     (fun entity ->
       match id_of_entity entity with
       | Some id -> pure (Ok (Edn_util.int64 id))
-      | None ->
-          if dry_run then pure (Ok value)
-          else
-            bind (create_page invoke_config repo name) (fun _create ->
-                bind
-                  (pull_entity_by_lookup invoke_config repo
-                     (vector_vec
-                        (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-                     (vector_vec
-                        (Vec.of_array
-                           [| kw "block/name"; Edn_util.string name |])))
-                  (fun entity ->
-                    match id_of_entity entity with
-                    | Some id -> pure (Ok (Edn_util.int64 id))
-                    | None -> pure (Error (page_not_found ())))))
+      | None -> pure (Ok value))
 
-let rec resolve_property_value_refs ~dry_run invoke_config repo value =
+let rec resolve_property_value_refs invoke_config repo value =
   let open Cli_effect in
   match block_uuid_lookup_ref value with
   | Some uuid -> resolve_block_uuid_ref invoke_config repo uuid
   | None -> (
       match block_name_lookup_ref value with
       | Some name ->
-          resolve_block_name_ref ~dry_run invoke_config repo name value
+          resolve_block_name_ref invoke_config repo name value
       | None -> (
           let resolve_values wrap values =
             let rec loop acc remaining =
@@ -1822,7 +1811,7 @@ let rec resolve_property_value_refs ~dry_run invoke_config repo value =
               | None -> pure (Ok (wrap acc))
               | Some (value, rest) ->
                   bind
-                    (resolve_property_value_refs ~dry_run invoke_config repo
+                    (resolve_property_value_refs invoke_config repo
                        value)
                     (function
                     | Error err -> pure (Error err)
@@ -1844,7 +1833,7 @@ let rec resolve_property_value_refs ~dry_run invoke_config repo value =
                 | None -> pure (Ok (Edn_util.map_vec acc))
                 | Some ((key, value), rest) ->
                     bind
-                      (resolve_property_value_refs ~dry_run invoke_config
+                      (resolve_property_value_refs invoke_config
                          repo value)
                       (function
                       | Error err -> pure (Error err)
@@ -1854,7 +1843,7 @@ let rec resolve_property_value_refs ~dry_run invoke_config repo value =
               loop Vec.empty (Edn_util.vec_of_array fields)
           | _ -> pure (Ok value)))
 
-let resolve_property_assignments ~dry_run invoke_config repo assignments =
+let resolve_property_assignments invoke_config repo assignments =
   let open Cli_effect in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
@@ -1865,7 +1854,7 @@ let resolve_property_assignments ~dry_run invoke_config repo assignments =
           | Error err -> pure (Error err)
           | Ok ident ->
               bind
-                (resolve_property_value_refs ~dry_run invoke_config repo
+                (resolve_property_value_refs invoke_config repo
                    assignment.value)
                 (function
                 | Error err -> pure (Error err)
@@ -2028,7 +2017,7 @@ let resolve_block_property_assignments ~dry_run invoke_config repo
               | Error err -> pure (Error err)
               | Ok value ->
                   bind
-                    (resolve_property_value_refs ~dry_run invoke_config repo
+                    (resolve_property_value_refs invoke_config repo
                        value)
                     (function
                     | Error err -> pure (Error err)
@@ -2191,7 +2180,7 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
     (Vec.append remove_property_ops
        (Vec.append update_tag_ops update_property_ops))
 
-let resolve_update_plan ~dry_run invoke_config repo plan =
+let resolve_update_plan invoke_config repo plan =
   let open Cli_effect in
   bind (resolve_tag_ids invoke_config repo plan.Property.update_tags) (function
     | Error err -> pure (Error (option_resolution_error "--update-tags" err))
@@ -2201,7 +2190,7 @@ let resolve_update_plan ~dry_run invoke_config repo plan =
               pure (Error (option_resolution_error "--remove-tags" err))
           | Ok remove_tag_ids ->
               bind
-                (resolve_property_assignments ~dry_run invoke_config repo
+                (resolve_property_assignments invoke_config repo
                    plan.update_properties) (function
                 | Error err ->
                     pure
@@ -2238,7 +2227,7 @@ let apply_resolved_update_plan invoke_config repo block_uuids resolved =
 
 let execute_plan_on_uuids invoke_config repo block_uuids plan =
   let open Cli_effect in
-  bind (resolve_update_plan ~dry_run:false invoke_config repo plan)
+  bind (resolve_update_plan invoke_config repo plan)
     (function
     | Error err -> pure (Error err)
     | Ok resolved ->
@@ -3060,7 +3049,7 @@ let execute_create_block mode (action : block_create) config =
                   map
                     (function
                       | Ok plan -> Ok (Some plan) | Error err -> Error err)
-                    (resolve_update_plan ~dry_run:action.dry_run
+                    (resolve_update_plan
                        invoke_config action.repo
                        action.update_plan)
               in

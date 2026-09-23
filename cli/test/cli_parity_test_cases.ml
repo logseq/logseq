@@ -3388,6 +3388,7 @@ let () =
                    tags = Vec.empty;
                    properties = Vec.empty;
                    blocks = Vec.singleton (Block.make ~title:"Child" ());
+                   markdown_blocks = false;
                    update_plan = Property.empty_update_plan;
                    dry_run = false;
                  })
@@ -3908,6 +3909,7 @@ let () =
                            (Vec.singleton
                               (Block.make ~uuid:child_uuid ~title:"Child" ()))
                          ());
+                  markdown_blocks = false;
                 }
               in
               let* result =
