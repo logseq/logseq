@@ -1747,6 +1747,65 @@ let () =
             fail_promise
               (Printf.sprintf "expected four invoke requests, got %d" !step)));
 
+  test_promise "upsert block --blocks accepts tab-separated markdown" (fun () ->
+      let step = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"insert-blocks" body) then
+                  fail_test ("missing insert-blocks op: " ^ body);
+                (* The parsed titles prove the outline became two blocks —
+                   a positional-content fallback would send the raw
+                   "-\tParent\n\t- Child" text as a single title. *)
+                if not (Js.String.includes ~search:"Parent" body) then
+                  fail_test ("missing Parent block title: " ^ body);
+                if not (Js.String.includes ~search:"Child" body) then
+                  fail_test ("missing Child block title: " ^ body);
+                if Js.String.includes ~search:"-\\tParent" body then
+                  fail_test ("markdown leaked as literal title: " ^ body);
+                "[]"
+            | 3 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",11]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "-\tParent\n\t- Child";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block tab-separated markdown" output);
+          if !step = 4 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected four invoke requests, got %d" !step)));
+
   test_promise "upsert block create sends page refs from block title" (fun () ->
       let step = ref 0 in
       let captured_apply_body = ref None in
