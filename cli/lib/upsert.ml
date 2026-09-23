@@ -1132,6 +1132,7 @@ let property_selector =
          kw "block/uuid";
          kw "block/name";
          kw "block/title";
+         kw "db/valueType";
          kw "logseq.property/type";
        |])
 
@@ -1972,6 +1973,37 @@ let coerce_block_property_value ~dry_run entity value =
                       Edn_util.string (strip_page_ref_syntax text);
                     |]))
           else Ok (Edn_util.string (strip_page_ref_syntax text))
+      | Some "default" ->
+          (* default covers both ref-typed properties (closed enums like
+             logseq.property/status, open node refs) and plain text ones —
+             db/valueType is the discriminator. Ref-typed values take uuid /
+             [[name]] lookups; bare words are resolved against the property's
+             closed values or as page names downstream. *)
+          let is_ref =
+            match
+              Option.bind
+                (Edn_util.get entity "db/valueType")
+                Edn_util.as_keyword
+            with
+            | Some "db.type/ref" -> true
+            | _ -> false
+          in
+          let text = String.trim text in
+          if Cli_primitive.is_uuid_string text then
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array [| kw "block/uuid"; Edn_util.uuid text |]))
+          else if
+            is_ref && not (String.equal (strip_page_ref_syntax text) text)
+          then
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array
+                    [|
+                      kw "block/name";
+                      Edn_util.string (strip_page_ref_syntax text);
+                    |]))
+          else Ok value
       | Some ("node" | "entity" | "class" | "property" | "asset") ->
           let text = String.trim text in
           if Cli_primitive.is_uuid_string text then
@@ -1980,6 +2012,122 @@ let coerce_block_property_value ~dry_run entity value =
                  (Vec.of_array [| kw "block/uuid"; Edn_util.uuid text |]))
           else Ok (Edn_util.string (strip_page_ref_syntax text))
       | _ -> Ok value)
+
+let closed_value_selector =
+  vector_vec
+    (Vec.of_array [| kw "db/id"; kw "db/ident"; kw "block/title" |])
+
+let closed_values_query =
+  Cli_primitive.make_datascript_query
+    ~find:
+      (Vec.singleton
+         (vector_vec
+            (Vec.of_array
+               [|
+                 list_vec
+                   (Vec.of_array
+                      [| sym "pull"; sym "?e"; closed_value_selector |]);
+                 sym "...";
+               |])))
+    ~in_:
+      (Vec.of_array
+         [| Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?prop" |])
+    ~where:
+      (Vec.singleton
+         (Cli_primitive.V
+            (Edn_util.vector_t_vec
+               (Vec.of_array
+                  [|
+                    sym "?e";
+                    kw "block/closed-value-property";
+                    sym "?prop";
+                  |]))))
+    ()
+
+(* Resolves a bare `key::` word against the property's closed-value entities
+   (e.g. `status:: todo` -> the `logseq.property/status.todo` value entity).
+   A property with closed values rejects non-matching words; a property with
+   none is an open ref, so the word falls back to a `[:block/name]` lookup. *)
+let resolve_default_property_value invoke_config repo entity text =
+  let open Cli_effect in
+  match id_of_entity entity with
+  | None ->
+      pure
+        (Ok
+           (Edn_util.vector_vec
+              (Vec.of_array [| kw "block/name"; Edn_util.string text |])))
+  | Some property_id ->
+      bind
+        (Transport.thread_api_q invoke_config ~repo
+           ~query:
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [|
+                     query_value closed_values_query;
+                     Edn_util.int64 property_id;
+                   |])))
+        (fun result ->
+          let values =
+            Option.value (Edn_util.as_seq result) ~default:Vec.empty
+          in
+          if Vec.is_empty values then
+            pure
+              (Ok
+                 (Edn_util.vector_vec
+                    (Vec.of_array
+                       [| kw "block/name"; Edn_util.string text |])))
+          else
+            let token value =
+              value |> String.trim |> String.lowercase_ascii
+              |> String.map (function ' ' | '_' -> '-' | c -> c)
+            in
+            let wanted = token text in
+            let matches value = String.equal (token value) wanted in
+            let matched =
+              Vec.find_map
+                (fun value_entity ->
+                  match id_of_entity value_entity with
+                  | None -> None
+                  | Some id ->
+                      let title_hit =
+                        match
+                          Edn_util.get_string value_entity "block/title"
+                        with
+                        | Some title -> matches title
+                        | None -> false
+                      in
+                      let ident_hit =
+                        match Edn_util.get_string value_entity "db/ident" with
+                        | Some ident -> (
+                            match String.rindex_opt ident '.' with
+                            | Some dot ->
+                                matches
+                                  (String.sub ident (dot + 1)
+                                     (String.length ident - dot - 1))
+                            | None -> matches ident)
+                        | None -> false
+                      in
+                      if title_hit || ident_hit then Some id else None)
+                values
+            in
+            match matched with
+            | Some id -> pure (Ok (Edn_util.int64 id))
+            | None ->
+                let choices =
+                  values
+                  |> Vec.filter_map (fun value_entity ->
+                         Edn_util.get_string value_entity "block/title")
+                  |> Vec.to_list
+                  |> List.map (fun value -> "\"" ^ value ^ "\"")
+                  |> String.concat ", "
+                in
+                pure
+                  (Error
+                     (Error.invalid_options
+                        (Printf.sprintf
+                           "unknown value \"%s\" for closed property; \
+                            choices: %s"
+                           text choices))))
 
 let resolve_block_property_assignments ~dry_run invoke_config repo
     assignments =
@@ -1997,11 +2145,31 @@ let resolve_block_property_assignments ~dry_run invoke_config repo
                with
                | Error err -> pure (Error err)
                | Ok value ->
-                   map
+                   bind
+                     (match
+                        ( Edn_util.get_string entity "logseq.property/type",
+                          Edn_util.as_string value )
+                      with
+                     | Some "default", Some text -> (
+                         match
+                           Option.bind
+                             (Edn_util.get entity "db/valueType")
+                             Edn_util.as_keyword
+                         with
+                         | Some "db.type/ref" ->
+                             resolve_default_property_value invoke_config
+                               repo entity (String.trim text)
+                         | _ -> pure (Ok value))
+                     | _ -> pure (Ok value))
                      (function
-                       | Error err -> Error err
-                       | Ok value -> Ok (ident, value))
-                     (resolve_property_value_refs invoke_config repo value))))
+                     | Error err -> pure (Error err)
+                     | Ok value ->
+                         map
+                           (function
+                             | Error err -> Error err
+                             | Ok value -> Ok (ident, value))
+                           (resolve_property_value_refs invoke_config repo
+                              value)))))
        assignments)
 
 let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
