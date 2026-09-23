@@ -623,6 +623,37 @@
                (page-cp {:disable-preview? true
                          :skip-async-load? true} page))))})
 
+(defn- include-asset-file-column?
+  [config properties]
+  (or (= :logseq.class/Asset (:db/ident (:view-parent config)))
+      (some (fn [property]
+              (= :logseq.property.asset/type
+                 (or (:db/ident property) (:id property) property)))
+            properties)))
+
+(defn- asset-file-column
+  [config]
+  {:id :file
+   :name (t :file/label)
+   :type :string
+   :header header-cp
+   :cell (fn [_table row _column]
+           (when (ldb/asset? row)
+             (when-let [asset-cp (state/get-component :block/asset-cp)]
+               [:div.block-content.overflow-hidden
+                {:style {:max-height 30}}
+                (asset-cp (assoc config :disable-resize? true) row)])))
+   :disable-hide? true})
+
+(defn- maybe-add-asset-file-column
+  [config properties columns]
+  (if (and (include-asset-file-column? config properties)
+           (not (some #(= :file (:id %)) columns)))
+    (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %)))
+                                               columns)]
+      (concat before-cols [(asset-file-column config)] after-cols))
+    columns))
+
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column? add-page-column? advanced-query?]
                         :or {with-object-name? true
@@ -715,7 +746,8 @@
               :cell timestamp-cell-cp})
            (when add-page-column?
              (page-column))])
-         (remove nil?))))
+         (remove nil?)
+         (maybe-add-asset-file-column config properties))))
 
 (defn sort-columns
   [columns ordered-column-ids]
@@ -2913,22 +2945,21 @@
   [block asset-property-ident]
   (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
                       (get block asset-property-ident))
-        ->entity (fn [value]
-                   (cond
-                     (map? value) value
-                     :else value))]
-    (cond
-      (= :block/uuid asset-property-ident)
-      block
+        from-property (cond
+                        (= :block/uuid asset-property-ident)
+                        block
 
-      (set? asset-value)
-      (some ->entity asset-value)
+                        (set? asset-value)
+                        (some identity asset-value)
 
-      (sequential? asset-value)
-      (some ->entity asset-value)
+                        (sequential? asset-value)
+                        (some identity asset-value)
 
-      :else
-      (->entity asset-value))))
+                        :else
+                        asset-value)]
+    (or from-property
+        (when (ldb/asset? block)
+          block))))
 
 (defn- gallery-cover-url-string
   [value]
@@ -3668,7 +3699,9 @@
         [head-ready? set-head-ready!] (hooks/use-state (view-head-ready-on-mount? display-type view-partition data))
         journals? (:journals? config)
         option (assoc option* :properties
-                      (-> (remove #{:id :select} (map :id columns))
+                      (-> (remove #{:id :select :file} (map :id columns))
+                          (cond-> (some #(= :file (:id %)) columns)
+                            (conj :logseq.property.asset/type))
                           (conj :block/uuid :block/name)
                           vec)
                       :on-first-table-paint!
