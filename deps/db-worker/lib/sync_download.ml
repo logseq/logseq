@@ -121,18 +121,21 @@ let import_rows_batch (state : import_state)
   Sqlite.transaction rows_db (fun () ->
       List.iter
         (fun (addr, content, addresses) ->
+           let addresses_bind =
+             match addresses with Some a -> Sqlite.Text a | None -> Sqlite.Null
+           in
            Sqlite.exec rows_db
              ~sql:
                ("INSERT INTO kvs (addr, content, addresses) "
-                ^ "values ($addr, $content, $addresses) "
-                ^ "on conflict(addr) do update set content = $content, \
-                   addresses = $addresses")
+                ^ "values (?, ?, ?) "
+                ^ "on conflict(addr) do update set content = ?, \
+                   addresses = ?")
              ~bind:
                [| Sqlite.Integer (Int64.of_int addr)
                 ; Sqlite.Text content
-                ; (match addresses with
-                   | Some a -> Sqlite.Text a
-                   | None -> Sqlite.Null) |])
+                ; addresses_bind
+                ; Sqlite.Text content
+                ; addresses_bind |])
         rows);
   List.length rows
 

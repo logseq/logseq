@@ -87,6 +87,12 @@ let unsupported op =
   Db_worker_effect.error
     (Failure (Printf.sprintf "File_sys.%s is not supported on this platform" op))
 
+(* cljs node.cljs expand-home — leading '~' expands to os.homedir. *)
+let expand_home path =
+  if String.length path > 0 && path.[0] = '~' then
+    Node_process.home_dir () ^ String.sub path 1 (String.length path - 1)
+  else path
+
 let read_text path =
   if is_browser () then
     (* cljs <read-text!: root.getFileHandle(path) -> getFile -> text *)
@@ -99,7 +105,7 @@ let read_text path =
             Db_worker_effect.bind
               (task_of_promise (Opfs_file.get_file file_handle))
               (fun file -> task_of_promise (Opfs_file.text file))))
-  else wrap (fun () -> Node.Fs.readFileAsUtf8Sync path)
+  else wrap (fun () -> Node.Fs.readFileAsUtf8Sync (expand_home path))
 
 let read_binary path =
   if is_browser () then unsupported "read_binary"
@@ -122,7 +128,7 @@ let write_text path contents =
                 Db_worker_effect.bind
                   (task_of_promise (Opfs_file.write writable contents))
                   (fun () -> task_of_promise (Opfs_file.close writable)))))
-  else wrap (fun () -> Node.Fs.writeFileAsUtf8Sync path contents)
+  else wrap (fun () -> Node.Fs.writeFileAsUtf8Sync (expand_home path) contents)
 
 let write_binary path contents =
   if is_browser () then unsupported "write_binary"
@@ -157,7 +163,8 @@ let readdir path =
 let remove path =
   if is_browser () then unsupported "remove" (* cljs delete-file! throws *)
   else
-    wrap (fun () -> Fs_ext.rmSync path [%mel.obj { recursive = true; force = true }])
+    wrap (fun () ->
+        Fs_ext.rmSync (expand_home path) [%mel.obj { recursive = true; force = true }])
 
 external renameSync : string -> string -> unit = "renameSync" [@@mel.module "fs"]
 
@@ -166,6 +173,7 @@ let write_text_atomic path contents =
   else
     wrap (fun () ->
         (* cljs write-text-atomic!: ensure-dir + .<base>.tmp-<uuid> + rename *)
+        let path = expand_home path in
         let dir = Filename.dirname path in
         let tmp =
           Filename.concat dir

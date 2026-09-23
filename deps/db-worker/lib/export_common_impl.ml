@@ -118,7 +118,7 @@ let with_bound_state (st : state) (patch : state -> unit) (f : unit -> 'a) : 'a 
     , st.nab_first_heading )
   in
   patch st;
-  Fun.protect
+  Common_util.protect
     ~finally:(fun () ->
       let l, es, ib, rl, br, er, fh = saved in
       st.current_level <- l;

@@ -1607,7 +1607,7 @@ let apply_edn ~(entity_attr : entity_id -> attr -> value) (edn : string)
   let c = { entity_attr } in
   let saved = !current_ctx in
   current_ctx := Some c;
-  Fun.protect
+  Common_util.protect
     ~finally:(fun () -> current_ctx := saved)
     (fun () ->
       let form = Edn_util.read_string edn in

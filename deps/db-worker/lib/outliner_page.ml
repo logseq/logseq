@@ -281,7 +281,7 @@ let page_name_string_to_map (original_page_name : string) db
   in
   let base =
     if with_timestamp && Option.is_none page_entity then
-      let now = Wire.Date_ms (Int64.of_float (Clock.now_ms ())) in
+      let now = Wire.Int64 (Int64.of_float (Clock.now_ms ())) in
       Cljs_map.assoc_list base
         [ "block/created-at", now; "block/updated-at", now ]
     else base

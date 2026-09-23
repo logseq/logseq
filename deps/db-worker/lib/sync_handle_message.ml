@@ -491,6 +491,7 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
                               Sync_deps.decrypt_tx_data
                               (match aes_key with
                                | Wire.String s -> s
+                               | Wire.Binary b -> b
                                | _ -> "")
                               (seq_items td)
                             >>= fun tx_data' ->
