@@ -707,6 +707,16 @@ html.is-mobile .ls-block-content-indent {
         }
       }
     }
+
+    &[data-heading] {
+      height: var(--ls-block-icon-size, 24px);
+
+      .bullet-container {
+        width: var(--ls-block-icon-size, 1em);
+        height: var(--ls-block-icon-size, 1em);
+        min-width: var(--ls-block-icon-size, 1em);
+      }
+    }
   }
 
   &.bullet-hidden {
@@ -1003,6 +1013,10 @@ html.is-mobile .ls-block-content-indent {
       @apply relative top-4;
     }
 
+    > .block-control-wrap.is-with-icon {
+      top: calc(0.25rem + (2rem * 1.38 - var(--ls-block-icon-size, 28px)) / 2);
+    }
+
     .block-content-or-editor-wrap {
       .positioned-properties {
         @apply relative top-4;
@@ -1013,6 +1027,10 @@ html.is-mobile .ls-block-content-indent {
   &[data-has-heading="2"], &:has(textarea.h2) {
     > .block-control-wrap {
       @apply relative top-2.5;
+    }
+
+    > .block-control-wrap.is-with-icon {
+      top: calc(0.25rem + (1.5rem * 1.38 - var(--ls-block-icon-size, 24px)) / 2);
     }
 
     .block-content-or-editor-wrap {
