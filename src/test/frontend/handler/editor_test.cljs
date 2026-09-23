@@ -249,6 +249,7 @@
            (fn []
              (is (= [inserted-block 0 {:container-id 7
                                        :save-code-editor? false
+                                       :save-current-block? false
                                        :skip-load? true}]
                     @calls))))
           (p/catch
@@ -592,7 +593,7 @@
         (#'editor/edit-last-block-after-inserted! {:blocks [inserted-block]})
         (is (= [[:schedule]
                 [:clear-when-saved]
-                [:edit-block inserted-block :max]]
+                [:edit-block inserted-block :max {:save-current-block? false}]]
                @calls))
         (catch :default error
           (is false (str error)))))))
@@ -1478,6 +1479,7 @@
       (is (= [(assoc current :block/title "" :block/raw-title "")
               0
               {:save-code-editor? false
+               :save-current-block? false
                :skip-load? true}]
              @edited)
           "Deleting an empty predecessor must not restore the erased mounted title."))))
@@ -1723,6 +1725,7 @@
                              :tail-len 0
                              :container-id 7
                              :save-code-editor? false
+                             :save-current-block? false
                              :skip-load? true}]]
                @calls))))))
 
@@ -2179,6 +2182,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
@@ -2227,6 +2231,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
