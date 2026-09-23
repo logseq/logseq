@@ -116,18 +116,23 @@ The CLI binds these via a small `cli/lib/mldoc.ml` using `[@@mel.module
 externals in `add.ml`/`skill.ml`); `mldoc` is added to `cli/package.json`
 dependencies so the Vite bundle (`static/logseq-cli.js`) includes it.
 
-The config string replicates `gp-mldoc/get-default-config` for DB graphs:
+The config string follows `gp-mldoc/get-default-config` for DB graphs with
+one deliberate deviation:
 
 ```json
 {"toc":false,"parse_outline_only":false,"heading_number":false,
  "keep_line_break":true,"format":"Markdown","heading_to_list":false,
- "enable_drawers":false,"parse_marker":false,"parse_priority":false}
+ "enable_drawers":true,"parse_marker":false,"parse_priority":false}
 ```
 
-`enable_drawers`/`parse_marker`/`parse_priority` are off exactly like the
-app's DB-graph config — `TODO`, `DEADLINE:`, `SCHEDULED:` stay literal title
-text (status is a property in DB graphs, set via `--status`/property ops,
-not parsed from text).
+`parse_marker`/`parse_priority` are off like the app's DB-graph config —
+`TODO`, `DEADLINE:`, `SCHEDULED:` stay literal title text (status is a
+property in DB graphs, set via `--status`/property ops, not parsed from
+text). `enable_drawers` is **on** — unlike the DB-graph default — because
+this feature needs mldoc to emit `Property_Drawer` nodes for `key:: value`
+lines; with drawers off, `key::` lines degrade to paragraph text and no
+properties can be extracted. The app disables them because graph-parser
+extracts file-level properties through its own path.
 
 ### 2. AST → `Block.t` extraction (the new OCaml code)
 
@@ -139,9 +144,9 @@ not parsed from text).
   `{{macros}}`, inline markup survive untouched; no inline-AST re-rendering
   needed. Body lines belonging to the heading (src blocks, quotes,
   paragraphs) are covered by the pos range and stay in the title.
-- `["Properties", props]` → `key:: value` lines belonging to the block they
-  attach to → property resolution (§3); resolvable keys are consumed and
-  their lines dropped from the stored title.
+- `["Property_Drawer", props]` → `key:: value` lines belonging to the block
+  they attach to → property resolution (§3); resolvable keys are consumed
+  and their lines dropped from the stored title.
 - Non-heading nodes before the first heading (pre-block) → ignored for v1
   (a document's leading non-block content is dropped, same as
   `extract-blocks`'s pre-block handling which creates a page-level
