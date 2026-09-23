@@ -39,6 +39,29 @@
 (defn- has-datom-attr? [datoms a]
   (some #(= a (second %)) datoms))
 
+(defn- import-txs-like
+  "Same path as logseq.outliner.op/import-edn-data after txs are built: validate-import-txs, then transact if valid."
+  [conn txs]
+  (let [validation (sqlite-export/validate-import-txs txs @conn)]
+    (when-not (:error validation)
+      (d/transact! conn (:tx-data validation)))
+    validation))
+
+(defn- import-edn-like
+  "Same path as logseq.outliner.op/import-edn-data: build-import, validate-import-txs, then transact if valid."
+  [conn export-map]
+  (import-txs-like conn (sqlite-export/build-import export-map @conn {})))
+
+(defn- poison-user-property-with-library-parent
+  "Reproduce a pre-existing invalid user property with a disallowed :block/parent."
+  [conn property-ident]
+  (let [user-property (d/entity @conn property-ident)
+        library (ldb/get-library-page @conn)]
+    (assert (some? user-property) "User property exists")
+    (assert (some? library) "Library page exists")
+    (d/transact! conn [[:db/add (:db/id user-property) :block/parent (:db/id library)]])
+    library))
+
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -615,6 +638,52 @@
     (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))
     (is (not (some #{[:db/add (:db/id plugin-property-ent) :hide? true]} tx-data)))
     (is (not (some #{[:db/add (:db/id plugin-property-ent) :public? false]} tx-data)))))
+
+(deftest import-edn-ignores-pre-existing-invalid-entities
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/code {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "existing"}]}]})
+        library (poison-user-property-with-library-parent conn :user.property/code)
+        before-errors (:errors (db-validate/validate-local-db! @conn))]
+    (is (seq before-errors)
+        "Whole-db validation reports the poisoned user property")
+    (is (some (fn [{:keys [entity errors]}]
+                (and (= :user.property/code (:db/ident entity))
+                     (contains? errors :block/parent)))
+              before-errors)
+        "Pre-existing error is a disallowed :block/parent on the user property")
+
+    (testing "unrelated valid import succeeds despite the pre-existing invalid entity"
+      (let [validation (import-edn-like
+                        conn
+                        {:pages-and-blocks [{:page {:block/title "page1"}
+                                             :blocks [{:block/title "imported block"}]}]})]
+        (is (nil? (:error validation))
+            "Unrelated EDN import is not blocked by a pre-existing invalid entity")
+        (is (some? (db-test/find-block-by-content @conn "imported block"))
+            "Imported block exists")
+        (is (= (:db/id library)
+               (:db/id (:block/parent (d/entity @conn :user.property/code))))
+            "Pre-existing invalid entity is not repaired by import")))
+
+    (testing "import whose own txs are invalid is still rejected"
+      (let [txs (sqlite-export/build-import
+                 {:properties {:user.property/bad {:logseq.property/type :default}}
+                  :pages-and-blocks [{:page {:block/title "page1"}
+                                      :blocks [{:block/title "should not import"}]}]}
+                 @conn
+                 {})
+            invalid-txs (update txs :init-tx conj
+                                [:db/add :user.property/bad :logseq.property/type :not-a-real-type])
+            validation (import-txs-like conn invalid-txs)]
+        (is (string? (:error validation))
+            "Import that introduces its own validation error is rejected")
+        (is (re-find #"Imported EDN" (:error validation)))
+        (is (nil? (d/entity @conn :user.property/bad))
+            "Rejected import is not transacted")
+        (is (nil? (db-test/find-block-by-content @conn "should not import"))
+            "Rejected import does not create the new block")))))
 
 (deftest graph-export-keeps-referenced-recycled-closed-value-config
   (let [property-id :plugin.property.degrande-colors/tldraw

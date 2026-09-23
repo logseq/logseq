@@ -1364,25 +1364,49 @@
                  (contains? (get eid->attrs (second tx)) (nth tx 2))))
           tx-data))
 
+(defn- introduced-validation-errors
+  "Errors in after-errors that were not already present in before-errors.
+   Entities are matched by :db/id, which is present on every validated entity
+   map and preserved by d/with for pre-existing entities."
+  [before-errors after-errors]
+  (let [before-errors-by-eid (into {}
+                                   (map (fn [{:keys [entity errors]}]
+                                          [(:db/id entity) errors]))
+                                   before-errors)]
+    (keep (fn [error]
+            (let [before-entity-errors (get before-errors-by-eid (-> error :entity :db/id))
+                  introduced (not-empty
+                              (into {}
+                                    (remove (fn [[attr error-val]]
+                                              (= error-val (get before-entity-errors attr))))
+                                    (:errors error)))]
+              (when introduced
+                (assoc error :errors introduced))))
+          after-errors)))
+
 (defn- validate-import-tx-data
   [txs db edn-label]
-  (loop [tx-data (import-tx-data txs)]
-    (let [db-after (:db-after (d/with db tx-data))
-          validation (db-validate/validate-local-db! db-after)]
-      (if-let [errors (seq (:errors validation))]
-        (let [eid->attrs (disallowed-key-attrs errors)
-              tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
-          (if (and (all-disallowed-key-errors? errors)
-                   (seq eid->attrs)
-                   (not= (count tx-data) (count tx-data')))
-            (recur (vec tx-data'))
-            {:error (str "The " edn-label " has " (count errors) " validation error(s)")
-             :errors errors}))
-        {:db db-after
-         :tx-data tx-data}))))
+  (let [before-errors (:errors (db-validate/validate-local-db! db))]
+    (loop [tx-data (import-tx-data txs)]
+      (let [db-after (:db-after (d/with db tx-data))
+            validation (db-validate/validate-local-db! db-after)
+            errors (seq (introduced-validation-errors before-errors (:errors validation)))]
+        (if errors
+          (let [eid->attrs (disallowed-key-attrs errors)
+                tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
+            (if (and (all-disallowed-key-errors? errors)
+                     (seq eid->attrs)
+                     (not= (count tx-data) (count tx-data')))
+              (recur (vec tx-data'))
+              {:error (str "The " edn-label " has " (count errors) " validation error(s)")
+               :errors errors}))
+          {:db db-after
+           :tx-data tx-data})))))
 
 (defn validate-import-txs
-  "Dry-runs import txs against db and validates the resulting local DB.
+  "Dry-runs import txs against db and fails only on newly introduced validation errors.
+   Pre-existing invalid entities elsewhere in the graph do not veto the import.
+   Disallowed keys in the import txs themselves are still stripped.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
    (validate-import-txs txs db {:edn-label "Imported EDN"}))
