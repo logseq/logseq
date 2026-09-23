@@ -290,7 +290,6 @@ let page_selector =
          kw "block/uuid";
          kw "block/name";
          kw "block/title";
-         kw "block/journal-day";
          kw "logseq.property/deleted-at";
        |])
 
@@ -1194,11 +1193,11 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                    returns it only when this call actually created the page —
                    an existing (or concurrently created) page returns its own
                    uuid, which must never enter the rollback set. Journal
-                   pages are the exception: their uuid is derived from the
-                   journal day, not the supplied uuid, so a freshly created
-                   journal page is recognized by block/journal-day instead.
-                   The residual risk is deleting a concurrently created
-                   *empty* journal page, which loses no content. *)
+                   pages are never tracked: their uuid is derived from the
+                   journal day, so every concurrent creator returns the same
+                   uuid and ownership cannot be proven — a failed run may
+                   leave an empty journal page behind, which is harmless
+                   (the app creates today's journal on demand anyway). *)
                 let our_uuid = generate_uuid () in
                 bind (create_page invoke_config repo name our_uuid)
                   (fun create_result ->
@@ -1208,12 +1207,8 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                         match found entity with
                         | Some entry -> (
                             (match returned_uuid create_result with
-                            | Some uuid
-                              when String.equal uuid our_uuid
-                                   || Option.is_some
-                                        (Edn_util.get entity
-                                           "block/journal-day") ->
-                                created := Vec.push_back !created uuid
+                            | Some uuid when String.equal uuid our_uuid ->
+                                created := Vec.push_back !created our_uuid
                             | _ -> ());
                             resolve_ids (Vec.push_back acc entry) rest)
                         | None -> pure (Error (page_not_found ()))))))
