@@ -56,8 +56,7 @@
   [repo]
   (true? (get @*repo->upload-stopped? repo)))
 
-(declare enqueue-asset-task!
-         apply-remote-txs!
+(declare apply-remote-txs!
          cap-upload-request-tx-entries
          commit-large-upload-progress!
          ref-attr?
@@ -265,17 +264,8 @@
   (sync-assets/request-asset-download!
    repo asset-uuid
    {:current-client-f current-client
-    :enqueue-asset-task-f enqueue-asset-task!
+    :enqueue-asset-task-f sync-assets/enqueue-asset-task!
     :broadcast-rtc-state!-f broadcast-rtc-state!}))
-
-(defn- enqueue-asset-task! [client task]
-  (when-let [queue (:asset-queue client)]
-    (swap! queue
-           (fn [prev]
-             (-> prev
-                 ;; Keep queue alive even if one asset task fails.
-                 (p/catch (fn [_] nil))
-                 (p/then (fn [_] (task))))))))
 
 (defn- derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
@@ -1940,7 +1930,7 @@
                  (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
         (sync-assets/enqueue-asset-sync!
          repo client
-         {:enqueue-asset-task-f enqueue-asset-task!
+         {:enqueue-asset-task-f sync-assets/enqueue-asset-task!
           :current-client-f current-client
           :broadcast-rtc-state!-f broadcast-rtc-state!
           :fail-fast-f fail-fast})))))
