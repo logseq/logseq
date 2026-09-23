@@ -310,7 +310,9 @@ let entity_forward_map ?(properties : attr list option)
   let keep a =
     (not (excluded a))
     && (match properties with
-        | Some ps -> List.mem a ps
+        (* cljs filters only when (seq property-set) — nil and [] alike
+           mean "no property filter". *)
+        | Some ps -> ps = [] || List.mem a ps
         | None -> true)
   in
   let raw_title =

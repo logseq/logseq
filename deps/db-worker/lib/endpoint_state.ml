@@ -27,7 +27,16 @@ let () =
 (* :thread-api/set-context [context] — merge into :worker/context. *)
 let () =
   Dispatcher.register "thread-api/set-context" (fun args ->
-      (match args with t :: _ -> Worker_state.merge_context t | [] -> ());
+      (match args with
+       | t :: _ -> (
+           Worker_state.merge_context t;
+           (* cljs OUTLINER-PERF-LOGGING is a goog-define baked into dev/e2e
+              app builds; its runtime mirror here is the :dev? flag the
+              frontend ships in the worker context (DEV-RELEASE). *)
+           match Cljs_map.get t "dev?" with
+           | Some (Wire.Bool true) -> Sync_state.outliner_perf_logging := true
+           | _ -> ())
+       | [] -> ());
       pure' Wire.nil)
 
 (* :thread-api/set-ui-state [path value] — persist_db/browser.cljs
@@ -167,9 +176,14 @@ let () =
    endpoint_sync.ml (sanitized via Sync_state.non_auth_db_sync_config). *)
 
 (* :thread-api/undo-redo-* — undo_redo.ml state machine *)
+(* cljs keys the undo/redo stacks by repo where nil is a valid map
+   key — the UI calls these endpoints with (get-current-repo), which is
+   nil before any graph opens. "" is not a valid graph name, so it
+   stands in for the cljs nil key. *)
 let repo_arg_u args =
   match List.nth_opt args 0 with
   | Some (Wire.String s) -> s
+  | Some Wire.Nil | None -> ""
   | _ -> invalid_arg "first arg must be repo name"
 
 let () =

@@ -43,6 +43,11 @@ let () =
 (* :thread-api/db-exists [repo] *)
 let () =
   Dispatcher.register "thread-api/db-exists" (fun args ->
+      let args =
+        match args with
+        | Wire.Nil :: rest -> Wire.String "" :: rest
+        | _ -> args
+      in
       match args with
       | Wire.String repo :: _ ->
           let exists = Option.is_some (Worker_state.sqlite_conn repo) in
@@ -262,7 +267,8 @@ let close_db_aux repo =
   List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
   attempt (fun () -> Sync_state.close_client_ops_conn repo);
   if Sqlite.pooled_runtime () then begin
-    Sqlite.pause_vfs ~repo;
+    (* cljs attempt!s .pauseVfs and forgets the pool unconditionally *)
+    attempt (fun () -> Sqlite.pause_vfs ~repo);
     Sqlite.drop_pool ~repo
   end;
   (match !errors with
@@ -274,6 +280,11 @@ let close_db_aux repo =
                (List.map Printexc.to_string (List.rev es)))))
 
 let close_db_handler args =
+  let args =
+    match args with
+    | Wire.Nil :: rest -> Wire.String "" :: rest
+    | _ -> args
+  in
   match args with
   | Wire.String repo :: _ ->
       let (_ : int) = Endpoint_state.cancel_ui_requests Wire.Nil in
@@ -290,6 +301,11 @@ let () = Dispatcher.register "thread-api/db-sync-close-db" close_db_handler
    delete the graph's storage file (node storage root). *)
 let () =
   Dispatcher.register "thread-api/unsafe-unlink-db" (fun args ->
+      let args =
+        match args with
+        | Wire.Nil :: rest -> Wire.String "" :: rest
+        | _ -> args
+      in
       match args with
       | Wire.String repo :: _ ->
           let (_ : int) = Endpoint_state.cancel_ui_requests Wire.Nil in
@@ -306,6 +322,11 @@ let () =
    holds none. *)
 let () =
   Dispatcher.register "thread-api/release-access-handles" (fun args ->
+      let args =
+        match args with
+        | Wire.Nil :: rest -> Wire.String "" :: rest
+        | _ -> args
+      in
       match args with
       | Wire.String repo :: _ ->
           Db_worker_effect.bind
@@ -318,7 +339,12 @@ let () =
 (* :thread-api/reset-db [repo db-transit] — handler/maintenance.cljs *)
 let () =
   Dispatcher.register "thread-api/reset-db" (fun args ->
-      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      let repo =
+        match args with
+        | Wire.String r :: _ -> r
+        | Wire.Nil :: _ | [] -> ""
+        | _ -> invalid_arg "repo arg"
+      in
       (match Worker_state.datascript_conn repo with
        | None -> Db_worker_effect.pure Wire.nil
        | Some conn ->
@@ -345,7 +371,12 @@ let () =
 (* :thread-api/gc-graph [repo] — handler/maintenance.cljs *)
 let () =
   Dispatcher.register "thread-api/gc-graph" (fun args ->
-      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      let repo =
+        match args with
+        | Wire.String r :: _ -> r
+        | Wire.Nil :: _ | [] -> ""
+        | _ -> invalid_arg "repo arg"
+      in
       (match Worker_state.sqlite_conn repo, Worker_state.datascript_conn repo with
        | Some db, Some conn ->
            Graph_gc.gc_kvs_table ~full_gc:true db;
@@ -365,7 +396,12 @@ let () =
 (* :thread-api/backup-db-sqlite [repo dst-path] — sqlite backup to dst-path *)
 let () =
   Dispatcher.register "thread-api/backup-db-sqlite" (fun args ->
-      let repo = match args with Wire.String r :: _ -> r | _ -> invalid_arg "repo arg" in
+      let repo =
+        match args with
+        | Wire.String r :: _ -> r
+        | Wire.Nil :: _ | [] -> ""
+        | _ -> invalid_arg "repo arg"
+      in
       (match Worker_state.sqlite_conn repo with
        | None -> invalid_arg ("graph not opened: " ^ repo)
        | Some db ->

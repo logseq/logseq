@@ -16,9 +16,11 @@ let search_blocks_fn :
 
 (* sci/eval-string result transform — :result-transform-edn EDN source ->
    row list -> row list. Rows/result are Wire.t so the hook stays free of
-   entity representations; the cljs transform sees the same normalized
-   maps/values the renderer would. *)
-let result_transform_fn : (string -> Wire.t list -> Wire.t) option ref =
+   entity representations; entity_attr resolves datascript/Entity lookups
+   against the live db the way SCI sees entity maps. *)
+let result_transform_fn :
+    (entity_attr:(int -> string -> Datascript.value) -> string -> Wire.t list -> Wire.t)
+    option ref =
   ref None
 
 let search_blocks ~repo ~db query limit : Datascript.entity list =
@@ -29,9 +31,10 @@ let search_blocks ~repo ~db query limit : Datascript.entity list =
         (Dispatcher.Exn_info
            ("Search is not available in this worker", []))
 
-let apply_result_transform (edn : string) (rows : Wire.t list) : Wire.t =
+let apply_result_transform ~(entity_attr : int -> string -> Datascript.value)
+    (edn : string) (rows : Wire.t list) : Wire.t =
   match !result_transform_fn with
-  | Some f -> f edn rows
+  | Some f -> f ~entity_attr edn rows
   | None ->
       raise
         (Dispatcher.Exn_info

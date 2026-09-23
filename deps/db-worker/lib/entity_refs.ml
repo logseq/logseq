@@ -1,7 +1,7 @@
 (* Ref-attr access for entities.
 
    Datascript.entity_attr materializes resolved refs into
-   One_entity/Many_entities (tx_entity), so Ldb.ref_ids/ref_ent/ref_ents —
+   One_entity/Many_entities tx_entity, so Ldb.ref_ids/ref_ent/ref_ents —
    which only match One_value/Many_values — cannot see resolved ref attrs.
    These helpers accept both the raw (Ref) and materialized shapes. *)
 

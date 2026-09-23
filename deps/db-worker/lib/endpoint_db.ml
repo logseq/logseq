@@ -8,6 +8,7 @@ open Datascript
 let require_repo args =
   match List.nth_opt args 0 with
   | Some (Wire.String repo) -> repo
+  | Some Wire.Nil | None -> ""
   | _ -> invalid_arg "first arg must be repo name"
 
 let require_conn repo =
