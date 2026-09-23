@@ -1105,37 +1105,54 @@ let rewrite_name_lookups ~target ids ops =
    a concurrent client may own a returned page. To avoid destroying committed or
    foreign content, each created page is re-pulled and only permanently removed
    when it still holds no blocks. *)
+(* Entities referencing a page through any ref attribute — block/parent
+   (children), block/refs, block/page, property values. When the final apply
+   committed despite a client-side error (e.g. a timeout), inserted blocks hold
+   incoming references to the created pages; a page with no incoming refs can
+   only come from a pre-commit failure or an unrelated orphan, so it is the
+   only shape safe to delete. *)
+let incoming_ref_query =
+  Cli_primitive.make_datascript_query
+    ~find:(Vec.singleton (sym "?x"))
+    ~in_:
+      (Vec.of_array
+         [|
+           Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?uuid";
+         |])
+    ~where:
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| sym "?p"; kw "block/uuid"; sym "?uuid" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?x"; sym "?a"; sym "?p" |]));
+         |])
+    ()
+
 let rollback_pages invoke_config repo created_uuids =
   let open Cli_effect in
-  let still_empty uuid =
+  let still_orphaned uuid =
     bind
-      (pull_entity invoke_config repo
-         (vector_vec
-            (Vec.of_array
-               [|
-                 kw "db/id";
-                 Edn_util.map_vec
-                   (Vec.of_array
-                      [|
-                        ( kw "block/children",
-                          Edn_util.vector_vec (Vec.singleton (kw "db/id")) );
-                      |]);
-               |]))
-         (vector_vec
-            (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
-      (fun entity ->
-        match Edn_util.get entity "block/children" with
-        | Some children -> (
-            match Edn_util.as_seq children with
-            | Some items -> pure (Vec.is_empty items)
-            | None -> pure false)
-        | None -> pure (Option.is_some (Edn_util.as_map entity)))
+      (Transport.thread_api_q invoke_config ~repo
+         ~query:
+           (Edn_util.vector_t_vec
+              (Vec.of_array
+                 [|
+                   query_value incoming_ref_query; Edn_util.uuid uuid;
+                 |])))
+      (fun result ->
+        match Edn_util.as_seq result with
+        | Some items -> pure (Vec.is_empty items)
+        | None -> pure false)
   in
   let rec collect acc remaining =
     match Vec.pop_front remaining with
     | None -> pure acc
     | Some (uuid, rest) ->
-        bind (still_empty uuid) (fun empty ->
+        bind (still_orphaned uuid) (fun empty ->
             collect (if empty then Vec.push_back acc uuid else acc) rest)
   in
   bind (collect Vec.empty created_uuids) (fun empty_uuids ->
@@ -1196,6 +1213,8 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
           (pull_pages_by_name invoke_config repo name page_selector)
           (fun result ->
             match first_entity result with
+            | Some entity when recycled_entity entity ->
+                pure (Error (recycled_page_error ()))
             | Some entity -> (
                 match found entity with
                 | Some entry -> resolve_ids (Vec.push_back acc entry) rest
@@ -1242,14 +1261,17 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                          in
                          try_uuid uuids)
                       (fun entity ->
-                        match found entity with
-                        | Some entry -> (
-                            (match returned_uuid create_result with
-                            | Some uuid when String.equal uuid our_uuid ->
-                                created := Vec.push_back !created our_uuid
-                            | _ -> ());
-                            resolve_ids (Vec.push_back acc entry) rest)
-                        | None -> pure (Error (page_not_found ()))))))
+                        if recycled_entity entity then
+                          pure (Error (recycled_page_error ()))
+                        else
+                          match found entity with
+                          | Some entry -> (
+                              (match returned_uuid create_result with
+                              | Some uuid when String.equal uuid our_uuid ->
+                                  created := Vec.push_back !created our_uuid
+                              | _ -> ());
+                              resolve_ids (Vec.push_back acc entry) rest)
+                          | None -> pure (Error (page_not_found ()))))))
   in
   bind
     (catch (resolve_ids Vec.empty names) (fun exn ->
