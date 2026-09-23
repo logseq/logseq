@@ -339,7 +339,12 @@ let extract_pages_and_blocks (format : string) (ast : value list)
     in
     let page', page_name, _journal_day =
       if opts.skip_journal then (page, Ldb.page_name_sanity_lc page, None)
-      else Gp_block.convert_page_if_journal page opts.date_formatter
+      else
+        (* cljs extract.cljc calls convert-page-if-journal without
+           :export-to-db-graph?, so it tries the safe journal-title
+           formatters (not only the configured one). *)
+        Gp_block.convert_page_if_journal ~export_to_db_graph:false page
+          opts.date_formatter
     in
     let opts' = { opts with page_name = Some page_name } in
     let override_uuids =
@@ -347,15 +352,18 @@ let extract_pages_and_blocks (format : string) (ast : value list)
       | r -> r
     in
     let extracted_block_ids : (string, unit) Hashtbl.t = Hashtbl.create 127 in
+    let blocks = Gp_block.extract_blocks ast content format opts' in
+    let blocks = attach_block_ids_if_match override_uuids blocks in
     let blocks =
-      Gp_block.extract_blocks ast content format opts'
-      |> attach_block_ids_if_match override_uuids
-      |> List.map
-           (fun b ->
-             Gp_block.fix_block_id_if_duplicated opts'.db page_name
-               extracted_block_ids b)
-      |> Gp_block.with_parent_and_order
-           (Map [ Keyword "block/name", String page_name ])
+      List.map
+        (fun b ->
+          Gp_block.fix_block_id_if_duplicated opts'.db page_name
+            extracted_block_ids b)
+        blocks
+    in
+    let blocks =
+      Gp_block.with_parent_and_order
+        (Map [ Keyword "block/name", String page_name ]) blocks
     in
     let ref_pages = ref [] in
     let blocks =
@@ -370,7 +378,7 @@ let extract_pages_and_blocks (format : string) (ast : value list)
               | None -> []
             in
             if block_ref_pages <> [] then
-              ref_pages := !ref_pages @ block_ref_pages;
+              ref_pages := List.rev_append block_ref_pages !ref_pages;
             block
             |> List.filter (fun (k, _) -> k <> "ref-pages")
             |> fun b ->
@@ -405,7 +413,10 @@ let extract_pages_and_blocks (format : string) (ast : value list)
         ~date_formatter:opts'.date_formatter ~db:opts'.db ~from_page:page'
         ~skip_journal:opts'.skip_journal
     in
-    let pages = build_pages_aux opts'.db page_map !ref_pages opts'.date_formatter format in
+    let pages =
+      build_pages_aux opts'.db page_map (List.rev !ref_pages)
+        opts'.date_formatter format
+    in
     let blocks =
       List.filter_map
         (fun b ->
@@ -533,9 +544,10 @@ let with_ref_pages (pages : Block_map.t list) (blocks : Block_map.t list)
       | Some (String n) ->
         (match Hashtbl.find_opt merged n with
          | Some existing ->
+           (* cljs (apply merge group): later maps win *)
            Hashtbl.replace merged n
-             (existing
-              @ List.filter (fun (k, _) -> not (List.mem_assoc k existing)) bm)
+             (List.filter (fun (k, _) -> not (List.mem_assoc k bm)) existing
+              @ bm)
          | None ->
            Hashtbl.replace merged n bm;
            order := n :: !order)
