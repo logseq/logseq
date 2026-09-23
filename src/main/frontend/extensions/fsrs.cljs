@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -247,7 +248,7 @@
               {:class (when (:mobile? opts) "ls-mobile-card")}
               [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
                [:div.mb-4.ml-2.opacity-70.text-sm
-                (component-block/breadcrumb {} repo (:block/uuid block) {:block block})]
+                (block-breadcrumb/breadcrumb {} repo (:block/uuid block) {:block block})]
                (let [option (case phase
                               :init
                               {:hide-children? true}
