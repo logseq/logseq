@@ -1896,7 +1896,7 @@
             editor (util/get-editor)]
         (.evaluate editor
                    "(el, pos) => { el.focus(); el.setSelectionRange(pos, pos); }"
-                   after-page-a))
+                   after-page-a)
         (k/backspace)
         (k/backspace)
         (is (= mid-edit (util/get-edit-content))))
