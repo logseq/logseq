@@ -153,6 +153,43 @@
             :entry :scheme}
            (get-in @(:*state context) [:plugin-languages :racket])))))
 
+(deftest cm6-plugin-language-descriptors-keep-opaque-support-and-load
+  (let [support #js {:opaque "language-support-instance"}
+        load (fn [_descriptor] support)
+        context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}]
+    (code-editor-view/apply-enhancers!
+     context
+     [{:key :plugin-a
+       :enhancer (fn [^js payload]
+                   ((.-registerLanguage payload)
+                    #js {:id "mydsl"
+                         :names #js ["mydsl"]
+                         :source "plugin"
+                         :support support
+                         :load load}))}])
+    (let [descriptor (get-in @(:*state context) [:plugin-languages :mydsl])]
+      (is (= :plugin (:source descriptor)))
+      (is (identical? support (:support descriptor))
+          "opaque support instance survives normalization untouched")
+      (is (identical? load (:load descriptor))))
+    (is (thrown? js/Error
+                 ((fn []
+                    (code-editor-view/apply-enhancers!
+                     {:editor-id "editor-1"
+                      :view #js {}
+                      :*state (atom {:plugin-extensions {}
+                                     :plugin-languages {}})}
+                     [{:key :plugin-b
+                       :enhancer (fn [^js payload]
+                                   ((.-registerLanguage payload)
+                                    #js {:id "badlang"
+                                         :names #js ["badlang"]
+                                         :source "plugin"}))}]))))
+        "plugin source requires :support or :load")))
+
 (deftest cm6-enhancers-reject-legacy-cm5-enhancer-type
   (let [legacy-called? (atom false)
         context {:editor-id "editor-1"

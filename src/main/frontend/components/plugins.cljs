@@ -1586,16 +1586,25 @@
     (hooks/use-effect!
      (fn []
        (let [*dispose! (atom nil)
-             t (js/setTimeout
-                #(when-let [editor (some-> (hooks/deref *el)
-                                           (.closest ".ui-fenced-code-wrap")
-                                           util/get-code-editor-context)]
-                   (hooks/set-ref! *editor editor)
-                   (reset! *dispose! (code-editor/add-change-listener! editor set-content1!)))
-                  ;; wait for the code editor to be created
-                1000)]
+             attach-listener! (fn []
+                                (when-let [editor (and (nil? (hooks/deref *editor))
+                                                       (some-> (hooks/deref *el)
+                                                               (.closest ".ui-fenced-code-wrap")
+                                                               util/get-code-editor-context))]
+                                  (hooks/set-ref! *editor editor)
+                                  (reset! *dispose! (code-editor/add-change-listener! editor set-content1!))
+                                  true))
+             wrapper (some-> (hooks/deref *el) (.closest ".ui-fenced-code-wrap"))
+             ;; The editor component mounts lazily once in view; observe the
+             ;; wrapper until its context exists instead of a one-shot timer.
+             observer (when (and wrapper
+                                 (not (attach-listener!))
+                                 (exists? js/MutationObserver))
+                        (js/MutationObserver. (fn [_mutations _observer]
+                                                (attach-listener!))))]
+         (some-> observer (.observe wrapper #js {:childList true :subtree true}))
          #(do
-            (js/clearTimeout t)
+            (some-> observer .disconnect)
             (when-let [dispose! @*dispose!]
               (dispose!)))))
      [])

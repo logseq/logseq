@@ -44,6 +44,7 @@ export type CodeMirror6LanguageSource =
   | 'nextjournal'
   | 'legacy'
   | 'plain-text'
+  | 'plugin'
 
 export type CodeMirror6PluginCapability =
   | 'code-editor/cm6'
@@ -58,6 +59,17 @@ export type CodeMirror6LanguageDescriptor = {
   package?: string
   entry?: string
   options?: Record<string, any>
+  /**
+   * For `source: 'plugin'` descriptors: an already-built CodeMirror 6
+   * LanguageSupport (or Extension) instance used to highlight this language.
+   */
+  support?: unknown
+  /**
+   * For `source: 'plugin'` descriptors: LanguageDescription.load-style
+   * loader returning a LanguageSupport/Extension or a promise of one. The
+   * editor reconfigures its language compartment when it settles.
+   */
+  load?: () => unknown | Promise<unknown>
 }
 
 export type CodeMirror6ExtensionFactoryContext = {

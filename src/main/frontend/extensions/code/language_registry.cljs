@@ -7,7 +7,7 @@
    LanguageSupport/StreamLanguage extension."
   (:require [clojure.string :as string]))
 
-(def supported-sources #{:native :nextjournal :legacy :plain-text})
+(def supported-sources #{:native :nextjournal :legacy :plain-text :plugin})
 
 (def ^:private ^:large-vars/data-var languages
   [{:id :plain-text
@@ -998,9 +998,13 @@
        (keyword? (:id descriptor))
        (seq (:names descriptor))
        (contains? supported-sources (:source descriptor))
-       (or (= :plain-text (:source descriptor))
-           (and (string? (:package descriptor))
-                (keyword? (:entry descriptor))))))
+       (case (:source descriptor)
+         :plain-text true
+         ;; Plugin descriptors resolve their LanguageSupport via an opaque
+         ;; `:support` value or an async `:load` fn.
+         :plugin (boolean (or (:support descriptor) (:load descriptor)))
+         (and (string? (:package descriptor))
+              (keyword? (:entry descriptor))))))
 
 (defn- lookup-pairs
   [field]
