@@ -2471,7 +2471,7 @@
                          :on-drag-start (fn [event]
                                           (reset! *bullet-dragging? true)
                                           (util/stop-propagation event)
-                                          (on-drag-start event block block-id))
+                                          (on-drag-start event (or (:original-block config) block) block-id))
                          :on-drag-end (fn [_e]
                                         (reset! *bullet-dragging? false))))
 
@@ -4251,7 +4251,7 @@
                               element))]
               (doseq [block blocks]
                 (dom/add-class! block "dragging"))
-              (on-drag-start event block block-id)
+              (on-drag-start event (or (:original-block config) block) block-id)
               (when element
                 (dom/append! js/document.body element)
                 (dnd/set-drag-image! event element (/ (.-offsetWidth target) 2) (/ (.-offsetHeight target) 2)))))))
