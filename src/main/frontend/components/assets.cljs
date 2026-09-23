@@ -234,7 +234,13 @@
                    (let [^js form-data (js/FormData. (.-currentTarget e))
                          repo (state/get-current-repo)
                          title (.get form-data "title")
-                         src (.get form-data "src")
+                         src (util/trim-safe (.get form-data "src"))
+                         ;; Local file paths (e.g. picked via "Select from disk")
+                         ;; are stored as file:// URIs so they are valid :url values
+                         src (if (or (string/blank? src)
+                                     (try (js/URL. src) true (catch :default _ false)))
+                               src
+                               (str "file://" (js/encodeURI src)))
                          err-handle (fn [^js e]
                                       (js/console.error e)
                                       (notification/show! (str e)))]
