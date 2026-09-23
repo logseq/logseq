@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.db.subs :as db-subs]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
@@ -87,7 +88,9 @@
         (state/pub-event! [:editor/save-code-editor]))
       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
         (state/clear-edit! {:clear-editing-block? false}))
-      (let [content (or custom-content (:block/title block) "")
+      (let [raw-content (or custom-content (:block/title block) "")
+            content (db-editor-handler/heading-edit-content block raw-content)
+            pos (db-editor-handler/heading-edit-pos block raw-content pos)
             content-length (count content)
             text-range (cond
                          (vector? pos)

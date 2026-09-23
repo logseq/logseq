@@ -2674,6 +2674,56 @@
                          (set! state/<invoke-db-worker original-<invoke-db-worker)
                          (done))))))))
 
+(deftest save-block-without-heading-marker-retracts-heading
+  (async done
+    (let [block-uuid #uuid "33333333-3333-3333-3333-333333333333"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "foo"
+                 :logseq.property/heading 1}
+          tx-calls (atom [])
+          original-<get-block db-async/<get-block
+          original-apply-outliner-ops db-transact/apply-outliner-ops
+          original-<invoke-db-worker state/<invoke-db-worker]
+      (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
+      (set! db-async/<get-block (fn [_repo id _opts]
+                                  (p/resolved (assoc block :block/uuid id))))
+      (set! db-transact/apply-outliner-ops
+            (fn [db ops opts]
+              (swap! tx-calls conj [db ops opts])
+              :tx))
+      (-> (p/do!
+           (editor/save-block! "repo" block-uuid "foo")
+           (let [saved-block (get-in (first @tx-calls) [1 0 1 0])]
+             (is (= "foo" (:block/title saved-block)))
+             (is (nil? (:logseq.property/heading saved-block)))
+             (is (= [[:db/retract [:block/uuid block-uuid] :logseq.property/heading]]
+                    (:db/other-tx saved-block)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-<get-block)
+             (set! db-transact/apply-outliner-ops original-apply-outliner-ops)
+             (set! state/<invoke-db-worker original-<invoke-db-worker)
+             (done)))))))
+
+(deftest get-editor-style-class-follows-heading-marker
+  (testing "heading class comes from the visible # marker, not the stored property"
+    (is (= "uniline-block h1"
+           (editor-component/get-editor-style-class
+            {:logseq.property/heading 1} "# Title" :markdown)))
+    (is (= "uniline-block h2"
+           (editor-component/get-editor-style-class
+            {:logseq.property/heading 1} "## Title" :markdown)))
+    (is (= "uniline-block normal-block"
+           (editor-component/get-editor-style-class
+            {:logseq.property/heading 1} "Title" :markdown)))
+    (is (= "uniline-block normal-block"
+           (editor-component/get-editor-style-class
+            {:logseq.property/heading 1} "" :markdown)))))
+
 (deftest block-default-collapsed-respects-ignore-block-collapsed-flag
   (is (true? (editor/block-default-collapsed?
               {:block/collapsed? true}

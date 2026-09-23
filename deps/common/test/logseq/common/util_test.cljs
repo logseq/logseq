@@ -67,6 +67,33 @@
       [nil 0]   ""
       [42 0 1]  "")))
 
+(deftest markdown-heading-helpers
+  (testing "detects heading levels 1-6"
+    (are [content level]
+         (= level (common-util/markdown-heading-level content))
+      "# Title" 1
+      "## Title" 2
+      "###### Title" 6
+      " # Title" 1
+      "Title" nil
+      "#Title" nil
+      "####### Title" nil
+      "" nil
+      nil nil))
+  (testing "reconstructs a marker for non-empty heading text"
+    (are [heading content expected]
+         (= expected (common-util/with-markdown-heading-prefix heading content))
+      1 "Title" "# Title"
+      2 "Title" "## Title"
+      1 "# Title" "# Title"
+      1 "" ""
+      1 "   " "   "
+      nil "Title" "Title"
+      true "Title" "# Title"))
+  (testing "auto-heading uses the block level"
+    (is (= "## Title"
+           (common-util/with-markdown-heading-prefix true "Title" 1)))))
+
 (deftest timestamp-ms
   (testing "keeps positive epoch-ms numbers"
     (is (= 1577934245000 (common-util/timestamp-ms 1577934245000))))

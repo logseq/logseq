@@ -314,9 +314,8 @@
 
        :else
        (when content
-         (let [content-changed? (not= (string/trim content) (string/trim value))]
-           (when content-changed?
-             (save-block-with-pending-title! block value opts))))))))
+         (when (db-editor-handler/editor-content-changed? block content value)
+           (save-block-with-pending-title! block value opts))))))))
 
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
@@ -1858,7 +1857,10 @@
                        (assoc state-edit-block :block/title edit-content)
                        last-edit-block))
         has-unsaved-edit? (and state-edit-block
-                               (not= (:block/title state-edit-block) edit-content))
+                               (db-editor-handler/editor-content-changed?
+                                state-edit-block
+                                (:block/title state-edit-block)
+                                edit-content))
         empty-target? (cond
                         target-block false
                         state-edit-block (string/blank? edit-content)
@@ -2446,8 +2448,10 @@
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (assoc editing-block :block/title (state/get-edit-content)))
         has-unsaved-edits (and editing-block
-                               (not= (:block/title (state/get-edit-block))
-                                     (state/get-edit-content)))
+                               (db-editor-handler/editor-content-changed?
+                                (state/get-edit-block)
+                                (:block/title (state/get-edit-block))
+                                (state/get-edit-content)))
         target-block (or target-block editing-block)
         block target-block
         page (if (:block/name block) block
@@ -3006,7 +3010,8 @@
              (when (and
                     uuid
                     (not (state/block-component-editing?))
-                    (not= title (string/trim value)))
+                    (db-editor-handler/editor-content-changed?
+                     (state/get-edit-block) title value))
                (save-block! repo uuid value))
 
              (cond
@@ -3102,7 +3107,7 @@
     (when sibling-block
       (let [content (:block/title block)
             value (state/get-edit-content)]
-        (when (and value (not= content (string/trim value)))
+        (when (and value (db-editor-handler/editor-content-changed? block content value))
           (save-block! repo uuid value)))
       (let [sibling-block-id (node-attr sibling-block "blockid")]
         (cond

@@ -14,6 +14,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.op]
@@ -44,16 +45,60 @@
              x))
          refs)))
 
-(defn- markdown-heading-level
-  [content]
-  (when-let [heading (some->> content
-                              string/triml
-                              (re-find #"^(#{1,6})\s+"))]
-    (count (second heading))))
-
-(defn- normalize-markdown-heading?
+(defn normalize-markdown-heading?
   [block]
   (not (contains? #{:code :math} (:logseq.property.node/display-type block))))
+
+(defn heading-edit-content
+  "Reconstruct markdown heading markers for the editor so users can delete `#`
+   to remove heading format. Empty titles stay empty."
+  [block content]
+  (if (normalize-markdown-heading? block)
+    (common-util/with-markdown-heading-prefix
+      (:logseq.property/heading block)
+      (or content "")
+      (:block/level block))
+    (or content "")))
+
+(defn heading-edit-pos
+  "Offset a stored-title caret position after reconstructing the heading marker."
+  [block content pos]
+  (let [prefixed (heading-edit-content block content)
+        prefix-len (- (count prefixed) (count (or content "")))]
+    (cond
+      (number? pos) (+ pos prefix-len)
+      (and (vector? pos) (= :down (first pos)))
+      [:down (+ (second pos) prefix-len)]
+      :else pos)))
+
+(defn effective-heading-level
+  [block]
+  (when (normalize-markdown-heading? block)
+    (common-util/heading-value->level (:logseq.property/heading block)
+                                      (:block/level block))))
+
+(defn editor-content-changed?
+  "Compare stored title/heading with editor value after normalizing `#` markers
+   reconstructed for edit."
+  [block stored-title editor-value]
+  (let [stored-title (string/trim (or stored-title ""))
+        editor-value (string/trim (or editor-value ""))]
+    (or (not= (common-util/clear-markdown-heading (string/triml stored-title))
+              (common-util/clear-markdown-heading (string/triml editor-value)))
+        (not= (effective-heading-level block)
+              (common-util/markdown-heading-level editor-value)))))
+
+(defn- persist-heading-level
+  [block title]
+  (when (normalize-markdown-heading? block)
+    (when-let [level (common-util/markdown-heading-level title)]
+      (when-not (string/blank? (common-util/clear-markdown-heading (string/triml title)))
+        level))))
+
+(defn- retract-heading-tx
+  [block]
+  (when (:block/uuid block)
+    [:db/retract [:block/uuid (:block/uuid block)] :logseq.property/heading]))
 
 (defn- markdown-hashtag-link-target
   [target]
@@ -102,9 +147,9 @@
   [{:block/keys [title level] :as block}]
   (let [block (if (nil? title)
                 block
-                (let [heading-level (when (normalize-markdown-heading? block)
-                                      (markdown-heading-level title))
-                      title (if heading-level
+                (let [heading-level (persist-heading-level block title)
+                      title (if (and (normalize-markdown-heading? block)
+                                     (common-util/markdown-heading-level title))
                               (commands/clear-markdown-heading (string/triml title))
                               title)
                       ast (mldoc/->edn (string/trim title) :markdown)
@@ -124,7 +169,14 @@
                                                         title)}
                                         (when heading-level
                                           {:logseq.property/heading heading-level}))
-                                 (dissoc :block/format))]
+                                 (dissoc :block/format))
+                      block' (if (and (normalize-markdown-heading? block)
+                                      (nil? heading-level))
+                               (cond-> (dissoc block' :logseq.property/heading)
+                                 (retract-heading-tx block)
+                                 (update :db/other-tx (fnil conj [])
+                                         (retract-heading-tx block)))
+                               block')]
                   (update block' :block/refs
                           (fn [refs]
                             (->> (concat (-> refs

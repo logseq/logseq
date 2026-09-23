@@ -1787,13 +1787,29 @@
 (deftest heading-editor-shows-every-row-test
   (testing "the editor of a heading block is sized for the heading font when it opens"
     (let [title (string/join " " (repeat 12 "heading row"))]
-      ;; "# " at the start becomes the heading property, so the content is
-      ;; the title alone.
+      ;; "# " at the start becomes the heading property. Re-entering edit
+      ;; reconstructs the marker so it can be deleted.
       (b/new-block (str "# " title))
       (util/exit-edit)
       (w/click (loc/filter ".block-title-wrap" :has-text "heading row"))
       (util/wait-editor-visible)
-      (is (= title (util/get-edit-content)))
+      (is (= (str "# " title) (util/get-edit-content)))
       (let [{:keys [client scroll]} (editor-box-heights)]
         (is (<= scroll client)
             (str "textarea clientHeight " client " scrollHeight " scroll))))))
+
+(deftest heading-edit-shows-marker-and-clears-empty-test
+  (testing "re-editing a heading shows # and clearing text drops heading chrome"
+    (b/new-block "# Heading marker stays")
+    (util/exit-edit)
+    (assert/assert-is-visible "h1.block-title-wrap.as-heading")
+    (b/jump-to-block "Heading marker stays")
+    (util/wait-editor-visible)
+    (is (= "# Heading marker stays" (util/get-edit-content)))
+    (k/press "ControlOrMeta+a")
+    (k/press "Backspace")
+    (is (= "" (util/get-edit-content)))
+    (is (= "uniline-block normal-block"
+           (w/eval-js "document.querySelector('.editor-wrapper textarea').className")))
+    (util/exit-edit)
+    (assert/assert-is-hidden "h1.block-title-wrap.as-heading")))

@@ -720,20 +720,18 @@
 
 (defn- heading-value->level
   [heading level]
-  (cond
-    (and (integer? heading) (<= 1 heading 6)) heading
-    (true? heading) (min (inc (or level 0)) 6)
-    :else nil))
+  (common-util/heading-value->level heading level))
 
 (defn- block-heading-level
   [block level]
-  (or (when-let [heading-level (:block/heading-level block)]
-        (when (and (integer? heading-level)
-                   (<= 1 heading-level 6))
-          heading-level))
-      (heading-value->level (or (pu/lookup block :logseq.property/heading)
-                                (:block.temp/heading block))
-                            level)))
+  (when-not (string/blank? (:block/title block))
+    (or (when-let [heading-level (:block/heading-level block)]
+          (when (and (integer? heading-level)
+                     (<= 1 heading-level 6))
+            heading-level))
+        (heading-value->level (or (pu/lookup block :logseq.property/heading)
+                                  (:block.temp/heading block))
+                              level))))
 
 (defn- heading-icon-size
   [heading-level]
