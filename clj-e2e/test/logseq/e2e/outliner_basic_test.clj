@@ -167,6 +167,77 @@
 (deftest indent-outdent-embed-page-test
   (indent-outdent-embed-page))
 
+(defn- block-q
+  [title]
+  (format ".ls-block:has(> .block-main-container .block-title-wrap:text-is('%s'))" title))
+
+(defn- collapse-block-by-arrow!
+  [title]
+  (let [block (.first (w/-query (block-q title)))]
+    (.hover block)
+    (w/click (.first (.locator block ".block-control")))
+    (assert/assert-is-visible (str (block-q title) " > .block-main-container .bullet-closed"))))
+
+(defn- new-collapsed-parent-and-sibling!
+  "Creates `parent` with `child`, followed by `sibling`, then collapses `parent`."
+  [parent child sibling]
+  (b/new-blocks [parent child])
+  (b/indent)
+  (b/new-block sibling)
+  (b/outdent)
+  (util/exit-edit)
+  (collapse-block-by-arrow! parent))
+
+(defn- assert-expanded-parent!
+  [parent child]
+  (assert/assert-is-hidden (str (block-q parent) " > .block-main-container .bullet-closed"))
+  (assert/assert-is-visible (str (block-q parent) " .ls-block " (format ".block-title-wrap:text-is('%s')" child))))
+
+(defn- indent-into-collapsed-block-while-editing
+  []
+  (new-collapsed-parent-and-sibling! "collapsed parent" "hidden child" "indent me")
+  (b/jump-to-block "indent me")
+  (k/tab)
+  (assert-expanded-parent! "collapsed parent" "hidden child")
+  (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block .editor-wrapper textarea"))
+  (is (= "indent me" (util/get-edit-content))))
+
+(deftest indent-into-collapsed-block-expands-it-test
+  (testing "Tab under a collapsed sibling expands it and keeps editing the indented block"
+    (indent-into-collapsed-block-while-editing)))
+
+(deftest indent-into-collapsed-block-on-journals-expands-it-test
+  (testing "Same as above, on the journals view"
+    (util/goto-journals)
+    (w/wait-for "#journals .journal-item .ls-page-blocks")
+    (b/open-last-block)
+    (indent-into-collapsed-block-while-editing)))
+
+(deftest indent-selected-block-into-collapsed-block-expands-it-test
+  (testing "Tab on a selected block under a collapsed sibling expands it and keeps the selection visible"
+    (new-collapsed-parent-and-sibling! "collapsed parent" "hidden child" "select me")
+    (b/jump-to-block "select me")
+    (k/esc)
+    (assert/assert-selected-block-text "select me")
+    (k/tab)
+    (assert-expanded-parent! "collapsed parent" "hidden child")
+    (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block.selected :text('select me')"))))
+
+(deftest enter-then-tab-on-collapsed-block-expands-it-test
+  (testing "Enter at the end of a collapsed block then Tab nests the new block under it, expanded"
+    (b/new-blocks ["collapsed parent" "hidden child"])
+    (b/indent)
+    (util/exit-edit)
+    (collapse-block-by-arrow! "collapsed parent")
+    (b/jump-to-block "collapsed parent")
+    (util/move-cursor-to-end)
+    (k/enter)
+    (k/tab)
+    (util/press-seq "new child")
+    (assert-expanded-parent! "collapsed parent" "hidden child")
+    (assert/assert-is-visible (str (block-q "collapsed parent") " .ls-block .editor-wrapper textarea"))
+    (is (= "new child" (util/get-edit-content)))))
+
 (deftest move-up-down-test
   (move-up-down))
 
