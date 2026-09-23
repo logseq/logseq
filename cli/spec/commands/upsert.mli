@@ -99,6 +99,7 @@ type block_create = {
   tags : Selector.tag Rrbvec.t;
   properties : Property.assignment Rrbvec.t;
   blocks : Block.t Rrbvec.t;
+  markdown_blocks : bool;
   update_plan : Property.update_plan;
   dry_run : bool;
 }
