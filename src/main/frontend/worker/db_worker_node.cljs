@@ -597,8 +597,7 @@
                   root-dir (.-root admission)
                   server-list-file (server-list-file-path root-dir)
                   _ (do
-                      ;; storage roots for the optional OCaml db-worker
-                      ;; (db-worker-ocaml.cjs); inert when it isn't loaded.
+                      ;; Storage roots for the OCaml db-worker.
                       (set! (.. js/process -env -LOGSEQ_WORKER_DB_DIR) (.-graphsDir storage))
                       (set! (.. js/process -env -LOGSEQ_WORKER_KV_DIR) root-dir))
                   proxy* (atom nil)]
@@ -659,17 +658,13 @@
           (p/catch (fn [e] (throw e)))))))
 
 (defn- load-ocaml-db-worker!
-  "Loads the optional OCaml db-worker node bundle (deps/db-worker) as
-   `globalThis.LogseqDbWorker` when `db-worker-ocaml.cjs` sits next to this
-   script, and calls its `init()`. Absent bundle keeps the cljs worker
-   unchanged; a present-but-broken bundle fails fast."
+  "Loads and initializes the required OCaml worker bundle beside this script.
+   Missing or broken bundles fail before the daemon starts."
   []
   (let [bundle-path (.resolve (js/require "path") js/__dirname "db-worker-ocaml.cjs")]
-    (when (.existsSync (js/require "fs") bundle-path)
-      (gobj/set js/globalThis "LogseqDbWorker" (js/require bundle-path))
-      (.init (gobj/get js/globalThis "LogseqDbWorker"))
-      (when-let [set-post-fn (gobj/get (gobj/get js/globalThis "LogseqDbWorker") "set_post_fn")]
-        (set-post-fn handle-event!)))))
+    (gobj/set js/globalThis "LogseqDbWorker" (js/require bundle-path))
+    (.init (gobj/get js/globalThis "LogseqDbWorker"))
+    (.set_post_fn (gobj/get js/globalThis "LogseqDbWorker") handle-event!)))
 
 (defn main
   []
