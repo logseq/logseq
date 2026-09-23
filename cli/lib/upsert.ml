@@ -1755,12 +1755,45 @@ let resolve_block_uuid_ref invoke_config repo uuid =
             (Error
                (Error.make Error.Block_not_found ("block not found: " ^ uuid))))
 
+let block_name_lookup_ref value =
+  match (Edn_util.as_vector value, Edn_util.as_list value) with
+  | Some values, _ when Vec.length values = 2 -> (
+      match
+        ( Edn_util.as_string_like (Vec.nth values 0),
+          Edn_util.as_string_like (Vec.nth values 1) )
+      with
+      | Some "block/name", Some name -> Some name
+      | _ -> None)
+  | _, Some values when Vec.length values = 2 -> (
+      match
+        ( Edn_util.as_string_like (Vec.nth values 0),
+          Edn_util.as_string_like (Vec.nth values 1) )
+      with
+      | Some "block/name", Some name -> Some name
+      | _ -> None)
+  | _ -> None
+
+let resolve_block_name_ref invoke_config repo name =
+  let open Cli_effect in
+  bind
+    (pull_entity_by_lookup invoke_config repo
+       (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
+       (vector_vec
+          (Vec.of_array [| kw "block/name"; Edn_util.string name |])))
+    (fun entity ->
+      match id_of_entity entity with
+      | Some id -> pure (Ok (Edn_util.int64 id))
+      | None -> pure (Error (page_not_found ())))
+
 let rec resolve_property_value_refs invoke_config repo value =
   let open Cli_effect in
   match block_uuid_lookup_ref value with
   | Some uuid -> resolve_block_uuid_ref invoke_config repo uuid
   | None -> (
-      let resolve_values wrap values =
+      match block_name_lookup_ref value with
+      | Some name -> resolve_block_name_ref invoke_config repo name
+      | None -> (
+          let resolve_values wrap values =
         let rec loop acc remaining =
           match Vec.pop_front remaining with
           | None -> pure (Ok (wrap acc))
@@ -1790,7 +1823,7 @@ let rec resolve_property_value_refs invoke_config repo value =
                   | Ok value -> loop (Vec.push_back acc (key, value)) rest)
           in
           loop Vec.empty (Edn_util.vec_of_array fields)
-      | _ -> pure (Ok value))
+      | _ -> pure (Ok value)))
 
 let resolve_property_assignments invoke_config repo assignments =
   let open Cli_effect in
@@ -1895,9 +1928,24 @@ let coerce_block_property_value entity value =
               Error
                 (Error.invalid_options
                    ("property value is not a boolean: " ^ text)))
+      | Some "date" ->
+          let text = String.trim text in
+          if Cli_primitive.is_uuid_string text then
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array [| kw "block/uuid"; Edn_util.uuid text |]))
+          else
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array
+                    [|
+                      kw "block/name";
+                      Edn_util.string
+                        (normalized_lookup_name
+                           (strip_page_ref_syntax text));
+                    |]))
       | Some
-          ( "page" | "node" | "entity" | "class" | "property" | "date"
-          | "asset" ) ->
+          ("page" | "node" | "entity" | "class" | "property" | "asset") ->
           let text = String.trim text in
           if Cli_primitive.is_uuid_string text then
             Ok
