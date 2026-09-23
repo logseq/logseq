@@ -9,6 +9,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
@@ -191,7 +192,7 @@
   [block-id-or-uuid-or-key]
   (if (or (number? block-id-or-uuid-or-key)
         (util/uuid-string? block-id-or-uuid-or-key))
-    (editor-handler/open-block-in-sidebar!
+    (editor-format/open-block-in-sidebar!
       (if (number? block-id-or-uuid-or-key)
         block-id-or-uuid-or-key
         (sdk-utils/uuid-or-throw-error block-id-or-uuid-or-key)))

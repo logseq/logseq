@@ -4,6 +4,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
@@ -300,7 +301,7 @@
             (fn []
               (p/let [alpha (test-helper/find-block-by-content "alpha")
                       uuid' (str (:block/uuid alpha))
-                      _ (p/with-redefs [editor-handler/open-block-in-sidebar!
+                      _ (p/with-redefs [editor-format/open-block-in-sidebar!
                                         (fn [_block-id]
                                           (state/update-state! :sidebar/blocks
                                                                (fn [blocks]
