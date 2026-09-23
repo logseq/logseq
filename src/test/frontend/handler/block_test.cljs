@@ -127,6 +127,7 @@
              (fn []
                (is (= [[:get-block "test" block-id {:children? false}]
                        [:event [:editor/save-code-editor]]
+                       [:event [:editor/save-current-block]]
                        [:clear-edit {:clear-editing-block? false}]
                        [:clear-selection]
                        [:set-editing
