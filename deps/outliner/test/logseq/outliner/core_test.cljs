@@ -473,9 +473,9 @@
                   :blocks [{:block/title "first"}
                            {:block/title "second"}]}])
           page (db-test/find-page-by-title @conn "page1")
-          second (db-test/find-block-by-content @conn "second")
+          second-block (db-test/find-block-by-content @conn "second")
           before (reset-page-updated-at! conn page)]
-      (outliner-core/move-blocks-up-down! conn [second] true)
+      (outliner-core/move-blocks-up-down! conn [second-block] true)
       (is (= "second"
              (:block/title (first (ldb/sort-by-order (:block/_parent (d/entity @conn (:db/id page))))))))
       (is (> (page-updated-at conn page) before)
@@ -508,11 +508,11 @@
                            {:block/title "second"}]}])
           page (db-test/find-page-by-title @conn "page1")
           first-block (db-test/find-block-by-content @conn "first")
-          second (db-test/find-block-by-content @conn "second")
+          second-block (db-test/find-block-by-content @conn "second")
           before (reset-page-updated-at! conn page)]
       (outliner-op/apply-ops!
        conn
-       [[:move-blocks [[(:block/uuid second)]
+       [[:move-blocks [[(:block/uuid second-block)]
                        (:block/uuid first-block)
                        {:sibling? false}]]]
        {})
