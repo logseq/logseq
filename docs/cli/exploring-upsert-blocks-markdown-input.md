@@ -162,7 +162,7 @@ Correctness risks to pin down during implementation:
   sibling text.
 - `Src` blocks need `update-src-full-content` semantics (indentation
   stripping via `remove-indentation-spaces`) or fenced code titles come out
-  mis-indented.
+  misindented.
 
 `Mldoc.getReferences(text, config)` is the ref/tag extractor of choice
 (§4): it reports `pages`/`tags` from the inline AST, so `[[x]]`/`#t`

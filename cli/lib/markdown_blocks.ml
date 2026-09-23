@@ -159,7 +159,7 @@ let safe_sub text start length =
 
 (* Port of graph-parser mldoc/remove-indentation-spaces (remove-first-line?
    false): non-first lines drop `level` leading columns when they are all
-   whitespace, otherwise they are trim-lefted. *)
+   whitespace, otherwise their leading whitespace is trimmed. *)
 let remove_indentation_spaces text level =
   match String.split_on_char '\n' text with
   | [] -> text
