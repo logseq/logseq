@@ -28,6 +28,17 @@ let encode_error name exn =
   let message, data =
     match exn with
     | Exn_info (msg, kvs) -> (msg, kvs)
+    | Outliner_validate.Notification (Wire.Map kvs) ->
+        ( (match Wire.get "message" (Wire.Map kvs) with
+           | Some (Wire.String m) -> m
+           | _ ->
+               (match Wire.get "payload" (Wire.Map kvs) with
+                | Some p ->
+                    (match Wire.get "message" p with
+                     | Some (Wire.String m) -> m
+                     | _ -> Printexc.to_string exn)
+                | None -> Printexc.to_string exn))
+        , kvs )
     | _ -> (Printexc.to_string exn, [ (Wire.Keyword "endpoint", Wire.String name) ])
   in
   Wire.Tagged

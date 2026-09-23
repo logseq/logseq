@@ -11,14 +11,6 @@
 
 let init () = Worker_core.init ()
 
-let invoke name transit_args =
-  Worker_core.init ();
-  Js.Promise.make (fun ~resolve ~reject ->
-      Db_worker_effect.on_any
-        (Worker_core.invoke name transit_args)
-        (fun result -> resolve result [@u])
-        (fun exn -> reject exn [@u]))
-
 let registered name = Dispatcher.registered name
 
 (* Node daemon entry (cljs db_worker_node/main): takes over argv
@@ -70,6 +62,49 @@ external global_get : global -> string -> 'a Js.Undefined.t = ""
 
 external global_set : global -> string -> 'a -> unit = ""
   [@@mel.set_index]
+
+external prop : 'a -> string -> 'b Js.Undefined.t = "" [@@mel.get_index]
+external call1 : 'a -> 'b -> 'c -> 'd Js.Undefined.t = "call" [@@mel.send]
+
+let get_path root keys =
+  List.fold_left
+    (fun acc key ->
+       match Js.Undefined.toOption acc with
+       | Some v -> prop v key
+       | None -> acc)
+    (Js.Undefined.return root) keys
+
+(* cljs `read-transit-str` reachable when a cljs runtime shares the
+   process (node daemon, browser worker); decodes the tagged error transit
+   into a real ExceptionInfo so `ex-data` works on the rejection. *)
+let decode_error_exn (transit : string) : exn Js.Undefined.t =
+  match
+    Js.Undefined.toOption
+      (get_path global_this
+         [ "logseq"; "db"; "sqlite"; "util"; "read_transit_str" ])
+  with
+  | Some read -> call1 read Js.Undefined.empty transit
+  | None -> Js.Undefined.empty
+
+let rejection_of_exn name exn =
+  let transit =
+    try Some (Transit_codec.to_string (Dispatcher.encode_error name exn))
+    with _ -> None
+  in
+  match transit with
+  | Some t -> (
+      match Js.Undefined.toOption (decode_error_exn t) with
+      | Some decoded -> decoded
+      | None -> exn)
+  | None -> exn
+
+let invoke name transit_args =
+  Worker_core.init ();
+  Js.Promise.make (fun ~resolve ~reject ->
+      Db_worker_effect.on_any
+        (Worker_core.invoke name transit_args)
+        (fun result -> resolve result [@u])
+        (fun exn -> reject (rejection_of_exn name exn) [@u]))
 
 let bootstrap_flag = "__logseq_db_worker_bootstrap_loaded__"
 

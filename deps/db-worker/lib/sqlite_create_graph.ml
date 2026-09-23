@@ -66,9 +66,12 @@ let entity_tx (db : db) ?(hint : BM.schema_hint option) (m : BM.t) : tx_op =
         if a = "db/id" then None
         else
           match v with
-          | Map _
+          | Map kvs
             when not
                    (Ldb.ref_attr db a
+                    || List.exists
+                         (fun (k, _) -> k = Keyword "db/id" || k = String "db/id")
+                         kvs
                     ||
                     (match hint with
                      | Some h -> List.mem a h.BM.ref_attrs
