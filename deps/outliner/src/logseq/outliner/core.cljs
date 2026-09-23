@@ -114,15 +114,19 @@
         (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
+(defn- page-updated-at-tx
+  [page-eid]
+  (when page-eid
+    {:db/id page-eid
+     :block/updated-at (common-util/time-ms)}))
+
 (defn- update-page-when-save-block
   [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
-    (let [m' (cond-> {:db/id (:db/id e)
-                      :block/updated-at (common-util/time-ms)}
+    (let [m' (cond-> (page-updated-at-tx (:db/id e))
                (not (:block/created-at e))
-               (assoc :block/created-at (common-util/time-ms)))
-          txs [m']]
-      (swap! txs-state into txs))))
+               (assoc :block/created-at (common-util/time-ms)))]
+      (swap! txs-state conj m'))))
 
 (defn- remove-orphaned-refs-when-save
   [db txs-state block-entity m]
@@ -1023,10 +1027,12 @@
                                                       (:db/ident (d/entity db (:db/id restore-from-property)))
                                                       [:block/uuid new-id]]]))
                                                 top-level-blocks)))
+                 page-updated-tx (page-updated-at-tx (get-target-block-page target-block sibling?))
                  full-tx (common-util/concat-without-nil page-txs
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
-                                                         property-values-tx)
+                                                         property-values-tx
+                                                         (when page-updated-tx [page-updated-tx]))
                 ;; Replace entities with eid because Datascript doesn't support entity transaction
                  full-tx' (walk/prewalk
                            (fn [f]
@@ -1244,8 +1250,10 @@
                                               :block/page target-page}))) children-ids)))
             block-from-property (:logseq.property/created-from-property block)
             property-tx (move-block-property-tx block target-block sibling?
-                                               block-from-property restore-from-property)]
-        (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
+                                               block-from-property restore-from-property)
+            page-updated-txs (keep page-updated-at-tx
+                                   (distinct [first-block-page target-page]))]
+        (common-util/concat-without-nil tx-data children-page-tx property-tx page-updated-txs)))))
 
 (defn- transact-move-blocks!
   [conn blocks target-block sibling? opts outliner-op top-level-blocks]
