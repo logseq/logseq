@@ -69,7 +69,12 @@
         support (when js-descriptor? (gobj/get descriptor "support"))
         load (when js-descriptor? (gobj/get descriptor "load"))
         descriptor (if js-descriptor?
-                     (js->clj descriptor :keywordize-keys true)
+                     ;; Strip the opaque fields before js->clj: extension
+                     ;; graphs can be cyclic and would overflow the conversion.
+                     (let [^js copy (js/Object.assign #js {} descriptor)]
+                       (gobj/remove copy "support")
+                       (gobj/remove copy "load")
+                       (js->clj copy :keywordize-keys true))
                      descriptor)]
     (cond-> descriptor
       support
