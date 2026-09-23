@@ -260,6 +260,13 @@ let rec value_to_tx_value
   | (List [ Keyword a'; _ ] | Vector [ Keyword a'; _ ]) as v
       when unique_of a' || not many_ok ->
     Some (One_value v)
+  | (List [ Map kvs ] | Vector [ Map kvs ]) when ref_ok ->
+    (* the transit encoding of [{:block/uuid u}] under a single-valued ref
+       attr arrives as a 1-element collection of a map — unwrap it to the
+       nested entity so it resolves like a direct {k v} map value *)
+    (match tx_entity_of_map (List.map (fun (k, x) -> (k, normalize_value x)) kvs) with
+     | Some te -> Some (One_entity te)
+     | None -> Some (One_value v))
   | (List _ | Vector _ | Set _) when not many_ok ->
     (* cljs maybe-wrap-multival: a non-multival attr keeps the whole
        collection as a single value *)

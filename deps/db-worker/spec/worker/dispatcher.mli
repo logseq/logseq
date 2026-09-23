@@ -14,3 +14,7 @@ val registered : string -> bool
 val invoke : string -> Wire.t list -> Wire.t Db_worker_effect.t
 val invoke_transit : string -> string -> string Db_worker_effect.t
 val registered_names : unit -> string list
+
+(* Tagged "error" wire value for an exception, the same payload
+   cljs `read-transit-str` decodes back into ExceptionInfo. *)
+val encode_error : string -> exn -> Wire.t
