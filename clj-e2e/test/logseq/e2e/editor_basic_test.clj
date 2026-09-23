@@ -1797,3 +1797,72 @@
       (let [{:keys [client scroll]} (editor-box-heights)]
         (is (<= scroll client)
             (str "textarea clientHeight " client " scrollHeight " scroll))))))
+
+(defn- block-control-icon-metrics
+  [title]
+  (-> (w/eval-js
+       (format
+        "(async () => {
+          const title = %s;
+          const block = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
+            .find((block) => block.textContent.includes(title));
+          if (!block) {
+            throw new Error(`Block not found: ${title}`);
+          }
+          const wrap = block.querySelector('.block-control-wrap.is-with-icon');
+          const icon = wrap && (wrap.querySelector('em-emoji') || wrap.querySelector('svg') || wrap.querySelector('.ui__icon'));
+          const heading = block.querySelector('.block-title-wrap');
+          if (!wrap || !icon || !heading) {
+            throw new Error('Expected a block-control icon next to block title');
+          }
+          const iconRect = icon.getBoundingClientRect();
+          const headingStyle = window.getComputedStyle(heading);
+          return JSON.stringify({
+            iconWidth: iconRect.width,
+            iconHeight: iconRect.height,
+            headingFontSize: Number.parseFloat(headingStyle.fontSize),
+            headingLevel: block.querySelector('.block-main-container')?.dataset.hasHeading || null,
+            wrapHeading: wrap.dataset.heading || null,
+            iconSizeVar: wrap.style.getPropertyValue('--ls-block-icon-size') || null
+          });
+        })();"
+        (json/write-value-as-string title)))
+      (json/read-value json/keyword-keys-object-mapper)))
+
+(deftest heading-tag-icon-scales-with-heading-size
+  (testing "a tag icon grows with heading format and stays small on a normal block"
+    (let [page-name (p/get-page-name)
+          tag "ScaleIcon"
+          plain-title "plain tagged icon block"
+          heading-title "heading tagged icon block"]
+      (b/new-block plain-title)
+      (util/set-tag tag)
+      (p/goto-page tag)
+      (w/click "button:text('Add icon')")
+      (w/fill ".cp__emoji-icon-picker input" "rocket")
+      (w/click ".cp__emoji-icon-picker button:has(em-emoji[id='rocket'])")
+      (p/goto-page page-name)
+      (assert/assert-is-visible
+       (-> ".ls-page-blocks .ls-block"
+           (loc/filter :has-text plain-title)
+           (loc/filter :has "em-emoji[id='rocket']")))
+      (b/new-block heading-title)
+      (util/set-tag tag)
+      (util/input-command "h1")
+      (util/exit-edit)
+      (assert/assert-is-visible
+       (loc/filter "h1.block-title-wrap.as-heading" :has-text heading-title))
+      (let [plain (block-control-icon-metrics plain-title)
+            heading (block-control-icon-metrics heading-title)]
+        (is (<= 12 (:iconWidth plain) 16) (pr-str plain))
+        (is (<= 12 (:iconHeight plain) 16) (pr-str plain))
+        (is (nil? (:headingLevel plain)) (pr-str plain))
+        (is (= "28px" (:iconSizeVar heading)) (pr-str heading))
+        (is (= "1" (:headingLevel heading)) (pr-str heading))
+        (is (<= 24 (:iconWidth heading) 32) (pr-str heading))
+        (is (<= 24 (:iconHeight heading) 32) (pr-str heading))
+        (is (> (:iconWidth heading) (+ (:iconWidth plain) 8))
+            (pr-str {:plain plain :heading heading}))
+        (is (< (abs (- (:iconHeight heading) (:headingFontSize heading)))
+               (abs (- 14 (:headingFontSize heading))))
+            (pr-str heading))))))
