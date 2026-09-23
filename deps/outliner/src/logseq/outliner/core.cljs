@@ -214,8 +214,12 @@
                     (seq (set/intersection (ref-tag-idents ref)
                                            #{:logseq.class/Page :logseq.class/Journal}))))
            ;; Refs parsed without a db carry generated ident/uuid that still
-           ;; need resolving by name
+           ;; need resolving by name; restrict to page/tag refs so stale
+           ;; non-page refs (e.g. a deleted property's ident) don't create pages
            (and (:db/ident ref)
+                (some? (:block/name ref))
+                (seq (set/intersection (ref-tag-idents ref)
+                                       #{:logseq.class/Page :logseq.class/Journal :logseq.class/Tag}))
                 (not (d/entity db (:db/ident ref)))
                 (not (and (:block/uuid ref)
                           (d/entity db [:block/uuid (:block/uuid ref)])))))))

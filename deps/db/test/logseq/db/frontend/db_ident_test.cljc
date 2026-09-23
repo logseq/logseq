@@ -59,5 +59,28 @@
     (is (= "日本語" (db-ident/normalize-ident-name-part "日本語")))
     (is (= "über" (db-ident/normalize-ident-name-part "über")))
     (is (= "café" (db-ident/normalize-ident-name-part "café")))
-    (is (= "u" (db-ident/normalize-ident-name-part "@#%"))
-        "Names with no allowed characters still produce a non-empty ident part")))
+    (is (string/starts-with? (db-ident/normalize-ident-name-part "@#%") "u-")
+        "Names with no allowed characters still produce a non-empty ident part")
+    (is (not= (db-ident/normalize-ident-name-part "@#%")
+              (db-ident/normalize-ident-name-part "$^&"))
+        "Distinct names that normalize to nothing get distinct ident parts"))
+
+  (testing "Whitespace, separators, and control characters are still dropped"
+    (doseq [name-string ["foo bar" "foo\tbar" "foo bar" "foo|bar" "café\t"]]
+      (let [normalized (db-ident/normalize-ident-name-part name-string)]
+        (is (valid-edn-keyword? (keyword "user.class" normalized))
+            (str "Normalized name for " (pr-str name-string) " is a valid edn keyword"))))
+    (is (= "foobar" (db-ident/normalize-ident-name-part "foo bar"))
+        "Spaces are dropped")
+    (is (= "foobar" (db-ident/normalize-ident-name-part "foo\u00A0bar"))
+        "NBSP is dropped")
+    (is (= "über" (db-ident/normalize-ident-name-part "u\u0308ber"))
+        "NFC normalization keeps decomposed non-ASCII names as one word")))
+
+(deftest normalize-ident-name-part-ascii
+  (testing "Reproduces the historical ASCII-only normalization for deterministic idents"
+    (is (= "f!ho" (db-ident/normalize-ident-name-part-ascii "f@!{h[#o")))
+    (is (= "NUM-2nd" (db-ident/normalize-ident-name-part-ascii "2nd")))
+    (is (= "foo*+!_'?<>=-" (db-ident/normalize-ident-name-part-ascii "foo*+!_'?<>=-")))
+    (is (= "ber" (db-ident/normalize-ident-name-part-ascii "über"))
+        "Non-ASCII letters are dropped as before")))

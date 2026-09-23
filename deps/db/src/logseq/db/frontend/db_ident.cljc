@@ -62,21 +62,40 @@
      :clj (java.text.Normalizer/normalize s java.text.Normalizer$Form/NFC)
      :default s))
 
-(def ^:private ident-name-disallowed-char-re
-  "Drop characters that cannot appear in a keyword name.
-  Keep ASCII symbol chars allowed in Clojure keywords and the rest of the BMP
-  so Cyrillic, CJK, and other letters survive."
-  #"[^0-9A-Za-z*+!_'?<>=\u00A0-\uFFFF-]")
+(def ^:private ident-name-allowed-char-re
+  "Characters allowed in a keyword name: the ASCII symbol chars allowed in
+  Clojure keywords plus Unicode letters, marks, and numbers so Cyrillic, CJK,
+  and other letters survive while whitespace, separators, and control
+  characters are still dropped."
+  #?(:cljs (js/RegExp. "^[0-9A-Za-z*+!_'?<>=\\p{L}\\p{M}\\p{N}-]$" "u")
+     :default #"^[0-9A-Za-z*+!_'?<>=\p{L}\p{M}\p{N}-]$"))
+
+(defn- ident-name-char?
+  [ch]
+  (boolean (re-find ident-name-allowed-char-re (str ch))))
 
 (defn normalize-ident-name-part
   [name-string]
-  (let [normalized (-> name-string
-                       nfc-normalize
-                       (string/replace-first #"^(\d)" "NUM-$1")
-                       (string/replace ident-name-disallowed-char-re ""))]
+  (let [normalized (->> (-> name-string
+                            nfc-normalize
+                            (string/replace-first #"^(\d)" "NUM-$1"))
+                        (filter ident-name-char?)
+                        (apply str))]
     (if (string/blank? normalized)
-      "u"
+      ;; Distinct names must not collapse to one ident
+      (str "u-" (Math/abs (hash name-string)))
       normalized)))
+
+(defn normalize-ident-name-part-ascii
+  "ASCII-only normalization historically used to create deterministic idents
+  e.g. plugin property idents. Since plugin properties resolve a name to its
+  ident by recomputing it, this mapping must stay identical to what older
+  versions generated."
+  [name-string]
+  (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
+       ;; '-' must go last in char class
+       (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" (str %)))
+       (apply str)))
 
 (defn create-db-ident-from-name
   "Creates a :db/ident for a class or property by sanitizing the given name.
