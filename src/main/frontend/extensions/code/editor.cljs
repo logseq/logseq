@@ -435,18 +435,36 @@
         (set-language-impl! context requested))))
   context)
 
+(defonce ^:private *reported-legacy-enhancers
+  (atom #{}))
+
+(defn- report-legacy-enhancer!
+  [key enhancer]
+  (let [id (or key enhancer)]
+    (when-not (contains? @*reported-legacy-enhancers id)
+      (swap! *reported-legacy-enhancers conj id)
+      (log/error :code-editor/legacy-codemirror-enhancer
+                 {:key key
+                  :message "Legacy CodeMirror enhancer is not supported by the CodeMirror 6 editor"}))))
+
+(defn- apply-enhancer!
+  [key enhancer payload]
+  (let [result (enhancer payload)]
+    (when (instance? js/Promise result)
+      (.catch ^js result
+              (fn [e]
+                (log/error :code-editor/enhancer-failed {:key key :error e}))))))
+
 (defn apply-enhancers!
   [context enhancers]
   (let [payload (js-enhancer-payload context)]
     (doseq [{:keys [key type enhancer]} enhancers]
       (cond
         (= api/legacy-enhancer-type type)
-        (log/error :code-editor/legacy-codemirror-enhancer
-                   {:key key
-                    :message "Legacy CodeMirror enhancer is not supported by the CodeMirror 6 editor"})
+        (report-legacy-enhancer! key enhancer)
 
         (fn? enhancer)
-        (enhancer payload))))
+        (apply-enhancer! key enhancer payload))))
   context)
 
 (defn- enhancer-payload
