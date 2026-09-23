@@ -11,6 +11,7 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.library :as library-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -307,6 +308,18 @@
                                   (route-handler/go-to-journals!)))
             :icon "calendar"
             :shortcut :go/journals})))
+
+      (when (config/db-based-graph?)
+        (let [library-uuid (library-handler/page-uuid)]
+          (sidebar-item
+           {:class "library-nav"
+            :title (t :library/title)
+            :href (rfe/href :page {:name (str library-uuid)})
+            :active (and (not srs-open?)
+                         (= route-name :page)
+                         (= (str library-uuid) (get-in route-match [:path-params :name])))
+            :icon "books"
+            :shortcut :go/library})))
 
       (for [nav checked-navs]
         (cond

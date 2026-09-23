@@ -382,6 +382,7 @@
  :command.go/home "首页"
  :command.go/journals "跳转到日记"
  :command.go/keyboard-shortcuts "快捷键"
+ :command.go/library "前往页面库"
  :command.go/next-journal "下一篇日记"
  :command.go/prev-journal "上一篇日记"
  :command.go/search "搜索页面和块"
@@ -1005,6 +1006,9 @@
 
  :library/add-existing-pages "将现有页面添加到页面库"
  :library/add-pages "添加页面"
+ :library/file-graph-unavailable "页面库仅适用于数据库图谱。"
+ :library/remove-page-confirm-desc "将此页面从页面库移除？它仍会保留在图谱中，作为未归档页面。"
+ :library/tip "在这里整理页面层级。可以添加现有页面，或从块菜单将块转换为页面（也可以添加 #Page）。"
  :library/title "页面库"
 
  :mobile/camera-access-denied "相机访问被拒绝。请在“设置 > Logseq”中启用。"
@@ -1161,6 +1165,8 @@
  :page.convert/tag-to-page-confirm-desc "将标签转换为页面也会移除它的标签属性，并把所有已使用该标签的节点中的该标签一并移除。你确定要继续吗？"
  :page.convert/tag-to-page-duplicate "页面“{1}”已存在。"
  :page.convert/tag-to-page-has-children "此标签无法转换，因为它仍有子标签。必须先移除或转换所有子标签，才能转换此标签。"
+ :page.convert/to-block-action "转换为块"
+ :page.convert/to-page-action "转换为页面"
 
  :page.delete/batch-confirm-title "确定要删除这些页面吗？属性和标签将被永久删除，页面将被移入回收站。"
  :page.delete/confirm-title "确认要删除此页面吗？"
