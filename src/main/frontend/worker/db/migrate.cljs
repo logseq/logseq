@@ -195,7 +195,7 @@
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
                           :logseq.property.view/gallery-card-height]}]
-   ["65.34" {:fix convert-external-url-to-url-type}]]))
+   ["65.34" {:fix convert-external-url-to-url-type}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
