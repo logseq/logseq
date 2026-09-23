@@ -1994,7 +1994,13 @@ let coerce_block_property_value entity value =
 
 let closed_value_selector =
   vector_vec
-    (Vec.of_array [| kw "db/id"; kw "db/ident"; kw "block/title" |])
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "db/ident";
+         kw "block/title";
+         kw "block/property-value";
+       |])
 
 let closed_values_query =
   Cli_primitive.make_datascript_query
@@ -2035,10 +2041,24 @@ let closed_values invoke_config repo property_id =
          (Vec.of_array
             [| query_value closed_values_query; Edn_util.int64 property_id |]))
 
-let default_value_of_result result text =
+let closed_value_display value_entity =
+  match Edn_util.get value_entity "block/property-value" with
+  | Some pv -> (
+      match Edn_util.as_string_like pv with
+      | Some value -> value
+      | None -> (
+          match Edn_util.as_int64 pv with
+          | Some n -> Int64.to_string n
+          | None -> (
+              match Edn_util.get_string value_entity "block/title" with
+              | Some title -> title
+              | None -> "?")))
+  | None -> Option.value (Edn_util.get_string value_entity "block/title") ~default:"?"
+
+let closed_value_of_result ~property_type result text value =
   let bare = strip_page_ref_syntax text in
   let values = Option.value (Edn_util.as_seq result) ~default:Vec.empty in
-  if Vec.is_empty values then Ok (Edn_util.string text)
+  if Vec.is_empty values then Ok value
   else
     let token value =
       value |> String.trim |> String.lowercase_ascii
@@ -2052,29 +2072,54 @@ let default_value_of_result result text =
           match id_of_entity value_entity with
           | None -> None
           | Some id ->
-              let title_hit =
-                match Edn_util.get_string value_entity "block/title" with
-                | Some title -> matches title
-                | None -> false
-              in
-              let ident_hit =
-                match Edn_util.get_string value_entity "db/ident" with
-                | Some ident -> (
-                    (* Closed-value idents come in both `ns.prop/value` and
-                       `ns.prop.value` shapes — match on the tail after the
-                       last separator. *)
-                    let cut =
-                      List.filter_map (String.rindex_opt ident) [ '.'; '/' ]
-                      |> List.fold_left max (-1)
+              let hit =
+                match property_type with
+                (* Closed number/url values match on their stored
+                   block/property-value; the entity titles carry display
+                   labels, not the literal. *)
+                | "number" -> (
+                    match
+                      ( Option.bind
+                          (Edn_util.get value_entity "block/property-value")
+                          Edn_util.as_int64,
+                        Edn_util.as_int64 value )
+                    with
+                    | Some stored, Some wanted -> Int64.equal stored wanted
+                    | _ -> false)
+                | "url" -> (
+                    match
+                      Edn_util.get_string value_entity "block/property-value"
+                    with
+                    | Some stored ->
+                        String.equal (String.trim stored) (String.trim text)
+                    | None -> false)
+                | _ ->
+                    let title_hit =
+                      match Edn_util.get_string value_entity "block/title" with
+                      | Some title -> matches title
+                      | None -> false
                     in
-                    if cut < 0 then matches ident
-                    else
-                      matches
-                        (String.sub ident (cut + 1)
-                           (String.length ident - cut - 1)))
-                | None -> false
+                    let ident_hit =
+                      match Edn_util.get_string value_entity "db/ident" with
+                      | Some ident -> (
+                          (* Closed-value idents come in both `ns.prop/value`
+                             and `ns.prop.value` shapes — match on the tail
+                             after the last separator. *)
+                          let cut =
+                            List.filter_map (String.rindex_opt ident)
+                              [ '.'; '/' ]
+                            |> List.fold_left max (-1)
+                          in
+                          if cut < 0 then matches ident
+                          else
+                            matches
+                              (String.sub ident (cut + 1)
+                                 (String.length ident - cut - 1)))
+                      | None -> false
+                    in
+                    title_hit || ident_hit
               in
-              if title_hit || ident_hit then Some id else None)
+              if hit then Some id else None)
         values
     in
     match matched with
@@ -2082,8 +2127,7 @@ let default_value_of_result result text =
     | None ->
         let choices =
           values
-          |> Vec.filter_map (fun value_entity ->
-                 Edn_util.get_string value_entity "block/title")
+          |> Vec.map closed_value_display
           |> Vec.to_list
           |> List.map (fun value -> "\"" ^ value ^ "\"")
           |> String.concat ", "
@@ -2131,23 +2175,23 @@ let resolve_block_property_assignments ~entity_memo ~closed_memo
                    bind
                      (match
                         ( Edn_util.get_string entity "logseq.property/type",
-                          Edn_util.as_string value )
+                          Edn_util.as_string assignment.Property.value )
                       with
-                     | Some "default", Some text -> (
+                     | Some property_type, Some text
+                       when List.mem property_type
+                              [ "default"; "number"; "url" ] -> (
                          match
-                           Option.bind
-                             (Edn_util.get entity "db/valueType")
-                             Edn_util.as_keyword
+                           ( Option.bind
+                               (Edn_util.get entity "db/valueType")
+                               Edn_util.as_keyword,
+                             id_of_entity entity )
                          with
-                         | Some "db.type/ref" -> (
-                             let text = String.trim text in
-                             match id_of_entity entity with
-                             | None -> pure (Ok (Edn_util.string text))
-                             | Some property_id ->
-                                 map
-                                   (fun result ->
-                                     default_value_of_result result text)
-                                   (closed_values_of property_id))
+                         | Some "db.type/ref", Some property_id ->
+                             map
+                               (fun result ->
+                                 closed_value_of_result ~property_type result
+                                   (String.trim text) value)
+                               (closed_values_of property_id)
                          | _ -> pure (Ok value))
                      | _ -> pure (Ok value))
                      (function
