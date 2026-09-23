@@ -100,7 +100,8 @@
                  "borderRadius" "4px"
                  "boxShadow" "none"}
             ".cm-scroller" {"scrollbarGutter" "stable"
-                            "overscrollBehavior" "contain"}
+                            "overscrollBehavior" "contain"
+                            "lineHeight" "inherit"}
             ".cm-content" {"caretColor" "var(--ls-primary-text-color)"
                            "padding" "6px 0"
                            "minWidth" "max-content"}
@@ -489,6 +490,7 @@
   (let [language (or (plugin-language-by-name context language-name)
                      (language-registry/language-by-name language-name)
                      (language-registry/language-by-extension language-name)
+                     (language-registry/language-by-subname language-name)
                      (language-registry/plain-text-language))]
     (swap! (:*state context) assoc
            :language language
@@ -514,6 +516,7 @@
                             (api/sanitize-user-options user-options))
         language (or (language-registry/language-by-name language-name)
                      (language-registry/language-by-extension language-name)
+                     (language-registry/language-by-subname language-name)
                      (language-registry/plain-text-language))
         *state (atom {:default-value initial-doc
                       :change-listeners {}

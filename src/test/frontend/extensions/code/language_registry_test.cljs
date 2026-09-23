@@ -32,6 +32,19 @@
     (is (= :shell (:id (registry/language-by-name "bash"))))
     (is (nil? (registry/language-by-name "unknown-language")))))
 
+(deftest partial-language-names-resolve-by-substring
+  (testing "Partial names resolve to the shortest matching name"
+    (is (= :ocaml (:id (registry/language-by-subname "oca"))))
+    (is (= :ocaml (:id (registry/language-by-subname "cam"))))
+    (is (= :ocaml (:id (registry/language-by-subname "ca"))))
+    (is (= :cmake (:id (registry/language-by-subname "cm"))))
+    (is (= :scala (:id (registry/language-by-subname "scal")))))
+  (testing "Non-matching and degenerate queries stay unresolved"
+    (is (nil? (registry/language-by-subname "zzz-not-a-language")))
+    (is (nil? (registry/language-by-subname "c")))
+    (is (nil? (registry/language-by-subname "")))
+    (is (nil? (registry/language-by-subname nil)))))
+
 (deftest registry-entries-have-unique-lookup-keys
   (testing "Names and file extensions are unambiguous"
     (is (empty? (registry/duplicate-name-keys)))
