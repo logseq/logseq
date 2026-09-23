@@ -34,15 +34,19 @@
                       {:key key :snapshot result})))
     result))
 
+(defn- snapshot-value
+  [{:keys [status value error] :as result}]
+  (case status
+    :ready value
+    (:loading :missing) nil
+    :error (if (state/db-worker-uninitialized-error? error)
+             nil
+             (throw error))
+    (throw (ex-info "Invalid renderer subscription snapshot" result))))
+
 (defn- use-external-store
   [subscribe! snapshot key]
-  (let [{:keys [status value error] :as result}
-        (use-external-store-snapshot subscribe! snapshot key)]
-    (case status
-      :ready value
-      (:loading :missing) nil
-      :error (throw error)
-      (throw (ex-info "Invalid renderer subscription snapshot" result)))))
+  (snapshot-value (use-external-store-snapshot subscribe! snapshot key)))
 
 (defn- use-external-store-projection-snapshot
   [subscribe! snapshot key project]
@@ -76,12 +80,8 @@
 
 (defn- use-external-store-projection
   [subscribe! snapshot key project]
-  (let [{:keys [status value error]}
-        (use-external-store-projection-snapshot subscribe! snapshot key project)]
-    (case status
-      :ready value
-      (:loading :missing) nil
-      :error (throw error))))
+  (snapshot-value
+   (use-external-store-projection-snapshot subscribe! snapshot key project)))
 
 (defn- subscribe-nothing!
   [_key _listener]
@@ -121,13 +121,7 @@
   [block-uuids]
   (when (use-block-prefetch block-uuids)
     (mapv (fn [block-uuid]
-            (let [{:keys [status value error] :as snapshot}
-                  (subs/block-snapshot block-uuid)]
-              (case status
-                :ready value
-                :missing nil
-                :error (throw error)
-                (throw (ex-info "Invalid settled block snapshot" snapshot)))))
+            (snapshot-value (subs/block-snapshot block-uuid)))
           block-uuids)))
 
 (defn use-block-projection

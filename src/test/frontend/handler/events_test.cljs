@@ -64,3 +64,32 @@
       (testing "explicit type insertion preserves its existing refocus behavior"
         (#'events/refocus-upsert-type-block! source-block converted-block false)
         (is (= [[converted-block :max]] @edit-calls))))))
+
+(deftest graph-sync-context-with-nil-worker-does-not-throw
+  (let [previous-worker @state/*db-worker
+        handler (get @@#'events/event-definitions :graph/sync-context)]
+    (is (fn? handler) ":graph/sync-context should be registered")
+    (reset! state/*db-worker nil)
+    (try
+      (is (nil? (handler [:graph/sync-context]))
+          "Sync-context must no-op when the worker is missing instead of crashing All graphs.")
+      (finally
+        (reset! state/*db-worker previous-worker)))))
+
+(deftest graph-sync-context-invokes-worker-when-ready
+  (let [previous-worker @state/*db-worker
+        calls (atom [])
+        handler (get @@#'events/event-definitions :graph/sync-context)]
+    (reset! state/*db-worker (fn [& _] nil))
+    (try
+      (is (true? @state/db-worker-ready?)
+          "A function worker must mark db-worker as ready.")
+      (with-redefs [state/<invoke-db-worker
+                    (fn [qkw context]
+                      (swap! calls conj [qkw context])
+                      nil)]
+        (handler [:graph/sync-context])
+        (is (= 1 (count @calls)))
+        (is (= :thread-api/set-context (ffirst @calls))))
+      (finally
+        (reset! state/*db-worker previous-worker)))))
