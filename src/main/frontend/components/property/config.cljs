@@ -776,15 +776,25 @@
     :asset (t :property/type-asset)
     ((comp string/capitalize name) property-type)))
 
+(defn delete-property-from-owner-confirm-content
+  "Confirm dialog body when removing a property from a node or tag schema."
+  [property {:keys [class-schema?]}]
+  (let [property-name (db-property/built-in-display-title property t)]
+    (if class-schema?
+      [:p (t :property/delete-from-tag-confirm property-name)]
+      (t :property/delete-from-node-confirm property-name))))
+
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
   (let [class? (or class? (entity/class? block))
         remove! #(if (and class? class-schema?)
                    (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
-                   (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
+                   (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))
+        confirm-content (delete-property-from-owner-confirm-content
+                         property {:class-schema? (and class? class-schema?)})]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
-           [:p (t :property/delete-from-tag-confirm)]
+           confirm-content
            {:id :delete-property-from-class
             :data-reminder :ok
             :data-reminder-label (t :ui/dont-remind-me-again)
@@ -792,7 +802,7 @@
             :ok-label (t :ui/confirm)})
           (p/then remove!))
       (-> (shui/dialog-confirm!
-           (t :property/delete-from-node-confirm)
+           confirm-content
            {:id :delete-property-from-node
             :data-reminder :ok
             :data-reminder-label (t :ui/dont-remind-me-again)
