@@ -370,6 +370,7 @@
                          :custom-content (str source-title typed-text block-title)
                          :tail-len (count block-title)
                          :save-code-editor? false
+                         :save-current-block? false
                          :skip-load? true})
            (delete-block-aux! block')
            (let [latest-text (:typed-text (pending-new-block))]
@@ -378,6 +379,7 @@
                            :custom-content (str source-title latest-text block-title)
                            :tail-len (count block-title)
                            :save-code-editor? false
+                           :save-current-block? false
                            :skip-load? true}))
            (clear-pending-new-block!)))
         (p/do!
@@ -388,6 +390,7 @@
          (edit-block! block' (count typed-text)
                       (cond-> {:container-id container-id
                                :save-code-editor? false
+                               :save-current-block? false
                                :skip-load? true}
                         (seq typed-text)
                         (assoc :custom-content (str typed-text (:block/title block')))))
@@ -764,12 +767,20 @@
         (outliner-op/delete-blocks! blocks {}))))))
 
 (defn- previous-block-edit
-  [block value container-id]
+  [block value container-id node]
   (if (:block/name block)
     {:prev-block block
      :new-value (:block/title block)
-     :edit-block-f #(edit-block! block :max {:save-code-editor? false
-                                             :skip-load? true})}
+     :edit-block-f (if (entity/journal? block)
+                     ;; Journal titles are read-only (date-derived) — focus them as a
+                     ;; selection rather than opening the title editor. The title can
+                     ;; be mounted multiple times (e.g. main pane + sidebar), so select
+                     ;; the node adjacent to the deleted block.
+                     #(when (and node (.-isConnected node))
+                        (state/exit-editing-and-set-selected-blocks! [node]))
+                     #(edit-block! block :max {:save-code-editor? false
+                                               :save-current-block? false
+                                               :skip-load? true}))}
     (let [original-content (if (= (:db/id block) (:db/id (state/get-edit-block)))
                              (state/get-edit-content)
                              (:block/title block))
@@ -786,6 +797,7 @@
                                               :tail-len tail-len
                                               :container-id container-id
                                               :save-code-editor? false
+                                              :save-current-block? false
                                               :skip-load? true})})))
 
 (defn- previous-block-node
@@ -810,7 +822,8 @@
         (when block
           (previous-block-edit block value
                                (some-> (dom/attr sibling-block "containerid")
-                                       util/safe-parse-int)))))))
+                                       util/safe-parse-int)
+                               sibling-block))))))
 
 (defn- edit-previous-window-block-fn
   [sibling-block]
@@ -821,13 +834,13 @@
       (fn [rows]
         (when-let [block (or (some #(when (= block-id (:block/uuid %)) %) rows)
                              mounted)]
-          (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id))]
+          (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id sibling-block))]
             (edit-block-f)))))))
 
 (defn- loaded-block-edit
   [block value container-id]
   (when block
-    (previous-block-edit block value container-id)))
+    (previous-block-edit block value container-id nil)))
 
 (declare save-block!)
 
@@ -888,6 +901,7 @@
                 :editor/edit-block-fn
                 (fn [_rows]
                   (edit-block! next-block 0 {:save-code-editor? false
+                                             :save-current-block? false
                                              :skip-load? true})))
          (when (seq children)
            (outliner-op/move-blocks!
@@ -911,6 +925,7 @@
                 (edit-block! (current-block-with-title current-block new-content)
                              0
                              {:save-code-editor? false
+                              :save-current-block? false
                               :skip-load? true})))
        (when-not (= (block-parent-id block) (block-parent-id prev-block))
          (outliner-op/move-blocks! [block] prev-block {:sibling? true}))
@@ -2993,6 +3008,7 @@
       (edit-block! block' pos {:container-id container-id
                                :custom-content content
                                :save-code-editor? false
+                               :save-current-block? false
                                :skip-load? true}))))
 
 (defn indent-outdent
@@ -3528,8 +3544,19 @@
     (let [selected-blocks (state/get-selection-blocks)
           f (case direction :left first :right last)
           node (some-> selected-blocks f)]
-      (if (some-> node (dom/has-class? "block-add-button"))
+      (cond
+        (some-> node (dom/has-class? "block-add-button"))
         (.click node)
+
+        ;; Journal titles are read-only — opening them creates the page's first
+        ;; block instead of editing the title.
+        (and (entity/journal? (mounted-block node))
+             (util/rec-get-node node "ls-page-title"))
+        (do
+          (util/stop e)
+          (api-insert-new-block! "" {:page (:block/uuid (mounted-block node))}))
+
+        :else
         (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
           (util/stop e)
           (let [block {:block/uuid block-id}
