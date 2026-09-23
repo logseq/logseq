@@ -356,8 +356,18 @@ let transaction t f =
   exec t ~sql:(if outermost then "begin" else "SAVEPOINT " ^ savepoint)
     ~bind:[||];
   t.tx_depth <- t.tx_depth + 1;
-  Fun.protect
-    ~finally:(fun () -> t.tx_depth <- t.tx_depth - 1)
+  (* Fun.protect uses caml_raise_if_exception / backtrace helpers that are
+     not polyfilled under Melange; decrement tx_depth explicitly instead. *)
+  let run_finally (work : unit -> 'a) : 'a =
+    match work () with
+    | result ->
+        t.tx_depth <- t.tx_depth - 1;
+        result
+    | exception e ->
+        t.tx_depth <- t.tx_depth - 1;
+        raise e
+  in
+  run_finally
     (fun () ->
       match f () with
       | result ->

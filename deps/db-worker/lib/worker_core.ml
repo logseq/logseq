@@ -86,7 +86,7 @@ let init () =
     ignore Render_resource.get_render_snapshots;
     ignore Endpoint_search.clear_search_index_builds;
     ignore Endpoint_sync.pure_nil;
-    ignore Sync_crypt.init;
+    Sync_crypt.init ();
     ignore Endpoint_query.query_dsl_query;
     ignore Endpoint_transaction.transact;
     ignore Endpoint_transaction.apply_outliner_ops;

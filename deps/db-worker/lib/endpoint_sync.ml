@@ -250,7 +250,7 @@ let () =
            Endpoint_lifecycle.create_or_open_db
              [ Wire.String repo
              ; Wire.Map [ (kw "close-other-db?", Wire.Bool false) ] ]
-           >>= fun _ -> pure_nil
+           >>= fun _ -> Sync_client.start repo >>= fun () -> pure_nil
        | _ ->
            raise
              (Dispatcher.Exn_info

@@ -8,7 +8,7 @@ open Datascript
 (* outliner-core/block-with-updated-at *)
 let block_with_updated_at (block : Wire.t) : Wire.t =
   Cljs_map.assoc block "block/updated-at"
-    (Wire.Date_ms (Int64.of_float (Clock.now_ms ())))
+    (Wire.Int64 (Int64.of_float (Clock.now_ms ())))
 
 (* initial-data/get-block-full-children-ids — nested children incl.
    collapsed and property-value children, via the :parent rule

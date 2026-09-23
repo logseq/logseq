@@ -307,7 +307,7 @@ let parse_args : type marker.
           | Error err ->
               set_pending_error_output mode err;
               Error err))
-  | _ -> assert false
+  | _ -> .
 
 let resolve_request_config app request input =
   Cli_config.resolve ~defaults:app.defaults ~env:(env_lookup input.env)
@@ -390,7 +390,7 @@ let resolve_config : type marker.
                 (Resolved_config_state
                    ({ config with Cli_config.profile_session }, request))))
     (resolve_request_config app request input)
-  | _ -> assert false
+  | _ -> .
 
 let build_request_action app request config =
   match request.Cli_request.command with
@@ -427,7 +427,7 @@ let build_action : type marker.
               Error err
           | Ok () -> Ok (Built_action_state (config, action))))
     (build_request_action app request config)
-  | _ -> assert false
+  | _ -> .
 
 let execute_action : type marker.
     app_context ->
@@ -439,13 +439,13 @@ let execute_action : type marker.
         (fun result ->
           Ok (Executed_action_state (config, with_registry_metadata app result)))
         (Cli_action.execute action config)
-  | _ -> assert false
+  | _ -> .
 
 let format_cli_result result config = Format_types.format_result result config
 
 let format_result _ = function
   | Executed_action_state (config, result) -> format_cli_result result config
-  | _ -> assert false
+  | _ -> .
 
 let result_exit_code result = Cli_result.exit_code result
 let write_stdout_line output = if output <> "" then print_string (output ^ "\n")
@@ -477,4 +477,4 @@ let final_effect : type phase. (phase, final) state -> int Cli_effect.t =
       flush stdout;
       flush stderr;
       Cli_effect.pure output.exit_code
-  | _ -> assert false
+  | _ -> .

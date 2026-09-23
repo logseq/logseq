@@ -311,9 +311,21 @@ let () =
           let (_ : int) = Endpoint_state.cancel_ui_requests Wire.Nil in
           close_db_aux repo;
           (* cljs unsafe-unlink-db: pool.removeVfs on browser; node
-             clears the repo dir. *)
+             clears the repo dir's contents but keeps the dir itself —
+             the graph-lifecycle admission check requires the graph dir
+             to exist. *)
           (if Sqlite.pooled_runtime () then Sqlite.remove_vfs ~repo
-           else File_sys.remove (db_dir repo))
+           else
+             Db_worker_effect.bind
+               (File_sys.readdir (db_dir repo))
+               (fun entries ->
+                 Db_worker_effect.map
+                   (fun _ -> ())
+                   (Db_worker_effect.all
+                      (List.map
+                         (fun entry ->
+                           File_sys.remove (Filename.concat (db_dir repo) entry))
+                         entries))))
           |> Db_worker_effect.map (fun () -> Wire.nil)
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 

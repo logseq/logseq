@@ -62,7 +62,7 @@ let timestamp_ms (v : value) : int64 option =
     | Float f -> Some (Int64.of_float f)
     | Int n -> Some (Int64.of_int n)
     | Instant n -> Some n
-    | _ -> None
+  | _ -> None
   in
   match ms with
   | Some ms when Int64.compare ms 0L > 0 -> Some ms
@@ -491,7 +491,9 @@ let rec value_of_wire (w : Wire.t) : value =
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
   | Wire.Int n -> Int n
-  | Wire.Int64 n -> Instant n
+  | Wire.Int64 n ->
+      if Int64.abs n <= Int64.of_int max_int then Int (Int64.to_int n)
+      else Instant n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
@@ -556,3 +558,19 @@ let markdown_heading_pattern = Regexp.compile "^#+\\s+"
 
 let clear_markdown_heading (content : string) : string =
   regex_replace_first markdown_heading_pattern ~replacement:"" content
+
+(* Fun.protect for runtimes without backtrace support (Melange): the
+   stdlib version restores the raise backtrace via a primitive that is
+   not polyfilled there, which would replace the work exception with the
+   polyfill error. Same semantics minus backtrace preservation. *)
+let protect ~(finally : unit -> unit) (work : unit -> 'a) : 'a =
+  let finally_no_exn () =
+    try finally () with e -> raise (Fun.Finally_raised e)
+  in
+  match work () with
+  | result ->
+      finally_no_exn ();
+      result
+  | exception work_exn ->
+      finally_no_exn ();
+      raise work_exn
