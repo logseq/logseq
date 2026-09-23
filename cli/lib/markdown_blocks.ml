@@ -1,39 +1,16 @@
 (* mldoc pos_meta positions are UTF-8 byte offsets, so titles must be sliced
-   out of the UTF-8 encoding of the source text, not the UTF-16 JS string. *)
+   out of the UTF-8 encoding of the source text, not the UTF-16 JS string.
+   Buffer.from produces UTF-8 bytes; reading them back as latin1 preserves
+   each byte as a character so String.sub can use the byte offsets. *)
 let utf8_encode text =
-  let buffer = Buffer.create (String.length text) in
-  let push code = Buffer.add_char buffer (Char.chr code) in
-  let push_codepoint codepoint =
-    if codepoint < 0x80 then push codepoint
-    else if codepoint < 0x800 then (
-      push (0xC0 lor (codepoint lsr 6));
-      push (0x80 lor (codepoint land 0x3F)))
-    else if codepoint < 0x10000 then (
-      push (0xE0 lor (codepoint lsr 12));
-      push (0x80 lor ((codepoint lsr 6) land 0x3F));
-      push (0x80 lor (codepoint land 0x3F)))
-    else (
-      push (0xF0 lor (codepoint lsr 18));
-      push (0x80 lor ((codepoint lsr 12) land 0x3F));
-      push (0x80 lor ((codepoint lsr 6) land 0x3F));
-      push (0x80 lor (codepoint land 0x3F)))
-  in
-  let rec loop index =
-    match Js.String.codePointAt ~index text with
-    | Some codepoint ->
-        push_codepoint codepoint;
-        loop (index + if codepoint < 0x10000 then 1 else 2)
-    | None -> ()
-  in
-  loop 0;
-  Buffer.contents buffer
+  Node.Buffer.fromString text |> Node.Buffer.toString ~encoding:`latin1
 
 type pos = { start : int; stop : int }
 
 type item =
   | Heading of { level : int; heading : int option; unordered : bool; pos : pos }
   | Drawer of (string * string) list * pos
-  | Other
+  | Other of string * int option
 
 let pos_of_json json =
   match Js.Json.decodeObject json with
@@ -80,7 +57,7 @@ let item_of_json json =
                     |> Option.value ~default:true
                   in
                   Heading { level; heading; unordered; pos }
-              | _ -> Other)
+              | _ -> Other ("Heading", Option.map (fun p -> p.start) pos))
           | Some "Property_Drawer" ->
               let pairs =
                 match
@@ -103,9 +80,10 @@ let item_of_json json =
                 | None -> []
               in
               Drawer (pairs, Option.value pos ~default:{ start = 0; stop = 0 })
-          | _ -> Other)
-      | _ -> Other)
-  | _ -> Other
+          | Some kind -> Other (kind, Option.map (fun p -> p.start) pos)
+          | None -> Other ("?", None))
+      | _ -> Other ("?", None))
+  | _ -> Other ("?", None)
 
 type node = {
   title : string;
@@ -175,19 +153,19 @@ let strip_heading_marker title =
     String.sub title (spaces index) (length - spaces index)
   else title
 
-let title_of_range bytes ~start ~stop ~exclude_ranges ~level ~heading =
+let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let ranges = List.sort (fun (a, _) (b, _) -> compare a b) exclude_ranges in
   let rec parts cursor ranges =
     match ranges with
     | (s, e) :: rest when s < stop && e > start ->
         let s' = max s start and e' = min e stop in
         if s' > cursor then
-          String.sub bytes cursor (s' - cursor) :: parts e' rest
+          String.sub payload cursor (s' - cursor) :: parts e' rest
         else parts (max cursor e') rest
     | _ :: rest -> parts cursor rest
     | [] ->
         if cursor < stop then
-          [ String.sub bytes cursor (stop - cursor) ]
+          [ String.sub payload cursor (stop - cursor) ]
         else []
   in
   let text = String.concat "" (parts start ranges) in
@@ -204,8 +182,8 @@ type frame = {
 }
 
 let of_markdown text =
-  let bytes = utf8_encode text in
-  let text_length = String.length bytes in
+  let payload = utf8_encode text in
+  let text_length = String.length payload in
   let items =
     match Js.Json.decodeArray (Mldoc.parse_ast text) with
     | Some items -> Array.map item_of_json items
@@ -215,6 +193,8 @@ let of_markdown text =
     let collected = ref [] in
     let pending = ref [] in
     let next_start = ref text_length in
+    let first_heading_start = ref max_int in
+    let others = ref [] in
     for i = Array.length items - 1 downto 0 do
       match items.(i) with
       | Drawer (pairs, pos) -> pending := (pairs, pos) :: !pending
@@ -230,7 +210,7 @@ let of_markdown text =
             List.concat_map (fun (pairs, _) -> pairs) drawers
           in
           let title =
-            title_of_range bytes ~start:pos.start ~stop:!next_start
+            title_of_range payload ~start:pos.start ~stop:!next_start
               ~exclude_ranges ~level:input_level ~heading
           in
           collected :=
@@ -243,12 +223,33 @@ let of_markdown text =
             }
             :: !collected;
           pending := [];
-          next_start := pos.start
-      | Other -> ()
+          next_start := pos.start;
+          first_heading_start := pos.start
+      | Other (kind, start) -> others := (kind, start) :: !others
     done;
-    Array.of_list !collected
+    let dropped =
+      (* Non-heading AST nodes inside an outline are harmless — their source
+         text lands in the surrounding heading's title slice. Only content
+         before the first heading is lost entirely. *)
+      !others
+      |> List.filter_map (fun (kind, start) ->
+             match start with
+             | Some start when start < !first_heading_start -> Some kind
+             | _ -> None)
+    in
+    (Array.of_list !collected, !pending, dropped)
   in
-  if Array.length headings = 0 then
+  let headings, leading_drawers, dropped = headings in
+  if dropped <> [] then
+    Error
+      (Error.make Error.Invalid_blocks
+         ("unsupported markdown content before the first block: "
+         ^ String.concat ", " (List.rev dropped)))
+  else if leading_drawers <> [] then
+    Error
+      (Error.make Error.Invalid_blocks
+         "properties before the first block are not supported")
+  else if Array.length headings = 0 then
     Error
       (Error.make Error.Invalid_blocks
          "blocks markdown produced no blocks")
