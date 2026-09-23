@@ -3756,9 +3756,8 @@
     (util/stop-propagation event)
     (haptics/haptics)
     (let [block-uuids (->> (state/get-selection-blocks)
-                           (keep #(some-> (or (dom/attr % "originalblockid")
-                                              (dom/attr % "blockid"))
-                                          uuid))
+                           (keep #(or (some-> (dom/attr % "originalblockid") uuid)
+                                      (util/selection-node-block-id %)))
                            (distinct)
                            (seq))
           dragging-block @*dragging-block
