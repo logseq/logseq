@@ -8,14 +8,14 @@ let uuid_ref_max_depth = 10
 let lower_uuid uuid = String.lowercase_ascii uuid
 
 let unique_preserve_order values =
-  let rec loop seen acc values =
-    match Vec.pop_front values with
-    | None -> acc
-    | Some (value, rest) ->
-        if Vec.mem value seen then loop seen acc rest
-        else loop (Vec.push_front seen value) (Vec.push_back acc value) rest
-  in
-  loop Vec.empty Vec.empty values
+  let seen = Hashtbl.create (Vec.length values) in
+  Vec.filter_map
+    (fun value ->
+      if Hashtbl.mem seen value then None
+      else (
+        Hashtbl.replace seen value ();
+        Some value))
+    values
 
 let find_substring_from ~needle haystack start =
   let needle_len = String.length needle in

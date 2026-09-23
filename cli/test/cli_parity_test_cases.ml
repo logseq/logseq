@@ -3834,6 +3834,68 @@ let () =
       expect_error_code "no headings" "invalid-blocks"
         (Markdown_blocks.of_markdown "plain text without list items"));
 
+  test "CLI parity add block markdown keeps multibyte titles intact"
+    (fun () ->
+      let parsed =
+        expect_ok "parse multibyte"
+          (Markdown_blocks.of_markdown "- CJK 测试 🎉 tail")
+      in
+      expect_equal "multibyte title" "CJK 测试 🎉 tail"
+        (expect_some "multibyte title" (Vec.nth parsed 0).title));
+
+  test "CLI parity add block markdown heading marker becomes a property"
+    (fun () ->
+      let parsed =
+        expect_ok "parse heading"
+          (Markdown_blocks.of_markdown "- ## Section")
+      in
+      let block = Vec.nth parsed 0 in
+      expect_equal "stripped title" "Section"
+        (expect_some "stripped title" block.title);
+      expect_int "one property" 1 (Vec.length block.properties);
+      let assignment = Vec.nth block.properties 0 in
+      (match assignment.Property.key with
+      | Property.Key_ident _ -> ()
+      | _ -> fail_test "expected logseq.property/heading ident");
+      expect_bool "heading level 2" true
+        (Edn_util.as_int64 assignment.value = Some (Int64.of_int 2)));
+
+  test "CLI parity add block markdown drawer becomes properties" (fun () ->
+      let parsed =
+        expect_ok "parse drawer"
+          (Markdown_blocks.of_markdown "- Note\n  status:: todo")
+      in
+      let block = Vec.nth parsed 0 in
+      expect_int "one property" 1 (Vec.length block.properties);
+      let assignment = Vec.nth block.properties 0 in
+      (match assignment.Property.key with
+      | Property.Key_name "status" -> ()
+      | _ -> fail_test "expected status property key");
+      expect_bool "todo value" true
+        (Edn_util.as_string_like assignment.value = Some "todo"));
+
+  test "CLI parity add block markdown folds irregular indents" (fun () ->
+      let parsed =
+        expect_ok "parse indents"
+          (Markdown_blocks.of_markdown "- a\n    - deep\n  - mid")
+      in
+      expect_int "one root" 1 (Vec.length parsed);
+      let root = Vec.nth parsed 0 in
+      expect_int "root children" 2 (Vec.length root.children);
+      expect_equal "deep title" "deep"
+        (expect_some "deep title" (Vec.nth root.children 0).title);
+      expect_equal "mid title" "mid"
+        (expect_some "mid title" (Vec.nth root.children 1).title));
+
+  test "CLI parity add block markdown rejects leading non-block content"
+    (fun () ->
+      expect_error_code "leading paragraph" "invalid-blocks"
+        (Markdown_blocks.of_markdown "intro paragraph\n- b");
+      expect_error_code "leading ordered list" "invalid-blocks"
+        (Markdown_blocks.of_markdown "1. ordered\n- b");
+      expect_error_code "leading drawer" "invalid-blocks"
+        (Markdown_blocks.of_markdown "status:: todo\n- b"));
+
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
       let child =
