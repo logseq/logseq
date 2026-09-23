@@ -35,9 +35,7 @@ export type BlockPropertiesPredicate = (
   props: BlockPropertiesRendererProps
 ) => boolean
 
-export type BlockRendererPredicate = (
-  props: BlockRendererProps
-) => boolean
+export type BlockRendererPredicate = (props: BlockRendererProps) => boolean
 
 export type CodeMirror6LanguageSource =
   | 'native'
@@ -51,26 +49,51 @@ export type CodeMirror6PluginCapability =
   | 'code-editor/extensions'
   | 'code-editor/language-registry'
 
-export type CodeMirror6LanguageDescriptor = {
+type CodeMirror6LanguageDescriptorBase = {
   id: string
   names: Array<string>
-  source: CodeMirror6LanguageSource
   extensions?: Array<string>
-  package?: string
-  entry?: string
   options?: Record<string, any>
-  /**
-   * For `source: 'plugin'` descriptors: an already-built CodeMirror 6
-   * LanguageSupport (or Extension) instance used to highlight this language.
-   */
-  support?: unknown
-  /**
-   * For `source: 'plugin'` descriptors: LanguageDescription.load-style
-   * loader returning a LanguageSupport/Extension or a promise of one. The
-   * editor reconfigures its language compartment when it settles.
-   */
-  load?: () => unknown | Promise<unknown>
 }
+
+/**
+ * Descriptor shapes `registerLanguage` accepts. Every registration must
+ * resolve to a LanguageSupport at runtime: `plain-text` intentionally
+ * installs none; `plugin` supplies one through `support` or `load`.
+ * `native`, `nextjournal`, and `legacy` sources are not registrable — their
+ * package/entry fields only describe entries of the statically generated
+ * built-in language table.
+ */
+export type CodeMirror6LanguageRegistration =
+  | (CodeMirror6LanguageDescriptorBase & { source: 'plain-text' })
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'plugin'
+      /** An already-built CodeMirror 6 LanguageSupport (or Extension) used
+       *  to highlight this language. */
+      support: unknown
+      /** LanguageDescription.load-style loader resolving a
+       *  LanguageSupport/Extension or a promise of one. */
+      load?: () => unknown | Promise<unknown>
+    })
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'plugin'
+      load: () => unknown | Promise<unknown>
+      support?: unknown
+    })
+
+/**
+ * Full descriptor shape, e.g. as returned by `getLanguage`. Built-in
+ * registry entries carry package/entry metadata for the statically
+ * generated language table; plugins register the narrower
+ * {@link CodeMirror6LanguageRegistration} subset.
+ */
+export type CodeMirror6LanguageDescriptor =
+  | CodeMirror6LanguageRegistration
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'native' | 'nextjournal' | 'legacy'
+      package: string
+      entry: string
+    })
 
 export type CodeMirror6ExtensionFactoryContext = {
   apiVersion: 1
@@ -97,7 +120,7 @@ export type CodeMirror6EnhancerAPI = CodeMirror6ExtensionFactoryContext & {
   enhancerType: 'codemirror-6'
   capabilities: Array<CodeMirror6PluginCapability>
   registerExtension: (key: string, extension: CodeMirror6ExtensionValue) => void
-  registerLanguage: (descriptor: CodeMirror6LanguageDescriptor) => void
+  registerLanguage: (descriptor: CodeMirror6LanguageRegistration) => void
   getLanguage: (languageName: string) => CodeMirror6LanguageDescriptor | null
 }
 
