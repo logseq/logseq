@@ -127,13 +127,20 @@
     (is (string/includes? panel-markup "jtrigger")
         "Keys outside pills still open property config")))
 
-(defn- click-bottom-pill!
-  [{:keys [in-value? meta?]}]
-  (let [*clicks (atom 0)
-        value-trigger #js {:click #(swap! *clicks inc)}
+(defn- bottom-pill-event!
+  "Runs `handler` on a stubbed pill event. `inline-editor?` focuses a number
+  input inside the pill value."
+  [handler {:keys [in-value? meta? inline-editor?]}]
+  (let [*calls (atom {:trigger-clicks 0 :editor-blurs 0 :prevented 0})
+        value-trigger #js {:click #(swap! *calls update :trigger-clicks inc)}
+        editor #js {:tagName "INPUT"
+                    :blur #(swap! *calls update :editor-blurs inc)
+                    :closest (fn [selector]
+                               (when (= selector ".bottom-property-content") #js {}))}
         pill #js {:querySelector (fn [selector]
                                    (when (= selector ".bottom-property-content .jtrigger")
-                                     value-trigger))}
+                                     value-trigger))
+                  :contains (fn [node] (identical? node editor))}
         target #js {:closest (fn [selector]
                                (when (and in-value? (= selector ".bottom-property-content"))
                                  #js {}))}
@@ -141,18 +148,44 @@
                    :currentTarget pill
                    :metaKey (boolean meta?)
                    :ctrlKey (boolean meta?)
-                   :preventDefault (fn [])
-                   :stopPropagation (fn [])}]
-    (#'block/handle-bottom-pill-click! event)
-    @*clicks))
+                   :preventDefault #(swap! *calls update :prevented inc)
+                   :stopPropagation (fn [])}
+        previous-document (gobj/get js/globalThis "document")]
+    (gobj/set js/globalThis "document" #js {:activeElement (when inline-editor? editor)})
+    (try
+      (handler event)
+      (finally
+        (if (some? previous-document)
+          (gobj/set js/globalThis "document" previous-document)
+          (js-delete js/globalThis "document"))))
+    @*calls))
+
+(defn- click-bottom-pill!
+  [opts]
+  (bottom-pill-event! #'block/handle-bottom-pill-click! opts))
 
 (deftest bottom-pill-click-opens-value-picker-test
-  (is (= 1 (click-bottom-pill! {}))
+  (is (= 1 (:trigger-clicks (click-bottom-pill! {})))
       "Clicking the key or pill padding opens the value picker")
-  (is (= 0 (click-bottom-pill! {:in-value? true}))
+  (is (= 0 (:trigger-clicks (click-bottom-pill! {:in-value? true})))
       "Clicks inside the value are handled by the value itself")
-  (is (= 0 (click-bottom-pill! {:meta? true}))
+  (is (= 0 (:trigger-clicks (click-bottom-pill! {:meta? true})))
       "Meta+click is left to the key, which opens the property page"))
+
+(deftest bottom-pill-click-closes-inline-editor-test
+  (let [{:keys [trigger-clicks editor-blurs]} (click-bottom-pill! {:inline-editor? true})]
+    (is (= 1 editor-blurs)
+        "Clicking the key while a number input is open commits and closes it")
+    (is (= 0 trigger-clicks)
+        "The value trigger is not clicked again, so the editor does not reopen"))
+  (is (= 1 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down!
+                                           {:inline-editor? true})))
+      "Mouse down on the key keeps focus in the editor until the click closes it")
+  (is (= 0 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down! {})))
+      "Mouse down does not interfere when no inline editor is open")
+  (is (= 0 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down!
+                                           {:inline-editor? true :in-value? true})))
+      "Mouse down inside the value keeps its default behavior"))
 
 (deftest hidden-properties-pill-toggle-only-for-zoom-in-root-test
   (let [root-uuid #uuid "22222222-2222-2222-2222-222222222222"

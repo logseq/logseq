@@ -3197,15 +3197,39 @@
       :else
       nil)))
 
+(defn- bottom-pill-value-target?
+  [^js e]
+  (some? (some-> (.-target e) (.closest ".bottom-property-content"))))
+
+(defn- bottom-pill-inline-editor
+  "The focused inline value editor (e.g. a number input) inside the pill."
+  [^js pill]
+  (let [^js active (.-activeElement js/document)]
+    (when (and (util/input? active)
+               (.contains pill active)
+               (some? (.closest active ".bottom-property-content")))
+      active)))
+
+(defn- handle-bottom-pill-mouse-down!
+  "Keeps focus in an inline value editor so the click can close it."
+  [^js e]
+  (when (and (not (bottom-pill-value-target? e))
+             (bottom-pill-inline-editor (.-currentTarget e)))
+    (.preventDefault e)))
+
 (defn- handle-bottom-pill-click!
-  "Clicks on the key or the pill padding open the value picker. Clicks inside
+  "Clicks on the key or the pill padding toggle the value picker. Clicks inside
   the value are left to the value component (e.g. page refs navigate)."
   [^js e]
   (when-not (or config/publishing?
                 (util/meta-key? e)
-                (some-> (.-target e) (.closest ".bottom-property-content")))
+                (bottom-pill-value-target? e))
     (util/stop e)
-    (trigger-bottom-pill-edit! (.-currentTarget e))))
+    (let [^js pill (.-currentTarget e)]
+      (if-let [^js editor (bottom-pill-inline-editor pill)]
+        ;; Blurring runs the editor's own commit and exit path
+        (.blur editor)
+        (trigger-bottom-pill-edit! pill)))))
 
 (defn- bottom-property-pill-cp
   [block property opts]
@@ -3220,6 +3244,7 @@
       :data-bottom-pill-focusable true
       :data-bottom-row-nav true
       :tab-index -1
+      :on-mouse-down handle-bottom-pill-mouse-down!
       :on-click handle-bottom-pill-click!
       :on-key-down handle-bottom-pill-key-down!}
    [:div.flex.flex-row.items-center
