@@ -35,7 +35,9 @@
         (when block
           (editor/edit-block! block pos
                               {:container-id container-id
-                               :custom-content block-content}))))))
+                               :custom-content block-content
+                               ;; The buffer was already flushed before undo/redo.
+                               :save-current-block? false}))))))
 
 (defn- restore-app-state!
   [state]

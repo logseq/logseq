@@ -370,6 +370,7 @@
                          :custom-content (str source-title typed-text block-title)
                          :tail-len (count block-title)
                          :save-code-editor? false
+                         :save-current-block? false
                          :skip-load? true})
            (delete-block-aux! block')
            (let [latest-text (:typed-text (pending-new-block))]
@@ -378,6 +379,7 @@
                            :custom-content (str source-title latest-text block-title)
                            :tail-len (count block-title)
                            :save-code-editor? false
+                           :save-current-block? false
                            :skip-load? true}))
            (clear-pending-new-block!)))
         (p/do!
@@ -388,6 +390,7 @@
          (edit-block! block' (count typed-text)
                       (cond-> {:container-id container-id
                                :save-code-editor? false
+                               :save-current-block? false
                                :skip-load? true}
                         (seq typed-text)
                         (assoc :custom-content (str typed-text (:block/title block')))))
@@ -776,6 +779,7 @@
                      #(when (and node (.-isConnected node))
                         (state/exit-editing-and-set-selected-blocks! [node]))
                      #(edit-block! block :max {:save-code-editor? false
+                                               :save-current-block? false
                                                :skip-load? true}))}
     (let [original-content (if (= (:db/id block) (:db/id (state/get-edit-block)))
                              (state/get-edit-content)
@@ -793,6 +797,7 @@
                                               :tail-len tail-len
                                               :container-id container-id
                                               :save-code-editor? false
+                                              :save-current-block? false
                                               :skip-load? true})})))
 
 (defn- previous-block-node
@@ -896,6 +901,7 @@
                 :editor/edit-block-fn
                 (fn [_rows]
                   (edit-block! next-block 0 {:save-code-editor? false
+                                             :save-current-block? false
                                              :skip-load? true})))
          (when (seq children)
            (outliner-op/move-blocks!
@@ -919,6 +925,7 @@
                 (edit-block! (current-block-with-title current-block new-content)
                              0
                              {:save-code-editor? false
+                              :save-current-block? false
                               :skip-load? true})))
        (when-not (= (block-parent-id block) (block-parent-id prev-block))
          (outliner-op/move-blocks! [block] prev-block {:sibling? true}))
@@ -3001,6 +3008,7 @@
       (edit-block! block' pos {:container-id container-id
                                :custom-content content
                                :save-code-editor? false
+                               :save-current-block? false
                                :skip-load? true}))))
 
 (defn indent-outdent
