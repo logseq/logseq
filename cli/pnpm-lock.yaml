@@ -12,8 +12,8 @@ importers:
         specifier: file:../deps/graph-lifecycle
         version: file:../deps/graph-lifecycle
       mldoc:
-        specifier: ^1.5.9
-        version: 1.6.0
+        specifier: 1.5.9
+        version: 1.5.9
       transit-js:
         specifier: 0.8.874
         version: 0.8.874
@@ -322,8 +322,8 @@ packages:
     resolution: {integrity: sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==}
     engines: {node: '>=6'}
 
-  mldoc@1.6.0:
-    resolution: {integrity: sha512-Gs+XDd4CANeCUIpgnW1ZXsORaa5UHMZfK+CxdA5ZcGmTADV61BpDo4TfvrfqNmykDBcJb9l6HfsG1vvLh24QFQ==}
+  mldoc@1.5.9:
+    resolution: {integrity: sha512-87FQ7hseS87tsk+VdpIigpu8LH+GwmbbFgpxgFwvnbH5oOjmIrc47laH4Dyggzqiy8/vMjDHkl7vsId0eXhCDQ==}
     hasBin: true
 
   nanoid@3.3.12:
@@ -750,7 +750,7 @@ snapshots:
 
   mimic-fn@2.1.0: {}
 
-  mldoc@1.6.0:
+  mldoc@1.5.9:
     dependencies:
       yargs: 12.0.5
 

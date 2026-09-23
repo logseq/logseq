@@ -1,6 +1,6 @@
 # Exploring: markdown input for `upsert block --blocks` / `--blocks-file`
 
-Status: exploration — no code written yet. Design decisions resolved:
+Status: implemented. Design decisions:
 parse in the CLI, emit only existing outliner ops over the existing
 thread-api, `key::` properties resolve against existing db properties
 (unknown keys rejected), uuids always auto-generated, `#tag` must resolve
