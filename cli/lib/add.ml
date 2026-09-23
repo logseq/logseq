@@ -430,6 +430,23 @@ let ident_of_entity value =
 let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
+(* Page names are not unique: a recycled page can share a name with a live
+   one. Prefer a live match; report recycled only when every match is
+   recycled. *)
+let live_or_all_recycled result =
+  let entities =
+    match Edn_util.as_seq result with
+    | Some items -> items
+    | None -> (
+        match Edn_util.as_map result with
+        | Some _ -> Vec.singleton result
+        | None -> Vec.empty)
+  in
+  match Vec.find_opt (fun e -> not (recycled_entity e)) entities with
+  | Some entity -> `Live entity
+  | None when not (Vec.is_empty entities) -> `All_recycled
+  | None -> `Missing
+
 let page_not_found () = Error.make Error.Page_not_found "page not found"
 let recycled_page_error () = Error.make Error.Recycled_page "page is recycled"
 
@@ -580,14 +597,13 @@ let resolve_add_target config (action : action) =
       bind
         (pull_pages_by_name config action.repo page_name page_selector)
         (fun result ->
-          match first_entity result with
-          | Some entity when recycled_entity entity ->
-              pure (Error (recycled_page_error ()))
-          | Some entity -> (
+          match live_or_all_recycled result with
+          | `All_recycled -> pure (Error (recycled_page_error ()))
+          | `Live entity -> (
               match uuid_of_entity entity with
               | Some uuid -> pure (Ok (Edn_util.uuid uuid, Vec.empty))
               | None -> pure (Error (page_not_found ())))
-          | None ->
+          | `Missing ->
               pure
                 (Ok
                    ( vector_vec
@@ -1129,6 +1145,13 @@ let incoming_ref_query =
            Cli_primitive.V
              (Edn_util.vector_t_vec
                 (Vec.of_array [| sym "?x"; sym "?a"; sym "?p" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?ae"; kw "db/ident"; sym "?a" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| sym "?ae"; kw "db/valueType"; kw "db.type/ref" |]));
          |])
     ()
 
@@ -1212,14 +1235,13 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
         bind
           (pull_pages_by_name invoke_config repo name page_selector)
           (fun result ->
-            match first_entity result with
-            | Some entity when recycled_entity entity ->
-                pure (Error (recycled_page_error ()))
-            | Some entity -> (
+            match live_or_all_recycled result with
+            | `Live entity -> (
                 match found entity with
                 | Some entry -> resolve_ids (Vec.push_back acc entry) rest
                 | None -> pure (Error (page_not_found ())))
-            | None ->
+            | `All_recycled -> pure (Error (recycled_page_error ()))
+            | `Missing ->
                 (* A create-page op carries our generated uuid: the worker
                    returns it only when this call actually created the page —
                    an existing (or concurrently created) page returns its own
