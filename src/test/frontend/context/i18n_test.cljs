@@ -72,7 +72,18 @@
 
     (set-language! :zh-Hant)
     (is (= "頁面「Inbox」已成功刪除！"
-           (i18n/t :page.delete/success "Inbox")))))
+           (i18n/t :page.delete/success "Inbox"))))
+
+  (testing "property delete-from-owner confirms include the property name"
+    (set-language! :en)
+    (is (= "Are you sure you want to delete the property \"Priority\" from this node?"
+           (i18n/t :property/delete-from-node-confirm "Priority")))
+    (is (= "Are you sure you want to delete the property \"Priority\" from this tag?"
+           (i18n/t :property/delete-from-tag-confirm "Priority")))
+
+    (set-language! :zh-CN)
+    (is (= "确认要从此节点删除属性 \"Priority\" 吗？"
+           (i18n/t :property/delete-from-node-confirm "Priority")))))
 
 (deftest tt-test
   (testing "tt returns the first translated key"
