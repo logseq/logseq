@@ -1073,54 +1073,6 @@ let rewrite_name_lookups ~target ids ops =
       ops,
     rewrite ~as_uuid:true target )
 
-(* Resolves every [:block/name] lookup vec left in the planned ops to concrete
-   references, creating the named pages that do not exist yet. Page creation
-   happens only after all read-only validation has succeeded, so a rejected
-   command leaves no orphaned pages behind. Returns the rewritten ops, the
-   materialized target lookup, and the uuids of pages created here (for
-   rollback when the final apply fails). *)
-let materialize_name_lookups invoke_config repo ~target_lookup ops =
-  let open Cli_effect in
-  let names = block_name_lookups_in_ops ops in
-  let rec resolve_ids acc created remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok (acc, created))
-    | Some (name, rest) -> (
-        let found entity =
-          match (uuid_of_entity entity, id_of_entity entity) with
-          | Some uuid, Some id -> Some (name, uuid, id)
-          | _ -> None
-        in
-        bind
-          (pull_pages_by_name invoke_config repo name page_selector)
-          (fun result ->
-            match first_entity result with
-            | Some entity -> (
-                match found entity with
-                | Some entry ->
-                    resolve_ids (Vec.push_back acc entry) created rest
-                | None -> pure (Error (page_not_found ())))
-            | None ->
-                bind (create_page invoke_config repo name)
-                  (fun create_result ->
-                    bind
-                      (pull_created_page invoke_config repo name create_result)
-                      (fun entity ->
-                        match found entity with
-                        | Some ((_, uuid, _) as entry) ->
-                            resolve_ids
-                              (Vec.push_back acc entry)
-                              (Vec.push_back created uuid) rest
-                        | None -> pure (Error (page_not_found ()))))))
-  in
-  bind (resolve_ids Vec.empty Vec.empty names) (function
-    | Error err -> pure (Error err)
-    | Ok (ids, created_uuids) ->
-        pure
-          (Ok
-             ( rewrite_name_lookups ~target:target_lookup ids ops,
-               created_uuids )))
-
 (* Best-effort cleanup of pages materialize_name_lookups created when the final
    apply fails. Creation cannot join that transaction (insert-blocks requires a
    concrete uuid target and ref property values require entity ids), and the
@@ -1194,6 +1146,73 @@ let rollback_pages invoke_config repo created_uuids =
              (fun _ -> ())
              (apply_outliner_ops invoke_config repo ops))
           (fun _ -> pure ()))
+
+(* Resolves every [:block/name] lookup vec left in the planned ops to concrete
+   references, creating the named pages that do not exist yet. Page creation
+   happens only after all read-only validation has succeeded, so a rejected
+   command leaves no orphaned pages behind. Returns the rewritten ops, the
+   materialized target lookup, and the uuids of pages created here (for
+   rollback when the final apply fails). *)
+let materialize_name_lookups invoke_config repo ~target_lookup ops =
+  let open Cli_effect in
+  let names = block_name_lookups_in_ops ops in
+  let created = ref Vec.empty in
+  let track_created create_result =
+    match
+      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
+    with
+    | Some values, _ | _, Some values -> (
+        match Vec.nth_opt values 1 with
+        | Some value -> (
+            match Edn_util.as_string_like value with
+            | Some uuid -> created := Vec.push_back !created uuid
+            | None -> ())
+        | None -> ())
+    | _ -> ()
+  in
+  let rec resolve_ids acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (name, rest) -> (
+        let found entity =
+          match (uuid_of_entity entity, id_of_entity entity) with
+          | Some uuid, Some id -> Some (name, uuid, id)
+          | _ -> None
+        in
+        bind
+          (pull_pages_by_name invoke_config repo name page_selector)
+          (fun result ->
+            match first_entity result with
+            | Some entity -> (
+                match found entity with
+                | Some entry -> resolve_ids (Vec.push_back acc entry) rest
+                | None -> pure (Error (page_not_found ())))
+            | None ->
+                bind (create_page invoke_config repo name)
+                  (fun create_result ->
+                    track_created create_result;
+                    bind
+                      (pull_created_page invoke_config repo name create_result)
+                      (fun entity ->
+                        match found entity with
+                        | Some entry ->
+                            resolve_ids (Vec.push_back acc entry) rest
+                        | None -> pure (Error (page_not_found ()))))))
+  in
+  bind
+    (catch (resolve_ids Vec.empty names) (fun exn ->
+         bind
+           (rollback_pages invoke_config repo !created)
+           (fun () -> Cli_effect.error exn))) (function
+    | Error err ->
+        bind
+          (rollback_pages invoke_config repo !created)
+          (fun () -> pure (Error err))
+    | Ok ids ->
+        pure
+          (Ok
+             ( rewrite_name_lookups ~target:target_lookup ids ops,
+               !created )))
 
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
