@@ -39,15 +39,11 @@ let make_app ?version:_ () =
 
 let make_app_context = make_app
 let env_lookup env key = Vec.assoc_opt key env
+(* See cli_parse.ml — only a `- ` token is a markdown list item value;
+   every other dash prefix is still an option. *)
 let is_option token =
-  let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
   let n = String.length token in
-  n > 1
-  && token.[0] = '-'
-  &&
-  match token.[1] with
-  | '-' -> n > 2 && is_alpha token.[2]
-  | c -> is_alpha c
+  n > 0 && token.[0] = '-' && not (n > 1 && token.[1] = ' ')
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
