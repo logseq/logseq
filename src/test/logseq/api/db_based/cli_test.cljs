@@ -6,6 +6,7 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.api.db-based.cli :as cli-api]
             [logseq.api.test-helper :as api-test]
+            [logseq.db.frontend.validate :as db-validate]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -104,3 +105,29 @@
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
+
+(deftest upsert-nodes-uses-tx-scoped-import-validation
+  (async done
+    (let [calls (atom [])]
+      (-> (api-test/with-plugin-api
+            (fn []
+              (p/with-redefs [db-validate/validate-local-db!
+                              (fn [_db & {:as opts}]
+                                (swap! calls conj opts)
+                                nil)]
+                (p/let [summary (cli-api/upsert-nodes
+                                 #js [#js {:operation "add"
+                                           :entityType "page"
+                                           :id "p1"
+                                           :data #js {:title "Scoped Page"}}
+                                      #js {:operation "add"
+                                           :entityType "block"
+                                           :data #js {:title "Scoped Block"
+                                                      :page-id "p1"}}]
+                                 #js {})]
+                  (is (re-find #"Added" summary))
+                  (is (seq @calls))
+                  (is (every? #(seq (:entity-ids %)) @calls))))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
