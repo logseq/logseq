@@ -1,5 +1,5 @@
 (ns logseq.e2e.flashcards-basic-test
-  (:require [clojure.test :refer [deftest testing use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
@@ -143,4 +143,6 @@
       (select-cards-option "All cards")
       (assert/assert-have-count (loc/filter "#cards-modal" :has-text "Time to create a card!") 0)
       (assert/assert-is-visible (loc/filter "#cards-modal .text-sm.opacity-50" :has-text #"1/2"))
-      (assert/assert-is-visible "#cards-modal .ls-card"))))
+      (assert/assert-is-visible "#cards-modal .ls-card")
+      (is (re-find #"1/2" (or (util/get-text "#cards-modal") ""))
+          "due=0 All cards browse shows existing cards instead of the empty state"))))
