@@ -244,7 +244,8 @@
                              q))
             last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
             tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
-      (when-not conversion-rejected?
+      (if conversion-rejected?
+        (when input (.focus input))
         (p/do!
          (editor-handler/insert-command! id
                                          (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
@@ -253,8 +254,8 @@
                                           :end-pattern (when wrapped? page-ref/right-brackets)
                                           :command :page-ref})
          (when-not tag-in-page-auto-complete?
-           (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))))
-      (when input (.focus input)))))
+           (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
+         (when input (.focus input)))))))
 
 (defn- page-on-chosen-handler
   [id format q]
