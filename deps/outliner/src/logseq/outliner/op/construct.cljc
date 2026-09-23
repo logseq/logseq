@@ -441,16 +441,20 @@
   [db tx-data args]
   (let [[blocks target-id opts] args
         created-uuids (created-block-uuids-from-tx-data tx-data)
+        inserted-uuids (:logseq.outliner/inserted-block-uuids opts)
+        target (d/entity db (stable-entity-ref db target-id))
+        blocks (if inserted-uuids
+                 (mapv #(into {} (d/entity db [:block/uuid %])) inserted-uuids)
+                 blocks)
         source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
         source-uuids (mapv :block/uuid source-blocks)
         target-ref (stable-entity-ref db target-id)
-        target (d/entity db target-id)
         block-with-new-id (fn [block block-uuid]
                             (assoc block
                                    :block/uuid block-uuid
                                    :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
                                                    [:block/uuid (:block/uuid parent)])))
-        blocks* (if (seq created-uuids)
+        blocks* (if (and (nil? inserted-uuids) (seq created-uuids))
                   (if (and (:replace-empty-target? opts)
                            (= (inc (count created-uuids)) (count source-blocks)))
                     (let [[fst-block & rst-blocks] source-blocks
@@ -473,7 +477,7 @@
                   blocks*)]
     [blocks*
      target-ref
-     (assoc (dissoc (or opts {}) :outliner-op)
+     (assoc (dissoc (or opts {}) :outliner-op :logseq.outliner/inserted-block-uuids)
             :keep-uuid? true)]))
 
 (defn- canonical-move-op-for-block
@@ -820,14 +824,16 @@
   [db-before db-after target-id opts]
   (when (:replace-empty-target? opts)
     (when-let [target-ref (stable-entity-ref db-before target-id)]
-      (when (d/entity db-after target-ref)
-        (when-let [target (d/entity db-before target-ref)]
-          (let [insert-block (build-insert-block-payload db-before target)
-                [target-id sibling?] (resolve-target-and-sibling target)]
-            [[:delete-blocks [[target-ref] {}]]
-             (to-insert-op db-before {:blocks [insert-block]
-                                      :target-id (stable-entity-ref db-before target-id)
-                                      :sibling? sibling?})]))))))
+      (when-let [target (d/entity db-before target-ref)]
+        (let [insert-block (build-insert-block-payload db-before target)
+              [target-id sibling?] (resolve-target-and-sibling target)]
+          (cond-> []
+            (d/entity db-after target-ref)
+            (conj [:delete-blocks [[target-ref] {}]])
+            :always
+            (conj (to-insert-op db-before {:blocks [insert-block]
+                                          :target-id (stable-entity-ref db-before target-id)
+                                          :sibling? sibling?}))))))))
 
 (defn- build-inverse-insert-like
   [db-before db-after tx-data args]

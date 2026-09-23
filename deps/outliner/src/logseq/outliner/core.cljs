@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -22,6 +23,10 @@
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
             [malli.util :as mu]))
+
+(defkeywords
+  :logseq.outliner/inserted-block-uuids
+  {:doc "Ordered UUIDs produced by one insert operation, before history canonicalization."})
 
 (defn- direct-op-entry
   [outliner-op args]
@@ -488,8 +493,13 @@
                           (dec (- idx)))]
             (if replacing-block?
               [(assoc block
-                      :db/id (:db/id target-block)
-                      :block/uuid (:block/uuid target-block)
+                      :db/id (if (and (ldb/asset? block)
+                                      (not= (:block/uuid block) (:block/uuid target-block)))
+                               db-id
+                               (:db/id target-block))
+                      :block/uuid (if (ldb/asset? block)
+                                    (:block/uuid block)
+                                    (:block/uuid target-block))
                       :block/order (:block/order target-block))]
               [(assoc block :db/id db-id)]))))
        (apply concat)))
@@ -708,7 +718,7 @@
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (map #(uuid-for-insert db keep-uuid? outliner-op %) block-uuids))
-        uuids (if replace-empty-target?
+        uuids (if (and replace-empty-target? (not (ldb/asset? (first blocks))))
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
@@ -800,7 +810,7 @@
         (let [block (first blocks)
               parent (:block/parent block)
               parent-level (cond
-                             (map? parent) (get id->level (:db/id parent))
+                             (or (map? parent) (de/entity? parent)) (get id->level (:db/id parent))
                              (vector? parent) (get uuid->level (second parent)))
               level (if parent-level
                       (inc parent-level)
@@ -843,6 +853,56 @@
   (or (url-property-value-forbidden-target? target-block sibling?)
       (default-value-block? target-block)
       (and sibling? (default-value-block? (:block/parent target-block)))))
+
+(defn- asset-block->paste-link
+  "Embed a copied asset while retaining source IDs for insertion planning."
+  [db block parent-ids]
+  (let [asset (d/entity db [:block/uuid (:block/uuid block)])]
+    (when-not (ldb/asset? asset)
+      (throw (ex-info "Cannot paste a missing asset" {:block/uuid (:block/uuid block)})))
+    (when (contains? parent-ids (:db/id asset))
+      (throw (ex-info "Cannot embed an asset inside itself" {:block/uuid (:block/uuid block)})))
+    (assoc (select-keys block [:db/id :block/uuid :block/title
+                              :block/parent :block/order])
+           :block/link (:db/id asset))))
+
+(defn- prepare-pasted-assets
+  "Embed copied assets and omit descendants rendered through the source link."
+  [db blocks target-block sibling? keep-uuid?]
+  (let [parent-ids (cond-> (into #{(:db/id target-block)}
+                                (map :db/id)
+                                (ldb/get-block-parents db (:block/uuid target-block)))
+                     sibling? (disj (:db/id target-block)))]
+    (loop [remaining (blocks-with-level blocks)
+           embedded-level nil
+           result []]
+      (if-let [block (first remaining)]
+        (let [level (:block/level block)
+              skip? (and embedded-level (> level embedded-level))
+              embed? (and (not skip?)
+                          (ldb/asset? block)
+                          (or (not keep-uuid?)
+                              (when-let [source (d/entity db [:block/uuid (:block/uuid block)])]
+                                (not (ldb/recycled? source)))))]
+          (recur (rest remaining)
+                 (cond skip? embedded-level embed? level)
+                 (cond
+                   skip? result
+                   embed? (conj result (asset-block->paste-link db block parent-ids))
+                   :else (conj result block))))
+        result))))
+
+(defn- asset-replaceable-placeholder?
+  "Only discard plain, unreferenced placeholders when restoring an asset."
+  [db block]
+  (and (not-any? (fn [[attr schema]]
+                   (and (= :db.type/ref (:db/valueType schema))
+                        (seq (d/datoms db :avet attr (:db/id block)))))
+                 (:schema db))
+       (every? #{:db/id :block/uuid :block/title :block/parent :block/page :block/order
+                 :block/created-at :block/updated-at :block/tx-id
+                 :logseq.property/created-by-ref :logseq.property/updated-by-ref}
+               (keys block))))
 
 (defn- resolve-created-from-property
   [db created-from-property]
@@ -905,19 +965,26 @@
                              (apply dissoc b' dissoc-keys))
                            b))
                        blocks)
-                  (or (= outliner-op :paste)
-                      insert-template?)
+                  ;; Templates cannot clone uuid-named asset files.
+                  insert-template?
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
-         replace-empty-target? (if (and (some? replace-empty-target?)
+         blocks (if (and (= outliner-op :paste) (some ldb/asset? blocks))
+                  (prepare-pasted-assets db blocks target-block sibling? keep-uuid?)
+                  blocks)
+         replace-empty-target? (and (not (ldb/asset? target-block))
+                                   (or (not (ldb/asset? (first blocks)))
+                                       (= (:block/uuid (first blocks)) (:block/uuid target-block))
+                                       (asset-replaceable-placeholder? db target-block))
+                                   (if (and (some? replace-empty-target?)
                                         (:block/title target-block)
                                         (string/blank? (:block/title target-block)))
                                  replace-empty-target?
                                  (and sibling?
                                       (:block/title target-block)
                                       (string/blank? (:block/title target-block))
-                                      (> (count blocks) 1)))]
+                                      (> (count blocks) 1))))]
      (when (and (seq blocks)
                 (not (leaf-property-value-forbidden-target? target-block sibling?)))
        (let [from-property (:logseq.property/created-from-property target-block)
@@ -976,6 +1043,10 @@
                                                       [:block/uuid new-id]]]))
                                                 top-level-blocks)))
                  full-tx (common-util/concat-without-nil page-txs
+                                                         (when (and replace-empty-target?
+                                                                    (ldb/asset? (first blocks))
+                                                                    (not= (:block/uuid (first blocks-tx)) (:block/uuid target-block)))
+                                                           [[:db/retractEntity (:db/id target-block)]])
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
                                                          property-values-tx)
@@ -993,6 +1064,12 @@
                                f))
                            full-tx)]
              {:tx-data full-tx'
+              :tx-meta {:outliner-ops
+                        [[:insert-blocks [(vec blocks) (:block/uuid target-block)
+                                          (assoc opts
+                                                 :sibling? sibling?
+                                                 :replace-empty-target? replace-empty-target?
+                                                 :logseq.outliner/inserted-block-uuids (mapv :block/uuid tx))]]]}
               :blocks  tx})))))))
 
 (defn- sort-non-consecutive-blocks

@@ -12,7 +12,6 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
             [logseq.outliner.op.construct :as op-construct]))
 
@@ -440,11 +439,25 @@
 
                 (some import-edn-op? ops)
                 (assoc ::sqlite-export/imported-data? true))
-        *result (atom nil)]
+        *result (atom nil)
+        *applied-ops (atom [])]
 
-    (outliner-tx/transact!
-     opts'
-     (doseq [op-entry ops]
-       (apply-op! conn opts' *result op-entry)))
+    (ldb/batch-transact-with-temp-conn!
+     conn (dissoc opts' :additional-tx :transact-opts :current-block)
+     (fn [temp-conn _tx-data]
+       (doseq [op-entry ops]
+         (let [unset (js-obj)
+               *op-result (atom unset)]
+           (apply-op! temp-conn opts' *op-result op-entry)
+           (when-not (identical? unset @*op-result)
+             (reset! *result @*op-result))
+           (when (contains? op-construct/semantic-outliner-ops (first op-entry))
+             (swap! *applied-ops into
+                    (if (= :insert-blocks (first op-entry))
+                      (get-in @*op-result [:tx-meta :outliner-ops])
+                      [op-entry])))))
+       (when (seq (:additional-tx opts'))
+         (ldb/transact! temp-conn (:additional-tx opts') {})))
+     :tx-meta-fn #(assoc % :outliner-ops @*applied-ops))
 
     @*result))
