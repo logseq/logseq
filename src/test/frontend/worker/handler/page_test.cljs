@@ -13,7 +13,7 @@
     api))
 
 (defn- conn-with-page
-  "Creates a conn with a \"Page\" page of `child-count` direct children, each
+  "Creates a conn with a \"PerfPage\" page of `child-count` direct children, each
    having `grandchild-count` children of its own. Returns conn."
   [child-count grandchild-count]
   (db-test/create-conn-with-blocks
@@ -26,14 +26,14 @@
                    (range child-count))}]))
 
 (defn- page-uuid
-  [conn]
-  (:block/uuid (db-test/find-page-by-title @conn "PerfPage")))
+  [db]
+  (:block/uuid (db-test/find-page-by-title db "PerfPage")))
 
 (deftest get-page-block-index-bounds-work-to-initial-limit-test
   (let [get-page-block-index (page-block-index-api)]
     (testing "returns only the first N visible blocks in pre-order"
       (let [conn (conn-with-page 10 100)
-            result (get-page-block-index @conn (page-uuid conn) 5)
+            result (get-page-block-index @conn (page-uuid @conn) 5)
             index (:index result)]
         (is (= 5 (count index)))
         (is (= ["b0" "b0.0" "b0.1" "b0.2" "b0.3"]
@@ -46,7 +46,7 @@
       (let [conn (conn-with-page 3 5)
             first-child (:db/id (db-test/find-block-by-content @conn "b0"))]
         (d/transact! conn [[:db/add first-child :block/collapsed? true]])
-        (let [index (:index (get-page-block-index @conn (page-uuid conn) 10))]
+        (let [index (:index (get-page-block-index @conn (page-uuid @conn) 10))]
           (is (= ["b0" "b1" "b1.0" "b1.1" "b1.2" "b1.3" "b1.4" "b2" "b2.0" "b2.1"]
                  (mapv #(:block/title (d/entity @conn (:db/id %))) index)))
           (is (true? (:block/collapsed? (first index))))
@@ -88,7 +88,7 @@
     (doseq [child-count [50 500]]
       (let [conn (conn-with-page child-count 10)
             db @conn
-            root-uuid (page-uuid conn)
+            root-uuid (page-uuid db)
             total (* child-count 10)
             _ (dotimes [_ 3] (get-page-block-index db root-uuid 50))
             root (d/entity db [:block/uuid root-uuid])
