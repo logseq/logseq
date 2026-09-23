@@ -4,7 +4,7 @@
    [frontend.components.cmdk.core :as cmdk]
    [frontend.db.async :as db-async]
    [frontend.handler.db-based.recent :as db-recent-handler]
-   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.editor.format :as editor-format]
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.object :as gobj]
@@ -23,7 +23,7 @@
                           (fn [& args]
                             (swap! calls conj [:get-block args])
                             (p/resolved (:source-block item)))
-                          editor-handler/open-block-in-sidebar!
+                          editor-format/open-block-in-sidebar!
                           (fn [block-id]
                             (swap! calls conj [:open block-id]))
                           shui/dialog-close!

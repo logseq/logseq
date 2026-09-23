@@ -9,6 +9,9 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.autopair :as editor-autopair]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -152,7 +155,7 @@
                            (commands/simple-insert! input-id text nil)))
         text (string/replace *text "\r\n" "\n") ;; Fix for Windows platform
         input-id (state/get-edit-input-id)
-        {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
+        {:keys [selection] :as selection-and-format} (editor-format/get-selection-and-format)
         text-url? (common-util/url? text)
         selection-url? (common-util/url? selection)]
     (cond
@@ -165,11 +168,11 @@
       ;; Paste a formatted link over selected text or paste text over a selected formatted link
       (and (or text-url? selection-url?)
            (not (string/blank? (util/get-selected-text))))
-      (editor-handler/html-link-format! text)
+      (editor-format/html-link-format! text)
 
       ;; Pastes only block id when inside of '(())'
       (and (block-ref/block-ref? text)
-           (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+           (editor-autopair/wrapped-by? input block-ref/left-parens block-ref/right-parens))
       (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
 
       :else
@@ -250,7 +253,7 @@
        (if (common-util/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
-           (editor-handler/html-link-format! clipboard-data))
+           (editor-format/html-link-format! clipboard-data))
          (editor-handler/insert clipboard-data true))))
    (fn [error]
      (js/console.error error))))
@@ -273,7 +276,7 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (p/let [blocks (editor-handler/upload-asset! id files
+      (p/let [blocks (editor-assets/upload-asset! id files
                                                    (get (state/get-edit-block) :block/format :markdown)
                                                    editor-handler/*asset-uploading? true)]
         (when-let [asset (first blocks)]
