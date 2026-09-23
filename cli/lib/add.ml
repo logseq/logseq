@@ -443,7 +443,7 @@ let apply_outliner_ops config repo ops =
     ~ops:(Edn_util.vector_t_vec ops)
     ~options:(Edn_util.map_t_vec Vec.empty)
 
-let create_page config repo name =
+let create_page config repo name uuid =
   let op =
     Edn_util.vector_vec
       (Vec.of_array
@@ -451,7 +451,11 @@ let create_page config repo name =
            kw "create-page";
            Edn_util.vector_vec
              (Vec.of_array
-                [| Edn_util.string name; Edn_util.map_vec Vec.empty |]);
+                [|
+                  Edn_util.string name;
+                  Edn_util.map_vec
+                    (Vec.singleton (kw "uuid", Edn_util.uuid uuid));
+                |]);
          |])
   in
   apply_outliner_ops config repo (Vec.singleton op)
@@ -1157,18 +1161,15 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
   let open Cli_effect in
   let names = block_name_lookups_in_ops ops in
   let created = ref Vec.empty in
-  let track_created create_result =
+  let returned_uuid create_result =
     match
       (Edn_util.as_vector create_result, Edn_util.as_list create_result)
     with
     | Some values, _ | _, Some values -> (
         match Vec.nth_opt values 1 with
-        | Some value -> (
-            match Edn_util.as_string_like value with
-            | Some uuid -> created := Vec.push_back !created uuid
-            | None -> ())
-        | None -> ())
-    | _ -> ()
+        | Some value -> Edn_util.as_string_like value
+        | None -> None)
+    | _ -> None
   in
   let rec resolve_ids acc remaining =
     match Vec.pop_front remaining with
@@ -1188,9 +1189,17 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                 | Some entry -> resolve_ids (Vec.push_back acc entry) rest
                 | None -> pure (Error (page_not_found ())))
             | None ->
-                bind (create_page invoke_config repo name)
+                (* A create-page op carries our generated uuid: the worker
+                   returns it only when this call actually created the page —
+                   an existing (or concurrently created) page returns its own
+                   uuid, which must never enter the rollback set. *)
+                let our_uuid = generate_uuid () in
+                bind (create_page invoke_config repo name our_uuid)
                   (fun create_result ->
-                    track_created create_result;
+                    (match returned_uuid create_result with
+                    | Some uuid when String.equal uuid our_uuid ->
+                        created := Vec.push_back !created our_uuid
+                    | _ -> ());
                     bind
                       (pull_created_page invoke_config repo name create_result)
                       (fun entity ->
