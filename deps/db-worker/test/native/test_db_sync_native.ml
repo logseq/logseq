@@ -7798,7 +7798,7 @@ let normalize_rebased_pending_tx ~(db_before : db) ~(db_after : db)
 (* cljs (reduce (fn [db r] (:db-after (d/with db r))) db rows) *)
 let db_after_of (db : db) (reversed : Wire.t list) : db =
   (Datascript.with_tx db ~tx_meta:[]
-     (Db_transact.tx_ops_of_tx_data reversed)).db_after
+     (Db_transact.tx_ops_of_tx_data db reversed)).db_after
 
 (* cljs (:block/uuid (first (:blocks apply-ops-result))) — the first
    block/uuid add in an insert-blocks tx result *)
@@ -9405,7 +9405,7 @@ let test_normalize_rebased_keeps_reconstructive_reverse () =
       let db_before = Datascript.db conn in
       let tx_report =
         Datascript.with_tx db_before ~tx_meta:[]
-          (Db_transact.tx_ops_of_tx_data
+          (Db_transact.tx_ops_of_tx_data db_before
              [ db_retract_entity
                  (block_uuid_lookup (Wire.Uuid target_uuid)) ])
       in
@@ -9447,7 +9447,7 @@ let test_reverse_tx_data_delete_recreate_same_uuid_reversible () =
       let db_before = Datascript.db conn in
       let tx_report =
         Datascript.with_tx db_before ~tx_meta:[]
-          (Db_transact.tx_ops_of_tx_data
+          (Db_transact.tx_ops_of_tx_data db_before
              [ db_retract_entity
                  (block_uuid_lookup (Wire.Uuid target_uuid))
              ; db_add (Wire.Int (-1)) "block/uuid"

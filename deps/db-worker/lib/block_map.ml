@@ -278,21 +278,13 @@ let rec value_to_tx_value
            | Some r -> Some (tx_entity_of_ref r)
            | None -> None)
     in
-    let all_refs =
-      items <> []
-      && List.for_all
-           (fun x ->
-             match te_of_item x with
-             | Some te -> te.db_id <> None || te.attrs = []
-             | None -> false)
-           items
-    in
-    if all_refs then
-      Some (Many_entities (List.filter_map te_of_item items))
-    else if ref_ok then
-      (* collections on a ref attr can carry nested entity maps (cljs
-         resolves e.g. [{:db/ident k} {:db/ident k2 :block/order o}] as
-         entities via upsert) — keep their attrs through tx_entity_of_map *)
+    if ref_ok then
+      (* cljs maybe-wrap-multival explodes the collection only for a
+         multival attr; on a ref attr each item resolves to an entity
+         (idents, lookup refs, eids, nested entity maps via upsert). On a
+         non-ref attr items are stored literally — e.g. :keyword-typed
+         multival props like :logseq.property.table/hidden-columns keep
+         raw keyword datoms. *)
       let tes = List.map te_of_item items in
       if List.for_all Option.is_some tes then
         Some (Many_entities (List.filter_map Fun.id tes))

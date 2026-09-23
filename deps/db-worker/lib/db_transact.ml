@@ -667,7 +667,7 @@ let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
             ])
   | _ -> None
 
-let tx_ops_of_tx_data (tx_data : Wire.t list) : tx_op list =
+let tx_ops_of_tx_data (db : db) (tx_data : Wire.t list) : tx_op list =
   List.concat_map
     (fun item ->
        match item with
@@ -678,6 +678,16 @@ let tx_ops_of_tx_data (tx_data : Wire.t list) : tx_op list =
        | Wire.Array [ Wire.Symbol "datascript/Datom"; rep ]
        | Wire.List [ Wire.Symbol "datascript/Datom"; rep ] ->
            [ Raw_datom (Ds_wire.datom_of_transit rep) ]
+       | Wire.Map _ ->
+           (* cljs maybe-wrap-multival runs schema-aware inside the entity
+              expansion: a collection on a card-one attr stays a single
+              datom (e.g. :logseq.property.table/sorting keeps its
+              vector), only multival attrs explode. Route through
+              Block_map.to_tx_op which classifies against the live schema;
+              the schema-blind parse_tx_data_string reader would collapse
+              every coll-of-maps to nested entities (wrapped as a Set on
+              non-ref attrs). *)
+           [ Block_map.to_tx_op db (Block_map.of_transit item) ]
        | Wire.Array [ op; e; a; v; t ] | Wire.List [ op; e; a; v; t ] -> (
            match datom_form_tx_ops op e a v t with
            | Some ops -> ops
@@ -705,7 +715,7 @@ let transact (conn : conn) (tx_data : Wire.t list) (tx_meta : tx_meta)
         |> fun m ->
         if flags.Db_tx.skip_store then ("skip-store?", Bool true) :: m else m
       in
-      let tx_ops = tx_ops_of_tx_data tx_data in
+      let tx_ops = tx_ops_of_tx_data db tx_data in
       Some (Db_tx.transact_sync conn tx_ops tx_meta)
 
 (* db.cljs batch-transact-with-temp-conn!. [f] receives the temp conn;
