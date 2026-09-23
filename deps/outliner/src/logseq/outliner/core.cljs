@@ -1200,9 +1200,11 @@
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
         target-from-property (when sibling?
                                (:logseq.property/created-from-property target-block))
-        restore-from-property (or target-from-property
-                                  (resolve-created-from-property db created-from-property))
-        demote-page? (restore-property-value-from-page? block restore-from-property)
+        explicit-restore-from-property (resolve-created-from-property db created-from-property)
+        restore-from-property (or target-from-property explicit-restore-from-property)
+        ;; Only the explicit undo opt demotes. Inferring from a sibling target
+        ;; must not convert an unrelated page into a property value.
+        demote-page? (restore-property-value-from-page? block explicit-restore-from-property)
         move-page-as-block-child? (and (not sibling?)
                                        (not (ldb/page? target-block))
                                        (ldb/page? block)
