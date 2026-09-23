@@ -13,6 +13,8 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -388,8 +390,8 @@
             (fn [& args]
               (swap! sidebar-calls conj (vec args))))
       (-> (p/do!
-           (editor/open-block-in-sidebar! page-id)
-           (editor/open-block-in-sidebar! block-id))
+           (editor-format/open-block-in-sidebar! page-id)
+           (editor-format/open-block-in-sidebar! block-id))
           (p/then
            (fn []
              (is (= [[:thread-api/pull "test" [:db/id {:block/page [:db/id]}] [:block/uuid page-id]]
@@ -2548,7 +2550,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -2562,7 +2564,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2577,7 +2579,7 @@
       (set! state/get-edit-content (constantly ""))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block target-block}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
                                         :target-block target-block)
           (p/then (fn [_]
                     (is (= target-block (:target @inserted)))
@@ -2594,7 +2596,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
@@ -2614,7 +2616,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -2628,7 +2630,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2642,7 +2644,7 @@
       (set! state/get-edit-content (constantly "Current block"))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block stale-comment-target}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
           (p/then (fn [_]
                     (is (= edit-block (:target @inserted)))
                     (is (= {:bottom? true
@@ -2658,7 +2660,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)

@@ -6,6 +6,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -191,7 +192,7 @@
         files (some-> clipboard-data (gobj/get "files"))]
     (when (and target-block (seq files))
       (util/stop e)
-      (editor-handler/db-based-save-assets!
+      (editor-assets/db-based-save-assets!
        (state/get-current-repo)
        (js->clj files)
        :target-block target-block)

@@ -7,6 +7,7 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.mobile.audio-recorder :as audio-recorder]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -76,7 +77,7 @@
                                 (assoc :target-block @*target-block)
                                 capture?
                                 (assoc :save-to-page save-to-page))
-                  result (editor-handler/db-based-save-assets! repo [file] insert-opts)
+                  result (editor-assets/db-based-save-assets! repo [file] insert-opts)
                   asset-entity (first result)]
             (when (nil? asset-entity)
               (log/error ::empty-asset-entity {}))
