@@ -2167,6 +2167,71 @@ let () =
               ("expected non-zero exit for invalid datetime: " ^ output.stdout
              ^ output.stderr)));
 
+  test_promise "upsert block keeps target page title case when creating" (fun () ->
+      let step = ref 0 in
+      let page_uuid = "33333333-3333-4333-8333-333333333333" in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | (1 | 2)
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"my page" body ->
+                "[]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"create-page" body) then
+                  fail_test ("missing create-page op: " ^ body);
+                if not (Js.String.includes ~search:"My Page" body) then
+                  fail_test
+                    ("create-page lost original title case: " ^ body);
+                "[null,\"~u" ^ page_uuid ^ "\"]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \
+                 \",\"~:db/id\",50,\"~:block/uuid\",\"~u" ^ page_uuid
+                ^ "\",\"~:block/name\",\"my page\"]"
+            | 5
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"insert-blocks" body) then
+                  fail_test ("missing insert-blocks op: " ^ body);
+                if not (Js.String.includes ~search:page_uuid body) then
+                  fail_test
+                    ("insert target was not rewritten to created page uuid: "
+                   ^ body);
+                "[]"
+            | 6 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "My Page";
+                "--blocks";
+                "- note";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block created page title case" output);
+          if !step = 6 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected six invoke requests, got %d" !step)));
+
   test_promise "update block resolves string update property names by title"
     (fun () ->
       let step = ref 0 in
