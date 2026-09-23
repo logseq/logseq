@@ -211,6 +211,7 @@
                                                    :tail-len 0
                                                    :container-id nil
                                                    :save-code-editor? false
+                                                   :save-current-block? false
                                                    :skip-load? true}}
                                            (some-> (last @edit-calls)
                                                    (update :block :block/title)))
@@ -383,6 +384,7 @@
                           :tail-len 0
                           :container-id nil
                           :save-code-editor? false
+                          :save-current-block? false
                           :skip-load? true}]
                         @edit-call)
                      "Deletion should restore focus from the renderer callback")))))
