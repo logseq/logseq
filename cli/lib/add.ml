@@ -240,8 +240,19 @@ let read_blocks (opts : opts) args =
       opts.blocks_file,
       Option.map String.trim opts.content )
   with
-  | Some text, _, _ -> Markdown_blocks.of_markdown text
-  | None, Some path, _ -> Markdown_blocks.of_markdown (read_file path)
+  | Some text, _, _ -> (
+      match Markdown_blocks.of_markdown text with
+      | result -> result
+      | exception exn ->
+          Error
+            (Error.make Error.Invalid_blocks
+               ("invalid blocks markdown: " ^ Printexc.to_string exn)))
+  | None, Some path, _ -> (
+      try Markdown_blocks.of_markdown (read_file path)
+      with exn ->
+        Error
+          (Error.make Error.Invalid_blocks
+             (path ^ ": " ^ Printexc.to_string exn)))
   | None, None, Some content when content <> "" ->
       Ok (Vec.singleton (Block.make ~title:content ()))
   | None, None, _ when not (Vec.is_empty args) ->
@@ -981,7 +992,10 @@ let title_references ~block_refs title =
         | _ -> None)
     | None -> None
   in
-  match Js.Json.decodeArray (Mldoc.references title) with
+  match
+    try Js.Json.decodeArray (Mldoc.references title)
+    with _ -> None
+  with
   | None -> (Vec.empty, Vec.empty)
   | Some items ->
       Array.fold_left
@@ -1320,16 +1334,20 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                  (fun (ancestor, live_before) ->
                    if live_before then pure ()
                    else
-                     map
-                       (fun result ->
-                         match live_or_all_recycled result with
-                         | `Live entity -> (
-                             match uuid_of_entity entity with
-                             | Some uuid -> track_created ancestor uuid
-                             | None -> ())
-                         | _ -> ())
-                       (pull_pages_by_name invoke_config repo ancestor
-                          page_selector))
+                     (* One rejected re-pull must not skip tracking the
+                        ancestors that follow it. *)
+                     catch
+                       (map
+                          (fun result ->
+                            match live_or_all_recycled result with
+                            | `Live entity -> (
+                                match uuid_of_entity entity with
+                                | Some uuid -> track_created ancestor uuid
+                                | None -> ())
+                            | _ -> ())
+                          (pull_pages_by_name invoke_config repo ancestor
+                             page_selector))
+                       (fun _ -> pure ()))
                  (Vec.rev (Vec.combine ancestors was_live))))
         (all
            (Vec.map
