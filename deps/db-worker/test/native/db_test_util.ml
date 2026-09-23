@@ -401,6 +401,10 @@ let initial_data_idents_edn =
     {:db/ident :logseq.property/public? :db/index true}
     {:db/ident :logseq.property/default-value}
     {:db/ident :logseq.property/deleted-at :db/index true}
+    {:db/ident :logseq.property/deleted-by-ref :db/index true}
+    {:db/ident :logseq.property.recycle/original-parent :db/index true}
+    {:db/ident :logseq.property.recycle/original-page :db/index true}
+    {:db/ident :logseq.property.recycle/original-order :db/index true}
     {:db/ident :logseq.property/cardinality}
     {:db/ident :logseq.property/description}
     {:db/ident :logseq.property.class/enable-bidirectional?}
@@ -443,7 +447,8 @@ let initial_data_idents_edn =
     {:db/ident :logseq.class/Query}
     {:db/ident :logseq.class/Comments}
     {:db/ident :logseq.class/Comment}
-    {:db/ident :logseq.class/Asset}]"
+    {:db/ident :logseq.class/Asset}
+    {:db/ident :logseq.class/Template}]"
 
 (* cljs (db-test/create-conn) initial data: every built-in class/property
    is a full page entity (uuid + name + title + tags + built-in? +
@@ -514,6 +519,46 @@ let initial_data_edn =
 :block/tags #{:logseq.class/Property}
      :logseq.property/built-in? true
      :logseq.property/type :datetime
+:db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property/deleted-by-ref
+     :block/uuid #uuid \"00000003-0000-4000-8000-00000000020a\"
+     :block/name \"deleted by\" :block/title \"Deleted by\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :entity
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.recycle/original-parent
+     :block/uuid #uuid \"00000003-0000-4000-8000-00000000020b\"
+     :block/name \"recycle original parent\" :block/title \"Recycle original parent\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :node
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.recycle/original-page
+     :block/uuid #uuid \"00000003-0000-4000-8000-00000000020c\"
+     :block/name \"recycle original page\" :block/title \"Recycle original page\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :node
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? false
+     }
+    {:db/ident :logseq.property.recycle/original-order
+     :block/uuid #uuid \"00000003-0000-4000-8000-00000000020d\"
+     :block/name \"recycle original order\" :block/title \"Recycle original order\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :string
 :db/index true
      :logseq.property/public? false
      }
@@ -1014,6 +1059,14 @@ let initial_data_edn =
     {:db/ident :logseq.class/Tag
      :block/tags #{:logseq.class/Tag}
      :logseq.property.class/extends #{:logseq.class/Root}}
+    {:db/ident :logseq.class/Template
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000209\"
+     :block/name \"template\" :block/title \"Template\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Tag}
+     :logseq.property.class/extends #{:logseq.class/Root}
+     :logseq.property/built-in? true
+     }
     {:db/ident :logseq.kv/db-type :kv/value \"db\"}
     ;; cljs build-new-page + mark-block-as-built-in for
     ;; built-in-pages-names (Library, Quick add, Contents); Quick add is
@@ -1745,6 +1798,7 @@ type pvalue_entry =
 let rec property_value_tx (block : new_block) (prop : string) (v : prop_value)
     ~(properties_config : (string * property_decl) list)
     ~(all_idents : string StringMap.t) ~(page_uuids : string StringMap.t)
+    ~(translate_values : bool) ~(extract_refs : bool)
     : pvalue_entry option =
   (* cljs build-property-map-for-pvalue-tx *)
   let is_ref_vec = function Vec _ -> true | _ -> false in
@@ -1786,7 +1840,8 @@ let rec property_value_tx (block : new_block) (prop : string) (v : prop_value)
             let nested_entries =
               List.filter_map
                 (fun (pk, pv) ->
-                  property_value_tx nb' pk pv ~properties_config ~all_idents ~page_uuids)
+                  property_value_tx nb' pk pv ~properties_config ~all_idents ~page_uuids
+                    ~translate_values ~extract_refs)
                 nested_props
             in
             let attrs =
@@ -1815,7 +1870,45 @@ let rec property_value_tx (block : new_block) (prop : string) (v : prop_value)
                    ~property_id ~prop_type ~value ~extra:attrs)
                 [ "block/uuid", Uuid uuid ]
             in
-            (ent :: List.concat_map (fun e -> e.pv_txs) nested_entries,
+            (* cljs pvalue-tx->txs: :build/children of a pvalue block go
+               through ->block-tx with parent = [:block/uuid pvalue-uuid]
+               and page = the pvalue's :block/page *)
+            let child_page =
+              match block.nb_page with
+              | Some (Map [ "db/id", pid ]) -> pid
+              | Some other -> other
+              | None -> block.nb_db_id
+            in
+            let children_txs =
+              match get' m "build/children" with
+              | Some (Vec cs) | Some (Set_ cs) ->
+                  List.concat_map
+                    (fun c ->
+                       match c with
+                       | Map cm ->
+                           (* cljs expand-build-children assigns uuids to
+                              every child map *)
+                           let cm =
+                             match get' cm "block/uuid" with
+                             | Some _ -> cm
+                             | None ->
+                                 cm @ [ "block/uuid", Uuid (gen_uuid ()) ]
+                           in
+                           block_tx
+                             ~block_map:
+                               (merge' cm
+                                  [ "block/parent",
+                                    Map
+                                      [ "db/id",
+                                        Vec [ Kw "block/uuid"; Uuid uuid ] ] ])
+                             ~page_id:child_page ~page_uuids ~all_idents
+                             ~properties_config ~translate_values ~extract_refs
+                       | _ -> [])
+                    cs
+              | _ -> []
+            in
+            (ent :: children_txs
+             @ List.concat_map (fun e -> e.pv_txs) nested_entries,
              Vec [ Kw "block/uuid"; Uuid uuid ])
         | scalar ->
             let closed_uuid =
@@ -1850,7 +1943,7 @@ let rec property_value_tx (block : new_block) (prop : string) (v : prop_value)
            Some { pv_key = prop; pv_txs = txs; pv_ref = ref' })
 
 (* cljs ->block-tx — pvalue txs first, then the block map *)
-let block_tx ~(block_map : (string * edn) list) ~(page_id : edn)
+and block_tx ~(block_map : (string * edn) list) ~(page_id : edn)
     ~(page_uuids : string StringMap.t) ~(all_idents : string StringMap.t)
     ~(properties_config : (string * property_decl) list)
     ~(translate_values : bool) ~(extract_refs : bool) : (string * edn) list list =
@@ -1861,7 +1954,7 @@ let block_tx ~(block_map : (string * edn) list) ~(page_id : edn)
   in
   let pvalue_entries =
     List.filter_map
-      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids)
+      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids ~translate_values ~extract_refs)
       properties
   in
   let ref_strings =
@@ -1940,7 +2033,7 @@ let build_page_tx ~(page : (string * edn) list) ~(all_idents : string StringMap.
   let nb = { nb_db_id = db_id; nb_page = None } in
   let pvalue_entries =
     List.filter_map
-      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids)
+      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids ~translate_values:true ~extract_refs:true)
       properties
   in
   let tag_idents =
@@ -2066,7 +2159,7 @@ let build_property_tx ~(prop_name : string) ~(decl : property_decl)
   let nb = { nb_db_id = property_db_id; nb_page = None } in
   let pvalue_entries =
     List.filter_map
-      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids)
+      (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids ~translate_values:true ~extract_refs:true)
       decl.p_properties
   in
   let final =
@@ -2151,7 +2244,7 @@ let build_classes_tx ~(classes : (string * class_decl) list)
       let nb = { nb_db_id = List.assoc class_name class_db_ids; nb_page = None } in
       let pvalue_entries =
         List.filter_map
-          (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids)
+          (fun (pk, pv) -> property_value_tx nb pk pv ~properties_config ~all_idents ~page_uuids ~translate_values:true ~extract_refs:true)
           decl.c_properties
       in
       let extends =

@@ -131,6 +131,12 @@ let get_user_uuid (id_token : string option) : string option =
   | Some t -> Sync_util.jwt_payload_field t "sub"
   | None -> None
 
+(* cljs sync-auth/auth-headers — nil (no header) when there is no token *)
+let auth_headers () : (string * string) list =
+  match Sync_util.auth_token () with
+  | Some token -> [ "authorization", "Bearer " ^ token ]
+  | None -> []
+
 (* with-auth-headers: merge auth headers into a request record *)
 let with_auth_headers (headers : (string * string) list) (req : Http.request)
     : Http.request =

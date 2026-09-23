@@ -778,7 +778,11 @@ let add_missing_tag_idents (db : db) (tags : value list) : tx_op list =
         match map_key_of t "db/ident" with Some _ -> true | None -> false
       in
       let uuid =
-        match uuid_of_value t with Some u -> Some u | None -> None
+        (* cljs reads (:block/uuid t) — map keys only; lookup-ref vectors,
+           idents and bare eids are not tag maps *)
+        match t with
+        | Map _ -> uuid_of_value t
+        | _ -> None
       in
       match db_id, has_ident, uuid with
       | None, false, Some u ->
@@ -1815,6 +1819,48 @@ let rec rewrite_value (id_to_new_uuid : (entity_id * string) list) (v : value)
   | Set vs -> Set (List.map (rewrite_value id_to_new_uuid) vs)
   | _ -> v
 
+let rec rewrite_tx_value (id_to_new_uuid : (entity_id * string) list)
+    (tv : tx_value) : tx_value =
+  match tv with
+  | One_value v -> One_value (rewrite_value id_to_new_uuid v)
+  | Many_values vs ->
+      Many_values (List.map (rewrite_value id_to_new_uuid) vs)
+  (* cljs walk/prewalk: (de/entity? f) -> id->new-uuid remap; entity
+     values inside tx are remapped too (e.g. user.property/* refs to
+     inserted value blocks). Misses keep the raw eid like cljs
+     (:db/id f). *)
+  | One_entity t -> (
+      match t.db_id with
+      | Some (Entity_id id) -> (
+          match List.assoc_opt id id_to_new_uuid with
+          | Some u ->
+              One_value (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+          | None -> One_entity t)
+      | _ -> One_entity t)
+  (* (map? f) keeps the nested entity map — only :block/level is dropped,
+     so refs written as {:block/uuid u, ...attrs} still upsert at apply
+     time instead of collapsing to a stale eid *)
+  | Many_entities ts ->
+      Many_entities (List.map (rewrite_tx_entity id_to_new_uuid) ts)
+
+and rewrite_tx_entity (id_to_new_uuid : (entity_id * string) list)
+    (t : tx_entity) : tx_entity =
+  let db_id =
+    match t.db_id with
+    | Some (Entity_id id) -> (
+        match List.assoc_opt id id_to_new_uuid with
+        | Some u -> Some (Lookup_ref ("block/uuid", Uuid u))
+        | None -> t.db_id)
+    | _ -> t.db_id
+  in
+  { db_id
+  ; attrs =
+      List.filter_map
+        (fun (a, tv) ->
+          if a = "block/level" then None
+          else Some (a, rewrite_tx_value id_to_new_uuid tv))
+        t.attrs }
+
 let rewrite_tx_op (id_to_new_uuid : (entity_id * string) list) (op : tx_op)
     : tx_op =
   match op with
@@ -1825,46 +1871,8 @@ let rewrite_tx_op (id_to_new_uuid : (entity_id * string) list) (op : tx_op)
             List.filter_map
               (fun (a, tv) ->
                 if a = "block/level" then None
-                else
-                  let tv' =
-                    match tv with
-                    | One_value v -> One_value (rewrite_value id_to_new_uuid v)
-                    | Many_values vs ->
-                        Many_values (List.map (rewrite_value id_to_new_uuid) vs)
-                    (* cljs walk/prewalk: (de/entity? f) -> id->new-uuid
-                       remap; entity values inside tx are remapped too
-                       (e.g. user.property/* refs to inserted value
-                       blocks). Misses keep the raw eid like cljs
-                       (:db/id f). *)
-                    | One_entity t -> (
-                        match t.db_id with
-                        | Some (Entity_id id) -> (
-                            match List.assoc_opt id id_to_new_uuid with
-                            | Some u ->
-                                One_value
-                                  (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
-                            | None -> One_entity t)
-                        | _ -> One_entity t)
-                    | Many_entities ts ->
-                        Many_values
-                          (List.map
-                             (fun (t : tx_entity) ->
-                               match t.db_id with
-                               | Some (Entity_id id) -> (
-                                   match List.assoc_opt id id_to_new_uuid with
-                                   | Some u ->
-                                       Ref_to (Lookup_ref ("block/uuid", Uuid u))
-                                   | None -> Ref id)
-                               | Some (Lookup_ref _ as r) -> Ref_to r
-                               | Some (Ident s) -> Ref_to (Ident s)
-                               | Some (Temp_id s) -> Ref_to (Temp_id s)
-                               | Some CurrentTx -> Ref_to CurrentTx
-                               | None -> Ref 0)
-                             ts)
-                  in
-                  Some (a, tv'))
-              te.attrs
-        }
+                else Some (a, rewrite_tx_value id_to_new_uuid tv))
+              te.attrs }
   | Add (r, a, v) -> Add (r, a, rewrite_value id_to_new_uuid v)
   | _ -> op
 
