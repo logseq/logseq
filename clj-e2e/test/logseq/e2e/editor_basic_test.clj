@@ -1854,14 +1854,16 @@
        (loc/filter "h1.block-title-wrap.as-heading" :has-text heading-title))
       (let [plain (block-control-icon-metrics plain-title)
             heading (block-control-icon-metrics heading-title)]
-        (is (<= 12 (:iconWidth plain) 16) (pr-str plain))
-        (is (<= 12 (:iconHeight plain) 16) (pr-str plain))
+        ;; Emoji glyphs can be wider than their requested size; height is the
+        ;; heading-shared metric.
+        (is (<= 12 (:iconHeight plain) 18) (pr-str plain))
         (is (nil? (:headingLevel plain)) (pr-str plain))
+        (is (nil? (:iconSizeVar plain)) (pr-str plain))
         (is (= "28px" (:iconSizeVar heading)) (pr-str heading))
-        (is (= "1" (:headingLevel heading)) (pr-str heading))
-        (is (<= 24 (:iconWidth heading) 32) (pr-str heading))
-        (is (<= 24 (:iconHeight heading) 32) (pr-str heading))
-        (is (> (:iconWidth heading) (+ (:iconWidth plain) 8))
+        (is (= "1" (:headingLevel heading) (:wrapHeading heading)) (pr-str heading))
+        (is (<= 26 (:iconHeight heading) 30) (pr-str heading))
+        (is (>= (:headingFontSize heading) 30) (pr-str heading))
+        (is (> (:iconHeight heading) (+ (:iconHeight plain) 8))
             (pr-str {:plain plain :heading heading}))
         (is (< (abs (- (:iconHeight heading) (:headingFontSize heading)))
                (abs (- 14 (:headingFontSize heading))))
