@@ -856,15 +856,13 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when mouse-down?
-                          (editor-handler/save-current-block!)
-                          (state/clear-edit!)
+                          (editor-handler/save-current-block-before-navigate!)
                           (when-not (:disable-click? config)
                             (<open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
                             (util/stop e)
-                            (editor-handler/save-current-block!)
-                            (state/clear-edit!)
+                            (editor-handler/save-current-block-before-navigate!)
                             (<open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
        (assoc :on-context-menu on-context-menu))

@@ -1806,11 +1806,13 @@
       (p/new-page target-page)
       (p/goto-page host-page)
       (b/new-block (str "See [[" target-page "]] here"))
-      (util/exit-edit)
+      ;; Enter directly into a new empty block so the ref block renders without
+      ;; being clicked (clicking it could hit the page-ref link and navigate)
+      (b/new-block "")
       (assert/assert-is-visible
        (loc/filter ".page-reference .page-ref" :has-text target-page))
-      ;; New empty block, type without idle autosave, then immediately navigate via page-ref
-      (b/new-block "")
+      (is (= host-page (p/get-page-name)))
+      ;; type without idle autosave, then immediately navigate via page-ref
       (w/fill util/editor-q marker)
       (is (= marker (util/get-edit-content)))
       (w/click
@@ -1843,3 +1845,26 @@
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
       (is (some #(= marker %) (util/get-page-blocks-contents))))))
+
+(deftest page-ref-navigate-persists-edit-buffer-with-open-popup-test
+  (testing "clicking a page-ref while the page-search popup is open still flushes the editor"
+    (let [target-page (str "pageref-popup-target-" (random-uuid))
+          marker (str "pageref-popup-marker-" (random-uuid))
+          host-page (p/get-page-name)]
+      (p/new-page target-page)
+      (p/goto-page host-page)
+      (b/new-block (str "See [[" target-page "]] here"))
+      (b/new-block "")
+      (assert/assert-is-visible
+       (loc/filter ".page-reference .page-ref" :has-text target-page))
+      (is (= host-page (p/get-page-name)))
+      ;; typing "[[" opens the page-search popup, setting :editor/action
+      (util/press-seq (str marker " [[draft"))
+      (assert/assert-is-visible ".ui__popover-content a.menu-link")
+      (w/click
+       (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (is (= target-page (p/get-page-name)))
+      (p/goto-page host-page)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(string/starts-with? % marker) (util/get-page-blocks-contents))))))
