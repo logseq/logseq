@@ -2002,6 +2002,71 @@ let () =
             fail_promise
               (Printf.sprintf "expected six invoke requests, got %d" !step)));
 
+  test_promise "upsert block create resolves date property values by page name"
+    (fun () ->
+      let step = ref 0 in
+      let property_ident = "user.property/duedate" in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"duedate" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/duedate\",\"~:logseq.property/type\",\"~:date\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"2026-09-23" body ->
+                "[\"^ \
+                 \",\"~:db/id\",99,\"~:block/uuid\",\"33333333-3333-4333-8333-333333333333\"]"
+            | 3
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | 4
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:property_ident body) then
+                  fail_test ("missing duedate property ident: " ^ body);
+                if not (Js.String.includes ~search:"99" body) then
+                  fail_test ("missing resolved journal page id: " ^ body);
+                if Js.String.includes ~search:"2026-09-23" body then
+                  fail_test
+                    ("unresolved journal name leaked into property op: " ^ body);
+                "[]"
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- Ship it\n  duedate:: [[2026-09-23]]";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block date property" output);
+          if !step = 5 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+
   test_promise "update block resolves string update property names by title"
     (fun () ->
       let step = ref 0 in
