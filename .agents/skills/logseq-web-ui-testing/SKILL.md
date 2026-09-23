@@ -29,7 +29,7 @@ How to run the browser app and reach common editor UI flows for E2E verification
 - Insert a **code block**: click a block → type `/` → pick **Code block**. Or type ` `````` ` (six backticks) in a block to convert it. Set language via hover → "Choose language"/lang-name button → type in the filter input → click entry.
 - Insert a **calc block**: `/` → **Calculator** (typing `/calculate` does NOT match — the label is "Calculator"). Editor autofocuses; each line evaluates live into the right-hand results column.
 - Block with a ``` fence inside text: in a block editor, type text → **Shift+Enter** (soft newline) → ` ```lang ` → Shift+Enter → code → Shift+Enter → ` ``` ` → Escape. Plain Enter creates a NEW block; Shift+Enter inserts a newline inside it.
-- Shift+Enter inside a code/calc editor creates a sibling block — currently also inserts a newline into the code (known double-handling quirk; avoid using it mid-line).
+- Shift+Enter inside a code/calc editor creates a sibling block (captured before CodeMirror's own Shift-Enter keybinding).
 - **Right sidebar**: shift+click the page title or any `[[page-ref]]` → opens that page in `#right-sidebar`; block bullet right-click → "Open in sidebar" opens one block. Toggle sidebar off with `t r` (press `t` then `r`).
 - **File route editor** (:file): Settings (`#/settings`) → "Edit config.edn" → `#/file/logseq%2Fconfig.edn`, rendered by the same CM6 editor (clojure/edn mode).
 - Editing inside a CM editor: click the `.cm-content` area; plain Enter adds a line; Ctrl+Z / Ctrl+Shift+Z for undo/redo; clicking outside blurs → `save-code-editor!` persists to the block (verify via F5 reload).
