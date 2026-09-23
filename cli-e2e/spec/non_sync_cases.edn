@@ -844,6 +844,22 @@
      :show ["--id"]}},
    :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-dry-run-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
+   :cmds
+   ["out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks $'- Dry run parent\n  - Dry run child' --dry-run)\"; printf '%s\n' \"$out\"; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"ok\"; assert data[\"data\"][\"dry-run\"] is True; assert len(data[\"data\"][\"ops\"]) >= 1'; found=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Dry run parent\"]]')\"; printf '%s\n' \"$found\"; printf '%s' \"$found\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["\"dry-run\":true"]},
+   :covers
+   {:commands ["upsert block" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--dry-run"],
+     :query ["--query"]}},
+   :tags [:upsert],
+   :extends :non-sync/graph-json-env}
   {:id "block-upsert-target-uuid-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
