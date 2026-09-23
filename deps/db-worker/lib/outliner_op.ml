@@ -547,7 +547,9 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
         ~value:(Option.value (Cljs_map.get opts_map "value") ~default:Wire.Nil)
         ~description:(Option.bind (Cljs_map.get opts_map "description")
                         (fun w -> match w with Wire.String s -> Some s | _ -> None))
-        ~scoped_class_id:Wire.Nil;
+        ~scoped_class_id:(Option.value
+                            (Cljs_map.get opts_map "scoped-class-id")
+                            ~default:Wire.Nil);
       None
   | "delete-closed-value", [ property_id; value_block_id ] ->
       Outliner_property.delete_closed_value conn
