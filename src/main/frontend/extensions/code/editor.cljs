@@ -387,8 +387,8 @@
   (let [lookup-key (normalize-language-lookup language-name)]
     (some
      (fn [descriptor]
-       (when (or (= lookup-key (api/external-name (:id descriptor)))
-                 (contains? (:names descriptor) lookup-key))
+       (when (or (= lookup-key (normalize-language-lookup (api/external-name (:id descriptor))))
+                 (some #(= lookup-key (normalize-language-lookup %)) (:names descriptor)))
          descriptor))
      (vals (:plugin-languages @(:*state context))))))
 
