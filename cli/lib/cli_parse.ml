@@ -616,7 +616,10 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                 content = content_option_or_args options args;
                 blocks_markdown = option_value "blocks" options;
                 blocks_file = option_value "blocks-file" options;
-                dry_run = option_present "dry-run" options;
+                dry_run =
+                  Option.value
+                    (bool_option_value "dry-run" options)
+                    ~default:false;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;

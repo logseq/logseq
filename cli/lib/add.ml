@@ -692,12 +692,18 @@ let tag_entity value =
 
 let resolve_tag_entity invoke_config repo tag =
   let open Cli_effect in
+  let tag_not_found =
+    Error.make Error.Tag_not_found "tag not found"
+  in
   match tag with
   | Selector.Tag_name name ->
       bind (find_tag_by_name invoke_config repo name) (function
         | Some entity when Option.is_some (id_of_entity entity) ->
-            pure (Entity.of_value entity)
-        | _ -> failwith "tag not found")
+            pure (Ok (Entity.of_value entity))
+        | _ ->
+            pure
+              (Error
+                 (Error.make Error.Tag_not_found ("tag not found: " ^ name))))
   | _ ->
       bind
         (pull_entity invoke_config repo tag_selector (lookup_of_tag tag))
@@ -705,19 +711,30 @@ let resolve_tag_entity invoke_config repo tag =
           match first_entity entity with
           | Some entity
             when Option.is_some (id_of_entity entity) && tag_entity entity ->
-              pure (Entity.of_value entity)
-          | Some _ -> failwith "tag not found"
-          | None -> failwith "tag not found")
+              pure (Ok (Entity.of_value entity))
+          | _ -> pure (Error tag_not_found))
+
+let resolve_tag_entities invoke_config repo tags =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (tag, rest) ->
+        bind (resolve_tag_entity invoke_config repo tag) (function
+          | Error err -> pure (Error err)
+          | Ok entity -> loop (Vec.push_back acc entity) rest)
+  in
+  loop Vec.empty tags
 
 let resolve_tags config repo tags =
-  if Vec.is_empty tags then Cli_effect.pure Vec.empty
+  if Vec.is_empty tags then Cli_effect.pure (Ok Vec.empty)
   else
     let open Cli_effect in
     bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
       (function
-      | Error err -> failwith err.message
+      | Error err -> pure (Error err)
       | Ok invoke_config ->
-          all (Vec.map (resolve_tag_entity invoke_config repo) tags))
+          resolve_tag_entities invoke_config repo tags)
 
 let lookup_property_entity invoke_config repo = function
   | Property.Key_id id ->
@@ -749,21 +766,35 @@ let resolve_property_assignment invoke_config repo assignment =
           Edn_util.get entity "logseq.property/type" )
       with
       | Some _, Some ident, Some _ ->
-          pure { assignment with Property.key = Property.Key_ident ident }
-      | _ -> failwith "property not found")
+          pure
+            (Ok { assignment with Property.key = Property.Key_ident ident })
+      | _ ->
+          pure
+            (Error
+               (Error.make Error.Property_not_found "property not found")))
+
+let resolve_property_assignments invoke_config repo assignments =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (assignment, rest) ->
+        bind (resolve_property_assignment invoke_config repo assignment)
+          (function
+          | Error err -> pure (Error err)
+          | Ok assignment -> loop (Vec.push_back acc assignment) rest)
+  in
+  loop Vec.empty assignments
 
 let resolve_properties config repo properties =
-  if Vec.is_empty properties then Cli_effect.pure Vec.empty
+  if Vec.is_empty properties then Cli_effect.pure (Ok Vec.empty)
   else
     let open Cli_effect in
     bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
       (function
-      | Error err -> failwith err.message
+      | Error err -> pure (Error err)
       | Ok invoke_config ->
-          all
-            (Vec.map
-               (resolve_property_assignment invoke_config repo)
-               properties))
+          resolve_property_assignments invoke_config repo properties)
 
 let resolve_created_ids config repo blocks =
   let open Cli_effect in
@@ -942,13 +973,16 @@ let title_references title =
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
                           | Some "Block_ref", Some uuid ->
-                              ( Vec.push_back refs
-                                  (vector_vec
-                                     (Vec.of_array
-                                        [|
-                                          kw "block/uuid"; Edn_util.uuid uuid;
-                                        |])),
-                                tag_names )
+                              if Cli_primitive.is_uuid_string uuid then
+                                ( Vec.push_back refs
+                                    (vector_vec
+                                       (Vec.of_array
+                                          [|
+                                            kw "block/uuid";
+                                            Edn_util.uuid uuid;
+                                          |])),
+                                  tag_names )
+                              else (refs, tag_names)
                           | _ -> (refs, tag_names))
                       | _ -> (refs, tag_names))
                   | None -> (refs, tag_names))
@@ -956,17 +990,10 @@ let title_references title =
           | _ -> (refs, tag_names))
         (Vec.empty, Vec.empty) items
 
-(* Dry-run preview: page names referenced inside block titles that do not
-   exist yet; the worker would create them while applying insert-blocks. *)
-let missing_ref_page_names invoke_config repo links =
+(* Dry-run preview: page names that do not exist yet; the worker would create
+   them while applying the planned ops. Read-only — pulls, never creates. *)
+let missing_page_names invoke_config repo names =
   let open Cli_effect in
-  let names =
-    links
-    |> Vec.concat_map (fun (_, refs, _) -> refs)
-    |> Vec.filter_map (fun ref_value ->
-           Edn_util.get_string ref_value "block/title")
-    |> unique
-  in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure acc
@@ -979,6 +1006,38 @@ let missing_ref_page_names invoke_config repo links =
   in
   loop Vec.empty names
 
+let missing_ref_page_names invoke_config repo links =
+  let names =
+    links
+    |> Vec.concat_map (fun (_, refs, _) -> refs)
+    |> Vec.filter_map (fun ref_value ->
+           Edn_util.get_string ref_value "block/title")
+    |> unique
+  in
+  missing_page_names invoke_config repo names
+
+(* 2-element lookup vectors [:block/name "x"] inside the planned ops — the
+   target lookup and unresolved date property values under --dry-run — name
+   pages the worker may need to create while applying. *)
+let block_name_lookups_in_ops ops =
+  let rec collect acc value =
+    match Edn_util.as_vector value with
+    | Some items -> (
+        match
+          ( Vec.length items = 2,
+            Edn_util.as_string_like (Vec.nth items 0),
+            Edn_util.as_string_like (Vec.nth items 1) )
+        with
+        | true, Some "block/name", Some name -> Vec.push_back acc name
+        | _ -> Vec.fold_left collect acc items)
+    | None -> (
+        match Edn_util.as_map value with
+        | Some fields ->
+            Vec.fold_left (fun a (_, v) -> collect a v) acc fields
+        | None -> acc)
+  in
+  Vec.fold_left collect Vec.empty ops |> unique
+
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
@@ -990,10 +1049,20 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
           | Error err ->
               pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
           | Ok (target_lookup, would_create_pages) ->
-              bind (resolve_tags config action.repo action.tags) (fun tags ->
-                  bind
-                    (resolve_properties config action.repo action.properties)
-                    (fun properties ->
+              bind (resolve_tags config action.repo action.tags) (function
+                | Error err ->
+                    pure
+                      (Cli_result.error ~command:Command_id.Upsert_block
+                         mode err)
+                | Ok tags ->
+                    bind
+                      (resolve_properties config action.repo action.properties)
+                      (function
+                      | Error err ->
+                          pure
+                            (Cli_result.error ~command:Command_id.Upsert_block
+                               mode err)
+                      | Ok properties ->
                       let flat_blocks = flatten_blocks action.blocks in
                       let links =
                         Vec.filter_map
@@ -1020,7 +1089,12 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                            (Vec.map
                               (fun name -> Selector.Tag_name name)
                               block_tag_names))
-                        (fun block_tag_entities ->
+                        (function
+                        | Error err ->
+                            pure
+                              (Cli_result.error
+                                 ~command:Command_id.Upsert_block mode err)
+                        | Ok block_tag_entities ->
                           let tag_id_of_name name =
                             Vec.find_map
                               (fun (n, entity) ->
@@ -1109,28 +1183,37 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                             bind
                               (missing_ref_page_names invoke_config action.repo
                                  links) (fun missing_refs ->
-                                let would_create_pages =
-                                  Vec.append would_create_pages missing_refs
-                                  |> unique
-                                in
-                                pure
-                                  (Cli_result.ok
-                                     ~command:Command_id.Upsert_block mode
-                                     (Raw
-                                        (Edn_util.map_vec
-                                           (Vec.of_array
-                                              [|
-                                                ( kw "dry-run",
-                                                  Edn_util.bool true );
-                                                ( kw "ops",
-                                                  Edn_util.vector_vec ops );
-                                                ( kw "would-create-pages",
-                                                  Edn_util.vector_vec
-                                                    (would_create_pages
-                                                    |> Vec.map (fun name ->
-                                                        Edn_util.string name))
-                                              );
-                                              |])))))
+                                bind
+                                  (missing_page_names invoke_config
+                                     action.repo
+                                     (block_name_lookups_in_ops ops))
+                                  (fun missing_lookups ->
+                                    let would_create_pages =
+                                      Vec.append would_create_pages
+                                        (Vec.append missing_refs
+                                           missing_lookups)
+                                      |> unique
+                                    in
+                                    pure
+                                      (Cli_result.ok
+                                         ~command:Command_id.Upsert_block mode
+                                         (Raw
+                                            (Edn_util.map_vec
+                                               (Vec.of_array
+                                                  [|
+                                                    ( kw "dry-run",
+                                                      Edn_util.bool true );
+                                                    ( kw "ops",
+                                                      Edn_util.vector_vec ops
+                                                    );
+                                                    ( kw "would-create-pages",
+                                                      Edn_util.vector_vec
+                                                        (would_create_pages
+                                                        |> Vec.map
+                                                             (fun name ->
+                                                               Edn_util.string
+                                                                 name)) );
+                                                  |]))))))
                           else
                             bind
                               (apply_outliner_ops invoke_config action.repo
