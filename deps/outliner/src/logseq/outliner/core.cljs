@@ -1182,22 +1182,45 @@
            (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
            (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
+(defn- move-block-property-tx
+  [block target-block sibling? block-from-property restore-from-property]
+  (let [retract-property-tx (when block-from-property
+                              [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
+                               [:db/retract (:db/id block) :logseq.property/created-from-property]])
+        add-property-tx (when restore-from-property
+                          (let [owner-id (if sibling?
+                                           (:db/id (:block/parent target-block))
+                                           (:db/id target-block))]
+                            [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
+                             [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
+    (concat retract-property-tx add-property-tx)))
+
 (defn- move-block
   [db block target-block sibling? {:keys [created-from-property]}]
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
-        move-page-as-block-child? (and (not sibling?)
-                                       (not (ldb/page? target-block))
-                                       (ldb/page? block))]
-    (if (or target-without-parent? move-page-as-block-child?)
+        target-from-property (when sibling?
+                               (:logseq.property/created-from-property target-block))
+        explicit-restore-from-property (resolve-created-from-property db created-from-property)
+        restore-from-property (or target-from-property explicit-restore-from-property)
+        new-parent (if sibling? (:block/parent target-block) target-block)
+        ;; The Library page only holds normal pages; blocks, classes,
+        ;; properties and other page types can't be moved into it.
+        move-disallowed? (if (ldb/library? new-parent)
+                           (not (ldb/internal-page? block))
+                           (and (ldb/page? block)
+                                (not (ldb/page? new-parent))))]
+    (if (or target-without-parent? move-disallowed?)
       (throw (ex-info "not-allowed-move-block-page"
-                      {:reason (if target-without-parent?
-                                 :move-to-target-without-parent
-                                 :move-page-to-be-child-of-block)}))
+                      {:reason (cond
+                                 target-without-parent? :move-to-target-without-parent
+                                 (ldb/library? new-parent) :move-to-library
+                                 :else :move-page-to-be-child-of-block)}))
       (let [first-block-page (:db/id (:block/page block))
             target-page (get-target-block-page target-block sibling?)
             not-same-page? (not= first-block-page target-page)
+            page-after-move? (ldb/page? block)
             block-order (if sibling?
                           (db-order/gen-key (:block/order target-block)
                                             (:block/order (ldb/get-right-sibling target-block)))
@@ -1210,30 +1233,18 @@
                                        (:db/id (:block/parent target-block))
                                        (:db/id target-block))
                        :block/order block-order}
-                       (not (ldb/page? block))
+                       (not page-after-move?)
                        (assoc :block/page target-page))]
-            children-page-tx (when (and not-same-page? (not (ldb/page? block)))
+            children-page-tx (when (and not-same-page? (not page-after-move?))
                                (let [children-ids (ldb/get-block-full-children-ids db (:db/id block))]
                                  (keep (fn [id]
                                          (let [child (d/entity db id)]
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            target-from-property (when sibling?
-                                   (:logseq.property/created-from-property target-block))
             block-from-property (:logseq.property/created-from-property block)
-            restore-from-property (or target-from-property
-                                      (resolve-created-from-property db created-from-property))
-            property-tx (let [retract-property-tx (when block-from-property
-                                                    [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
-                                                     [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when restore-from-property
-                                                (let [owner-id (if sibling?
-                                                                 (:db/id (:block/parent target-block))
-                                                                 (:db/id target-block))]
-                                                  [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
-                                                   [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
-                          (concat retract-property-tx add-property-tx))]
+            property-tx (move-block-property-tx block target-block sibling?
+                                               block-from-property restore-from-property)]
         (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
 
 (defn- transact-move-blocks!
