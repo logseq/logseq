@@ -1416,7 +1416,11 @@ let create_page config repo name =
            kw "create-page";
            Edn_util.vector_vec
              (Vec.of_array
-                [| Edn_util.string name; Edn_util.map_vec Vec.empty |]);
+                [|
+                  Edn_util.string name;
+                  Edn_util.map_vec
+                    (Vec.singleton (kw "split-namespace?", Edn_util.bool true));
+                |]);
          |])
   in
   apply_outliner_ops config repo (Vec.singleton op)
@@ -2243,38 +2247,16 @@ let restore_recycled_page invoke_config repo page_uuid =
              |])))
 
 let pull_created_page invoke_config repo name create_result =
-  let uuid_value =
-    match
-      (Edn_util.as_vector create_result, Edn_util.as_list create_result)
-    with
-    | Some values, _ -> Vec.nth_opt values 1
-    | _, Some values -> Vec.nth_opt values 1
-    | _ -> None
-  in
-  match uuid_value with
-  | Some uuid_value -> (
-      match Edn_util.as_string_like uuid_value with
-      | Some uuid ->
-          Transport.thread_api_pull invoke_config ~repo
-            ~selector:
-              (Edn_util.vector_t_vec
-                 (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-            ~lookup:
-              (vector_vec
-                 (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
-      | _ ->
-          Transport.thread_api_pull invoke_config ~repo
-            ~selector:
-              (Edn_util.vector_t_vec
-                 (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-            ~lookup:
-              (vector_vec
-                 (Vec.of_array
-                    [|
-                      kw "block/name";
-                      Edn_util.string (normalized_lookup_name name);
-                    |])))
-  | _ ->
+  match Add.created_page_uuid create_result with
+  | Some uuid ->
+      Transport.thread_api_pull invoke_config ~repo
+        ~selector:
+          (Edn_util.vector_t_vec
+             (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
+        ~lookup:
+          (vector_vec
+             (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
+  | None ->
       Transport.thread_api_pull invoke_config ~repo
         ~selector:
           (Edn_util.vector_t_vec
