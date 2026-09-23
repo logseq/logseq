@@ -690,6 +690,18 @@ should be done through this fn in order to get global config and config defaults
   ([repo]
    (not (false? (:feature/enable-flashcards? (get-config repo))))))
 
+(def flashcard-class-idents
+  "Built-in classes that implement the Flashcards feature."
+  #{:logseq.class/Card :logseq.class/Cards})
+
+(defn flashcard-class?
+  "True when `class` is the built-in Card or Cards class."
+  [class]
+  (contains? flashcard-class-idents
+             (if (keyword? class)
+               class
+               (:db/ident class))))
+
 ;; Enable by default
 (defn show-brackets?
   []

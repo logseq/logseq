@@ -463,16 +463,17 @@
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (p/let [blocks (<get-operating-blocks block-ids)
-           card-class (state/<invoke-db-worker :thread-api/pull
-                                               (state/get-current-repo)
-                                               [:db/id]
-                                               :logseq.class/Card)]
-     (when-let [block-ids (not-empty (map :block/uuid blocks))]
-       (property-handler/batch-set-block-property!
-        block-ids
-        :block/tags
-        (:db/id card-class))))))
+   (when (state/enable-flashcards?)
+     (p/let [blocks (<get-operating-blocks block-ids)
+             card-class (state/<invoke-db-worker :thread-api/pull
+                                                 (state/get-current-repo)
+                                                 [:db/id]
+                                                 :logseq.class/Card)]
+       (when-let [block-ids (not-empty (map :block/uuid blocks))]
+         (property-handler/batch-set-block-property!
+          block-ids
+          :block/tags
+          (:db/id card-class)))))))
 
 ;;; register cloze macro
 

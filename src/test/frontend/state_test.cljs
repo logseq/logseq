@@ -307,3 +307,9 @@
       (is (some? (state/<invoke-db-worker-when-ready :thread-api/pull "repo" [:db/id] 1)))
       (finally
         (reset! state/*db-worker previous)))))
+
+(deftest flashcard-class?-identifies-built-in-card-classes
+  (is (true? (state/flashcard-class? :logseq.class/Card)))
+  (is (true? (state/flashcard-class? {:db/ident :logseq.class/Cards})))
+  (is (false? (state/flashcard-class? :logseq.class/Task)))
+  (is (false? (state/flashcard-class? {:db/ident :logseq.class/Query}))))

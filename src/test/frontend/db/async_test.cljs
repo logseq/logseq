@@ -569,3 +569,23 @@
                   (fn [error]
                     (is false (str error))))
                  (p/finally done))))))
+
+(deftest get-all-classes-hides-flashcard-classes-when-feature-disabled
+  (async done
+    (let [card {:db/id 1 :db/ident :logseq.class/Card :block/title "Card"}
+          cards {:db/id 2 :db/ident :logseq.class/Cards :block/title "Cards"}
+          task {:db/id 3 :db/ident :logseq.class/Task :block/title "Task"}]
+      (-> (p/let [disabled (p/with-redefs [state/enable-flashcards? (constantly false)
+                                           db-async/<invoke-db-worker
+                                           (fn [& _] (p/resolved [card cards task]))]
+                             (db-async/<get-all-classes "graph" {:except-root-class? true}))
+                  enabled (p/with-redefs [state/enable-flashcards? (constantly true)
+                                          db-async/<invoke-db-worker
+                                          (fn [& _] (p/resolved [card cards task]))]
+                            (db-async/<get-all-classes "graph" {:except-root-class? true}))]
+            (is (= ["Task"] (map :block/title disabled))
+                "#Card and #Cards must not be offered when Flashcards is off")
+            (is (= ["Card" "Cards" "Task"] (map :block/title enabled))
+                "#Card and #Cards stay available when Flashcards is on"))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))

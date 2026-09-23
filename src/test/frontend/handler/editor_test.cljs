@@ -1050,6 +1050,35 @@
                        (reset! state/*db-worker previous-worker)
                        (done)))))))
 
+(deftest get-matched-classes-hides-flashcard-tags-when-disabled
+  (async done
+    (let [card {:db/id 1
+                :db/ident :logseq.class/Card
+                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                :block/title "Card"}
+          cards {:db/id 2
+                 :db/ident :logseq.class/Cards
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "Cards"}
+          task {:db/id 3
+                :db/ident :logseq.class/Task
+                :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                :block/title "Task"}]
+      (-> (p/let [disabled (p/with-redefs [state/enable-flashcards? (constantly false)
+                                           db-async/<invoke-db-worker
+                                           (fn [& _] (p/resolved [card cards task]))]
+                             (editor/get-matched-classes "card"))
+                  enabled (p/with-redefs [state/enable-flashcards? (constantly true)
+                                          db-async/<invoke-db-worker
+                                          (fn [& _] (p/resolved [card cards task]))]
+                            (editor/get-matched-classes "card"))]
+            (is (empty? (filter state/flashcard-class? disabled))
+                "#card / #cards autocomplete must hide Card and Cards when the feature is off")
+            (is (= ["Card" "Cards"] (map :block/title enabled))
+                "#card / #cards autocomplete still matches when the feature is on"))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
 (deftest get-matched-classes-includes-page-class-for-blocks
   (async done
     (let [page-class {:db/id 3
