@@ -7,5 +7,6 @@
                   logseq.outliner.property
                   logseq.outliner.op.construct
                   logseq.outliner.recycle
+                  logseq.outliner.transaction
                   logseq.outliner.tree]
  :report {:format :ignore}}
