@@ -3,6 +3,7 @@
    Keep this namespace free of npm dependencies so it is usable from tests and
    from the main bundle without pulling in the editor implementation."
   (:require [clojure.set :as set]
+            [goog.object :as gobj]
             [lambdaisland.glogi :as log]))
 
 (def api-version 1)
@@ -59,11 +60,24 @@
     #{(str values)}))
 
 (defn normalize-language-descriptor
+  "Normalizes a language descriptor map or JS object. `:support` (an
+   Extension/LanguageSupport instance) and `:load` (a function returning an
+   extension or a promise of one, mirroring LanguageDescription.load) are
+   kept as opaque values — they must not pass through `js->clj`."
   [descriptor]
-  (let [descriptor (if (map? descriptor)
-                     descriptor
-                     (js->clj descriptor :keywordize-keys true))]
+  (let [js-descriptor? (not (map? descriptor))
+        support (when js-descriptor? (gobj/get descriptor "support"))
+        load (when js-descriptor? (gobj/get descriptor "load"))
+        descriptor (if js-descriptor?
+                     (js->clj descriptor :keywordize-keys true)
+                     descriptor)]
     (cond-> descriptor
+      support
+      (assoc :support support)
+
+      load
+      (assoc :load load)
+
       (:id descriptor)
       (update :id keyword)
 
@@ -90,7 +104,9 @@
            :extensions (clj->js (sort (or (:extensions descriptor) [])))
            :package (:package descriptor)
            :entry (external-name (:entry descriptor))
-           :options (clj->js (:options descriptor))})))
+           :options (clj->js (:options descriptor))
+           :support (:support descriptor)
+           :load (:load descriptor)})))
 
 (defn make-enhancer-payload
   [context]

@@ -291,9 +291,38 @@
     :clojure
     (clojure-language/extensions code-highlight-style)
 
-    (if-let [support (get language-supports (:id language))]
+    (if-let [support (or (:support language)
+                         (get language-supports (:id language)))]
       (to-array [support])
       #js [])))
+
+(defn- reconfigure-language!
+  [context extension]
+  (when (and extension
+             (:view context)
+             (:language-compartment context))
+    (let [^js view (:view context)
+          ^js compartment (:language-compartment context)]
+      (.dispatch view
+                 #js {:effects (.reconfigure compartment
+                                             (if (array? extension)
+                                               extension
+                                               (to-array [extension])))}))))
+
+(defn- load-language-support!
+  "For plugin language descriptors carrying a `:load` fn
+   (LanguageDescription.load-style), resolve the support and reconfigure the
+   language compartment once it settles."
+  [context descriptor]
+  (when-let [load (:load descriptor)]
+    (let [result (load (api/language-descriptor->js descriptor))]
+      (-> (js/Promise.resolve result)
+          (.then (fn [extension]
+                   (reconfigure-language! context extension)))
+          (.catch (fn [error]
+                    (log/error :code-editor/language-load-failed
+                               {:id (:id descriptor)
+                                :error error})))))))
 
 (defn- base-extensions
   []
@@ -412,9 +441,8 @@
   (let [language (or (plugin-language-by-name context language-name)
                      (resolve-language! language-name))]
     (swap! (:*state context) assoc :language language)
-    (when-let [^js view (:view context)]
-      (when-let [^js compartment (:language-compartment context)]
-        (.dispatch view #js {:effects (.reconfigure compartment (language-extensions language))})))
+    (reconfigure-language! context (language-extensions language))
+    (load-language-support! context language)
     language))
 
 (code-editor/register-impl! {:set-language! set-language-impl!})
