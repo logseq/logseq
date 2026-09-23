@@ -2,7 +2,7 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [deftest is]]
-            [frontend.components.block :as block]
+            [frontend.components.block.reaction :as block]
             [frontend.db.hooks :as db-hooks]
             [frontend.handler.user :as user-handler]
             [goog.object :as gobj]))
