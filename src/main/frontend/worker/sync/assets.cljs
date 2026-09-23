@@ -331,6 +331,16 @@
                      (range (min parallelism (count asset-ops))))))
       (p/resolved nil))))
 
+(defn enqueue-asset-task!
+  [client task]
+  (when-let [queue (:asset-queue client)]
+    (swap! queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 ;; Keep queue alive even if one asset task fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task))))))))
+
 (defn enqueue-asset-sync!
   [repo client {:keys [enqueue-asset-task-f current-client-f broadcast-rtc-state!-f fail-fast-f]}]
   (enqueue-asset-task-f
