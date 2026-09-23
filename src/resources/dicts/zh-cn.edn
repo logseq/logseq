@@ -518,6 +518,7 @@
  :editor.slash/advanced-query-desc "创建一个高级查询块"
  :editor.slash/calculator "计算器"
  :editor.slash/calculator-desc "插入一个计算器"
+ :editor.slash/clear-heading "清除标题"
  :editor.slash/cloze "填空"
  :editor.slash/code-block "代码块"
  :editor.slash/code-block-desc "插入代码块"
