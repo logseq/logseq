@@ -65,3 +65,38 @@
           :entityType "block"
           :data {:title "orphan"
                  :page-id "Some Page Name"}}]))))
+
+(deftest build-upsert-nodes-edn-resolves-uuid-page-ids
+  (test-helper/load-test-files
+   [{:page {:block/title "Existing Tools Page"}
+     :blocks [{:block/title "existing block"}]}])
+  (let [db (conn/get-db)
+        page (api-tools/get-page-data db "Existing Tools Page")
+        page-uuid (str (get-in page [:entity :block/uuid]))
+        block-uuid (str (:block/uuid (first (:blocks page))))
+        local-id "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        edn (api-tools/build-upsert-nodes-edn
+             db
+             [{:operation "add"
+               :entityType "page"
+               :id local-id
+               :data {:title "Local Uuid Page"}}
+              {:operation "add"
+               :entityType "block"
+               :data {:title "local block" :page-id local-id}}
+              {:operation "add"
+               :entityType "block"
+               :data {:title "existing page block" :page-id page-uuid}}])]
+    (is (= [{:page {:block/title "Local Uuid Page"}
+             :blocks [{:block/title "local block"}]}
+            {:page {:block/uuid (uuid page-uuid)}
+             :blocks [{:block/title "existing page block"}]}]
+           (:pages-and-blocks edn)))
+    (is (thrown-with-msg?
+         js/Error
+         #"is not an existing page"
+         (api-tools/build-upsert-nodes-edn
+          db
+          [{:operation "add"
+            :entityType "block"
+            :data {:title "bad parent" :page-id block-uuid}}])))))
