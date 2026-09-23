@@ -131,6 +131,42 @@
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
 
+(defn- page-tag?
+  [tag]
+  (= :logseq.class/Page (or (:db/ident tag) tag)))
+
+(defn- title-for-page-conversion
+  "Stored title with an inline #Page tag removed."
+  [db title]
+  (let [title' (if (string? title) (string/trim title) title)
+        page-tag (d/entity db :logseq.class/Page)]
+    (if (and (string? title') (:block/uuid page-tag))
+      (-> title'
+          (string/replace (str "#[[" (:block/uuid page-tag) "]]") "")
+          string/trim)
+      title')))
+
+(defn ^:api validate-page-conversion-title
+  "Validates and returns the title to persist for block→page conversion.
+  Reused by the intentional #Page tag path, Library moves, and pipeline auto-#Page."
+  [db block title]
+  (let [title' (title-for-page-conversion db (or title
+                                                 (:block/raw-title block)
+                                                 (:block/title block)))
+        node {:node block}]
+    (validate-page-title title' node)
+    (validate-page-title-characters title' node)
+    (let [page-tag (d/entity db :logseq.class/Page)
+          tags (cond-> (vec (:block/tags block))
+                 (and page-tag (not (some page-tag? (:block/tags block))))
+                 (conj page-tag))
+          page-like {:db/id (:db/id block)
+                     :block/parent (:block/parent block)
+                     :block/tags tags
+                     :block/title title'}]
+      (validate-unique-for-page db title' page-like)
+      title')))
+
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
   [new-title entity]
@@ -328,8 +364,12 @@
     (doseq [eid eids]
       (let [block (d/entity db eid)]
         (when (:block/parent block)
-          (validate-page-title (:block/title block) {:node block})
-          (validate-page-title-characters (:block/title block) {:node block})
+          (let [library-page (ldb/get-library-page db)
+                title (or (:block/raw-title block) (:block/title block))]
+            ;; Empty Library children are #Page drafts created by Enter; validate when titled.
+            (when-not (and (string/blank? title)
+                           (= (:db/id library-page) (:db/id (:block/parent block))))
+              (validate-page-conversion-title db block nil)))
 
           ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents
