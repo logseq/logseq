@@ -39,7 +39,7 @@
   (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
 (defn filter-commands
-  [page? commands]
+  [page? has-heading? commands]
   (if page?
     (let [task-groups #{(t :editor.slash/group-task-status)
                         (t :editor.slash/group-task-date)
@@ -49,7 +49,9 @@
                  (= (t :command.editor/add-property) (first item))
                  (when (= (count item) 5)
                    (contains? task-groups (last item))))) commands))
-    commands))
+    (if has-heading?
+      commands
+      (remove #(= (t :editor.slash/clear-heading) (first %)) commands))))
 
 (defn node-render
   [block q {:keys [db-tag?]}]
@@ -90,8 +92,10 @@
 (hsx/defc commands
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
-        page? (entity/page? (state/get-edit-block))
-        matched (or (filter-commands page? matched') no-matched-commands)
+        edit-block (state/get-edit-block)
+        page? (entity/page? edit-block)
+        has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
+        matched (or (filter-commands page? has-heading? matched') no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
     (ui/auto-complete
      matched
