@@ -351,6 +351,7 @@
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
+(declare expand-collapsed-indent-target!)
 
 (defn- inserted-block-edit-fn
   [source-block block container-id]
@@ -380,6 +381,8 @@
                            :skip-load? true}))
            (clear-pending-new-block!)))
         (p/do!
+         (when (true? tab-indent?)
+           (expand-collapsed-indent-target! block'))
          (when (some? tab-indent?)
            (block-handler/indent-outdent-blocks! [block'] tab-indent? nil))
          (edit-block! block' (count typed-text)
@@ -506,6 +509,22 @@
       (some-> (.-nextSibling parent)
               (dom/sel1 ".ls-block"))
       (.-nextSibling node))))
+
+(defn- expand-collapsed-indent-target!
+  "Indenting under a collapsed block expands it in the db, but the
+  `:ui/collapsed-blocks` override written when collapsing it takes precedence
+  and would keep hiding the indented blocks, unmounting the editor. Clear the
+  override on the new parent in every view that renders `block`."
+  [block]
+  (doseq [node (util/get-blocks-by-id (:block/uuid block))
+          :when (dom/has-class? node "ls-block")
+          :let [target (get-node-prev-sibling node)
+                target-id (some-> target (dom/attr "blockid") uuid)
+                container-id (some-> target get-node-container-id)]
+          :when (and target-id
+                     container-id
+                     (true? (state/get-block-collapsed target-id container-id)))]
+    (state/set-collapsed-block! target-id false container-id)))
 
 (defn- get-new-container-id
   [op data]
@@ -1807,6 +1826,8 @@
     (let [indent? (= direction :right)
           blocks (filter #(block-eligible-for-indent-outdent? % indent? root-block) blocks)]
       (when (seq blocks)
+        (when indent?
+          (expand-collapsed-indent-target! (first blocks)))
         (block-handler/indent-outdent-blocks! blocks indent? nil)))))
 
 (defn- get-link [format link label]
@@ -2976,6 +2997,8 @@
           (let [block (current-block-with-title block value)
                 edit-block-fn (moved-block-edit-fn block pos value
                                                    (or container-id (:container-id config)))]
+            (when indent?
+              (expand-collapsed-indent-target! block))
             (block-handler/indent-outdent-blocks! [block] indent? save-current-block!
                                                   edit-block-fn)))))))
 
