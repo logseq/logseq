@@ -355,11 +355,12 @@ let on_become_slave ~slave_client_id ~service_name ~common_channel
       let ty = wire_string "type" data in
       match ty with
       | Some t when List.mem t broadcast_data_types ->
-          (* cljs (.postMessage js/self data) — the broadcast
-             transit-payload forwarded to this client's UI thread *)
+          (* cljs (.postMessage js/self data) — forward the broadcast
+             transit-payload straight to this client's UI thread only;
+             Broadcast.to_clients would re-relay it onto the common
+             channel via extra_poster, looping between slaves *)
           (match Wire.get "data" data with
-           | Some (Wire.String payload) ->
-               Broadcast.to_clients ~kind:t ~transit_payload:payload
+           | Some (Wire.String payload) -> Comlink.post_message payload
            | _ -> ())
       | Some "master-changed" ->
           E.async (fun () ->
