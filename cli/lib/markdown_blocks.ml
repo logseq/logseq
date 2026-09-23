@@ -174,12 +174,7 @@ let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let text = match heading with Some _ -> strip_heading_marker text | None -> text in
   String.trim text |> Ustring.of_string |> Ustring.to_string
 
-type frame = {
-  node_index : int;
-  parent_index : int;
-  level : int;
-  indent : int;
-}
+type frame = { node_index : int; parent_index : int; indent : int }
 
 let of_markdown text =
   let payload = utf8_encode text in
@@ -256,10 +251,7 @@ let of_markdown text =
   else
     let count = Array.length headings in
     let parents = Array.make count (-1) in
-    let depths = Array.make count 1 in
-    let stack =
-      ref [ { node_index = -1; parent_index = -1; level = 0; indent = 0 } ]
-    in
+    let stack = ref [ { node_index = -1; parent_index = -1; indent = 0 } ] in
     Array.iteri
       (fun index (node : node) ->
         let input = node.level in
@@ -273,31 +265,20 @@ let of_markdown text =
         if input = top.indent then (
           let parent_index = top.parent_index in
           parents.(index) <- parent_index;
-          depths.(index) <- top.level;
           stack := List.tl !stack;
-          stack :=
-            { node_index = index; parent_index; level = top.level; indent = input }
-            :: !stack)
+          stack := { node_index = index; parent_index; indent = input } :: !stack)
         else if Option.is_none !last_popped then (
           parents.(index) <- top.node_index;
-          depths.(index) <- top.level + 1;
           stack :=
-            {
-              node_index = index;
-              parent_index = top.node_index;
-              level = top.level + 1;
-              indent = input;
-            }
+            { node_index = index; parent_index = top.node_index; indent = input }
             :: !stack)
         else
           let popped = Option.get !last_popped in
           parents.(index) <- top.node_index;
-          depths.(index) <- popped.level;
           stack :=
             {
               node_index = index;
               parent_index = top.node_index;
-              level = popped.level;
               indent = popped.indent;
             }
             :: !stack)
@@ -336,8 +317,7 @@ let of_markdown text =
            ~children:(Vec.map to_block !(node.children))
            ())
         with
-        Block.level = Some depths.(index);
-        properties;
+        Block.properties = properties;
       }
     in
     let roots =
