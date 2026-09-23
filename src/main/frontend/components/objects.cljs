@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -88,7 +89,7 @@
                                   [:div.font-medium (t :asset/add-assets)]
                                   (filepicker/picker
                                    {:on-change (fn [_e files]
-                                                 (p/let [_ (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                 (p/let [_ (editor-assets/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
                                                    (shui/dialog-close!)))})]))
                               (p/let [block (add-new-class-object! class properties)]
                                 (when (:db/id block)

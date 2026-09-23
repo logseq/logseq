@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.block.drop :as block-drop]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [promesa.core :as p]))
 
@@ -36,7 +37,7 @@
           {:keys [event prevent-default? stop-propagation?]}
           (drop-event ["Files"] [dropped-file] "")]
       (with-redefs [state/get-current-repo (constantly "test-repo")
-                    editor-handler/db-based-save-assets! (fn [repo files & opts]
+                    editor-assets/db-based-save-assets! (fn [repo files & opts]
                                                            (swap! calls conj [repo files opts])
                                                            (p/resolved :saved))]
         (block-drop/handle-data-transfer-drop! event (:block/uuid target-block) target-block nil)
@@ -53,7 +54,7 @@
           {:keys [event]}
           (drop-event ["Files" "text/plain"] [dropped-file] "C:\\Users\\me\\demo.png")]
       (with-redefs [state/get-current-repo (constantly "test-repo")
-                    editor-handler/db-based-save-assets! (fn [& _]
+                    editor-assets/db-based-save-assets! (fn [& _]
                                                            (swap! asset-calls inc)
                                                            (p/resolved :saved))
                     editor-handler/api-insert-new-block! (fn [& _]
