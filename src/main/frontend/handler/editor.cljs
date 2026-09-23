@@ -2072,7 +2072,9 @@
    (fn []
      (when-let [last-block (last (:blocks result))]
        (clear-when-saved!)
-       (edit-block! last-block :max)))))
+       ;; Unsaved edits were already flushed by the caller before the insert;
+       ;; saving the stale buffer here would overwrite a replaced target's title.
+       (edit-block! last-block :max {:save-current-block? false})))))
 
 (defn- nested-blocks
   [blocks]
