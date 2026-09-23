@@ -315,7 +315,7 @@
        :else
        (when content
          (when (db-editor-handler/editor-content-changed? block content value)
-           (save-block-with-pending-title! block value opts))))))))
+           (save-block-with-pending-title! block value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
