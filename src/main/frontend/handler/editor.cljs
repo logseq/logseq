@@ -768,8 +768,13 @@
   (if (:block/name block)
     {:prev-block block
      :new-value (:block/title block)
-     :edit-block-f #(edit-block! block :max {:save-code-editor? false
-                                             :skip-load? true})}
+     :edit-block-f (if (entity/journal? block)
+                     ;; Journal titles are read-only (date-derived) — focus them as a
+                     ;; selection rather than opening the title editor.
+                     #(when-let [node (util/get-first-block-by-id (:block/uuid block))]
+                        (state/exit-editing-and-set-selected-blocks! [node]))
+                     #(edit-block! block :max {:save-code-editor? false
+                                               :skip-load? true}))}
     (let [original-content (if (= (:db/id block) (:db/id (state/get-edit-block)))
                              (state/get-edit-content)
                              (:block/title block))
@@ -3528,8 +3533,19 @@
     (let [selected-blocks (state/get-selection-blocks)
           f (case direction :left first :right last)
           node (some-> selected-blocks f)]
-      (if (some-> node (dom/has-class? "block-add-button"))
+      (cond
+        (some-> node (dom/has-class? "block-add-button"))
         (.click node)
+
+        ;; Journal titles are read-only — opening them creates the page's first
+        ;; block instead of editing the title.
+        (and (entity/journal? (mounted-block node))
+             (util/rec-get-node node "ls-page-title"))
+        (do
+          (util/stop e)
+          (api-insert-new-block! "" {:page (:block/uuid (mounted-block node))}))
+
+        :else
         (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
           (util/stop e)
           (let [block {:block/uuid block-id}
