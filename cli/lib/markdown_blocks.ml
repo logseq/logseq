@@ -222,15 +222,18 @@ let of_markdown text =
           first_heading_start := pos.start
       | Other (kind, start) -> others := (kind, start) :: !others
     done;
+    (* Paragraphs inside the outline are fine — their source text lands in
+       the previous block's multi-line title slice. Every other non-heading
+       node is unsupported: content before the first block is lost entirely,
+       and structural nodes (ordered lists, tables, quotes) would silently
+       fold raw markdown into a title. Fail fast on all of them. *)
     let dropped =
-      (* Non-heading AST nodes inside an outline are harmless — their source
-         text lands in the surrounding heading's title slice. Only content
-         before the first heading is lost entirely. *)
       !others
       |> List.filter_map (fun (kind, start) ->
-             match start with
-             | Some start when start < !first_heading_start -> Some kind
-             | _ -> None)
+             match (kind, start) with
+             | "Paragraph", Some start when start >= !first_heading_start ->
+                 None
+             | _ -> Some kind)
     in
     (Array.of_list !collected, !pending, dropped)
   in
@@ -238,7 +241,7 @@ let of_markdown text =
   if dropped <> [] then
     Error
       (Error.make Error.Invalid_blocks
-         ("unsupported markdown content before the first block: "
+         ("unsupported markdown content: "
          ^ String.concat ", " (List.rev dropped)))
   else if leading_drawers <> [] then
     Error
