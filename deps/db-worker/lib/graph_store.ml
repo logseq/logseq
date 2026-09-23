@@ -29,10 +29,11 @@ let row_text row i =
 
 let store db addr_payloads =
   (* cljs upsert-addr-content! wraps the batch in a single sqlite
-     transaction — one fsync for all rows. One multi-row insert keeps
-     it to a single prepare/step as well; a per-row exec pays a fresh
-     statement each time and a full store (~50+ rows at tail
-     compaction) stalls the commit by hundreds of ms. *)
+     transaction — one fsync for all rows. Multi-row inserts keep the
+     prepare/step count low; a per-row exec pays a fresh statement each
+     time and a full store (~50+ rows at tail compaction) stalls the
+     commit by hundreds of ms. Chunks stay under the sqlite variable
+     limit (999) — 300 rows * 3 columns. *)
   let rows =
     List.map
       (fun (addr, payload) ->
@@ -46,14 +47,29 @@ let store db addr_payloads =
          [| Sqlite.Integer (Int64.of_string addr); Sqlite.Text content; addresses |])
       addr_payloads
   in
-  (match rows with
+  let insert_chunk chunk =
+    let sql =
+      "insert or replace into kvs (addr, content, addresses) values "
+      ^ String.concat "," (List.map (fun _ -> "(?, ?, ?)") chunk)
+    in
+    Sqlite.exec db ~sql ~bind:(Array.concat chunk)
+  in
+  let rec chunk_rows acc xs =
+    match xs with
+    | [] -> List.rev acc
+    | _ ->
+        let rec take n xs acc =
+          match n, xs with
+          | 0, _ | _, [] -> (List.rev acc, xs)
+          | n, x :: rest -> take (n - 1) rest (x :: acc)
+        in
+        let c, rest = take 300 xs [] in
+        chunk_rows (c :: acc) rest
+  in
+  (match chunk_rows [] rows with
    | [] -> ()
-   | _ ->
-       let sql =
-         "insert or replace into kvs (addr, content, addresses) values "
-         ^ String.concat "," (List.map (fun _ -> "(?, ?, ?)") rows)
-       in
-       Sqlite.exec db ~sql ~bind:(Array.concat rows))
+   | chunk_list ->
+       Sqlite.transaction db (fun () -> List.iter insert_chunk chunk_list))
 
 let restore db addr =
   let rows =
