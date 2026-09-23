@@ -2149,6 +2149,13 @@ let () =
                 "[[\"^ \
                  \",\"~:db/id\",200,\"~:block/title\",\"Comments\"]]"
             | 5
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"comments" body ->
+                (* #tags join block/refs as [:block/name] lookups — materialize
+                   resolves the existing tag entity. *)
+                "[\"^ \
+                 \",\"~:db/id\",200,\"~:block/uuid\",\"55555555-5555-4555-8555-555555555555\",\"~:block/name\",\"comments\"]"
+            | 6
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:"block/tags" body) then
@@ -2159,11 +2166,17 @@ let () =
                   fail_test ("missing related property ident: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
+                if
+                  not
+                    (Js.String.includes
+                       ~search:"55555555-5555-4555-8555-555555555555" body)
+                then
+                  fail_test ("missing tag entity in block/refs: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
                   fail_test
                     ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
-            | 6 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 7 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -2189,10 +2202,10 @@ let () =
               |]
           in
           ignore (expect_cli_exit_zero "upsert block inline ref tags" output);
-          if !step = 6 then Js.Promise.resolve pass
+          if !step = 7 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected six invoke requests, got %d" !step)));
+              (Printf.sprintf "expected seven invoke requests, got %d" !step)));
 
   test_promise "upsert block create resolves date property values by page name"
     (fun () ->
