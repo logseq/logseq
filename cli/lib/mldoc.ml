@@ -1,3 +1,5 @@
+(* Bindings for the npm mldoc package — no mldoc wrappers exist in
+   melange.js/melange.node (checked), so these externals are required. *)
 external parse_json : string -> string -> string = "parseJson"
 [@@mel.module "mldoc"] [@@mel.scope "Mldoc"]
 
