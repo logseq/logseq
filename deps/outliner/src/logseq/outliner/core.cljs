@@ -901,17 +901,6 @@
     (some? created-from-property)
     (d/entity db created-from-property)))
 
-(defn- restore-property-value-from-page?
-  "Library moves promote a text/URL property value to a page. Undo must demote
-  that page back to a block before reattaching it as the property value."
-  [block restore-from-property]
-  (boolean (and restore-from-property (ldb/page? block))))
-
-(defn- demote-page-to-block-tx
-  [block]
-  [[:db/retract (:db/id block) :block/tags :logseq.class/Page]
-   [:db/retract (:db/id block) :block/name]])
-
 (defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
@@ -1215,22 +1204,23 @@
                                (:logseq.property/created-from-property target-block))
         explicit-restore-from-property (resolve-created-from-property db created-from-property)
         restore-from-property (or target-from-property explicit-restore-from-property)
-        ;; Only the explicit undo opt demotes. Inferring from a sibling target
-        ;; must not convert an unrelated page into a property value.
-        demote-page? (restore-property-value-from-page? block explicit-restore-from-property)
-        move-page-as-block-child? (and (not sibling?)
-                                       (not (ldb/page? target-block))
-                                       (ldb/page? block)
-                                       (not demote-page?))]
-    (if (or target-without-parent? move-page-as-block-child?)
+        new-parent (if sibling? (:block/parent target-block) target-block)
+        ;; The Library page only holds normal pages; blocks, classes,
+        ;; properties and other page types can't be moved into it.
+        move-disallowed? (if (ldb/library? new-parent)
+                           (not (ldb/internal-page? block))
+                           (and (ldb/page? block)
+                                (not (ldb/page? new-parent))))]
+    (if (or target-without-parent? move-disallowed?)
       (throw (ex-info "not-allowed-move-block-page"
-                      {:reason (if target-without-parent?
-                                 :move-to-target-without-parent
-                                 :move-page-to-be-child-of-block)}))
+                      {:reason (cond
+                                 target-without-parent? :move-to-target-without-parent
+                                 (ldb/library? new-parent) :move-to-library
+                                 :else :move-page-to-be-child-of-block)}))
       (let [first-block-page (:db/id (:block/page block))
             target-page (get-target-block-page target-block sibling?)
             not-same-page? (not= first-block-page target-page)
-            page-after-move? (and (ldb/page? block) (not demote-page?))
+            page-after-move? (ldb/page? block)
             block-order (if sibling?
                           (db-order/gen-key (:block/order target-block)
                                             (:block/order (ldb/get-right-sibling target-block)))
@@ -1252,12 +1242,10 @@
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            page-demote-tx (when demote-page?
-                             (demote-page-to-block-tx block))
             block-from-property (:logseq.property/created-from-property block)
             property-tx (move-block-property-tx block target-block sibling?
                                                block-from-property restore-from-property)]
-        (common-util/concat-without-nil tx-data children-page-tx page-demote-tx property-tx)))))
+        (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
 
 (defn- transact-move-blocks!
   [conn blocks target-block sibling? opts outliner-op top-level-blocks]
