@@ -24,6 +24,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
+            [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -1028,7 +1029,7 @@
            ;; A web address the viewer cannot fetch (the site sends no CORS
            ;; headers to the app) opens in the browser, as the link did before
            ;; it became an asset.
-           (let [ext-url (:logseq.property.asset/external-url block)]
+           (let [ext-url (db-property/asset-external-url block)]
              (if (and (string? ext-url) (re-find #"^https?://" ext-url))
                (do
                  (util/open-url ext-url)

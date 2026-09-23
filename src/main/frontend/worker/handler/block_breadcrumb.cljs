@@ -2,7 +2,8 @@
   "Canonical breadcrumb payloads shared by block loads and search results."
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private load-depth 16)
 
@@ -114,7 +115,13 @@
         asset-width (:logseq.property.asset/width collected)
         asset-height (:logseq.property.asset/height collected)
         asset-resize-metadata (:logseq.property.asset/resize-metadata collected)
-        asset-external-url (:logseq.property.asset/external-url collected)
+        asset-external-url (let [value (:logseq.property.asset/external-url collected)]
+                             (cond
+                               (string? value) value
+                               (integer? value)
+                               (db-property/asset-external-url (d/entity db value))
+                               :else
+                               (db-property/scalar-property-value value)))
         closed-value? (some? (:block/closed-value-property collected))
         created-from-property? (some? (:logseq.property/created-from-property collected))
         property-value-title (when (and ref-title (or closed-value? created-from-property?))

@@ -17,6 +17,7 @@
             [frontend.util :as util]
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
@@ -236,7 +237,7 @@
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
-        external-url (:logseq.property.asset/external-url asset)
+        external-url (db-property/asset-external-url asset)
         file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))
         file-path (if (string/starts-with? file-path "zotero://")
                     (get-zotero-local-pdf-path (:logseq.property.asset/external-file-name asset))

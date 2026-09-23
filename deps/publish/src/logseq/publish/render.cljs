@@ -844,7 +844,7 @@
 (defn- asset-url [block ctx]
   (let [asset-type (:logseq.property.asset/type block)
         asset-uuid (:block/uuid block)
-        external-url (:logseq.property.asset/external-url block)
+        external-url (db-property/asset-external-url block)
         graph-uuid (:graph-uuid ctx)]
     (cond
       (string? external-url) external-url
@@ -881,7 +881,7 @@
 (defn- asset-node [block ctx]
   (let [asset-type (:logseq.property.asset/type block)
         asset-url' (asset-url block ctx)
-        external-url (:logseq.property.asset/external-url block)
+        external-url (db-property/asset-external-url block)
         title (or (:block/title block) (str asset-type))
         ext (string/lower-case (or asset-type ""))
         graph-uuid (:graph-uuid ctx)
