@@ -1625,13 +1625,20 @@
   [asset]
   (let [url (:logseq.property.asset/external-url asset)]
     (if (string? url)
-      (let [value-block (db-property-build/build-property-value-block
-                         asset
+      (let [block' (assoc asset
+                          :db/id [:block/uuid (:block/uuid asset)]
+                          :block/page {:db/id (:block/page asset)})
+            value-block (db-property-build/build-property-value-block
+                         block'
                          {:db/ident :logseq.property.asset/external-url
                           :logseq.property/type :url}
                          url)]
-        [(assoc asset :logseq.property.asset/external-url [:block/uuid (:block/uuid value-block)])
-         value-block])
+        ;; Place property values first since they are referenced by block
+        [(dissoc asset :logseq.property.asset/external-url)
+         value-block
+         [:db/add [:block/uuid (:block/uuid asset)]
+          :logseq.property.asset/external-url
+          [:block/uuid (:block/uuid value-block)]]])
       [asset])))
 
 (defn- build-new-asset [asset-data]
