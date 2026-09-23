@@ -3267,7 +3267,7 @@
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
-            [key-code k code is-processed?]
+            [_key-code k code is-processed?]
             (if (and c
                      (mobile-util/native-android?)
                      (or (= key-code 229)
@@ -3330,11 +3330,6 @@
 
         (close-autocomplete-if-outside input)
 
-        (when-not (or (= k "Shift") is-processed?)
-          (state/set-last-key-code! {:key-code key-code
-                                     :code code
-                                     :key k
-                                     :shift? (.-shiftKey e)}))
         (when-not (state/get-editor-action)
           (state/set-editor-last-pos! (cursor/pos input)))))))
 
