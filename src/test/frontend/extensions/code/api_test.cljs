@@ -1,6 +1,6 @@
 (ns frontend.extensions.code.api-test
   (:require ["@codemirror/state" :refer [EditorState]]
-            [cljs.test :refer [deftest is testing]]
+            [cljs.test :refer [async deftest is testing]]
             [frontend.extensions.code :as code-editor]
             [frontend.extensions.code.editor :as code-editor-view]
             [frontend.extensions.code.api :as api]))
@@ -189,6 +189,89 @@
                                          :names #js ["badlang"]
                                          :source "plugin"}))}]))))
         "plugin source requires :support or :load")))
+
+(deftest registering-the-requested-language-re-resolves-the-editor
+  (let [support #js {:opaque "plugin-language-support"}
+        dispatched (atom [])
+        plain-text {:id :plain-text :source :plain-text}
+        context {:editor-id "editor-1"
+                 :view #js {:dispatch (fn [tx] (swap! dispatched conj tx))
+                            :state #js {}}
+                 :language-compartment #js {:reconfigure (fn [extension] extension)}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}
+                                :language plain-text
+                                :requested-language-name "mydsl"})}]
+    (code-editor-view/apply-enhancers!
+     context
+     [{:key :plugin-a
+       :enhancer (fn [^js payload]
+                   ((.-registerLanguage payload)
+                    #js {:id "mydsl"
+                         :names #js ["mydsl"]
+                         :source "plugin"
+                         :support support}))}])
+    (let [language (:language @(:*state context))]
+      (is (= :mydsl (:id language))
+          "the fence language is re-resolved once its descriptor is registered")
+      (is (identical? support (:support language)))
+      (is (some #(identical? support (aget (.-effects ^js %) 0)) @dispatched)
+          "plugin support is reconfigured onto the language compartment"))))
+
+(deftest plugin-language-load-does-not-clobber-newer-selection
+  (async done
+         (let [loaded-ext #js {:opaque "loaded-extension"}
+               dispatched (atom [])
+               descriptor-a {:id :lang-a
+                             :names #{"lang-a"}
+                             :source :plugin
+                             :load (fn [_] (js/Promise.resolve loaded-ext))}
+               descriptor-b {:id :lang-b :names #{"lang-b"} :source :plain-text}
+               context {:editor-id "editor-1"
+                        :view #js {:dispatch (fn [tx] (swap! dispatched conj tx))
+                                   :state #js {}}
+                        :language-compartment #js {:reconfigure (fn [extension] extension)}
+                        :*state (atom {:plugin-extensions {}
+                                       :plugin-languages {:lang-a descriptor-a
+                                                          :lang-b descriptor-b}
+                                       :language {:id :plain-text :source :plain-text}
+                                       :requested-language-name "lang-a"})}]
+           (code-editor/set-language! context "lang-a")
+           ;; The user picks another language before lang-a's :load settles.
+           (code-editor/set-language! context "lang-b")
+           (-> (js/Promise.resolve nil)
+               (.then (fn [_] (js/Promise.resolve nil)))
+               (.then (fn [_]
+                        (is (= :lang-b (:id (:language @(:*state context)))))
+                        (is (not-any? #(identical? loaded-ext (aget (.-effects ^js %) 0)) @dispatched)
+                            "a stale load result is not reconfigured")
+                        (done)))
+               (.catch done)))))
+
+(deftest plugin-language-load-reconfigures-while-selected
+  (async done
+         (let [loaded-ext #js {:opaque "loaded-extension"}
+               dispatched (atom [])
+               descriptor {:id :lang-a
+                           :names #{"lang-a"}
+                           :source :plugin
+                           :load (fn [_] (js/Promise.resolve loaded-ext))}
+               context {:editor-id "editor-1"
+                        :view #js {:dispatch (fn [tx] (swap! dispatched conj tx))
+                                   :state #js {}}
+                        :language-compartment #js {:reconfigure (fn [extension] extension)}
+                        :*state (atom {:plugin-extensions {}
+                                       :plugin-languages {:lang-a descriptor}
+                                       :language {:id :plain-text :source :plain-text}
+                                       :requested-language-name "lang-a"})}]
+           (code-editor/set-language! context "lang-a")
+           (-> (js/Promise.resolve nil)
+               (.then (fn [_] (js/Promise.resolve nil)))
+               (.then (fn [_]
+                        (is (some #(identical? loaded-ext (aget (.-effects ^js %) 0)) @dispatched)
+                            "settled load result is reconfigured while selected")
+                        (done)))
+               (.catch done)))))
 
 (deftest cm6-enhancers-reject-legacy-cm5-enhancer-type
   (let [legacy-called? (atom false)
