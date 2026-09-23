@@ -193,14 +193,14 @@ let get_nested_page_name (s : string) : string option =
   find_open 0
 
 let split_last (sep : string) (s : string) : string * string option =
-  (* common-util/split-last *)
+  (* common-util/split-last — splits at the LAST occurrence of sep *)
   let n = String.length sep in
   let rec last i =
-    if i + n > String.length s then -1
-    else if String.sub s i n = sep then i
-    else last (i + 1)
+    if i < 0 then -1
+    else if i + n <= String.length s && String.sub s i n = sep then i
+    else last (i - 1)
   in
-  let j = last 0 in
+  let j = last (String.length s - n) in
   if j = -1 then (s, None)
   else (String.sub s 0 j, Some (String.sub s (j + n) (String.length s - j - n)))
 

@@ -103,19 +103,22 @@ let gen_block_uuid (prefix : string) (s : string) : string =
 let gen_journal_page_uuid (day : int) : string =
   Printf.sprintf "00000001-%04d-%04d-0000-000000000000" (day / 10000) (day mod 10000)
 
-(* common-uuid/gen-uuid — hash-seeded kinds:
+(* common-uuid/gen-uuid — :journal-page-uuid delegates to
+   gen_journal_page_uuid; hash-seeded kinds:
    :db-ident-block-uuid 00000002, :migrate-new-block-uuid 00000003,
-   :builtin-block-uuid 00000004, :view-block-uuid 00000006.
-   (:journal-page-uuid is separate: it hashes nothing.) *)
+   :builtin-block-uuid 00000004, :view-block-uuid 00000006. *)
 let gen_uuid (kind : string) (seed : string) : string =
-  gen_block_uuid
-    (match kind with
-     | "db-ident-block-uuid" -> "00000002"
-     | "migrate-new-block-uuid" -> "00000003"
-     | "builtin-block-uuid" -> "00000004"
-     | "view-block-uuid" -> "00000006"
-     | _ -> invalid_arg ("unknown gen-uuid kind " ^ kind))
-    seed
+  match kind with
+  | "journal-page-uuid" -> gen_journal_page_uuid (int_of_string seed)
+  | _ ->
+      gen_block_uuid
+        (match kind with
+         | "db-ident-block-uuid" -> "00000002"
+         | "migrate-new-block-uuid" -> "00000003"
+         | "builtin-block-uuid" -> "00000004"
+         | "view-block-uuid" -> "00000006"
+         | _ -> invalid_arg ("unknown gen-uuid kind " ^ kind))
+        seed
 
 (* ldb/new-block-id / common-uuid/gen-uuid () — datascript squuid. *)
 let new_block_id () : string =

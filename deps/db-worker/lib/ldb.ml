@@ -225,60 +225,14 @@ let is_uuid_string s =
 (* ---------- journal titles (date-time-util/int->journal-title) ----------
 
    Formats a :block/journal-day int (yyyymmdd) with a strftime-ish
-   pattern. Supports the tokens used by the built-in journal title
-   formats: yyyy yy MMMM MMM MM dd do. Unknown text passes through. *)
-
-let month_short =
-  [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep";
-     "Oct"; "Nov"; "Dec" |]
-
-let month_long =
-  [| "January"; "February"; "March"; "April"; "May"; "June"; "July";
-     "August"; "September"; "October"; "November"; "December" |]
-
-let ordinal n =
-  let suffix =
-    if n mod 100 >= 11 && n mod 100 <= 13 then "th"
-    else match n mod 10 with 1 -> "st" | 2 -> "nd" | 3 -> "rd" | _ -> "th"
-  in
-  string_of_int n ^ suffix
+   pattern. Tokens: yyyy yy MMMM MMM MM dd do EEEE EEE E; unknown text
+   passes through as literals. *)
 
 let journal_title_of_day (day : int) (fmt : string) : string =
-  let y = day / 10000 in
-  let m = day / 100 mod 100 in
-  let d = day mod 100 in
-  let b = Buffer.create 16 in
-  let n = String.length fmt in
-  let try_token i tok rep =
-    let len = String.length tok in
-    if i + len <= n && String.sub fmt i len = tok then Some (rep, i + len)
-    else None
-  in
-  let rec loop i =
-    if i < n then begin
-      let i' =
-        match
-          List.find_map Fun.id
-            [ try_token i "yyyy" (Printf.sprintf "%04d" y);
-              try_token i "MMMM" month_long.(m - 1);
-              try_token i "MMM" month_short.(m - 1);
-              try_token i "yy" (Printf.sprintf "%02d" (y mod 100));
-              try_token i "MM" (Printf.sprintf "%02d" m);
-              try_token i "dd" (Printf.sprintf "%02d" d);
-              try_token i "do" (ordinal d) ]
-        with
-        | Some (rep, next) ->
-            Buffer.add_string b rep;
-            next
-        | None ->
-            Buffer.add_char b fmt.[i];
-            i + 1
-      in
-      loop i'
-    end
-  in
-  loop 0;
-  Buffer.contents b
+  (* cljs tf/unparse over the full token set (yyyy yy MMMM MMM MM dd do EEEE
+     EEE E + literals); Date_time_util.formatter_of_date is the port. *)
+  Date_time_util.formatter_of_date fmt
+    (day / 10000, day / 100 mod 100, day mod 100)
 
 let journal_title_format db : string =
   match counted_entity db (Ident "logseq.class/Journal") with

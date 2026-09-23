@@ -16,8 +16,9 @@ let skip_imported_graph_refs (conn : conn) (tx_meta : tx_meta) : bool =
 (* cljs invoke-hooks — worker-pipeline invoke-hooks for new DB graphs
    only (:block/tx-id etc not handled). *)
 let invoke_hooks (conn : conn) (tx_report : tx_report) : unit =
-  if not (skip_imported_graph_refs conn tx_report.tx_meta) then
+  if not (skip_imported_graph_refs conn tx_report.tx_meta) then begin
     ignore (Outliner_pipeline.transact_new_db_graph_refs conn tx_report)
+  end
 
 (* cljs add-listener — d/listen! conn :pipeline-updates *)
 let add_listener (conn : conn) : unit =

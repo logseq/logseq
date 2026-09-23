@@ -19,8 +19,11 @@ let get_blocks_and_pages (r : tx_report) : entity list * entity list =
   let push_pages e = if not (Hashtbl.mem seen_pages e.id) then begin
       Hashtbl.add seen_pages e.id (); pages := e :: !pages end in
   let updated_db_ids =
+    let seen = Hashtbl.create 1024 in
     List.fold_left
-      (fun acc (d : datom) -> if List.mem d.e acc then acc else d.e :: acc)
+      (fun acc (d : datom) ->
+        if Hashtbl.mem seen d.e then acc
+        else begin Hashtbl.add seen d.e (); d.e :: acc end)
       [] r.tx_data
   in
   List.iter

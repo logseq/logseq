@@ -317,7 +317,11 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
     List.of_seq (datoms db Eavt ~e:e.id ())
     |> List.fold_left
          (fun (m : (attr * value) list) (d : datom) ->
-           if List.mem d.a Db_schema.card_many_attributes then
+           (* cljs (into {} block) groups only attrs that are cardinality-many
+              in the live schema — a :db/cardinality/one datom on the attr's
+              own entity can narrow a statically-many attr (e.g.
+              :block/closed-value-property) *)
+           if Ldb.many_attr db d.a then
              let cur =
                match List.assoc_opt d.a m with
                | Some (Set xs) -> xs
@@ -445,6 +449,7 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
         |> List.filter (fun (k, _) -> k <> "db/id"))
       data
   in
+
   (* cljs (ldb/transact! conn data' {:fix-db? true :db-migrate? true}) —
      Db_tx.transact runs the worker pipeline like ldb/transact!, and the
      tx_op path (entity_tx) keeps Map values on non-ref attrs as stored

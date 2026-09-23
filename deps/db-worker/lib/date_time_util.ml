@@ -674,9 +674,11 @@ let formatter_of_date (fmt : string) (year, month, day : int * int * int)
             (string_of_int day ^ ordinal_suffix day)
       | TokWeekday w ->
           let i = weekday_index (year, month, day) in
-          Buffer.add_string
-            b
-            (if w = 4 then weekday_names.(i + 7) else weekday_names.(i)))
+          let name =
+            if w = 4 then weekday_names.(i + 7) else weekday_names.(i)
+          in
+          (* tf/format emits capitalized English weekday names *)
+          Buffer.add_string b (String.capitalize_ascii name))
     (tokens_of_formatter fmt);
   Buffer.contents b
 
