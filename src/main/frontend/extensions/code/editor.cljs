@@ -394,13 +394,6 @@
   (or (plugin-language-by-name context language-name)
       (language-registry/language-by-name language-name)))
 
-(defn- resolve-language!
-  [language-name]
-  (or (language-registry/language-by-name language-name)
-      (language-registry/language-by-extension language-name)
-      (throw (ex-info "Unsupported CodeMirror 6 language"
-                      {:language language-name}))))
-
 (declare enhancer-payload)
 
 (declare set-language-impl!)
@@ -470,9 +463,14 @@
       :register-language! #(register-language! context %)})))
 
 (defn- set-language-impl!
+  "Same resolution order as `create-context!`: plugin languages, registry
+   names, then file extensions, falling back to plain-text while preserving the
+   requested name so a later plugin `register-language!` can re-resolve it."
   [context language-name]
   (let [language (or (plugin-language-by-name context language-name)
-                     (resolve-language! language-name))]
+                     (language-registry/language-by-name language-name)
+                     (language-registry/language-by-extension language-name)
+                     (language-registry/plain-text-language))]
     (swap! (:*state context) assoc
            :language language
            :requested-language-name language-name)
@@ -771,12 +769,8 @@
    update the other's highlighting too."
   [context language-name]
   (when context
-    (let [language-name (or language-name "plain-text")
-          language (or (plugin-language-by-name context language-name)
-                       (language-registry/language-by-name language-name)
-                       (language-registry/language-by-extension language-name))]
-      (when (and language
-                 (not (identical? language (:language @(:*state context)))))
+    (let [language-name (or language-name "plain-text")]
+      (when-not (= language-name (:requested-language-name @(:*state context)))
         (code-editor/set-language! context language-name)))))
 
 (hsx/defc editor
