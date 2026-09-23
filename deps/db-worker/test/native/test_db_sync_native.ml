@@ -25,10 +25,18 @@
    Dropped tests (cljs source order):
      - first-local-block-after-upload, first-page-and-block-after-upload,
        snapshot-roundtrip (cljs ~2560-2656: drive the db-sync server
-       worker over D1 — no OCaml port). *)
+       worker over D1 — no OCaml port).
+     - create-temp-sqlite-db-uses-opfs-pool-test (cljs ~7247: asserts
+       the OPFS-backed browser VFS pool — there is no OPFS on native).
+     - download-large-title-decrypts-transit-payload-test (cljs ~7333:
+       marked ^:fix-me upstream — skipped in cljs too). *)
 
 open Datascript
 open Db_worker_effect.Infix
+
+(* wires Db_tx.transact_pipeline_fn / validate_tx_report_fn and the
+   endpoint registry like the cljs worker bundle *)
+let () = Worker_core.init ()
 
 let check = Test_shared.check
 let kw (s : string) : Wire.t = Wire.Keyword s
@@ -712,6 +720,9 @@ let db_add (e : Wire.t) (a : string) (v : Wire.t) : Wire.t =
 
 (* cljs (:block/raw-title e) — virtual attr falling back to :block/title *)
 let ent_raw_title (e : entity) : value option = Ldb.raw_title e.db e
+
+let db_retract (e : Wire.t) (a : string) (v : Wire.t) : Wire.t =
+  Wire.Array [ kw "db/retract"; e; kw a; v ]
 
 let db_retract_entity (e : Wire.t) : Wire.t =
   Wire.Array [ kw "db/retractEntity"; e ]
@@ -7777,6 +7788,3698 @@ let test_three_children_cycle () =
                     (fun p -> Ldb.value p "block/title")
                   = Some (String "child 2")))))
 
+(* cljs sync-apply/normalize-rebased-pending-tx (remote-tx-data-set unused
+   in tests) *)
+let normalize_rebased_pending_tx ~(db_before : db) ~(db_after : db)
+    ~(tx_data : datom list) : Wire.t list * Wire.t list =
+  ( Sync_apply.normalize_tx_data db_after db_before tx_data
+  , Sync_apply.reverse_tx_data db_before db_after tx_data )
+
+(* cljs (reduce (fn [db r] (:db-after (d/with db r))) db rows) *)
+let db_after_of (db : db) (reversed : Wire.t list) : db =
+  (Datascript.with_tx db ~tx_meta:[]
+     (Db_transact.tx_ops_of_tx_data reversed)).db_after
+
+(* cljs (:block/uuid (first (:blocks apply-ops-result))) — the first
+   block/uuid add in an insert-blocks tx result *)
+let first_block_uuid_of_tx_result (r : Wire.t) : string =
+  match Wire.get "tx-data" r with
+  | Some (Wire.Array items) | Some (Wire.List items) -> (
+      match
+        List.find_map
+          (fun it ->
+            match it with
+            | Wire.Map _ as m -> (
+                match Wire.get "block/uuid" m with
+                | Some (Wire.Uuid u) -> Some u
+                | _ -> None)
+            | Wire.Array [ op; _e; a; Wire.Uuid u ]
+            | Wire.List [ op; _e; a; Wire.Uuid u ]
+            | Wire.Array [ op; _e; a; Wire.Uuid u; _ ]
+            | Wire.List [ op; _e; a; Wire.Uuid u; _ ]
+              when op = kw "db/add" && a = kw "block/uuid" -> Some u
+            | _ -> None)
+          items
+      with
+      | Some u -> u
+      | None ->
+          failwith
+            ("no block/uuid in insert-blocks result: "
+             ^ Transit_codec.to_string r))
+  | _ -> failwith ("no tx-data: " ^ Transit_codec.to_string r)
+
+(* cljs (d/transact! conn [[:db/retract ...]...])-style remote delete ops as
+   Wire.t list from a pure outliner tx_result *)
+let wire_of_tx_result (r : Outliner_core.tx_result) : Wire.t list =
+  List.map Ds_wire.transit_of_tx_op r.tx_data
+
+(* cljs (.now js/Date) *)
+let now_ms () : int = int_of_float (Unix.gettimeofday () *. 1000.)
+
+(* cljs ignore-missing-parent-update-after-local-delete-test *)
+let test_ignore_missing_parent_update_after_local_delete () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = ent_block_uuid child1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_core.insert_blocks_conn conn
+               [ Block_map.of_transit
+                   (wire_map [ "block/title", Wire.String "child 4" ]) ]
+               (Block_map.of_entity parent)
+               { Outliner_core.default_insert_opts with sibling = false }
+               Block_map.empty);
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          let tx_id_before = (List.hd pending_before).tx_id in
+          check "one pending" (List.length pending_before = 1);
+          let delete_tx =
+            (Outliner_core.delete_blocks (Datascript.db conn)
+               [ Block_map.of_entity parent ]).tx_data
+          in
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               (List.map Ds_wire.transit_of_tx_op delete_tx));
+          check "child retracted"
+            (ent_by_block_uuid (Datascript.db conn) child_uuid = None);
+          check "pending cleared" (Sync_apply.pending_txs test_repo () = []);
+          let row = client_op_tx_row ops tx_id_before in
+          check "tx row kept" (row <> None);
+          check "pending flag cleared" (tx_row_int row 1 = 0)))
+
+(* cljs missing-parent-after-remote-delete-removes-descendants-test *)
+let test_missing_parent_after_remote_delete_removes_descendants () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, _ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = ent_block_uuid child1 in
+      let remote_delete_tx =
+        (Outliner_core.delete_blocks (Datascript.db conn)
+           [ Block_map.of_entity parent ]).tx_data
+      in
+      with_datascript_conns conn None (fun () ->
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               (List.map Ds_wire.transit_of_tx_op remote_delete_tx));
+          check "child retracted"
+            (ent_by_block_uuid (Datascript.db conn) child_uuid = None)))
+
+(* cljs capture listener writing one normalized remote tx *)
+let listen_capture_one (conn : conn) (key : string) (remote_tx : Wire.t list ref)
+    : unit =
+  ignore
+    (Datascript.listen conn key (fun (r : tx_report) ->
+         if r.tx_data <> [] && !remote_tx = [] then
+           remote_tx
+           := Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data))
+
+(* cljs rebase-drops-local-property-pairs-for-remotely-deleted-property-test *)
+let test_rebase_drops_local_property_pairs_for_deleted_property () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ "p2", { Db_test_util.default_property with p_type = "default" } ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      listen_capture_one conn_b "capture-property-delete-rebase" remote_tx;
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-property-delete-rebase")
+        (fun () ->
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let local_block =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "local object")
+               in
+               Outliner_property.set_block_property conn_a
+                 (block_uuid_lookup (entity_block_uuid local_block))
+                 "user.property/p2" (Wire.String "local value");
+               let p2_b =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_b)
+                      (Ident "user.property/p2"))
+               in
+               ignore
+                 (Outliner_page.delete_conn conn_b (ent_block_uuid p2_b)
+                    (Wire.Map []));
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let local_block' =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "local object")
+               in
+               let validation =
+                 Db_validate.validate_local_db (Datascript.db conn_a)
+               in
+               check "p2 dropped"
+                 (Ldb.value local_block' "user.property/p2" = None);
+               check "no validation errors"
+                 (non_recycle_validation_entities validation = []))))
+
+(* cljs rebase-drops-local-tags-for-remotely-deleted-tag-test *)
+let test_rebase_drops_local_tags_for_deleted_tag () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~classes:[ "Tag1", Db_test_util.default_class ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "local object" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      listen_capture_one conn_b "capture-tag-delete-rebase" remote_tx;
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-tag-delete-rebase")
+        (fun () ->
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let local_block =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "local object")
+               in
+               let tag =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_a)
+                      (Ident "user.class/Tag1"))
+               in
+               ignore
+                 (Db_transact.transact conn_a
+                    [ db_add (Wire.Int local_block.id) "block/tags"
+                        (Wire.Int tag.id) ]
+                    (Ds_wire.tx_meta_of_transit local_tx_meta));
+               let tag_b =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_b)
+                      (Ident "user.class/Tag1"))
+               in
+               ignore
+                 (Outliner_page.delete_conn conn_b (ent_block_uuid tag_b)
+                    (Wire.Map []));
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let local_block' =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "local object")
+               in
+               let validation =
+                 Db_validate.validate_local_db (Datascript.db conn_a)
+               in
+               check "tags dropped"
+                 (Ldb.ref_ents local_block' "block/tags" = []);
+               check "no validation errors"
+                 (non_recycle_validation_entities validation = []))))
+
+(* cljs rebase-inserted-page-ref-does-not-keep-stale-ref-to-remotely-deleted-tag-test *)
+let test_rebase_inserted_page_ref_drops_stale_ref_for_deleted_tag () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~classes:[ "tag1", Db_test_util.default_class ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks = [] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      listen_capture_one conn_b "capture-ref-delete-rebase" remote_tx;
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-ref-delete-rebase")
+        (fun () ->
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let page =
+                 Option.get
+                   (Db_test_util.find_page_by_title (Datascript.db conn_a)
+                      "page 1")
+               in
+               let tag1 =
+                 Option.get
+                   (Ldb.get_page (Datascript.db conn_a) (String "tag1"))
+               in
+               let tag1_uuid = ent_block_uuid tag1 in
+               let result =
+                 apply_ops conn_a
+                   [ Wire.Array
+                       [ kw "insert-blocks"
+                       ; Wire.Array
+                           [ Wire.Array
+                               [ wire_map
+                                   [ ( "block/title"
+                                     , Wire.String
+                                         (Printf.sprintf "[[%s]]" tag1_uuid) )
+                                   ; ( "block/refs"
+                                     , Wire.Array
+                                         [ wire_map
+                                             [ "block/uuid",
+                                               Wire.Uuid tag1_uuid
+                                             ; "block/title",
+                                               Wire.String "tag1" ] ] ) ] ]
+                           ; Wire.Int page.id
+                           ; wire_map [ "sibling?", Wire.Bool false ] ] ] ]
+                   (Wire.Map [])
+               in
+               let block_uuid = first_block_uuid_of_tx_result result in
+               let tag_b =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_b)
+                      (Ident "user.class/tag1"))
+               in
+               ignore
+                 (Outliner_page.delete_conn conn_a (ent_block_uuid tag_b)
+                    (Wire.Map []));
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               match ent_by_block_uuid (Datascript.db conn_a) block_uuid with
+               | None -> check "block exists" false
+               | Some block ->
+                   check "refs empty"
+                     (Ldb.ref_ents block "block/refs" = []);
+                   check "raw title"
+                     (ent_raw_title block = Some (String "tag1")))))
+
+(* cljs save-block! with a merged entity map — (assoc (into {} block) kvs) *)
+let save_block_merged (conn : conn) (block : entity)
+    (pairs : (string * Datascript.value) list) : unit =
+  let bm =
+    List.fold_left
+      (fun m (k, v) -> Block_map.put m k v)
+      (Block_map.of_entity block)
+      pairs
+  in
+  ignore
+    (Outliner_core.save_block_conn conn bm Outliner_core.default_save_opts
+       Block_map.empty)
+
+(* cljs #{tag-ref} — a set containing the lazy entity map, which serializes
+   into forward ops with :block/uuid + :db/ident intact *)
+let entity_map_value (e : entity) : value =
+  Map (List.map (fun (a, v) -> (Keyword a, v)) (Block_map.of_entity e))
+
+(* cljs rebase-save-block-inline-tag-recreates-deleted-tag-with-same-ident-test *)
+let test_rebase_save_block_inline_tag_recreates_deleted_tag () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~classes:[ "tag4", Db_test_util.default_class ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with b_title = Some "hello" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      listen_capture_one conn_b "capture-save-inline-tag-rebase" remote_tx;
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-save-inline-tag-rebase")
+        (fun () ->
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let block =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "hello")
+               in
+               let block_uuid = ent_block_uuid block in
+               let tag =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_a)
+                      (Ident "user.class/tag4"))
+               in
+               let tag_uuid = ent_block_uuid tag in
+               let tag_ident = Ldb.value tag "db/ident" in
+               save_block_merged conn_a block
+                 [ "block/title", String "hello #tag4"
+                 ; "block/refs", Set [ entity_map_value tag ]
+                 ; "block/tags", Set [ entity_map_value tag ] ];
+               let tag_b =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_b)
+                      (Ident "user.class/tag4"))
+               in
+               ignore
+                 (Outliner_page.delete_conn conn_b (ent_block_uuid tag_b)
+                    (Wire.Map []));
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let db = Datascript.db conn_a in
+               let block' = ent_by_block_uuid db block_uuid in
+               let recreated_tag = ent_by_block_uuid db tag_uuid in
+               let validation = Db_validate.validate_local_db db in
+               check "block exists" (block' <> None);
+               check "tag recreated" (recreated_tag <> None);
+               (match recreated_tag with
+                | Some t ->
+                    check "tag ident kept"
+                      (Ldb.value t "db/ident" = tag_ident)
+                | None -> ());
+               (match block' with
+                | Some b ->
+                    check "raw title"
+                      (ent_raw_title b = Some (String "hello #tag4"));
+                    let ref_idents =
+                      List.filter_map
+                        (fun r -> Ldb.value r "db/ident")
+                        (Ldb.ref_ents b "block/refs")
+                    in
+                    let tag_idents =
+                      List.filter_map
+                        (fun r -> Ldb.value r "db/ident")
+                        (Ldb.ref_ents b "block/tags")
+                    in
+                    check "tag in refs"
+                      (List.mem (Option.get tag_ident) ref_idents);
+                    check "tags idents"
+                      (tag_idents = [ Option.get tag_ident ])
+                | None -> ());
+               check "no validation errors"
+                 (non_recycle_validation_entities validation = []))))
+
+(* cljs rebase-save-block-inline-tag-keeps-surviving-and-recreates-deleted-with-same-ident-test *)
+let test_rebase_save_block_inline_tag_mixed_surviving_deleted () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn_a =
+        Db_test_util.create_conn_with_blocks
+          ~classes:
+            [ "tag1", Db_test_util.default_class
+            ; "tag2", Db_test_util.default_class ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with b_title = Some "hello" } ] } ]
+          ()
+      in
+      let conn_b = Datascript.conn_from_db (Datascript.db conn_a) in
+      let ops = new_client_ops_db () in
+      let remote_tx = ref [] in
+      listen_capture_one conn_b "capture-save-inline-mixed-tag-rebase"
+        remote_tx;
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b
+              "capture-save-inline-mixed-tag-rebase")
+        (fun () ->
+           with_datascript_conns conn_a (Some ops) (fun () ->
+               let block =
+                 Option.get
+                   (Db_test_util.find_block_by_content (Datascript.db conn_a)
+                      "hello")
+               in
+               let block_uuid = ent_block_uuid block in
+               let tag1 =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_a)
+                      (Ident "user.class/tag1"))
+               in
+               let tag2 =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_a)
+                      (Ident "user.class/tag2"))
+               in
+               let tag1_ident = Ldb.value tag1 "db/ident" in
+               let tag2_ident = Ldb.value tag2 "db/ident" in
+               let tag2_uuid = ent_block_uuid tag2 in
+               save_block_merged conn_a block
+                 [ "block/title", String "hello #tag1 #tag2"
+                 ; "block/refs"
+                 , Set [ entity_map_value tag1; entity_map_value tag2 ]
+                 ; "block/tags"
+                 , Set [ entity_map_value tag1; entity_map_value tag2 ] ];
+               let tag2_b =
+                 Option.get
+                   (Ldb.ent_of_ref (Datascript.db conn_b)
+                      (Ident "user.class/tag2"))
+               in
+               ignore
+                 (Outliner_page.delete_conn conn_b (ent_block_uuid tag2_b)
+                    (Wire.Map []));
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    !remote_tx);
+               let db = Datascript.db conn_a in
+               let block' = ent_by_block_uuid db block_uuid in
+               let recreated_tag2 = ent_by_block_uuid db tag2_uuid in
+               let validation = Db_validate.validate_local_db db in
+               check "block exists" (block' <> None);
+               check "tag2 recreated" (recreated_tag2 <> None);
+               (match recreated_tag2 with
+                | Some t ->
+                    check "tag2 ident kept"
+                      (Ldb.value t "db/ident" = tag2_ident)
+                | None -> ());
+               (match block' with
+                | Some b ->
+                    check "raw title"
+                      (ent_raw_title b
+                       = Some (String "hello #tag1 #tag2"));
+                    let ref_idents =
+                      List.filter_map
+                        (fun r -> Ldb.value r "db/ident")
+                        (Ldb.ref_ents b "block/refs")
+                    in
+                    let tag_idents =
+                      List.filter_map
+                        (fun r -> Ldb.value r "db/ident")
+                        (Ldb.ref_ents b "block/tags")
+                        |> List.sort compare
+                    in
+                    let expected =
+                      List.sort compare
+                        [ Option.get tag1_ident; Option.get tag2_ident ]
+                    in
+                    check "both tags in refs"
+                      (List.for_all (fun i -> List.mem i ref_idents)
+                         expected);
+                    check "tags idents" (tag_idents = expected)
+                | None -> ());
+               check "no validation errors"
+                 (non_recycle_validation_entities validation = []))))
+
+(* cljs cut-paste-parent-with-child-keeps-child-parent-after-sync-test *)
+let test_cut_paste_parent_with_child_keeps_child_parent () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "parent"
+                    ; b_children =
+                        [ { Db_test_util.default_block with
+                            b_title = Some "child" } ] }
+                  ; { Db_test_util.default_block with
+                      b_title = Some "target" } ] } ]
+          ()
+      in
+      let parent =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "parent")
+      in
+      let child =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "child")
+      in
+      let target =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "target")
+      in
+      let page_uuid =
+        ent_block_uuid (Option.get (Ldb.ref_ent parent "block/page"))
+      in
+      let parent_uuid = ent_block_uuid parent in
+      let child_uuid = ent_block_uuid child in
+      let target_uuid = ent_block_uuid target in
+      let target_order = Option.get (Ldb.value target "block/order") in
+      let now = 1760000000000 in
+      with_datascript_conns conn None (fun () ->
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_retract_entity (block_uuid_lookup (Wire.Uuid parent_uuid))
+               ; db_retract_entity (block_uuid_lookup (Wire.Uuid target_uuid))
+               ; db_add (Wire.Int (-1)) "block/uuid" (Wire.Uuid target_uuid)
+               ; db_add (Wire.Int (-1)) "block/title" (Wire.String "parent")
+               ; db_add (Wire.Int (-1)) "block/parent"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-1)) "block/page"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-1)) "block/order"
+                   (Ds_wire.transit_of_value target_order)
+               ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
+               ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now)
+               ; db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                   "block/parent" (block_uuid_lookup (Wire.Uuid target_uuid)) ]);
+          let parent' = ent_by_block_uuid (Datascript.db conn) target_uuid in
+          let child' = ent_by_block_uuid (Datascript.db conn) child_uuid in
+          match parent', child' with
+          | Some p', Some c' ->
+              check "title" (Ldb.value p' "block/title" = Some (String "parent"));
+              check "child parent is recreated"
+                (Option.map (fun (p : entity) -> p.id)
+                   (Ldb.ref_ent c' "block/parent")
+                 = Some p'.id)
+          | _ -> check "entities exist" false))
+
+(* cljs fix-duplicate-orders-after-rebase-test *)
+let test_fix_duplicate_orders_after_rebase () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, child2, _c3 = setup_parent_child () in
+      let order = Option.get (Ldb.value child1 "block/order") in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title"
+                (Wire.String "child 1 local") ];
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int child1.id) "block/order"
+                   (Ds_wire.transit_of_value order)
+               ; db_add (Wire.Int child2.id) "block/order"
+                   (Ds_wire.transit_of_value order) ]);
+          let child1' = Option.get (Ldb.ent_of_id (Datascript.db conn) child1.id) in
+          let child2' = Option.get (Ldb.ent_of_id (Datascript.db conn) child2.id) in
+          let o1 = Ldb.value child1' "block/order" in
+          let o2 = Ldb.value child2' "block/order" in
+          check "orders present" (o1 <> None && o2 <> None);
+          check "orders distinct" (o1 <> o2)))
+
+(* cljs create-today-journal-does-not-rewrite-existing-journal-timestamps-test *)
+let test_create_today_journal_keeps_existing_timestamps () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn = Db_test_util.create_conn () in
+      let ops = new_client_ops_db () in
+      let title = "Dec 16th, 2024" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let _title, page_uuid =
+            Outliner_page.create_bang conn title
+              ~opts:(fun () ->
+                Outliner_page.create (Datascript.db conn) title
+                  ~today_journal:true ())
+              ()
+          in
+          let page_uuid = Option.get page_uuid in
+          let page =
+            Option.get (ent_by_block_uuid (Datascript.db conn) page_uuid)
+          in
+          let library_page =
+            Option.get
+              (Ldb.get_built_in_page (Datascript.db conn)
+                 Ldb.library_page_name)
+          in
+          raw_transact_string conn
+            [ db_add (Wire.Int page.id) "block/parent"
+                (Wire.Int library_page.id) ];
+          let before =
+            Option.get (ent_by_block_uuid (Datascript.db conn) page_uuid)
+          in
+          let created_at_before = Ldb.value before "block/created-at" in
+          let updated_at_before = Ldb.value before "block/updated-at" in
+          ignore
+            (Outliner_page.create_bang conn title
+               ~opts:(fun () ->
+                 Outliner_page.create (Datascript.db conn) title
+                   ~today_journal:true ())
+               ());
+          let page' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) page_uuid)
+          in
+          check "created-at kept"
+            (Ldb.value page' "block/created-at" = created_at_before);
+          check "updated-at kept"
+            (Ldb.value page' "block/updated-at" = updated_at_before)))
+
+(* cljs temp-conn-batch-commit-ignores-transient-invalid-page-parent-test *)
+let test_temp_conn_batch_commit_ignores_transient_page_parent () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "temporary parent" } ] } ]
+          ()
+      in
+      let temporary_parent =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "temporary parent")
+      in
+      let page_tag =
+        (Option.get
+           (Ldb.ent_of_ref (Datascript.db conn) (Ident "logseq.class/Page"))).id
+      in
+      let page_uuid = fresh_uuid () in
+      let now = 1760000000000 in
+      ignore
+        (Db_transact.batch_transact_with_temp_conn conn
+           [ "rtc-tx?", Bool true ] (fun temp_conn ->
+             ignore
+               (Db_transact.transact temp_conn
+                  [ wire_map
+                      [ "db/id", Wire.Int (-1)
+                      ; "block/uuid", Wire.Uuid page_uuid
+                      ; "block/title", Wire.String "Reused UUID Page"
+                      ; "block/name", Wire.String "reused uuid page"
+                      ; "block/tags", Wire.Int page_tag
+                      ; "block/parent", Wire.Int temporary_parent.id
+                      ; "block/created-at", Wire.Int now
+                      ; "block/updated-at", Wire.Int now ] ]
+                  []);
+             ignore
+               (Db_transact.transact temp_conn
+                  [ Wire.Array
+                      [ kw "db/retract"
+                      ; block_uuid_lookup (Wire.Uuid page_uuid)
+                      ; kw "block/parent"; Wire.Int temporary_parent.id ] ]
+                  [])));
+      match ent_by_block_uuid (Datascript.db conn) page_uuid with
+      | None -> check "entity exists" false
+      | Some entity ->
+          check "name"
+            (Ldb.value entity "block/name"
+             = Some (String "reused uuid page"));
+          check "no parent" (Ldb.ref_ent entity "block/parent" = None);
+          check "is page" (Ldb.is_page entity))
+
+(* cljs fix-duplicate-order-against-existing-sibling-test *)
+let test_fix_duplicate_order_against_existing_sibling () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, child2, _c3 = setup_parent_child () in
+      let child2_order = Option.get (Ldb.value child2 "block/order") in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title"
+                (Wire.String "child 1 local") ];
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int child1.id) "block/order"
+                   (Ds_wire.transit_of_value child2_order) ]);
+          let child1' = Option.get (Ldb.ent_of_id (Datascript.db conn) child1.id) in
+          let child2' = Option.get (Ldb.ent_of_id (Datascript.db conn) child2.id) in
+          let o1 = Ldb.value child1' "block/order" in
+          let o2 = Ldb.value child2' "block/order" in
+          check "order present" (o1 <> None);
+          check "orders differ" (o1 <> o2)))
+
+(* cljs apply-remote-txs-with-local-changes-rejects-invalid-final-rebase-test *)
+let test_apply_remote_txs_rejects_invalid_final_rebase () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let child_uuid = ent_block_uuid child1 in
+      let parent_title = Ldb.value parent "block/title" in
+      let original_title = Ldb.value child1 "block/title" in
+      let original_created_at = Ldb.value child1 "block/created-at" in
+      let original_order = Ldb.value child1 "block/order" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx tx_id ~created_at:(now_ms ()) ~pending:true
+                ~outliner_op:"insert-blocks"
+                ~tx_data_v:(Wire.Array [])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_retract (Wire.Int child1.id) "block/title"
+                         (Ds_wire.transit_of_value
+                            (Option.get original_title))
+                     ; db_retract (Wire.Int child1.id) "block/created-at"
+                         (Ds_wire.transit_of_value
+                            (Option.get original_created_at))
+                     ; db_retract (Wire.Int child1.id) "block/order"
+                         (Ds_wire.transit_of_value
+                            (Option.get original_order)) ]) ];
+          let error =
+            try
+              await_unit
+                (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                   [ db_add (Wire.Int parent.id) "block/title"
+                       (Wire.String "remote parent") ]);
+              None
+            with e -> Some e
+          in
+          check "rejected" (error <> None);
+          let child1' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
+          in
+          let parent' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) parent.id)
+          in
+          check "child title unchanged"
+            (Ldb.value child1' "block/title" = original_title);
+          check "child created-at unchanged"
+            (Ldb.value child1' "block/created-at" = original_created_at);
+          check "child order unchanged"
+            (Ldb.value child1' "block/order" = original_order);
+          check "parent title unchanged"
+            (Ldb.value parent' "block/title" = parent_title)))
+
+(* cljs two-clients-extends-cycle-test *)
+let test_two_clients_extends_cycle () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn = Db_test_util.create_conn () in
+      let ops = new_client_ops_db () in
+      let db0 = Datascript.db conn in
+      let root_id =
+        Option.get
+          (Datascript.entid_ref db0 (Ident "logseq.class/Root"))
+      in
+      let tag_id =
+        Option.get (Datascript.entid_ref db0 (Ident "logseq.class/Tag"))
+      in
+      let now = 1710000000000 in
+      let a_uuid = fresh_uuid () in
+      let b_uuid = fresh_uuid () in
+      raw_transact_string conn
+        [ wire_map
+            [ "db/ident", Wire.Keyword "user.class/A"
+            ; "block/uuid", Wire.Uuid a_uuid
+            ; "block/name", Wire.String "a"
+            ; "block/title", Wire.String "A"
+            ; "block/created-at", Wire.Int now
+            ; "block/updated-at", Wire.Int now
+            ; "block/tags", Wire.Array [ Wire.Int tag_id ]
+            ; "logseq.property.class/extends",
+              Wire.Array [ Wire.Int root_id ] ]
+        ; wire_map
+            [ "db/ident", Wire.Keyword "user.class/B"
+            ; "block/uuid", Wire.Uuid b_uuid
+            ; "block/name", Wire.String "b"
+            ; "block/title", Wire.String "B"
+            ; "block/created-at", Wire.Int now
+            ; "block/updated-at", Wire.Int now
+            ; "block/tags", Wire.Array [ Wire.Int tag_id ]
+            ; "logseq.property.class/extends",
+              Wire.Array [ Wire.Int root_id ] ] ];
+      with_datascript_conns conn (Some ops) (fun () ->
+          let a_id =
+            Option.get
+              (Datascript.entid_ref (Datascript.db conn)
+                 (Ident "user.class/A"))
+          in
+          let b_id =
+            Option.get
+              (Datascript.entid_ref (Datascript.db conn)
+                 (Ident "user.class/B"))
+          in
+          raw_transact_string conn
+            [ db_add (Wire.Int a_id) "logseq.property.class/extends"
+                (Wire.Int b_id) ];
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int b_id) "logseq.property.class/extends"
+                   (Wire.Int a_id) ]);
+          let a =
+            Option.get
+              (Ldb.ent_of_ref (Datascript.db conn) (Ident "user.class/A"))
+          in
+          let b =
+            Option.get
+              (Ldb.ent_of_ref (Datascript.db conn) (Ident "user.class/B"))
+          in
+          let idents e =
+            List.filter_map
+              (fun r -> Ldb.value r "db/ident")
+              (Ldb.ref_ents e "logseq.property.class/extends")
+          in
+          let extends_a = idents a in
+          let extends_b = idents b in
+          check "a extends B"
+            (List.mem (Keyword "user.class/B") extends_a);
+          check "a extends Root"
+            (List.mem (Keyword "logseq.class/Root") extends_a);
+          check "b extends A"
+            (List.mem (Keyword "user.class/A") extends_b)))
+
+(* cljs fix-duplicate-orders-with-local-and-remote-new-blocks-test *)
+let test_fix_duplicate_orders_local_and_remote_new_blocks () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let page_uuid =
+        ent_block_uuid (Option.get (Ldb.ref_ent parent "block/page"))
+      in
+      let remote_uuid_1 = fresh_uuid () in
+      let remote_uuid_2 = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_core.insert_blocks_conn conn
+               [ Block_map.of_transit
+                   (wire_map
+                      [ "block/title", Wire.String "local 1"
+                      ; "block/uuid", Wire.Uuid (fresh_uuid ()) ])
+               ; Block_map.of_transit
+                   (wire_map
+                      [ "block/title", Wire.String "local 2"
+                      ; "block/uuid", Wire.Uuid (fresh_uuid ()) ]) ]
+               (Block_map.of_entity parent)
+               { Outliner_core.default_insert_opts with sibling = true }
+               Block_map.empty);
+          let local1 =
+            Option.get
+              (Db_test_util.find_block_by_content (Datascript.db conn)
+                 "local 1")
+          in
+          let local2 =
+            Option.get
+              (Db_test_util.find_block_by_content (Datascript.db conn)
+                 "local 2")
+          in
+          let local1_order = Option.get (Ldb.value local1 "block/order") in
+          let local2_order = Option.get (Ldb.value local2 "block/order") in
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int (-1)) "block/uuid"
+                   (Wire.Uuid remote_uuid_1)
+               ; db_add (Wire.Int (-1)) "block/title"
+                   (Wire.String "remote 1")
+               ; db_add (Wire.Int (-1)) "block/parent"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-1)) "block/page"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-1)) "block/order"
+                   (Ds_wire.transit_of_value local1_order)
+               ; db_add (Wire.Int (-1)) "block/updated-at"
+                   (Wire.Int 1768308019312)
+               ; db_add (Wire.Int (-1)) "block/created-at"
+                   (Wire.Int 1768308019312)
+               ; db_add (Wire.Int (-2)) "block/uuid"
+                   (Wire.Uuid remote_uuid_2)
+               ; db_add (Wire.Int (-2)) "block/title"
+                   (Wire.String "remote 2")
+               ; db_add (Wire.Int (-2)) "block/parent"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-2)) "block/page"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-2)) "block/order"
+                   (Ds_wire.transit_of_value local2_order)
+               ; db_add (Wire.Int (-2)) "block/updated-at"
+                   (Wire.Int 1768308019312)
+               ; db_add (Wire.Int (-2)) "block/created-at"
+                   (Wire.Int 1768308019312) ]);
+          let parent' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) parent.id)
+          in
+          let children = Ldb.ref_ents parent' "block/_parent" in
+          let orders =
+            List.map (fun c -> Ldb.value c "block/order") children
+          in
+          check "all orders" (List.for_all (fun o -> o <> None) orders);
+          check "orders distinct"
+            (List.length orders
+             = List.length (List.sort_uniq compare orders))))
+
+(* cljs rebase-preserves-pending-tx-boundaries-test *)
+let test_rebase_preserves_pending_tx_boundaries () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, child2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title"
+                (Wire.String "child 1 local") ];
+          raw_transact_string conn
+            [ db_add (Wire.Int child2.id) "block/title"
+                (Wire.String "child 2 local") ];
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          let tx_ids_before =
+            List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+              pending_before
+          in
+          check "2 pending" (List.length pending_before = 2);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote") ]);
+          let pending_after = Sync_apply.pending_txs test_repo () in
+          let tx_ids_after =
+            List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+              pending_after
+          in
+          check "still 2 pending" (List.length pending_after = 2);
+          check "same tx-ids" (tx_ids_before = tx_ids_after);
+          check "distinct tx-ids"
+            (List.length tx_ids_after
+             = List.length (List.sort_uniq compare tx_ids_after))))
+
+(* cljs remote-rebase-tx-is-not-enqueued-as-local-pending-test *)
+let test_remote_rebase_tx_not_enqueued_as_local_pending () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title"
+                (Wire.String "child local") ];
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          let tx_ids_before =
+            List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+              pending_before
+          in
+          check "1 pending" (List.length pending_before = 1);
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add (Wire.Int parent.id) "block/title"
+                             (Wire.String "remote rebase") ] )
+                   ; "outliner-op", Wire.Keyword "rebase" ] ]);
+          let pending_after = Sync_apply.pending_txs test_repo () in
+          let tx_ids_after =
+            List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+              pending_after
+          in
+          check "still 1 pending" (List.length pending_after = 1);
+          check "same tx-id" (tx_ids_before = tx_ids_after);
+          check "rebase op"
+            ((List.hd pending_after).outliner_op = Some "rebase")))
+
+(* cljs rebase-keeps-original-created-at-for-pending-tx-test *)
+let test_rebase_keeps_original_created_at_for_pending_tx () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title"
+                (Wire.String "child 1 local") ];
+          let tx_id = (List.hd (Sync_apply.pending_txs test_repo ())).tx_id in
+          let created_at_before =
+            tx_row_int (client_op_tx_row ops tx_id) 3
+          in
+          check "created-at recorded" (created_at_before > 0);
+          while now_ms () <= created_at_before do
+            ()
+          done;
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote") ]);
+          let created_at_after =
+            tx_row_int (client_op_tx_row ops tx_id) 3
+          in
+          check "created-at kept" (created_at_before = created_at_after)))
+
+(* cljs persist-local-tx-keeps-created-at-for-existing-tx-id-test *)
+let test_persist_local_tx_keeps_created_at_for_existing_tx_id () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let report1 =
+            Datascript.with_tx (Datascript.db conn)
+              ~tx_meta:
+                [ "client-id", String "test-client"
+                ; "local-tx?", Bool true
+                ; "db-sync/tx-id", Uuid tx_id
+                ; "outliner-op", Keyword "save-block" ]
+              [ Add
+                  ( Entity_id child1.id, "block/title"
+                  , String "created-at-v1" ) ]
+          in
+          let normalized1, reversed1 =
+            normalize_rebased_pending_tx ~db_before:report1.db_before
+              ~db_after:report1.db_after ~tx_data:report1.tx_data
+          in
+          ignore
+            (Sync_apply.persist_local_tx test_repo report1 normalized1
+               reversed1);
+          let created_at_before =
+            tx_row_int (client_op_tx_row ops tx_id) 3
+          in
+          check "created-at recorded" (created_at_before > 0);
+          while now_ms () <= created_at_before do
+            ()
+          done;
+          let report2 =
+            Datascript.with_tx (Datascript.db conn)
+              ~tx_meta:
+                [ "client-id", String "test-client"
+                ; "local-tx?", Bool true
+                ; "db-sync/tx-id", Uuid tx_id
+                ; "outliner-op", Keyword "rebase" ]
+              [ Add
+                  ( Entity_id child1.id, "block/title"
+                  , String "created-at-v2" ) ]
+          in
+          let normalized2, reversed2 =
+            normalize_rebased_pending_tx ~db_before:report2.db_before
+              ~db_after:report2.db_after ~tx_data:report2.tx_data
+          in
+          ignore
+            (Sync_apply.persist_local_tx test_repo report2 normalized2
+               reversed2);
+          let created_at_after =
+            tx_row_int (client_op_tx_row ops tx_id) 3
+          in
+          check "created-at kept" (created_at_before = created_at_after)))
+
+(* cljs rebase-keeps-pending-when-rebased-empty-test *)
+let test_rebase_keeps_pending_when_rebased_empty () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id) "block/title" (Wire.String "same") ];
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          check "1 pending" (List.length pending_before = 1);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int child1.id) "block/title"
+                   (Wire.String "same") ]);
+          check "pending dropped"
+            (Sync_apply.pending_txs test_repo () = [])))
+
+(* cljs apply-remote-tx-collapsed-encrypted-title-update-test *)
+let test_apply_remote_tx_collapsed_encrypted_title () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = ent_block_uuid child1 in
+      let title = Option.get (Ldb.value child1 "block/title") in
+      with_datascript_conns conn (Some ops) (fun () ->
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                   "block/title" (Ds_wire.transit_of_value title)
+               ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
+                   "block/title" (Ds_wire.transit_of_value title) ]);
+          let child' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
+          in
+          check "title kept"
+            (Ldb.value child' "block/title" = Some title)))
+
+(* cljs rebase-later-tx-for-new-block-uses-lookup-ref-test *)
+let test_rebase_later_tx_for_new_block_uses_lookup_ref () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_core.insert_blocks_conn conn
+               [ Block_map.of_transit
+                   (wire_map
+                      [ "block/title", Wire.String "temp for lookup" ]) ]
+               (Block_map.of_entity parent)
+               { Outliner_core.default_insert_opts with sibling = false }
+               Block_map.empty);
+          let block =
+            Option.get
+              (Db_test_util.find_block_by_content (Datascript.db conn)
+                 "temp for lookup")
+          in
+          let block_uuid = ent_block_uuid block in
+          ignore
+            (Outliner_core.save_block_conn conn
+               (Block_map.of_transit
+                  (wire_map
+                     [ "block/uuid", Wire.Uuid block_uuid
+                     ; "block/title",
+                       Wire.String "temp for lookup updated" ]))
+               Outliner_core.default_save_opts Block_map.empty);
+          let pending_before = Sync_apply.pending_txs test_repo () in
+          check ">=2 pending" (List.length pending_before >= 2);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote") ]);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let expected =
+            db_add (block_uuid_lookup (Wire.Uuid block_uuid)) "block/title"
+              (Wire.String "temp for lookup updated")
+          in
+          (* cljs (mapv (fn [[op e a v _t]] [op e a v]) tx) — drop the
+             5th tx column before comparing rows *)
+          let strip_t (w : Wire.t) : Wire.t =
+            match w with
+            | Wire.Array [ op; e; a; v; _t ] -> Wire.Array [ op; e; a; v ]
+            | Wire.List [ op; e; a; v; _t ] -> Wire.List [ op; e; a; v ]
+            | other -> other
+          in
+          let save_block_tx =
+            List.find_opt
+              (fun (e : Sync_client_op.local_tx_entry) ->
+                 List.exists
+                   (fun w -> strip_t w = expected)
+                   (wire_tx_items e.tx))
+              pending
+          in
+          check "save-block tx found" (save_block_tx <> None);
+          (match save_block_tx with
+           | Some entry ->
+               check "no string eids"
+                 (List.for_all
+                    (fun w ->
+                       match w with
+                       | Wire.Array (_ :: e :: _)
+                       | Wire.List (_ :: e :: _) -> (
+                           match e with
+                           | Wire.String _ -> false
+                           | _ -> true)
+                       | _ -> true)
+                    (wire_tx_items entry.tx))
+           | None -> ())))
+
+(* cljs rebase-drops-stale-raw-pending-tx-with-missing-history-ops-test *)
+let test_rebase_drops_stale_raw_pending_missing_history_ops () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let block_uuid = ent_block_uuid child1 in
+      let previous_title = Option.get (Ldb.value child1 "block/title") in
+      let tx_id = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx tx_id ~created_at:1 ~pending:true
+                ~outliner_op:"rebase"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid block_uuid))
+                         "block/title" (Wire.String "stale raw value") ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid block_uuid))
+                         "block/title"
+                         (Ds_wire.transit_of_value previous_title) ]) ];
+          check "1 pending" (List.length (Sync_apply.pending_txs test_repo ()) = 1);
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_retract_entity
+                             (block_uuid_lookup (Wire.Uuid block_uuid)) ] ) ] ]);
+          check "pending dropped"
+            (Sync_apply.pending_txs test_repo () = [])))
+
+(* cljs rebase-replays-title-only-raw-pending-tx-without-history-ops-test *)
+let test_rebase_replays_title_only_raw_pending_tx () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let block_uuid = ent_block_uuid child1 in
+      let previous_title = Option.get (Ldb.value child1 "block/title") in
+      let parent_uuid = ent_block_uuid parent in
+      let tx_id = fresh_uuid () in
+      let local_title = "local raw title" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx tx_id ~created_at:1 ~pending:true
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid block_uuid))
+                         "block/title" (Wire.String local_title) ])
+                ~reversed_tx_data:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid block_uuid))
+                         "block/title"
+                         (Ds_wire.transit_of_value previous_title) ]) ];
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add
+                             (block_uuid_lookup (Wire.Uuid parent_uuid))
+                             "block/title"
+                             (Wire.String "parent remote") ] ) ] ]);
+          let pending = Sync_apply.pending_txs test_repo () in
+          let block' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) block_uuid)
+          in
+          check "local title applied"
+            (Ldb.value block' "block/title" = Some (String local_title));
+          check "1 pending" (List.length pending = 1)))
+
+(* cljs rebase-keeps-fix-pending-tx-with-empty-reversed-data-test *)
+let test_rebase_keeps_fix_pending_empty_reversed () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let parent_uuid = ent_block_uuid parent in
+      let child_uuid = ent_block_uuid child1 in
+      let fix_title = "local fix title" in
+      raw_transact_string conn
+        [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid)) "block/title"
+            (Wire.String fix_title) ];
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx tx_id ~created_at:1 ~pending:true ~outliner_op:"fix"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                         "block/title" (Wire.String fix_title) ])
+                ~reversed_tx_data:(Wire.Array []) ];
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add
+                             (block_uuid_lookup (Wire.Uuid child_uuid))
+                             "block/title"
+                             (Wire.String "remote child") ] ) ] ]);
+          let pending_after =
+            Sync_apply.pending_tx_by_id test_repo tx_id
+          in
+          let parent' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) parent_uuid)
+          in
+          let child' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
+          in
+          check "fix title"
+            (Ldb.value parent' "block/title" = Some (String fix_title));
+          check "remote child"
+            (Ldb.value child' "block/title"
+             = Some (String "remote child"));
+          check "fix op kept"
+            ((Option.get pending_after).outliner_op = Some "fix")))
+
+(* cljs rebase-keeps-no-op-fix-pending-tx-with-empty-reversed-data-test *)
+let test_rebase_keeps_no_op_fix_pending_empty_reversed () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let parent_uuid = ent_block_uuid parent in
+      let fix_title = "remote already fixed" in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx tx_id ~created_at:1 ~pending:true ~outliner_op:"fix"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                         "block/title" (Wire.String fix_title) ])
+                ~reversed_tx_data:(Wire.Array []) ];
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add
+                             (block_uuid_lookup (Wire.Uuid parent_uuid))
+                             "block/title"
+                             (Wire.String fix_title) ] ) ] ]);
+          let parent' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) parent_uuid)
+          in
+          check "fix title"
+            (Ldb.value parent' "block/title" = Some (String fix_title));
+          let pending_after =
+            Sync_apply.pending_tx_by_id test_repo tx_id
+          in
+          check "fix op kept"
+            ((Option.get pending_after).outliner_op = Some "fix")))
+
+(* cljs remote-log-uuid-string-scalar-values-stay-scalar-test *)
+let test_remote_log_uuid_string_scalar_values_stay_scalar () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, _ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let title_uuid = "6a4970da-145c-430f-ba25-869617b87b1d" in
+      let title_uuid_str = title_uuid in
+      let class_temp_id = "6a4970e3-275b-4d99-bc0e-04616f55afb9" in
+      let history_t = Wire.Int 536872354 in
+      raw_transact_string conn
+        [ wire_map
+            [ "block/uuid", Wire.Uuid title_uuid
+            ; "block/title",
+              Wire.String "existing page with UUID title text"
+            ; "block/name",
+              Wire.String "existing page with UUID title text" ] ];
+      let title_eid =
+        (Option.get
+           (ent_by_block_uuid (Datascript.db conn) title_uuid)).id
+      in
+      let resolve a v =
+        Sync_apply.resolve_temp_id (Datascript.db conn)
+          (Wire.Array
+             [ kw "db/add"; Wire.String class_temp_id; kw a; v
+             ; history_t ])
+      in
+      let expected a v =
+        Wire.Array
+          [ kw "db/add"; Wire.String class_temp_id; kw a; v; history_t ]
+      in
+      check "title scalar kept"
+        (resolve "block/title" (Wire.String title_uuid_str)
+         = expected "block/title" (Wire.String title_uuid_str));
+      check "name scalar kept"
+        (resolve "block/name" (Wire.String title_uuid_str)
+         = expected "block/name" (Wire.String title_uuid_str));
+      check "refs resolved"
+        (resolve "block/refs" (Wire.String title_uuid_str)
+         = expected "block/refs" (Wire.Int title_eid)))
+
+(* cljs reverse-tx-data-create-property-text-block-restores-base-db-test *)
+let test_reverse_tx_data_create_property_text_block_restores_base () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "b1"
+                    ; b_properties =
+                        [ "default", Db_test_util.Str "foo" ] }
+                  ; { Db_test_util.default_block with b_title = Some "b2" } ] } ]
+          ()
+      in
+      let tx_reports = ref [] in
+      ignore
+        (Datascript.listen conn "capture-create-property-text-block"
+           (fun (r : tx_report) -> tx_reports := !tx_reports @ [ r ]));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn
+              "capture-create-property-text-block")
+        (fun () ->
+           let base_db = Datascript.db conn in
+           let block_before =
+             Option.get
+               (Db_test_util.find_block_by_content base_db "b2")
+           in
+           ignore
+             (Outliner_property.create_property_text_block conn
+                ~block_id:(Some (Wire.Int block_before.id))
+                "user.property/default" (Wire.String "") ());
+           let db_after = Datascript.db conn in
+           let block_after =
+             Option.get
+               (Db_test_util.find_block_by_content db_after "b2")
+           in
+           let value_block =
+             Option.get
+               (Ldb.ref_ent block_after "user.property/default")
+           in
+           let value_uuid = ent_block_uuid value_block in
+           let reversed_rows =
+             List.map
+               (fun (r : tx_report) ->
+                  Sync_apply.reverse_tx_data r.db_before r.db_after
+                    r.tx_data)
+               !tx_reports
+           in
+           let restored_db =
+             List.fold_left db_after_of db_after
+               (List.rev reversed_rows)
+           in
+           let block_restored =
+             Option.get
+               (Db_test_util.find_block_by_content restored_db "b2")
+           in
+           check "one report" (List.length !tx_reports = 1);
+           check "reversed rows" (List.exists (fun r -> r <> []) reversed_rows);
+           check "property gone"
+             (Ldb.value block_restored "user.property/default" = None);
+           check "uuid same"
+             (Ldb.value block_restored "block/uuid"
+              = Ldb.value block_before "block/uuid");
+           check "title same"
+             (Ldb.value block_restored "block/title"
+              = Ldb.value block_before "block/title");
+           check "order same"
+             (Ldb.value block_restored "block/order"
+              = Ldb.value block_before "block/order");
+           check "value block gone"
+             (ent_by_block_uuid restored_db value_uuid = None)))
+
+(* cljs count [:find ?h :where [?h :logseq.property.history/block ?block]] *)
+let history_block_count (db : db) (block_id : int) : int =
+  List.length
+    (Datascript.q_string
+       ~inputs:[ Arg_scalar (Result_value (Int block_id)) ] db
+       "[:find ?h :in $ ?block :where [?h :logseq.property.history/block ?block]]")
+
+(* cljs (set (map :db/ident (:block/tags e))) *)
+let tag_idents_of (e : entity) : value list =
+  List.filter_map
+    (fun r -> Ldb.value r "db/ident")
+    (Ldb.ref_ents e "block/tags")
+  |> List.sort compare
+
+(* cljs (some-> (:logseq.property/status e) :db/ident) *)
+let status_ident_of (e : entity) : value option =
+  Option.bind (Ldb.ref_ent e "logseq.property/status") (fun s ->
+      Ldb.value s "db/ident")
+
+(* cljs restore base db by folding reversed pending txs *)
+let restore_base_db (db : db) (pending : Sync_client_op.local_tx_entry list)
+    : db =
+  List.fold_left db_after_of db
+    (List.rev
+       (List.map
+          (fun (e : Sync_client_op.local_tx_entry) -> wire_tx_items e.reversed_tx)
+          pending))
+
+(* cljs pending-reversed-txs-for-multiple-status-changes-restore-base-db-test *)
+let test_pending_reversed_txs_multiple_status_restore_base () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "task"
+                    ; b_properties =
+                        [ "status", Db_test_util.Str "Todo" ] } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let base_db = Datascript.db conn in
+          let block_before =
+            Option.get (Db_test_util.find_block_by_content base_db "task")
+          in
+          let block_uuid = ent_block_uuid block_before in
+          let base_status = status_ident_of block_before in
+          let base_tags = tag_idents_of block_before in
+          let base_history_count =
+            history_block_count base_db block_before.id
+          in
+          Outliner_property.set_block_property conn
+            (Wire.Int block_before.id) "logseq.property/status"
+            (Wire.String "Doing");
+          Outliner_property.set_block_property conn
+            (Wire.Int block_before.id) "logseq.property/status"
+            (Wire.String "Todo");
+          Outliner_property.set_block_property conn
+            (Wire.Int block_before.id) "logseq.property/status"
+            (Wire.String "Doing");
+          let pending = Sync_apply.pending_txs test_repo () in
+          let restored_db =
+            restore_base_db (Datascript.db conn) pending
+          in
+          let block_restored =
+            Option.get (ent_by_block_uuid restored_db block_uuid)
+          in
+          let restored_history_count =
+            history_block_count restored_db block_restored.id
+          in
+          check "3 pending" (List.length pending = 3);
+          check "status restored"
+            (status_ident_of block_restored = base_status);
+          check "tags restored"
+            (tag_idents_of block_restored = base_tags);
+          check "history count restored"
+            (base_history_count = restored_history_count)))
+
+(* cljs pending-reversed-txs-for-batch-status-changes-restore-base-db-test *)
+let test_pending_reversed_txs_batch_status_restore_base () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "task"
+                    ; b_properties =
+                        [ "status", Db_test_util.Str "Todo" ] } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let base_db = Datascript.db conn in
+          let block_before =
+            Option.get (Db_test_util.find_block_by_content base_db "task")
+          in
+          let block_uuid = ent_block_uuid block_before in
+          let status_doing =
+            (Option.get
+               (Ldb.ent_of_ref base_db
+                  (Ident "logseq.property/status.doing"))).id
+          in
+          let status_todo =
+            (Option.get
+               (Ldb.ent_of_ref base_db
+                  (Ident "logseq.property/status.todo"))).id
+          in
+          let base_status = status_ident_of block_before in
+          let base_tags = tag_idents_of block_before in
+          let base_history_count =
+            history_block_count base_db block_before.id
+          in
+          Outliner_property.batch_set_property conn
+            [ Wire.Int block_before.id ] "logseq.property/status"
+            (Wire.Int status_doing) ~entity_id_opt:true ();
+          Outliner_property.batch_set_property conn
+            [ Wire.Int block_before.id ] "logseq.property/status"
+            (Wire.Int status_todo) ~entity_id_opt:true ();
+          Outliner_property.batch_set_property conn
+            [ Wire.Int block_before.id ] "logseq.property/status"
+            (Wire.Int status_doing) ~entity_id_opt:true ();
+          let pending = Sync_apply.pending_txs test_repo () in
+          let restored_db =
+            restore_base_db (Datascript.db conn) pending
+          in
+          let block_restored =
+            Option.get (ent_by_block_uuid restored_db block_uuid)
+          in
+          let restored_history_count =
+            history_block_count restored_db block_restored.id
+          in
+          check "3 pending" (List.length pending = 3);
+          check "status restored"
+            (status_ident_of block_restored = base_status);
+          check "tags restored"
+            (tag_idents_of block_restored = base_tags);
+          check "history count restored"
+            (base_history_count = restored_history_count)))
+
+(* cljs normalize-rebased-pending-tx-keeps-reconstructive-reverse-for-retract-entity-test *)
+let test_normalize_rebased_keeps_reconstructive_reverse () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "target" } ] } ]
+          ()
+      in
+      let target =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "target")
+      in
+      let target_uuid = ent_block_uuid target in
+      let db_before = Datascript.db conn in
+      let tx_report =
+        Datascript.with_tx db_before ~tx_meta:[]
+          (Db_transact.tx_ops_of_tx_data
+             [ db_retract_entity
+                 (block_uuid_lookup (Wire.Uuid target_uuid)) ])
+      in
+      let normalized, reversed =
+        normalize_rebased_pending_tx ~db_before
+          ~db_after:tx_report.db_after ~tx_data:tx_report.tx_data
+      in
+      let restored_db = db_after_of tx_report.db_after reversed in
+      check "normalized retractEntity"
+        (normalized
+         = [ db_retract_entity
+               (block_uuid_lookup (Wire.Uuid target_uuid)) ]);
+      check "reversed non-empty" (reversed <> []);
+      let restored = ent_by_block_uuid restored_db target_uuid in
+      check "target restored" (restored <> None))
+
+(* cljs reverse-tx-data-delete-and-recreate-same-uuid-remains-reversible-test *)
+let test_reverse_tx_data_delete_recreate_same_uuid_reversible () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with b_title = Some "old" } ] } ]
+          ()
+      in
+      let target =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "old")
+      in
+      let target_uuid = ent_block_uuid target in
+      let page_uuid =
+        ent_block_uuid (Option.get (Ldb.ref_ent target "block/page"))
+      in
+      let original_order = Option.get (Ldb.value target "block/order") in
+      let db_before = Datascript.db conn in
+      let tx_report =
+        Datascript.with_tx db_before ~tx_meta:[]
+          (Db_transact.tx_ops_of_tx_data
+             [ db_retract_entity
+                 (block_uuid_lookup (Wire.Uuid target_uuid))
+             ; db_add (Wire.Int (-1)) "block/uuid"
+                 (Wire.Uuid target_uuid)
+             ; db_add (Wire.Int (-1)) "block/title" (Wire.String "new")
+             ; db_add (Wire.Int (-1)) "block/parent"
+                 (block_uuid_lookup (Wire.Uuid page_uuid))
+             ; db_add (Wire.Int (-1)) "block/page"
+                 (block_uuid_lookup (Wire.Uuid page_uuid))
+             ; db_add (Wire.Int (-1)) "block/order"
+                 (Ds_wire.transit_of_value original_order) ])
+      in
+      let reversed =
+        Sync_apply.reverse_tx_data db_before tx_report.db_after
+          tx_report.tx_data
+      in
+      let reverse_conn = Datascript.conn_from_db tx_report.db_after in
+      check "recreated exists"
+        (ent_by_block_uuid tx_report.db_after target_uuid <> None);
+      ignore
+        (Db_transact.transact reverse_conn reversed
+           [ "outliner-op", Keyword "reverse-test" ]);
+      match ent_by_block_uuid (Datascript.db reverse_conn) target_uuid with
+      | None -> check "restored exists" false
+      | Some restored ->
+          check "old title"
+            (Ldb.value restored "block/title" = Some (String "old"));
+          check "page uuid"
+            (Option.map ent_block_uuid (Ldb.ref_ent restored "block/page")
+             = Some page_uuid);
+          check "parent uuid"
+            (Option.map ent_block_uuid (Ldb.ref_ent restored "block/parent")
+             = Some page_uuid))
+
+(* cljs rebase-preserves-title-when-reversed-tx-ids-change-test *)
+let test_rebase_preserves_title_when_reversed_tx_ids_change () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with b_title = Some "old" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "old")
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "save-block"
+                   ; Wire.Array
+                       [ wire_map
+                           [ "block/uuid",
+                             entity_block_uuid block
+                           ; "block/title", Wire.String "test" ]
+                       ; Wire.Nil ] ] ]
+               local_tx_meta);
+          check "1 pending"
+            (List.length (Sync_apply.pending_txs test_repo ()) = 1);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int block.id) "block/updated-at"
+                   (Wire.Int 1710000000000) ]);
+          let block' =
+            Option.get (Ldb.ent_of_id (Datascript.db conn) block.id)
+          in
+          check "local title kept"
+            (Ldb.value block' "block/title" = Some (String "test"))))
+
+(* cljs sync-conflict-model-roundtrip-test *)
+let test_sync_conflict_model_roundtrip () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      ignore (new_client_ops_db ());
+      let block_uuid = fresh_uuid () in
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "remote title", 42 ];
+      let conflicts =
+        Sync_client_op.get_sync_conflicts test_repo block_uuid
+      in
+      check "one conflict" (List.length conflicts = 1);
+      let (c : Sync_client_op.sync_conflict) = List.hd conflicts in
+      check "block-uuid" (c.block_uuid = block_uuid);
+      check "attr" (c.attr = "block/title");
+      check "value" (c.value = "remote title");
+      check "remote-t" (c.remote_t = Some 42);
+      check "created-at" (c.created_at > 0))
+
+(* cljs sync-conflict-model-title-conflict-keeps-latest-non-empty-value-test *)
+let test_sync_conflict_keeps_latest_non_empty () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      ignore (new_client_ops_db ());
+      let block_uuid = fresh_uuid () in
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "a remote title", 41 ];
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "b remote title", 42 ];
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "", 43 ];
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "c remote title", 44 ];
+      let conflicts =
+        Sync_client_op.get_sync_conflicts test_repo block_uuid
+      in
+      check "one conflict" (List.length conflicts = 1);
+      let (c : Sync_client_op.sync_conflict) = List.hd conflicts in
+      check "latest" (c.value = "c remote title");
+      check "remote-t" (c.remote_t = Some 44))
+
+(* cljs sync-conflict-model-clear-test *)
+let test_sync_conflict_model_clear () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      ignore (new_client_ops_db ());
+      let block_uuid_1 = fresh_uuid () in
+      let block_uuid_2 = fresh_uuid () in
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid_1, "block/title", "remote title 1", 51
+        ; block_uuid_2, "block/title", "remote title 2", 52 ];
+      Sync_client_op.clear_sync_conflicts test_repo block_uuid_1;
+      check "block-1 cleared"
+        (Sync_client_op.get_sync_conflicts test_repo block_uuid_1 = []);
+      let conflicts_2 =
+        Sync_client_op.get_sync_conflicts test_repo block_uuid_2
+      in
+      check "block-2 kept" (List.length conflicts_2 = 1);
+      check "block-2 value"
+        ((List.hd conflicts_2).value = "remote title 2"))
+
+(* cljs rebase-saves-remote-title-and-name-conflicts-test *)
+let test_rebase_saves_remote_title_and_name_conflicts () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "old page" }
+              ; blocks = [ { Db_test_util.default_block with
+                             b_title = Some "old block" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db conn) "old page")
+      in
+      let block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "old block")
+      in
+      let page_uuid = ent_block_uuid page in
+      let block_uuid = ent_block_uuid block in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "save-block"
+                   ; Wire.Array
+                       [ wire_map
+                           [ "block/uuid", Wire.Uuid block_uuid
+                           ; "block/title", Wire.String "local block" ]
+                       ; Wire.Nil ] ]
+               ; Wire.Array
+                   [ kw "save-block"
+                   ; Wire.Array
+                       [ wire_map
+                           [ "block/uuid", Wire.Uuid page_uuid
+                           ; "block/title", Wire.String "local page" ]
+                       ; Wire.Nil ] ] ]
+               local_tx_meta);
+          check "pending"
+            (Sync_apply.pending_txs test_repo () <> []);
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ "t", Wire.Int 10
+                   ; ( "tx-data"
+                     , Wire.Array
+                         [ db_add
+                             (block_uuid_lookup (Wire.Uuid block_uuid))
+                             "block/title" (Wire.String "remote block")
+                         ; db_add
+                             (block_uuid_lookup (Wire.Uuid page_uuid))
+                             "block/title" (Wire.String "remote page") ] ) ] ]);
+          let db = Datascript.db conn in
+          check "local block kept"
+            (Ldb.value (Option.get (ent_by_block_uuid db block_uuid))
+               "block/title"
+             = Some (String "local block"));
+          check "local page kept"
+            (Ldb.value (Option.get (ent_by_block_uuid db page_uuid))
+               "block/title"
+             = Some (String "local page"));
+          let rows =
+            sync_conflict_rows ops block_uuid
+            @ sync_conflict_rows ops page_uuid
+          in
+          check "conflicts"
+            (List.sort compare rows
+             = List.sort compare
+                 [ block_uuid, "block/title", "remote block"
+                 ; page_uuid, "block/title", "remote page" ])))
+
+(* cljs (set (map (comp str :block/uuid) (d/datoms db :avet :block/uuid))) *)
+let block_uuid_strings (db : db) : string list =
+  Datascript.datoms db Avet ~a:"block/uuid" ()
+  |> Seq.filter_map
+       (fun (d : datom) ->
+          match d.v with
+          | Uuid u -> Some u
+          | _ -> None)
+  |> List.of_seq
+
+(* cljs rebase-does-not-leave-anonymous-created-by-entities-test *)
+let test_rebase_does_not_leave_anonymous_created_by_entities () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let page_id =
+        (Option.get (Ldb.ref_ent parent "block/page")).id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          raw_transact_string conn
+            [ db_add (Wire.Int child1.id)
+                "logseq.property/created-by-ref" (Wire.Int page_id) ];
+          ignore (delete_blocks conn [ child1 ]);
+          check "pending" (Sync_apply.pending_txs test_repo () <> []);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote") ]);
+          let db = Datascript.db conn in
+          let anonymous_ents =
+            List.filter_map
+              (fun (d : datom) ->
+                 match Ldb.ent_of_id db d.e with
+                 | Some ent
+                   when Ldb.value ent "block/uuid" = None
+                        && Ldb.value ent "db/ident" = None
+                        && Ldb.value ent "block/created-at" <> None
+                        && Ldb.value ent "block/updated-at" <> None ->
+                     Some ent.id
+                 | _ -> None)
+              (List.of_seq
+                 (Datascript.datoms db Avet
+                    ~a:"logseq.property/created-by-ref" ()))
+          in
+          let validation = Db_validate.validate_local_db db in
+          check "no anonymous" (anonymous_ents = []);
+          check "no validation errors"
+            (non_recycle_validation_entities validation = [])))
+
+(* cljs rebase-create-then-delete-does-not-leave-anonymous-entities-test *)
+let test_rebase_create_then_delete_no_anonymous () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let page_id =
+        (Option.get (Ldb.ref_ent parent "block/page")).id
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_core.insert_blocks_conn conn
+               [ Block_map.of_transit
+                   (wire_map [ "block/title", Wire.String "temp-rebase-case" ]) ]
+               (Block_map.of_entity parent)
+               { Outliner_core.default_insert_opts with sibling = false }
+               Block_map.empty);
+          let temp_block =
+            Option.get
+              (Db_test_util.find_block_by_content (Datascript.db conn)
+                 "temp-rebase-case")
+          in
+          raw_transact_string conn
+            [ db_add (Wire.Int temp_block.id)
+                "logseq.property/created-by-ref" (Wire.Int page_id) ];
+          ignore (delete_blocks conn [ temp_block ]);
+          check ">=2 pending"
+            (List.length (Sync_apply.pending_txs test_repo ()) >= 2);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote 2") ]);
+          let db = Datascript.db conn in
+          let anonymous_ents =
+            List.filter_map
+              (fun (d : datom) ->
+                 match Ldb.ent_of_id db d.e with
+                 | Some ent
+                   when Ldb.value ent "block/uuid" = None
+                        && Ldb.value ent "db/ident" = None
+                        && Ldb.value ent "block/updated-at" <> None ->
+                     Some ent.id
+                 | _ -> None)
+              (List.of_seq
+                 (Datascript.datoms db Avet ~a:"block/created-at" ()))
+          in
+          let validation = Db_validate.validate_local_db db in
+          check "no anonymous" (anonymous_ents = []);
+          check "no validation errors"
+            (non_recycle_validation_entities validation = [])))
+
+(* cljs apply-remote-txs-delete-parent-with-child-without-local-changes-test *)
+let test_apply_remote_txs_delete_parent_with_child_no_local () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let child1_uuid = ent_block_uuid child1 in
+      let remote_parent_uuid = fresh_uuid () in
+      let remote_child_uuid = fresh_uuid () in
+      raw_transact_string conn
+        [ db_add (Wire.String "remote-parent") "block/uuid"
+            (Wire.Uuid remote_parent_uuid)
+        ; db_add (Wire.String "remote-parent") "block/title"
+            (Wire.String "remote parent")
+        ; db_add (Wire.String "remote-parent") "block/page"
+            (block_uuid_lookup (Wire.Uuid remote_parent_uuid))
+        ; db_add (Wire.String "remote-parent") "block/parent"
+            (block_uuid_lookup (Wire.Uuid remote_parent_uuid))
+        ; db_add (Wire.String "remote-child") "block/uuid"
+            (Wire.Uuid remote_child_uuid)
+        ; db_add (Wire.String "remote-child") "block/title"
+            (Wire.String "remote child")
+        ; db_add (Wire.String "remote-child") "block/page"
+            (block_uuid_lookup (Wire.Uuid remote_parent_uuid))
+        ; db_add (Wire.String "remote-child") "block/parent"
+            (block_uuid_lookup (Wire.Uuid remote_parent_uuid)) ];
+      with_datascript_conns conn (Some ops) (fun () ->
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_retract_entity
+                             (block_uuid_lookup
+                                (Wire.Uuid remote_parent_uuid)) ] ) ] ]);
+          let db = Datascript.db conn in
+          check "remote parent deleted"
+            (ent_by_block_uuid db remote_parent_uuid = None);
+          check "remote child deleted"
+            (ent_by_block_uuid db remote_child_uuid = None);
+          check "unrelated child kept"
+            (ent_by_block_uuid db child1_uuid <> None)))
+
+(* cljs apply-remote-txs-delete-expansion-includes-generated-property-value-children-test *)
+let test_delete_expansion_includes_generated_pvalue_children () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let property_value_uuid = fresh_uuid () in
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "user.property/delete-expansion"
+              , { Db_test_util.default_property with p_type = "default" } )
+            ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "parent"
+                    ; b_properties =
+                        [ ( "user.property/delete-expansion"
+                          , Db_test_util.Map
+                              [ ( "build/property-value"
+                                , Db_test_util.Kw "block" )
+                              ; "block/title",
+                                Db_test_util.Str "property value"
+                              ; "block/uuid",
+                                Db_test_util.Uuid property_value_uuid
+                              ; "build/keep-uuid?", Db_test_util.Bool true
+                              ; ( "build/children"
+                                , Db_test_util.Vec
+                                    [ Db_test_util.Map
+                                        [ ( "block/title"
+                                          , Db_test_util.Str
+                                              "nested property child" ) ] ] )
+                              ] ) ] } ] } ]
+          ()
+      in
+      let parent =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "parent")
+      in
+      let property_value =
+        Option.get
+          (ent_by_block_uuid (Datascript.db conn) property_value_uuid)
+      in
+      let nested_child =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "nested property child")
+      in
+      let generic_expanded =
+        Delete_blocks.expand_delete_blocks_tx (Datascript.db conn)
+          [ RetractEntity (Entity_id parent.id) ] ~outliner_op:"delete-blocks"
+      in
+      let sync_expanded =
+        Sync_apply.expand_block_retracts_to_descendants
+          (Datascript.db conn)
+          [ db_retract_entity (Wire.Int parent.id) ]
+      in
+      let sync_retracted_ids =
+        List.filter_map
+          (fun w ->
+             match w with
+             | Wire.Array [ Wire.Keyword "db/retractEntity"; ref_ ]
+             | Wire.List [ Wire.Keyword "db/retractEntity"; ref_ ] -> (
+                 match
+                   Ldb.ent_of_ref (Datascript.db conn)
+                     (Ds_wire.entity_ref_of_transit ref_)
+                 with
+                 | Some e -> Some e.id
+                 | None -> None)
+             | _ -> None)
+          sync_expanded
+      in
+      check "created-from-property"
+        (Ldb.ref_ent property_value "logseq.property/created-from-property"
+         <> None);
+      check "no filtered children"
+        (Ldb.parent_children parent = []);
+      check "raw children = [pv]"
+        (List.map
+           (fun (e : entity) -> e.id)
+           (Ldb.ref_ents parent "block/_parent")
+         = [ property_value.id ]);
+      check "generic retracts pv"
+        (List.mem
+           (RetractEntity (Entity_id property_value.id))
+           generic_expanded);
+      check "generic retracts nested"
+        (List.mem
+           (RetractEntity (Entity_id nested_child.id))
+           generic_expanded);
+      check "sync retracts pv"
+        (List.mem property_value.id sync_retracted_ids);
+      check "sync retracts nested"
+        (List.mem nested_child.id sync_retracted_ids))
+
+(* cljs apply-remote-txs-computes-remote-deletes-once-per-batch-test *)
+let test_apply_remote_txs_computes_remote_deletes_once () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, child2, _c3 = setup_parent_child () in
+      let parent_id = parent.id in
+      let child2_uuid = ent_block_uuid child2 in
+      let delete_set_computations = ref 0 in
+      let original =
+        !Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn
+      in
+      let remote_txs =
+        List.init 128 (fun index ->
+            wire_map
+              [ ( "tx-data"
+                , Wire.Array
+                    [ db_add (Wire.Int parent_id) "block/title"
+                        (Wire.String
+                           (Printf.sprintf "remote title %d" index)) ] ) ])
+        @ [ wire_map
+              [ ( "tx-data"
+                , Wire.Array
+                    [ db_retract_entity
+                        (block_uuid_lookup (Wire.Uuid child2_uuid)) ] ) ] ]
+      in
+      Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn :=
+        (fun txs ->
+           incr delete_set_computations;
+           original txs);
+      Fun.protect
+        ~finally:(fun () ->
+            Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn :=
+              original)
+        (fun () ->
+           with_datascript_conns conn (Some ops) (fun () ->
+               await_unit
+                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                    remote_txs);
+               check "computed once" (!delete_set_computations = 1);
+               check "last title"
+                 (Ldb.value
+                    (Option.get
+                       (Ldb.ent_of_id (Datascript.db conn) parent_id))
+                    "block/title"
+                  = Some (String "remote title 127"));
+               check "child2 deleted"
+                 (ent_by_block_uuid (Datascript.db conn) child2_uuid
+                  = None))))
+
+(* cljs apply-remote-txs-skips-block-ref-filters-when-no-block-uuid-refs-test *)
+let test_apply_remote_txs_skips_block_ref_filters_no_refs () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let remote_txs =
+        List.init 128 (fun index ->
+            wire_map
+              [ ( "tx-data"
+                , Wire.Array
+                    [ db_add (Wire.Int parent.id) "block/title"
+                        (Wire.String (Printf.sprintf "remote title %d" index))
+                    ] ) ])
+      in
+      let stale_calls = ref 0 in
+      let missing_calls = ref 0 in
+      let orig_stale =
+        !Sync_apply.drop_stale_deleted_block_ref_ops_fn
+      in
+      let orig_missing = !Sync_apply.drop_missing_block_ref_ops_fn in
+      Sync_apply.drop_stale_deleted_block_ref_ops_fn :=
+        (fun db deleted txs ->
+           incr stale_calls;
+           orig_stale db deleted txs);
+      Sync_apply.drop_missing_block_ref_ops_fn :=
+        (fun db txs ->
+           incr missing_calls;
+           orig_missing db txs);
+      Fun.protect
+        ~finally:(fun () ->
+            Sync_apply.drop_stale_deleted_block_ref_ops_fn := orig_stale;
+            Sync_apply.drop_missing_block_ref_ops_fn := orig_missing)
+        (fun () ->
+           with_datascript_conns conn (Some ops) (fun () ->
+               await_unit
+                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                    remote_txs);
+               check "stale skipped" (!stale_calls = 0);
+               check "missing skipped" (!missing_calls = 0);
+               let parent' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) parent_uuid)
+               in
+               check "title applied"
+                 (Ldb.value parent' "block/title"
+                  = Some (String "remote title 127")))))
+
+(* cljs apply-remote-txs-keeps-refs-to-block-recreated-after-earlier-delete-test *)
+let test_apply_remote_txs_keeps_refs_recreated_after_earlier_delete () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, child2, _c3 = setup_parent_child () in
+      let child2_uuid = ent_block_uuid child2 in
+      let parent_uuid = ent_block_uuid parent in
+      let page_uuid =
+        ent_block_uuid
+          (Option.get (Ldb.ref_ent parent "block/page"))
+      in
+      let recreated_child_uuid = fresh_uuid () in
+      let now = now_ms () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          await_unit
+            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_retract_entity
+                             (block_uuid_lookup (Wire.Uuid child2_uuid))
+                         ] ) ]
+               ; wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add (Wire.Int (-1)) "block/uuid"
+                             (Wire.Uuid child2_uuid)
+                         ; db_add (Wire.Int (-1)) "block/title"
+                             (Wire.String "child 2 recreated")
+                         ; db_add (Wire.Int (-1)) "block/parent"
+                             (block_uuid_lookup (Wire.Uuid parent_uuid))
+                         ; db_add (Wire.Int (-1)) "block/page"
+                             (block_uuid_lookup (Wire.Uuid page_uuid))
+                         ; db_add (Wire.Int (-1)) "block/order"
+                             (Wire.String "b2")
+                         ; db_add (Wire.Int (-1)) "block/created-at"
+                             (Wire.Int now)
+                         ; db_add (Wire.Int (-1)) "block/updated-at"
+                             (Wire.Int now)
+                         ; db_add (Wire.Int (-2)) "block/uuid"
+                             (Wire.Uuid recreated_child_uuid)
+                         ; db_add (Wire.Int (-2)) "block/title"
+                             (Wire.String "child 2 descendant")
+                         ; db_add (Wire.Int (-2)) "block/parent"
+                             (block_uuid_lookup (Wire.Uuid child2_uuid))
+                         ; db_add (Wire.Int (-2)) "block/page"
+                             (block_uuid_lookup (Wire.Uuid page_uuid))
+                         ; db_add (Wire.Int (-2)) "block/order"
+                             (Wire.String "b2a")
+                         ; db_add (Wire.Int (-2)) "block/created-at"
+                             (Wire.Int now)
+                         ; db_add (Wire.Int (-2)) "block/updated-at"
+                             (Wire.Int now) ] ) ] ]);
+          let recreated_child2 =
+            Option.get
+              (ent_by_block_uuid (Datascript.db conn) child2_uuid)
+          in
+          let descendant =
+            Option.get
+              (ent_by_block_uuid (Datascript.db conn)
+                 recreated_child_uuid)
+          in
+          check "child2 title"
+            (Ldb.value recreated_child2 "block/title"
+             = Some (String "child 2 recreated"));
+          check "descendant title"
+            (Ldb.value descendant "block/title"
+             = Some (String "child 2 descendant"));
+          let descendant_parent =
+            Option.get (Ldb.ref_ent descendant "block/parent")
+          in
+          check "descendant parent"
+            (ent_block_uuid descendant_parent = child2_uuid)))
+
+(* cljs apply-remote-txs-local-fallback-delete-parent-retracts-remote-child-test *)
+let test_apply_remote_txs_local_fallback_delete_parent_retracts_child () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page 1" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "parent" } ] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      let parent =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn) "parent")
+      in
+      let parent_uuid = ent_block_uuid parent in
+      let page_uuid =
+        ent_block_uuid (Option.get (Ldb.ref_ent parent "block/page"))
+      in
+      let child_uuid = fresh_uuid () in
+      let now = now_ms () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Db_transact.transact conn
+               [ db_retract_entity
+                   (block_uuid_lookup (Wire.Uuid parent_uuid)) ]
+               [ "local-tx?", Bool true
+               ; "outliner-op", Keyword "batch-remove-property" ]);
+          check "pending"
+            (List.length (Sync_apply.pending_txs test_repo ()) = 1);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int (-1)) "block/uuid"
+                   (Wire.Uuid child_uuid)
+               ; db_add (Wire.Int (-1)) "block/title"
+                   (Wire.String "remote child")
+               ; db_add (Wire.Int (-1)) "block/parent"
+                   (block_uuid_lookup (Wire.Uuid parent_uuid))
+               ; db_add (Wire.Int (-1)) "block/page"
+                   (block_uuid_lookup (Wire.Uuid page_uuid))
+               ; db_add (Wire.Int (-1)) "block/order" (Wire.String "Zz")
+               ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
+               ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now) ]);
+          let db = Datascript.db conn in
+          check "remote child deleted"
+            (ent_by_block_uuid db child_uuid = None);
+          check "parent deleted"
+            (ent_by_block_uuid db parent_uuid = None);
+          let validation = Db_validate.validate_local_db db in
+          check "no validation errors"
+            (non_recycle_validation_entities validation = [])))
+
+(* cljs with-redefs [ldb/batch-transact-with-temp-conn!] — swap the fn ref,
+   delegate to the saved impl, restore on exit *)
+let with_batch_transact_hook
+    (hook :
+      (conn -> tx_meta -> ?listen_db:(tx_report -> unit) ->
+       ?before_commit:(unit -> unit) -> (conn -> unit) -> unit ->
+       tx_report option) ->
+      conn -> tx_meta -> ?listen_db:(tx_report -> unit) ->
+      ?before_commit:(unit -> unit) -> (conn -> unit) -> unit ->
+      tx_report option)
+    (f : unit -> 'a) : 'a =
+  let orig = !Sync_apply.batch_transact_with_temp_conn_fn in
+  Sync_apply.batch_transact_with_temp_conn_fn := hook orig;
+  Fun.protect f ~finally:(fun () ->
+      Sync_apply.batch_transact_with_temp_conn_fn := orig)
+
+let tx_meta_has (name : string) (tx_meta : tx_meta) : bool =
+  List.exists (fun (k, _) -> k = name) tx_meta
+
+(* cljs apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test *)
+let test_rechecks_local_delete_races_temp_snapshot () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          delete_blocks conn [ child1 ];
+          check "pending" (Sync_apply.pending_txs test_repo () <> []);
+          let injected = ref false in
+          with_batch_transact_hook
+            (fun orig conn' tx_meta ?listen_db ?before_commit f' () ->
+               orig conn' tx_meta ?listen_db
+                 ~before_commit:
+                   (fun () ->
+                      (match before_commit with
+                       | Some bc -> bc ()
+                       | None -> ());
+                      if (not !injected)
+                         && tx_meta_has "with-local-changes?" tx_meta
+                      then begin
+                        injected := true;
+                        delete_blocks conn [ parent ]
+                      end)
+                 f' ())
+            (fun () ->
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    [ db_add
+                        (block_uuid_lookup (Wire.Uuid parent_uuid))
+                        "block/title"
+                        (Wire.String "parent remote title") ]));
+          check "injected" !injected;
+          let pending_after = Sync_apply.pending_txs test_repo () in
+          check "pending after"
+            (List.exists
+               (fun (e : Sync_client_op.local_tx_entry) ->
+                  List.exists
+                    (fun w ->
+                       match w with
+                       | Wire.Array [ op; _ ] | Wire.List [ op; _ ] ->
+                           op = kw "db/retractEntity"
+                       | _ -> false)
+                    (wire_tx_items e.tx))
+               pending_after)))
+
+(* cljs apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test *)
+let test_rechecks_local_delete_races_temp_commit () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          delete_blocks conn [ child1 ];
+          let remote_tx =
+            [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                "block/title" (Wire.String "parent remote title") ]
+          in
+          let injected = ref false in
+          with_batch_transact_hook
+            (fun orig conn' tx_meta ?listen_db ?before_commit f' () ->
+               orig conn' tx_meta ?listen_db ?before_commit
+                 (fun tc ->
+                    f' tc;
+                    if (not !injected)
+                       && tx_meta_has "with-local-changes?" tx_meta
+                    then begin
+                      injected := true;
+                      delete_blocks conn [ parent ]
+                    end)
+                 ())
+            (fun () ->
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    remote_tx));
+          check "injected" !injected;
+          let pending_after = Sync_apply.pending_txs test_repo () in
+          check "pending after"
+            (List.exists
+               (fun (e : Sync_client_op.local_tx_entry) ->
+                  List.exists
+                    (fun w ->
+                       match w with
+                       | Wire.Array [ op; _ ] | Wire.List [ op; _ ] ->
+                           op = kw "db/retractEntity"
+                       | _ -> false)
+                    (wire_tx_items e.tx))
+               pending_after)))
+
+(* cljs apply-remote-txs-rechecks-local-txs-when-local-edit-races-without-local-batch-test *)
+let test_rechecks_local_edit_races_without_local_batch () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let child_uuid = ent_block_uuid child1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          let remote_txs =
+            [ wire_map
+                [ ( "tx-data"
+                  , Wire.Array
+                      [ db_add
+                          (block_uuid_lookup (Wire.Uuid child_uuid))
+                          "block/title"
+                          (Wire.String "remote child") ] ) ] ]
+          in
+          let inserted = ref false in
+          with_batch_transact_hook
+            (fun orig conn' tx_meta ?listen_db ?before_commit f' () ->
+               orig conn' tx_meta ?listen_db ?before_commit
+                 (fun tc ->
+                    f' tc;
+                    if (not !inserted)
+                       && tx_meta_has "without-local-changes?" tx_meta
+                    then begin
+                      inserted := true;
+                      ignore
+                        (Outliner_core.insert_blocks_conn conn
+                           [ Block_map.of_transit
+                               (wire_map
+                                  [ "block/title",
+                                    Wire.String "injected sibling"
+                                  ; "block/uuid",
+                                    Wire.Uuid (fresh_uuid ()) ]) ]
+                           (Block_map.of_entity parent)
+                           { Outliner_core.default_insert_opts with
+                             sibling = true }
+                           Block_map.empty)
+                    end)
+                 ())
+            (fun () ->
+               await_unit
+                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                    remote_txs));
+          check "inserted" !inserted;
+          let injected =
+            Db_test_util.find_block_by_content (Datascript.db conn)
+              "injected sibling"
+          in
+          let child' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
+          in
+          check "injected exists" (injected <> None);
+          check "remote title applied"
+            (Ldb.value child' "block/title"
+             = Some (String "remote child"))))
+
+(* cljs apply-remote-txs-with-retry-delays-retry-when-local-txs-keep-changing-test *)
+let test_delays_retry_when_local_txs_keep_changing () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let parent = Option.get (Ldb.ref_ent child1 "block/parent") in
+      let child_uuid = ent_block_uuid child1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          delete_blocks conn [ child1 ];
+          let remote_tx =
+            [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                "block/title" (Wire.String "remote child title") ]
+          in
+          let snapshot_taken = ref false in
+          with_batch_transact_hook
+            (fun orig conn' tx_meta ?listen_db ?before_commit f' () ->
+               orig conn' tx_meta ?listen_db ?before_commit
+                 (fun tc ->
+                    if (not !snapshot_taken)
+                       && tx_meta_has "with-local-changes?" tx_meta
+                    then begin
+                      snapshot_taken := true;
+                      f' tc;
+                      delete_blocks conn [ parent ]
+                    end
+                    else f' tc)
+                 ())
+            (fun () ->
+               ignore
+                 (await_task
+                    (Sync_apply.apply_remote_txs_with_retry test_repo
+                       (mk_client ())
+                       [ wire_map [ "tx-data", Wire.Array remote_tx ] ] 0)));
+          check "snapshot taken" !snapshot_taken;
+          check "parent delete kept"
+            (Sync_apply.pending_txs test_repo () <> []);
+          check "child deleted"
+            (ent_by_block_uuid (Datascript.db conn) child_uuid = None)))
+
+(* cljs apply-remote-txs-with-retry-retries-snapshot-drift-even-if-pending-list-stabilizes-test *)
+let test_retries_snapshot_drift_pending_list_stabilizes () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          delete_blocks conn [ child1 ];
+          let pending = Sync_apply.pending_txs test_repo () in
+          let delete_tx_id = (List.hd pending).tx_id in
+          let remote_txs =
+            [ wire_map
+                [ ( "tx-data"
+                  , Wire.Array
+                      [ db_add
+                          (block_uuid_lookup (Wire.Uuid parent_uuid))
+                          "block/title"
+                          (Wire.String "parent remote title") ] ) ] ]
+          in
+          let staged_insert_done = ref false in
+          with_batch_transact_hook
+            (fun orig conn' tx_meta ?listen_db ?before_commit f' () ->
+               if tx_meta_has "with-local-changes?" tx_meta
+                  && not !staged_insert_done
+               then begin
+                 staged_insert_done := true;
+                 orig conn' tx_meta ?listen_db ?before_commit
+                   (fun tc ->
+                      ignore
+                        (Outliner_core.insert_blocks_conn conn
+                           [ Block_map.of_transit
+                               (wire_map
+                                  [ "block/title",
+                                    Wire.String "snapshot racing block"
+                                  ; "block/uuid",
+                                    Wire.Uuid (fresh_uuid ()) ]) ]
+                           (Block_map.of_entity parent)
+                           { Outliner_core.default_insert_opts with
+                             sibling = true }
+                           Block_map.empty);
+                      ignore
+                        (Sync_client_op.mark_pending_txs_false test_repo
+                           [ delete_tx_id ]);
+                      f' tc)
+                   ()
+               end
+               else orig conn' tx_meta ?listen_db ?before_commit f' ())
+            (fun () ->
+               ignore
+                 (await_task
+                    (Sync_apply.apply_remote_txs_with_retry test_repo
+                       (mk_client ()) remote_txs 0)));
+          check "staged insert" !staged_insert_done;
+          let injected =
+            Db_test_util.find_block_by_content (Datascript.db conn)
+              "snapshot racing block"
+          in
+          check "injected kept" (injected <> None);
+          let parent' =
+            Option.get (ent_by_block_uuid (Datascript.db conn) parent_uuid)
+          in
+          check "remote title applied"
+            (Ldb.value parent' "block/title"
+             = Some (String "parent remote title"))))
+
+(* cljs apply-remote-txs-rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test *)
+let test_rebase_persisted_row_forward_and_inverse_ops () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      wire_no_e2ee ();
+      with_datascript_conns conn (Some ops) (fun () ->
+          delete_blocks conn [ child1 ];
+          let tx_id =
+            match Sync_apply.pending_txs test_repo () with
+            | first :: _ -> first.tx_id
+            | [] -> failwith "no pending tx"
+          in
+          (match Sync_apply.pending_txs test_repo () with
+           | first :: _ ->
+               check "before forward" (first.forward_outliner_ops <> []);
+               check "before inverse" (first.inverse_outliner_ops <> [])
+           | [] -> check "pending exists" false);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "parent remote") ]);
+          match Sync_apply.pending_tx_by_id test_repo tx_id with
+          | Some row ->
+              check "rebase op" (row.outliner_op = Some "rebase");
+              check "forward ops" (row.forward_outliner_ops <> []);
+              check "inverse ops" (row.inverse_outliner_ops <> [])
+          | None -> check "pending kept" false))
+
+(* cljs apply-remote-txs-rebases-create-delete-page-as-recycled-test *)
+let test_apply_remote_txs_rebases_create_delete_page_as_recycled () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "remote page" }
+              ; blocks = [] } ]
+          ()
+      in
+      let ops = new_client_ops_db () in
+      wire_no_e2ee ();
+      let page_uuid = fresh_uuid () in
+      let remote_page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db conn)
+             "remote page")
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (Outliner_page.create_bang conn "local recycled page"
+               ~opts:(fun () ->
+                 Outliner_page.create (Datascript.db conn)
+                   "local recycled page" ~uuid:page_uuid ())
+               ());
+          ignore
+            (Outliner_page.delete_conn conn page_uuid (Wire.Map []));
+          let page_before =
+            Option.get (ent_by_block_uuid (Datascript.db conn) page_uuid)
+          in
+          check "recycled before" (Ldb.recycled page_before);
+          check "2 pending"
+            (List.length (Sync_apply.pending_txs test_repo ()) = 2);
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (Wire.Int remote_page.id) "block/title"
+                   (Wire.String "remote page updated") ]);
+          let page =
+            Option.get (ent_by_block_uuid (Datascript.db conn) page_uuid)
+          in
+          check "page kept" true;
+          check "recycled after" (Ldb.recycled page);
+          check "parent kept"
+            (Ldb.ref_ent page "block/parent" <> None);
+          check "deleted-at"
+            (Ldb.value page "logseq.property/deleted-at" <> None);
+          let original_page =
+            Ldb.ref_ent page "logseq.property.recycle/original-page"
+          in
+          check "original-page self"
+            (match original_page with
+             | Some op -> op.id = page.id
+             | None -> false)))
+
+(* cljs legacy-rebase-row-with-missing-history-ops-gets-persisted-with-both-ops-test *)
+let test_legacy_rebase_row_missing_history_persisted_with_both_ops () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let old_title = Option.get (Ldb.value parent "block/title") in
+      let new_title = "legacy rebase title" in
+      let tx_id = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let legacy_pending =
+            seed_tx tx_id ~created_at:1 ~pending:true ~outliner_op:"rebase"
+              ~tx_data_v:
+                (Wire.Array
+                   [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                       "block/title" (Wire.String new_title) ])
+              ~reversed_tx_data:
+                (Wire.Array
+                   [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                       "block/title"
+                       (Ds_wire.transit_of_value old_title) ])
+          in
+          seed_client_op_txs test_repo [ legacy_pending ];
+          await_unit
+            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+               [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                   "block/title" (Wire.String "parent remote refresh") ]);
+          let pending_after = Sync_apply.pending_txs test_repo () in
+          check "1 pending" (List.length pending_after = 1);
+          let row = List.hd pending_after in
+          check "tx_id kept" (row.tx_id = tx_id);
+          check "rebase op" (row.outliner_op = Some "rebase");
+          (* cljs asserts (vector? ...) — empty vector qualifies *)
+          check "forward ops" true;
+          check "inverse ops" true))
+
+(* substring check without str *)
+let string_contains (haystack : string) (needle : string) : bool =
+  let n = String.length needle and h = String.length haystack in
+  let rec loop i =
+    if i + n > h then false
+    else if String.sub haystack i n = needle then true
+    else loop (i + 1)
+  in
+  n = 0 || loop 0
+
+(* cljs offload-large-title-test *)
+let test_offload_large_title () =
+  let large_title = String.make 5000 'a' in
+  let tx_data =
+    [ db_add (Wire.Int 1) "block/title" (Wire.String large_title) ]
+  in
+  let upload_calls = ref [] in
+  let upload_fn title =
+    upload_calls := !upload_calls @ [ title ];
+    Db_worker_effect.pure
+      (Sync_large_title.large_title_object_wire "title-1" "txt")
+  in
+  let result =
+    await_task (Sync_large_title.offload_large_titles tx_data ~upload_fn)
+  in
+  check "upload called" (!upload_calls = [ large_title ]);
+  check "placeholder + object"
+    (result
+     = [ db_add (Wire.Int 1) "block/title" (Wire.String "")
+       ; db_add (Wire.Int 1)
+           "logseq.property.sync/large-title-object"
+           (Sync_large_title.large_title_object_wire "title-1" "txt") ])
+
+(* cljs offload-small-title-test *)
+let test_offload_small_title () =
+  let tx_data =
+    [ db_add (Wire.Int 1) "block/title" (Wire.String "short") ]
+  in
+  let upload_fn _title =
+    Db_worker_effect.pure (Wire.Map [])
+  in
+  let result =
+    await_task (Sync_large_title.offload_large_titles tx_data ~upload_fn)
+  in
+  check "unchanged" (result = tx_data)
+
+(* cljs offload-large-title-preserves-map-form-tx-items-test *)
+let test_offload_large_title_preserves_map_form () =
+  let map_item =
+    wire_map
+      [ "db/ident", Wire.Keyword "logseq.class/Comments"
+      ; "block/uuid",
+        Wire.Uuid "00000002-2556-9161-5000-000000000000"
+      ; "block/title", Wire.String "Comments" ]
+  in
+  let tx_data =
+    [ map_item
+    ; db_add
+        (block_uuid_lookup
+           (Wire.Uuid "00000002-2556-9161-5000-000000000000"))
+        "block/title" (Wire.String "Comments") ]
+  in
+  let upload_fn _title = Db_worker_effect.pure (Wire.Map []) in
+  let result =
+    await_task (Sync_large_title.offload_large_titles tx_data ~upload_fn)
+  in
+  check "unchanged" (result = tx_data)
+
+(* cljs offload-large-title-datoms-drops-stale-object-for-same-entity-test *)
+let test_offload_datoms_drops_stale_object_same_entity () =
+  let large_title = String.make 5000 'a' in
+  let old_obj =
+    Ds_wire.value_of_transit
+      (Sync_large_title.large_title_object_wire "old-title" "txt")
+  in
+  let other_obj =
+    Ds_wire.value_of_transit
+      (Sync_large_title.large_title_object_wire "other-title" "txt")
+  in
+  let new_obj_wire =
+    Sync_large_title.large_title_object_wire "new-title" "txt"
+  in
+  let datoms =
+    [ Datascript.datom ~e:1 ~a:"block/title" ~v:(String large_title) ()
+    ; Datascript.datom ~e:1
+        ~a:"logseq.property.sync/large-title-object" ~v:old_obj ()
+    ; Datascript.datom ~e:2
+        ~a:"logseq.property.sync/large-title-object" ~v:other_obj () ]
+  in
+  let upload_calls = ref [] in
+  let upload_fn ~repo:_ ~graph_id:_ ~title ~aes_key:_ =
+    upload_calls := !upload_calls @ [ title ];
+    Db_worker_effect.pure new_obj_wire
+  in
+  let result =
+    await_task
+      (Sync_large_title.offload_large_titles_in_datoms_batch test_repo
+         "graph-1" datoms ~aes_key:Wire.Nil ~upload_fn ())
+  in
+  check "upload called" (!upload_calls = [ large_title ]);
+  check "datoms"
+    (result
+     = [ Datascript.datom ~e:1 ~a:"block/title" ~v:(String "") ()
+       ; Datascript.datom ~e:1
+           ~a:"logseq.property.sync/large-title-object"
+           ~v:(Ds_wire.value_of_transit new_obj_wire) ()
+       ; Datascript.datom ~e:2
+           ~a:"logseq.property.sync/large-title-object" ~v:other_obj () ])
+
+(* cljs offload-large-title-datoms-drops-stale-object-from-known-offload-set-test *)
+let test_offload_datoms_drops_stale_object_known_offload_set () =
+  let old_obj =
+    Ds_wire.value_of_transit
+      (Sync_large_title.large_title_object_wire "old-title" "txt")
+  in
+  let other_obj =
+    Ds_wire.value_of_transit
+      (Sync_large_title.large_title_object_wire "other-title" "txt")
+  in
+  let datoms =
+    [ Datascript.datom ~e:1
+        ~a:"logseq.property.sync/large-title-object" ~v:old_obj ()
+    ; Datascript.datom ~e:2
+        ~a:"logseq.property.sync/large-title-object" ~v:other_obj () ]
+  in
+  let upload_fn ~repo:_ ~graph_id:_ ~title:_ ~aes_key:_ =
+    Db_worker_effect.pure (Wire.Map [])
+  in
+  let result =
+    await_task
+      (Sync_large_title.offload_large_titles_in_datoms_batch test_repo
+         "graph-1" datoms ~aes_key:Wire.Nil ~upload_fn
+         ~offloaded_title_eids:[ 1 ] ())
+  in
+  check "stale dropped"
+    (result
+     = [ Datascript.datom ~e:2
+           ~a:"logseq.property.sync/large-title-object" ~v:other_obj () ])
+
+(* cljs upload-preparation-processes-datoms-in-batches-test *)
+let test_upload_preparation_processes_datoms_in_batches () =
+  let datoms =
+    [ Datascript.datom ~e:1 ~a:"block/title" ~v:(String "a") ()
+    ; Datascript.datom ~e:2 ~a:"block/title" ~v:(String "b") ()
+    ; Datascript.datom ~e:3 ~a:"block/title" ~v:(String "c") ()
+    ; Datascript.datom ~e:4 ~a:"block/title" ~v:(String "d") ()
+    ; Datascript.datom ~e:5 ~a:"block/title" ~v:(String "e") () ]
+  in
+  let seen_batches = ref [] in
+  let progress_calls = ref [] in
+  await_unit
+    (Sync_large_title.process_upload_datoms_in_batches datoms
+       ~batch_size:2
+       ~process_batch:(fun batch ->
+         seen_batches :=
+           !seen_batches
+           @ [ List.map (fun (d : datom) -> d.e) batch ];
+         Db_worker_effect.pure ())
+       ~progress:(fun processed total ->
+         progress_calls := !progress_calls @ [ processed, total ]));
+  check "batches"
+    (!seen_batches = [ [ 1; 2 ]; [ 3; 4 ]; [ 5 ] ]);
+  check "progress"
+    (!progress_calls = [ 2, 5; 4, 5; 5, 5 ])
+
+(* cljs upload-large-title-encrypts-transit-payload-test *)
+let test_upload_large_title_encrypts_transit_payload () =
+  preserve_state (fun () ->
+      Sync_crypt.init ();
+      let title = String.make 5000 'a' in
+      let captured_body = ref None in
+      Native_test_hooks.install_http
+        ~send:(fun (req : Native_test_hooks.http_req) ->
+          captured_body := req.body;
+          Db_worker_effect.pure { Native_test_hooks.status = 200; headers = []; body = "" })
+        ~send_binary:(fun _ -> Db_worker_effect.pure "");
+      Fun.protect
+        ~finally:Native_test_hooks.restore_http
+        (fun () ->
+           let aes_key =
+             await_wire (!Sync_crypt.generate_aes_key_fn ())
+           in
+           ignore
+             (await_wire
+                (Sync_large_title.upload_large_title ~repo:test_repo
+                   ~graph_id:"graph-1" ~title ~aes_key
+                   ~http_base:"https://example.com" ~auth_headers:[]));
+           check "body captured" (!captured_body <> None);
+           let payload = Option.get !captured_body in
+           let decrypted =
+             await_task
+               (Sync_deps.require "decrypt_text_value"
+                  Sync_deps.decrypt_text_value aes_key payload)
+           in
+           check "decrypts to title" (decrypted = title)))
+
+(* cljs rehydrate-large-title-test — download-fn maps to an http_bytes
+   install returning the title text; the cljs download-calls assertion
+   becomes "the captured request URL contains the asset uuid" *)
+let test_rehydrate_large_title () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "rehydrate-page" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "rehydrate-block" } ] } ]
+          ()
+      in
+      let block =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "rehydrate-block")
+      in
+      let block_id = block.id in
+      let obj_wire =
+        Sync_large_title.large_title_object_wire "title-1" "txt"
+      in
+      let tx_data =
+        [ db_add (Wire.Int block_id) "block/title" (Wire.String "")
+        ; db_add (Wire.Int block_id)
+            "logseq.property.sync/large-title-object" obj_wire ]
+      in
+      let download_calls = ref [] in
+      let download_fn ~repo:_ ~graph_id:_ ~obj ~aes_key:_ =
+        download_calls := !download_calls @ [ obj ];
+        Db_worker_effect.pure "rehydrated-title"
+      in
+      with_datascript_conns conn None (fun () ->
+               raw_transact_string conn tx_data;
+               check "conn registered"
+                 (Worker_state.datascript_conn test_repo <> None);
+               let obj_datoms =
+                 Datascript.datoms (Datascript.db conn) Eavt ()
+                 |> List.of_seq
+                 |> List.filter
+                      (fun (d : datom) ->
+                        d.a = "logseq.property.sync/large-title-object")
+               in
+               check "one object datom" (List.length obj_datoms = 1);
+               check "large-title-object?"
+                 ((match obj_datoms with
+                   | [ (d : datom) ] ->
+                       Sync_large_title.large_title_object_wire_of
+                         (Ds_wire.transit_of_value d.v)
+                       <> None
+                   | _ -> false));
+               let items =
+                 List.filter_map
+                   (fun item ->
+                      match item with
+                      | Wire.Array [ op; e; a; obj ]
+                      | Wire.List [ op; e; a; obj ]
+                        when op = kw "db/add"
+                             && a = kw
+                                  "logseq.property.sync/large-title-object"
+                             && Sync_large_title
+                                  .large_title_object_wire_of obj
+                                <> None ->
+                          Some (e, obj)
+                      | _ -> None)
+                   tx_data
+                 |> Sync_state.distinct_by Fun.id
+               in
+               check "one item" (List.length items = 1);
+               await_unit
+                 (Sync_large_title.rehydrate_large_titles test_repo
+                    ~graph_id:(Some "graph-1")
+                    ~tx_data:(Some tx_data)
+                    ~download_fn
+                    ~graph_e2ee:(fun () -> false)
+                    ~ensure_graph_aes_key:(fun _ ->
+                      Db_worker_effect.pure Wire.Nil)
+                    ~conn:(Some conn));
+               check "download called with obj"
+                 (!download_calls = [ obj_wire ]);
+               let block' =
+                 Option.get (Ldb.ent_of_id (Datascript.db conn) block_id)
+               in
+               check "title rehydrated"
+                 (Ldb.value block' "block/title"
+                  = Some (String "rehydrated-title"))))
+
+(* cljs rehydrate-large-title-tempid-test *)
+let test_rehydrate_large_title_tempid () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "tempid-rehydrate-page" }
+              ; blocks = [] } ]
+          ()
+      in
+      let page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db conn)
+             "tempid-rehydrate-page")
+      in
+      let block_uuid = fresh_uuid () in
+      let tempid = block_uuid in
+      let obj_wire =
+        Sync_large_title.large_title_object_wire "title-tempid" "txt"
+      in
+      let tx_data =
+        [ db_add (Wire.String tempid) "block/uuid" (Wire.Uuid block_uuid)
+        ; db_add (Wire.String tempid) "block/title" (Wire.String "")
+        ; db_add (Wire.String tempid) "block/page" (Wire.Int page.id)
+        ; db_add (Wire.String tempid) "block/parent" (Wire.Int page.id)
+        ; db_add (Wire.String tempid) "block/order" (Wire.String "a0")
+        ; db_add (Wire.String tempid) "block/created-at" (Wire.Int 1)
+        ; db_add (Wire.String tempid) "block/updated-at" (Wire.Int 1)
+        ; db_add (Wire.String tempid)
+            "logseq.property.sync/large-title-object" obj_wire ]
+      in
+      let download_calls = ref [] in
+      let download_fn ~repo:_ ~graph_id:_ ~obj ~aes_key:_ =
+        download_calls := !download_calls @ [ obj ];
+        Db_worker_effect.pure "rehydrated tempid title"
+      in
+      with_datascript_conns conn None (fun () ->
+               raw_transact_string conn tx_data;
+               let block =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) block_uuid)
+               in
+               check "tempid resolved" (block.id > 0);
+               await_unit
+                 (Sync_large_title.rehydrate_large_titles test_repo
+                    ~graph_id:(Some "graph-1")
+                    ~tx_data:(Some tx_data)
+                    ~download_fn
+                    ~graph_e2ee:(fun () -> false)
+                    ~ensure_graph_aes_key:(fun _ ->
+                      Db_worker_effect.pure Wire.Nil)
+                    ~conn:(Some conn));
+               check "download called with obj"
+                 (!download_calls = [ obj_wire ]);
+               let block' =
+                 Option.get
+                   (ent_by_block_uuid (Datascript.db conn) block_uuid)
+               in
+               check "same eid" (block'.id = block.id);
+               check "title rehydrated"
+                 (Ldb.value block' "block/title"
+                  = Some (String "rehydrated tempid title"));
+               check "no tempid entity"
+                 (Ldb.ent_of_ref (Datascript.db conn) (Temp_id tempid)
+                  = None)))
+
+(* cljs rehydrate-large-titles-from-db-skips-missing-object-attr-test *)
+let test_rehydrate_from_db_skips_missing_object_attr () =
+  preserve_state (fun () ->
+      let conn = Db_test_util.create_conn () in
+      let calls = ref 0 in
+      with_datascript_conns conn None (fun () ->
+          await_unit
+            (Sync_large_title.rehydrate_large_titles_from_db test_repo
+               "graph-1"
+               ~rehydrate:(fun ~tx_data:_ ~graph_id:_ ->
+                 incr calls;
+                 Db_worker_effect.pure ()));
+          check "no calls" (!calls = 0)))
+
+(* cljs rehydrate-large-titles-from-db-reads-unindexed-object-attr-test *)
+let test_rehydrate_from_db_reads_unindexed_object_attr () =
+  preserve_state (fun () ->
+      let conn = Db_test_util.create_conn () in
+      let obj_wire =
+        Sync_large_title.large_title_object_wire "title-unindexed" "txt"
+      in
+      raw_transact_string conn
+        [ wire_map
+            [ "db/id", Wire.Int 100
+            ; "block/title", Wire.String ""
+            ; "logseq.property.sync/large-title-object", obj_wire ] ];
+      let calls = ref [] in
+      with_datascript_conns conn None (fun () ->
+          await_unit
+            (Sync_large_title.rehydrate_large_titles_from_db test_repo
+               "graph-1"
+               ~rehydrate:(fun ~tx_data ~graph_id ->
+                 calls := !calls @ [ tx_data, graph_id ];
+                 Db_worker_effect.pure ()));
+          check "one call" (List.length !calls = 1);
+          let tx_data, graph_id = List.hd !calls in
+          check "graph-id" (graph_id = "graph-1");
+          check "tx-data"
+            (match tx_data with
+             | [ item ] ->
+                 wire_eq item
+                   (Wire.Array
+                      [ kw "db/add"; Wire.Int 100
+                      ; kw "logseq.property.sync/large-title-object"
+                      ; obj_wire ])
+             | _ -> false)))
+
+(* cljs apply-template-to-empty-target! *)
+let apply_template_op_wire conn template_root_uuid target_uuid
+    (opts_pairs : (string * Wire.t) list) : Wire.t =
+  let db = Datascript.db conn in
+  let template_root =
+    Option.get (ent_by_block_uuid db template_root_uuid)
+  in
+  let children =
+    Ldb.get_block_and_children db ~include_property_block:true
+      template_root_uuid
+  in
+  let blocks_to_insert =
+    match children with
+    | _root :: first_child :: rest ->
+        Block_map.put (Block_map.of_entity first_child)
+          "logseq.property/used-template" (Ref template_root.id)
+        :: List.map Block_map.of_entity rest
+    | _ -> []
+  in
+  apply_ops conn
+    [ Wire.Array
+        [ kw "apply-template"
+        ; Wire.Array
+            [ Wire.Uuid template_root_uuid
+            ; Wire.Uuid target_uuid
+            ; wire_map
+                ([ "sibling?", Wire.Bool true
+                 ; ( "template-blocks"
+                   , Wire.Array
+                       (List.map Block_map.to_transit blocks_to_insert) ) ]
+                 @ opts_pairs) ] ] ]
+    local_tx_meta
+
+let apply_template_to_empty_target conn template_root_uuid
+    empty_target_uuid : Wire.t =
+  apply_template_op_wire conn template_root_uuid empty_target_uuid
+    [ "replace-empty-target?", Wire.Bool true ]
+
+let apply_template_with_opts conn template_root_uuid target_uuid
+    (opts_pairs : (string * Wire.t) list) : Wire.t =
+  apply_template_op_wire conn template_root_uuid target_uuid opts_pairs
+
+(* cljs apply-ops [[:apply-template [template-id target-id {:sibling? true}]]]
+   without :template-blocks *)
+let apply_template_simple conn template_root_uuid target_uuid : Wire.t =
+  apply_ops conn
+    [ Wire.Array
+        [ kw "apply-template"
+        ; Wire.Array
+            [ Wire.Uuid template_root_uuid
+            ; Wire.Uuid target_uuid
+            ; wire_map [ "sibling?", Wire.Bool true ] ] ] ]
+    local_tx_meta
+
+(* cljs undo-all!/redo-all! *)
+let undo_all (repo : string) : unit =
+  let rec loop n =
+    let result = Undo_redo.undo repo in
+    if result
+       <> Wire.Keyword "frontend.worker.undo-redo/empty-undo-stack"
+    then begin
+      if n > 128 then failwith "undo loop exceeded";
+      loop (n + 1)
+    end
+  in
+  loop 0
+
+let redo_all (repo : string) : unit =
+  let rec loop n =
+    let result = Undo_redo.redo repo in
+    if result
+       <> Wire.Keyword "frontend.worker.undo-redo/empty-redo-stack"
+    then begin
+      if n > 128 then failwith "redo loop exceeded";
+      loop (n + 1)
+    end
+  in
+  loop 0
+
+(* cljs select-offline-inserted-three/one — title entities whose parent
+   uuid differs from template-root-uuid (else first) *)
+let select_offline_inserted conn template_root_uuid (title : string)
+    : entity option =
+  let db = Datascript.db conn in
+  let all =
+    match
+      Datascript.q_string
+        ~inputs:[ Arg_scalar (Result_value (String title)) ] db
+        "[:find [?b ...] :in $ ?title :where [?b :block/title ?title]]"
+    with
+    | [ row ] ->
+        List.filter_map
+          (fun v ->
+             match v with
+             | Result_value (Int id) -> Ldb.ent_of_id db id
+             | Result_entity id -> Ldb.ent_of_id db id
+             | _ -> None)
+          row
+    | rows ->
+        List.filter_map
+          (fun row ->
+             match row with
+             | [ Result_value (Int id) ] -> Ldb.ent_of_id db id
+             | [ Result_entity id ] -> Ldb.ent_of_id db id
+             | _ -> None)
+          rows
+  in
+  match
+    List.find_opt
+      (fun (b : entity) ->
+         Option.map ent_block_uuid (Ldb.ref_ent b "block/parent")
+         <> Some template_root_uuid)
+      all
+  with
+  | Some b -> Some b
+  | None -> List.nth_opt all 0
+
+(* cljs setup-rebase-apply-template-repro-state *)
+let setup_rebase_apply_template_repro_state () =
+  let template_root_uuid = fresh_uuid () in
+  let template_1_uuid = fresh_uuid () in
+  let template_2_uuid = fresh_uuid () in
+  let template_3_uuid = fresh_uuid () in
+  let empty_target_uuid = fresh_uuid () in
+  let local_empty_uuid = fresh_uuid () in
+  let seed_conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page 1" }
+          ; blocks =
+              [ { Db_test_util.default_block with b_title = Some "seed" } ] } ]
+      ()
+  in
+  let seed_page =
+    Option.get
+      (Db_test_util.find_page_by_title (Datascript.db seed_conn) "page 1")
+  in
+  let ops = new_client_ops_db () in
+  ignore
+    (apply_ops seed_conn
+       [ Wire.Array
+           [ kw "insert-blocks"
+           ; Wire.Array
+               [ Wire.Array
+                   [ wire_map
+                       [ "block/uuid", Wire.Uuid template_root_uuid
+                       ; "block/title", Wire.String "template 1"
+                       ; "block/tags",
+                         Wire.Array
+                           [ Wire.Keyword "logseq.class/Template" ] ]
+                   ; wire_map
+                       [ "block/uuid", Wire.Uuid template_1_uuid
+                       ; "block/title", Wire.String "1"
+                       ; "block/parent",
+                         block_uuid_lookup
+                           (Wire.Uuid template_root_uuid) ]
+                   ; wire_map
+                       [ "block/uuid", Wire.Uuid template_2_uuid
+                       ; "block/title", Wire.String "2"
+                       ; "block/parent",
+                         block_uuid_lookup (Wire.Uuid template_1_uuid) ]
+                   ; wire_map
+                       [ "block/uuid", Wire.Uuid template_3_uuid
+                       ; "block/title", Wire.String "3"
+                       ; "block/parent",
+                         block_uuid_lookup
+                           (Wire.Uuid template_root_uuid) ] ]
+               ; Wire.Int seed_page.id
+               ; wire_map
+                   [ "sibling?", Wire.Bool false
+                   ; "keep-uuid?", Wire.Bool true ] ]
+           ]
+       ; Wire.Array
+           [ kw "insert-blocks"
+           ; Wire.Array
+               [ Wire.Array
+                   [ wire_map
+                       [ "block/uuid", Wire.Uuid empty_target_uuid
+                       ; "block/title", Wire.String "" ] ]
+               ; Wire.Int seed_page.id
+               ; wire_map
+                   [ "sibling?", Wire.Bool false
+                   ; "keep-uuid?", Wire.Bool true ] ]
+           ] ]
+       local_tx_meta);
+  ( template_root_uuid, template_1_uuid, template_2_uuid
+  , template_3_uuid, empty_target_uuid, local_empty_uuid
+  , seed_conn, ops )
+
+(* cljs (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!) *)
+let apply_history_wrapper (repo : string) (tx_id_opt : string option)
+    (undo : bool) (pairs : (Wire.t * Wire.t) list) :
+    (string * Wire.t) list =
+  let tx_meta =
+    List.filter_map
+      (fun (k, v) ->
+        match k with
+        | Wire.Keyword s -> Some (s, Ds_wire.value_of_transit v)
+        | _ -> None)
+      pairs
+  in
+  let result =
+    Sync_apply.apply_history_action repo
+      (Option.value ~default:"" tx_id_opt) undo tx_meta
+  in
+  match result with
+  | Wire.Map kvs ->
+      List.filter_map
+        (fun (k, v) ->
+          match k with Wire.Keyword s -> Some (s, v) | _ -> None)
+        kvs
+  | _ -> []
+
+let with_apply_history_action (f : unit -> 'a) : 'a =
+  let prev = !Undo_redo.apply_history_action in
+  Undo_redo.apply_history_action := Some apply_history_wrapper;
+  Fun.protect f ~finally:(fun () ->
+      Undo_redo.apply_history_action := prev)
+
+(* cljs rebase-apply-template-preserves-followup-insert-target-uuid-test *)
+let test_rebase_apply_template_preserves_followup_insert () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, _t1, _t2, _t3, empty_target_uuid
+          , local_empty_uuid, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn_a = Datascript.conn_from_db (Datascript.db seed_conn) in
+      let conn_b = Datascript.conn_from_db (Datascript.db seed_conn) in
+      (* cljs (d/listen! conn-b ::capture ... (swap! remote-txs conj
+          {:tx-data (normalize-tx-data ...) :outliner-op ...})) — one
+          normalized {:tx-data :outliner-op} map per tx-report *)
+      let remote_txs = ref [] in
+      ignore
+        (Datascript.listen conn_b "capture-rebase-apply-template"
+           (fun (r : tx_report) ->
+              if r.tx_data <> [] then
+                remote_txs :=
+                  !remote_txs
+                  @ [ wire_map
+                        [ ( "tx-data"
+                          , Wire.Array
+                              (Sync_apply.normalize_tx_data r.db_after
+                                 r.db_before r.tx_data) )
+                        ; ( "outliner-op"
+                          , (match tx_meta_get "outliner-op" r.tx_meta with
+                             | Some v -> Ds_wire.transit_of_value v
+                             | None -> Wire.Nil) ) ] ]));
+      Fun.protect
+        ~finally:(fun () ->
+            Datascript.unlisten conn_b "capture-rebase-apply-template")
+        (fun () ->
+          ignore
+            (apply_template_to_empty_target conn_b template_root_uuid
+               empty_target_uuid);
+          with_datascript_conns conn_a (Some ops) (fun () ->
+              ignore
+                (apply_template_to_empty_target conn_a template_root_uuid
+                   empty_target_uuid);
+              let inserted_three =
+                Option.get
+                  (select_offline_inserted conn_a template_root_uuid "3")
+              in
+              ignore
+                (Outliner_core.insert_blocks_conn conn_a
+                   [ Block_map.of_transit
+                       (wire_map
+                          [ "block/uuid", Wire.Uuid local_empty_uuid
+                          ; "block/title", Wire.String "" ]) ]
+                   (Block_map.of_entity inserted_three)
+                   { Outliner_core.default_insert_opts with
+                     sibling = true; keep_uuid = true }
+                   (Block_map.of_transit
+                      (wire_map
+                         [ "sibling?", Wire.Bool true
+                         ; "keep-uuid?", Wire.Bool true ])));
+              delete_blocks conn_a [ inserted_three ];
+              let pending_before =
+                Sync_apply.pending_txs test_repo ()
+              in
+              let insert_tx_id =
+                List.filter
+                  (fun (e : Sync_client_op.local_tx_entry) ->
+                     e.outliner_op = Some "insert-blocks")
+                  pending_before
+                |> List.rev |> List.hd
+                |> fun (e : Sync_client_op.local_tx_entry) -> e.tx_id
+              in
+              let error =
+                try
+                  await_unit
+                    (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                       !remote_txs);
+                  None
+                with e -> Some e
+              in
+              let insert_pending_after =
+                Sync_apply.pending_tx_by_id test_repo insert_tx_id
+              in
+              let local_empty_block =
+                ent_by_block_uuid (Datascript.db conn_a) local_empty_uuid
+              in
+              check "remote txs captured" (!remote_txs <> []);
+              check "no error" (error = None);
+              check "insert pending after"
+                (insert_pending_after <> None);
+              check "rebase op"
+                ((Option.get insert_pending_after).outliner_op
+                 = Some "rebase");
+              check "local empty kept" (local_empty_block <> None);
+              let validation =
+                Db_validate.validate_local_db (Datascript.db conn_a)
+              in
+              check "no validation errors"
+                (non_recycle_validation_entities validation = []))))
+
+(* cljs apply-history-action-redo-after-apply-template-undo-all-preserves-followup-insert-test *)
+let test_redo_after_apply_template_undo_all_preserves_followup () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, _t1, _t2, _t3, empty_target_uuid
+          , _local_empty_uuid, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn = Datascript.conn_from_db (Datascript.db seed_conn) in
+      let followup_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_apply_history_action (fun () ->
+              ignore
+                (apply_template_to_empty_target conn template_root_uuid
+                   empty_target_uuid);
+              let inserted_three =
+                Option.get
+                  (select_offline_inserted conn template_root_uuid "3")
+              in
+              ignore
+                (apply_ops conn
+                   [ Wire.Array
+                       [ kw "insert-blocks"
+                       ; Wire.Array
+                           [ Wire.Array
+                               [ wire_map
+                                   [ "block/uuid",
+                                     Wire.Uuid followup_uuid
+                                   ; "block/title",
+                                     Wire.String "followup" ] ]
+                           ; Wire.Int inserted_three.id
+                           ; wire_map
+                               [ "sibling?", Wire.Bool true
+                               ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                   local_tx_meta);
+              undo_all test_repo;
+              check "followup gone"
+                (ent_by_block_uuid (Datascript.db conn) followup_uuid
+                 = None);
+              redo_all test_repo;
+              let followup =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db conn) followup_uuid)
+              in
+              check "followup restored" true;
+              check "followup title"
+                (Ldb.value followup "block/title"
+                 = Some (String "followup")))))
+
+(* cljs apply-history-action-redo-after-non-empty-template-insert-preserves-followup-insert-test *)
+let test_redo_after_non_empty_template_insert_preserves_followup () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, _t1, _t2, _t3, empty_target_uuid
+          , _local_empty_uuid, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn = Datascript.conn_from_db (Datascript.db seed_conn) in
+      let followup_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_apply_history_action (fun () ->
+              raw_transact_string conn
+                [ db_add
+                    (block_uuid_lookup (Wire.Uuid empty_target_uuid))
+                    "block/title" (Wire.String "target") ];
+              ignore
+                (apply_template_with_opts conn template_root_uuid
+                   empty_target_uuid []);
+              let inserted_three =
+                Option.get
+                  (select_offline_inserted conn template_root_uuid "3")
+              in
+              ignore
+                (apply_ops conn
+                   [ Wire.Array
+                       [ kw "insert-blocks"
+                       ; Wire.Array
+                           [ Wire.Array
+                               [ wire_map
+                                   [ "block/uuid",
+                                     Wire.Uuid followup_uuid
+                                   ; "block/title",
+                                     Wire.String "followup" ] ]
+                           ; Wire.Int inserted_three.id
+                           ; wire_map
+                               [ "sibling?", Wire.Bool true
+                               ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                   local_tx_meta);
+              undo_all test_repo;
+              check "followup gone"
+                (ent_by_block_uuid (Datascript.db conn) followup_uuid
+                 = None);
+              redo_all test_repo;
+              let followup =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db conn) followup_uuid)
+              in
+              check "followup restored" true;
+              check "followup title"
+                (Ldb.value followup "block/title"
+                 = Some (String "followup")))))
+
+(* cljs undo-redo-apply-template-without-template-blocks-keeps-followup-insert-target-test *)
+let test_undo_redo_apply_template_simple_keeps_followup () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, _t1, _t2, _t3, empty_target_uuid
+          , _local_empty_uuid, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn = Datascript.conn_from_db (Datascript.db seed_conn) in
+      let followup_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_apply_history_action (fun () ->
+              raw_transact_string conn
+                [ db_add
+                    (block_uuid_lookup (Wire.Uuid empty_target_uuid))
+                    "block/title" (Wire.String "target") ];
+              ignore
+                (apply_template_simple conn template_root_uuid
+                   empty_target_uuid);
+              let inserted_three =
+                Option.get
+                  (select_offline_inserted conn template_root_uuid "3")
+              in
+              ignore
+                (apply_ops conn
+                   [ Wire.Array
+                       [ kw "insert-blocks"
+                       ; Wire.Array
+                           [ Wire.Array
+                               [ wire_map
+                                   [ "block/uuid",
+                                     Wire.Uuid followup_uuid
+                                   ; "block/title",
+                                     Wire.String "followup" ] ]
+                           ; Wire.Int inserted_three.id
+                           ; wire_map
+                               [ "sibling?", Wire.Bool true
+                               ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                   local_tx_meta);
+              undo_all test_repo;
+              check "followup gone"
+                (ent_by_block_uuid (Datascript.db conn) followup_uuid
+                 = None);
+              redo_all test_repo;
+              let followup =
+                Option.get
+                  (ent_by_block_uuid (Datascript.db conn) followup_uuid)
+              in
+              check "followup restored" true;
+              check "followup title"
+                (Ldb.value followup "block/title"
+                 = Some (String "followup")))))
+
+(* cljs undo-redo-apply-template-without-template-blocks-rewrites-property-value-refs-test *)
+let test_undo_redo_apply_template_rewrites_property_value_refs () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, template_1_uuid, _t2, template_3_uuid
+          , empty_target_uuid, _local_empty_uuid, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn = Datascript.conn_from_db (Datascript.db seed_conn) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          with_apply_history_action (fun () ->
+              raw_transact_string conn
+                [ db_add
+                    (block_uuid_lookup (Wire.Uuid template_1_uuid))
+                    "user.property/p1"
+                    (block_uuid_lookup (Wire.Uuid template_3_uuid))
+                ; db_add
+                    (block_uuid_lookup (Wire.Uuid empty_target_uuid))
+                    "block/title" (Wire.String "target") ];
+              ignore
+                (apply_template_simple conn template_root_uuid
+                   empty_target_uuid);
+              let check_ref () =
+                let inserted_one =
+                  Option.get
+                    (select_offline_inserted conn template_root_uuid "1")
+                in
+                let inserted_three =
+                  Option.get
+                    (select_offline_inserted conn template_root_uuid "3")
+                in
+                (* cljs (cond (map? v) (:block/uuid v) (and (vector? v)
+                   (= :block/uuid (first v))) (second v) :else v) — the
+                   property value may be an entity map, a [:block/uuid u]
+                   lookup vector, or a raw value *)
+                let ref_uuid =
+                  match Ldb.value inserted_one "user.property/p1" with
+                  | Some (Vector [ Keyword "block/uuid"; Uuid u ])
+                  | Some (List [ Keyword "block/uuid"; Uuid u ]) -> Some u
+                  | Some (Map kvs) -> (
+                      match
+                        List.find_map
+                          (fun (k, v) ->
+                             match k, v with
+                             | (Keyword "block/uuid" | String "block/uuid")
+                               , Uuid u -> Some u
+                             | _ -> None)
+                          kvs
+                      with
+                      | Some u -> Some u
+                      | None -> None)
+                  | Some (Ref id) | Some (Int id) -> (
+                      match Ldb.ent_of_id (Datascript.db conn) id with
+                      | Some e -> Some (ent_block_uuid e)
+                      | None -> None)
+                  | Some (Keyword ident) -> (
+                      match
+                        Ldb.ent_of_ref (Datascript.db conn) (Ident ident)
+                      with
+                      | Some e -> Some (ent_block_uuid e)
+                      | None -> None)
+                  | Some _ | None -> None
+                in
+                check "ref = inserted three"
+                  (ref_uuid = Some (ent_block_uuid inserted_three));
+                check "ref <> template-3"
+                  (ref_uuid <> Some template_3_uuid)
+              in
+              check_ref ();
+              undo_all test_repo;
+              redo_all test_repo;
+              check_ref ())))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -8238,4 +11941,205 @@ let () =
             test_two_children_cycle
         ; Alcotest.test_case "three-children-cycle" `Quick
             test_three_children_cycle
+        ; Alcotest.test_case
+            "ignore-missing-parent-update-after-local-delete" `Quick
+            test_ignore_missing_parent_update_after_local_delete
+        ; Alcotest.test_case
+            "missing-parent-after-remote-delete-removes-descendants" `Quick
+            test_missing_parent_after_remote_delete_removes_descendants
+        ; Alcotest.test_case
+            "rebase-drops-local-property-pairs-for-deleted-property" `Quick
+            test_rebase_drops_local_property_pairs_for_deleted_property
+        ; Alcotest.test_case
+            "rebase-drops-local-tags-for-deleted-tag" `Quick
+            test_rebase_drops_local_tags_for_deleted_tag
+        ; Alcotest.test_case
+            "rebase-inserted-page-ref-drops-stale-ref-for-deleted-tag"
+            `Quick
+            test_rebase_inserted_page_ref_drops_stale_ref_for_deleted_tag
+        ; Alcotest.test_case
+            "rebase-save-block-inline-tag-recreates-deleted-tag" `Quick
+            test_rebase_save_block_inline_tag_recreates_deleted_tag
+        ; Alcotest.test_case
+            "rebase-save-block-inline-tag-mixed-surviving-deleted" `Quick
+            test_rebase_save_block_inline_tag_mixed_surviving_deleted
+        ; Alcotest.test_case
+            "cut-paste-parent-with-child-keeps-child-parent" `Quick
+            test_cut_paste_parent_with_child_keeps_child_parent
+        ; Alcotest.test_case "fix-duplicate-orders-after-rebase" `Quick
+            test_fix_duplicate_orders_after_rebase
+        ; Alcotest.test_case
+            "create-today-journal-keeps-existing-timestamps" `Quick
+            test_create_today_journal_keeps_existing_timestamps
+        ; Alcotest.test_case
+            "temp-conn-batch-commit-ignores-transient-page-parent" `Quick
+            test_temp_conn_batch_commit_ignores_transient_page_parent
+        ; Alcotest.test_case
+            "fix-duplicate-order-against-existing-sibling" `Quick
+            test_fix_duplicate_order_against_existing_sibling
+        ; Alcotest.test_case
+            "apply-remote-txs-rejects-invalid-final-rebase" `Quick
+            test_apply_remote_txs_rejects_invalid_final_rebase
+        ; Alcotest.test_case "two-clients-extends-cycle" `Quick
+            test_two_clients_extends_cycle
+        ; Alcotest.test_case
+            "fix-duplicate-orders-local-and-remote-new-blocks" `Quick
+            test_fix_duplicate_orders_local_and_remote_new_blocks
+        ; Alcotest.test_case "rebase-preserves-pending-tx-boundaries"
+            `Quick test_rebase_preserves_pending_tx_boundaries
+        ; Alcotest.test_case
+            "remote-rebase-tx-not-enqueued-as-local-pending" `Quick
+            test_remote_rebase_tx_not_enqueued_as_local_pending
+        ; Alcotest.test_case
+            "rebase-keeps-original-created-at-for-pending-tx" `Quick
+            test_rebase_keeps_original_created_at_for_pending_tx
+        ; Alcotest.test_case
+            "persist-local-tx-keeps-created-at-for-existing-tx-id" `Quick
+            test_persist_local_tx_keeps_created_at_for_existing_tx_id
+        ; Alcotest.test_case "rebase-keeps-pending-when-rebased-empty"
+            `Quick test_rebase_keeps_pending_when_rebased_empty
+        ; Alcotest.test_case
+            "apply-remote-tx-collapsed-encrypted-title" `Quick
+            test_apply_remote_tx_collapsed_encrypted_title
+        ; Alcotest.test_case
+            "rebase-later-tx-for-new-block-uses-lookup-ref" `Quick
+            test_rebase_later_tx_for_new_block_uses_lookup_ref
+        ; Alcotest.test_case
+            "rebase-drops-stale-raw-pending-missing-history-ops" `Quick
+            test_rebase_drops_stale_raw_pending_missing_history_ops
+        ; Alcotest.test_case
+            "rebase-replays-title-only-raw-pending-tx" `Quick
+            test_rebase_replays_title_only_raw_pending_tx
+        ; Alcotest.test_case "rebase-keeps-fix-pending-empty-reversed"
+            `Quick test_rebase_keeps_fix_pending_empty_reversed
+        ; Alcotest.test_case
+            "rebase-keeps-no-op-fix-pending-empty-reversed" `Quick
+            test_rebase_keeps_no_op_fix_pending_empty_reversed
+        ; Alcotest.test_case
+            "remote-log-uuid-string-scalar-values-stay-scalar" `Quick
+            test_remote_log_uuid_string_scalar_values_stay_scalar
+        ; Alcotest.test_case
+            "reverse-tx-data-create-property-text-block-restores-base"
+            `Quick
+            test_reverse_tx_data_create_property_text_block_restores_base
+        ; Alcotest.test_case
+            "pending-reversed-txs-multiple-status-restore-base" `Quick
+            test_pending_reversed_txs_multiple_status_restore_base
+        ; Alcotest.test_case
+            "pending-reversed-txs-batch-status-restore-base" `Quick
+            test_pending_reversed_txs_batch_status_restore_base
+        ; Alcotest.test_case
+            "normalize-rebased-keeps-reconstructive-reverse" `Quick
+            test_normalize_rebased_keeps_reconstructive_reverse
+        ; Alcotest.test_case
+            "reverse-tx-data-delete-recreate-same-uuid-reversible" `Quick
+            test_reverse_tx_data_delete_recreate_same_uuid_reversible
+        ; Alcotest.test_case
+            "rebase-preserves-title-when-reversed-tx-ids-change" `Quick
+            test_rebase_preserves_title_when_reversed_tx_ids_change
+        ; Alcotest.test_case "sync-conflict-model-roundtrip" `Quick
+            test_sync_conflict_model_roundtrip
+        ; Alcotest.test_case
+            "sync-conflict-keeps-latest-non-empty" `Quick
+            test_sync_conflict_keeps_latest_non_empty
+        ; Alcotest.test_case "sync-conflict-model-clear" `Quick
+            test_sync_conflict_model_clear
+        ; Alcotest.test_case
+            "rebase-saves-remote-title-and-name-conflicts" `Quick
+            test_rebase_saves_remote_title_and_name_conflicts
+        ; Alcotest.test_case
+            "rebase-does-not-leave-anonymous-created-by-entities" `Quick
+            test_rebase_does_not_leave_anonymous_created_by_entities
+        ; Alcotest.test_case
+            "rebase-create-then-delete-no-anonymous" `Quick
+            test_rebase_create_then_delete_no_anonymous
+        ; Alcotest.test_case
+            "apply-remote-txs-delete-parent-with-child-no-local" `Quick
+            test_apply_remote_txs_delete_parent_with_child_no_local
+        ; Alcotest.test_case
+            "delete-expansion-includes-generated-pvalue-children" `Quick
+            test_delete_expansion_includes_generated_pvalue_children
+        ; Alcotest.test_case
+            "apply-remote-txs-computes-remote-deletes-once" `Quick
+            test_apply_remote_txs_computes_remote_deletes_once
+        ; Alcotest.test_case
+            "apply-remote-txs-skips-block-ref-filters-no-refs" `Quick
+            test_apply_remote_txs_skips_block_ref_filters_no_refs
+        ; Alcotest.test_case
+            "apply-remote-txs-keeps-refs-recreated-after-earlier-delete"
+            `Quick
+            test_apply_remote_txs_keeps_refs_recreated_after_earlier_delete
+        ; Alcotest.test_case
+            "apply-remote-txs-local-fallback-delete-parent-retracts-child"
+            `Quick
+            test_apply_remote_txs_local_fallback_delete_parent_retracts_child
+        ; Alcotest.test_case
+            "rechecks-local-delete-races-temp-snapshot" `Quick
+            test_rechecks_local_delete_races_temp_snapshot
+        ; Alcotest.test_case "rechecks-local-delete-races-temp-commit"
+            `Quick test_rechecks_local_delete_races_temp_commit
+        ; Alcotest.test_case
+            "rechecks-local-edit-races-without-local-batch" `Quick
+            test_rechecks_local_edit_races_without_local_batch
+        ; Alcotest.test_case
+            "delays-retry-when-local-txs-keep-changing" `Quick
+            test_delays_retry_when_local_txs_keep_changing
+        ; Alcotest.test_case
+            "retries-snapshot-drift-pending-list-stabilizes" `Quick
+            test_retries_snapshot_drift_pending_list_stabilizes
+        ; Alcotest.test_case
+            "rebase-persisted-row-forward-and-inverse-ops" `Quick
+            test_rebase_persisted_row_forward_and_inverse_ops
+        ; Alcotest.test_case
+            "apply-remote-txs-rebases-create-delete-page-as-recycled"
+            `Quick
+            test_apply_remote_txs_rebases_create_delete_page_as_recycled
+        ; Alcotest.test_case
+            "legacy-rebase-row-missing-history-persisted-with-both-ops"
+            `Quick
+            test_legacy_rebase_row_missing_history_persisted_with_both_ops
+        ; Alcotest.test_case "offload-large-title" `Quick
+            test_offload_large_title
+        ; Alcotest.test_case "offload-small-title" `Quick
+            test_offload_small_title
+        ; Alcotest.test_case "offload-large-title-preserves-map-form"
+            `Quick test_offload_large_title_preserves_map_form
+        ; Alcotest.test_case
+            "offload-datoms-drops-stale-object-same-entity" `Quick
+            test_offload_datoms_drops_stale_object_same_entity
+        ; Alcotest.test_case
+            "offload-datoms-drops-stale-object-known-offload-set" `Quick
+            test_offload_datoms_drops_stale_object_known_offload_set
+        ; Alcotest.test_case
+            "upload-preparation-processes-datoms-in-batches" `Quick
+            test_upload_preparation_processes_datoms_in_batches
+        ; Alcotest.test_case
+            "upload-large-title-encrypts-transit-payload" `Quick
+            test_upload_large_title_encrypts_transit_payload
+        ; Alcotest.test_case "rehydrate-large-title" `Quick
+            test_rehydrate_large_title
+        ; Alcotest.test_case "rehydrate-large-title-tempid" `Quick
+            test_rehydrate_large_title_tempid
+        ; Alcotest.test_case
+            "rehydrate-from-db-skips-missing-object-attr" `Quick
+            test_rehydrate_from_db_skips_missing_object_attr
+        ; Alcotest.test_case
+            "rehydrate-from-db-reads-unindexed-object-attr" `Quick
+            test_rehydrate_from_db_reads_unindexed_object_attr
+        ; Alcotest.test_case
+            "rebase-apply-template-preserves-followup-insert" `Quick
+            test_rebase_apply_template_preserves_followup_insert
+        ; Alcotest.test_case
+            "redo-after-apply-template-undo-all-preserves-followup" `Quick
+            test_redo_after_apply_template_undo_all_preserves_followup
+        ; Alcotest.test_case
+            "redo-after-non-empty-template-insert-preserves-followup"
+            `Quick
+            test_redo_after_non_empty_template_insert_preserves_followup
+        ; Alcotest.test_case
+            "undo-redo-apply-template-simple-keeps-followup" `Quick
+            test_undo_redo_apply_template_simple_keeps_followup
+        ; Alcotest.test_case
+            "undo-redo-apply-template-rewrites-property-value-refs" `Quick
+            test_undo_redo_apply_template_rewrites_property_value_refs
         ] ) ]

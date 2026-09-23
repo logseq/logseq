@@ -632,7 +632,19 @@ let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
           Some
             [ Call
                 (fun db ->
-                   let eid = entid_strict db e in
+                   (* upstream datascript: [:db/add e a v t] resolves e
+                      through entid-strict, but [:db/retract e a v t] uses
+                      non-strict entid — an unresolvable e skips the op
+                      entirely (if-some ... (recur report entities)). *)
+                   let eid_opt =
+                     match entity_ref_of_wire e with
+                     | Some r -> Datascript.entid_ref db r
+                     | None -> None
+                   in
+                   match eid_opt with
+                   | None ->
+                       if added then unresolved_entity_ref e else []
+                   | Some eid ->
                    let v' =
                      match v with
                      (* cljs (and (ref? db a) (tempid? v)): a value tempid

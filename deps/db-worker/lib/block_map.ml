@@ -259,29 +259,34 @@ let rec value_to_tx_value
     Some (One_value v)
   | List vs | Vector vs | Set vs ->
     let items = List.map (normalize_value) vs in
-    let all_refs =
-      List.for_all
-        (fun x -> Option.is_some (entity_ref_of_value x))
-        items
+    let te_of_item x =
+      match x with
+      | Map kvs ->
+          (* nested map values are nested entities upstream — a
+             {:block/uuid u, ...attrs} map upserts by its unique attrs
+             instead of resolving as a strict lookup-ref *)
+          tx_entity_of_map kvs
+      | _ ->
+          (match entity_ref_of_value x with
+           | Some r -> Some (tx_entity_of_ref r)
+           | None -> None)
     in
-    if all_refs && items <> [] then
-      Some (Many_entities
-              (List.map (fun x -> tx_entity_of_ref (Option.get (entity_ref_of_value x))) items))
+    let all_refs =
+      items <> []
+      && List.for_all
+           (fun x ->
+             match te_of_item x with
+             | Some te -> te.db_id <> None || te.attrs = []
+             | None -> false)
+           items
+    in
+    if all_refs then
+      Some (Many_entities (List.filter_map te_of_item items))
     else if ref_ok then
       (* collections on a ref attr can carry nested entity maps (cljs
          resolves e.g. [{:db/ident k} {:db/ident k2 :block/order o}] as
          entities via upsert) — keep their attrs through tx_entity_of_map *)
-      let tes =
-        List.map
-          (fun x ->
-            match entity_ref_of_value x with
-            | Some r -> Some (tx_entity_of_ref r)
-            | None ->
-                (match x with
-                 | Map kvs -> tx_entity_of_map kvs
-                 | _ -> None))
-          items
-      in
+      let tes = List.map te_of_item items in
       if List.for_all Option.is_some tes then
         Some (Many_entities (List.filter_map Fun.id tes))
       else Some (Many_values items)

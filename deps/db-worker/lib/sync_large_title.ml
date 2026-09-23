@@ -80,9 +80,13 @@ let large_title_object_datoms (db : db) : datom Seq.t =
     |> Seq.filter (fun (d : datom) -> d.a = large_title_object_attr)
 
 let find_large_title_object_eid (db : db) (obj : value) : entity_id option =
+  (* cljs (= obj (:v datom)) — map equality is entry-order-insensitive,
+     so compare normalized values *)
+  let obj' = Util.normalize_value obj in
   large_title_object_datoms db
   |> Seq.find_map (fun (d : datom) ->
-         if d.v = obj then Some d.e else None)
+         if Util.value_equal (Util.normalize_value d.v) obj' then Some d.e
+         else None)
 
 let resolve_large_title_item_eid (db : db) ~(e : Wire.t) ~(obj : value)
     : entity_id option =
@@ -105,7 +109,8 @@ let asset_url base graph_id asset_uuid asset_type =
 
 (* upload-large-title! — PUT text/plain; returns the object map *)
 let upload_large_title ~repo ~graph_id ~title ~(aes_key : Wire.t)
-    ~(http_base : string) : Wire.t Db_worker_effect.t =
+    ~(http_base : string)
+    ~(auth_headers : (string * string) list) : Wire.t Db_worker_effect.t =
   if http_base = "" then
     Sync_util.fail_fast "db-sync/missing-field"
       (Wire.Map
@@ -130,7 +135,7 @@ let upload_large_title ~repo ~graph_id ~title ~(aes_key : Wire.t)
     ; headers =
         ("content-type", "text/plain; charset=utf-8")
         :: ("x-amz-meta-type", large_title_asset_type)
-           :: Sync_util.auth_headers ()
+           :: auth_headers
     ; body = Some payload }
   >>= fun (resp : Http.response) ->
   if resp.status >= 200 && resp.status < 300 then
@@ -144,7 +149,8 @@ let upload_large_title ~repo ~graph_id ~title ~(aes_key : Wire.t)
 
 (* download-large-title! — GET; returns the plain-text title *)
 let download_large_title ~repo ~graph_id ~(obj : Wire.t)
-    ~(aes_key : Wire.t) ~(http_base : string) : string Db_worker_effect.t =
+    ~(aes_key : Wire.t) ~(http_base : string)
+    ~(auth_headers : (string * string) list) : string Db_worker_effect.t =
   if http_base = "" then
     Sync_util.fail_fast "db-sync/missing-field"
       (Wire.Map
@@ -169,7 +175,7 @@ let download_large_title ~repo ~graph_id ~(obj : Wire.t)
   Http_bytes.send
     { Http_bytes.url
     ; method_ = "GET"
-    ; headers = Sync_util.auth_headers ()
+    ; headers = auth_headers
     ; body = None }
   >>= fun (resp : Http_bytes.response) ->
   if resp.status < 200 || resp.status >= 300 then
@@ -217,9 +223,10 @@ let offload_large_titles (tx_data : Wire.t list)
 (* rehydrate-large-titles! *)
 let rehydrate_large_titles repo ~(graph_id : string option)
     ~(tx_data : Wire.t list option)
+    ~(download_fn : repo:string -> graph_id:string -> obj:Wire.t ->
+       aes_key:Wire.t -> string Db_worker_effect.t)
     ~(graph_e2ee : unit -> bool) ~(ensure_graph_aes_key : string -> Wire.t Db_worker_effect.t)
     ~(conn : conn option)
-    ~(http_base : unit -> string option)
     : unit Db_worker_effect.t =
   match conn with
   | None -> Db_worker_effect.pure ()
@@ -289,15 +296,9 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                         (Wire.Map
                            [ Wire.Keyword "repo", Wire.String repo
                            ; Wire.Keyword "e", e ])
-                  | Some eid -> (
-                      let http_base =
-                        match http_base () with
-                        | Some b -> b
-                        | None -> ""
-                      in
-                      download_large_title ~repo ~graph_id ~obj:obj_wire
-                        ~aes_key ~http_base
-                      >>= fun title ->
+                  | Some eid ->
+                      download_fn ~repo ~graph_id ~obj:obj_wire ~aes_key
+                      >>= fun title -> (
                       ignore
                         (Db_transact.transact conn
                            [ Wire.Array
@@ -311,12 +312,22 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                items)
           >>= fun _ -> Db_worker_effect.pure ())
 
-(* offload-large-titles-in-datoms-batch — datoms -> datoms *)
+(* offload-large-titles-in-datoms-batch — datoms -> datoms; cljs derives
+   offloaded-title-eids from the large-title datoms when not supplied *)
 let offload_large_titles_in_datoms_batch repo graph_id
     (datoms : datom list) ~(aes_key : Wire.t)
     ~(upload_fn : repo:string -> graph_id:string -> title:string ->
        aes_key:Wire.t -> Wire.t Db_worker_effect.t)
-    ~(offloaded_title_eids : int list) : datom list Db_worker_effect.t =
+    ?(offloaded_title_eids : int list option) () :
+    datom list Db_worker_effect.t =
+  let offloaded_title_eids =
+    match offloaded_title_eids with
+    | Some ids -> ids
+    | None ->
+        List.filter_map
+          (fun (d : datom) -> if large_title_datom d then Some d.e else None)
+          datoms
+  in
   let eid_set =
     List.fold_left (fun s e -> Int_set.add e s) Int_set.empty
       offloaded_title_eids

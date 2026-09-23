@@ -261,6 +261,7 @@ let upload_large_title repo graph_id title (aes_key : Wire.t)
       (Option.value
          (Sync_auth.http_base_url (Worker_state.db_sync_config ()))
          ~default:"")
+    ~auth_headers:(Sync_auth.auth_headers ())
 
 let offload_large_titles repo graph_id (tx_data : Wire.t list)
     (aes_key : Wire.t) : Wire.t list Db_worker_effect.t =
@@ -279,8 +280,13 @@ let rehydrate_large_titles repo ~(tx_data : Wire.t list option)
       (Sync_deps.require "ensure_graph_aes_key"
          Sync_deps.ensure_graph_aes_key)
     ~conn:(Worker_state.datascript_conn repo)
-    ~http_base:(fun () ->
-       Sync_auth.http_base_url (Worker_state.db_sync_config ()))
+    ~download_fn:(fun ~repo ~graph_id ~obj ~aes_key ->
+       Sync_large_title.download_large_title ~repo ~graph_id ~obj ~aes_key
+         ~http_base:
+           (Option.value
+              (Sync_auth.http_base_url (Worker_state.db_sync_config ()))
+              ~default:"")
+         ~auth_headers:(Sync_auth.auth_headers ()))
 
 let rehydrate_large_titles_from_db repo graph_id : unit Db_worker_effect.t =
   Sync_large_title.rehydrate_large_titles_from_db repo graph_id
@@ -1011,7 +1017,7 @@ let expected_history_action_error_reason reason : bool =
   || reason = kw "invalid-history-action-tx"
 
 (* batch-transact-with-temp-conn! with cljs {:listen-db :before-commit} *)
-let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
+let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
     ?(listen_db : (tx_report -> unit) option)
     ?(before_commit : (unit -> unit) option) (f : conn -> unit) () :
     tx_report option =
@@ -1051,6 +1057,16 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
                 ; Wire.Int d.e; kw d.a; Ds_wire.transit_of_value d.v ])
            datoms)
         tx_meta
+
+(* cljs with-redefs seam — tests intercept the temp-conn batch to inject a
+   local change mid-apply *)
+let batch_transact_with_temp_conn_fn = ref batch_transact_with_temp_conn_impl
+
+let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
+    ?(listen_db : (tx_report -> unit) option)
+    ?(before_commit : (unit -> unit) option) (f : conn -> unit) () :
+    tx_report option =
+  !batch_transact_with_temp_conn_fn conn tx_meta ?listen_db ?before_commit f ()
 
 (* ---- entity resolution helpers for replay ---- *)
 
@@ -1977,11 +1993,18 @@ let tx_meta_get name (tx_meta : tx_meta) =
 
 (* ---- transact-remote-txs! ---- *)
 
+(* cljs with-redefs seams — tests count/wrap these helpers *)
+let remote_txs_retract_entity_block_uuid_suffixes_fn =
+  ref remote_txs_retract_entity_block_uuid_suffixes
+
+let drop_stale_deleted_block_ref_ops_fn = ref drop_stale_deleted_block_ref_ops
+let drop_missing_block_ref_ops_fn = ref drop_missing_block_ref_ops
+
 let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
     ?db_before_local_reversal ()
     : (Wire.t list * tx_report option) list =
   let deleted_suffixes =
-    remote_txs_retract_entity_block_uuid_suffixes remote_txs
+    !remote_txs_retract_entity_block_uuid_suffixes_fn remote_txs
   in
   let rec loop remaining suffixes results =
     match remaining with
@@ -2014,11 +2037,12 @@ let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
           let has_uuid_ref = tx_data_has_block_uuid_ref tx_data in
           let d =
             if not (SSet.is_empty deleted_block_uuids) then
-              drop_stale_deleted_block_ref_ops db deleted_block_uuids tx_data
+              !drop_stale_deleted_block_ref_ops_fn db deleted_block_uuids
+                tx_data
             else tx_data
           in
           if has_uuid_ref then
-            drop_missing_block_ref_ops db d
+            !drop_missing_block_ref_ops_fn db d
           else d
         in
         let tx_data =
@@ -2683,8 +2707,13 @@ and apply_remote_txs_with_retry repo (client : Sync_state.client)
     (remote_txs : Wire.t list) (snapshot_retry_count : int)
     : (Wire.t list * tx_report option) list Db_worker_effect.t =
   let local_txs = pending_txs repo () in
+  (* bind (pure ()) defers the synchronous apply body into the task so a
+     raise (e.g. pending-tx-snapshot-changed) becomes a Rejected task that
+     this catch can retry — a plain argument would be evaluated eagerly
+     and escape before catch is installed *)
   Db_worker_effect.catch
-    (apply_remote_txs_once repo client remote_txs)
+    (Db_worker_effect.bind (Db_worker_effect.pure ()) (fun () ->
+         apply_remote_txs_once repo client remote_txs))
     (fun error ->
        let snapshot_changed =
          (match error with
