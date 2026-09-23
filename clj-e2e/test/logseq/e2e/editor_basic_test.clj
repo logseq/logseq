@@ -1418,10 +1418,10 @@
       (is (= "late editor row 29 edited" (util/get-edit-content))))
     (b/new-block "")
     (util/input-command "Code block")
-    (assert/assert-is-visible ".CodeMirror, .cm-editor")
+    (assert/assert-is-visible ".cm-editor")
     (let [code-block-uuid
-          (.getAttribute (w/-query ".ls-block:has(.CodeMirror)") "blockid")]
-      (w/click (.first (w/-query "pre.CodeMirror-line")))
+          (.getAttribute (w/-query ".ls-block:has(.cm-editor)") "blockid")]
+      (w/click (.first (w/-query ".cm-line")))
       (util/input "const value = 1;\nvalue + 1;")
       (k/esc)
       (util/exit-edit)

@@ -201,7 +201,7 @@
   (testing "/code block"
     (b/new-block "")
     (util/input-command "code block")
-    (w/wait-for ".CodeMirror")
+    (w/wait-for ".cm-editor")
     (util/wait-timeout 100)
     ;; create another block
     (k/shift+enter)
@@ -442,7 +442,7 @@
     (b/new-blocks ["[[bar]] block" "[[bar]] another" ""])
     (util/input-command "advanced query")
     (w/click ".ls-query-setting")
-    (w/click (.first (w/-query "pre.CodeMirror-line")))
+    (w/click (.first (w/-query ".cm-line")))
     (util/input "{:query [:find (pull ?b [*])
 :where [?b :block/refs ?r]
 [?r :block/title \"bar\"]]}")
