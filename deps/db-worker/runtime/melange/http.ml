@@ -37,6 +37,17 @@ let task_of_promise promise =
     | Ok value -> Db_worker_effect.pure value
     | Error message -> Db_worker_effect.error (Failure message))
 
+(* bodies are raw bytes (e.g. framed gzip snapshot batches); send as
+   Uint8Array like the cljs upload does with ArrayBuffer, otherwise fetch
+   would utf-8 re-encode the string body. *)
+external buffer_source_of_u8 : Js.Typed_array.Uint8Array.t -> Fetch.bufferSource
+  = "%identity"
+
+let body_init_of_string s =
+  let a = Js.Typed_array.Uint8Array.fromLength (String.length s) in
+  String.iteri (fun i c -> Js.Typed_array.Uint8Array.unsafe_set a i (Char.code c)) s;
+  Fetch.BodyInit.makeWithBufferSource (buffer_source_of_u8 a)
+
 let method_of_string = function
   | "POST" -> Fetch.Post
   | "PUT" -> Fetch.Put
@@ -53,7 +64,7 @@ let send req =
   let init =
     Fetch.RequestInit.make ~method_:(method_of_string req.method_)
       ~headers:(Fetch.HeadersInit.makeWithDict (Js.Dict.fromList req.headers))
-      ?body:(Option.map Fetch.BodyInit.make req.body)
+      ?body:(Option.map body_init_of_string req.body)
       ()
   in
   task_of_promise (Fetch.fetchWithInit req.url init) >>= fun resp ->

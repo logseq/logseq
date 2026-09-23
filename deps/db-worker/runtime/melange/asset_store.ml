@@ -101,8 +101,13 @@ let sanitize_repo_name repo =
 let path ~repo ~name =
   if is_browser () then browser_path ~repo ~name
   else
+    let repo_dir =
+      match Graph_dir.repo_to_encoded_graph_dir_name repo with
+      | Some dir -> dir
+      | None -> sanitize_repo_name repo
+    in
     Filename.concat
-      (Filename.concat (base_dir ()) (sanitize_repo_name repo))
+      (Filename.concat (base_dir ()) repo_dir)
       (Filename.concat "assets" name)
 
 let pfs_parent dir = Filename.dirname dir

@@ -38,7 +38,7 @@ type tx_entity_error =
 let validate_tx_report ~(closed_schema : bool) (db_after : db)
     (tx_data : datom list) : bool * tx_entity_error list =
   Db_malli_schema.skip_strict_url_validate := true;
-  Fun.protect
+  Common_util.protect
     ~finally:(fun () -> Db_malli_schema.skip_strict_url_validate := false)
     (fun () ->
       let seen = Hashtbl.create 16 in
@@ -289,7 +289,7 @@ let validate_local_db ?(open_schema = false) (db : db) : grouped_error list =
   in
   let ctx = ctx_of db in
   Db_malli_schema.closed_values_validate := true;
-  Fun.protect
+  Common_util.protect
     ~finally:(fun () -> Db_malli_schema.closed_values_validate := false)
     (fun () ->
       let errs =

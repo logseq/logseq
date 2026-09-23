@@ -529,7 +529,7 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
            in
            match rows with
            | [] ->
-               ignore (Sync_client_op.clear_pending_txs repo);
+               ignore (Sync_apply.clear_pending_txs repo);
                Sync_client_op.reset_local_tx repo;
                Sync_client_op.add_all_exists_asset_as_ops repo;
                update_upload_progress

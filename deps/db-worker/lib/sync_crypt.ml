@@ -2020,6 +2020,15 @@ let decrypt_snapshot_datoms_batch_impl aes_key (datoms : Wire.t) : Wire.t t =
                             (!decrypt_text_value_fn aes_key vs)
                       | None -> pure datom)
                  | false -> pure datom)
+            | Wire.Array xs | Wire.List xs when List.length xs >= 4 -> (
+                let attr = List.nth xs 1 and v = List.nth xs 2 in
+                match in_encrypt_attr_set attr, Wire.as_string v with
+                | true, Some vs ->
+                    map
+                      (fun v' ->
+                         Wire.Array (List.mapi (fun i x -> if i = 2 then v' else x) xs))
+                      (!decrypt_text_value_fn aes_key vs)
+                | _ -> pure datom)
             | _ -> pure datom)
           (Wire.as_seq datoms)))
 

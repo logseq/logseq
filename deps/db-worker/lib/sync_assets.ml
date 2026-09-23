@@ -116,7 +116,7 @@ let http_base () : string option =
   Sync_auth.http_base_url (Worker_state.db_sync_config ())
 
 let asset_url base graph_id asset_id asset_type =
-  Printf.sprintf "%s/sync/%s/assets/%s.%s" base graph_id asset_id asset_type
+  Printf.sprintf "%s/assets/%s/%s.%s" base graph_id asset_id asset_type
 
 let err typ ?(data = []) msg : exn =
   Sync_util.ex_info msg

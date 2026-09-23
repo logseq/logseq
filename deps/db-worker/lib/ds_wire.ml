@@ -125,7 +125,9 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
   | Wire.Int n -> Int n
-  | Wire.Int64 n -> Instant n
+  | Wire.Int64 n ->
+      if Int64.abs n <= Int64.of_int max_int then Int (Int64.to_int n)
+      else Instant n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s

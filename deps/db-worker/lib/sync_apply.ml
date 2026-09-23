@@ -2309,8 +2309,11 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
                         Sync_deps.require "encrypt_tx_data"
                           Sync_deps.encrypt_tx_data
                           (match aes_key with
+                           | Wire.Binary b -> b
                            | Wire.String s -> s
-                           | _ -> "")
+                           | _ ->
+                               invalid_arg
+                                 "encrypt_tx_data: aes-key is not binary")
                           tx_data')
                    >>= fun tx_data'' ->
                    Db_worker_effect.pure
@@ -2326,13 +2329,15 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
            let payload =
              List.map
                (fun entry ->
+                  let tx_str =
+                    Transit_codec.to_string
+                      (Option.value
+                         (Wire.get "tx-data" entry)
+                         ~default:(Wire.Array []))
+                  in
                   let base : (Wire.t * Wire.t) list =
                     [ ( kw "tx"
-                      , Wire.String
-                          (Transit_codec.to_string
-                             (Option.value
-                                (Wire.get "tx-data" entry)
-                                ~default:(Wire.Array []))) ) ]
+                      , Wire.String tx_str ) ]
                   in
                   let with_id =
                     match Wire.get "tx-id" entry with
