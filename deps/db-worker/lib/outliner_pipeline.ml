@@ -143,11 +143,14 @@ let user_visible_property (k : attr) : bool =
       || List.mem k Db_property.public_db_attribute_properties
   | None -> List.mem k Db_property.public_db_attribute_properties
 
-(* entity's property entries: ident -> values (refs materialized as Ref). *)
+(* entity's property entries: ident -> values (refs materialized as Ref).
+   Forward attrs only — cljs (into {} entity) doesn't enumerate :_reverse
+   attrs, so backrefs like :logseq.property.linked-references/_includes
+   must not count as block properties here. *)
 let properties_of (e : entity) : (attr * value list) list =
   entity_attrs e
   |> List.filter_map (fun (a, tv) ->
-      if not (user_visible_property a) then None
+      if is_reverse_ref a || not (user_visible_property a) then None
       else
         let ref_of (te : tx_entity) =
           match te.db_id with Some (Entity_id id) -> Some (Ref id) | _ -> None
