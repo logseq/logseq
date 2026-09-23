@@ -764,14 +764,16 @@
         (outliner-op/delete-blocks! blocks {}))))))
 
 (defn- previous-block-edit
-  [block value container-id]
+  [block value container-id node]
   (if (:block/name block)
     {:prev-block block
      :new-value (:block/title block)
      :edit-block-f (if (entity/journal? block)
                      ;; Journal titles are read-only (date-derived) — focus them as a
-                     ;; selection rather than opening the title editor.
-                     #(when-let [node (util/get-first-block-by-id (:block/uuid block))]
+                     ;; selection rather than opening the title editor. The title can
+                     ;; be mounted multiple times (e.g. main pane + sidebar), so select
+                     ;; the node adjacent to the deleted block.
+                     #(when (and node (.-isConnected node))
                         (state/exit-editing-and-set-selected-blocks! [node]))
                      #(edit-block! block :max {:save-code-editor? false
                                                :skip-load? true}))}
@@ -815,7 +817,8 @@
         (when block
           (previous-block-edit block value
                                (some-> (dom/attr sibling-block "containerid")
-                                       util/safe-parse-int)))))))
+                                       util/safe-parse-int)
+                               sibling-block))))))
 
 (defn- edit-previous-window-block-fn
   [sibling-block]
@@ -826,13 +829,13 @@
       (fn [rows]
         (when-let [block (or (some #(when (= block-id (:block/uuid %)) %) rows)
                              mounted)]
-          (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id))]
+          (when-let [edit-block-f (:edit-block-f (previous-block-edit block "" container-id sibling-block))]
             (edit-block-f)))))))
 
 (defn- loaded-block-edit
   [block value container-id]
   (when block
-    (previous-block-edit block value container-id)))
+    (previous-block-edit block value container-id nil)))
 
 (declare save-block!)
 
