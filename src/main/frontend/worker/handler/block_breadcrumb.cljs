@@ -119,7 +119,7 @@
                              (cond
                                (string? value) value
                                (integer? value)
-                               (db-property/asset-external-url (d/entity db value))
+                               (db-property/scalar-property-value (d/entity db value))
                                :else
                                (db-property/scalar-property-value value)))
         closed-value? (some? (:block/closed-value-property collected))

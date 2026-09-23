@@ -114,28 +114,28 @@
   (when-let [property (d/entity db :logseq.property.asset/external-url)]
     (let [property-id (:db/id property)
           already-url-ref? (and (= :url (:logseq.property/type property))
-                                (= :db.type/ref (:db/valueType property)))
-          datoms (d/datoms db :avet :logseq.property.asset/external-url)]
+                                (= :db.type/ref (:db/valueType property)))]
       (when-not already-url-ref?
         (concat
          [{:db/id property-id
            :logseq.property/type :url
-           :db/valueType :db.type/ref}]
+           :db/valueType :db.type/ref
+           :db/index true}]
          (mapcat
-          (fn [datom]
-            (let [value (:v datom)
-                  eid (:e datom)]
-              (when (string? value)
-                (let [value-block (db-property-build/build-property-value-block
-                                   (d/entity db eid)
-                                   {:db/id property-id
-                                    :db/ident :logseq.property.asset/external-url
-                                    :logseq.property/type :url}
-                                   value)]
-                  [[:db/retract eid :logseq.property.asset/external-url value]
-                   value-block
-                   [:db/add eid :logseq.property.asset/external-url [:block/uuid (:block/uuid value-block)]]]))))
-          datoms))))))
+          (fn [[eid value]]
+            (when (string? value)
+              (let [value-block (db-property-build/build-property-value-block
+                                 (d/entity db eid)
+                                 {:db/id property-id
+                                  :db/ident :logseq.property.asset/external-url
+                                  :logseq.property/type :url}
+                                 value)]
+                [[:db/retract eid :logseq.property.asset/external-url value]
+                 value-block
+                 [:db/add eid :logseq.property.asset/external-url [:block/uuid (:block/uuid value-block)]]])))
+          (d/q '[:find ?e ?v
+                 :where [?e :logseq.property.asset/external-url ?v]]
+               db)))))))
 
 (defn- repair-comment-classes-and-targets
   [db]
