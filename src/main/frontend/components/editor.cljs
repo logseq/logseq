@@ -158,18 +158,15 @@
       (let [value (.-value input)
             value' (str (common-util/safe-subs value 0 q)
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
-        (state/set-edit-content! (.-id input) value')
-        (state/clear-editor-action!)
         (p/let [page (db-async/<get-block (state/get-current-repo) chosen-item {:children? false})
                 page' (or page
                           (page-handler/<create! chosen-item {:redirect? false
                                                              :reference? true}))
-                current-block (state/get-edit-block)]
-          (editor-handler/api-insert-new-block! chosen-item
-                                                {:block-uuid (:block/uuid current-block)
-                                                 :sibling? true
-                                                 :replace-empty-target? true
-                                                 :other-attrs {:block/link (:db/id page')}}))))
+                current-block (state/get-edit-block)
+                inserted (editor-handler/embed-node! current-block page')]
+          (when inserted
+            (state/set-edit-content! (.-id input) value')
+            (state/clear-editor-action!)))))
     (page-handler/on-chosen-handler input id pos format)))
 
 (defn- class-alias?
@@ -298,17 +295,13 @@
       (let [pos (state/get-editor-last-pos)
             value (.-value input)
             value' (str (common-util/safe-subs value 0 q)
-                        (common-util/safe-subs value (+ (count q) 4 pos)))]
-        (state/set-edit-content! (.-id input) value')
-        (state/clear-editor-action!)
-        (let [current-block (state/get-edit-block)]
-          (p/do!
-           (editor-handler/api-insert-new-block! ""
-                                                  {:block-uuid (:block/uuid current-block)
-                                                   :sibling? true
-                                                   :replace-empty-target? true
-                                                   :other-attrs {:block/link (:db/id chosen-item)}})
-           (state/clear-edit!)))))
+                        (common-util/safe-subs value (+ (count q) 4 pos)))
+            current-block (state/get-edit-block)]
+        (p/let [inserted (editor-handler/embed-node! current-block chosen-item)]
+          (when inserted
+            (state/set-edit-content! (.-id input) value')
+            (state/clear-editor-action!)
+            (state/clear-edit!)))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
 (hsx/defc block-search-auto-complete

@@ -15,6 +15,7 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.format :as editor-format]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -25,6 +26,7 @@
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.ref :as ref]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.sqlite.build :as sqlite-build]
@@ -3113,3 +3115,83 @@
     (is (not (editor/db-collapsable?
               {:block/title "hello"
                :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
+
+(deftest selection-node-delete-uuid-prefers-embed-wrapper
+  (let [wrapper-id #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        source-id #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        embed-node #js {:getAttribute #({"originalblockid" (str wrapper-id)
+                                         "blockid" (str source-id)} %)}
+        plain-node #js {:getAttribute #({"blockid" (str source-id)} %)}]
+    (is (= wrapper-id (#'editor/selection-node-delete-uuid embed-node)))
+    (is (= source-id (#'editor/selection-node-delete-uuid plain-node)))))
+
+(deftest can-embed-rejects-self-and-ancestors
+  (let [host {:db/id 10 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        target {:db/id 20 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+        parent {:db/id 30 :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}]
+    (is (true? (editor/can-embed? host target []))
+        "Unrelated nodes can be embedded")
+    (is (false? (editor/can-embed? host host []))
+        "A node cannot embed itself")
+    (is (false? (editor/can-embed? host parent [parent]))
+        "A node cannot embed an ancestor")
+    (is (true? (editor/can-embed? parent host [parent]))
+        "A parent can embed a descendant")))
+
+(deftest replace-ref-with-embed-uses-block-link
+  (async done
+    (let [host-id #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          target-id #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          host {:db/id 10
+                :block/uuid host-id
+                :block/title (str "see " (ref/->block-ref target-id) " later")}
+          target {:db/id 20 :block/uuid target-id :block/title "source"}
+          saved (atom nil)
+          inserted (atom nil)
+          toast (atom nil)
+          original-get-current-repo state/get-current-repo
+          original-<get-block db-async/<get-block
+          original-<get-block-parents db-async/<get-block-parents
+          original-save-block! editor/save-block!
+          original-api-insert-new-block! editor/api-insert-new-block!
+          original-notification-show! notification/show!]
+      (set! state/get-current-repo (constantly "test"))
+      (set! db-async/<get-block (fn [_repo id _opts]
+                                  (p/resolved (cond
+                                                (or (= id host-id) (= id host)) host
+                                                (or (= id target-id) (= id 20)) target
+                                                :else nil))))
+      (set! db-async/<get-block-parents (fn [_repo db-id _depth]
+                                          (is (= 10 db-id))
+                                          (p/resolved [])))
+      (set! editor/save-block! (fn [_repo uuid content]
+                                 (reset! saved {:uuid uuid :content content})
+                                 (p/resolved nil)))
+      (set! editor/api-insert-new-block! (fn [content opts]
+                                           (reset! inserted {:content content :opts opts})
+                                           (p/resolved :inserted)))
+      (set! notification/show! (fn [content status]
+                                 (reset! toast {:content content :status status})))
+      (-> (p/do!
+           (editor/replace-ref-with-embed! host target-id)
+           (is (= {:uuid host-id :content "see  later"} @saved)
+               "Removes the block ref from the host title")
+           (is (= "" (:content @inserted)))
+           (is (= {:block-uuid host-id
+                   :sibling? true
+                   :replace-empty-target? false
+                   :outliner-op nil
+                   :other-attrs {:block/link 20}}
+                  (:opts @inserted))
+               "Replace with embed writes :block/link instead of {{embed}}")
+           (is (nil? @toast)))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! state/get-current-repo original-get-current-repo)
+                       (set! db-async/<get-block original-<get-block)
+                       (set! db-async/<get-block-parents original-<get-block-parents)
+                       (set! editor/save-block! original-save-block!)
+                       (set! editor/api-insert-new-block! original-api-insert-new-block!)
+                       (set! notification/show! original-notification-show!)
+                       (done)))))))

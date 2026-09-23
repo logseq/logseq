@@ -47,7 +47,6 @@
  :asset/align-left "Links"
  :asset/align-right "Regs"
  :asset/already-exists "Bate bestaan reeds, titel: {1}, nodus verwysing: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Bovenliggend element kan nie als eigen eienskap worden ingesloten"
  :asset/confirm-delete-image "Is jy seker jy wil hierdie beeld uitvee?"
  :asset/copy "Kopieer"
  :asset/copy-image-unsupported-extension "Kopiëring van beelde word nie vir {1}-lêers ondersteun nie"

@@ -47,7 +47,6 @@
  :asset/align-left "Venstre"
  :asset/align-right "Høyre"
  :asset/already-exists "ressurs eksisterer allerede, tittel: {1}, nodereferanse: [[{2}]]"
- :asset/cannot-embed-parent-as-own-property "Overordnet element kan ikke bygges inn som egen egenskap"
  :asset/confirm-delete-image "Er du sikker på at du vil slette dette bildet?"
  :asset/copy "Kopier"
  :asset/copy-image-unsupported-extension "Kopiering av bilder støttes ikke for {1}-filer"

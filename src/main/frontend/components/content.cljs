@@ -180,7 +180,7 @@
       (ui/dropdown-shortcut :editor/collapse-block-children))]))
 
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
-  [_target block-id property-default-value?]
+  [_target block-id property-default-value? embed-uuid]
   (let [[block set-block!] (hooks/use-state nil)
         simple-commands (rfx/use-sub [:plugin/simple-commands])
         developer-mode? (rfx/use-sub [:ui/developer-mode?])
@@ -332,7 +332,9 @@
          (when-not property-default-value?
            (shui/dropdown-menu-item
             {:key "delete"
-             :on-click #(editor-handler/delete-block-aux! block)}
+             :on-click #(if embed-uuid
+                          (editor-handler/remove-embed! embed-uuid)
+                          (editor-handler/delete-block-aux! block))}
             (t :editor/delete-selection)
             (ui/dropdown-shortcut :editor/delete)))
 

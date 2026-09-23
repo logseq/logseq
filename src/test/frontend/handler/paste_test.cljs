@@ -250,7 +250,8 @@
                                 :block/uuid linked-block-id})))
       editor-handler/api-insert-new-block! (fn [_content opts]
                                              (reset! inserted-opts opts)
-                                             (p/resolved nil))
+                                             (p/resolved {:db/id 99
+                                                          :block/uuid #uuid "99999999-9999-9999-9999-999999999999"}))
       state/clear-edit! (fn [] (reset! clear-edit? true))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                  #js {:clipboardData #js {:getData (constantly "copied")}})]
