@@ -253,7 +253,7 @@
             text (str heading " test ")]
         (b/new-block text)
         (util/input-command heading)
-        (is (= (string/trim text) (util/get-edit-content)))
+        (is (= text (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
 
