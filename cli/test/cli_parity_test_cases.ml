@@ -3898,6 +3898,19 @@ let () =
       expect_error_code "leading drawer" "invalid-blocks"
         (Markdown_blocks.of_markdown "status:: todo\n- b"));
 
+  test "CLI parity add block markdown keeps fenced code in titles" (fun () ->
+      let parsed =
+        expect_ok "fenced code body"
+          (Markdown_blocks.of_markdown
+             "- Example\n  ```clojure\n  (+ 1 2)\n  ```\n- b")
+      in
+      expect_int "two blocks" 2 (Vec.length parsed);
+      let title =
+        expect_some "first title" (Vec.nth parsed 0).Block.title
+      in
+      if not (String.contains title '`') then
+        fail_test ("fenced code missing from title: " ^ title));
+
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
       let child =

@@ -1999,7 +1999,7 @@ let closed_value_selector =
          kw "db/id";
          kw "db/ident";
          kw "block/title";
-         kw "block/property-value";
+         kw "logseq.property/value";
        |])
 
 let closed_values_query =
@@ -2042,7 +2042,7 @@ let closed_values invoke_config repo property_id =
             [| query_value closed_values_query; Edn_util.int64 property_id |]))
 
 let closed_value_display value_entity =
-  match Edn_util.get value_entity "block/property-value" with
+  match Edn_util.get value_entity "logseq.property/value" with
   | Some pv -> (
       match Edn_util.as_string_like pv with
       | Some value -> value
@@ -2075,12 +2075,13 @@ let closed_value_of_result ~property_type result text value =
               let hit =
                 match property_type with
                 (* Closed number/url values match on their stored
-                   block/property-value; the entity titles carry display
-                   labels, not the literal. *)
+                   logseq.property/value literal — the same field the
+                   worker's closed-value check reads; entity titles carry
+                   display labels, not the literal. *)
                 | "number" -> (
                     match
                       ( Option.bind
-                          (Edn_util.get value_entity "block/property-value")
+                          (Edn_util.get value_entity "logseq.property/value")
                           Edn_util.as_int64,
                         Edn_util.as_int64 value )
                     with
@@ -2088,7 +2089,7 @@ let closed_value_of_result ~property_type result text value =
                     | _ -> false)
                 | "url" -> (
                     match
-                      Edn_util.get_string value_entity "block/property-value"
+                      Edn_util.get_string value_entity "logseq.property/value"
                     with
                     | Some stored ->
                         String.equal (String.trim stored) (String.trim text)
@@ -2117,7 +2118,15 @@ let closed_value_of_result ~property_type result text value =
                                  (String.length ident - cut - 1)))
                       | None -> false
                     in
-                    title_hit || ident_hit
+                    let literal_hit =
+                      match
+                        Edn_util.get_string value_entity
+                          "logseq.property/value"
+                      with
+                      | Some literal -> matches literal
+                      | None -> false
+                    in
+                    title_hit || ident_hit || literal_hit
               in
               if hit then Some id else None)
         values
