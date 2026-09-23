@@ -1923,6 +1923,9 @@
                            ipc/ipc ipc!]
             (p/let [generation (lifecycle/createGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) "source")
                     _ (start! "source" generation)
+                    ;; The worker defers graph open until the first client
+                    ;; create-or-open-db call, which materializes db.sqlite.
+                    _ (persist-db/<open-and-fetch-schema "logseq_db_source")
                     _ (lifecycle/stopGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) "source" "cli")
                     payload (fs/readFileSync (node-path/join root "graphs/source/db.sqlite"))
                     _ (persist-db/<import-db "logseq_db_imported" payload)
