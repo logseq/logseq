@@ -36,6 +36,7 @@ let arg args i = List.nth_opt args i
 let repo_of args =
   match arg args 0 with
   | Some (Wire.String s) -> s
+  | Some Wire.Nil | None -> ""
   | _ -> invalid_arg "first arg must be repo name"
 
 let value_arg args i =

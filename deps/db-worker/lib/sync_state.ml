@@ -245,3 +245,8 @@ let time_ms () = Clock.now_ms ()
 (* worker-util/dev-or-test? — goog.DEBUG || node-test in cljs; a settable
    flag here, defaulting to off like production builds *)
 let dev_or_test : bool ref = ref false
+
+(* transaction.cljs OUTLINER-PERF-LOGGING — a goog-define enabled only in
+   e2e app builds. The runtime signal for the same "e2e build" here is the
+   :dev? flag the app sends in its transact context (DEV-RELEASE). *)
+let outliner_perf_logging : bool ref = ref false

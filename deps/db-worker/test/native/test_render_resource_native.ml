@@ -2728,18 +2728,15 @@ let test_query_resource_preserves_scalar_tuples () =
 (* query-resource-renders-partial-block-pulls-as-blocks-test — the cljs
    transform is SCI-evaluated; OCaml routes through
    Render_deps.result_transform_fn, so a small evaluator for this exact EDN
-   form is injected (the row encoding is tuple-wrapped — see header). *)
+   form is injected (block-query rows arrive as flat cells, matching cljs). *)
 let eval_transform_filter_journal_day (rows : Wire.t list) : Wire.t =
   Wire.Array
     (List.filter
        (fun row ->
          match row with
-         | Wire.Array [ cell ] | Wire.List [ cell ] -> (
-             match cell with
-             | Wire.Map _ -> (
-                 match slot_get (kw "block/journal-day") cell with
-                 | Some (Wire.Int 20200101) -> true
-                 | _ -> false)
+         | Wire.Map _ -> (
+             match slot_get (kw "block/journal-day") row with
+             | Some (Wire.Int 20200101) -> true
              | _ -> false)
          | _ -> false)
        rows)
@@ -2759,7 +2756,7 @@ let test_query_resource_renders_partial_block_pulls_as_blocks () =
   in
   let saved = !Render_deps.result_transform_fn in
   Render_deps.result_transform_fn :=
-    Some (fun _edn rows -> eval_transform_filter_journal_day rows);
+    Some (fun ~entity_attr:_ _edn rows -> eval_transform_filter_journal_day rows);
   Fun.protect ~finally:(fun () -> Render_deps.result_transform_fn := saved)
     (fun () ->
       List.iteri

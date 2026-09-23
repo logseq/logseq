@@ -544,6 +544,144 @@ let test_insert_block_persists () =
       check "insert-block title" (Ldb.string_value e "block/title" = Some "")
   | None -> Alcotest.fail "insert-block-persists: block missing"
 
+(* UI Enter+type flow (clj-e2e outliner move-up-down / delete): on a fresh
+   page, typing N blocks is save-block(title) on the open block, then Enter =
+   insert-blocks(new sibling after current). Repeat -> children must read
+   back in insertion order; then delete-blocks on a multi-block selection
+   must remove exactly those. *)
+let test_apply_outliner_ops_typing_flow_order_and_delete () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with
+                  b_uuid = Some "aaaaaaaa-1111-0000-0000-000000000001" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let first = Option.get (entity_at_uuid (db_of conn) "aaaaaaaa-1111-0000-0000-000000000001") in
+  let save_op uuid title =
+    Wire.Array
+      [ Wire.Array
+          [ kw "save-block"
+          ; Wire.Array
+              [ Wire.Map
+                  [ kw "block/uuid", Wire.Uuid uuid
+                  ; kw "block/title", Wire.String title ]
+              ; Wire.Map [] ] ] ]
+  in
+  let insert_op target_uuid new_uuid =
+    Wire.Array
+      [ Wire.Array
+          [ kw "insert-blocks"
+          ; Wire.Array
+              [ Wire.Array
+                  [ Wire.Map
+                      [ kw "block/uuid", Wire.Uuid new_uuid
+                      ; kw "block/title", Wire.String "" ] ]
+              ; Wire.Uuid target_uuid
+              ; Wire.Map
+                  [ kw "sibling?", Wire.Bool true
+                  ; kw "keep-uuid?", Wire.Bool true ] ] ] ]
+  in
+  let call ops = api "apply-outliner-ops" [ Wire.String test_repo; ops; Wire.Map [] ] in
+  ignore (call (save_op (uuid_of first) "b1"));
+  let cur = ref (uuid_of first) in
+  List.iteri
+    (fun i title ->
+      let nu = Printf.sprintf "aaaaaaaa-1111-0000-0000-00000000000%d" (i + 2) in
+      ignore (call (insert_op !cur nu));
+      ignore (call (save_op nu title));
+      cur := nu)
+    [ "b2"; "b3"; "b4" ];
+  let page_id = (Option.get (Ldb.ref_ent first "block/page")).id in
+  let titles_of () =
+    let page = Option.get (Ldb.ent_of_id (db_of conn) page_id) in
+    Ldb.sort_by_order (Ldb.ref_ents page "block/_parent")
+    |> List.filter_map (fun e -> Ldb.string_value e "block/title")
+  in
+  let titles = titles_of () in
+  check "typed blocks order" (titles = [ "b1"; "b2"; "b3"; "b4" ]);
+  let ids =
+    List.filter_map
+      (fun t ->
+        match find_block_by_content (db_of conn) t with
+        | Some e -> Some (Wire.Uuid (uuid_of e))
+        | None -> None)
+      [ "b2"; "b3" ]
+  in
+  ignore
+    (call
+       (Wire.Array
+          [ Wire.Array
+              [ kw "delete-blocks"; Wire.Array [ Wire.Array ids; Wire.Map [] ] ] ]));
+  let titles' = titles_of () in
+  check "after delete" (titles' = [ "b1"; "b4" ])
+
+(* move-blocks-up-down: clj-e2e move-up-down selects [b3 b4] (shift+up x2
+   from b4), moves the selection up twice -> [b3 b4 b1 b2], then down
+   twice -> original order. Single-block: up to top is a no-op on the
+   second press; down moves one slot each press. *)
+let test_apply_outliner_ops_move_up_down () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with b_uuid = Some "bbbbbbbb-0000-0000-0000-000000000001" }
+              ; { default_block with b_uuid = Some "bbbbbbbb-0000-0000-0000-000000000002" }
+              ; { default_block with b_uuid = Some "bbbbbbbb-0000-0000-0000-000000000003" }
+              ; { default_block with b_uuid = Some "bbbbbbbb-0000-0000-0000-000000000004" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let save_title u t =
+    api "apply-outliner-ops"
+      [ Wire.String test_repo
+      ; Wire.Array
+          [ Wire.Array
+              [ kw "save-block"
+              ; Wire.Array
+                  [ Wire.Map [ kw "block/uuid", Wire.Uuid u; kw "block/title", Wire.String t ]
+                  ; Wire.Map [] ] ] ]
+      ; Wire.Map [] ]
+  in
+  List.iteri
+    (fun i u -> ignore (save_title u (Printf.sprintf "b%d" (i + 1))))
+    [ "bbbbbbbb-0000-0000-0000-000000000001"
+    ; "bbbbbbbb-0000-0000-0000-000000000002"
+    ; "bbbbbbbb-0000-0000-0000-000000000003"
+    ; "bbbbbbbb-0000-0000-0000-000000000004" ];
+  let move uuids up =
+    api "apply-outliner-ops"
+      [ Wire.String test_repo
+      ; Wire.Array
+          [ Wire.Array
+              [ kw "move-blocks-up-down"
+              ; Wire.Array [ Wire.Array (List.map (fun u -> Wire.Uuid u) uuids); Wire.Bool up ] ] ]
+      ; Wire.Map [] ]
+  in
+  let page_id =
+    (Option.get
+       (Ldb.ref_ent
+          (Option.get (entity_at_uuid (db_of conn) "bbbbbbbb-0000-0000-0000-000000000001"))
+          "block/page")).id
+  in
+  let titles_of () =
+    let page = Option.get (Ldb.ent_of_id (db_of conn) page_id) in
+    Ldb.sort_by_order (Ldb.ref_ents page "block/_parent")
+    |> List.filter_map (fun e -> Ldb.string_value e "block/title")
+  in
+  check "initial order" (titles_of () = [ "b1"; "b2"; "b3"; "b4" ]);
+  ignore (move [ "bbbbbbbb-0000-0000-0000-000000000003"; "bbbbbbbb-0000-0000-0000-000000000004" ] true);
+  check "sel up1" (titles_of () = [ "b1"; "b3"; "b4"; "b2" ]);
+  ignore (move [ "bbbbbbbb-0000-0000-0000-000000000003"; "bbbbbbbb-0000-0000-0000-000000000004" ] true);
+  check "sel up2" (titles_of () = [ "b3"; "b4"; "b1"; "b2" ]);
+  ignore (move [ "bbbbbbbb-0000-0000-0000-000000000003"; "bbbbbbbb-0000-0000-0000-000000000004" ] false);
+  ignore (move [ "bbbbbbbb-0000-0000-0000-000000000003"; "bbbbbbbb-0000-0000-0000-000000000004" ] false);
+  check "restored" (titles_of () = [ "b1"; "b2"; "b3"; "b4" ])
+
 (* (deftest apply-outliner-ops-rejects-missing-indent-parent-original ...) *)
 let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
   let u1 = "cccccccc-0000-0000-0000-000000000001"
@@ -2601,6 +2739,10 @@ let cases =
   ; Alcotest.test_case "apply-outliner-ops-rejects-missing-indent-parent-original" `Quick
       test_apply_outliner_ops_rejects_missing_indent_parent_original
   ; Alcotest.test_case "insert-block-persists" `Quick test_insert_block_persists
+  ; Alcotest.test_case "apply-outliner-ops-typing-flow-order-and-delete" `Quick
+      test_apply_outliner_ops_typing_flow_order_and_delete
+  ; Alcotest.test_case "apply-outliner-ops-move-up-down" `Quick
+      test_apply_outliner_ops_move_up_down
   ; Alcotest.test_case "get-block-sibling" `Quick test_get_block_sibling
   ; Alcotest.test_case "set-db-sync-config-keeps-only-non-auth-fields-test" `Quick
       test_set_db_sync_config_keeps_only_non_auth_fields

@@ -28,6 +28,7 @@ let kw s = Wire.Keyword s
 let repo_arg args =
   match List.nth_opt args 0 with
   | Some (Wire.String repo) -> repo
+  | Some Wire.Nil | None -> ""
   | _ -> invalid_arg "first arg must be repo name"
 
 let arg args i = List.nth_opt args i

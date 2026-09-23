@@ -339,7 +339,7 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
       match v with Some x -> x | None -> Nil
     else
       match v with
-      | Some ((Set _ | Vector _ | List _) as coll) -> coll
+      | Some ((Set _ | Vector _ | List _ | Map _) as coll) -> coll
       | _ ->
           let existing' =
             match existing_v with

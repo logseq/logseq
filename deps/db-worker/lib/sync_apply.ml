@@ -398,7 +398,7 @@ let perf_time_ms () = Clock.now_ms ()
 
 let log_outliner_op_perf (_data : (string * string) list) : unit =
   if !Sync_state.dev_or_test then
-    Worker_log.info "db-worker/outliner-op-perf" _data
+    Worker_log.info ":db-worker/outliner-op-perf" _data
 
 (* ---- tx item helpers (wire items) ---- *)
 

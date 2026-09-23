@@ -73,13 +73,49 @@ let take_outliner_op_perf perf_id =
       | Some xs -> Hashtbl.remove outliner_op_perf id; xs
       | None -> [])
 
+(* cljs transaction.cljs log-outliner-op-perf! — the endpoint-level perf
+   log emitted by :thread-api/apply-outliner-ops. dev (goog.DEBUG) logs
+   every op; OUTLINER-PERF-LOGGING (e2e builds) logs only op-names +
+   worker-apply-ms for the three e2e op sets. *)
+let e2e_perf_op_names =
+  [ [ "insert-blocks" ]; [ "save-block"; "insert-blocks" ]; [ "delete-blocks" ] ]
+
+let op_names_of (data : Wire.t) : string list =
+  match Wire.get "op-names" data with
+  | Some (Wire.Array xs) | Some (Wire.List xs) ->
+      List.filter_map (function Wire.Keyword s -> Some s | _ -> None) xs
+  | _ -> []
+
+let log_tx_outliner_op_perf (data : Wire.t) =
+  match Wire.get "perf-id" data with
+  | Some (Wire.String _) | Some (Wire.Uuid _) ->
+      let data' =
+        match Wire.get "apply-ms" data with
+        | Some am -> Cljs_map.assoc data "worker-apply-ms" am
+        | None -> data
+      in
+      if !Sync_state.dev_or_test then
+        Worker_log.info ":db-worker/outliner-op-perf"
+          [ ("data", Ds_wire.edn_of_transit data') ]
+      else if !Sync_state.outliner_perf_logging
+              && List.mem (op_names_of data') e2e_perf_op_names then
+        let slim =
+          Wire.Map
+            (List.filter
+               (fun (k, _) -> k = kw "op-names" || k = kw "worker-apply-ms")
+               (Wire.as_map data'))
+        in
+        Worker_log.info ":db-worker/outliner-op-perf"
+          [ ("data", Ds_wire.edn_of_transit slim) ]
+  | _ -> ()
+
 (* cljs log-outliner-op-perf! — recorded only in dev (goog.DEBUG) *)
 let log_outliner_op_perf (data : Wire.t) =
   if !Sync_state.dev_or_test then
     match Wire.get "perf-id" data with
-    | Some (Wire.String perf_id) -> begin
+    | Some (Wire.String perf_id) | Some (Wire.Uuid perf_id) -> begin
         note_outliner_op_perf perf_id data;
-        Worker_log.info "db-worker/outliner-op-perf"
+        Worker_log.info ":db-worker/outliner-op-perf"
           (List.map
              (fun (k, v) ->
                 ( (match k with

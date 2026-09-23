@@ -672,6 +672,7 @@ let get_blocks args =
   let repo =
     match arg args 0 with
     | Some (Wire.String s) -> s
+    | Some Wire.Nil | None -> ""
     | _ -> invalid_arg "first arg must be repo name"
   in
   let requests = Option.value (arg args 1) ~default:(Wire.List []) in

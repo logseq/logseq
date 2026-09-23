@@ -15,6 +15,7 @@ let with_conn args f =
   let repo =
     match arg args 0 with
     | Some (Wire.String s) -> s
+    | Some Wire.Nil | None -> ""
     | _ -> invalid_arg "first arg must be repo name"
   in
   match Worker_state.datascript_conn repo with
@@ -442,6 +443,7 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
            | Some ms ->
                (match Ldb.value e "block/created-at" with
                 | Some (Int n) -> float_of_int n > ms
+                | Some (Instant i) -> Int64.to_float i > ms
                 | Some (Float f) -> f > ms
                 | _ -> false)
            | None -> true)
@@ -450,6 +452,7 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
            | Some ms ->
                (match Ldb.value e "block/updated-at" with
                 | Some (Int n) -> float_of_int n > ms
+                | Some (Instant i) -> Int64.to_float i > ms
                 | Some (Float f) -> f > ms
                 | _ -> false)
            | None -> true)

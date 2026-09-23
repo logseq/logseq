@@ -633,12 +633,30 @@ let resolve_page_ref (db : db) (v : value) (tag_names : string list)
              let m = m @ [ (Keyword "block/uuid", Uuid page_uuid) ] in
              let m =
                if class_ then
+                 (* cljs: (or (some :db/ident tx-data)
+                             (:db/ident (d/entity db [:block/uuid page-uuid])))
+                    — the ident comes from the creation tx itself; the entity
+                    is not in db yet since page_txs apply at commit. *)
                  let ident =
-                   match
-                     entity db (Lookup_ref ("block/uuid", Uuid page_uuid))
-                   with
-                   | Some e -> Ldb.ident_of e
-                   | None -> None
+                   List.find_map
+                     (fun w ->
+                       match w with
+                       | Wire.Map _ -> (
+                           match Cljs_map.get w "db/ident" with
+                           | Some (Wire.Keyword i) -> Some i
+                           | _ -> None)
+                       | _ -> None)
+                     res.tx_data
+                 in
+                 let ident =
+                   match ident with
+                   | Some _ -> ident
+                   | None -> (
+                       match
+                         entity db (Lookup_ref ("block/uuid", Uuid page_uuid))
+                       with
+                       | Some e -> Ldb.ident_of e
+                       | None -> None)
                  in
                  match ident with
                  | Some i -> m @ [ (Keyword "db/ident", Keyword i) ]
@@ -2590,7 +2608,7 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
         in
         match left_left with
         | Some ll ->
-            if
+            let guard_ok =
               (match first_parent, ll with
                | Some fp, _ ->
                    (match Ldb.ref_ent fp "block/page" with
@@ -2601,7 +2619,8 @@ let move_blocks_up_down (conn : conn) (blocks : entity list) (up : bool)
                    (Option.is_some
                       (Ldb.value first_block "logseq.property/created-from-property")
                     && left_sibling = None)
-            then
+            in
+            if guard_ok then
               let opts' = { opts with sibling = sibling_; up = true } in
               move_blocks conn top_level ll opts' (move_opts_map opts')
             else None

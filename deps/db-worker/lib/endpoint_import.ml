@@ -444,6 +444,11 @@ let terminal_import_result (run_id : string) (compact : Wire.t) : Wire.t =
 (* ---- <import-file-graph! ---- *)
 
 let import_file_graph (args : Wire.t list) : Wire.t Eff.t =
+  let args =
+    match args with
+    | Wire.Nil :: rest -> Wire.String "" :: rest
+    | _ -> args
+  in
   match args with
   | Wire.String repo :: config_file_t :: files_t :: opts_t :: _ ->
     (match Worker_state.datascript_conn repo with

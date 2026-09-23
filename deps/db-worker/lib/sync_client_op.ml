@@ -47,20 +47,14 @@ let sync_conflicts_sql =
 let sync_conflicts_index_sql =
   "create index if not exists idx_sync_conflicts_block_uuid on sync_conflicts(block_uuid, created_at)"
 
-let schema_ready : (string, unit) Hashtbl.t = Hashtbl.create 7
-
-(* every ":memory:" database shares the same filename — track readiness by
-   connection identity there *)
-let schema_ready_mem : Sqlite.db list ref = ref []
+(* Readiness is per-connection: pooled browser dbs share the relative
+   filename "client-ops-/db.sqlite" across repos, and ":memory:" shares
+   its filename across dbs, so keying by filename would wrongly mark a
+   fresh repo's db as already initialized. *)
+let schema_ready_dbs : Sqlite.db list ref = ref []
 
 let ensure_schema (db : Sqlite.db) =
-  let f = Sqlite.filename db in
-  let in_mem = f = ":memory:" in
-  let ready =
-    if in_mem then List.exists (fun d -> d == db) !schema_ready_mem
-    else Hashtbl.mem schema_ready f
-  in
-  if not ready then begin
+  if not (List.exists (fun d -> d == db) !schema_ready_dbs) then begin
     Sqlite.transaction db (fun () ->
         Sqlite.exec db ~sql:sync_meta_sql ~bind:[||];
         Sqlite.exec db ~sql:client_ops_sql ~bind:[||];
@@ -68,8 +62,7 @@ let ensure_schema (db : Sqlite.db) =
         Sqlite.exec db ~sql:pending_index_sql ~bind:[||];
         Sqlite.exec db ~sql:asset_index_sql ~bind:[||];
         Sqlite.exec db ~sql:sync_conflicts_index_sql ~bind:[||]);
-    if in_mem then schema_ready_mem := db :: !schema_ready_mem
-    else Hashtbl.replace schema_ready f ()
+    schema_ready_dbs := db :: !schema_ready_dbs
   end
 
 (* run! / rows / row helpers over the sync Sqlite surface *)
