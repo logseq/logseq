@@ -353,6 +353,8 @@
   []
   [code-editor-theme
    (highlightSpecialChars)
+   ;; Keep the editable content out of the tab order; TAB is bound globally.
+   (.of (.-contentAttributes EditorView) #js {:tabindex "-1"})
    (history)
    (drawSelection)
    (dropCursor)
