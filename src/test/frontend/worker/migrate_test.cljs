@@ -419,6 +419,7 @@
                    :block/title "External URL"
                    :logseq.property/type :string
                    :logseq.property/public? true
+                   :db/cardinality :db.cardinality/one
                    :db/index true}
                   {:block/uuid block-uuid
                    :block/title "asset"

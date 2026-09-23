@@ -118,6 +118,8 @@
       (when-not already-url-ref?
         (concat
          [{:db/id property-id
+           :db/ident :logseq.property.asset/external-url
+           :db/cardinality :db.cardinality/one
            :logseq.property/type :url
            :db/valueType :db.type/ref
            :db/index true}]
