@@ -2269,10 +2269,12 @@
                                       value)}))))
 
 (hsx/defc new-record-button
-  [table view-entity]
+  [table view-entity display-type]
   (let [asset? (and (:logseq.property/built-in? view-entity)
                     (= (:block/name view-entity) "asset"))
-        label (if asset? (t :node/new) (t :view.table/add-row))]
+        label (if (or asset? (not= :logseq.property.view/type.table display-type))
+                (t :node/new)
+                (t :view.table/add-row))]
     (shui/button
      {:variant "ghost"
       :class "ls-table-add-row !px-2 text-muted-foreground hover:text-foreground"
@@ -3765,7 +3767,6 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       {:title (t :property.built-in/view-type)}
        (ui/tooltip
         (pv/property-value (view-with-display-type view-entity display-type)
                            (built-in-property :logseq.property.view/type)
@@ -3777,7 +3778,7 @@
       (more-actions view-entity columns table option)
 
       (when (toolbar-add-object? view-entity add-new-object!)
-        (new-record-button table view-entity))]]))
+        (new-record-button table view-entity display-type))]]))
 
 (defn- group-item-content
   [view-entity table' group group-by-property value option view-opts
