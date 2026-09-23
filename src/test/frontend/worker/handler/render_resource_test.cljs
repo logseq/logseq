@@ -1784,7 +1784,7 @@
             :row reference-block}
            {:key [:view-data unlinked-view
                   {:feature-type :unlinked-references :sorting sorting}]
-            :watch #{}
+            :watch #{[:entity unlinked-view]}
             :row view-row}
            {:key [:view-data query-view
                   {:feature-type :query-result
