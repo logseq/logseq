@@ -2074,12 +2074,19 @@ let resolve_default_property_value invoke_config repo entity text =
                       let ident_hit =
                         match Edn_util.get_string value_entity "db/ident" with
                         | Some ident -> (
-                            match String.rindex_opt ident '.' with
-                            | Some dot ->
-                                matches
-                                  (String.sub ident (dot + 1)
-                                     (String.length ident - dot - 1))
-                            | None -> matches ident)
+                            (* Closed-value idents come in both
+                               `ns.prop/value` and `ns.prop.value` shapes —
+                               match on the tail after the last separator. *)
+                            let cut =
+                              List.filter_map (String.rindex_opt ident)
+                                [ '.'; '/' ]
+                              |> List.fold_left max (-1)
+                            in
+                            if cut < 0 then matches ident
+                            else
+                              matches
+                                (String.sub ident (cut + 1)
+                                   (String.length ident - cut - 1)))
                         | None -> false
                       in
                       if title_hit || ident_hit then Some id else None)
