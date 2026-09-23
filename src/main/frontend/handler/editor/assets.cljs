@@ -136,12 +136,21 @@
                                           :edit-block edit-block})))
       (when (seq blocks)
         (p/do!
-         (ui-outliner-tx/transact!
-          {:outliner-op :insert-blocks}
-          (outliner-op/insert-blocks! blocks target {:keep-uuid? true
-                                                     :bottom? true
-                                                     :sibling? (boolean (and edit-block (= edit-block target)))
-                                                     :replace-empty-target? insert-to-current-block-page?}))
+         (let [external-urls (into {}
+                                   (keep (fn [block]
+                                           (when-let [url (:logseq.property.asset/external-url block)]
+                                             [(:block/uuid block) url]))
+                                         blocks))
+               insert-blocks (mapv #(dissoc % :logseq.property.asset/external-url) blocks)]
+           (ui-outliner-tx/transact!
+            {:outliner-op :insert-blocks}
+            (outliner-op/insert-blocks! insert-blocks target {:keep-uuid? true
+                                                              :bottom? true
+                                                              :sibling? (boolean (and edit-block (= edit-block target)))
+                                                              :replace-empty-target? insert-to-current-block-page?})
+            (doseq [[block-uuid url] external-urls]
+              (when-not (string/blank? url)
+                (outliner-op/set-block-property! block-uuid :logseq.property.asset/external-url url)))))
          (p/let [results (db-async/<get-blocks repo (map :block/uuid blocks) {:children? false})
                  blocks (editor/unwrap-block-results results)]
            (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]

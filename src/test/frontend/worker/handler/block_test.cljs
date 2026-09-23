@@ -1064,6 +1064,13 @@
                    :block/title "Cover"
                    :logseq.property/type :asset
                    :block/tags :logseq.class/Property}
+                  {:db/id -5
+                   :block/uuid #uuid "20000000-0000-0000-0000-000000000005"
+                   :block/tx-id 10
+                   :block/title "https://example.com/poster.webp"
+                   :block/page -3
+                   :block/parent -3
+                   :logseq.property/created-from-property :logseq.property.asset/external-url}
                   {:db/id -3
                    :block/uuid cover-uuid
                    :block/tx-id 10
@@ -1072,7 +1079,7 @@
                    :logseq.property.asset/type "webp"
                    :logseq.property.asset/width 800
                    :logseq.property.asset/height 1200
-                   :logseq.property.asset/external-url "https://example.com/poster.webp"}
+                   :logseq.property.asset/external-url -5}
                   {:db/id -4
                    :block/uuid row-uuid
                    :block/tx-id 10

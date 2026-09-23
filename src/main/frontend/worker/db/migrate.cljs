@@ -11,6 +11,7 @@
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -105,6 +106,37 @@
     (or (nil? extends)
         (and (coll? extends) (empty? extends)))))
 
+(defn- convert-external-url-to-url-type
+  "Existing graphs stored External URL as a :string. :url is a ref type, so
+   convert leftover string datoms to property-value entities and mark the
+   property as :url."
+  [db]
+  (when-let [property (d/entity db :logseq.property.asset/external-url)]
+    (let [property-id (:db/id property)
+          already-url-ref? (and (= :url (:logseq.property/type property))
+                                (= :db.type/ref (:db/valueType property)))
+          datoms (d/datoms db :avet :logseq.property.asset/external-url)]
+      (when-not already-url-ref?
+        (concat
+         [{:db/id property-id
+           :logseq.property/type :url
+           :db/valueType :db.type/ref}]
+         (mapcat
+          (fn [datom]
+            (let [value (:v datom)
+                  eid (:e datom)]
+              (when (string? value)
+                (let [value-block (db-property-build/build-property-value-block
+                                   (d/entity db eid)
+                                   {:db/id property-id
+                                    :db/ident :logseq.property.asset/external-url
+                                    :logseq.property/type :url}
+                                   value)]
+                  [[:db/retract eid :logseq.property.asset/external-url value]
+                   value-block
+                   [:db/add eid :logseq.property.asset/external-url [:block/uuid (:block/uuid value-block)]]]))))
+          datoms))))))
+
 (defn- repair-comment-classes-and-targets
   [db]
   (let [root-id (:db/id (d/entity db :logseq.class/Root))]
@@ -162,7 +194,8 @@
                           :logseq.property.view/gallery-display-properties
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
-                          :logseq.property.view/gallery-card-height]}]])
+                          :logseq.property.view/gallery-card-height]}]
+   ["65.34" {:fix convert-external-url-to-url-type}]]))
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

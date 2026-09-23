@@ -8,6 +8,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.property :as db-property]
             [medley.core :as medley]
             [promesa.core :as p]))
 
@@ -333,7 +334,7 @@
   [repo asset-block file-ready? progress]
   (let [asset-uuid (:block/uuid asset-block)
         asset-type (:logseq.property.asset/type asset-block)
-        external-url (:logseq.property.asset/external-url asset-block)
+        external-url (db-property/asset-external-url asset-block)
         remote-metadata (:logseq.property.asset/remote-metadata asset-block)
         progress-entry (get progress (str asset-uuid))]
     (and (seq repo)

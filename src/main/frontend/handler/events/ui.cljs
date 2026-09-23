@@ -46,6 +46,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.property :as db-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [logseq.shui.dialog.core :as shui-dialog]))
@@ -53,7 +54,7 @@
 (defn- <asset-file-ready?
   [asset file-name]
   (if (or config/publishing?
-          (seq (:logseq.property.asset/external-url asset)))
+          (seq (db-property/asset-external-url asset)))
     (p/resolved true)
     (fs/file-exists?
      (config/get-repo-dir (state/get-current-repo))
@@ -439,7 +440,7 @@
           file-name (str (:block/uuid asset) "." asset-type-str)
           ;; Prefer external-url so plugin-sandboxed assets resolve to their
           ;; real on-disk path; mirrors the asset-cp render-side fix.
-          rel-path (or (:logseq.property.asset/external-url asset)
+          rel-path (or (db-property/asset-external-url asset)
                        (path/path-join (str "../" common-config/local-assets-dir) file-name))]
       (cond
         image?

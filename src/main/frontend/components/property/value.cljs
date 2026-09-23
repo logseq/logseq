@@ -47,7 +47,9 @@
 (defonce string-value-on-click
   {:logseq.property.asset/external-url
    (fn [block property]
-     (when-not (string/starts-with? (get block (:db/ident property)) "zotero://")
+     (when-not (string/starts-with? (str (db-property/scalar-property-value
+                                          (get block (:db/ident property))))
+                                    "zotero://")
        (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
 (def ^:private editor-navigation-trigger-class "jtrigger")

@@ -75,6 +75,25 @@
     (is (= true (get-in props [property :schema :hide?])))
     (is (db-property/logseq-property? property))))
 
+(deftest url-built-in-properties
+  (testing "External URL and Published URL are :url so values hyperlink"
+    (is (= :url (get-in db-property/built-in-properties
+                        [:logseq.property.asset/external-url :schema :type])))
+    (is (= :url (get-in db-property/built-in-properties
+                        [:logseq.property.publish/published-url :schema :type])))
+    (is (true? (get-in db-property/built-in-properties
+                       [:logseq.property.asset/external-url :schema :public?])))
+    (is (true? (get-in db-property/built-in-properties
+                       [:logseq.property.publish/published-url :schema :public?]))))
+
+  (testing "asset-external-url unwraps leftover strings and url entities"
+    (is (= "https://example.com" (db-property/asset-external-url
+                                  {:logseq.property.asset/external-url "https://example.com"})))
+    (is (= "https://example.com" (db-property/asset-external-url
+                                  {:logseq.property.asset/external-url
+                                   {:block/title "https://example.com"}})))
+    (is (nil? (db-property/asset-external-url {})))))
+
 (deftest assignee-built-in-property
   (let [property (get db-property/built-in-properties :logseq.property/assignee)]
     (testing "schema"

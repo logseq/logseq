@@ -17,6 +17,7 @@
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
+   [logseq.db.frontend.property :as db-property]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [medley.core :as medley]
@@ -288,7 +289,7 @@
                      (shui/dialog-close!))]
      (if asset-block
        [:div.pb-2.-mt-2
-        (let [url (:logseq.property.asset/external-url asset-block)
+        (let [url (db-property/asset-external-url asset-block)
               title (:block/title asset-block)]
           (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))]
 
