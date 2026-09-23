@@ -1,7 +1,5 @@
 (ns frontend.components.lazy-editor
   (:require [clojure.string :as string]
-            [frontend.config :as config]
-            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
@@ -37,16 +35,8 @@
                       _ (when-not (fn? editor)
                           (throw (ex-info "Code editor module did not register its component"
                                           {})))
-                      _ (p/all
-                         (when-let [enhancers
-                                    (and config/lsp-enabled?
-                                         (seq (hook-extensions-enhancers-by-key
-                                               :codemirror)))]
-                           (mapv (fn [{f :enhancer}]
-                                   (when (fn? f)
-                                     (f (. js/window -CodeMirror))))
-                                 enhancers)))]
-                (reset! loaded? true))]
+                      _ (reset! loaded? true)]
+                true)]
           (reset! *load-promise result)
           result))))
 

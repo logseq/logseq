@@ -1,5 +1,9 @@
 .extensions__code {
-  @apply relative z-0 flex flex-row flex-nowrap justify-between;
+  @apply relative z-0;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 
   &-lang {
     @apply p-1 text-sm;
@@ -7,15 +11,17 @@
     word-break: keep-all;
     position: absolute;
     width: fit-content;
+
     /* height:2rem; */
     order: 3;
     left: auto;
     right: 0;
+
     /* margin-top: 4px; */
     z-index: 9999;
     padding: 4px 6px;
     line-height: 1em;
-    opacity: .8;
+    opacity: 0.8;
 
     &:hover {
       cursor: pointer;
@@ -39,53 +45,276 @@
   }
 }
 
-.cp__fenced-code-block[data-lang="calc"],
+.ui-fenced-code-editor {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cp__fenced-code-block {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.logseq-code-editor {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  position: relative;
+  --logseq-code-token-keyword: #7f00a8;
+  --logseq-code-token-control-keyword: #af00db;
+  --logseq-code-token-definition-keyword: var(--logseq-code-token-keyword);
+  --logseq-code-token-module-keyword: var(--logseq-code-token-control-keyword);
+  --logseq-code-token-operator-keyword: var(--logseq-code-token-keyword);
+  --logseq-code-token-modifier: var(--logseq-code-token-keyword);
+  --logseq-code-token-self: #005a9e;
+  --logseq-code-token-atom: #007878;
+  --logseq-code-token-bool: #0000ff;
+  --logseq-code-token-null: #0000ff;
+  --logseq-code-token-unit: #098658;
+  --logseq-code-token-literal: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-number: #098658;
+  --logseq-code-token-string: #a31515;
+  --logseq-code-token-doc-string: #a31515;
+  --logseq-code-token-character: #a31515;
+  --logseq-code-token-attribute-value: #a31515;
+  --logseq-code-token-regexp: #811f3f;
+  --logseq-code-token-escape: #ee0000;
+  --logseq-code-token-color: #007878;
+  --logseq-code-token-url: #0451a5;
+  --logseq-code-token-comment: #008000;
+  --logseq-code-token-doc-comment: #008000;
+  --logseq-code-token-name: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-variable: var(--ls-primary-text-color, #24292f);
+  --logseq-code-token-definition: #795e26;
+  --logseq-code-token-function: #795e26;
+  --logseq-code-token-constant: #007878;
+  --logseq-code-token-standard: #0451a5;
+  --logseq-code-token-local: var(--logseq-code-token-variable);
+  --logseq-code-token-special-variable: #0451a5;
+  --logseq-code-token-property: #0451a5;
+  --logseq-code-token-attribute: #ff0000;
+  --logseq-code-token-type: #267f99;
+  --logseq-code-token-tag: #800000;
+  --logseq-code-token-class: #267f99;
+  --logseq-code-token-label: #795e26;
+  --logseq-code-token-namespace: #267f99;
+  --logseq-code-token-macro: #795e26;
+  --logseq-code-token-operator: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-definition-operator: #7f00a8;
+  --logseq-code-token-type-operator: #267f99;
+  --logseq-code-token-control-operator: #af00db;
+  --logseq-code-token-punctuation: color-mix(in srgb, var(--ls-primary-text-color, #000000) 72%, transparent);
+  --logseq-code-token-separator: var(--logseq-code-token-punctuation);
+  --logseq-code-token-bracket: color-mix(in srgb, var(--ls-primary-text-color, #000000) 78%, transparent);
+  --logseq-code-token-content: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-heading: #7f00a8;
+  --logseq-code-token-content-separator: #800000;
+  --logseq-code-token-list: #007878;
+  --logseq-code-token-quote: #008000;
+  --logseq-code-token-emphasis: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-strong: var(--ls-primary-text-color, #000000);
+  --logseq-code-token-link: #0451a5;
+  --logseq-code-token-monospace: #a31515;
+  --logseq-code-token-strikethrough: #666666;
+  --logseq-code-token-inserted: #008000;
+  --logseq-code-token-deleted: #a31515;
+  --logseq-code-token-changed: #795e26;
+  --logseq-code-token-meta: #800000;
+  --logseq-code-token-document-meta: #800000;
+  --logseq-code-token-annotation: #800000;
+  --logseq-code-token-processing-instruction: #800000;
+  --logseq-code-token-special-string: #811f3f;
+  --logseq-code-token-invalid: #cd3131;
+  --logseq-code-scrollbar-space: 0px;
+  --logseq-code-editor-line-padding-right: calc(8.5rem + var(--logseq-code-scrollbar-space));
+
+  .cm-editor {
+    height: auto;
+    max-height: 560px !important;
+    max-height: min(60vh, 560px) !important;
+    min-height: 2rem;
+    width: 100%;
+    position: relative;
+    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+    border-radius: 4px;
+    line-height: 1.45em;
+    background: var(--ls-secondary-background-color);
+    overflow: hidden;
+  }
+
+  .cm-scroller {
+    font-family: inherit;
+    max-height: inherit;
+    overflow: auto;
+    scrollbar-gutter: auto;
+    scrollbar-color: color-mix(in srgb, var(--ls-link-text-color) 76%, var(--ls-primary-text-color))
+      color-mix(in srgb, var(--ls-link-text-color) 18%, transparent);
+    scrollbar-width: thin;
+  }
+
+  .cm-scroller::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .cm-scroller::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--ls-link-text-color) 18%, transparent);
+  }
+
+  .cm-scroller::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .cm-scroller::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--ls-link-text-color) 76%, var(--ls-primary-text-color));
+    border-radius: 999px;
+  }
+
+  .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--ls-link-text-color) 88%, var(--ls-primary-text-color));
+  }
+
+  &.logseq-code-editor-has-vertical-scroll .cm-scroller {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+
+  .cm-content {
+    min-width: max-content;
+  }
+
+  .cm-line {
+    padding-right: var(--logseq-code-editor-line-padding-right);
+  }
+
+  .cm-activeLine,
+  .cm-activeLineGutter {
+    background: transparent !important;
+  }
+
+  .cm-focused {
+    outline: none;
+  }
+
+}
+
+html[data-theme='dark'] .logseq-code-editor,
+.dark-theme .logseq-code-editor {
+  --logseq-code-token-keyword: #c586c0;
+  --logseq-code-token-control-keyword: #c586c0;
+  --logseq-code-token-definition-keyword: var(--logseq-code-token-keyword);
+  --logseq-code-token-module-keyword: #d7ba7d;
+  --logseq-code-token-operator-keyword: var(--logseq-code-token-keyword);
+  --logseq-code-token-modifier: var(--logseq-code-token-keyword);
+  --logseq-code-token-self: #9cdcfe;
+  --logseq-code-token-atom: #4ec9b0;
+  --logseq-code-token-bool: #569cd6;
+  --logseq-code-token-null: #569cd6;
+  --logseq-code-token-unit: #b5cea8;
+  --logseq-code-token-literal: var(--ls-primary-text-color);
+  --logseq-code-token-number: #b5cea8;
+  --logseq-code-token-string: #ce9178;
+  --logseq-code-token-doc-string: #ce9178;
+  --logseq-code-token-character: #ce9178;
+  --logseq-code-token-attribute-value: #ce9178;
+  --logseq-code-token-regexp: #d16969;
+  --logseq-code-token-escape: #d7ba7d;
+  --logseq-code-token-color: #4ec9b0;
+  --logseq-code-token-url: #4fc1ff;
+  --logseq-code-token-comment: #6a9955;
+  --logseq-code-token-doc-comment: #6a9955;
+  --logseq-code-token-name: var(--ls-primary-text-color);
+  --logseq-code-token-variable: var(--ls-primary-text-color);
+  --logseq-code-token-definition: #dcdcaa;
+  --logseq-code-token-function: #dcdcaa;
+  --logseq-code-token-constant: #4ec9b0;
+  --logseq-code-token-standard: #9cdcfe;
+  --logseq-code-token-local: var(--logseq-code-token-variable);
+  --logseq-code-token-special-variable: #9cdcfe;
+  --logseq-code-token-property: #9cdcfe;
+  --logseq-code-token-attribute: #9cdcfe;
+  --logseq-code-token-type: #4ec9b0;
+  --logseq-code-token-tag: #569cd6;
+  --logseq-code-token-class: #4ec9b0;
+  --logseq-code-token-label: #dcdcaa;
+  --logseq-code-token-namespace: #4ec9b0;
+  --logseq-code-token-macro: #dcdcaa;
+  --logseq-code-token-operator: var(--ls-primary-text-color);
+  --logseq-code-token-definition-operator: #c586c0;
+  --logseq-code-token-type-operator: #4ec9b0;
+  --logseq-code-token-control-operator: #c586c0;
+  --logseq-code-token-punctuation: color-mix(in srgb, var(--ls-primary-text-color) 78%, transparent);
+  --logseq-code-token-separator: var(--logseq-code-token-punctuation);
+  --logseq-code-token-bracket: color-mix(in srgb, var(--ls-primary-text-color) 84%, transparent);
+  --logseq-code-token-content: var(--ls-primary-text-color);
+  --logseq-code-token-heading: #c586c0;
+  --logseq-code-token-content-separator: #d7ba7d;
+  --logseq-code-token-list: #4ec9b0;
+  --logseq-code-token-quote: #6a9955;
+  --logseq-code-token-emphasis: var(--ls-primary-text-color);
+  --logseq-code-token-strong: var(--ls-primary-text-color);
+  --logseq-code-token-link: #4fc1ff;
+  --logseq-code-token-monospace: #ce9178;
+  --logseq-code-token-strikethrough: #808080;
+  --logseq-code-token-inserted: #b5cea8;
+  --logseq-code-token-deleted: #ce9178;
+  --logseq-code-token-changed: #d7ba7d;
+  --logseq-code-token-meta: #d7ba7d;
+  --logseq-code-token-document-meta: #d7ba7d;
+  --logseq-code-token-annotation: #d7ba7d;
+  --logseq-code-token-processing-instruction: #d7ba7d;
+  --logseq-code-token-special-string: #d16969;
+  --logseq-code-token-invalid: #f44747;
+}
+
+.extensions__code .code-editor {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .extensions__code[data-lang="calc"] {
-  .CodeMirror,
-  .CodeMirror-scroll {
+  display: block;
+  width: 100%;
+
+  .code-editor {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+    column-gap: 0.5rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .logseq-code-editor .cm-editor,
+  .logseq-code-editor .cm-scroller {
     max-height: none;
   }
 
-  .CodeMirror {
-    overflow: visible;
+  .logseq-code-editor .cm-scroller {
+    overflow: hidden;
   }
 
-  .CodeMirror-scroll {
-    overflow: visible !important;
-    margin-right: 0;
-    margin-bottom: 0;
-    padding-bottom: 0;
+  .extensions__code-calc {
+    justify-self: end;
+    width: var(--logseq-code-calc-result-width, max-content);
+    max-width: 32ch;
+    overflow: hidden;
+    padding: 6px 0 0 !important;
+    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+    line-height: 1.45em;
+    text-align: right;
   }
 
-  .CodeMirror-vscrollbar,
-  .CodeMirror-hscrollbar {
-    display: none !important;
+  .extensions__code-calc-output-line {
+    height: 1.45em;
+    line-height: 1.45em;
+    overflow: hidden;
+    text-overflow: clip;
   }
-}
-
-.CodeMirror {
-  height: auto;
-  max-height: 1024px;
-  width: 100%;
-  font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-  border-radius: 2px;
-  line-height: 1.45em;
-
-  &:not(.CodeMirror-focused) {
-    .CodeMirror-activeline-background {
-      background: unset !important;
-    }
-  }
-
-  pre.CodeMirror-line {
-    box-shadow: none !important;
-  }
-
-  .CodeMirror-hscrollbar {
-    cursor: pointer;
-  }
-}
-
-.cm-s-solarized.CodeMirror {
-    box-shadow: none;
 }

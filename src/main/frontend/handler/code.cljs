@@ -2,13 +2,13 @@
   "Codemirror editor related."
   (:require [clojure.string :as string]
             [frontend.db.async :as db-async]
+            [frontend.extensions.code :as code-editor]
             [frontend.fs :as fs]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [logseq.common.path :as path]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
@@ -34,6 +34,16 @@
             (fs/write-file! path content))
           (js/console.error "Saving relative file ignored" path content))))))
 
+(defn fenced-code-content
+  [content {:keys [start_pos end_pos]} value]
+  (let [offset 2
+        raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
+        prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
+        surfix (utf8/decode (.slice raw-content (- end_pos offset)))]
+    (if (string/blank? value)
+      (str prefix surfix)
+      (str prefix value "\n" surfix))))
+
 (defn- block-content
   [block]
   (or (:block/raw-title block)
@@ -45,16 +55,12 @@
   (let [{:keys [config state editor]} (get (state/get-state) :editor/code-block-context)]
     (when editor
       (state/set-block-component-editing-mode! false)
-      (.save editor)
-      (let [^js textarea (.getTextArea ^js editor)
-            ^js ds (.-dataset textarea)
-            value (gobj/get textarea "value")
-            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))
+      (let [value (code-editor/get-value editor)
+            default-value (code-editor/default-value editor)
             repo (state/get-current-repo)
             block (or (:code-block config) (:block config))]
         (when (not= value default-value)
-          ;; update default value for the editor initial state
-          (set! ds -v value)
+          (code-editor/set-default-value! editor value)
           (cond
             (= :code (:logseq.property.node/display-type block))
             (editor-handler/save-block-if-changed! block value)
@@ -63,14 +69,9 @@
             (:block/uuid config)
             (p/let [block (db-async/<get-block repo (:block/uuid config) {:children? false})]
               (let [content (block-content block)
-                    {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
-                    offset 2
-                    raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
-                    prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
-                    surfix (utf8/decode (.slice raw-content (- end_pos offset)))
-                    new-content (if (string/blank? value)
-                                  (str prefix surfix)
-                                  (str prefix value "\n" surfix))]
+                    new-content (fenced-code-content content
+                                                     (:pos_meta @(:code-options state))
+                                                     value)]
                 (state/set-edit-content! (state/get-edit-input-id) new-content)
                 (editor-handler/save-block-if-changed! block new-content)))
 
