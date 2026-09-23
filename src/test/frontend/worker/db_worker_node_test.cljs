@@ -680,7 +680,8 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-create-empty-start")
                repo (str "logseq_db_create_empty_start_" (subs (str (random-uuid)) 0 8))
                invoke-calls (atom [])]
-           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved false))}})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
@@ -707,7 +708,8 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-default-start")
                repo (str "logseq_db_default_start_" (subs (str (random-uuid)) 0 8))
                invoke-calls (atom [])]
-           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved true))}})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
@@ -727,12 +729,39 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest db-worker-node-start-daemon-defers-open-for-new-graph
+  "A graph without a db file is opened by the first create-or-open-db call,
+   whose opts decide how it is initialized (e.g. debug-transit import datoms)."
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-defer-open")
+               repo (str "logseq_db_defer_open_" (subs (str (random-uuid)) 0 8))
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved false))}})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [method args-transit]
+                                                                         (swap! invoke-calls conj
+                                                                                [method
+                                                                                 (ldb/read-transit-str args-transit)])
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :log-level "error"})
+                         _ (is (= [["thread-api/init" []]]
+                                  @invoke-calls))
+                         _ (stop!)]
+                   true))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest db-worker-node-stop-closes-bound-repo
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-stop-close-db")
                repo (str "logseq_db_stop_close_" (subs (str (random-uuid)) 0 8))
                invoke-calls (atom [])]
-           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved true))}})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
@@ -758,7 +787,8 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
                repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
                server-list-file (server-list/path data-dir)]
-           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved true))}})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [_method _args-transit]
                                                                          (p/resolved (ldb/write-transit-str nil)))})]
@@ -1532,6 +1562,7 @@
           ctx (lifecycle/context storage repo)]
       (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir :repo repo})
                   _ (reset! daemon {:stop! stop!})
+                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                   binary (invoke host port "thread-api/export-db-binary" [repo])
                   _ (invoke host port "thread-api/import-db-binary" [repo binary])
                   _ (invoke host port "thread-api/backup-db-sqlite" [repo (node-path/join data-dir "backup.sqlite")])
@@ -1560,6 +1591,7 @@
           original lifecycle/assertOwnership]
       (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir :repo repo})
                   _ (reset! daemon {:stop! stop!})
+                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                   binary (invoke host port "thread-api/export-db-binary" [repo])]
             (set! lifecycle/assertOwnership
                   (fn [_] (throw (ex-info "Graph ownership transaction was lost" {:code :repo-locked}))))
@@ -1636,6 +1668,7 @@
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:root-dir data-dir :repo repo})
                        _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        ;; Build a deterministic block to use as target and fetch Journal tag db/id
                        journal (invoke host port "thread-api/pull"
                                        [repo [:db/id] [:db/ident :logseq.class/Journal]])
@@ -1712,6 +1745,8 @@
                repo (str "logseq_db_no_startup_maintenance_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{first-host :host first-port :port first-stop! :stop!}
                        (start-daemon! {:root-dir data-dir :repo repo})
+                       _ (invoke first-host first-port
+                                 "thread-api/create-or-open-db" [repo {}])
                        _ (invoke first-host first-port
                                  "thread-api/transact"
                                  [repo
