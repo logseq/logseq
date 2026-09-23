@@ -230,12 +230,13 @@ let build_new_property ~(db_ident : string) ~(prop_schema : Block_map.t)
 let build_closed_values ?(property_attributes : Block_map.t option = None)
     ?(properties : Block_map.t option = None) (db_ident : string) (prop_name : string)
     (property : Block_map.t) : Block_map.t list =
+  (* cljs (or (:schema property) (db-property/get-property-schema property)) *)
   let property_schema =
     match Block_map.attr_value property "schema" with
     | Some (Map kvs) ->
       List.filter_map (fun (k, v) ->
           match k with Keyword a | String a -> Some (a, v) | _ -> None) kvs
-    | _ -> []
+    | _ -> Db_property.get_property_schema property
   in
   let property_tx =
     let m =
