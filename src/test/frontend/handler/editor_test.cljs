@@ -2399,6 +2399,49 @@
       (finally
         (state/set-editor-action! prev-action)))))
 
+(deftest set-editing-clears-slash-commands-when-switching-blocks-test
+  ;; Click-to-edit goes through set-editing! on pointerdown, not editor-on-hide.
+  (let [block-a {:block/uuid (random-uuid) :block/title "/"}
+        block-b {:block/uuid (random-uuid) :block/title "other"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / in the current block opens slash commands")
+      (state/set-editing! (str "edit-block-" (:block/uuid block-b))
+                          (:block/title block-b)
+                          block-b
+                          ""
+                          {:container-id :test-container})
+      (is (nil? (state/get-editor-action))
+          "Slash commands close when entering edit on a different block")
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / after the switch still opens slash commands")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
+(deftest set-editing-keeps-slash-commands-when-re-editing-same-block-test
+  (let [block {:block/uuid (random-uuid) :block/title "/"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block)
+      (state/set-editor-action! :commands)
+      (state/set-editing! (str "edit-block-" (:block/uuid block))
+                          (:block/title block)
+                          block
+                          "/"
+                          {:container-id :test-container})
+      (is (= :commands (state/get-editor-action))
+          "Same-block re-edit keeps slash commands open")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
                    :value ">"}
