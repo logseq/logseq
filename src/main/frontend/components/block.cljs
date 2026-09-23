@@ -746,6 +746,14 @@
     6 12
     14))
 
+(defn- block-control-icon-size
+  "Tag/node icons in the block control share heading chrome size.
+   Non-heading blocks keep the existing collapsed/expanded sizes."
+  [block config collapsed?]
+  (if-let [heading (block-heading-level block (:level config))]
+    (heading-icon-size heading)
+    (if collapsed? 12 14)))
+
 (defn <open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
@@ -2402,16 +2410,19 @@
                                                             :ignore-children? page-title?
                                                             :page-title? collapsable-page-title?}))
         link? (boolean (:original-block config))
-        icon-size (if collapsed? 12 14)
+        heading (block-heading-level block (:level config))
+        icon-size (block-control-icon-size block config collapsed?)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (block-control-with-icon? block config icon link?)
         movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
-     {:data-has-children (boolean has-children?)
-      :class (util/classnames [{:is-order-list order-list?
-                                :is-with-icon with-icon?
-                                :bullet-closed collapsed?
-                                :bullet-hidden (:hide-bullet? config)}])}
+     (cond-> {:data-has-children (boolean has-children?)
+              :class (util/classnames [{:is-order-list order-list?
+                                        :is-with-icon with-icon?
+                                        :bullet-closed collapsed?
+                                        :bullet-hidden (:hide-bullet? config)}])}
+       heading (assoc :data-heading heading
+                      :style {"--ls-block-icon-size" (str icon-size "px")}))
      (when (and (not page-title?) editing-user)
        (editing-user-avatar editing-user))
      (when (and (or (not fold-button-right?) collapsable? collapsed?)
