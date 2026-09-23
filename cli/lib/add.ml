@@ -582,10 +582,20 @@ let resolve_add_target config (action : action) =
     bind
       (pull_entity config action.repo
          (vector_vec
-            (Vec.of_array [| kw "db/id"; kw "block/uuid"; kw "block/title" |]))
+            (Vec.of_array
+               [|
+                 kw "db/id";
+                 kw "block/uuid";
+                 kw "block/title";
+                 kw "logseq.property/deleted-at";
+               |]))
          lookup)
       (fun block ->
         match uuid_of_entity block with
+        | Some _ when recycled_entity block ->
+            pure
+              (Error
+                 (Error.make Error.Recycled_page "target block is recycled"))
         | Some uuid -> pure (Ok (Edn_util.uuid uuid, Vec.empty))
         | None ->
             pure
