@@ -28,19 +28,32 @@ let row_text row i =
   | _ -> None
 
 let store db addr_payloads =
-  List.iter
-    (fun (addr, payload) ->
-       let content = Storage_codec.encode payload in
-       let addresses =
-         match payload with
-         | Storage_node (Persistent_sorted_set.Branch (_, children)) ->
-             Sqlite.Text (Storage_codec.encode_addresses children)
-         | _ -> Sqlite.Null
+  (* cljs upsert-addr-content! wraps the batch in a single sqlite
+     transaction — one fsync for all rows. One multi-row insert keeps
+     it to a single prepare/step as well; a per-row exec pays a fresh
+     statement each time and a full store (~50+ rows at tail
+     compaction) stalls the commit by hundreds of ms. *)
+  let rows =
+    List.map
+      (fun (addr, payload) ->
+         let content = Storage_codec.encode payload in
+         let addresses =
+           match payload with
+           | Storage_node (Persistent_sorted_set.Branch (_, children)) ->
+               Sqlite.Text (Storage_codec.encode_addresses children)
+           | _ -> Sqlite.Null
+         in
+         [| Sqlite.Integer (Int64.of_string addr); Sqlite.Text content; addresses |])
+      addr_payloads
+  in
+  (match rows with
+   | [] -> ()
+   | _ ->
+       let sql =
+         "insert or replace into kvs (addr, content, addresses) values "
+         ^ String.concat "," (List.map (fun _ -> "(?, ?, ?)") rows)
        in
-       Sqlite.exec db
-         ~sql:"insert or replace into kvs (addr, content, addresses) values (?, ?, ?)"
-         ~bind:[| Sqlite.Integer (Int64.of_string addr); Sqlite.Text content; addresses |])
-    addr_payloads
+       Sqlite.exec db ~sql ~bind:(Array.concat rows))
 
 let restore db addr =
   let rows =

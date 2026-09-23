@@ -2,11 +2,11 @@
 
 type lock = Js.Json.t
 
-external locks_obj : unit -> Js.Json.t option = "locks"
-  [@@mel.scope "navigator"] [@@mel.return { undefined_to_opt }]
+external locks_obj : Js.Json.t Js.Undefined.t = "locks"
+  [@@mel.scope "navigator"]
 
 let locks () =
-  match locks_obj () with
+  match Js.Undefined.toOption locks_obj with
   | Some l -> l
   | None -> invalid_arg "navigator.locks unavailable"
 

@@ -715,8 +715,11 @@ let get_bidirectional_properties db (target_id : entity_id)
         [] class_entities
     in
     let created_at (e : entity) =
+      (* int64-range instants read back as Instant on JS, where int
+         only holds 32 bits. *)
       match value e "block/created-at" with
-      | Some (Int n) -> Some n
+      | Some (Int n) -> Some (Int64.of_int n)
+      | Some (Instant ms) -> Some ms
       | _ -> None
     in
     let cmp_created_at a b =
@@ -724,7 +727,7 @@ let get_bidirectional_properties db (target_id : entity_id)
       | None, None -> 0
       | None, Some _ -> -1
       | Some _, None -> 1
-      | Some x, Some y -> compare x y
+      | Some x, Some y -> Int64.compare x y
     in
     List.filter_map
       (fun (cid, ents) ->

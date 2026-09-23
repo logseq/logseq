@@ -569,7 +569,13 @@ let wire_of_index_item (it : Search_index.index_item) : Wire.t =
 
 (* ---- handlers ---- *)
 
+let normalize_repo_args args =
+  match args with
+  | Wire.Nil :: rest -> Wire.String "" :: rest
+  | _ -> args
+
 let search_blocks_handler args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: Wire.String q :: option_rest ->
       let opts = match option_rest with t :: _ -> decode_search_opts t | [] -> Search_index.default_opts in
@@ -577,6 +583,7 @@ let search_blocks_handler args : Wire.t E.t =
   | _ -> invalid_arg "search-blocks expects (repo q option)"
 
 let search_upsert_blocks args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: blocks_w :: _ -> (
       match get_search_db repo with
@@ -589,6 +596,7 @@ let search_upsert_blocks args : Wire.t E.t =
   | _ -> invalid_arg "search-upsert-blocks expects (repo blocks)"
 
 let search_delete_blocks args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: ids_w :: _ -> (
       match get_search_db repo with
@@ -601,6 +609,7 @@ let search_delete_blocks args : Wire.t E.t =
   | _ -> invalid_arg "search-delete-blocks expects (repo ids)"
 
 let search_truncate_tables args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: _ -> (
       match get_search_db repo with
@@ -612,6 +621,7 @@ let search_truncate_tables args : Wire.t E.t =
   | _ -> invalid_arg "search-truncate-tables expects (repo)"
 
 let search_build_blocks_indice args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: _ -> (
       match Worker_state.datascript_conn repo with
@@ -628,6 +638,7 @@ let search_build_blocks_indice args : Wire.t E.t =
   | _ -> invalid_arg "search-build-blocks-indice expects (repo)"
 
 let search_build_blocks_indice_in_worker args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: rest -> (
       let force =
@@ -690,6 +701,7 @@ let search_build_pages_indice _args : Wire.t E.t = E.pure Wire.nil
    conn; when absent (and not publishing) opens the search db file directly,
    truncates and closes. *)
 let invalidate_search_db args : Wire.t E.t =
+  let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: _ -> (
       match Worker_state.sqlite_conn_of repo Worker_state.Search with
@@ -717,30 +729,35 @@ let invalidate_search_db args : Wire.t E.t =
    for tx-meta :from-disk? and the importer flags. *)
 
 let search_listener repo (r : tx_report) : unit =
-  let meta k =
-    match List.assoc_opt k r.tx_meta with
-    | Some (Bool b) -> b
-    | _ -> false
-  in
-  if meta "from-disk?"
-     || meta "logseq.graph-parser.exporter/imported-data?"
-     || meta "logseq.db.sqlite.export/imported-data?"
-  then ()
-  else
-    let include_vector_title =
-      Option.is_some (Worker_state.vector_index repo)
-    in
-    match Search_index.sync_search_indice ~include_vector_title r with
-    | None -> ()
-    | Some { Search_index.blocks_to_remove; blocks_to_add } ->
-        ignore
-          (search_delete_blocks
-             [ Wire.String repo
-             ; Wire.Array (List.map (fun s -> Wire.String s) blocks_to_remove) ]);
-        ignore
-          (search_upsert_blocks
-             [ Wire.String repo
-             ; Wire.Array (List.map wire_of_index_item blocks_to_add) ])
+  (* cljs wraps the whole handler in p/do! — async so it does not block the
+     commit's broadcast to the main thread. *)
+  Db_worker_effect.async (fun () ->
+      let meta k =
+        match List.assoc_opt k r.tx_meta with
+        | Some (Bool b) -> b
+        | _ -> false
+      in
+      if meta "from-disk?"
+         || meta "logseq.graph-parser.exporter/imported-data?"
+         || meta "logseq.db.sqlite.export/imported-data?"
+      then Db_worker_effect.pure ()
+      else
+        let include_vector_title =
+          Option.is_some (Worker_state.vector_index repo)
+        in
+        match Search_index.sync_search_indice ~include_vector_title r with
+        | None -> Db_worker_effect.pure ()
+        | Some { Search_index.blocks_to_remove; blocks_to_add } ->
+            Db_worker_effect.bind
+              (search_delete_blocks
+                 [ Wire.String repo
+                 ; Wire.Array (List.map (fun s -> Wire.String s) blocks_to_remove) ])
+              (fun _ ->
+                Db_worker_effect.map
+                  (fun _ -> ())
+                  (search_upsert_blocks
+                     [ Wire.String repo
+                     ; Wire.Array (List.map wire_of_index_item blocks_to_add) ])))
 
 (* ---- init wiring ---- *)
 

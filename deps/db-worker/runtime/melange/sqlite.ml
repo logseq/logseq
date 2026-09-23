@@ -67,10 +67,16 @@ module Opfs = struct
     [@@mel.send]
 
   (* pool-level storage ops — absent on the node fake pool, hence
-     undefined-able getters. *)
-  external pause_vfs : pool -> (unit -> unit) Js.Undefined.t = "pauseVfs" [@@mel.get]
-  external unpause_vfs : pool -> (unit -> unit) Js.Undefined.t = "unpauseVfs" [@@mel.get]
-  external get_capacity : pool -> (unit -> int) Js.Undefined.t = "getCapacity" [@@mel.get]
+     undefined-able getters. The getters only test presence: calling
+     the extracted function would drop `this` (OpfsSAHPoolUtil methods
+     read this.#e), so invocation goes through the _send bindings. *)
+  external has_pause_vfs : pool -> (unit -> unit) Js.Undefined.t = "pauseVfs" [@@mel.get]
+  external has_unpause_vfs : pool -> (unit -> unit) Js.Undefined.t = "unpauseVfs" [@@mel.get]
+  external has_get_capacity : pool -> (unit -> int) Js.Undefined.t = "getCapacity" [@@mel.get]
+
+  external pause_vfs : pool -> pool = "pauseVfs" [@@mel.send]
+  external unpause_vfs : pool -> pool Js.Promise.t = "unpauseVfs" [@@mel.send]
+  external get_capacity : pool -> int = "getCapacity" [@@mel.send]
   external remove_vfs : pool -> unit Js.Promise.t = "removeVfs" [@@mel.send]
 end
 
@@ -151,6 +157,11 @@ let is_node () =
 (* --- OPFS pool lifecycle --- *)
 
 let pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 8
+
+(* cljs unsafe-unlink-db captures the pool object before close-db!
+   drops it from the registry; drop_pool stashes it here so a later
+   remove_vfs can still call pool.removeVfs(). *)
+let dropped_pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 4
 let sqlite3_ref : Opfs.sqlite3 option ref = ref None
 
 external promise_error_message : Js.Promise.error -> string option = "message"
@@ -223,21 +234,42 @@ let open_db ~path =
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error "sqlite-wasm module not initialized")
 
+(* cljs <open-dbs: unpauseVfs when the pool's capacity hit 0 (post
+   release-access-handles). The promise is awaited before any db open
+   proceeds — racing OpfsSAHPoolDb against acquireAccessHandles throws
+   NoModificationAllowedError. *)
+let unpause_when_empty pool =
+  match
+    Js.Undefined.toOption (Opfs.has_get_capacity pool),
+    Js.Undefined.toOption (Opfs.has_unpause_vfs pool)
+  with
+  | Some _, Some _ when Opfs.get_capacity pool = 0 ->
+      Db_worker_effect.map
+        (fun _ -> ())
+        (task_of_promise (Opfs.unpause_vfs pool))
+  | _ -> Db_worker_effect.pure ()
+
 let prepare_pool ~name =
-  if is_node () || Hashtbl.mem pools name then Db_worker_effect.pure ()
+  if is_node () then Db_worker_effect.pure ()
   else
-    Db_worker_effect.bind (ensure_sqlite3 ()) (fun sqlite3 ->
-        Db_worker_effect.bind
-          (task_of_promise
-             (Opfs.install_pool sqlite3
-                [%obj
-                  { name
-                  ; initialCapacity = 20
-                  ; directory = "." ^ name
-                  }]))
-          (fun pool ->
-            Hashtbl.replace pools name pool;
-            Db_worker_effect.pure ()))
+    match Hashtbl.find_opt pools name with
+    | Some pool ->
+        Hashtbl.remove dropped_pools name;
+        unpause_when_empty pool
+    | None ->
+        Db_worker_effect.bind (ensure_sqlite3 ()) (fun sqlite3 ->
+            Db_worker_effect.bind
+              (task_of_promise
+                 (Opfs.install_pool sqlite3
+                    [%obj
+                      { name
+                      ; initialCapacity = 20
+                      ; directory = "." ^ name
+                      }]))
+              (fun pool ->
+                Hashtbl.remove dropped_pools name;
+                Hashtbl.replace pools name pool;
+                unpause_when_empty pool))
 
 (* Browser worker dbs live inside the per-graph pool under the cljs
    repo-path "/db.sqlite"; node paths pass through unchanged. *)
@@ -246,14 +278,6 @@ let open_db_pool ~name ~path =
   else
     match Hashtbl.find_opt pools name with
     | Some pool ->
-        (* cljs <open-dbs: unpauseVfs when the pool's capacity hit 0
-           (post release-access-handles). *)
-        (match
-           Js.Undefined.toOption (Opfs.get_capacity pool),
-           Js.Undefined.toOption (Opfs.unpause_vfs pool)
-         with
-         | Some capacity, Some unpause -> if capacity () = 0 then unpause ()
-         | _ -> ());
         (try
            { handle =
                Opfs_db
@@ -541,34 +565,46 @@ let remove_vfs ~repo =
              entries)
         |> Db_worker_effect.map (fun _ -> ()))
   else
-    match pool_for repo with
+    let name = Graph_dir.pool_name repo in
+    match Hashtbl.find_opt pools name with
     | Some pool ->
-        Hashtbl.remove pools (Graph_dir.pool_name repo);
+        Hashtbl.remove pools name;
         task_of_promise (Opfs.remove_vfs pool)
-    | None -> Db_worker_effect.pure ()
+    | None ->
+        (match Hashtbl.find_opt dropped_pools name with
+         | Some pool ->
+             Hashtbl.remove dropped_pools name;
+             task_of_promise (Opfs.remove_vfs pool)
+         | None -> Db_worker_effect.pure ())
 
 let pause_vfs ~repo =
   match pool_for repo with
   | Some pool ->
-      (match Js.Undefined.toOption (Opfs.pause_vfs pool) with
-       | Some f -> f ()
+      (match Js.Undefined.toOption (Opfs.has_pause_vfs pool) with
+       | Some _ -> ignore (Opfs.pause_vfs pool)
        | None -> ())
   | None -> ()
 
 let unpause_vfs ~repo =
   match pool_for repo with
   | Some pool ->
-      (match Js.Undefined.toOption (Opfs.unpause_vfs pool) with
-       | Some f -> f ()
+      (match Js.Undefined.toOption (Opfs.has_unpause_vfs pool) with
+       | Some _ -> ignore (Opfs.unpause_vfs pool)
        | None -> ())
   | None -> ()
 
 let pool_capacity ~repo =
   match pool_for repo with
   | Some pool ->
-      (match Js.Undefined.toOption (Opfs.get_capacity pool) with
-       | Some f -> f ()
+      (match Js.Undefined.toOption (Opfs.has_get_capacity pool) with
+       | Some _ -> Opfs.get_capacity pool
        | None -> 0)
   | None -> 0
 
-let drop_pool ~repo = Hashtbl.remove pools (Graph_dir.pool_name repo)
+let drop_pool ~repo =
+  let name = Graph_dir.pool_name repo in
+  match Hashtbl.find_opt pools name with
+  | Some pool ->
+      Hashtbl.remove pools name;
+      Hashtbl.replace dropped_pools name pool
+  | None -> ()

@@ -12,6 +12,7 @@ let with_conn args f =
   let repo =
     match arg args 0 with
     | Some (Wire.String s) -> s
+    | Some Wire.Nil | None -> ""
     | _ -> invalid_arg "first arg must be repo name"
   in
   match Worker_state.datascript_conn repo with
@@ -440,6 +441,7 @@ let () =
           match Worker_state.datascript_conn
                   (match arg args 0 with
                    | Some (Wire.String s) -> s
+                   | Some Wire.Nil | None -> ""
                    | _ -> invalid_arg "repo")
           with
           | Some conn ->
@@ -455,6 +457,7 @@ let () =
           match Worker_state.datascript_conn
                   (match arg args 0 with
                    | Some (Wire.String s) -> s
+                   | Some Wire.Nil | None -> ""
                    | _ -> invalid_arg "repo")
           with
           | Some conn ->
@@ -473,6 +476,7 @@ let () =
           match Worker_state.datascript_conn
                   (match arg args 0 with
                    | Some (Wire.String s) -> s
+                   | Some Wire.Nil | None -> ""
                    | _ -> invalid_arg "repo")
           with
           | Some conn ->

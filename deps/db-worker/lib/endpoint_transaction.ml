@@ -8,6 +8,7 @@ let kw s = Wire.Keyword s
 let require_repo (args : Wire.t list) : string =
   match args with
   | Wire.String repo :: _ -> repo
+  | Wire.Nil :: _ | [] -> ""
   | _ -> invalid_arg "transact/apply-outliner-ops: missing repo arg"
 
 let missing_connection repo =
@@ -88,7 +89,14 @@ let transact args : Wire.t Db_worker_effect.t =
     else tx_data
   in
   (match context with
-   | Some w when w <> Wire.Nil -> Worker_state.set_context w
+   | Some w when w <> Wire.Nil ->
+       Worker_state.set_context w;
+       (* cljs e2e builds compile OUTLINER-PERF-LOGGING in; the runtime
+          signal for the same e2e/dev app build here is the :dev? flag
+          in the transact context (DEV-RELEASE). *)
+       (match Cljs_map.get w "dev?" with
+        | Some (Wire.Bool true) -> Sync_state.outliner_perf_logging := true
+        | _ -> ())
    | _ -> ());
   let tx_meta' = Cljs_map.dissoc tx_meta_w "insert-blocks?" in
   let skip =
@@ -159,6 +167,8 @@ let notification_data (exn : exn) : Wire.t option =
       | _ -> Some w)
   | _ -> None
 
+let perf_time_ms () = Int64.to_float (Date_time_util.time_ms ())
+
 (* :thread-api/apply-outliner-ops [repo ops opts] *)
 let apply_outliner_ops args : Wire.t Db_worker_effect.t =
   let repo = require_repo args in
@@ -167,6 +177,19 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
     match List.nth_opt args 1 with
     | Some w -> w
     | None -> Wire.Array []
+  in
+  let op_list =
+    match ops with Wire.Array xs | Wire.List xs -> xs | _ -> []
+  in
+  (* cljs (mapv first ops) *)
+  let op_names =
+    Wire.Array
+      (List.map
+         (fun e ->
+           match e with
+           | Wire.Array (x :: _) | Wire.List (x :: _) -> x
+           | _ -> Wire.Nil)
+         op_list)
   in
   let opts =
     match List.nth_opt args 2 with
@@ -177,9 +200,17 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
      (* must run before apply-ops! so undo records pre-op editor state *)
      Undo_redo.set_pending_editor_info repo
        (Cljs_map.get opts "pending-editor-info");
-     let perf_id =
+     let started_at = perf_time_ms () in
+     (* cljs perf-id is (random-uuid) — arrives as a uuid, not a string *)
+     let perf_id_w =
        match Cljs_map.get opts "ui/perf-id" with
-       | Some (Wire.String s) -> Some s
+       | Some (Wire.String _ as s) -> Some s
+       | Some (Wire.Uuid _ as u) -> Some u
+       | _ -> None
+     in
+     let perf_id =
+       match perf_id_w with
+       | Some (Wire.String s) | Some (Wire.Uuid s) -> Some s
        | _ -> None
      in
      let editor_row_uuids =
@@ -192,9 +223,12 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
          [ "affected-block-uuids"; "editor-row-uuids"; "pending-editor-info"
          ; "return-updated-blocks?" ]
      in
+     let apply_started_at = perf_time_ms () in
      let operation_result = Outliner_op.apply_ops conn ops operation_opts in
+     let applied_at = perf_time_ms () in
      let delta = Db_listener.take_outliner_op_delta perf_id in
-     let _listener_perf = Db_listener.take_outliner_op_perf perf_id in
+     let listener_perf = Db_listener.take_outliner_op_perf perf_id in
+     let listener_at = perf_time_ms () in
      let editor_rows =
        if editor_row_uuids = [] then Wire.Nil
        else
@@ -232,6 +266,29 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
          @ [ (kw "editor-row-uuids", Wire.Array editor_row_uuids)
            ; (kw "editor-rows", editor_rows) ]
        else m
+     in
+     let plain_at = perf_time_ms () in
+     (* cljs perf-data + log-outliner-op-perf! — the console line the
+        e2e suite counts per outliner op. *)
+     let perf_data =
+       [ ("apply-ms", Wire.Float (applied_at -. apply_started_at))
+       ; ("listener-ms", Wire.Float (listener_at -. applied_at))
+       ; ("plain-ms", Wire.Float (plain_at -. listener_at))
+       ; ("total-ms", Wire.Float (plain_at -. started_at))
+       ; ("listener", Wire.Array listener_perf) ]
+     in
+     Db_listener.log_tx_outliner_op_perf
+       (Wire.Map
+          ((List.filter (fun (k, _) -> k <> "listener") perf_data
+            |> List.map (fun (k, v) -> (kw k, v)))
+           @ [ kw "perf-id"
+             , (match perf_id_w with Some w -> w | None -> Wire.Nil)
+             ; kw "op-names", op_names
+             ; kw "op-count", Wire.Int (List.length op_list) ]));
+     let response =
+       if !Sync_state.dev_or_test then
+         response @ [ (kw "perf", Wire.Map (List.map (fun (k, v) -> (kw k, v)) perf_data)) ]
+       else response
      in
      Db_worker_effect.pure (Wire.Map response)
    with e ->

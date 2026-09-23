@@ -389,9 +389,11 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
       let opts_map =
         match opts with Wire.Map _ -> opts | _ -> Cljs_map.empty_map
       in
-      ignore
-        (Outliner_core.save_block_conn conn (block_map_of_wire block)
-           (save_opts_of opts_map) (block_map_of_wire opts_map));
+      (try
+         ignore
+           (Outliner_core.save_block_conn conn (block_map_of_wire block)
+              (save_opts_of opts_map) (block_map_of_wire opts_map))
+       with (Outliner_validate.Notification _ as e) -> raise e);
       None
   | "insert-blocks", [ blocks; target_block_id; opts ] ->
       let result_ref = ref None in
@@ -602,6 +604,10 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
                    ~today_journal:(opt_bool opts "today-journal?")
                    ~split_namespace:(Option.value (Option.bind (Cljs_map.get opts "split-namespace?") bool_of_wire) ~default:false)
                    ~persist_op:(Option.value (Option.bind (Cljs_map.get opts "persist-op?") bool_of_wire) ~default:true)
+                   ?class_ident_namespace:
+                     (Option.bind
+                        (Cljs_map.get opts "class-ident-namespace")
+                        kw_value)
                    ())
                ()
            in

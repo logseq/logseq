@@ -676,31 +676,31 @@ let render_block_comment_summary db key _runtime =
     fail "Renderer resource entity is not a comment thread"
       [ (kw "thread-uuid", Wire.Uuid thread_uuid) ];
   let comments = direct_child_entities db thread_uuid in
-  List.iter
-    (fun (c : entity) ->
-      match Ldb.value c "block/created-at" with
-      | Some (Int _) | None -> ()
-      | Some v ->
-          fail "Invalid comment creation time"
-            [ ( kw "comment-uuid"
-              , Option.value
-                  (Option.map (fun u -> Wire.Uuid u)
-                     (match Ldb.value c "block/uuid" with
-                      | Some (Uuid u) -> Some u
-                      | _ -> None))
-                  ~default:Wire.Nil )
-            ; (kw "created-at", Ds_wire.transit_of_value v) ])
-    comments;
+  (* created-at is an int64-range instant; on JS it reads back as
+     Instant because int only holds 32 bits. *)
+  let created_at_ms (e : entity) : int64 option =
+    match Ldb.value e "block/created-at" with
+    | Some (Int n) -> Some (Int64.of_int n)
+    | Some (Instant ms) -> Some ms
+    | None -> None
+    | Some v ->
+        fail "Invalid comment creation time"
+          [ ( kw "comment-uuid"
+            , Option.value
+                (Option.map (fun u -> Wire.Uuid u)
+                   (match Ldb.value e "block/uuid" with
+                    | Some (Uuid u) -> Some u
+                    | _ -> None))
+                ~default:Wire.Nil )
+          ; (kw "created-at", Ds_wire.transit_of_value v) ]
+  in
+  List.iter (fun c -> ignore (created_at_ms c)) comments;
   let sorted =
     List.sort
       (fun (a : entity) (b : entity) ->
-        compare
-          (match Ldb.value a "block/created-at" with
-           | Some (Int n) -> n
-           | _ -> 0)
-          (match Ldb.value b "block/created-at" with
-           | Some (Int n) -> n
-           | _ -> 0))
+        Int64.compare
+          (Option.value (created_at_ms a) ~default:Int64.zero)
+          (Option.value (created_at_ms b) ~default:Int64.zero))
       comments
   in
   let latest = match List.rev sorted with l :: _ -> Some l | [] -> None in
@@ -1798,14 +1798,26 @@ let query_result_rows db (rows : query_result list list)
     else rows
   in
   (* apply-result-transform — wire hook; rows encoded as arrays of cells
-     with entities tagged datascript/Entity. *)
+     with entities tagged datascript/Entity. cljs hands the transform the
+     flat cell list for block results, tuples otherwise. *)
+  let entity_attr eid attr =
+    match Ldb.ent_of_id db eid with
+    | Some e -> (match Ldb.value e attr with Some v -> v | None -> Nil)
+    | None -> Nil
+  in
+  let is_block_result = block_query_result db rows' in
   let rows_wire =
     match get "result-transform-edn" with
     | Some (Wire.String edn) when Unicode.trim edn <> "" ->
         let encoded =
-          List.map (fun row -> Wire.Array (List.map wire_cell_of_query_result row)) rows'
+          if is_block_result then
+            List.map
+              (fun row -> wire_cell_of_query_result (List.hd row))
+              rows'
+          else
+            List.map (fun row -> Wire.Array (List.map wire_cell_of_query_result row)) rows'
         in
-        let out = Render_deps.apply_result_transform edn encoded in
+        let out = Render_deps.apply_result_transform ~entity_attr edn encoded in
         (match out with
          | Wire.Array rs | Wire.List rs | Wire.Set rs -> rs
          | _ -> fail "Query result transform must return rows" [ (kw "result", out) ])
@@ -2773,6 +2785,7 @@ let get_render_snapshots args =
   let repo =
     match List.nth_opt args 0 with
     | Some (Wire.String r) -> r
+    | Some Wire.Nil | None -> ""
     | _ -> invalid_arg "first arg must be repo name"
   in
   let request = Option.value (List.nth_opt args 1) ~default:Wire.Nil in

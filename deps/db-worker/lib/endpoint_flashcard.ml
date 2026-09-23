@@ -8,6 +8,7 @@ let with_conn args f =
   let repo =
     match arg args 0 with
     | Some (Wire.String s) -> s
+    | Some Wire.Nil | None -> ""
     | _ -> invalid_arg "first arg must be repo name"
   in
   match Worker_state.datascript_conn repo with
@@ -43,10 +44,18 @@ let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
   let card_ids =
     card_tag_id :: Db_class.get_structured_children db card_tag_id
   in
+  (* cljs wraps a non-coll first element: query-star becomes [query-star] —
+     a single clause's elements must be wrapped into one clause form. *)
   let extra_edn =
     match parsed with
     | Some { Db_query_dsl.pquery = Some clauses; _ } ->
-        " " ^ String.concat " " (List.map Ds_wire.edn_of_query_form clauses)
+        let clause_forms =
+          match clauses with
+          | first :: _ when Db_query_dsl.is_coll first -> clauses
+          | _ -> [ QueryFormList clauses ]
+        in
+        " "
+        ^ String.concat " " (List.map Ds_wire.edn_of_query_form clause_forms)
     | _ -> ""
   in
   let q =
