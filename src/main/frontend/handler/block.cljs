@@ -86,6 +86,7 @@
       (when save-code-editor?
         (state/pub-event! [:editor/save-code-editor]))
       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+        (state/pub-event! [:editor/save-current-block])
         (state/clear-edit! {:clear-editing-block? false}))
       (let [content (or custom-content (:block/title block) "")
             content-length (count content)
