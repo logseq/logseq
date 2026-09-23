@@ -90,8 +90,10 @@
        @*last-request
        (when-let [repo (state/get-current-repo)]
          (util/stop e)
-         (state/clear-editor-action!)
-         (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
-         (p/let [result @*last-request]
-           (restore-cursor-and-state! result)))))))
+         (p/do!
+          (editor/save-current-block!)
+          (state/clear-editor-action!)
+          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
+          (p/let [result @*last-request]
+            (restore-cursor-and-state! result))))))))
 (defonce redo! (debounce redo-aux! 20))
