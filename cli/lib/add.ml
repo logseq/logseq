@@ -516,13 +516,6 @@ let tag_name_matches name entity =
   | _, Some name when matches name -> true
   | _ -> false
 
-let find_tag_by_name config repo name =
-  let open Cli_effect in
-  bind (list_tags config repo) (fun value ->
-      match Edn_util.as_seq value with
-      | Some tags -> pure (Vec.find_opt (tag_name_matches name) tags)
-      | None -> pure None)
-
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
@@ -693,20 +686,24 @@ let tag_entity value =
         tags
   | None -> false
 
-let resolve_tag_entity invoke_config repo tag =
+let resolve_tag_entity invoke_config repo tag_list tag =
   let open Cli_effect in
   let tag_not_found =
     Error.make Error.Tag_not_found "tag not found"
   in
   match tag with
-  | Selector.Tag_name name ->
-      bind (find_tag_by_name invoke_config repo name) (function
-        | Some entity when Option.is_some (id_of_entity entity) ->
-            pure (Ok (Entity.of_value entity))
-        | _ ->
-            pure
-              (Error
-                 (Error.make Error.Tag_not_found ("tag not found: " ^ name))))
+  | Selector.Tag_name name -> (
+      match
+        Option.bind
+          (Option.bind tag_list Edn_util.as_seq)
+          (fun entities -> Vec.find_opt (tag_name_matches name) entities)
+      with
+      | Some entity when Option.is_some (id_of_entity entity) ->
+          pure (Ok (Entity.of_value entity))
+      | _ ->
+          pure
+            (Error
+               (Error.make Error.Tag_not_found ("tag not found: " ^ name))))
   | _ ->
       bind
         (pull_entity invoke_config repo tag_selector (lookup_of_tag tag))
@@ -717,17 +714,37 @@ let resolve_tag_entity invoke_config repo tag =
               pure (Ok (Entity.of_value entity))
           | _ -> pure (Error tag_not_found))
 
+(* Concurrent per-element resolution: every effect is constructed eagerly
+   so its HTTP request is in flight immediately, then the results fold in
+   input order so the first error still wins deterministically. *)
+let all_results tasks =
+  let open Cli_effect in
+  map
+    (fun results ->
+      Vec.fold_left
+        (fun acc result ->
+          match (acc, result) with
+          | Error _, _ -> acc
+          | Ok _, Error err -> Error err
+          | Ok acc, Ok value -> Ok (Vec.push_back acc value))
+        (Ok Vec.empty) results)
+    (all tasks)
+
 let resolve_tag_entities invoke_config repo tags =
   let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (tag, rest) ->
-        bind (resolve_tag_entity invoke_config repo tag) (function
-          | Error err -> pure (Error err)
-          | Ok entity -> loop (Vec.push_back acc entity) rest)
+  (* Fetch the tag table once for the whole command instead of once per
+     Tag_name selector. *)
+  let has_tag_name =
+    Vec.exists
+      (fun tag -> match tag with Selector.Tag_name _ -> true | _ -> false)
+      tags
   in
-  loop Vec.empty tags
+  bind
+    (if has_tag_name then map Option.some (list_tags invoke_config repo)
+     else pure None)
+    (fun tag_list ->
+      all_results
+        (Vec.map (resolve_tag_entity invoke_config repo tag_list) tags))
 
 let resolve_tags config repo tags =
   if Vec.is_empty tags then Cli_effect.pure (Ok Vec.empty)
@@ -777,17 +794,8 @@ let resolve_property_assignment invoke_config repo assignment =
                (Error.make Error.Property_not_found "property not found")))
 
 let resolve_property_assignments invoke_config repo assignments =
-  let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (assignment, rest) ->
-        bind (resolve_property_assignment invoke_config repo assignment)
-          (function
-          | Error err -> pure (Error err)
-          | Ok assignment -> loop (Vec.push_back acc assignment) rest)
-  in
-  loop Vec.empty assignments
+  all_results
+    (Vec.map (resolve_property_assignment invoke_config repo) assignments)
 
 let resolve_properties config repo properties =
   if Vec.is_empty properties then Cli_effect.pure (Ok Vec.empty)
@@ -911,7 +919,7 @@ let metadata_ops block_uuids status tags properties =
 (* Mldoc.get_references on a block title returns the AST-level references:
    [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
    code blocks or verbatim markup. *)
-let title_references title =
+let title_references ~block_refs title =
   let strip_alias name =
     match String.index_opt name '|' with
     | Some index -> String.trim (String.sub name 0 index)
@@ -942,6 +950,29 @@ let title_references title =
             | Some parts when Array.length parts >= 2 -> (
                 match Js.Json.decodeString parts.(0) with
                 | Some "Plain" -> Js.Json.decodeString parts.(1)
+                (* `#[[Tag Name]]` — multi-word tags arrive as a Link node
+                   carrying a Page_ref url. *)
+                | Some "Link" -> (
+                    match Js.Json.decodeObject parts.(1) with
+                    | Some link -> (
+                        match
+                          Option.bind
+                            (Js.Dict.get link "url")
+                            Js.Json.decodeArray
+                        with
+                        | Some url_parts
+                          when Array.length url_parts >= 2 -> (
+                            match
+                              ( Js.Json.decodeString url_parts.(0),
+                                Js.Json.decodeString url_parts.(1) )
+                            with
+                            | Some "Page_ref", Some name -> (
+                                match strip_alias name with
+                                | "" -> None
+                                | name -> Some name)
+                            | _ -> None)
+                        | _ -> None)
+                    | None -> None)
                 | _ -> None)
             | _ -> Js.Json.decodeString node)
           nodes
@@ -978,11 +1009,20 @@ let title_references title =
                           | Some "Page_ref", Some name -> (
                               match strip_alias name with
                               | "" -> (refs, tag_names)
+                              (* [[<uuid>]] is not a page name — the old
+                                 extractor filtered it the same way. *)
+                              | name when Cli_primitive.is_uuid_string name ->
+                                  (refs, tag_names)
                               | name ->
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
                           | Some "Block_ref", Some uuid ->
-                              if Cli_primitive.is_uuid_string uuid then
+                              (* ((uuid)) block refs resolve to real links
+                                 only for markdown --blocks; --content keeps
+                                 them as literal text like before. *)
+                              if
+                                block_refs && Cli_primitive.is_uuid_string uuid
+                              then
                                 ( Vec.push_back refs
                                     (vector_vec
                                        (Vec.of_array
@@ -1003,17 +1043,25 @@ let title_references title =
    them while applying the planned ops. Read-only — pulls, never creates. *)
 let missing_page_names invoke_config repo names =
   let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure acc
-    | Some (name, rest) ->
-        bind (pull_pages_by_name invoke_config repo name page_selector)
-          (fun result ->
-            match first_entity result with
-            | Some _ -> loop acc rest
-            | None -> loop (Vec.push_back acc name) rest)
-  in
-  loop Vec.empty names
+  map
+    (fun result ->
+      match result with
+      | Error err -> Error err
+      | Ok presence -> Ok (Vec.filter_map (fun name -> name) presence))
+    (all_results
+       (Vec.map
+          (fun name ->
+            map
+              (fun result ->
+                (* A recycled-only name resolves to an error on the real
+                   path, so the dry-run fails the same way rather than
+                   reporting a clean plan. *)
+                match live_or_all_recycled result with
+                | `Live _ -> Ok None
+                | `All_recycled -> Error (recycled_page_error ())
+                | `Missing -> Ok (Some name))
+              (pull_pages_by_name invoke_config repo name page_selector))
+          names))
 
 let missing_ref_page_names invoke_config repo links =
   let names =
@@ -1053,12 +1101,10 @@ let block_name_lookups_in_ops ops =
    schema requires a uuid there) and the entity id everywhere else. Returns
    the rewritten ops plus the materialized target lookup. *)
 let rewrite_name_lookups ~target ids ops =
-  let find name =
-    Vec.find_map
-      (fun (n, uuid, id) -> if n = name then Some (uuid, id) else None)
-      ids
-  in
-  let rec rewrite ~as_uuid value =
+  let by_name = Hashtbl.create (Vec.length ids) in
+  Vec.iter (fun (n, uuid, id) -> Hashtbl.replace by_name n (uuid, id)) ids;
+  let find name = Hashtbl.find_opt by_name name in
+  let rec rewrite ~as_uuid ~in_blocks value =
     match Edn_util.as_vector value with
     | Some items -> (
         if Vec.length items = 2 then
@@ -1068,24 +1114,30 @@ let rewrite_name_lookups ~target ids ops =
           with
           | Some "block/name", Some name -> (
               match find name with
-              | Some (uuid, _) ->
+              | Some (uuid, id) ->
                   (* insert-blocks payloads may not carry numeric entity
-                     ids (the worker's op forwarding rejects them); every
-                     non-target position takes a [:block/uuid] lookup. *)
+                     ids (the worker's op forwarding rejects them), so refs
+                     there take [:block/uuid] lookups; property values in
+                     batch-set-property / batch-delete-property-value must
+                     carry the resolved entity id itself. *)
                   if as_uuid then
                     Edn_util.uuid uuid
-                  else
+                  else if in_blocks then
                     vector_vec
                       (Vec.of_array
                          [| kw "block/uuid"; Edn_util.uuid uuid |])
+                  else Edn_util.int64 id
               | None -> value)
-          | _ -> Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false) items)
-        else Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false) items))
+          | _ ->
+              Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false ~in_blocks) items)
+        else Edn_util.vector_vec (Vec.map (rewrite ~as_uuid:false ~in_blocks) items))
     | None -> (
         match Edn_util.as_map value with
         | Some fields ->
             Edn_util.map_vec
-              (Vec.map (fun (k, v) -> (k, rewrite ~as_uuid:false v)) fields)
+              (Vec.map
+                 (fun (k, v) -> (k, rewrite ~as_uuid:false ~in_blocks v))
+                 fields)
         | None -> value)
   in
   ( Vec.map
@@ -1104,15 +1156,18 @@ let rewrite_name_lookups ~target ids ops =
                        Edn_util.vector_vec
                          (Vec.of_array
                             [|
-                              rewrite ~as_uuid:false (Vec.nth args 0);
-                              rewrite ~as_uuid:true (Vec.nth args 1);
-                              rewrite ~as_uuid:false (Vec.nth args 2);
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 0);
+                              rewrite ~as_uuid:true ~in_blocks:false
+                                (Vec.nth args 1);
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 2);
                             |]);
                      |])
-            | _ -> rewrite ~as_uuid:false op)
-        | _ -> rewrite ~as_uuid:false op)
+            | _ -> rewrite ~as_uuid:false ~in_blocks:false op)
+        | _ -> rewrite ~as_uuid:false ~in_blocks:false op)
       ops,
-    rewrite ~as_uuid:true target )
+    rewrite ~as_uuid:true ~in_blocks:false target )
 
 (* Best-effort cleanup of pages materialize_name_lookups created when the final
    apply fails. Creation cannot join that transaction (insert-blocks requires a
@@ -1171,14 +1226,14 @@ let rollback_pages invoke_config repo created_uuids =
         | Some items -> pure (Vec.is_empty items)
         | None -> pure false)
   in
-  let rec collect acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure acc
-    | Some (uuid, rest) ->
-        bind (still_orphaned uuid) (fun empty ->
-            collect (if empty then Vec.push_back acc uuid else acc) rest)
-  in
-  bind (collect Vec.empty created_uuids) (fun empty_uuids ->
+  bind
+    (all (Vec.map still_orphaned created_uuids))
+    (fun flags ->
+      let empty_uuids =
+        Vec.filter_map
+          (fun (uuid, empty) -> if empty then Some uuid else None)
+          (Vec.combine created_uuids flags)
+      in
       if Vec.is_empty empty_uuids then pure ()
       else
         let ops =
@@ -1223,86 +1278,89 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
   let names = block_name_lookups_in_ops ops in
   let created = ref Vec.empty in
   let returned_uuid create_result = created_page_uuid create_result in
-  let rec resolve_ids acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (name, rest) -> (
-        let found entity =
-          match (uuid_of_entity entity, id_of_entity entity) with
-          | Some uuid, Some id -> Some (name, uuid, id)
-          | _ -> None
-        in
-        bind
-          (pull_pages_by_name invoke_config repo name page_selector)
-          (fun result ->
-            match live_or_all_recycled result with
-            | `Live entity -> (
-                match found entity with
-                | Some entry -> resolve_ids (Vec.push_back acc entry) rest
-                | None -> pure (Error (page_not_found ())))
-            | `All_recycled -> pure (Error (recycled_page_error ()))
-            | `Missing ->
-                (* A create-page op carries our generated uuid: the worker
-                   returns it only when this call actually created the page —
-                   an existing (or concurrently created) page returns its own
-                   uuid, which must never enter the rollback set. Journal
-                   pages are never tracked: their uuid is derived from the
-                   journal day, so every concurrent creator returns the same
-                   uuid and ownership cannot be proven — a failed run may
-                   leave an empty journal page behind, which is harmless
-                   (the app creates today's journal on demand anyway). *)
-                let our_uuid = generate_uuid () in
-                bind (create_page invoke_config repo name our_uuid)
-                  (fun create_result ->
-                    bind
-                      ((* A name pull misses namespaced pages: split-namespace
-                          gives the leaf its own title. Pull by uuid instead —
-                          the worker's returned uuid when it reports one (it
-                          differs from ours when the page already existed),
-                          else ours. *)
-                         let uuids =
-                           (match returned_uuid create_result with
-                            | Some uuid -> Vec.of_array [| uuid; our_uuid |]
-                            | None -> Vec.singleton our_uuid)
-                           |> unique
-                         in
-                         let rec try_uuid remaining =
-                           match Vec.pop_front remaining with
-                           | None ->
-                               pull_created_page invoke_config repo name create_result
-                           | Some (uuid, rest) ->
-                               bind
-                                 (pull_entity invoke_config repo page_selector
-                                    (vector_vec
-                                       (Vec.of_array
-                                          [| kw "block/uuid"; Edn_util.uuid uuid |])))
-                                 (fun entity ->
-                                   match found entity with
-                                   | Some _ -> pure entity
-                                   | None -> try_uuid rest)
-                         in
-                         try_uuid uuids)
-                      (fun entity ->
-                        if recycled_entity entity then
-                          pure (Error (recycled_page_error ()))
-                        else
-                          match found entity with
-                          | Some entry -> (
-                              (match returned_uuid create_result with
-                              | Some uuid when String.equal uuid our_uuid ->
-                                  created := Vec.push_back !created our_uuid
-                              | _ -> ());
-                              resolve_ids (Vec.push_back acc entry) rest)
-                          | None -> pure (Error (page_not_found ()))))))
+  let resolve_one name =
+    let found entity =
+      match (uuid_of_entity entity, id_of_entity entity) with
+      | Some uuid, Some id -> Some (name, uuid, id)
+      | _ -> None
+    in
+    bind
+      (pull_pages_by_name invoke_config repo name page_selector)
+      (fun result ->
+        match live_or_all_recycled result with
+        | `Live entity -> (
+            match found entity with
+            | Some entry -> pure (Ok entry)
+            | None -> pure (Error (page_not_found ())))
+        | `All_recycled -> pure (Error (recycled_page_error ()))
+        | `Missing ->
+            (* A create-page op carries our generated uuid: the worker
+               returns it only when this call actually created the page —
+               an existing (or concurrently created) page returns its own
+               uuid, which must never enter the rollback set. Journal
+               pages are never tracked: their uuid is derived from the
+               journal day, so every concurrent creator returns the same
+               uuid and ownership cannot be proven — a failed run may
+               leave an empty journal page behind, which is harmless
+               (the app creates today's journal on demand anyway). *)
+            let our_uuid = generate_uuid () in
+            bind (create_page invoke_config repo name our_uuid)
+              (fun create_result ->
+                (* Register ownership as soon as the worker confirms it
+                   returned our uuid — the page exists even if the
+                   follow-up pull below rejects. *)
+                (match returned_uuid create_result with
+                | Some uuid when String.equal uuid our_uuid ->
+                    created := Vec.push_back !created our_uuid
+                | _ -> ());
+                bind
+                  ((* A name pull misses namespaced pages: split-namespace
+                      gives the leaf its own title. Pull by uuid instead —
+                      the worker's returned uuid when it reports one (it
+                      differs from ours when the page already existed),
+                      else ours. *)
+                     let uuids =
+                       (match returned_uuid create_result with
+                        | Some uuid -> Vec.of_array [| uuid; our_uuid |]
+                        | None -> Vec.singleton our_uuid)
+                       |> unique
+                     in
+                     let rec try_uuid remaining =
+                       match Vec.pop_front remaining with
+                       | None ->
+                           pull_created_page invoke_config repo name create_result
+                       | Some (uuid, rest) ->
+                           bind
+                             (pull_entity invoke_config repo page_selector
+                                (vector_vec
+                                   (Vec.of_array
+                                      [| kw "block/uuid"; Edn_util.uuid uuid |])))
+                             (fun entity ->
+                               match found entity with
+                               | Some _ -> pure entity
+                               | None -> try_uuid rest)
+                     in
+                     try_uuid uuids)
+                  (fun entity ->
+                    if recycled_entity entity then
+                      pure (Error (recycled_page_error ()))
+                    else
+                      match found entity with
+                      | Some entry -> pure (Ok entry)
+                      | None -> pure (Error (page_not_found ())))))
   in
   bind
-    (catch (resolve_ids Vec.empty names) (fun exn ->
+    (catch (all_results (Vec.map resolve_one names)) (fun exn ->
+         (* Rollback is best-effort: a rollback rejection must not mask the
+            real resolution/apply error. *)
          bind
-           (rollback_pages invoke_config repo !created)
+           (catch (rollback_pages invoke_config repo !created) (fun _ ->
+                pure ()))
            (fun () -> Cli_effect.error exn))) (function
     | Error err ->
         bind
-          (rollback_pages invoke_config repo !created)
+          (catch (rollback_pages invoke_config repo !created) (fun _ ->
+               pure ()))
           (fun () -> pure (Error err))
     | Ok ids ->
         pure
@@ -1342,7 +1400,8 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                             match (block.Block.uuid, block.title) with
                             | Some uuid, Some title ->
                                 let refs, tag_names =
-                                  title_references title
+                                  title_references
+                                    ~block_refs:action.markdown_blocks title
                                 in
                                 (* #tags resolve to block/tags only for
                                    markdown --blocks input; literal --content
@@ -1414,24 +1473,24 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                           let block_uuids =
                             collect_action_block_uuids action.blocks
                           in
+                          let refs_by_uuid =
+                            Hashtbl.create (Vec.length links)
+                          in
+                          Vec.iter
+                            (fun (u, refs, _) ->
+                              Hashtbl.replace refs_by_uuid u refs)
+                            links;
                           let block_value_for_insert block =
                             let value =
                               Edn_util.any (Block.to_value block)
                             in
                             match block.Block.uuid with
                             | Some uuid -> (
-                                match
-                                  Vec.find_map
-                                    (fun (u, refs, _) ->
-                                      if u = uuid && not (Vec.is_empty refs)
-                                      then Some refs
-                                      else None)
-                                    links
-                                with
-                                | Some refs ->
+                                match Hashtbl.find_opt refs_by_uuid uuid with
+                                | Some refs when not (Vec.is_empty refs) ->
                                     Edn_util.assoc "block/refs"
                                       (Edn_util.vector_vec refs) value
-                                | None -> value)
+                                | _ -> value)
                             | None -> value
                           in
                           let insert_op =
@@ -1461,12 +1520,24 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                           if dry_run then
                             bind
                               (missing_ref_page_names invoke_config action.repo
-                                 links) (fun missing_refs ->
+                                 links) (function
+                              | Error err ->
+                                  pure
+                                    (Cli_result.error
+                                       ~command:Command_id.Upsert_block mode
+                                       err)
+                              | Ok missing_refs ->
                                 bind
                                   (missing_page_names invoke_config
                                      action.repo
                                      (block_name_lookups_in_ops ops))
-                                  (fun missing_lookups ->
+                                  (function
+                                  | Error err ->
+                                      pure
+                                        (Cli_result.error
+                                           ~command:Command_id.Upsert_block
+                                           mode err)
+                                  | Ok missing_lookups ->
                                     let would_create_pages =
                                       Vec.append would_create_pages
                                         (Vec.append missing_refs
@@ -1509,8 +1580,10 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                       action.repo ops)
                                    (fun exn ->
                                      bind
-                                       (rollback_pages invoke_config
-                                          action.repo created_uuids)
+                                       (catch
+                                          (rollback_pages invoke_config
+                                             action.repo created_uuids)
+                                          (fun _ -> pure ()))
                                        (fun () -> Cli_effect.error exn))) (fun _apply_result ->
                                 match Edn_util.as_uuid target_lookup with
                                 | Some target_uuid ->

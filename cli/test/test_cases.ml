@@ -2004,30 +2004,36 @@ let () =
 
   test_promise "upsert block create resolves date property values by page name"
     (fun () ->
-      let step = ref 0 in
+      (* Resolution effects run concurrently, so the mock routes by request
+         content instead of a fixed sequence. *)
+      let seen = Hashtbl.create 5 in
       let property_ident = "user.property/duedate" in
       let server =
         invoke_server (fun body ->
-            incr step;
-            match !step with
-            | 1
+            let mark key = Hashtbl.replace seen key () in
+            match () with
+            | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"duedate" body ->
+                mark "prop";
                 "[[\"^ \
                  \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/duedate\",\"~:logseq.property/type\",\"~:date\"]]"
-            | 2
-              when Js.String.includes ~search:"thread-api/pull" body
+            | _
+              when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"2026-09-23" body ->
-                "[\"^ \
-                 \",\"~:db/id\",99,\"~:block/uuid\",\"33333333-3333-4333-8333-333333333333\"]"
-            | 3
+                mark "date";
+                "[[\"^ \
+                 \",\"~:db/id\",99,\"~:block/uuid\",\"33333333-3333-4333-8333-333333333333\",\"~:block/name\",\"2026-09-23\"]]"
+            | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"home" body ->
+                mark "home";
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
-            | 4
+            | _
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
+                mark "apply";
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing duedate property ident: " ^ body);
                 if not (Js.String.includes ~search:"99" body) then
@@ -2036,11 +2042,11 @@ let () =
                   fail_test
                     ("unresolved journal name leaked into property op: " ^ body);
                 "[]"
-            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
+            | _ when Js.String.includes ~search:"thread-api/pull" body ->
+                mark "pull";
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
-                fail_test
-                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                fail_test ("unexpected request: " ^ body);
                 "")
       in
       with_server server (fun base_url ->
@@ -2062,10 +2068,11 @@ let () =
           in
           ignore
             (expect_cli_exit_zero "upsert block date property" output);
-          if !step = 5 then Js.Promise.resolve pass
+          if Hashtbl.length seen = 5 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+              (Printf.sprintf "expected five invoke requests, got %d"
+                 (Hashtbl.length seen))));
 
   test_promise "upsert block create coerces datetime property values to epoch ms"
     (fun () ->
@@ -2231,6 +2238,212 @@ let () =
           else
             fail_promise
               (Printf.sprintf "expected six invoke requests, got %d" !step)));
+
+  test_promise "upsert block rolls back created pages when apply fails"
+    (fun () ->
+      (* Resolution effects run concurrently, so the mock routes by request
+         content instead of a fixed sequence. *)
+      let seen = Hashtbl.create 6 in
+      let created_uuid = ref "" in
+      let server =
+        invoke_server (fun body ->
+            let mark key = Hashtbl.replace seen key () in
+            match () with
+            | _
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"db/valueType" body ->
+                mark "orphan-query"; "[]"
+            | _
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"missingpage" body ->
+                mark "name-query"; "[]"
+            | _
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body
+                   && Js.String.includes ~search:"create-page" body ->
+                mark "create";
+                let at = Js.String.indexOf ~search:"~u" body in
+                if at < 0 then
+                  fail_test ("create-page missing preallocated uuid: " ^ body);
+                created_uuid :=
+                  Js.String.slice ~start:(at + 2) ~end_:(at + 38) body;
+                "[null,\"~u" ^ !created_uuid ^ "\"]"
+            | _
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body
+                   && Js.String.includes ~search:"delete-page" body ->
+                mark "delete";
+                if not (Js.String.includes ~search:!created_uuid body) then
+                  fail_test ("rollback deleted the wrong page: " ^ body);
+                if
+                  not
+                    (Js.String.includes
+                       ~search:"recycle-delete-permanently" body)
+                then fail_test ("missing recycle-delete-permanently: " ^ body);
+                "[]"
+            | _
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                mark "apply-failed";
+                failwith "worker apply failed"
+            | _ when Js.String.includes ~search:"thread-api/pull" body ->
+                mark "pull";
+                "[\"^ \
+                 \",\"~:db/id\",77,\"~:block/uuid\",\"~u" ^ !created_uuid
+                ^ "\",\"~:block/name\",\"missingpage\"]"
+            | _ ->
+                fail_test ("unexpected request: " ^ body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "MissingPage";
+                "--blocks";
+                "- a";
+              |]
+          in
+          assert_true "upsert block failed apply" (output.code <> 0)
+            (Printf.sprintf
+               "expected non-zero exit, got %d\nstdout:\n%s\nstderr:\n%s"
+               output.code output.stdout output.stderr);
+          let missing key =
+            not (Hashtbl.mem seen key)
+          in
+          if
+            missing "create" || missing "apply-failed" || missing "orphan-query"
+            || missing "delete"
+          then
+            fail_promise
+              (Printf.sprintf
+                 "expected create, apply failure, orphan query, and delete; \
+                  got %d requests\nstderr:\n%s"
+                 (Hashtbl.length seen) output.stderr)
+          else Js.Promise.resolve pass));
+
+  test_promise "upsert block prefers a live page over a recycled twin"
+    (fun () ->
+      let seen = Hashtbl.create 4 in
+      let live_uuid = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa" in
+      let dead_uuid = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb" in
+      let server =
+        invoke_server (fun body ->
+            let mark key = Hashtbl.replace seen key () in
+            match () with
+            | _
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                mark "name-query";
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"~u" ^ live_uuid
+                ^ "\",\"~:block/name\",\"home\"],[\"^ \
+                     \",\"~:db/id\",43,\"~:block/uuid\",\"~u" ^ dead_uuid
+                ^ "\",\"~:block/name\",\"home\",\"~:logseq.property/deleted-at\",1]]"
+            | _
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                mark "apply";
+                if Js.String.includes ~search:"create-page" body then
+                  fail_test ("unexpected create-page for live name: " ^ body);
+                if not (Js.String.includes ~search:live_uuid body) then
+                  fail_test ("insert target is not the live page: " ^ body);
+                if Js.String.includes ~search:dead_uuid body then
+                  fail_test ("recycled page uuid leaked into ops: " ^ body);
+                "[]"
+            | _ when Js.String.includes ~search:"thread-api/pull" body ->
+                mark "pull";
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test ("unexpected request: " ^ body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- note";
+              |]
+          in
+          ignore (expect_cli_exit_zero "upsert block live over recycled" output);
+          if Hashtbl.length seen = 3 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected three invoke requests, got %d"
+                 (Hashtbl.length seen))));
+
+  test_promise "upsert block --content keeps hashtags literal" (fun () ->
+      let seen = Hashtbl.create 4 in
+      let server =
+        invoke_server (fun body ->
+            let mark key = Hashtbl.replace seen key () in
+            match () with
+            | _ when Js.String.includes ~search:"cli-list-tags" body ->
+                fail_test ("unexpected tag resolution for --content: " ^ body);
+                ""
+            | _
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                mark "home";
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | _
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                mark "apply";
+                if not (Js.String.includes ~search:"#RealTag" body) then
+                  fail_test ("literal hashtag dropped from title: " ^ body);
+                if Js.String.includes ~search:"block/tags" body then
+                  fail_test ("--content gained tag metadata: " ^ body);
+                "[]"
+            | _ when Js.String.includes ~search:"thread-api/pull" body ->
+                mark "pull";
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test ("unexpected request: " ^ body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--content";
+                "note #RealTag";
+              |]
+          in
+          ignore (expect_cli_exit_zero "upsert block literal hashtag" output);
+          if Hashtbl.length seen = 3 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected three invoke requests, got %d"
+                 (Hashtbl.length seen))));
 
   test_promise "update block resolves string update property names by title"
     (fun () ->

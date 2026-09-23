@@ -1416,11 +1416,7 @@ let create_page config repo name =
            kw "create-page";
            Edn_util.vector_vec
              (Vec.of_array
-                [|
-                  Edn_util.string name;
-                  Edn_util.map_vec
-                    (Vec.singleton (kw "split-namespace?", Edn_util.bool true));
-                |]);
+                [| Edn_util.string name; Edn_util.map_vec Vec.empty |]);
          |])
   in
   apply_outliner_ops config repo (Vec.singleton op)
@@ -1783,31 +1779,18 @@ let block_name_lookup_ref value =
       | _ -> None)
   | _ -> None
 
-(* A `[:block/name]` property value (date refs coerced from markdown `key::`)
-   resolves to an existing page when possible. A missing page keeps the lookup
-   vec in the planned ops — Add.materialize_name_lookups creates it right
-   before apply, once all read-only validation has succeeded, and --dry-run
-   surfaces it via would-create-pages. *)
-let resolve_block_name_ref invoke_config repo name value =
-  let open Cli_effect in
-  bind
-    (pull_entity_by_lookup invoke_config repo
-       (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-       (vector_vec
-          (Vec.of_array [| kw "block/name"; Edn_util.string name |])))
-    (fun entity ->
-      match id_of_entity entity with
-      | Some id -> pure (Ok (Edn_util.int64 id))
-      | None -> pure (Ok value))
-
+(* A `[:block/name]` property value (date refs coerced from markdown
+   `key::`) keeps its lookup vec in the planned ops —
+   Add.materialize_name_lookups resolves it (creating the page when missing)
+   right before apply, once all read-only validation has succeeded, and
+   --dry-run surfaces it via would-create-pages. *)
 let rec resolve_property_value_refs invoke_config repo value =
   let open Cli_effect in
   match block_uuid_lookup_ref value with
   | Some uuid -> resolve_block_uuid_ref invoke_config repo uuid
   | None -> (
       match block_name_lookup_ref value with
-      | Some name ->
-          resolve_block_name_ref invoke_config repo name value
+      | Some _name -> pure (Ok value)
       | None -> (
           let resolve_values wrap values =
             let rec loop acc remaining =
@@ -1849,22 +1832,21 @@ let rec resolve_property_value_refs invoke_config repo value =
 
 let resolve_property_assignments invoke_config repo assignments =
   let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (assignment, rest) ->
-        bind (resolve_property_ident invoke_config repo assignment.Property.key)
-          (function
-          | Error err -> pure (Error err)
-          | Ok ident ->
-              bind
-                (resolve_property_value_refs invoke_config repo
-                   assignment.value)
-                (function
-                | Error err -> pure (Error err)
-                | Ok value -> loop (Vec.push_back acc (ident, value)) rest))
-  in
-  loop Vec.empty assignments
+  Add.all_results
+    (Vec.map
+       (fun assignment ->
+         bind
+           (resolve_property_ident invoke_config repo assignment.Property.key)
+           (function
+           | Error err -> pure (Error err)
+           | Ok ident ->
+               map
+                 (function
+                   | Error err -> Error err
+                   | Ok value -> Ok (ident, value))
+                 (resolve_property_value_refs invoke_config repo
+                    assignment.value)))
+       assignments)
 
 let option_resolution_error option err =
   {
@@ -2002,29 +1984,25 @@ let coerce_block_property_value ~dry_run entity value =
 let resolve_block_property_assignments ~dry_run invoke_config repo
     assignments =
   let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (assignment, rest) ->
-        bind
-          (resolve_property_entity invoke_config repo assignment.Property.key)
-          (function
-          | Error err -> pure (Error err)
-          | Ok (ident, entity) -> (
-              match
-                coerce_block_property_value ~dry_run entity assignment.value
-              with
-              | Error err -> pure (Error err)
-              | Ok value ->
-                  bind
-                    (resolve_property_value_refs invoke_config repo
-                       value)
-                    (function
-                    | Error err -> pure (Error err)
-                    | Ok value ->
-                        loop (Vec.push_back acc (ident, value)) rest)))
-  in
-  loop Vec.empty assignments
+  Add.all_results
+    (Vec.map
+       (fun assignment ->
+         bind
+           (resolve_property_entity invoke_config repo assignment.Property.key)
+           (function
+           | Error err -> pure (Error err)
+           | Ok (ident, entity) -> (
+               match
+                 coerce_block_property_value ~dry_run entity assignment.value
+               with
+               | Error err -> pure (Error err)
+               | Ok value ->
+                   map
+                     (function
+                       | Error err -> Error err
+                       | Ok value -> Ok (ident, value))
+                     (resolve_property_value_refs invoke_config repo value))))
+       assignments)
 
 let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
   let open Cli_effect in
@@ -2039,36 +2017,25 @@ let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
               { Property.key = Property.Key_ident ident; value })
             resolved_assignments
         in
-        let rec resolve_children acc remaining =
-          match Vec.pop_front remaining with
-          | None -> pure (Ok acc)
-          | Some (child, rest) ->
-              bind
-                (resolve_block_inline_properties ~dry_run invoke_config repo
-                   child)
-                (function
-                | Error err -> pure (Error err)
-                | Ok child ->
-                    resolve_children (Vec.push_back acc child) rest)
-        in
-        bind (resolve_children Vec.empty block.Block.children) (function
-          | Error err -> pure (Error err)
-          | Ok children ->
-              pure (Ok { block with Block.properties = resolved_properties; children })))
-
-let resolve_blocks_inline_properties ~dry_run invoke_config repo blocks =
-  let open Cli_effect in
-  let rec loop acc remaining =
-    match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
-    | Some (block, rest) ->
-        bind (resolve_block_inline_properties ~dry_run invoke_config repo
-                block)
+        bind
+          (Add.all_results
+             (Vec.map
+                (resolve_block_inline_properties ~dry_run invoke_config repo)
+                block.Block.children))
           (function
           | Error err -> pure (Error err)
-          | Ok block -> loop (Vec.push_back acc block) rest)
-  in
-  loop Vec.empty blocks
+          | Ok children ->
+              pure
+                (Ok
+                   { block with
+                     Block.properties = resolved_properties;
+                     children })))
+
+let resolve_blocks_inline_properties ~dry_run invoke_config repo blocks =
+  Add.all_results
+    (Vec.map
+       (resolve_block_inline_properties ~dry_run invoke_config repo)
+       blocks)
 
 let rec strip_block_properties block =
   {
