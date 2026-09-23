@@ -12,7 +12,6 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
             [logseq.outliner.op.construct :as op-construct]))
 
@@ -430,13 +429,12 @@
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [semantic-ops (filter (fn [op] (get op-construct/semantic-outliner-ops (first op))) ops)
+  (let [semantic-ops (atom [])
         single-op-outliner-op (when (= 1 (count ops))
                                 (first (first ops)))
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
                              :local-tx? true
-                             :outliner-ops semantic-ops
                              :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
@@ -446,9 +444,21 @@
                 (assoc ::sqlite-export/imported-data? true))
         *result (atom nil)]
 
-    (outliner-tx/transact!
-     opts'
-     (doseq [op-entry ops]
-       (apply-op! conn opts' *result op-entry)))
+    (ldb/batch-transact-with-temp-conn!
+     conn (dissoc opts' :additional-tx :transact-opts :current-block)
+     (fn [temp-conn _tx-data]
+       (doseq [[op args :as op-entry] ops]
+         (let [result (apply-op! temp-conn opts' *result op-entry)
+               [_ [blocks target-id insert-opts]] (first (get-in result [:tx-meta :outliner-ops]))
+               op-entry (case op
+                          :insert-blocks (when result [:insert-blocks [blocks target-id insert-opts]])
+                          :apply-template (when result [:apply-template [(first args) target-id
+                                                                         (assoc insert-opts :template-blocks blocks)]])
+                          op-entry)]
+           (when (and op-entry (contains? op-construct/semantic-outliner-ops op))
+             (swap! semantic-ops conj op-entry))))
+       (when (seq (:additional-tx opts'))
+         (ldb/transact! temp-conn (:additional-tx opts') {})))
+     :transform-tx-meta #(assoc % :outliner-ops @semantic-ops))
 
     @*result))
