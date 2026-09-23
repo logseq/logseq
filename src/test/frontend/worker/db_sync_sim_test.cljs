@@ -15,7 +15,9 @@
             [frontend.worker.undo-redo :as undo-redo]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -2437,6 +2439,49 @@
         (str "server checksum mismatch seed=" seed
              " server=" server-checksum
              " client-full=" (first full-checksums)))))
+
+(deftest ^:long every-core-outliner-op-uploads-with-and-without-rebase-test
+  (doseq [op (sort (conj required-core-outliner-op-names :undo :redo))
+          rebase? [false true]]
+    (testing (str "upload " op ", rebase=" rebase?)
+      (let [rng (make-rng 1337)
+            gen-uuid #(rng-uuid rng)
+            base-uuid (gen-uuid)
+            remote-uuid (gen-uuid)
+            conn (db-test/create-conn)
+            server (make-server)
+            history (atom [])
+            client {:repo repo-a :conn conn :client (make-client repo-a)
+                    :online? true :base-uuid base-uuid :gen-uuid gen-uuid
+                    :state (atom {:pages #{base-uuid} :blocks #{}})}
+            upload! server-upload!]
+        (with-test-repos {repo-a {:conn conn :ops-conn (new-client-ops-db)}}
+          (fn []
+            (reset! db-sync/*repo->latest-remote-tx {})
+            (client-op/update-local-tx repo-a 0)
+            (ensure-base-page! conn base-uuid)
+            (create-page! conn "Remote marker" remote-uuid)
+            (sync-client! server client)
+            (is (ensure-op-recorded! rng client history op 120))
+            (when rebase?
+              (server-upload! server (:t @server)
+                              [{:tx-data [[:db/add [:block/uuid remote-uuid]
+                                           :block/title "Remote marker edited"]]}]))
+            (with-redefs [server-upload!
+                          (fn [server t-before entries]
+                            (let [actual-server (d/conn-from-db @(get @server :conn))]
+                              (doseq [{:keys [tx-data outliner-op]} entries]
+                                (#'sync-handler/apply-tx-entry!
+                                 actual-server {:tx (sqlite-util/write-transit-str tx-data)
+                                                :outliner-op outliner-op}))
+                              (let [result (upload! server t-before entries)]
+                                (is (= (sync-checksum/recompute-checksum @actual-server)
+                                       (sync-checksum/recompute-checksum @(get @server :conn))))
+                                result)))]
+              (sync-client! server client))
+            (is (empty? (sync-apply/pending-txs repo-a)))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (sync-checksum/recompute-checksum @(get @server :conn))))))))))
 
 (deftest ^:long two-clients-online-sim-test
   (testing "db-sync convergence with two online clients"

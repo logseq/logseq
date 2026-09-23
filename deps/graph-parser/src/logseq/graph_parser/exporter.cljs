@@ -38,11 +38,11 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.emoji-data :as emoji-data]
+            [logseq.graph-parser.exporter.finalize :as exporter-finalize]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.import-profile :as import-profile]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [promesa.core :as p]))
 
 (defn- add-missing-timestamps
@@ -3110,188 +3110,6 @@
                    (swap! ignored-files conj {:path path :reason :export-failed}))
                  nil))))
 
-(defn- remove-block-ref-from-title
-  [title block-uuid]
-  (when (string? title)
-    (-> title
-        (string/replace (block-ref/->block-ref block-uuid) "")
-        (string/replace (page-ref/->page-ref block-uuid) "")
-        (string/replace #" {2,}" " ")
-        string/trim)))
-
-(defn- placeholder-block-ref?
-  [entity]
-  (and (:block/uuid entity)
-       (nil? (:block/title entity))))
-
-(defn- missing-placeholder-ref-datoms
-  [db attr candidate-ref-uuids]
-  (if (seq candidate-ref-uuids)
-    (mapcat (fn [ref-uuid]
-              (when-let [ref-id (some-> (d/entity db [:block/uuid ref-uuid]) :db/id)]
-                (when (placeholder-block-ref? (d/entity db ref-id))
-                  (for [datom (d/datoms db :avet attr ref-id)]
-                    {:source-id (:e datom)
-                     :ref-id ref-id
-                     :ref-uuid ref-uuid}))))
-            candidate-ref-uuids)
-    (->> (d/datoms db :aevt attr)
-         (keep (fn [datom]
-                 (let [ref-entity (d/entity db (:v datom))]
-                   (when (placeholder-block-ref? ref-entity)
-                     {:source-id (:e datom)
-                      :ref-id (:v datom)
-                      :ref-uuid (:block/uuid ref-entity)})))))))
-
-(defn- cleanup-missing-block-refs-tx
-  ([db] (cleanup-missing-block-refs-tx db nil))
-  ([db candidate-ref-uuids]
-   (let [missing-ref-datoms (missing-placeholder-ref-datoms db :block/refs candidate-ref-uuids)
-         missing-link-datoms (missing-placeholder-ref-datoms db :block/link candidate-ref-uuids)
-         refs-by-source-id (group-by :source-id missing-ref-datoms)
-         retract-ref-tx
-         (mapcat (fn [[source-id refs]]
-                   (map (fn [{:keys [ref-id]}]
-                          [:db/retract source-id :block/refs ref-id])
-                        refs))
-                 refs-by-source-id)
-         retract-link-tx
-         (map (fn [{:keys [source-id ref-id]}]
-                [:db/retract source-id :block/link ref-id])
-              missing-link-datoms)
-         update-title-tx
-         (keep (fn [[source-id refs]]
-                 (let [source (d/entity db source-id)
-                       title (:block/title source)
-                       title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
-                   (when (and (string? title') (not= title title'))
-                     [:db/add source-id :block/title title'])))
-               refs-by-source-id)
-         retract-placeholder-tx
-         (->> (concat missing-ref-datoms missing-link-datoms)
-              (map (juxt :ref-id :ref-uuid))
-              distinct
-              (map (fn [[ref-id ref-uuid]]
-                     [:db/retract ref-id :block/uuid ref-uuid])))]
-     (concat retract-ref-tx retract-link-tx update-title-tx retract-placeholder-tx))))
-
-(defn- set-finishing-import-ui!
-  [set-ui-state]
-  (set-ui-state [:graph/importing-state :step] :finishing)
-  (set-ui-state [:graph/importing-state :label] :import/finishing)
-  (set-ui-state [:graph/importing-state :current-page] nil))
-
-(defn finalize-imported-graph!
-  "Stamp :block/tx-id and rebuild :block/refs once after file import.
-
-  Per-file import txs set ::new-graph?, so CLI listeners and worker
-  transact-pipeline skip refs. This pass writes both in one transact.
-  File-graph import does not notify renderer clients; ::imported-data?
-  skips worker render-delta broadcast. :transact-new-graph-refs? skips
-  the worker pipeline so refs are not rebuilt a second time."
-  [conn]
-  (let [db @conn
-        entity-ids (d/q '[:find [?e ...]
-                          :where
-                          [?e :block/uuid]
-                          [?e :block/title]
-                          [(missing? $ ?e :block/tx-id)]]
-                     db)]
-    (when (seq entity-ids)
-      (let [tx-id (inc (:max-tx db))
-            rebuild-refs (outliner-pipeline/db-rebuild-block-refs-fn db)
-            tx (into []
-                     (mapcat
-                      (fn [id]
-                        (let [block (d/entity db id)
-                              refs (when-not (:logseq.property.reaction/target block)
-                                     (set (rebuild-refs block)))
-                              old-refs (when (seq refs)
-                                         (into #{} (map :v) (d/datoms db :eavt id :block/refs)))]
-                          (concat [[:db/add id :block/tx-id tx-id]]
-                                  (map (fn [ref] [:db/retract id :block/refs ref])
-                                    (set/difference old-refs refs))
-                                  (map (fn [ref] [:db/add id :block/refs ref])
-                                    (set/difference refs old-refs))))))
-                     entity-ids)]
-        (ldb/transact! conn tx
-          {::imported-data? true ::new-graph? true :transact-new-graph-refs? true})))))
-
-(defn- cleanup-missing-block-refs!
-  ([conn] (cleanup-missing-block-refs! conn nil))
-  ([conn import-state]
-   (let [candidate-ref-uuids (when import-state @(:placeholder-ref-uuids import-state))
-         tx (cleanup-missing-block-refs-tx @conn candidate-ref-uuids)]
-     (when (seq tx)
-       (ldb/transact! conn tx {::imported-data? true})))))
-
-(defn- journal-uuid-normalizations
-  [db]
-  (keep (fn [datom]
-          (let [entity (d/entity db (:e datom))
-                old-uuid (:block/uuid entity)
-                journal-day (:block/journal-day entity)
-                standard-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)]
-            (when (and old-uuid (not= old-uuid standard-uuid))
-              (when-let [target (d/entity db [:block/uuid standard-uuid])]
-                (when (not= (:db/id target) (:db/id entity))
-                  (throw (ex-info "Cannot normalize journal uuid because the standard uuid is already used"
-                                  {:journal-day journal-day
-                                   :old-uuid old-uuid
-                                   :standard-uuid standard-uuid
-                                   :target-id (:db/id target)}))))
-              {:eid (:db/id entity)
-               :old-uuid old-uuid
-               :standard-uuid standard-uuid})))
-        (d/datoms db :avet :block/journal-day)))
-
-(defn- replace-journal-uuid-refs
-  [value uuid-replacements]
-  (if (seq uuid-replacements)
-    (walk/postwalk
-     (fn [x]
-       (if (string? x)
-         (reduce (fn [s [old-uuid standard-uuid]]
-                   (-> s
-                       (string/replace (page-ref/->page-ref old-uuid)
-                                       (page-ref/->page-ref standard-uuid))
-                       (string/replace (block-ref/->block-ref old-uuid)
-                                       (block-ref/->block-ref standard-uuid))))
-                 x
-                 uuid-replacements)
-         x))
-     value)
-    value))
-
-(defn- normalize-journal-uuids-tx
-  [db]
-  (let [normalizations (vec (journal-uuid-normalizations db))
-        uuid-replacements (map (juxt :old-uuid :standard-uuid) normalizations)
-        uuid-tx (mapcat (fn [{:keys [eid old-uuid standard-uuid]}]
-                          [[:db/retract eid :block/uuid old-uuid]
-                           [:db/add eid :block/uuid standard-uuid]])
-                        normalizations)
-        text-tx (when (seq uuid-replacements)
-                  (keep (fn [datom]
-                          (let [value (:v datom)
-                                value' (when (or (string? value) (coll? value))
-                                         (replace-journal-uuid-refs value uuid-replacements))]
-                            (when (and (some? value') (not= value value'))
-                              [:db/add (:e datom) (:a datom) value'])))
-                        (d/datoms db :eavt)))]
-    (vec (concat uuid-tx text-tx))))
-
-(defn- normalize-journal-uuids!
-  [conn]
-  (let [tx (normalize-journal-uuids-tx @conn)]
-    (when (seq tx)
-      (ldb/transact! conn tx {::imported-data? true}))))
-
-(defn- ensure-imported-page-parent-orders!
-  [conn]
-  (let [tx-data (db-order/missing-internal-page-parent-order-tx @conn)]
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data {::imported-data? true}))))
 
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
@@ -3325,19 +3143,19 @@
            (p/doseq [file other-files]
              (export-doc-file file conn <read-file options)))
         (p/then (fn [_]
-                  (p/let [_ (set-finishing-import-ui! set-ui-state)
+                  (p/let [_ (exporter-finalize/set-finishing-import-ui! set-ui-state)
                           _ (import-progress! options {:phase :normalize-journal-uuids})
-                          normalize-tx-report (normalize-journal-uuids! conn)
+                          normalize-tx-report (exporter-finalize/normalize-journal-uuids! conn)
                           _ (when normalize-tx-report (on-tx-report normalize-tx-report))
                           _ (import-progress! options {:phase :cleanup-missing-block-refs})
-                          cleanup-tx-report (cleanup-missing-block-refs! conn (:import-state options))
+                          cleanup-tx-report (exporter-finalize/cleanup-missing-block-refs! conn (:import-state options))
                           _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))
-                          page-order-tx-report (ensure-imported-page-parent-orders! conn)
+                          page-order-tx-report (exporter-finalize/ensure-imported-page-parent-orders! conn)
                           _ (when page-order-tx-report (on-tx-report page-order-tx-report))
                           _ (when (not (false? (:finalize-imported-graph? options)))
                               (import-progress! options {:phase :finalize-imported-graph})
                               (let [finalize-start (when (:log-fn options) (import-profile/now-ms))]
-                                (finalize-imported-graph! conn)
+                                (exporter-finalize/finalize-imported-graph! conn)
                                 (log-phase-ms! (:log-fn options) :finalize-imported-graph finalize-start
                                                {:entities :post-doc-files})))]
                     cleanup-tx-report)))
@@ -3627,7 +3445,7 @@
                                        {:assets (get-in doc-options [:import-state :assets])}))
      (import-progress! doc-options {:step :doc-files :total-files (count doc-files)})
      (export-doc-files conn doc-files <read-file (assoc doc-options :finalize-imported-graph? false))
-     (set-finishing-import-ui! set-ui-state)
+     (exporter-finalize/set-finishing-import-ui! set-ui-state)
      (import-progress! doc-options {:step :favorites})
      (export-favorites-from-config-edn conn repo-or-conn config
                                       (cond-> {}
@@ -3638,7 +3456,7 @@
      (move-top-parent-pages-to-library conn repo-or-conn)
      (import-progress! doc-options {:phase :finalize-imported-graph})
      (let [finalize-start (when log-fn (import-profile/now-ms))]
-       (finalize-imported-graph! conn)
+       (exporter-finalize/finalize-imported-graph! conn)
        (log-phase-ms! log-fn :finalize-imported-graph finalize-start {}))
      {:import-state (-> (:import-state doc-options)
                         (dissoc :assets))

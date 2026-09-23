@@ -633,6 +633,27 @@
    ;; target-block is a page itself
    (:db/id target-block)))
 
+(defn- build-insert-block-tx
+  [db block result* {:keys [uuid' parent order target-page outliner-op]}]
+  (let [page? (or (ldb/page? block) (:block/name block))
+        ;; :block/name is not unique, so pasting a copied page entity
+        ;; would create a duplicate page; link to the existing page instead
+        existing-page (when (and (= :paste outliner-op)
+                                 (:block/name block))
+                        (ldb/get-page db (:block/name block)))]
+    (if existing-page
+      {:block/uuid uuid'
+       :block/parent parent
+       :block/order order
+       :block/page target-page
+       :block/title ""
+       :block/created-at (:block/created-at block)
+       :block/updated-at (:block/updated-at block)
+       :block/link (:db/id existing-page)}
+      (cond-> result*
+        (not page?) (assoc :block/page target-page)
+        page? (dissoc :block/page)))))
+
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
@@ -675,10 +696,12 @@
                 result* (if (:block.temp/use-old-db-id? result*)
                           result*
                           (dissoc result* :db/id))
-                page? (or (ldb/page? block) (:block/name block))
-                result (cond-> result*
-                         (not page?) (assoc :block/page target-page)
-                         page? (dissoc :block/page))
+                result (build-insert-block-tx db block result*
+                                              {:uuid' uuid'
+                                               :parent parent
+                                               :order order
+                                               :target-page target-page
+                                               :outliner-op outliner-op})
                 db' (if (seq page-txs)
                       (:db-after (d/with db page-txs))
                       db)]
@@ -844,6 +867,31 @@
       (default-value-block? target-block)
       (and sibling? (default-value-block? (:block/parent target-block)))))
 
+(defn- insert-history-blocks
+  [blocks page-txs id->new-uuid]
+  (let [pages (reduce (fn [pages tx]
+                       (if (and (map? tx) (:block/uuid tx))
+                         (update pages (:block/uuid tx) merge (dissoc tx :db/id))
+                         pages))
+                     {} page-txs)]
+    (mapv (fn [block]
+            (cond-> block
+              (seq (:block/refs block))
+              (update :block/refs
+                      (fn [refs]
+                        (mapv (fn [ref]
+                                (if-let [page (get pages (:block/uuid ref))]
+                                  (merge page ref)
+                                  ref))
+                              refs)))))
+          (walk/prewalk (fn [value]
+                          (if (de/entity? value)
+                            (if-let [uuid' (get id->new-uuid (:db/id value))]
+                              [:block/uuid uuid']
+                              (:db/id value))
+                            value))
+                        blocks))))
+
 (defn- resolve-created-from-property
   [db created-from-property]
   (cond
@@ -993,7 +1041,10 @@
                                f))
                            full-tx)]
              {:tx-data full-tx'
-              :blocks  tx})))))))
+              :blocks tx
+              :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs id->new-uuid)
+                                                       (:block/uuid target-block)
+                                                       (assoc insert-opts :keep-uuid? true)]]]}})))))))
 
 (defn- sort-non-consecutive-blocks
   [db blocks]

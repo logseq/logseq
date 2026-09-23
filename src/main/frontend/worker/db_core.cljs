@@ -1048,7 +1048,7 @@
                                (bean/->js fns)
                                #(on-become-master graph start-opts)
                                broadcast-data-types
-                               {:import? (:import-type? start-opts)})]
+                               {:import? (some? (:import-type start-opts))})]
           (reset! *service [graph service-promise])
           (p/let [service service-promise]
             (assert (p/promise? (get-in service [:status :ready])))

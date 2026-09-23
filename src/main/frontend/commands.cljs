@@ -202,6 +202,11 @@
            (->heading nil)
            (t-fn :editor.slash/normal-text-desc)
            :icon/text
+           (t-fn :editor.slash/group-heading)]
+          [(t-fn :editor.slash/clear-heading)
+           (->heading nil)
+           (t-fn :editor.slash/normal-text-desc)
+           :icon/heading-off
            (t-fn :editor.slash/group-heading)]]
          (mapv (fn [level]
                  (let [heading (t-fn :editor.slash/heading-label level)]

@@ -123,11 +123,18 @@
      :objects (- (count (d/datoms db :avet :block/tags)) classes-count properties-count)
      :property-pairs (count (mapcat #(-> % db-property/properties (dissoc :block/tags)) entities))}))
 
+(defn- entity-datoms
+  [db entity-ids]
+  (into [] (mapcat #(d/datoms db :eavt %)) entity-ids))
+
 (defn validate-local-db!
   "Validates a local (non-RTC) DB like validate-db! but with default behavior,
-  options and logging specific to a local DB. Used by CLI, importer and tests"
-  [db & {:keys [db-name open-schema verbose]}]
-  (let [datoms (d/datoms db :eavt)
+  options and logging specific to a local DB. Used by CLI, importer and tests.
+   When :entity-ids is provided, only those entities are validated."
+  [db & {:keys [db-name open-schema verbose entity-ids]}]
+  (let [datoms (if entity-ids
+                 (entity-datoms db entity-ids)
+                 (d/datoms db :eavt))
         ent-maps* (db-malli-schema/datoms->entities datoms)
         _ (when verbose
             (println "Read graph" (str db-name " with counts: "

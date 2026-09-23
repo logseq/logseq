@@ -1364,11 +1364,23 @@
                  (contains? (get eid->attrs (second tx)) (nth tx 2))))
           tx-data))
 
+(defn- tx-touched-entity-ids
+  [tx-report]
+  (->> (:tx-data tx-report)
+       (keep :e)
+       distinct
+       vec))
+
 (defn- validate-import-tx-data
-  [txs db edn-label]
+  [txs db edn-label validate-scope]
   (loop [tx-data (import-tx-data txs)]
-    (let [db-after (:db-after (d/with db tx-data))
-          validation (db-validate/validate-local-db! db-after)]
+    (let [tx-report (d/with db tx-data)
+          db-after (:db-after tx-report)
+          validation (if (= :tx validate-scope)
+                       (db-validate/validate-local-db!
+                        db-after
+                        :entity-ids (tx-touched-entity-ids tx-report))
+                       (db-validate/validate-local-db! db-after))]
       (if-let [errors (seq (:errors validation))]
         (let [eid->attrs (disallowed-key-attrs errors)
               tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
@@ -1383,15 +1395,23 @@
 
 (defn validate-import-txs
   "Dry-runs import txs against db and validates the resulting local DB.
+   Options:
+   * :edn-label - Label used in error messages. Default \"Imported EDN\"
+   * :validate-scope - :graph (default) validates every entity in db-after.
+     :tx validates only entities touched by the import tx. Use :tx for
+     incremental API/MCP writes; keep :graph for file and graph imports.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
   ([txs db]
    (validate-import-txs txs db {:edn-label "Imported EDN"}))
-  ([txs db {:keys [edn-label]
-            :or {edn-label "Imported EDN"}}]
+  ([txs db {:keys [edn-label validate-scope]
+            :or {edn-label "Imported EDN"
+                 validate-scope :graph}}]
+   (when-not (contains? #{:graph :tx} validate-scope)
+     (throw (ex-info "Invalid validate-scope" {:validate-scope validate-scope})))
    (if-let [error (:error txs)]
      {:error error}
      (try
-       (let [result (validate-import-tx-data txs db edn-label)]
+       (let [result (validate-import-tx-data txs db edn-label validate-scope)]
          (if-let [errors (seq (:errors result))]
            (do
              (js/console.error (str edn-label " has " (count errors) " validation error(s)"))
