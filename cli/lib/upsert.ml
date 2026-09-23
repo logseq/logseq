@@ -2030,95 +2030,98 @@ let closed_values_query =
    A property with closed values rejects non-matching words; a property with
    none is an open default value, so the raw string passes through — the
    worker validates it as a new value and creates the text block itself. *)
-let resolve_default_property_value invoke_config repo entity text =
-  let open Cli_effect in
-  let bare = strip_page_ref_syntax text in
-  match id_of_entity entity with
-  | None -> pure (Ok (Edn_util.string text))
-  | Some property_id ->
-      bind
-        (Transport.thread_api_q invoke_config ~repo
-           ~query:
-             (Edn_util.vector_t_vec
-                (Vec.of_array
-                   [|
-                     query_value closed_values_query;
-                     Edn_util.int64 property_id;
-                   |])))
-        (fun result ->
-          let values =
-            Option.value (Edn_util.as_seq result) ~default:Vec.empty
-          in
-          if Vec.is_empty values then
-            pure (Ok (Edn_util.string text))
-          else
-            let token value =
-              value |> String.trim |> String.lowercase_ascii
-              |> String.map (function ' ' | '_' -> '-' | c -> c)
-            in
-            let wanted = token bare in
-            let matches value = String.equal (token value) wanted in
-            let matched =
-              Vec.find_map
-                (fun value_entity ->
-                  match id_of_entity value_entity with
-                  | None -> None
-                  | Some id ->
-                      let title_hit =
-                        match
-                          Edn_util.get_string value_entity "block/title"
-                        with
-                        | Some title -> matches title
-                        | None -> false
-                      in
-                      let ident_hit =
-                        match Edn_util.get_string value_entity "db/ident" with
-                        | Some ident -> (
-                            (* Closed-value idents come in both
-                               `ns.prop/value` and `ns.prop.value` shapes —
-                               match on the tail after the last separator. *)
-                            let cut =
-                              List.filter_map (String.rindex_opt ident)
-                                [ '.'; '/' ]
-                              |> List.fold_left max (-1)
-                            in
-                            if cut < 0 then matches ident
-                            else
-                              matches
-                                (String.sub ident (cut + 1)
-                                   (String.length ident - cut - 1)))
-                        | None -> false
-                      in
-                      if title_hit || ident_hit then Some id else None)
-                values
-            in
-            match matched with
-            | Some id -> pure (Ok (Edn_util.int64 id))
-            | None ->
-                let choices =
-                  values
-                  |> Vec.filter_map (fun value_entity ->
-                         Edn_util.get_string value_entity "block/title")
-                  |> Vec.to_list
-                  |> List.map (fun value -> "\"" ^ value ^ "\"")
-                  |> String.concat ", "
-                in
-                pure
-                  (Error
-                     (Error.invalid_options
-                        (Printf.sprintf
-                           "unknown value \"%s\" for closed property; \
-                            choices: %s"
-                           bare choices))))
+let closed_values invoke_config repo property_id =
+  Transport.thread_api_q invoke_config ~repo
+    ~query:
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [| query_value closed_values_query; Edn_util.int64 property_id |]))
 
-let resolve_block_property_assignments ~dry_run invoke_config repo
-    assignments =
+let default_value_of_result result text =
+  let bare = strip_page_ref_syntax text in
+  let values = Option.value (Edn_util.as_seq result) ~default:Vec.empty in
+  if Vec.is_empty values then Ok (Edn_util.string text)
+  else
+    let token value =
+      value |> String.trim |> String.lowercase_ascii
+      |> String.map (function ' ' | '_' -> '-' | c -> c)
+    in
+    let wanted = token bare in
+    let matches value = String.equal (token value) wanted in
+    let matched =
+      Vec.find_map
+        (fun value_entity ->
+          match id_of_entity value_entity with
+          | None -> None
+          | Some id ->
+              let title_hit =
+                match Edn_util.get_string value_entity "block/title" with
+                | Some title -> matches title
+                | None -> false
+              in
+              let ident_hit =
+                match Edn_util.get_string value_entity "db/ident" with
+                | Some ident -> (
+                    (* Closed-value idents come in both `ns.prop/value` and
+                       `ns.prop.value` shapes — match on the tail after the
+                       last separator. *)
+                    let cut =
+                      List.filter_map (String.rindex_opt ident) [ '.'; '/' ]
+                      |> List.fold_left max (-1)
+                    in
+                    if cut < 0 then matches ident
+                    else
+                      matches
+                        (String.sub ident (cut + 1)
+                           (String.length ident - cut - 1)))
+                | None -> false
+              in
+              if title_hit || ident_hit then Some id else None)
+        values
+    in
+    match matched with
+    | Some id -> Ok (Edn_util.int64 id)
+    | None ->
+        let choices =
+          values
+          |> Vec.filter_map (fun value_entity ->
+                 Edn_util.get_string value_entity "block/title")
+          |> Vec.to_list
+          |> List.map (fun value -> "\"" ^ value ^ "\"")
+          |> String.concat ", "
+        in
+        Error
+          (Error.invalid_options
+             (Printf.sprintf
+                "unknown value \"%s\" for closed property; choices: %s" bare
+                choices))
+
+let resolve_block_property_assignments ~dry_run ~entity_memo ~closed_memo
+    invoke_config repo assignments =
   let open Cli_effect in
+  (* The same `key::` can repeat on many blocks; effects fire on
+     construction, so memoizing the effect shares one HTTP request. *)
+  let property_entity key =
+    match Hashtbl.find_opt entity_memo key with
+    | Some eff -> eff
+    | None ->
+        let eff = resolve_property_entity invoke_config repo key in
+        Hashtbl.add entity_memo key eff;
+        eff
+  in
+  let closed_values_of property_id =
+    match Hashtbl.find_opt closed_memo property_id with
+    | Some eff -> eff
+    | None ->
+        let eff = closed_values invoke_config repo property_id in
+        Hashtbl.add closed_memo property_id eff;
+        eff
+  in
   Add.all_results
     (Vec.map
        (fun assignment ->
          bind
-           (resolve_property_entity invoke_config repo assignment.Property.key)
+           (property_entity assignment.Property.key)
            (function
            | Error err -> pure (Error err)
            | Ok (ident, entity) -> (
@@ -2138,9 +2141,15 @@ let resolve_block_property_assignments ~dry_run invoke_config repo
                              (Edn_util.get entity "db/valueType")
                              Edn_util.as_keyword
                          with
-                         | Some "db.type/ref" ->
-                             resolve_default_property_value invoke_config
-                               repo entity (String.trim text)
+                         | Some "db.type/ref" -> (
+                             let text = String.trim text in
+                             match id_of_entity entity with
+                             | None -> pure (Ok (Edn_util.string text))
+                             | Some property_id ->
+                                 map
+                                   (fun result ->
+                                     default_value_of_result result text)
+                                   (closed_values_of property_id))
                          | _ -> pure (Ok value))
                      | _ -> pure (Ok value))
                      (function
@@ -2154,11 +2163,12 @@ let resolve_block_property_assignments ~dry_run invoke_config repo
                               value)))))
        assignments)
 
-let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
+let rec resolve_block_inline_properties ~dry_run ~entity_memo ~closed_memo
+    invoke_config repo block =
   let open Cli_effect in
   bind
-    (resolve_block_property_assignments ~dry_run invoke_config repo
-       block.Block.properties) (function
+    (resolve_block_property_assignments ~dry_run ~entity_memo ~closed_memo
+       invoke_config repo block.Block.properties) (function
     | Error err -> pure (Error (option_resolution_error "--blocks" err))
     | Ok resolved_assignments ->
         let resolved_properties =
@@ -2170,7 +2180,8 @@ let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
         bind
           (Add.all_results
              (Vec.map
-                (resolve_block_inline_properties ~dry_run invoke_config repo)
+                (resolve_block_inline_properties ~dry_run ~entity_memo
+                   ~closed_memo invoke_config repo)
                 block.Block.children))
           (function
           | Error err -> pure (Error err)
@@ -2182,9 +2193,14 @@ let rec resolve_block_inline_properties ~dry_run invoke_config repo block =
                      children })))
 
 let resolve_blocks_inline_properties ~dry_run invoke_config repo blocks =
+  (* Memo tables live for the whole command so the same `key::` across any
+     blocks resolves once. *)
+  let entity_memo = Hashtbl.create 4 in
+  let closed_memo = Hashtbl.create 4 in
   Add.all_results
     (Vec.map
-       (resolve_block_inline_properties ~dry_run invoke_config repo)
+       (resolve_block_inline_properties ~dry_run ~entity_memo ~closed_memo
+          invoke_config repo)
        blocks)
 
 let rec strip_block_properties block =
