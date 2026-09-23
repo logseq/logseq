@@ -171,6 +171,24 @@
              @editing)
           "Loaded block data should enter editor state before edit-block! returns."))))
 
+(deftest set-block-editing-reconstructs-heading-marker
+  (let [calls (atom [])]
+    (with-redefs [state/set-editing! (fn [& args] (reset! calls args))]
+      (block-handler/set-block-editing!
+       "edit-block-1"
+       "Title"
+       {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+        :logseq.property/heading 1}
+       "Ti"
+       {:container-id :test-container})
+      (is (= ["edit-block-1"
+              "# Title"
+              {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :logseq.property/heading 1}
+              "# Ti"
+              {:container-id :test-container}]
+             @calls)))))
+
 (deftest indent-outdent-does-not-use-global-editor-state-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"

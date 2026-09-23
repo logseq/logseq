@@ -2921,7 +2921,7 @@
 
                      (let [cursor-range (or point-cursor-range
                                             (if mobile? mobile-range (get-cursor-range)))]
-                       (state/set-editing!
+                       (block-handler/set-block-editing!
                         edit-input-id
                         (:block/title block)
                         block
@@ -3708,7 +3708,7 @@
   (let [content (:block/title block)]
     (editor-handler/clear-selection!)
     (editor-handler/unhighlight-blocks!)
-    (state/set-editing! edit-input-id content block content {:container-id (:container-id config)})))
+    (block-handler/set-block-editing! edit-input-id content block content {:container-id (:container-id config)})))
 
 (hsx/defc block-content-with-error
   [config block edit-input-id block-id *show-query? editor-box custom-block-content]
