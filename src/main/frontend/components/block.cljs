@@ -856,13 +856,13 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when mouse-down?
-                          (state/clear-edit!)
+                          (editor-handler/save-current-block-before-navigate!)
                           (when-not (:disable-click? config)
                             (<open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
                             (util/stop e)
-                            (state/clear-edit!)
+                            (editor-handler/save-current-block-before-navigate!)
                             (<open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
        (assoc :on-context-menu on-context-menu))
@@ -2891,6 +2891,11 @@
               (when (= 1 button)
                 (remember-block-pointer! e)
                 (block-selection/set-pointer-down!))
+              ;; util/stop'd pointerdowns below suppress the mousedown that
+              ;; would otherwise flush the editor via escape-editing
+              (when-let [editing-block (state/get-edit-block)]
+                (when-not (= (:block/uuid editing-block) (:block/uuid block))
+                  (editor-handler/save-current-block!)))
               (cond
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
@@ -2930,9 +2935,6 @@
                     (mobile-util/mobile-focus-hidden-input)
                     (editor-handler/clear-selection!)
                     (editor-format/unhighlight-blocks!)
-                    (when-let [editing-block (state/get-edit-block)]
-                      (when-not (= (:block/uuid editing-block) (:block/uuid block))
-                        (editor-handler/save-current-block!)))
                     (p/do!
                      (state/pub-event! [:editor/save-code-editor])
 
