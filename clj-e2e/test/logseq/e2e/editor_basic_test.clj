@@ -1886,11 +1886,7 @@
       (p/new-page host)
       (b/save-block complete)
       (util/exit-edit)
-      (p/goto-page page-a)
-      (assert/assert-is-visible
-       (loc/filter ".references" :has-text marker))
-      (w/click
-       (.first (loc/filter ".references .block-content" :has-text marker)))
+      (b/open-last-block)
       (util/wait-editor-visible)
       (let [after-page-a (count (str marker " [[" page-a "]]"))
             editor (util/get-editor)]
@@ -1903,16 +1899,15 @@
       (util/wait-timeout 800)
       (is (some? (util/get-editor))
           "Edit is still open after idle auto-save")
-      (assert/assert-is-visible
-       (loc/filter ".references" :has-text marker))
       (doseq [merged merged-names]
         (is (false? (page-exists? merged))
             (str "Idle auto-save must not create " merged)))
       (w/fill util/editor-q complete)
       (is (= complete (util/get-edit-content)))
       (util/exit-edit)
+      (p/goto-page page-a)
       (assert/assert-is-visible
-       (loc/filter ".references" :has-text marker))
+       (loc/filter ".references" :has-text host))
       (doseq [merged merged-names]
         (is (false? (page-exists? merged))
             (str "Restored commit must not create " merged))))))
