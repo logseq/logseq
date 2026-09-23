@@ -426,6 +426,14 @@
     (when-not (language-registry/valid-language-descriptor? descriptor)
       (throw (ex-info "Invalid CodeMirror 6 language descriptor"
                       {:descriptor descriptor})))
+    ;; Registered languages must resolve a LanguageSupport at runtime —
+    ;; native/legacy descriptors only carry package metadata for the
+    ;; statically generated built-in table.
+    (when-not (or (= :plain-text (:source descriptor))
+                  (:support descriptor)
+                  (:load descriptor))
+      (throw (ex-info "Plugin language descriptors must provide :support or :load"
+                      {:descriptor descriptor})))
     (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor)
     ;; The fence language was resolved before enhancers ran; if this
     ;; registration now matches the requested name, re-resolve it.
@@ -435,6 +443,20 @@
       (when (and match (not (identical? match resolved)))
         (set-language-impl! context requested))))
   context)
+
+(defn- save-and-reset-for-destroy!
+  "Unmounting the component (e.g. the lazy wrapper leaving the viewport) would
+   otherwise drop in-flight edits and leave :editor/code-block-context pointing
+   at a destroyed view. Mirror the leave-editor! save/reset lifecycle for the
+   current context; editors that were never focused just get destroyed."
+  [context config]
+  (when (identical? context (:editor (:editor/code-block-context (state/get-state))))
+    (code-handler/save-code-editor!)
+    (state/set-block-component-editing-mode! false)
+    (state/set-state! :editor/code-block-context nil)
+    (when (= (:db/id (state/get-edit-block))
+             (:db/id (:block config)))
+      (state/clear-edit!))))
 
 (defonce ^:private *reported-legacy-enhancers
   (atom #{}))
@@ -814,6 +836,7 @@
        (load-and-render! component-state)
        (fn []
          (when-let [context @editor-atom]
+           (save-and-reset-for-destroy! context config)
            (code-editor/destroy! context)
            (reset! editor-atom nil))))
      [id])

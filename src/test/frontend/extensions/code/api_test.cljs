@@ -126,7 +126,8 @@
            (get-in @(:*state context) [:plugin-extensions "plugin-a/factory"])))))
 
 (deftest cm6-enhancers-can-register-js-language-descriptors
-  (let [context {:editor-id "editor-1"
+  (let [support #js {:opaque "language-support-instance"}
+        context {:editor-id "editor-1"
                  :view #js {}
                  :*state (atom {:plugin-extensions {}
                                 :plugin-languages {}})}
@@ -138,20 +139,42 @@
                    ((.-registerLanguage payload)
                     #js {:id "racket"
                          :names #js ["racket" "rkt"]
-                         :source "legacy"
+                         :source "plugin"
                          :extensions #js ["rkt"]
-                         :package "@codemirror/legacy-modes"
-                         :entry "scheme"})
+                         :support support})
                    (let [^js language ((.-getLanguage payload) "rkt")]
                      (swap! calls conj (.-id language))))}])
     (is (= ["racket"] @calls))
-    (is (= {:id :racket
-            :names #{"racket" "rkt"}
-            :source :legacy
-            :extensions #{"rkt"}
-            :package "@codemirror/legacy-modes"
-            :entry :scheme}
-           (get-in @(:*state context) [:plugin-languages :racket])))))
+    (let [descriptor (get-in @(:*state context) [:plugin-languages :racket])]
+      (is (= {:id :racket
+              :names #{"racket" "rkt"}
+              :source :plugin
+              :extensions #{"rkt"}}
+             (dissoc descriptor :support)))
+      (is (identical? support (:support descriptor))))))
+
+(deftest cm6-enhancers-cannot-register-unresolvable-language-descriptors
+  ;; native/legacy descriptors only carry package metadata for the statically
+  ;; generated built-in table — they would register successfully but install
+  ;; no parser at runtime.
+  (let [context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}]
+    (doseq [source ["legacy" "native" "nextjournal"]]
+      (is (thrown? js/Error
+                   (code-editor-view/apply-enhancers!
+                    context
+                    [{:key :plugin-a
+                      :enhancer (fn [^js payload]
+                                  ((.-registerLanguage payload)
+                                   #js {:id "racket"
+                                        :names #js ["racket"]
+                                        :source source
+                                        :package "@codemirror/legacy-modes"
+                                        :entry "scheme"}))}]))
+          (str source " descriptors cannot be resolved at runtime")))
+    (is (empty? (:plugin-languages @(:*state context))))))
 
 (deftest cm6-plugin-language-descriptors-keep-opaque-support-and-load
   (let [support #js {:opaque "language-support-instance"}
