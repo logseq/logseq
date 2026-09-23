@@ -6,7 +6,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.db.subs :as db-subs]
-            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
@@ -54,24 +53,13 @@
   (when repo
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
-(defn set-block-editing!
-  "Start editing a block and reconstruct heading `#` markers for the editor."
-  [edit-input-id content block cursor-range & {:as opts}]
-  (let [raw (string/trim (or content ""))
-        content' (db-editor-handler/heading-edit-content block raw)
-        prefix-len (- (count content') (count raw))
-        cursor-range' (if (and (string? cursor-range) (pos? prefix-len))
-                        (str (subs content' 0 prefix-len) cursor-range)
-                        cursor-range)]
-    (state/set-editing! edit-input-id content' block cursor-range' opts)))
-
 (defn- edit-block-aux
   [repo block content text-range {:keys [container-id direction event pos]}]
   (when block
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
-      (set-block-editing! (str "edit-block-" (:block/uuid block)) content block text-range
+      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
                           {:container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
@@ -99,9 +87,7 @@
         (state/pub-event! [:editor/save-code-editor]))
       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
         (state/clear-edit! {:clear-editing-block? false}))
-      (let [raw-content (or custom-content (:block/title block) "")
-            content (db-editor-handler/heading-edit-content block raw-content)
-            pos (db-editor-handler/heading-edit-pos block raw-content pos)
+      (let [content (or custom-content (:block/title block) "")
             content-length (count content)
             text-range (cond
                          (vector? pos)

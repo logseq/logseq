@@ -238,7 +238,7 @@
      "div[data-node-type='quote']:has(h1.block-title-wrap.as-heading:has-text('Markdown quote heading'))")
     (b/jump-to-block "Markdown quote heading")
     (assert/assert-editor-mode)
-    (is (= "# Markdown quote heading" (util/get-edit-content)))
+    (is (= "Markdown quote heading" (util/get-edit-content)))
     (util/exit-edit)
     (b/new-block "Plain quote")
     (util/input-command "quote")
@@ -253,8 +253,7 @@
             text (str heading " test ")]
         (b/new-block text)
         (util/input-command heading)
-        (is (= (str (apply str (repeat (inc i) "#")) " " text)
-               (util/get-edit-content)))
+        (is (= (string/trim text) (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
 

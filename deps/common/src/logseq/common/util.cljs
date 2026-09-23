@@ -346,26 +346,6 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
     (true? heading) (min (inc (or level 0)) 6)
     :else nil))
 
-(defn markdown-heading-prefix
-  "Markdown marker for a heading level, e.g. \"# \" for 1."
-  [heading]
-  (when (and (integer? heading) (<= 1 heading 6))
-    (str (apply str (repeat heading "#")) " ")))
-
-(defn with-markdown-heading-prefix
-  "Prepend a heading marker so the editor can show and delete `#`.
-   Blank content is left unchanged so empty headings stay empty."
-  ([heading content]
-   (with-markdown-heading-prefix heading content nil))
-  ([heading content level]
-   (let [content (or content "")]
-     (cond
-       (string/blank? content) content
-       (markdown-heading-level content) content
-       :else
-       (if-let [prefix (markdown-heading-prefix (heading-value->level heading level))]
-         (str prefix content)
-         content)))))
 (defn block-with-timestamps
   "Adds updated-at timestamp and created-at if it doesn't exist"
   [block]

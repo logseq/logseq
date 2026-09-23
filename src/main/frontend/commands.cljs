@@ -198,7 +198,12 @@
 (defn- headings
   ([] (headings t))
   ([t-fn]
-   (into [[(t-fn :editor.slash/normal-text)
+   (into [[(t-fn :editor.slash/clear-heading)
+           (->heading nil)
+           (t-fn :editor.slash/clear-heading-desc)
+           :icon/text
+           (t-fn :editor.slash/group-heading)]
+          [(t-fn :editor.slash/normal-text)
            (->heading nil)
            (t-fn :editor.slash/normal-text-desc)
            :icon/text
@@ -672,22 +677,8 @@
 
 (def clear-markdown-heading common-util/clear-markdown-heading)
 
-(defn- apply-heading-marker!
-  "Keep the editor `#` marker in sync when heading format is set from slash or the menu."
-  [block heading]
-  (when-let [input (state/get-input)]
-    (let [value (or (.-value input) "")
-          body (common-util/clear-markdown-heading value)
-          level (common-util/heading-value->level heading (:block/level block))
-          new-value (if level
-                      (str (common-util/markdown-heading-prefix level) body)
-                      body)]
-      (when (not= value new-value)
-        (state/set-edit-content! (.-id input) new-value)))))
-
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [block (state/get-edit-block)]
-    (apply-heading-marker! block heading)
     (if (nil? heading)
       (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/heading)
       (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/heading heading))))

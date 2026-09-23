@@ -1788,24 +1788,32 @@
   (testing "the editor of a heading block is sized for the heading font when it opens"
     (let [title (string/join " " (repeat 12 "heading row"))]
       ;; "# " at the start becomes the heading property. Re-entering edit
-      ;; reconstructs the marker so it can be deleted.
+      ;; keeps the stored title (no reconstructed `#` marker).
       (b/new-block (str "# " title))
       (util/exit-edit)
       (w/click (loc/filter ".block-title-wrap" :has-text "heading row"))
       (util/wait-editor-visible)
-      (is (= (str "# " title) (util/get-edit-content)))
+      (is (= title (util/get-edit-content)))
       (let [{:keys [client scroll]} (editor-box-heights)]
         (is (<= scroll client)
             (str "textarea clientHeight " client " scrollHeight " scroll))))))
 
-(deftest heading-edit-shows-marker-and-clears-empty-test
-  (testing "re-editing a heading shows # and clearing text drops heading chrome"
-    (b/new-block "# Heading marker stays")
+(deftest heading-clear-command-and-empty-heading-test
+  (testing "clear heading command removes heading format and empty titles drop chrome"
+    (b/new-block "# Heading stays")
     (util/exit-edit)
     (assert/assert-is-visible "h1.block-title-wrap.as-heading")
-    (b/jump-to-block "Heading marker stays")
+    (b/jump-to-block "Heading stays")
     (util/wait-editor-visible)
-    (is (= "# Heading marker stays" (util/get-edit-content)))
+    (is (= "Heading stays" (util/get-edit-content)))
+    (util/input-command "Clear heading")
+    (util/exit-edit)
+    (assert/assert-is-hidden "h1.block-title-wrap.as-heading")
+    (assert/assert-is-visible ".block-title-wrap:has-text('Heading stays')")
+    (b/new-block "# Empty heading chrome")
+    (util/exit-edit)
+    (b/jump-to-block "Empty heading chrome")
+    (util/wait-editor-visible)
     (k/press "ControlOrMeta+a")
     (k/press "Backspace")
     (is (= "" (util/get-edit-content)))

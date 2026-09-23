@@ -47,16 +47,16 @@
              (select-keys result [:block/title :logseq.property/heading])))
       (is (nil? (:db/other-tx result)))))
 
-  (testing "removing the heading marker retracts heading"
+  (testing "editing heading text without a # marker keeps heading"
     (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
           result (db-editor-handler/wrap-parse-block
                   {:block/uuid block-uuid
                    :block/title "Heading"
                    :logseq.property/heading 1})]
-      (is (= "Heading" (:block/title result)))
-      (is (nil? (:logseq.property/heading result)))
-      (is (= [[:db/retract [:block/uuid block-uuid] :logseq.property/heading]]
-             (:db/other-tx result)))))
+      (is (= {:block/title "Heading"
+              :logseq.property/heading 1}
+             (select-keys result [:block/title :logseq.property/heading])))
+      (is (nil? (:db/other-tx result)))))
 
   (testing "empty content retracts heading"
     (doseq [title ["" "# " "#   "]]
@@ -82,59 +82,6 @@
                            :logseq.property/heading
                            :logseq.property.node/display-type]))
           (str "Preserves content for " display-type)))))
-
-(deftest heading-edit-display-test
-  (testing "non-empty headings reconstruct a markdown marker for the editor"
-    (is (= "# Title"
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading 1} "Title")))
-    (is (= "## Title"
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading 2} "Title")))
-    (is (= "# Title"
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading true} "Title")))
-    (is (= "## Title"
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading true
-             :block/level 1} "Title"))))
-
-  (testing "empty headings stay empty so they do not look like `# ` chrome"
-    (is (= ""
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading 1} ""))))
-
-  (testing "code and math blocks do not reconstruct a heading marker"
-    (is (= "Title"
-           (db-editor-handler/heading-edit-content
-            {:logseq.property/heading 1
-             :logseq.property.node/display-type :code}
-            "Title"))))
-
-  (testing "caret positions move after the reconstructed marker"
-    (is (= 5 (db-editor-handler/heading-edit-pos
-              {:logseq.property/heading 1} "Title" 3)))
-    (is (= :max (db-editor-handler/heading-edit-pos
-                 {:logseq.property/heading 1} "Title" :max)))
-    (is (= [:down 4] (db-editor-handler/heading-edit-pos
-                      {:logseq.property/heading 1} "Title" [:down 2])))))
-
-(deftest editor-content-changed-heading-test
-  (testing "reconstructed heading markers are not treated as edits"
-    (is (false? (db-editor-handler/editor-content-changed?
-                 {:logseq.property/heading 1} "Title" "# Title"))))
-
-  (testing "deleting the heading marker is an edit"
-    (is (true? (db-editor-handler/editor-content-changed?
-                {:logseq.property/heading 1} "Title" "Title"))))
-
-  (testing "clearing heading text is an edit"
-    (is (true? (db-editor-handler/editor-content-changed?
-                {:logseq.property/heading 1} "Title" ""))))
-
-  (testing "plain text without a heading is unchanged when it matches"
-    (is (false? (db-editor-handler/editor-content-changed?
-                 {} "Title" "Title")))))
 
 (deftest wrap-parse-block-markdown-hashtag-link-test
   (testing "markdown link targets cached from hashtag autocomplete are saved as refs"

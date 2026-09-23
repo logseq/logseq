@@ -13,6 +13,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
             [frontend.rfx :as rfx]
             [frontend.search :refer [fuzzy-search]]
@@ -521,11 +522,15 @@
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content.
-   Heading chrome follows the visible `#` marker so deleting it drops h1-h6
-   immediately. The stored heading property is not used here."
-  [_block content format]
+   Heading class follows the stored heading property (and typed `#` markers).
+   Blank content drops heading chrome immediately."
+  [block content format]
   (let [content (if content (str content) "")
-        heading (common-util/markdown-heading-level content)]
+        heading (when-not (string/blank? content)
+                  (pu/get-block-property-value block :logseq.property/heading))
+        heading (if (true? heading)
+                  (min (inc (:block/level block)) 6)
+                  heading)]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
      (if (or (> (.-length content) 1000)
@@ -533,13 +538,23 @@
        "multiline-block"
        "uniline-block")
      " "
-     (cond
-       heading (str "h" heading)
-       (and (or (= format :markdown) (nil? format))
-            (string/starts-with? content "---\n")
-            (.endsWith content "\n---"))
-       "page-properties"
-       :else "normal-block"))))
+     (case format
+       :markdown
+       (cond
+         heading (str "h" heading)
+         (string/starts-with? content "# ") "h1"
+         (string/starts-with? content "## ") "h2"
+         (string/starts-with? content "### ") "h3"
+         (string/starts-with? content "#### ") "h4"
+         (string/starts-with? content "##### ") "h5"
+         (string/starts-with? content "###### ") "h6"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")
+       ;; other formats
+       (cond
+         heading (str "h" heading)
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")))))
 (defn- update-heading-class!
   "Sets the textarea's class (uniline/multiline, heading level) from its
    current content. Called from the change handler on each keystroke; the box

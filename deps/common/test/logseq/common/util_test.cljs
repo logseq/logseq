@@ -80,19 +80,10 @@
       "####### Title" nil
       "" nil
       nil nil))
-  (testing "reconstructs a marker for non-empty heading text"
-    (are [heading content expected]
-         (= expected (common-util/with-markdown-heading-prefix heading content))
-      1 "Title" "# Title"
-      2 "Title" "## Title"
-      1 "# Title" "# Title"
-      1 "" ""
-      1 "   " "   "
-      nil "Title" "Title"
-      true "Title" "# Title"))
-  (testing "auto-heading uses the block level"
-    (is (= "## Title"
-           (common-util/with-markdown-heading-prefix true "Title" 1)))))
+  (testing "maps heading property values to levels"
+    (is (= 1 (common-util/heading-value->level 1 nil)))
+    (is (= 2 (common-util/heading-value->level true 1)))
+    (is (nil? (common-util/heading-value->level nil nil))))))
 
 (deftest timestamp-ms
   (testing "keeps positive epoch-ms numbers"

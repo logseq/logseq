@@ -45,50 +45,13 @@
              x))
          refs)))
 
-(defn normalize-markdown-heading?
+(defn- normalize-markdown-heading?
   [block]
   (not (contains? #{:code :math} (:logseq.property.node/display-type block))))
 
-(defn heading-edit-content
-  "Reconstruct markdown heading markers for the editor so users can delete `#`
-   to remove heading format. Empty titles stay empty."
-  [block content]
-  (if (normalize-markdown-heading? block)
-    (common-util/with-markdown-heading-prefix
-      (:logseq.property/heading block)
-      (or content "")
-      (:block/level block))
-    (or content "")))
-
-(defn heading-edit-pos
-  "Offset a stored-title caret position after reconstructing the heading marker."
-  [block content pos]
-  (let [prefixed (heading-edit-content block content)
-        prefix-len (- (count prefixed) (count (or content "")))]
-    (cond
-      (number? pos) (+ pos prefix-len)
-      (and (vector? pos) (= :down (first pos)))
-      [:down (+ (second pos) prefix-len)]
-      :else pos)))
-
-(defn effective-heading-level
-  [block]
-  (when (normalize-markdown-heading? block)
-    (common-util/heading-value->level (:logseq.property/heading block)
-                                      (:block/level block))))
-
-(defn editor-content-changed?
-  "Compare stored title/heading with editor value after normalizing `#` markers
-   reconstructed for edit."
-  [block stored-title editor-value]
-  (let [stored-title (string/trim (or stored-title ""))
-        editor-value (string/trim (or editor-value ""))]
-    (or (not= (common-util/clear-markdown-heading (string/triml stored-title))
-              (common-util/clear-markdown-heading (string/triml editor-value)))
-        (not= (effective-heading-level block)
-              (common-util/markdown-heading-level editor-value)))))
-
 (defn- persist-heading-level
+  "Heading level to persist when the user typed markdown `#` markers.
+   Empty `# ` titles do not become headings."
   [block title]
   (when (normalize-markdown-heading? block)
     (when-let [level (common-util/markdown-heading-level title)]
@@ -171,7 +134,8 @@
                                           {:logseq.property/heading heading-level}))
                                  (dissoc :block/format))
                       block' (if (and (normalize-markdown-heading? block)
-                                      (nil? heading-level))
+                                      (string/blank? title)
+                                      (:logseq.property/heading block))
                                (cond-> (dissoc block' :logseq.property/heading)
                                  (retract-heading-tx block)
                                  (update :db/other-tx (fnil conj [])

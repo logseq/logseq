@@ -518,6 +518,8 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/clear-heading "Clear heading"
+ :editor.slash/clear-heading-desc "Remove heading format from this block"
  :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
