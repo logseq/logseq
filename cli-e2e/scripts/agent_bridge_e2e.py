@@ -380,7 +380,9 @@ def create_comment_blocks(cli, repo_root, root_dir, config, graph, task_id, task
         root_dir,
         config,
         graph,
-        '[:find ?e . :where [?e :block/title "Comments"]]',
+        "[:find ?e . :where [?e :block/parent {}] [?e :block/tags :logseq.class/Comments]]".format(
+            task_id
+        ),
     )
     if comments_id is None:
         raise SystemExit("comments block was not found")
