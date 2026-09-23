@@ -5,21 +5,19 @@ let decode (content : string) : Datascript.storage_payload =
 let encode_addresses addrs = "[" ^ String.concat "," addrs ^ "]"
 
 let decode_addresses json =
+  let json = String.trim json in
   let len = String.length json in
-  let rec skip_ws i =
-    if i < len && (json.[i] = ' ' || json.[i] = '\t' || json.[i] = '\n') then skip_ws (i + 1) else i
-  in
-  let rec parse_int i acc =
-    if i < len && json.[i] >= '0' && json.[i] <= '9' then
-      parse_int (i + 1) (acc * 10 + (Char.code json.[i] - Char.code '0'))
-    else (acc, i)
-  in
-  let rec loop i acc =
-    let i = skip_ws i in
-    if i >= len || json.[i] = ']' then List.rev acc
-    else if json.[i] = ',' then loop (i + 1) acc
-    else
-      let n, i' = parse_int i 0 in
-      loop i' (string_of_int n :: acc)
-  in
-  loop 0 []
+  let invalid () = invalid_arg "Invalid storage address array" in
+  if len < 2 || json.[0] <> '[' || json.[len - 1] <> ']' then invalid ();
+  let contents = String.trim (String.sub json 1 (len - 2)) in
+  if contents = "" then []
+  else
+    String.split_on_char ',' contents
+    |> List.map (fun token ->
+        let address = String.trim token in
+        if address = ""
+           || not (String.for_all (fun c -> c >= '0' && c <= '9') address)
+           || (String.length address > 1 && address.[0] = '0')
+        then invalid ();
+        (try ignore (Int64.of_string address) with Failure _ -> invalid ());
+        address)

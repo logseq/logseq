@@ -37,6 +37,24 @@ let setup () =
   dir
 
 let () =
+  List.iter
+    (fun (json, expected) ->
+       check ("storage addresses " ^ json)
+         (Storage_codec.decode_addresses json = expected))
+    [ ("[]", []);
+      ("[1000001,1000004]", ["1000001"; "1000004"]);
+      (" \r\n[ 0, 2147483648 ]\t", ["0"; "2147483648"]);
+      (Storage_codec.encode_addresses ["1"; "9007199254740991"],
+       ["1"; "9007199254740991"]) ];
+  List.iter
+    (fun json ->
+       let rejected =
+         try ignore (Storage_codec.decode_addresses json); false
+         with Invalid_argument _ -> true
+       in
+       check ("reject malformed storage addresses " ^ json) rejected)
+    [""; "1,2"; "[1,]"; "[,1]"; "[x]"; "[-1]"; "[1.5]"; "[01]"; "[1] trailing"];
+
   (* --- wire helpers --- *)
   let m = Wire.kw_map [ ("a", Wire.int 1); ("b", Wire.string "s") ] in
   check "kw_map get int" (Wire.get_exn "a" m |> Wire.as_int = Some 1);

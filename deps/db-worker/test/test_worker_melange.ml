@@ -37,6 +37,26 @@ let schema_args () =
        ])
 
 let () =
+  Fest.test "storage addresses decode persisted JSON arrays" (fun () ->
+      List.iter
+        (fun (json, expected) ->
+           Fest.expect |> Fest.equal (Storage_codec.decode_addresses json = expected) true)
+        [ ("[]", []);
+          ("[1000001,1000004]", ["1000001"; "1000004"]);
+          (" \r\n[ 0, 2147483648 ]\t", ["0"; "2147483648"]);
+          (Storage_codec.encode_addresses ["1"; "9007199254740991"],
+           ["1"; "9007199254740991"]) ]);
+
+  Fest.test "storage addresses reject malformed arrays" (fun () ->
+      List.iter
+        (fun json ->
+           let rejected =
+             try ignore (Storage_codec.decode_addresses json); false
+             with Invalid_argument _ -> true
+           in
+           Fest.expect |> Fest.equal rejected true)
+        [""; "1,2"; "[1,]"; "[,1]"; "[x]"; "[-1]"; "[1.5]"; "[01]"; "[1] trailing"]);
+
   Fest.test "wire helpers" (fun () ->
       let m = Wire.kw_map [ ("a", Wire.int 1) ] in
       Fest.expect |> Fest.equal (Wire.get_exn "a" m |> Wire.as_int) (Some 1);
