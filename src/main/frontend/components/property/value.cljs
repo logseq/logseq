@@ -1441,7 +1441,7 @@
                   (if (and tags? allow-page-class? page-class page-class-title)
                     (cons page-option (remove #(= (:value %) page-class-id) options))
                     options))
-        classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
+        classes' (remove root-tag? classes)
         opts' (cond->
                (merge
                 opts
