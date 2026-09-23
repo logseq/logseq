@@ -86,12 +86,32 @@ let datoms args =
          | Some (Wire.Keyword "avet") | Some (Wire.Symbol "avet") -> Avet
          | _ -> invalid_arg "datoms index must be :eavt/:aevt/:avet"
        in
-       let opt_int i = Option.bind (List.nth_opt rest i) Wire.as_int in
-       let opt_attr i = Option.bind (List.nth_opt rest i) Wire.as_keyword in
-       let opt_value i = Option.map Ds_wire.value_of_transit (List.nth_opt rest i) in
-       let ds =
-         Datascript.datoms (Datascript.db conn) index
-           ?e:(opt_int 1) ?a:(opt_attr 2) ?v:(opt_value 3) ?tx:(opt_int 4) ()
+       (* cljs d/datoms takes positional components c0..c3 in INDEX
+          order: :eavt e a v tx | :aevt a e v tx | :avet a v e tx *)
+       let c i = List.nth_opt rest (i + 1) in
+       let c_int i = Option.bind (c i) Wire.as_int in
+       let c_attr i = Option.bind (c i) Wire.as_keyword in
+       let c_val i = Option.map Ds_wire.value_of_transit (c i) in
+       let db = Datascript.db conn in
+       let c_eid i =
+         match c i with
+         | None -> None
+         | Some w -> (
+             match Wire.as_int w with
+             | Some _ as r -> r
+             | None -> (
+                 match Ds_wire.value_of_transit w with
+                 | (Vector [ Keyword a; v ]) | (List [ Keyword a; v ]) ->
+                     Datascript.entid db a v
+                 | _ -> None))
+       in
+       let e, a, v, tx =
+         match index with
+         | Eavt -> (c_eid 0, c_attr 1, c_val 2, c_int 3)
+         | Aevt -> (c_int 1, c_attr 0, c_val 2, c_int 3)
+         | Avet -> (c_eid 2, c_attr 0, c_val 1, c_int 3)
+       in
+       let ds = Datascript.datoms db index ?e ?a ?v ?tx ()
        in
        let rows =
          List.of_seq ds

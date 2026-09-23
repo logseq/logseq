@@ -1609,6 +1609,44 @@ let block_map_is_page (db : db) (m : Block_map.t) : bool =
     [ "logseq.class/Page"; "logseq.class/Journal"; "logseq.class/Tag"
     ; "logseq.class/Property" ]
 
+(* cljs build-insert-block-tx — :block/name is not unique, so pasting a
+   copied page entity would create a duplicate page; link to the
+   existing page instead. *)
+let build_insert_block_tx (db : db) (block : Block_map.t)
+    (result : Block_map.t) (uuid' : string) (parent : value)
+    (order : string) (target_page : entity_id option)
+    (outliner_op : string option) : Block_map.t =
+  let page_ =
+    block_map_is_page db block || Option.is_some (mget block "block/name")
+  in
+  let existing_page =
+    match outliner_op, mget block "block/name" with
+    | Some "paste", Some (String name) -> Ldb.get_page db (String name)
+    | _ -> None
+  in
+  match existing_page with
+  | Some ep ->
+      List.filter_map
+        (fun x -> x)
+        [ Some ("block/uuid", Uuid uuid')
+        ; Some ("block/parent", parent)
+        ; Some ("block/order", String order)
+        ; (match target_page with
+           | Some tp -> Some ("block/page", Ref tp)
+           | None -> Some ("block/page", Nil))
+        ; Some ("block/title", String "")
+        ; Some ("block/created-at", (match mget block "block/created-at" with
+           | Some v -> v | None -> Nil))
+        ; Some ("block/updated-at", (match mget block "block/updated-at" with
+           | Some v -> v | None -> Nil))
+        ; Some ("block/link", Ref ep.id) ]
+  | None ->
+      if page_ then Block_map.dissoc result [ "block/page" ]
+      else
+        (match target_page with
+         | Some tp -> Block_map.put result "block/page" (Ref tp)
+         | None -> result)
+
 (* insert-blocks-aux — uuids/id maps + per-block tx entries *)
 let insert_blocks_aux (db : db) (blocks : Block_map.t list)
     (target_block : entity) (opts : insert_opts) :
@@ -1784,16 +1822,11 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
                | Some (Bool true) -> result
                | _ -> Block_map.dissoc result [ "db/id" ]
              in
-             let page_ =
-               block_map_is_page db result
-               || Option.is_some (mget result "block/name")
-             in
              let result =
-               if page_ then Block_map.dissoc result [ "block/page" ]
-               else
-                 match target_page with
-                 | Some tp -> Block_map.put result "block/page" (Ref tp)
-                 | None -> result
+               build_insert_block_tx db block result uuid'
+                 (match parent with Some p -> p | None -> Nil)
+                 (match order with Some o -> o | None -> "")
+                 target_page opts.outliner_op
              in
              let db' =
                if page_txs <> [] then
@@ -2877,17 +2910,33 @@ let save_block_conn (conn : conn) (block : Block_map.t) (opts : save_opts)
 
 let insert_blocks_conn (conn : conn) (blocks : Block_map.t list)
     (target_block : Block_map.t) (opts : insert_opts) (opts_entry : Block_map.t)
-    : tx_result option =
+    : (tx_result * Block_map.t list) option =
   let outliner_op = Option.value opts.outliner_op ~default:"insert-blocks" in
   let opts = { opts with outliner_op = Some outliner_op } in
-  op_transact "insert-blocks"
-    (fun () ->
-      let r, _blocks =
-        insert_blocks (Conn.db conn) blocks target_block opts
-      in
-      Some r)
-    [ Ref 0; bmaps_arg blocks; bmap_arg target_block; opts_arg opts_entry ]
-    conn
+  let bms = ref [] in
+  (match
+     op_transact "insert-blocks"
+       (fun () ->
+         let r, bs = insert_blocks (Conn.db conn) blocks target_block opts in
+         bms := bs;
+         Some r)
+       [ Ref 0; bmaps_arg blocks; bmap_arg target_block; opts_arg opts_entry ]
+       conn
+   with
+   | Some r -> Some (r, !bms)
+   | None -> None)
+
+(* cljs outliner-core/insert-blocks! result {:tx-data, :blocks} — the main
+   thread's edit-last-block-after-inserted! reads (:blocks result) to
+   focus the last inserted block. *)
+let insert_blocks_result_map (r : tx_result) (bms : Block_map.t list)
+    : Wire.t =
+  Wire.Map
+    [ ( Wire.Keyword "tx-data"
+      , Wire.Array (List.map Ds_wire.transit_of_tx_op r.tx_data) )
+    ; ( Wire.Keyword "blocks"
+      , Wire.Array
+          (List.map (fun m -> Ds_wire.transit_of_value (bmap_arg m)) bms) ) ]
 
 let delete_blocks_conn (conn : conn) (blocks : Block_map.t list)
     (opts_entry : Block_map.t) : tx_result option =
