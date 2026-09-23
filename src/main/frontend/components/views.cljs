@@ -1518,23 +1518,29 @@
         (:property column)
         (not (#{:select :id :add-property} (:id column))))))
 
+(def ^:private table-row-mutating-action-ids
+  #{:set-property :unset-property :delete})
+
 (defn- table-row-context-actions
   [column {:keys [view-parent]}]
-  (cond-> [{:id :open
-            :label-key :ui/open}
-           {:id :open-sidebar
-            :label-key :sidebar.right/open}
-           {:id :copy
-            :label-key :ui/copy}
-           {:id :set-property
-            :label-key :property/set-property
-            :property-key (when (table-property-column? column)
-                            (:id column))}
-           {:id :unset-property
-            :label-key :property/unset-property}]
-    (not= :logseq.class/Page (:db/ident view-parent))
-    (conj {:id :delete
-           :label-key :ui/delete})))
+  (let [actions (cond-> [{:id :open
+                          :label-key :ui/open}
+                         {:id :open-sidebar
+                          :label-key :sidebar.right/open}
+                         {:id :copy
+                          :label-key :ui/copy}
+                         {:id :set-property
+                          :label-key :property/set-property
+                          :property-key (when (table-property-column? column)
+                                          (:id column))}
+                         {:id :unset-property
+                          :label-key :property/unset-property}]
+                  (not= :logseq.class/Page (:db/ident view-parent))
+                  (conj {:id :delete
+                         :label-key :ui/delete}))]
+    (if config/publishing?
+      (into [] (remove (comp table-row-mutating-action-ids :id)) actions)
+      actions)))
 
 (defn- event-element
   [^js e]

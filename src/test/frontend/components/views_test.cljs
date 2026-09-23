@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.config :as config]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
@@ -1461,6 +1462,14 @@
                  (#'views/table-row-context-actions
                   nil
                   {:view-parent {:db/ident :logseq.class/Page}})))))
+
+(deftest table-row-context-actions-hide-mutations-when-publishing
+  (with-redefs [config/publishing? true]
+    (is (= [:open :open-sidebar :copy]
+           (map :id (#'views/table-row-context-actions
+                     {:id :user.property/score
+                      :property {:db/ident :user.property/score}}
+                     {:view-parent {:db/ident :user.class/Movie}}))))))
 
 (deftest view-type-choices-surface-list-and-gallery
   (is (= [:logseq.property.view/type.table
