@@ -48,7 +48,7 @@
           {:keys [error]} (when-not dry-run
                             (ui-outliner-tx/transact!
                              {:outliner-op :batch-import-edn}
-                             (outliner-op/batch-import-edn! edn-data {})))]
+                             (outliner-op/batch-import-edn! edn-data {:validate-scope :tx})))]
     (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)
     (api-util/summarize-upsert-operations ops options)))
