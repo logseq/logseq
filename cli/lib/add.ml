@@ -956,6 +956,29 @@ let title_references title =
           | _ -> (refs, tag_names))
         (Vec.empty, Vec.empty) items
 
+(* Dry-run preview: page names referenced inside block titles that do not
+   exist yet; the worker would create them while applying insert-blocks. *)
+let missing_ref_page_names invoke_config repo links =
+  let open Cli_effect in
+  let names =
+    links
+    |> Vec.concat_map (fun (_, refs, _) -> refs)
+    |> Vec.filter_map (fun ref_value ->
+           Edn_util.get_string ref_value "block/title")
+    |> unique
+  in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure acc
+    | Some (name, rest) ->
+        bind (pull_pages_by_name invoke_config repo name page_selector)
+          (fun result ->
+            match first_entity result with
+            | Some _ -> loop acc rest
+            | None -> loop (Vec.push_back acc name) rest)
+  in
+  loop Vec.empty names
+
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
@@ -1083,22 +1106,31 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                  (Vec.append block_tag_ops extra_ops))
                           in
                           if dry_run then
-                            pure
-                              (Cli_result.ok ~command:Command_id.Upsert_block
-                                 mode
-                                 (Raw
-                                    (Edn_util.map_vec
-                                       (Vec.of_array
-                                          [|
-                                            (kw "dry-run", Edn_util.bool true);
-                                            ( kw "ops",
-                                              Edn_util.vector_vec ops );
-                                            ( kw "would-create-pages",
-                                              Edn_util.vector_vec
-                                                (would_create_pages
-                                                |> Vec.map (fun name ->
-                                                    Edn_util.string name)) );
-                                          |]))))
+                            bind
+                              (missing_ref_page_names invoke_config action.repo
+                                 links) (fun missing_refs ->
+                                let would_create_pages =
+                                  Vec.append would_create_pages missing_refs
+                                  |> unique
+                                in
+                                pure
+                                  (Cli_result.ok
+                                     ~command:Command_id.Upsert_block mode
+                                     (Raw
+                                        (Edn_util.map_vec
+                                           (Vec.of_array
+                                              [|
+                                                ( kw "dry-run",
+                                                  Edn_util.bool true );
+                                                ( kw "ops",
+                                                  Edn_util.vector_vec ops );
+                                                ( kw "would-create-pages",
+                                                  Edn_util.vector_vec
+                                                    (would_create_pages
+                                                    |> Vec.map (fun name ->
+                                                        Edn_util.string name))
+                                              );
+                                              |])))))
                           else
                             bind
                               (apply_outliner_ops invoke_config action.repo

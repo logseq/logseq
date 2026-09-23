@@ -232,7 +232,9 @@ let of_markdown text =
       match items.(i) with
       | Drawer (pairs, pos) -> pending := (pairs, pos) :: !pending
       | Heading { level; heading; unordered; pos } ->
-          let input_level = if unordered then level else 1 in
+          let input_level =
+            if Option.is_some heading && not unordered then 1 else level
+          in
           let drawers = List.rev !pending in
           let exclude_ranges =
             List.map (fun (_, p) -> (p.start, p.stop)) drawers
