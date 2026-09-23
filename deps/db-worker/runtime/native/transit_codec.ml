@@ -44,8 +44,8 @@ let rec to_transit (t : Wire.t) : T.value =
   | Wire.Set xs -> T.Set (List.map to_transit xs)
   | Wire.Tagged (tag, rep) -> T.Tagged (tag, to_transit rep)
 
-let of_string s = of_transit (Transit_native.Transit.Json.of_string s)
+let of_string s = of_transit (Transit_json.of_string s)
 
 let to_string ?(mode = Wire.Normal) t =
   let mode = match mode with Wire.Normal -> T.Normal | Wire.Verbose -> T.Verbose in
-  Transit_native.Transit.Json.to_string ~mode (to_transit t)
+  Transit_json.to_string ~mode (to_transit t)
