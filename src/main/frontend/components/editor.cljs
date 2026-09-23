@@ -40,18 +40,19 @@
 
 (defn filter-commands
   [page? has-heading? commands]
-  (if page?
-    (let [task-groups #{(t :editor.slash/group-task-status)
-                        (t :editor.slash/group-task-date)
-                        (t :editor.slash/group-priority)}]
-      (filter (fn [item]
-                (or
-                 (= (t :command.editor/add-property) (first item))
-                 (when (= (count item) 5)
-                   (contains? task-groups (last item))))) commands))
-    (if has-heading?
-      commands
-      (remove #(= (t :editor.slash/clear-heading) (first %)) commands))))
+  (seq
+   (if page?
+     (let [task-groups #{(t :editor.slash/group-task-status)
+                         (t :editor.slash/group-task-date)
+                         (t :editor.slash/group-priority)}]
+       (filter (fn [item]
+                 (or
+                  (= (t :command.editor/add-property) (first item))
+                  (when (= (count item) 5)
+                    (contains? task-groups (last item))))) commands))
+     (if has-heading?
+       commands
+       (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
 
 (defn node-render
   [block q {:keys [db-tag?]}]
