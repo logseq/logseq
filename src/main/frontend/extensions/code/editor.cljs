@@ -665,7 +665,8 @@
                      (or (nil? @*cursor-curr)
                          (boundary? context @*cursor-curr direction)))
             (editor-handler/move-cross-boundary-up-down
-             direction {:pos [direction 0]}))
+             direction {:input (.-contentDOM ^js (:view context))
+                        :pos [direction 0]}))
           (update-cursor!))
 
         meta-or-ctrl-pressed?
