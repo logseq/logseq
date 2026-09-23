@@ -321,7 +321,9 @@
           inserted-child-1-uuid (random-uuid)
           inserted-child-2-uuid (random-uuid)
           tx-data [{:e 900001 :a :block/uuid :v inserted-child-1-uuid :added true}
-                   {:e 900002 :a :block/uuid :v inserted-child-2-uuid :added true}]
+                   {:e 900001 :a :block/parent :v (:db/id (:block/parent target)) :added true}
+                   {:e 900002 :a :block/uuid :v inserted-child-2-uuid :added true}
+                   {:e 900002 :a :block/parent :v (:db/id (:block/parent target)) :added true}]
           _ (d/transact! conn [[:db/add (:db/id template-child-1) :block/refs (:db/id template-child-2)]])
           tx-meta {:outliner-op :apply-template
                    :outliner-ops [[:apply-template [(:db/id template)

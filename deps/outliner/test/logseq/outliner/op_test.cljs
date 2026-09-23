@@ -5,8 +5,24 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.property :as outliner-property]))
+
+(deftest insert-blocks-preserves-existing-reference-ids
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "Target"} {:block/title "Referenced"}]}])
+        target (db-test/find-block-by-content @conn "Target")
+        referenced (db-test/find-block-by-content @conn "Referenced")
+        uuid' (random-uuid)]
+    (outliner-core/insert-blocks!
+     conn [{:block/uuid uuid'
+            :block/title (page-ref/->page-ref (:block/uuid referenced))
+            :block/refs [(:db/id referenced)]}]
+     target {:sibling? true :keep-uuid? true})
+    (is (= #{(:block/uuid referenced)}
+           (set (map :block/uuid (:block/refs (d/entity @conn [:block/uuid uuid']))))))))
 
 (deftest toggle-reaction-op
   (testing "toggles reactions via outliner ops"
