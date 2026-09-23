@@ -1820,3 +1820,26 @@
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
       (is (some #(= marker %) (util/get-page-blocks-contents))))))
+
+(deftest shift-click-select-persists-unsaved-edit-buffer-test
+  (testing "shift+click block selection flushes the editor buffer (db-test#1250)"
+    (let [marker (str "shift-flush-marker-" (random-uuid))
+          shift-click (fn [text]
+                        (.click
+                         (.first (loc/filter ".ls-page-blocks .ls-block .block-content"
+                                             :has-text text))
+                         (doto (Locator$ClickOptions.)
+                           (.setModifiers [KeyboardModifier/SHIFT]))))]
+      (b/new-block "shift flush target one")
+      (b/new-block "shift flush target two")
+      (util/exit-edit)
+      ;; New empty block, type without idle autosave, then shift+click twice to
+      ;; select a range, which exits editing
+      (b/new-block "")
+      (w/fill util/editor-q marker)
+      (is (= marker (util/get-edit-content)))
+      (shift-click "shift flush target one")
+      (shift-click "shift flush target two")
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(= marker %) (util/get-page-blocks-contents))))))
