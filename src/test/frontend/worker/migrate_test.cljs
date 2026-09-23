@@ -452,7 +452,8 @@
                    :block/uuid property-uuid
                    :block/title "External URL"
                    :logseq.property/type :string
-                   :logseq.property/public? true}
+                   :logseq.property/public? true
+                   :db/index true}
                   {:block/uuid block-uuid
                    :block/title "asset"
                    :logseq.property.asset/external-url "https://example.com/file.pdf"}])
