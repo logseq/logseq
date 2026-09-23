@@ -107,7 +107,8 @@
                         :block/uuid block-uuid}
                        3
                        {:container-id 99
-                        :custom-content nil}]]
+                        :custom-content nil
+                        :save-current-block? false}]]
                      @edit-calls))))
           (p/catch
            (fn [error]
