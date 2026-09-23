@@ -1,5 +1,5 @@
 (ns frontend.common.crypt-test
-  (:require [cljs.test :as t :refer [is testing]]
+  (:require [cljs.test :as t :refer [deftest is testing]]
             [frontend.common.crypt :as crypt]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [promesa.core :as p]))
@@ -43,7 +43,22 @@
 2. use wrong private-key to decrypt encrypted-aes-key above"
       (p/do!
        (-> (p/do! (crypt/<decrypt-private-key "wrong-password" encrypted-private-key))
-           (p/catch (fn [e] (is (= "decrypt-private-key" (ex-message e))))))
+           (p/catch (fn [e]
+                      (is (= "decrypt-private-key" (ex-message e)))
+                      (is (true? (:invalid-password? (ex-data e)))))))
        (-> (p/let [another-rsa-key-pair (crypt/<generate-rsa-key-pair)]
              (crypt/<decrypt-aes-key (:privateKey another-rsa-key-pair) encrypted-aes-key))
            (p/catch (fn [e] (is (= "decrypt-aes-key" (ex-message e))))))))))
+
+(deftest expected-crypto-operation-error-detects-runtime-shapes-test
+  (let [named (js/DOMException. "The operation failed for an operation-specific reason"
+                                "OperationError")
+        message-only (js/DOMException. "OperationError")
+        wrapped (ex-info "decrypt-private-key" {} named)
+        wrapped-message-only (ex-info "decrypt-private-key" {} message-only)]
+    (is (true? (crypt/expected-crypto-operation-error? named)))
+    (is (true? (crypt/expected-crypto-operation-error? message-only)))
+    (is (true? (crypt/expected-crypto-operation-error? wrapped)))
+    (is (true? (crypt/expected-crypto-operation-error? wrapped-message-only)))
+    (is (false? (crypt/expected-crypto-operation-error?
+                 (ex-info "decrypt-private-key" {} (js/Error. "TypeError")))))))
