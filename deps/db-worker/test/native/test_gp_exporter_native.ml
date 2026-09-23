@@ -1277,8 +1277,9 @@ let docs_graph_dir () : string =
         in
         if Sys.file_exists (Filename.concat sibling "pages") then sibling
         else
-          failwith
-            "docs v0.10.12 checkout not found (set LOGSEQ_DOCS_0_10_12_DIR)"
+          (* cljs marks this deftest ^:integration — excluded unless the docs
+             checkout is present *)
+          Alcotest.skip ()
 
 (* write files into an existing dir — cljs write-temp-file-graph body *)
 let write_temp_file_graph_in (dir : string)
