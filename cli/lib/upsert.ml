@@ -2074,23 +2074,36 @@ let closed_value_of_result ~property_type result text value =
           | Some id ->
               let hit =
                 match property_type with
-                (* Closed number/url values match on their stored
-                   logseq.property/value literal — the same field the
-                   worker's closed-value check reads; entity titles carry
-                   display labels, not the literal. *)
+                (* Closed number/url values match the literal the worker's
+                   closed-value check reads: numbers live in
+                   logseq.property/value (int or float), urls in
+                   block/title. *)
                 | "number" -> (
+                    let as_number v =
+                      match (Edn_util.as_int64 v, Edn_util.as_float v) with
+                      | Some n, _ -> Some (Int64.to_float n)
+                      | _, Some f -> Some f
+                      | _ -> None
+                    in
                     match
                       ( Option.bind
                           (Edn_util.get value_entity "logseq.property/value")
-                          Edn_util.as_int64,
-                        Edn_util.as_int64 value )
+                          as_number,
+                        as_number value )
                     with
-                    | Some stored, Some wanted -> Int64.equal stored wanted
+                    | Some stored, Some wanted -> Float.equal stored wanted
                     | _ -> false)
                 | "url" -> (
-                    match
-                      Edn_util.get_string value_entity "logseq.property/value"
-                    with
+                    let literal =
+                      match
+                        Edn_util.get_string value_entity
+                          "logseq.property/value"
+                      with
+                      | Some v -> Some v
+                      | None ->
+                          Edn_util.get_string value_entity "block/title"
+                    in
+                    match literal with
                     | Some stored ->
                         String.equal (String.trim stored) (String.trim text)
                     | None -> false)
