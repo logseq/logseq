@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.commands :as commands]
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.modules.outliner.op :as outliner-op]
@@ -97,6 +98,11 @@
                         :block/title "worker title"}
           calls (atom [])]
       (p/with-redefs [state/get-current-repo (constantly "test")
+                      ;; Swallow stray handle-step invocations left pending by other
+                      ;; tests: only commands/handle-step publishes
+                      ;; :editor/save-current-block, and this test's code path never
+                      ;; runs command steps.
+                      commands/handle-step (fn [& _])
                       db-async/<get-block
                       (fn [repo id opts]
                         (swap! calls conj [:get-block repo id opts])
