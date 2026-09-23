@@ -1655,6 +1655,14 @@
            (js/console.error error)
            (log/error :save-block-failed error)))))))
 
+(defn save-current-block-before-navigate!
+  "Closes any open editor popup so the raw textarea value is persisted,
+   then exits editing."
+  []
+  (state/clear-editor-action!)
+  (save-current-block!)
+  (state/clear-edit!))
+
 (def insert-command! editor-common-handler/insert-command!)
 
 
