@@ -315,7 +315,7 @@
       (for [nav checked-navs]
         (cond
           (= nav :flashcards)
-          (when flashcards-enabled?)
+          (when flashcards-enabled?
             (let [num (rfx/use-sub [:srs/cards-due-count])]
               (sidebar-item
                {:class "flashcards-nav"
