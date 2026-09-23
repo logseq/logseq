@@ -3389,6 +3389,7 @@ let () =
                    properties = Vec.empty;
                    blocks = Vec.singleton (Block.make ~title:"Child" ());
                    update_plan = Property.empty_update_plan;
+                   dry_run = false;
                  })
           in
           let* result =
@@ -3482,8 +3483,9 @@ let () =
           target_page = None;
           pos = None;
           content = None;
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
+          dry_run = false;
           update_tags_edn = None;
           update_properties_edn = None;
           remove_tags_edn = None;
@@ -3814,32 +3816,22 @@ let () =
       expect_bool "serialized child vector" true
         (Option.is_some (Edn_util.get serialized "block/children")));
 
-  test "CLI parity add block parsing preserves uuids tags and raw blocks"
+  test "CLI parity add block markdown parsing produces a block tree"
     (fun () ->
       let parsed =
         expect_ok "parse blocks"
-          (Add.parse_blocks_edn ~label:"blocks"
-             "[{:block/title \"Root\" :block/uuid #uuid \
-              \"00000000-0000-4000-8000-000000000301\" :block/tags \
-              [\"Project\" :logseq.class/Tag] :block/children [{:block/content \
-              \"Child\" :block/uuid #uuid \
-              \"00000000-0000-4000-8000-000000000302\"}]} \"Loose\"]")
+          (Markdown_blocks.of_markdown "- Root\n  - Child\n- Loose")
       in
       expect_int "parsed block count" 2 (Vec.length parsed);
       let root = Vec.nth parsed 0 in
       expect_equal "root title" "Root" (expect_some "root title" root.title);
-      expect_equal "root uuid" "00000000-0000-4000-8000-000000000301"
-        (expect_some "root uuid" root.uuid);
-      expect_int "root tags" 2 (Vec.length root.tags);
       expect_int "root children" 1 (Vec.length root.children);
-      expect_equal "child content title" "Child"
+      expect_equal "child title" "Child"
         (expect_some "child title" (Vec.peek_front root.children).title);
-      expect_equal "string block title" "Loose"
+      expect_equal "loose title" "Loose"
         (expect_some "loose title" (Vec.nth parsed 1).title);
-      expect_error_code "blocks must be vector" "invalid-blocks"
-        (Add.parse_blocks_edn ~label:"blocks" "{:block/title \"Root\"}");
-      expect_error_code "invalid blocks edn" "invalid-options"
-        (Add.parse_blocks_edn ~label:"blocks" "[{:block/title"));
+      expect_error_code "no headings" "invalid-blocks"
+        (Markdown_blocks.of_markdown "plain text without list items"));
 
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
@@ -3897,32 +3889,30 @@ let () =
                 }
               in
               let action =
-                expect_ok "create action"
-                  (Add.build_add_block_action
-                     {
-                       Add.target_id = Some 627L;
-                       target_uuid = None;
-                       target_page_name = None;
-                       pos = None;
-                       status = None;
-                       tags_edn = None;
-                       properties_edn = None;
-                       content = None;
-                       blocks_edn =
-                         Some
-                           (Printf.sprintf
-                              "[{:block/title \"Root\" :block/uuid #uuid \
-                               \"%s\" :block/children [{:block/title \"Child\" \
-                               :block/uuid #uuid \"%s\"}]}]"
-                              root_uuid child_uuid);
-                       blocks_file = None;
-                     }
-                     Vec.empty
-                     (Cli_primitive.create_repo "demo"))
+                {
+                  Add.repo = Cli_primitive.create_repo "demo";
+                  graph =
+                    Cli_config.repo_to_graph
+                      (Cli_primitive.create_repo "demo");
+                  target_id = Some 627L;
+                  target_uuid = None;
+                  target_page_name = None;
+                  pos = Block.Last_child;
+                  status = None;
+                  tags = Vec.empty;
+                  properties = Vec.empty;
+                  blocks =
+                    Vec.singleton
+                      (Block.make ~uuid:root_uuid ~title:"Root"
+                         ~children:
+                           (Vec.singleton
+                              (Block.make ~uuid:child_uuid ~title:"Child" ()))
+                         ());
+                }
               in
               let* result =
                 effect_to_promise
-                  (Add.execute_add_block action
+                  (Add.execute_add_block ~extra_ops:Vec.empty action
                      (config_with_output cfg Output.Mode.Json)
                      Output.Mode.Json)
               in
@@ -3958,7 +3948,7 @@ let () =
           tags_edn = None;
           properties_edn = None;
           content = Some "Hello from add";
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
         }
       in
@@ -3981,7 +3971,7 @@ let () =
         (Add.build_add_block_action
            {
              base_opts with
-             blocks_edn = Some "[\"Block\"]";
+             blocks_markdown = Some "[\"Block\"]";
              tags_edn = Some "[\"Project\"]";
            }
            Vec.empty
@@ -4095,7 +4085,7 @@ let () =
                    tags_edn = None;
                    properties_edn = None;
                    content = Some "Child";
-                   blocks_edn = None;
+                   blocks_markdown = None;
                    blocks_file = None;
                  }
                  Vec.empty
@@ -4103,7 +4093,7 @@ let () =
           in
           let* result =
             effect_to_promise
-              (Add.execute_add_block action
+              (Add.execute_add_block ~extra_ops:Vec.empty action
                  (config_with_output cfg Output.Mode.Human)
                  Output.Mode.Human)
           in
@@ -4133,7 +4123,7 @@ let () =
           update_properties_edn = None;
           remove_tags_edn = None;
           remove_properties_edn = None;
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
         }
       in

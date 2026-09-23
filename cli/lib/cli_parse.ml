@@ -1,4 +1,12 @@
-let is_option token = String.length token > 0 && token.[0] = '-'
+let is_option token =
+  let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+  let n = String.length token in
+  n > 1
+  && token.[0] = '-'
+  &&
+  match token.[1] with
+  | '-' -> n > 2 && is_alpha token.[2]
+  | c -> is_alpha c
 
 let option_value key options =
   Vec.find_map
@@ -37,7 +45,7 @@ let boolean_option = function
   | "fix" | "force" | "include-built-in" | "include-journal" | "journal-only"
   | "include-hidden" | "with-properties" | "with-extends" | "with-classes"
   | "with-type" | "page-hierarchy" | "linked-references" | "ref-id-footer"
-  | "progress" | "upload-keys" | "pretty-print" ->
+  | "progress" | "upload-keys" | "pretty-print" | "dry-run" ->
       true
   | _ -> false
 
@@ -231,6 +239,7 @@ let allowed_options_for_path path =
         "content";
         "blocks";
         "blocks-file";
+        "dry-run";
         "update-tags";
         "update-properties";
         "remove-tags";
@@ -605,8 +614,9 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                     (option_value "pos" options)
                     Block.position_of_string;
                 content = content_option_or_args options args;
-                blocks_edn = option_value "blocks" options;
+                blocks_markdown = option_value "blocks" options;
                 blocks_file = option_value "blocks-file" options;
+                dry_run = option_present "dry-run" options;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;

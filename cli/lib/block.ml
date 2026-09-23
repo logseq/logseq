@@ -6,6 +6,7 @@ type t = {
   title : string option;
   name : string option;
   order : int option;
+  level : int option;
   parent : Selector.block option;
   page : Selector.page option;
   tags : Selector.tag Rrbvec.t;
@@ -29,6 +30,7 @@ let make ?uuid ?title ?(children = Vec.empty) () =
     title;
     name = None;
     order = None;
+    level = None;
     parent = None;
     page = None;
     tags = Vec.empty;
@@ -82,6 +84,13 @@ let rec to_value t =
     match t.uuid with
     | Some uuid ->
         Vec.push_back fields (Edn_util.keyword "block/uuid", Edn_util.uuid uuid)
+    | None -> fields
+  in
+  let fields =
+    match t.level with
+    | Some level ->
+        Vec.push_back fields
+          (Edn_util.keyword "block/level", Edn_util.int64 (Int64.of_int level))
     | None -> fields
   in
   let fields =
