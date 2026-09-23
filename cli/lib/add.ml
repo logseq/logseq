@@ -582,8 +582,7 @@ let resolve_add_target config (action : action) =
                    ( vector_vec
                        (Vec.of_array
                           [|
-                            kw "block/name";
-                            Edn_util.string (normalized_lookup_name page_name);
+                            kw "block/name"; Edn_util.string page_name;
                           |]),
                      Vec.singleton page_name )))
   | None, None, None ->
@@ -1077,14 +1076,15 @@ let rewrite_name_lookups ~target ids ops =
 (* Resolves every [:block/name] lookup vec left in the planned ops to concrete
    references, creating the named pages that do not exist yet. Page creation
    happens only after all read-only validation has succeeded, so a rejected
-   command leaves no orphaned pages behind. Returns the rewritten ops plus the
-   materialized target lookup. *)
+   command leaves no orphaned pages behind. Returns the rewritten ops, the
+   materialized target lookup, and the uuids of pages created here (for
+   rollback when the final apply fails). *)
 let materialize_name_lookups invoke_config repo ~target_lookup ops =
   let open Cli_effect in
   let names = block_name_lookups_in_ops ops in
-  let rec resolve_ids acc remaining =
+  let rec resolve_ids acc created remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Ok acc)
+    | None -> pure (Ok (acc, created))
     | Some (name, rest) -> (
         let found entity =
           match (uuid_of_entity entity, id_of_entity entity) with
@@ -1098,7 +1098,7 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
             | Some entity -> (
                 match found entity with
                 | Some entry ->
-                    resolve_ids (Vec.push_back acc entry) rest
+                    resolve_ids (Vec.push_back acc entry) created rest
                 | None -> pure (Error (page_not_found ())))
             | None ->
                 bind (create_page invoke_config repo name)
@@ -1107,14 +1107,44 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                       (pull_created_page invoke_config repo name create_result)
                       (fun entity ->
                         match found entity with
-                        | Some entry ->
-                            resolve_ids (Vec.push_back acc entry) rest
+                        | Some ((_, uuid, _) as entry) ->
+                            resolve_ids
+                              (Vec.push_back acc entry)
+                              (Vec.push_back created uuid) rest
                         | None -> pure (Error (page_not_found ()))))))
   in
-  bind (resolve_ids Vec.empty names) (function
+  bind (resolve_ids Vec.empty Vec.empty names) (function
     | Error err -> pure (Error err)
-    | Ok ids ->
-        pure (Ok (rewrite_name_lookups ~target:target_lookup ids ops)))
+    | Ok (ids, created_uuids) ->
+        pure
+          (Ok
+             ( rewrite_name_lookups ~target:target_lookup ids ops,
+               created_uuids )))
+
+(* Best-effort cleanup of pages materialize_name_lookups created when the final
+   apply fails — page creation cannot join that transaction because the
+   insert-blocks schema requires a concrete uuid target and ref property values
+   require entity ids. *)
+let rollback_pages invoke_config repo created_uuids =
+  let open Cli_effect in
+  let ops =
+    Vec.map
+      (fun uuid ->
+        Edn_util.vector_vec
+          (Vec.of_array
+             [|
+               kw "delete-page";
+               Edn_util.vector_vec
+                 (Vec.of_array
+                    [| Edn_util.uuid uuid; Edn_util.map_vec Vec.empty |]);
+             |]))
+      created_uuids
+  in
+  if Vec.is_empty ops then pure ()
+  else
+    catch
+      (map (fun _ -> ()) (apply_outliner_ops invoke_config repo ops))
+      (fun _ -> pure ())
 
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
@@ -1308,10 +1338,16 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                     (Cli_result.error
                                        ~command:Command_id.Upsert_block mode
                                        err)
-                              | Ok (ops, target_lookup) ->
+                              | Ok ((ops, target_lookup), created_uuids) ->
                               bind
-                                (apply_outliner_ops invoke_config action.repo
-                                   ops) (fun _apply_result ->
+                                (catch
+                                   (apply_outliner_ops invoke_config
+                                      action.repo ops)
+                                   (fun exn ->
+                                     bind
+                                       (rollback_pages invoke_config
+                                          action.repo created_uuids)
+                                       (fun () -> Cli_effect.error exn))) (fun _apply_result ->
                                 match Edn_util.as_uuid target_lookup with
                                 | Some target_uuid ->
                                     bind

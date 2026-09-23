@@ -1969,9 +1969,7 @@ let coerce_block_property_value ~dry_run entity value =
                  (Vec.of_array
                     [|
                       kw "block/name";
-                      Edn_util.string
-                        (normalized_lookup_name
-                           (strip_page_ref_syntax text));
+                      Edn_util.string (strip_page_ref_syntax text);
                     |]))
       | Some "page" ->
           let text = String.trim text in
@@ -1985,9 +1983,7 @@ let coerce_block_property_value ~dry_run entity value =
                  (Vec.of_array
                     [|
                       kw "block/name";
-                      Edn_util.string
-                        (normalized_lookup_name
-                           (strip_page_ref_syntax text));
+                      Edn_util.string (strip_page_ref_syntax text);
                     |]))
           else Ok (Edn_util.string (strip_page_ref_syntax text))
       | Some ("node" | "entity" | "class" | "property" | "asset") ->
