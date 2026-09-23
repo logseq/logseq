@@ -100,6 +100,25 @@
   [repo cards-id]
   (state/<invoke-db-worker :thread-api/get-fsrs-due-card-block-ids repo cards-id))
 
+(defn- <get-card-block-ids
+  [repo cards-id]
+  (state/<invoke-db-worker :thread-api/get-fsrs-card-block-ids repo cards-id))
+
+(defn- card-ids-for-view
+  "Prefer due cards so review stays due-first. When none are due, browse every
+  matching card so All cards / category selection is not empty."
+  [due-ids all-ids]
+  (if (seq due-ids)
+    due-ids
+    all-ids))
+
+(defn- <get-card-ids-for-view
+  [repo cards-id]
+  (p/let [due-ids (<get-due-card-block-ids repo cards-id)
+          all-ids (when-not (seq due-ids)
+                    (<get-card-block-ids repo cards-id))]
+    (card-ids-for-view due-ids all-ids)))
+
 (defn- global-cards-id?
   [cards-id]
   (contains? #{:global "global"} cards-id))
@@ -301,7 +320,7 @@
         select-card! (fn [v]
                        (reset! *cards-id v)
                        (let [cards-id' (when-not (global-cards-id? v) v)]
-                         (p/let [result (<get-due-card-block-ids repo cards-id')]
+                         (p/let [result (<get-card-ids-for-view repo cards-id')]
                            (reset! *card-index 0)
                            (reset! *phase :init)
                            (reset! *block-ids result))))]
@@ -312,7 +331,7 @@
      (fn []
        (reset! *loading? true)
        (p/let [cards-class (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.class/Cards)
-               result (<get-due-card-block-ids repo initial-cards-id)]
+               result (<get-card-ids-for-view repo initial-cards-id)]
          (reset! *block-ids result)
          (reset! *loading? false)
          (when-let [cards-class-id (:db/id cards-class)]

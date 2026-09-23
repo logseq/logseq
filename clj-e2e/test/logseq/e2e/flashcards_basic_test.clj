@@ -3,6 +3,7 @@
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
@@ -111,3 +112,35 @@
       (w/click (loc/filter "[role='option']" :has-text query-a))
       (assert/assert-is-visible (format "#cards-modal .ls-card :text('%s')" card-a))
       (assert/assert-is-visible (loc/filter "#cards-modal .text-sm.opacity-50" :has-text "1/1")))))
+
+(deftest flashcards-due-zero-browse-and-due-review-test
+  (testing "due=0 still browses existing cards; due>0 still reviews only due cards"
+    (graph/new-graph (str "flashcards-due-zero-" (random-uuid)) false)
+    (util/goto-journals)
+    (let [page (ls-api-call! :editor.getCurrentPage)
+          page-name (get page "name")
+          future-card-title "Future scheduled card"
+          due-card-title "Due now card"
+          future-card (ls-api-call! :editor.appendBlockInPage page-name (str future-card-title " #Card"))
+          due-card (ls-api-call! :editor.appendBlockInPage page-name (str due-card-title " #Card"))
+          future-uuid (get future-card "uuid")
+          future-ms (+ (System/currentTimeMillis) (* 10 24 60 60 1000))]
+      (ls-api-call! :editor.upsertBlockProperty future-uuid "logseq.property.fsrs/due" future-ms)
+
+      (open-flashcards)
+      (assert/assert-is-visible (format "#cards-modal .ls-card :text('%s')" due-card-title))
+      (assert/assert-have-count (format "#cards-modal .ls-card :text('%s')" future-card-title) 0)
+      (assert/assert-is-visible (loc/filter "#cards-modal .text-sm.opacity-50" :has-text "1/1"))
+
+      (k/esc)
+      (assert/assert-is-hidden "#cards-modal")
+      (ls-api-call! :editor.upsertBlockProperty
+                    (get due-card "uuid")
+                    "logseq.property.fsrs/due"
+                    future-ms)
+
+      (open-flashcards)
+      (select-cards-option "All cards")
+      (assert/assert-have-count (loc/filter "#cards-modal" :has-text "Time to create a card!") 0)
+      (assert/assert-is-visible (loc/filter "#cards-modal .text-sm.opacity-50" :has-text #"1/2"))
+      (assert/assert-is-visible "#cards-modal .ls-card"))))
