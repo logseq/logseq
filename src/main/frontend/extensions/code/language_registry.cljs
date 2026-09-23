@@ -1044,6 +1044,27 @@
   [language-name]
   (get @name-index (normalize-key language-name)))
 
+(defn language-by-subname
+  "Best-effort lookup for partial language names: the language whose `:names`
+   set contains an entry that has `language-name` as a substring (e.g. \"oca\"
+   or \"cam\" resolves to :ocaml). Shorter matching names win; ties resolve in
+   registry order."
+  [language-name]
+  (let [lookup-key (normalize-key language-name)]
+    (when (and (not (string/blank? lookup-key))
+               (>= (count lookup-key) 2))
+      (->> languages
+           (keep (fn [descriptor]
+                   (when-let [matched (->> (:names descriptor)
+                                           (map normalize-key)
+                                           (filter #(string/includes? % lookup-key))
+                                           (sort-by count)
+                                           first)]
+                     [matched descriptor])))
+           (sort-by (comp count first))
+           first
+           second))))
+
 (defn language-by-extension
   [extension]
   (get @extension-index (normalize-key extension)))

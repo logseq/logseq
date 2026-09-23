@@ -295,12 +295,12 @@ html[data-theme='dark'] .logseq-code-editor,
     max-width: 100%;
   }
 
-  .logseq-code-editor .cm-editor,
-  .logseq-code-editor .cm-scroller {
-    max-height: none;
+  .logseq-code-editor .cm-editor {
+    max-height: none !important;
   }
 
   .logseq-code-editor .cm-scroller {
+    max-height: none;
     overflow: hidden;
   }
 
@@ -313,6 +313,9 @@ html[data-theme='dark'] .logseq-code-editor,
     max-width: 32ch;
     overflow: hidden;
     padding: 6px 0 0 !important;
+    /* Match the editor's font size so each 1.45em output line has exactly the
+       same height as a .cm-line row. */
+    font-size: inherit;
     font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     line-height: 1.45em;
     text-align: right;
