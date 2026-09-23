@@ -245,15 +245,22 @@
   (when-not (rtc-tx-or-download-graph? tx-meta)
     (let [page-tag (d/entity db :logseq.class/Page)
           library-page (ldb/get-library-page db-after)
+          ;; Climb to the topmost page ancestor: namespaces created before
+          ;; registration existed can have a parentless root higher up.
           move-parent-to-library-tx (fn [block-parent]
-                                      (when (and (ldb/page? block-parent)
-                                                 (nil? (:block/parent block-parent))
-                                                 (not= (:db/id block-parent) (:db/id library-page))
-                                                 (not (:db/ident block-parent))
-                                                 (not (ldb/built-in? block-parent)))
-                                        [{:db/id (:db/id block-parent)
-                                          :block/parent (:db/id library-page)
-                                          :block/order (db-order/gen-key)}]))]
+                                      (let [root (loop [parent block-parent]
+                                                   (if (and (ldb/page? parent)
+                                                            (ldb/page? (:block/parent parent)))
+                                                     (recur (:block/parent parent))
+                                                     parent))]
+                                        (when (and (ldb/page? root)
+                                                   (nil? (:block/parent root))
+                                                   (not= (:db/id root) (:db/id library-page))
+                                                   (not (:db/ident root))
+                                                   (not (ldb/built-in? root)))
+                                          [{:db/id (:db/id root)
+                                            :block/parent (:db/id library-page)
+                                            :block/order (db-order/gen-key)}])))]
       (mapcat
        (fn [datom]
          (let [id (:e datom)
