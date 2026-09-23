@@ -37,6 +37,8 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
+            [frontend.extensions.code :as code-editor]
+            [frontend.extensions.code.language-registry :as language-registry]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -4661,13 +4663,15 @@
               (gp-mldoc/inline->edn title
                                     (mldoc/get-default-config :markdown))))
 
-(defn- get-code-mode-by-lang
-  [lang]
-  (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
+(defn- supported-code-languages
+  []
+  (->> (language-registry/supported-languages)
+       (map (comp name :id))
+       sort))
 
 (hsx/defc src-lang-picker
   [block on-select!]
-  (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
+  (when-let [langs (seq (supported-code-languages))]
     (let [options (map (fn [lang] {:label lang :value lang}) langs)]
       (select/select {:items options
                       :input-default-placeholder (t :editor/code-language-placeholder)
@@ -4692,13 +4696,17 @@
             {:keys [lines language]} options
             attr (when language
                    {:data-lang language})
-            code (if lines (apply str lines) (:block/title block))]
+            code (if lines (apply str lines) (:block/title block))
+            normalized-language (when language
+                                  (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language)
+                                    "clojure"
+                                    language))]
         (cond
           html-export?
           (highlight/html-export attr code)
 
           :else
-          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
+          (let [language normalized-language]
             [:div.ui-fenced-code-editor.flex.w-full
              {:on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "!opacity-100")
               :on-mouse-leave (fn [e]
@@ -4716,15 +4724,14 @@
                  :blockid (str (:block/uuid block))
                  :on-click (fn [^js e]
                              (util/stop-propagation e)
-                             (let [target (.-target e)]
+                             (let [target (.-currentTarget e)
+                                   editor-root (some-> (.-currentTarget e)
+                                                       (.closest ".ui-fenced-code-editor"))]
                                (shui/popup-show! target
                                                  #(src-lang-picker block
                                                                    (fn [lang ^js _e]
-                                                                     (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
-                                                                       (if-let [mode (get-code-mode-by-lang lang)]
-                                                                         (.setOption cm "mode" mode)
-                                                                         (throw (ex-info "code mode not found"
-                                                                                         {:lang lang})))
+                                                                     (when-let [editor (util/get-code-editor-context editor-root)]
+                                                                       (code-editor/set-language! editor lang)
                                                                       (state/<invoke-db-worker :thread-api/transact
                                                                                                (state/get-current-repo)
                                                                                                [(ldb/kv :logseq.kv/latest-code-lang lang)]
@@ -4740,8 +4747,11 @@
                  :size :sm
                  :on-click (fn [^js e]
                              (util/stop-propagation e)
-                             (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
-                               (util/copy-to-clipboard! (.getValue cm))
+                             (let [editor-root (some-> (.-currentTarget e)
+                                                       (.closest ".ui-fenced-code-editor"))
+                                   editor (util/get-code-editor-context editor-root)
+                                   value (if editor (code-editor/get-value editor) code)]
+                               (util/copy-to-clipboard! value)
                                (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
                 (t :ui/copy))]

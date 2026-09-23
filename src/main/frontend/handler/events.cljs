@@ -13,6 +13,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.extensions.code :as code-editor]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
@@ -346,20 +347,19 @@
   (code-handler/save-code-editor!))
 
 (defevent! :editor/focus-code-editor [[_ editing-block container]]
-  (when-let [^js cm (util/get-cm-instance container)]
-    (when-not (.hasFocus cm)
+  (when-let [editor (util/get-code-editor-context container)]
+    (when-not (code-editor/has-focus? editor)
       (let [cursor-pos (some-> (state/get-state :editor/cursor-range) count)
             direction (:block.editing/direction editing-block)
             pos (:block.editing/pos editing-block)
             to-line (case direction
-                      :up (.lastLine cm)
+                      :up (code-editor/last-line editor)
                       (case pos
-                        :max (.lastLine cm)
+                        :max (code-editor/last-line editor)
                         0))]
                  ;; move to friendly cursor
-        (doto cm
-          (.focus)
-          (.setCursor to-line (or cursor-pos 0)))))))
+        (code-editor/focus! editor)
+        (code-editor/set-cursor! editor {:line to-line :ch (or cursor-pos 0)})))))
 
 (defevent! :editor/toggle-children-number-list [[_ block]]
   (when block
