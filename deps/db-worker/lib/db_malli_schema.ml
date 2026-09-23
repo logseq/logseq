@@ -72,7 +72,7 @@ let is_number_val = function Int _ | Float _ | Instant _ -> true | _ -> false
 let is_boolean_val = function Bool _ -> true | _ -> false
 let is_keyword_val = function Keyword _ -> true | _ -> false
 let is_map_val = function Map _ -> true | _ -> false
-let is_coll_val = function List _ | Vector _ | Set _ -> true | _ -> false
+let is_coll_val = function List _ | Vector _ | Set _ | Map _ -> true | _ -> false
 let is_some_val = function Nil -> false | _ -> true
 
 let macro_str (s : string) : bool =
@@ -388,17 +388,18 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
     match entity_fn with
     | Some f -> f
     | None ->
-        (* ident -> ent-map built from the ent-maps themselves *)
-        fun (k : attr) ->
-          Hashtbl.fold
-            (fun _eid (m : ent_map) acc ->
-              match acc with
-              | Some _ -> acc
-              | None ->
-                  (match mget "db/ident" m with
-                   | Some (Keyword ident) when ident = k -> Some m
-                   | _ -> None))
-            tbl None
+        (* cljs (into {} (map (juxt :db/ident identity) (vals ent-maps))) —
+           ident -> ent-map index built once, then O(1) lookups *)
+        let ident_tbl : (attr, ent_map) Hashtbl.t =
+          Hashtbl.create (Hashtbl.length tbl)
+        in
+        Hashtbl.iter
+          (fun _eid (m : ent_map) ->
+            match mget "db/ident" m with
+            | Some (Keyword ident) -> Hashtbl.replace ident_tbl ident m
+            | _ -> ())
+          tbl;
+        fun (k : attr) -> Hashtbl.find_opt ident_tbl k
   in
   (* post-pass: :many properties with a single value get wrapped in a set *)
   List.rev_map
