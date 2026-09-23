@@ -83,7 +83,7 @@
   (testing "maps heading property values to levels"
     (is (= 1 (common-util/heading-value->level 1 nil)))
     (is (= 2 (common-util/heading-value->level true 1)))
-    (is (nil? (common-util/heading-value->level nil nil))))))
+    (is (nil? (common-util/heading-value->level nil nil)))))
 
 (deftest timestamp-ms
   (testing "keeps positive epoch-ms numbers"

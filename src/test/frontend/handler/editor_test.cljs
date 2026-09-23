@@ -2693,10 +2693,10 @@
               (swap! tx-calls conj [db ops opts])
               :tx))
       (-> (p/do!
-           (editor/save-block! "repo" block-uuid "foo")
+           (editor/save-block! "repo" block-uuid "bar")
            (let [saved-block (get-in (first @tx-calls) [1 0 1 0])]
-             (is (= "foo" (:block/title saved-block)))
-             (is (= 1 (:logseq.property/heading saved-block)))
+             (is (= "bar" (:block/title saved-block)))
+             (is (nil? (:logseq.property/heading saved-block)))
              (is (nil? (:db/other-tx saved-block)))))
           (p/catch
            (fn [error]

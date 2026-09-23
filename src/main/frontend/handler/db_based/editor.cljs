@@ -135,11 +135,10 @@
                                  (dissoc :block/format))
                       block' (if (and (normalize-markdown-heading? block)
                                       (string/blank? title)
-                                      (:logseq.property/heading block))
-                               (cond-> (dissoc block' :logseq.property/heading)
-                                 (retract-heading-tx block)
-                                 (update :db/other-tx (fnil conj [])
-                                         (retract-heading-tx block)))
+                                      (retract-heading-tx block))
+                               (-> (dissoc block' :logseq.property/heading)
+                                   (update :db/other-tx (fnil conj [])
+                                           (retract-heading-tx block)))
                                block')]
                   (update block' :block/refs
                           (fn [refs]

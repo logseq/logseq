@@ -71,6 +71,16 @@
                (:db/other-tx result))
             title))))
 
+  (testing "empty content retracts heading when the incoming block omits the property"
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          result (db-editor-handler/wrap-parse-block
+                  {:block/uuid block-uuid
+                   :block/title ""})]
+      (is (= "" (:block/title result)))
+      (is (nil? (:logseq.property/heading result)))
+      (is (= [[:db/retract [:block/uuid block-uuid] :logseq.property/heading]]
+             (:db/other-tx result)))))
+
   (testing "raw display-type blocks preserve leading hash text"
     (doseq [display-type [:code :math]]
       (is (= {:block/title "# shell comment"
