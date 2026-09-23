@@ -159,8 +159,7 @@ let apply_insert_blocks_op conn result_ref (blocks : Wire.t list)
       in
       result_ref :=
         Option.map
-          (fun (r : Outliner_core.tx_result) ->
-            Ds_wire.transit_of_tx_result r.tx_data r.tx_meta)
+          (fun (r, bms) -> Outliner_core.insert_blocks_result_map r bms)
           r
 
 (* template-children-blocks — cljs takes rest of get-block-and-children
@@ -254,8 +253,8 @@ let apply_template_op conn result_ref (template_id : Wire.t)
            in
            result_ref :=
              Option.map
-               (fun (r : Outliner_core.tx_result) ->
-                 Ds_wire.transit_of_tx_result r.tx_data r.tx_meta)
+               (fun (r, bms) ->
+                 Outliner_core.insert_blocks_result_map r bms)
                r)
 
 (* resolve-indent-outdent-opts — resolves :parent-original uuid to
