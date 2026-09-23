@@ -222,17 +222,18 @@ let of_markdown text =
           first_heading_start := pos.start
       | Other (kind, start) -> others := (kind, start) :: !others
     done;
-    (* Paragraphs inside the outline are fine — their source text lands in
-       the previous block's multi-line title slice. Every other non-heading
-       node is unsupported: content before the first block is lost entirely,
-       and structural nodes (ordered lists, tables, quotes) would silently
-       fold raw markdown into a title. Fail fast on all of them. *)
+    (* Body nodes inside the outline (paragraphs, fenced code, quotes,
+       tables) are verbatim multi-line block content — their source lands
+       in the previous block's title slice. Only independent structure is
+       rejected: an ordered List carries sibling items that must become
+       separate blocks, so folding the raw "1. x" source into a title
+       would lose them. Content before the first block is always lost. *)
     let dropped =
       !others
       |> List.filter_map (fun (kind, start) ->
              match (kind, start) with
-             | "Paragraph", Some start when start >= !first_heading_start ->
-                 None
+             | "List", _ | "?", _ -> Some kind
+             | _, Some start when start >= !first_heading_start -> None
              | _ -> Some kind)
     in
     (Array.of_list !collected, !pending, dropped)
