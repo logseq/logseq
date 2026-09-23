@@ -31,6 +31,14 @@
   (w/click (loc/filter ".property-k" :has-text property-name))
   (w/click (loc/filter "div[role='menuitem']" :has-text "Available choices")))
 
+(defn- open-property-page-choices-pane
+  "Bottom property pills open the value picker, so a property shown as a pill
+  is configured from its property page."
+  [property-name]
+  (page/goto-page property-name)
+  (w/click "button:has-text('Configure')")
+  (w/click (loc/filter "div[role='menuitem']" :has-text "Available choices")))
+
 (defn- add-choice
   [choice]
   (w/click (loc/filter "div[role='menuitem']" :has-text "Add choice"))
@@ -39,7 +47,8 @@
   (assert/assert-is-visible (format ".choices-list li:has-text('%s')" choice)))
 
 (deftest property-choices-configuration-and-mod-p-stay-reactive-test
-  (let [property-name "reactive-priority"
+  (let [page-name (page/get-page-name)
+        property-name "reactive-priority"
         choice-before "Choice before"
         choice-after "Choice after"
         removable-choice "Choice to delete"]
@@ -58,7 +67,8 @@
              choice-after))
     (w/click (loc/filter "div[role='menuitem']" :has-text "Set as default choice"))
 
-    (open-choices-pane property-name)
+    ;; With choices the property renders as a bottom pill
+    (open-property-page-choices-pane property-name)
     (add-choice removable-choice)
     (w/click
      (format ".choices-list li:has-text('%s') button[title='More settings']"
@@ -69,6 +79,7 @@
      0)
 
     (util/double-esc)
+    (page/goto-page page-name)
     (b/new-block "closed choice target")
     (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
     (w/fill ".ls-property-dialog .cp__select-input" property-name)

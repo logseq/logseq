@@ -315,36 +315,46 @@
   [property]
   (:logseq.property/description-title property))
 
+(defn- redirect-to-property-on-meta-pointer-down
+  [property]
+  (fn [^js e]
+    (when (util/meta-key? e)
+      (route-handler/redirect-to-page! (:block/uuid property))
+      (.preventDefault e))))
+
 (hsx/defc property-key-title
-  [block property class-schema?]
+  [block property {:keys [class-schema? bottom-pill?]}]
   (let [title (db-property/built-in-display-title property t)
         description (property-description-title property)
-        key-title (shui/trigger-as
-                   :a
-                   {:tabIndex 0
-                    :class "property-k flex select-none jtrigger w-full"
-                    :on-pointer-down (fn [^js e]
-                                       (when (util/meta-key? e)
-                                         (route-handler/redirect-to-page! (:block/uuid property))
-                                         (.preventDefault e)))
-                    :on-click (fn [^js/MouseEvent e]
-                                (when-not (util/meta-key? e)
-                                  (shui/popup-show! (.-target e)
-                                                    (fn []
-                                                      (property-config/property-dropdown property block {:debug? (.-altKey e)
-                                                                                                         :class-schema? class-schema?}))
-                                                    {:content-props
-                                                     {:class "ls-property-dropdown as-root"
-                                                      :onEscapeKeyDown (fn [e]
-                                                                         (util/stop e)
-                                                                         (shui/popup-hide!)
-                                                                         (when-let [input (state/get-input)]
-                                                                           (.focus input)))}
-                                                     :align "start"
-                                                     :dropdown-menu? true
-                                                     :as-dropdown? true})))}
+        key-title (if bottom-pill?
+                    ;; Bottom pills open the value picker on click, so the key is
+                    ;; only a label here. Meta+click still opens the property page.
+                    [:span.property-k.flex.select-none.w-full
+                     {:on-pointer-down (redirect-to-property-on-meta-pointer-down property)}
+                     title]
+                    (shui/trigger-as
+                     :a
+                     {:tabIndex 0
+                      :class "property-k flex select-none jtrigger w-full"
+                      :on-pointer-down (redirect-to-property-on-meta-pointer-down property)
+                      :on-click (fn [^js/MouseEvent e]
+                                  (when-not (util/meta-key? e)
+                                    (shui/popup-show! (.-target e)
+                                                      (fn []
+                                                        (property-config/property-dropdown property block {:debug? (.-altKey e)
+                                                                                                           :class-schema? class-schema?}))
+                                                      {:content-props
+                                                       {:class "ls-property-dropdown as-root"
+                                                        :onEscapeKeyDown (fn [e]
+                                                                           (util/stop e)
+                                                                           (shui/popup-hide!)
+                                                                           (when-let [input (state/get-input)]
+                                                                             (.focus input)))}
+                                                       :align "start"
+                                                       :dropdown-menu? true
+                                                       :as-dropdown? true})))}
 
-                   title)]
+                     title))]
     (if (string/blank? description)
       key-title
       (ui/tooltip
@@ -352,7 +362,7 @@
        [:div.max-w-96.whitespace-pre-wrap description]))))
 
 (hsx/defc property-key-cp
-  [block property {:keys [other-position? class-schema?]}]
+  [block property {:keys [other-position? class-schema? bottom-pill?]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
      ;; icon picker
@@ -387,7 +397,8 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (db-property/built-in-display-title property t)]
-       (property-key-title block property class-schema?))]))
+       (property-key-title block property {:class-schema? class-schema?
+                                           :bottom-pill? bottom-pill?}))]))
 
 (hsx/defc bidirectional-values-cp
   [entity-uuids]

@@ -42,13 +42,30 @@
   (w/click (loc/filter ".property-k" :has-text property-name))
   (w/click (loc/filter "div[role='menuitem']" :has-text "Available choices")))
 
-(defn- add-choice
-  [property-name choice]
-  (open-choices-pane property-name)
+(defn- open-property-page-choices-pane
+  "Bottom property pills open the value picker, so global choices are
+  configured from the property page."
+  [property-name]
+  (page/goto-page property-name)
+  (w/click "button:has-text('Configure')")
+  (w/click (loc/filter "div[role='menuitem']" :has-text "Available choices")))
+
+(defn- add-choice-in-open-pane
+  [choice]
   (w/click (loc/filter "div[role='menuitem']" :has-text "Add choice"))
   (w/fill "input[placeholder='title']" choice)
   (w/click "button:has-text('Save')")
   (k/esc))
+
+(defn- add-choice
+  [property-name choice]
+  (open-choices-pane property-name)
+  (add-choice-in-open-pane choice))
+
+(defn- add-global-choice
+  [property-name choice]
+  (open-property-page-choices-pane property-name)
+  (add-choice-in-open-pane choice))
 
 (defn- hide-choice-for-tag
   [property-name choice tag]
@@ -68,8 +85,7 @@
   (assert/assert-is-visible ".cp__select-results"))
 
 (deftest tag-scoped-property-choices-test
-  (let [setup-page (page/get-page-name)
-        tag "Device"
+  (let [tag "Device"
         property-name "device-type"
         scoped-choice "wired"
         global-choice "wireless"]
@@ -80,8 +96,7 @@
     (add-choice property-name scoped-choice)
     (util/wait-timeout 100)
     (k/esc)
-    (page/goto-page setup-page)
-    (add-choice property-name global-choice)
+    (add-global-choice property-name global-choice)
     (util/wait-timeout 100)
     (k/esc)
     (page/goto-page tag)

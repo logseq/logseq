@@ -3197,6 +3197,16 @@
       :else
       nil)))
 
+(defn- handle-bottom-pill-click!
+  "Clicks on the key or the pill padding open the value picker. Clicks inside
+  the value are left to the value component (e.g. page refs navigate)."
+  [^js e]
+  (when-not (or config/publishing?
+                (util/meta-key? e)
+                (some-> (.-target e) (.closest ".bottom-property-content")))
+    (util/stop e)
+    (trigger-bottom-pill-edit! (.-currentTarget e))))
+
 (defn- bottom-property-pill-cp
   [block property opts]
   (let [many-node? (and (= :node (:logseq.property/type property))
@@ -3210,9 +3220,10 @@
       :data-bottom-pill-focusable true
       :data-bottom-row-nav true
       :tab-index -1
+      :on-click handle-bottom-pill-click!
       :on-key-down handle-bottom-pill-key-down!}
    [:div.flex.flex-row.items-center
-    (property-component/property-key-cp block property opts)
+    (property-component/property-key-cp block property (assoc opts :bottom-pill? true))
     [:div.select-none ":"]]
    [:div {:class (util/classnames
                   ["bottom-property-content property-value-container"
