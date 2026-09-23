@@ -375,6 +375,31 @@
             (fn []
               (state/set-state! :rtc/loading-graphs? false)))))))
 
+(def ^:private personal-access-tokens-path "/api/v1/personal-access-tokens")
+
+(defn <personal-access-tokens
+  []
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) personal-access-tokens-path)
+                {:method "GET"}
+                {})))
+
+(defn <create-personal-access-token!
+  [request]
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) personal-access-tokens-path)
+                {:method "POST"
+                 :headers {"content-type" "application/json"}
+                 :body (js/JSON.stringify (clj->js request))}
+                {})))
+
+(defn <revoke-personal-access-token!
+  [token-id]
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) personal-access-tokens-path "/" token-id)
+                {:method "DELETE"}
+                {})))
+
 (defn <rtc-invite-email
   [graph-uuid email]
   (let [base (http-base)
