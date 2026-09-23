@@ -399,9 +399,7 @@
                               (db-async/<get-block (state/get-current-repo) sel-block-id {:children? false})
                               (show! (cp-content/block-context-menu-content
                                       target sel-block-id property-default-value?
-                                      (some-> selected-block
-                                              (.getAttribute "originalblockid")
-                                              parse-uuid))))))
+                                      (editor-handler/embed-uuid-from-node selected-block))))))
                          (show! (cp-content/custom-context-menu-content)
                                 {:id :blocks-selection-context-menu})))
 
@@ -417,9 +415,7 @@
                         (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
                         (show! (cp-content/block-context-menu-content
                                 target (uuid block-id) property-default-value?
-                                (some-> block
-                                        (.getAttribute "originalblockid")
-                                        parse-uuid)))))
+                                (editor-handler/embed-uuid-from-node block)))))
 
                      :else
                      false)]

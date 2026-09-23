@@ -702,7 +702,7 @@
   []
   (distinct (seq (state/get-selection-blocks))))
 
-(defn- embed-uuid-from-node
+(defn embed-uuid-from-node
   "UUID of the linking (wrapper) block when `node` is a rendered embed."
   [node]
   (when-let [id (some-> node (dom/attr "originalblockid"))]
@@ -4211,7 +4211,7 @@
           :else
           (p/do!
            (save-block! repo (:block/uuid host) remaining)
-           (embed-node! (assoc host :block/title remaining)
+           (embed-node! host
                         target
                         {:replace-empty-target? (string/blank? remaining)
                          :skip-guard? true})))))))
