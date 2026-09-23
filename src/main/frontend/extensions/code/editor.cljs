@@ -419,11 +419,9 @@
     ;; The fence language was resolved before enhancers ran; if this
     ;; registration now matches the requested name, re-resolve it.
     (let [requested (:requested-language-name @(:*state context))
-          resolved (:language @(:*state context))]
-      (when (and requested
-                 (plugin-language-by-name context requested)
-                 (not= (:id resolved)
-                       (:id (plugin-language-by-name context requested))))
+          resolved (:language @(:*state context))
+          match (when requested (plugin-language-by-name context requested))]
+      (when (and match (not (identical? match resolved)))
         (set-language-impl! context requested))))
   context)
 
@@ -458,7 +456,9 @@
   [context language-name]
   (let [language (or (plugin-language-by-name context language-name)
                      (resolve-language! language-name))]
-    (swap! (:*state context) assoc :language language)
+    (swap! (:*state context) assoc
+           :language language
+           :requested-language-name language-name)
     (reconfigure-language! context (language-extensions language))
     (load-language-support! context language)
     language))
@@ -583,8 +583,7 @@
   [context config *esc-pressed? *cursor-prev *cursor-curr update-cursor!]
   (fn [e]
     (let [key-code (.-code e)
-          meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
-          shifted? (.-shiftKey e)]
+          meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
       (cond
         (= "Escape" key-code)
         (do
@@ -614,18 +613,7 @@
           "BracketRight" (util/stop e)
           nil)
 
-        shifted?
-        (case key-code
-          ;; create new block
-          "Enter"
-          (do
-            (util/stop e)
-            (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
-              (code-handler/save-code-editor!)
-              (util/schedule #(editor-handler/api-insert-new-block! ""
-                                                                    {:block-uuid (uuid blockid)
-                                                                     :sibling? true}))))
-          nil)))))
+        :else nil))))
 
 (defn- install-event-handlers!
   [context config component-state edit-block code-block *update-cursor!]
@@ -674,6 +662,19 @@
                            (when-not (and related-target
                                           (.contains editor-root related-target))
                              (leave-editor! @*esc-pressed?)))))
+    ;; Shift+Enter creates a sibling block. Intercept in the capture phase so
+    ;; CodeMirror's Shift-Enter (insertNewlineAndIndent) never runs — otherwise
+    ;; the editor would insert a newline *and* a sibling block would be added.
+    (.addEventListener editor-dom "keydown"
+                       (fn [e]
+                         (when (and (= "Enter" (.-code e)) (.-shiftKey e))
+                           (util/stop e)
+                           (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
+                             (code-handler/save-code-editor!)
+                             (util/schedule #(editor-handler/api-insert-new-block! ""
+                                                                                   {:block-uuid (uuid blockid)
+                                                                                    :sibling? true})))))
+                       #js {:capture true})
     (.addEventListener editor-dom "keydown"
                        (editor-keydown-handler context config *esc-pressed? *cursor-prev *cursor-curr update-cursor!))
     (.addEventListener editor-dom "pointerdown"
