@@ -132,7 +132,7 @@
                                   :db/ident :logseq.property.asset/external-url
                                   :logseq.property/type :url}
                                  value)]
-                [[:db/retract eid :logseq.property.asset/external-url value]
+                [[:db/retract eid :logseq.property.asset/external-url]
                  value-block
                  [:db/add eid :logseq.property.asset/external-url [:block/uuid (:block/uuid value-block)]]])))
           (d/q '[:find ?e ?v
