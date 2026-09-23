@@ -755,6 +755,34 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest db-worker-node-start-daemon-opens-new-graph-for-cli-owner
+  "The CLI never sends create-or-open-db, so a cli-owned worker eagerly opens
+   the graph even when its db file does not exist yet."
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-cli-eager-open")
+               repo (str "logseq_db_cli_eager_open_" (subs (str (random-uuid)) 0 8))
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts]
+                                                             {:storage {:db-exists? (fn [_] (p/resolved false))}})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [method args-transit]
+                                                                         (swap! invoke-calls conj
+                                                                                [method
+                                                                                 (ldb/read-transit-str args-transit)])
+                                                                         (p/resolved (ldb/write-transit-str nil)))})]
+                 (p/let [{:keys [stop!]} (start-daemon! {:root-dir data-dir
+                                                         :repo repo
+                                                         :owner-source "cli"
+                                                         :log-level "error"})
+                         _ (is (= [["thread-api/init" []]
+                                   ["thread-api/create-or-open-db" [repo {}]]]
+                                  @invoke-calls))
+                         _ (stop!)]
+                   true))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest db-worker-node-stop-closes-bound-repo
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-stop-close-db")
