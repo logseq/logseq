@@ -2067,6 +2067,106 @@ let () =
             fail_promise
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
+  test_promise "upsert block create coerces datetime property values to epoch ms"
+    (fun () ->
+      let step = ref 0 in
+      let property_ident = "user.property/meeting" in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"meeting" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/meeting\",\"~:logseq.property/type\",\"~:datetime\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:property_ident body) then
+                  fail_test ("missing meeting property ident: " ^ body);
+                if not (Js.String.includes ~search:"1790157600000" body) then
+                  fail_test ("missing epoch-ms datetime value: " ^ body);
+                if Js.String.includes ~search:"2026-09-23" body then
+                  fail_test
+                    ("unparsed datetime string leaked into property op: " ^ body);
+                "[]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- Ship it\n  meeting:: 2026-09-23T10:00:00Z";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block datetime property" output);
+          if !step = 4 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected four invoke requests, got %d" !step)));
+
+  test_promise "upsert block create rejects invalid datetime property values"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if
+              Js.String.includes ~search:"thread-api/q" body
+              && Js.String.includes ~search:"meeting" body
+            then
+              "[[\"^ \
+               \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/meeting\",\"~:logseq.property/type\",\"~:datetime\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              fail_test ("apply-outliner-ops should not run: " ^ body);
+              "")
+            else "[]")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- Ship it\n  meeting:: not-a-date";
+              |]
+          in
+          if output.code <> 0 then Js.Promise.resolve pass
+          else
+            fail_promise
+              ("expected non-zero exit for invalid datetime: " ^ output.stdout
+             ^ output.stderr)));
+
   test_promise "update block resolves string update property names by title"
     (fun () ->
       let step = ref 0 in
