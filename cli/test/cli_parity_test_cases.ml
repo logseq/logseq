@@ -3893,6 +3893,8 @@ let () =
         (Markdown_blocks.of_markdown "intro paragraph\n- b");
       expect_error_code "leading ordered list" "invalid-blocks"
         (Markdown_blocks.of_markdown "1. ordered\n- b");
+      expect_error_code "mid-outline ordered list" "invalid-blocks"
+        (Markdown_blocks.of_markdown "- a\n1. ordered\n- b");
       expect_error_code "leading drawer" "invalid-blocks"
         (Markdown_blocks.of_markdown "status:: todo\n- b"));
 
