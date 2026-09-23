@@ -22,11 +22,20 @@ exception Throw_value of value
 let eval_error fmt = Printf.ksprintf (fun msg -> raise (Eval_error msg)) fmt
 
 (* Runtime values: plain EDN values plus closures and pooled entities
-   (datascript/Entity cells decoded by the render-resource caller). *)
+   (datascript/Entity cells decoded by the render-resource caller).
+
+   [Seq] is a lazy-seq of runtime values: cljs seqs preserve the identity of
+   their elements, but [value] collections cannot hold [Ent]/[Fn]. Seq ops
+   that just select or reorder elements (map/filter/take/drop/...) return
+   [Seq] so entity rows keep keyword attr access and tagged re-emission on
+   the way back out. Concrete constructors (vec/set/hash-map, mapv/filterv,
+   values nested inside maps) still collapse to [value] — the cljs values
+   they hold are not entities either. *)
 type rt =
   | V of value
   | Ent of entity_id
   | Fn of (rt list -> rt)
+  | Seq of rt list
 
 type ctx = { entity_attr : entity_id -> attr -> value }
 
@@ -60,16 +69,18 @@ let rt_of_wire (w : Wire.t) : rt =
   | Wire.Tagged ("datascript/Entity", Wire.Int64 n) -> Ent (Int64.to_int n)
   | _ -> V (Ds_wire.value_of_transit w)
 
-let wire_of_rt (r : rt) : Wire.t =
+let rec wire_of_rt (r : rt) : Wire.t =
   match r with
   | V v -> Ds_wire.transit_of_value v
   | Ent eid -> Wire.Tagged ("datascript/Entity", Wire.Int eid)
   | Fn _ -> eval_error "function escapes result-transform"
+  | Seq xs -> Wire.Array (List.map wire_of_rt xs)
 
-let value_of_rt = function
+let rec value_of_rt = function
   | V v -> v
   | Ent eid -> Ref eid
   | Fn _ -> eval_error "function used as a value"
+  | Seq xs -> List (List.map value_of_rt xs)
 
 (* ---- value semantics (cljs core) ---- *)
 
@@ -80,12 +91,13 @@ let truthy = function
 let rt_equal a b =
   match a, b with
   | Ent x, Ent y -> x = y
-  | V x, V y -> Util.value_equal x y
+  | Fn f, Fn g -> f == g
   | Ent e, V (Keyword k) | V (Keyword k), Ent e -> (
       match (ctx ()).entity_attr e "db/ident" with
       | Keyword ik -> String.equal ik k
       | _ -> false)
-  | _ -> false
+  | Fn _, _ | _, Fn _ -> false
+  | _ -> Util.value_equal (value_of_rt a) (value_of_rt b)
 
 (* cljs compare — numbers compare numerically across int/float/instant. *)
 let rt_compare a b =
@@ -101,7 +113,8 @@ let rt_compare a b =
       | Some fx, Some fy -> compare fx fy
       | _ -> Util.compare_value x y)
   | Ent x, Ent y -> compare x y
-  | _ -> eval_error "compare on incomparable runtime values"
+  | Fn _, _ | _, Fn _ -> eval_error "compare on incomparable runtime values"
+  | _ -> Util.compare_value (value_of_rt a) (value_of_rt b)
 
 let num_of = function
   | V (Int n) -> float_of_int n
@@ -111,6 +124,7 @@ let num_of = function
 
 (* seqable: colls -> element list; maps -> [k v] vectors; nil -> [] *)
 let elems_of_rt = function
+  | Seq xs -> xs
   | V (List xs) | V (Vector xs) | V (Set xs) -> List.map (fun v -> V v) xs
   | V (Map kvs) -> List.map (fun (k, v) -> V (Vector [ k; v ])) kvs
   | V (Tuple vs) ->
@@ -121,7 +135,7 @@ let elems_of_rt = function
   | _ -> eval_error "value is not seqable"
 
 let seq_coll xs =
-  match xs with [] -> V Nil | _ -> V (List (List.map value_of_rt xs))
+  match xs with [] -> V Nil | _ -> Seq xs
 
 let take_elems n xs =
   let rec go acc i = function
@@ -432,7 +446,7 @@ and bind_pattern env pat value =
       let rec go i = function
         | [] -> ()
         | Symbol "&" :: Symbol r :: _ ->
-            env_bind env r (V (List (List.map value_of_rt (drop_elems i elems))))
+            env_bind env r (Seq (drop_elems i elems))
         | ((Symbol _ | Vector _) as sub) :: rest ->
             let elem = match List.nth_opt elems i with Some x -> x | None -> V Nil in
             bind_pattern env sub elem;
@@ -558,12 +572,11 @@ and make_fn env args =
         (match call_args with first :: _ -> env_bind env' "%" first | [] -> ());
         if variadic then
           env_bind env' "%&"
-            (V (List (List.map value_of_rt (drop_elems (List.length positional) call_args)))))
+            (Seq (drop_elems (List.length positional) call_args)))
       else (
         let rec bind ps args =
           match ps, args with
-          | "&" :: r :: _, rest ->
-              env_bind env' r (V (List (List.map value_of_rt rest)))
+          | "&" :: r :: _, rest -> env_bind env' r (Seq rest)
           | p :: prest, a :: arest ->
               env_bind env' p a;
               bind prest arest
@@ -619,6 +632,7 @@ and str_of_rt = function
   | V v -> Edn_util.pr_str v
   | Ent eid -> "#datascript/Entity " ^ string_of_int eid
   | Fn _ -> "#fn"
+  | Seq xs -> Edn_util.pr_str (List (List.map value_of_rt xs))
 
 and str_one args =
   match one args with V (String s) -> s | v -> str_of_rt v
@@ -808,11 +822,11 @@ and build_core_fns () =
       match List.rev (elems_of_rt (one args)) with x :: _ -> x | [] -> V Nil);
   reg "rest" (fun args ->
       match elems_of_rt (one args) with
-      | _ :: t -> V (List (List.map value_of_rt t))
-      | [] -> V (List []));
+      | _ :: t -> Seq t
+      | [] -> Seq []);
   reg "next" (fun args ->
       match elems_of_rt (one args) with
-      | _ :: (_ :: _ as t) -> V (List (List.map value_of_rt t))
+      | _ :: (_ :: _ as t) -> Seq t
       | _ -> V Nil);
   reg "nth" (fun args ->
       match args with
@@ -838,15 +852,15 @@ and build_core_fns () =
       | _ -> V (List []));
   reg "cons" (fun args ->
       match args with
-      | [ x; coll ] ->
-          V (List (value_of_rt x :: List.map value_of_rt (elems_of_rt coll)))
+      | [ x; coll ] -> Seq (x :: elems_of_rt coll)
       | _ -> eval_error "cons");
   reg "conj" (fun args ->
       match args with
       | coll :: xs -> (
           match coll with
           | V (Vector es) -> V (Vector (es @ List.map value_of_rt xs))
-          | V (List es) -> V (List (List.rev_map value_of_rt xs @ es))
+          | V (List es) -> Seq (List.rev xs @ List.map (fun v -> V v) es)
+          | Seq es -> Seq (List.rev xs @ es)
           | V (Set es) ->
               V
                 (Set
@@ -864,48 +878,44 @@ and build_core_fns () =
                       rt_assoc acc (V k) (V v)
                   | _ -> eval_error "conj into map wants [k v]")
                 (V (Map kvs)) xs
-          | V Nil -> V (List (List.rev_map value_of_rt xs))
+          | V Nil -> Seq (List.rev xs)
           | _ -> eval_error "conj")
       | [] -> eval_error "conj");
-  reg "concat" (fun args ->
-      V (List (List.concat_map (fun a -> List.map value_of_rt (elems_of_rt a)) args)));
-  reg "reverse" (fun args ->
-      V (List (List.rev (List.map value_of_rt (elems_of_rt (one args))))));
+  reg "concat" (fun args -> Seq (List.concat_map elems_of_rt args));
+  reg "reverse" (fun args -> Seq (List.rev (elems_of_rt (one args))));
   reg "distinct" (fun args ->
       let seen = ref [] in
-      V
-        (List
-           (List.filter_map
-              (fun x ->
-                let v = value_of_rt x in
-                if List.exists (fun y -> Util.value_equal y v) !seen then None
-                else (
-                  seen := v :: !seen;
-                  Some v))
-              (elems_of_rt (one args)))));
+      Seq
+        (List.filter_map
+           (fun x ->
+             let v = value_of_rt x in
+             if List.exists (fun y -> Util.value_equal y v) !seen then None
+             else (
+               seen := v :: !seen;
+               Some x))
+           (elems_of_rt (one args))));
   reg "dedupe" (fun args ->
       let rec go acc prev = function
         | x :: rest -> (
             let v = value_of_rt x in
             match prev with
             | Some p when Util.value_equal p v -> go acc prev rest
-            | _ -> go (v :: acc) (Some v) rest)
+            | _ -> go (x :: acc) (Some v) rest)
         | [] -> List.rev acc
       in
-      V (List (go [] None (elems_of_rt (one args)))));
+      Seq (go [] None (elems_of_rt (one args))));
   reg "flatten" (fun args ->
       let rec flat acc xs =
         List.fold_left
           (fun a x ->
             match x with
-            | V (List _ | Vector _ | Set _) -> flat a (elems_of_rt x)
-            | _ -> value_of_rt x :: a)
+            | V (List _ | Vector _ | Set _) | Seq _ -> flat a (elems_of_rt x)
+            | _ -> x :: a)
           acc xs
       in
-      V (List (List.rev (flat [] (elems_of_rt (one args))))));
+      Seq (List.rev (flat [] (elems_of_rt (one args)))));
   reg "sort" (fun args ->
-      let xs = List.map value_of_rt (elems_of_rt (one args)) in
-      V (List (List.stable_sort (fun a b -> rt_compare (V a) (V b)) xs)));
+      Seq (List.stable_sort rt_compare (elems_of_rt (one args))));
   reg "range" (fun args ->
       let lo, hi, step =
         match args with
@@ -930,39 +940,36 @@ and build_core_fns () =
               (go [] lo))));
   reg "repeat" (fun args ->
       match args with
-      | [ V (Int n); x ] -> V (List (List.init n (fun _ -> value_of_rt x)))
+      | [ V (Int n); x ] -> Seq (List.init n (fun _ -> x))
       | _ -> eval_error "repeat");
   reg "repeatedly" (fun args ->
       match args with
-      | [ V (Int n); f ] ->
-          V (List (List.init n (fun _ -> value_of_rt (apply_rt f []))))
+      | [ V (Int n); f ] -> Seq (List.init n (fun _ -> apply_rt f []))
       | _ -> eval_error "repeatedly wants (repeatedly n f)");
   reg "take" (fun args ->
       match args with
-      | [ V (Int n); coll ] ->
-          V (List (List.map value_of_rt (take_elems n (elems_of_rt coll))))
+      | [ V (Int n); coll ] -> Seq (take_elems n (elems_of_rt coll))
       | _ -> eval_error "take");
   reg "drop" (fun args ->
       match args with
-      | [ V (Int n); coll ] ->
-          V (List (List.map value_of_rt (drop_elems n (elems_of_rt coll))))
+      | [ V (Int n); coll ] -> Seq (drop_elems n (elems_of_rt coll))
       | _ -> eval_error "drop");
   reg "take-last" (fun args ->
       match args with
       | [ V (Int n); coll ] ->
           let xs = elems_of_rt coll in
-          V (List (List.map value_of_rt (drop_elems (max 0 (List.length xs - n)) xs)))
+          Seq (drop_elems (max 0 (List.length xs - n)) xs)
       | _ -> eval_error "take-last");
   reg "drop-last" (fun args ->
       match args with
       | coll :: rest ->
           let n = match rest with [ V (Int n) ] -> n | _ -> 1 in
           let xs = elems_of_rt coll in
-          V (List (List.map value_of_rt (take_elems (max 0 (List.length xs - n)) xs)))
+          Seq (take_elems (max 0 (List.length xs - n)) xs)
       | _ -> eval_error "drop-last");
   reg "butlast" (fun args ->
       let xs = elems_of_rt (one args) in
-      V (List (List.map value_of_rt (take_elems (max 0 (List.length xs - 1)) xs))));
+      Seq (take_elems (max 0 (List.length xs - 1)) xs));
   reg "take-while" (fun args ->
       match args with
       | [ p; coll ] ->
@@ -970,7 +977,7 @@ and build_core_fns () =
             | x :: rest when truthy (apply_rt p [ x ]) -> go (x :: acc) rest
             | _ -> List.rev acc
           in
-          V (List (List.map value_of_rt (go [] (elems_of_rt coll))))
+          Seq (go [] (elems_of_rt coll))
       | _ -> eval_error "take-while");
   reg "drop-while" (fun args ->
       match args with
@@ -982,7 +989,7 @@ and build_core_fns () =
                  | _ -> xs)
             | [] -> []
           in
-          V (List (List.map value_of_rt (go (elems_of_rt coll))))
+          Seq (go (elems_of_rt coll))
       | _ -> eval_error "drop-while");
   reg "take-nth" (fun args ->
       match args with
@@ -991,9 +998,9 @@ and build_core_fns () =
             elems_of_rt coll
             |> List.mapi (fun i x -> i, x)
             |> List.filter (fun (i, _) -> i mod n = 0)
-            |> List.map (fun (_, x) -> value_of_rt x)
+            |> List.map snd
           in
-          V (List kept)
+          Seq kept
       | _ -> eval_error "take-nth");
   reg "interleave" (fun args ->
       let cols = List.map elems_of_rt args in
@@ -1001,22 +1008,19 @@ and build_core_fns () =
         if List.exists (fun c -> c = []) cols then List.rev acc
         else
           go
-            (List.rev_append (List.map (fun c -> value_of_rt (List.hd c)) cols) acc)
+            (List.rev_append (List.map (fun c -> List.hd c) cols) acc)
             (List.map List.tl cols)
       in
-      V (List (go [] cols)));
+      Seq (go [] cols));
   reg "interpose" (fun args ->
       match args with
       | [ sep; coll ] -> (
           match elems_of_rt coll with
-          | [] -> V (List [])
+          | [] -> Seq []
           | x :: rest ->
-              V
-                (List
-                   (List.rev
-                      (List.fold_left
-                         (fun a x -> value_of_rt x :: value_of_rt sep :: a)
-                         [ value_of_rt x ] rest))))
+              Seq
+                (List.rev
+                   (List.fold_left (fun a x -> x :: sep :: a) [ x ] rest)))
       | _ -> eval_error "interpose");
   reg "partition" (fun args ->
       match args with
@@ -1029,11 +1033,10 @@ and build_core_fns () =
           in
           let rec go acc xs =
             if List.length xs >= n then
-              go (List (List.map value_of_rt (take_elems n xs)) :: acc)
-                (drop_elems step xs)
+              go (Seq (take_elems n xs) :: acc) (drop_elems step xs)
             else List.rev acc
           in
-          V (List (go [] (elems_of_rt coll)))
+          Seq (go [] (elems_of_rt coll))
       | _ -> eval_error "partition");
   reg "split-at" (fun args ->
       match args with
@@ -1071,11 +1074,7 @@ and build_core_fns () =
   reg "map" (fun args ->
       match args with
       | f :: colls ->
-          V
-            (List
-               (List.map
-                  (fun heads -> value_of_rt (apply_rt f heads))
-                  (map_cols colls)))
+          Seq (List.map (fun heads -> apply_rt f heads) (map_cols colls))
       | [] -> eval_error "map");
   reg "mapv" (fun args ->
       match args with
@@ -1089,22 +1088,15 @@ and build_core_fns () =
   reg "map-indexed" (fun args ->
       match args with
       | [ f; coll ] ->
-          V
-            (List
-               (List.mapi
-                  (fun i x -> value_of_rt (apply_rt f [ V (Int i); x ]))
-                  (elems_of_rt coll)))
+          Seq
+            (List.mapi
+               (fun i x -> apply_rt f [ V (Int i); x ])
+               (elems_of_rt coll))
       | _ -> eval_error "map-indexed");
   reg "filter" (fun args ->
       match args with
       | [ p; coll ] ->
-          V
-            (List
-               (List.filter_map
-                  (fun x ->
-                    if truthy (apply_rt p [ x ]) then Some (value_of_rt x)
-                    else None)
-                  (elems_of_rt coll)))
+          Seq (List.filter (fun x -> truthy (apply_rt p [ x ])) (elems_of_rt coll))
       | _ -> eval_error "filter");
   reg "filterv" (fun args ->
       match args with
@@ -1120,25 +1112,18 @@ and build_core_fns () =
   reg "remove" (fun args ->
       match args with
       | [ p; coll ] ->
-          V
-            (List
-               (List.filter_map
-                  (fun x ->
-                    if truthy (apply_rt p [ x ]) then None
-                    else Some (value_of_rt x))
-                  (elems_of_rt coll)))
+          Seq (List.filter (fun x -> not (truthy (apply_rt p [ x ]))) (elems_of_rt coll))
       | _ -> eval_error "remove");
   reg "keep" (fun args ->
       match args with
       | [ f; coll ] ->
-          V
-            (List
-               (List.filter_map
-                  (fun x ->
-                    match apply_rt f [ x ] with
-                    | V Nil -> None
-                    | r -> Some (value_of_rt r))
-                  (elems_of_rt coll)))
+          Seq
+            (List.filter_map
+               (fun x ->
+                 match apply_rt f [ x ] with
+                 | V Nil -> None
+                 | r -> Some r)
+               (elems_of_rt coll))
       | _ -> eval_error "keep");
   reg "keep-indexed" (fun args ->
       match args with
@@ -1149,18 +1134,17 @@ and build_core_fns () =
             |> List.filter_map (fun (i, x) ->
                    match apply_rt f [ V (Int i); x ] with
                    | V Nil -> None
-                   | r -> Some (value_of_rt r))
+                   | r -> Some r)
           in
-          V (List kept)
+          Seq kept
       | _ -> eval_error "keep-indexed");
   reg "mapcat" (fun args ->
       match args with
       | f :: colls ->
-          V
-            (List
-               (List.map value_of_rt
-                  (List.concat_map elems_of_rt
-                     (List.map (fun heads -> apply_rt f heads) (map_cols colls)))))
+          Seq
+            (List.concat_map
+               (fun heads -> elems_of_rt (apply_rt f heads))
+               (map_cols colls))
       | [] -> eval_error "mapcat");
   reg "reduce" (fun args ->
       match args with
@@ -1221,7 +1205,7 @@ and build_core_fns () =
               (fun a b -> rt_compare (apply_rt f [ a ]) (apply_rt f [ b ]))
               (elems_of_rt coll)
           in
-          V (List (List.map value_of_rt sorted))
+          Seq sorted
       | [ f; cmp; coll ] ->
           let sorted =
             List.stable_sort
@@ -1232,7 +1216,7 @@ and build_core_fns () =
                 | r -> if truthy r then -1 else 0)
               (elems_of_rt coll)
           in
-          V (List (List.map value_of_rt sorted))
+          Seq sorted
       | _ -> eval_error "sort-by");
   reg "group-by" (fun args ->
       match args with
@@ -1631,7 +1615,10 @@ let apply_edn ~(entity_attr : entity_id -> attr -> value) (edn : string)
       (match transform with
        | Fn _ -> ()
        | _ -> eval_error "Query result transform is not a function");
-      let out = apply_rt transform (List.map rt_of_wire rows) in
+      (* cljs applies the transform to ONE collection argument:
+         (transform rows). Elements go in as [rt] so entity cells keep
+         their datascript/Entity identity through the fn body. *)
+      let out = apply_rt transform [ Seq (List.map rt_of_wire rows) ] in
       match out with
       | V (List xs) | V (Vector xs) | V (Set xs) ->
           Wire.Array (List.map (fun v -> wire_of_rt (V v)) xs)
