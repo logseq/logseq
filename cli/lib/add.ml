@@ -1174,8 +1174,8 @@ let rewrite_name_lookups ~target ids ops =
    concrete uuid target and ref property values require entity ids), and the
    apply error is ambiguous — a timeout can fire after the worker committed, or
    a concurrent client may own a returned page. To avoid destroying committed or
-   foreign content, each created page is re-pulled and only permanently removed
-   when it still holds no blocks. *)
+   foreign content, each created page is re-checked for incoming references and
+   only deleted when it still holds none. *)
 (* Entities referencing a page through any ref attribute — block/parent
    (children), block/refs, block/page, property values. When the final apply
    committed despite a client-side error (e.g. a timeout), inserted blocks hold
@@ -1210,6 +1210,12 @@ let incoming_ref_query =
          |])
     ()
 
+(* created_uuids arrive leaf-first (deepest namespace level first). Pages are
+   checked and deleted one at a time in that order so a namespace parent's
+   orphan check runs only after its children were already removed. Deletion
+   goes through delete-page (recycle bin) rather than permanent removal: a
+   concurrent client may reference a page between the orphan check and the
+   delete, and a recycled page is recoverable while a purged one is not. *)
 let rollback_pages invoke_config repo created_uuids =
   let open Cli_effect in
   let still_orphaned uuid =
@@ -1226,58 +1232,111 @@ let rollback_pages invoke_config repo created_uuids =
         | Some items -> pure (Vec.is_empty items)
         | None -> pure false)
   in
-  bind
-    (all (Vec.map still_orphaned created_uuids))
-    (fun flags ->
-      let empty_uuids =
-        Vec.filter_map
-          (fun (uuid, empty) -> if empty then Some uuid else None)
-          (Vec.combine created_uuids flags)
-      in
-      if Vec.is_empty empty_uuids then pure ()
-      else
-        let ops =
-          empty_uuids
-          |> Vec.concat_map (fun uuid ->
-                 Vec.of_array
-                   [|
-                     Edn_util.vector_vec
-                       (Vec.of_array
-                          [|
-                            kw "delete-page";
-                            Edn_util.vector_vec
-                              (Vec.of_array
-                                 [|
-                                   Edn_util.uuid uuid;
-                                   Edn_util.map_vec Vec.empty;
-                                 |]);
-                          |]);
-                     Edn_util.vector_vec
-                       (Vec.of_array
-                          [|
-                            kw "recycle-delete-permanently";
-                            Edn_util.vector_vec
-                              (Vec.singleton (Edn_util.uuid uuid));
-                          |]);
-                   |])
-        in
-        catch
-          (map
-             (fun _ -> ())
-             (apply_outliner_ops invoke_config repo ops))
-          (fun _ -> pure ()))
+  let rec loop remaining =
+    match Vec.pop_front remaining with
+    | None -> pure ()
+    | Some (uuid, rest) ->
+        bind (still_orphaned uuid) (fun orphaned ->
+            bind
+              (if orphaned then
+                 catch
+                   (map
+                      (fun _ -> ())
+                      (apply_outliner_ops invoke_config repo
+                         (Vec.singleton
+                            (Edn_util.vector_vec
+                               (Vec.of_array
+                                  [|
+                                    kw "delete-page";
+                                    Edn_util.vector_vec
+                                      (Vec.of_array
+                                         [|
+                                           Edn_util.uuid uuid;
+                                           Edn_util.map_vec Vec.empty;
+                                         |]);
+                                  |])))))
+                   (fun _ -> pure ())
+               else pure ())
+              (fun () -> loop rest))
+  in
+  catch (loop created_uuids) (fun _ -> pure ())
+
+(* "A/B/C" -> ["A"; "A/B"] — the namespace prefixes a split-namespace
+   create-page may also create as parent pages. *)
+let ancestor_prefixes name =
+  let parts = Vec.split_on_char '/' name in
+  let rec loop acc prefix remaining =
+    match Vec.pop_front remaining with
+    | None -> acc
+    | Some (part, rest) ->
+        let prefix = if prefix = "" then part else prefix ^ "/" ^ part in
+        if Vec.is_empty rest then acc
+        else loop (Vec.push_back acc prefix) prefix rest
+  in
+  loop Vec.empty "" parts
 
 (* Resolves every [:block/name] lookup vec left in the planned ops to concrete
    references, creating the named pages that do not exist yet. Page creation
    happens only after all read-only validation has succeeded, so a rejected
    command leaves no orphaned pages behind. Returns the rewritten ops, the
-   materialized target lookup, and the uuids of pages created here (for
-   rollback when the final apply fails). *)
+   materialized target lookup, and the uuids of pages created here — deepest
+   first so rollback can walk leaf-to-root (for rollback when the final apply
+   fails). *)
 let materialize_name_lookups invoke_config repo ~target_lookup ops =
   let open Cli_effect in
   let names = block_name_lookups_in_ops ops in
   let created = ref Vec.empty in
+  let track_created name uuid =
+    if Vec.exists (fun (_, known) -> String.equal known uuid) !created then ()
+    else
+      created
+      := Vec.push_back !created (Vec.length (Vec.split_on_char '/' name), uuid)
+  in
   let returned_uuid create_result = created_page_uuid create_result in
+  (* A namespaced leaf's create-page can also create its ancestors; an
+     ancestor absent before the call and live after it belongs to this
+     command and joins the rollback set. Runs ancestor name pulls before
+     the create and returns the post-create check as a suspended task so
+     ownership is recorded only once the leaf is confirmed ours. *)
+  let track_ancestors invoke_config repo name =
+    let ancestors = ancestor_prefixes name in
+    if Vec.is_empty ancestors then pure (fun () -> pure ())
+    else
+      map
+        (fun presences ->
+          let was_live =
+            Vec.map
+              (fun result ->
+                match live_or_all_recycled result with
+                | `Live _ -> true
+                | _ -> false)
+              presences
+          in
+          fun () ->
+            (* Deepest ancestor first, matching leaf-to-root rollback order. *)
+            map
+              (fun _ -> ())
+              (map_s
+                 (fun (ancestor, live_before) ->
+                   if live_before then pure ()
+                   else
+                     map
+                       (fun result ->
+                         match live_or_all_recycled result with
+                         | `Live entity -> (
+                             match uuid_of_entity entity with
+                             | Some uuid -> track_created ancestor uuid
+                             | None -> ())
+                         | _ -> ())
+                       (pull_pages_by_name invoke_config repo ancestor
+                          page_selector))
+                 (Vec.rev (Vec.combine ancestors was_live))))
+        (all
+           (Vec.map
+              (fun ancestor ->
+                pull_pages_by_name invoke_config repo ancestor page_selector)
+              ancestors))
+  in
   let resolve_one name =
     let found entity =
       match (uuid_of_entity entity, id_of_entity entity) with
@@ -1293,7 +1352,7 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
             | Some entry -> pure (Ok entry)
             | None -> pure (Error (page_not_found ())))
         | `All_recycled -> pure (Error (recycled_page_error ()))
-        | `Missing ->
+        | `Missing -> (
             (* A create-page op carries our generated uuid: the worker
                returns it only when this call actually created the page —
                an existing (or concurrently created) page returns its own
@@ -1304,69 +1363,111 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                leave an empty journal page behind, which is harmless
                (the app creates today's journal on demand anyway). *)
             let our_uuid = generate_uuid () in
-            bind (create_page invoke_config repo name our_uuid)
-              (fun create_result ->
-                (* Register ownership as soon as the worker confirms it
-                   returned our uuid — the page exists even if the
-                   follow-up pull below rejects. *)
-                (match returned_uuid create_result with
-                | Some uuid when String.equal uuid our_uuid ->
-                    created := Vec.push_back !created our_uuid
-                | _ -> ());
+            bind (track_ancestors invoke_config repo name)
+              (fun check_ancestors ->
                 bind
-                  ((* A name pull misses namespaced pages: split-namespace
-                      gives the leaf its own title. Pull by uuid instead —
-                      the worker's returned uuid when it reports one (it
-                      differs from ours when the page already existed),
-                      else ours. *)
-                     let uuids =
-                       (match returned_uuid create_result with
-                        | Some uuid -> Vec.of_array [| uuid; our_uuid |]
-                        | None -> Vec.singleton our_uuid)
-                       |> unique
-                     in
-                     let rec try_uuid remaining =
-                       match Vec.pop_front remaining with
-                       | None ->
-                           pull_created_page invoke_config repo name create_result
-                       | Some (uuid, rest) ->
-                           bind
-                             (pull_entity invoke_config repo page_selector
-                                (vector_vec
-                                   (Vec.of_array
-                                      [| kw "block/uuid"; Edn_util.uuid uuid |])))
-                             (fun entity ->
-                               match found entity with
-                               | Some _ -> pure entity
-                               | None -> try_uuid rest)
-                     in
-                     try_uuid uuids)
-                  (fun entity ->
-                    if recycled_entity entity then
-                      pure (Error (recycled_page_error ()))
-                    else
-                      match found entity with
-                      | Some entry -> pure (Ok entry)
-                      | None -> pure (Error (page_not_found ())))))
+                  (create_page invoke_config repo name our_uuid)
+                  (fun create_result ->
+                    (* Register ownership as soon as the worker confirms it
+                       returned our uuid — the page exists even if the
+                       follow-up pull below rejects. *)
+                    (match returned_uuid create_result with
+                    | Some uuid when String.equal uuid our_uuid ->
+                        track_created name our_uuid
+                    | _ -> ());
+                    bind (check_ancestors ()) (fun () ->
+                        bind
+                          ((* A name pull misses namespaced pages: split-
+                              namespace gives the leaf its own title. Pull
+                              by uuid instead — the worker's returned uuid
+                              when it reports one (it differs from ours when
+                              the page already existed), else ours. *)
+                             let uuids =
+                               (match returned_uuid create_result with
+                                | Some uuid ->
+                                    Vec.of_array [| uuid; our_uuid |]
+                                | None -> Vec.singleton our_uuid)
+                               |> unique
+                             in
+                             let rec try_uuid remaining =
+                               match Vec.pop_front remaining with
+                               | None ->
+                                   pull_created_page invoke_config repo name
+                                     create_result
+                               | Some (uuid, rest) ->
+                                   bind
+                                     (pull_entity invoke_config repo
+                                        page_selector
+                                        (vector_vec
+                                           (Vec.of_array
+                                              [|
+                                                kw "block/uuid";
+                                                Edn_util.uuid uuid;
+                                              |])))
+                                     (fun entity ->
+                                       match found entity with
+                                       | Some _ -> pure entity
+                                       | None -> try_uuid rest)
+                             in
+                             try_uuid uuids)
+                          (fun entity ->
+                            if recycled_entity entity then
+                              pure (Error (recycled_page_error ()))
+                            else
+                              match found entity with
+                              | Some entry -> pure (Ok entry)
+                              | None -> pure (Error (page_not_found ()))))))))
   in
+  let created_uuids () =
+    !created
+    |> Vec.sort (fun (a, _) (b, _) -> compare b a)
+    |> Vec.map snd
+  in
+  (* all-settled: a sibling's failure leaves other resolve_one tasks in
+     flight, and their create-page requests can still land — waiting for
+     every task keeps !created complete before rollback runs. *)
   bind
-    (catch (all_results (Vec.map resolve_one names)) (fun exn ->
-         (* Rollback is best-effort: a rollback rejection must not mask the
-            real resolution/apply error. *)
-         bind
-           (catch (rollback_pages invoke_config repo !created) (fun _ ->
-                pure ()))
-           (fun () -> Cli_effect.error exn))) (function
-    | Error err ->
-        bind
-          (catch (rollback_pages invoke_config repo !created) (fun _ ->
-               pure ()))
-          (fun () -> pure (Error err))
-    | Ok ids ->
-        pure
-          (Ok
-             ( rewrite_name_lookups ~target:target_lookup ids ops,
-               !created )))
+    (all
+       (Vec.map
+          (fun name ->
+            catch
+              (map (fun value -> Ok value) (resolve_one name))
+              (fun exn -> pure (Error exn)))
+          names))
+    (fun settled ->
+      let first_failure =
+        Vec.find_map
+          (function
+            | Error exn -> Some (Ok exn)
+            | Ok (Error err) -> Some (Error err)
+            | Ok (Ok _) -> None)
+          settled
+      in
+      match first_failure with
+      | Some (Ok exn) ->
+          (* Rollback is best-effort: a rollback rejection must not mask the
+             real resolution/apply error. *)
+          bind
+            (catch
+               (rollback_pages invoke_config repo (created_uuids ()))
+               (fun _ -> pure ()))
+            (fun () -> Cli_effect.error exn)
+      | Some (Error err) ->
+          bind
+            (catch
+               (rollback_pages invoke_config repo (created_uuids ()))
+               (fun _ -> pure ()))
+            (fun () -> pure (Error err))
+      | None ->
+          let ids =
+            Vec.filter_map
+              (function Ok (Ok entry) -> Some entry | _ -> None)
+              settled
+          in
+          pure
+            (Ok
+               ( rewrite_name_lookups ~target:target_lookup ids ops,
+                 created_uuids () )))
 
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in

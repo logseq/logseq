@@ -2276,10 +2276,11 @@ let () =
                 if not (Js.String.includes ~search:!created_uuid body) then
                   fail_test ("rollback deleted the wrong page: " ^ body);
                 if
-                  not
-                    (Js.String.includes
-                       ~search:"recycle-delete-permanently" body)
-                then fail_test ("missing recycle-delete-permanently: " ^ body);
+                  Js.String.includes ~search:"recycle-delete-permanently" body
+                then
+                  fail_test
+                    ("rollback must stay recoverable (delete-page only): "
+                    ^ body);
                 "[]"
             | _
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
