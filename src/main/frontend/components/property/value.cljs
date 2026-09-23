@@ -15,6 +15,7 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
@@ -2374,7 +2375,7 @@
                         (let [files (array-seq files)]
                           (when (seq files)
                             (set-saving! true)
-                            (-> (editor-handler/db-based-save-assets! repo files)
+                            (-> (editor-assets/db-based-save-assets! repo files)
                                 (p/then
                                  (fn [saved-assets]
                                    (let [saved-assets (vec (remove nil? saved-assets))]

@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
@@ -504,7 +505,7 @@
      :type "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? false)))
+                    (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? false)))
      :hidden true}]])
 
 (def search-timeout (atom nil))

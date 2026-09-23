@@ -15,6 +15,7 @@
             [frontend.handler.db-based.recent :as db-recent-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -643,14 +644,14 @@
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (p/let [page-uuid (<page-uuid (state/get-current-repo) page-name)]
       (when page-uuid
-        (editor-handler/open-block-in-sidebar! page-uuid))
+        (editor-format/open-block-in-sidebar! page-uuid))
       (shui/dialog-close! :ls-dialog-cmdk))))
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)]
-      (editor-handler/open-block-in-sidebar! block-uuid)
+      (editor-format/open-block-in-sidebar! block-uuid)
       (shui/dialog-close! :ls-dialog-cmdk))))
 
 (defn- open-file
