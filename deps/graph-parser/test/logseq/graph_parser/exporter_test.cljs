@@ -24,6 +24,7 @@
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.graph-parser.exporter.finalize :as gp-exporter-finalize]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
@@ -2238,7 +2239,7 @@ abc
         tx-id (inc (:max-tx @conn))
         reports (atom [])]
     (d/listen! conn ::finalize-test #(swap! reports conj %))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= tx-id (:block/tx-id (d/entity @conn block-id))))
     (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
            (set (map :db/id (:block/refs (d/entity @conn block-id))))))
@@ -2248,7 +2249,7 @@ abc
     (is (= 42 (:block/tx-id (d/entity @conn [:block/uuid skipped-uuid]))))
     (is (empty? (:block/refs (d/entity @conn [:block/uuid reaction-uuid]))))
     (is (= 1 (count @reports)))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= 1 (count @reports)) "Repeated finalization is a no-op")))
 
 (deftest-async import-file-graph-rebuilds-refs-without-per-file-listener

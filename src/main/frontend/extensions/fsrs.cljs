@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -85,6 +86,15 @@
          (:block/uuid block-entity)
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due}))))))
+
+(declare update-due-cards-count!)
+
+(defn- rate-card!
+  "Persist a rating and refresh the sidebar due-cards counter."
+  [repo block-id rating]
+  (p/do!
+   (repeat-card! repo block-id rating)
+   (update-due-cards-count!)))
 
 (defn- <get-due-card-block-ids
   [repo cards-id]
@@ -199,7 +209,7 @@
                               :show-due? (not (:mobile? opts))
                               :mobile? (:mobile? opts)
                               :id (str "card-" (name rating))
-                              :on-click #(do (repeat-card! repo block-id rating)
+                              :on-click #(do (rate-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
       ratings)
@@ -238,7 +248,7 @@
               {:class (when (:mobile? opts) "ls-mobile-card")}
               [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
                [:div.mb-4.ml-2.opacity-70.text-sm
-                (component-block/breadcrumb {} repo (:block/uuid block) {:block block})]
+                (block-breadcrumb/breadcrumb {} repo (:block/uuid block) {:block block})]
                (let [option (case phase
                               :init
                               {:hide-children? true}

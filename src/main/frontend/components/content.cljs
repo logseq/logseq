@@ -16,6 +16,7 @@
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -223,7 +224,7 @@
          (shui/dropdown-menu-item
           {:key "Open in sidebar"
            :on-click (fn [_e]
-                       (editor-handler/open-block-in-sidebar! block-id))}
+                       (editor-format/open-block-in-sidebar! block-id))}
           (t :sidebar.right/open)
           (ui/dropdown-shortcut "shift+click"))
 
@@ -470,7 +471,7 @@
       (let [on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
-                         (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (editor-format/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-content! id content)
                          (when on-click
                            (on-click e))))]

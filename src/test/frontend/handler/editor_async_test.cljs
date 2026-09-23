@@ -13,6 +13,8 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as frontend-outliner-op]
@@ -687,7 +689,7 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo" [{:src "image.png"
+          (editor-assets/db-based-save-assets! "repo" [{:src "image.png"
                                                  :title "image"}]))
         (p/then
          (fn [_]
@@ -723,7 +725,7 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo"
+          (editor-assets/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
                                         :last-edit-block last-edit-block))
@@ -765,7 +767,7 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo"
+          (editor-assets/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
                                         :target-block target-block
@@ -848,7 +850,7 @@
                     (fn [content opts]
                       (swap! inserts conj [content opts])
                       (p/resolved nil))]
-      (p/let [_ (editor/quick-add-ensure-new-block-exists!)]
+      (p/let [_ (editor-quick-add/quick-add-ensure-new-block-exists!)]
         (is (= [["" {:page quick-add-page-id
                       :container-id :unknown-container
                       :replace-empty-target? false}]]

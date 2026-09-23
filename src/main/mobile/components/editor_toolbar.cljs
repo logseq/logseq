@@ -3,6 +3,7 @@
   (:require [frontend.commands :as commands]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.history :as history]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
@@ -40,7 +41,7 @@
   (when (state/get-edit-input-id)
     (let [input (state/get-input)]
       (state/clear-editor-action!)
-      (let [selection (editor-handler/get-selection-and-format)
+      (let [selection (editor-format/get-selection-and-format)
             {:keys [selection-start selection-end selection]} selection]
         (if (and input selection)
           (do

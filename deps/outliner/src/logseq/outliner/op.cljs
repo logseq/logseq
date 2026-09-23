@@ -211,14 +211,18 @@
           true)))))
 
 (defn- import-edn-data
-  [conn *result export-map {:keys [tx-meta] :as import-options}]
+  [conn *result export-map {:keys [tx-meta validate-scope] :as import-options}]
   (let [{:keys [error] :as txs}
-        (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
+        (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta :validate-scope))
              (catch :default e
                (js/console.error "Import EDN error: " e)
                {:error "An unexpected error occurred building the import. See the javascript console for details."}))
         validation (when-not error
-                     (sqlite-export/validate-import-txs txs @conn))]
+                     (sqlite-export/validate-import-txs
+                      txs
+                      @conn
+                      (cond-> {:edn-label "Imported EDN"}
+                        validate-scope (assoc :validate-scope validate-scope))))]
     ;; (cljs.pprint/pprint txs)
     (if (or error (:error validation))
       (reset! *result {:error (or error (:error validation))})
