@@ -6,6 +6,7 @@ type t = {
   title : string option;
   name : string option;
   order : int option;
+  level : int option;
   parent : Selector.block option;
   page : Selector.page option;
   tags : Selector.tag Rrbvec.t;
