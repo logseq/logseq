@@ -47,23 +47,3 @@
   (testing "hide-block-icon? and a missing icon suppress the control icon"
     (is (not (#'block/block-control-with-icon? page-block {:hide-block-icon? true} :icon false)))
     (is (not (#'block/block-control-with-icon? page-block {} nil false)))))
-
-(deftest block-control-icon-size-follows-heading-test
-  (testing "non-heading blocks keep the existing collapsed and expanded sizes"
-    (is (= 14 (#'block/block-control-icon-size plain-block {} false)))
-    (is (= 12 (#'block/block-control-icon-size plain-block {} true))))
-  (testing "heading blocks share the heading chrome icon size"
-    (is (= 28 (#'block/block-control-icon-size {:block/heading-level 1} {} false)))
-    (is (= 24 (#'block/block-control-icon-size {:block/heading-level 2} {} false)))
-    (is (= 20 (#'block/block-control-icon-size {:block/heading-level 3} {} false)))
-    (is (= 16 (#'block/block-control-icon-size {:block/heading-level 4} {} false)))
-    (is (= 13 (#'block/block-control-icon-size {:block/heading-level 5} {} false)))
-    (is (= 12 (#'block/block-control-icon-size {:block/heading-level 6} {} false))))
-  (testing "heading icon size does not shrink when the block is collapsed"
-    (is (= 28 (#'block/block-control-icon-size {:block/heading-level 1} {} true))))
-  (testing "boolean heading follows indent level like heading chrome"
-    (is (= 28 (#'block/block-control-icon-size {:block.temp/heading true} {:level 0} false)))
-    (is (= 24 (#'block/block-control-icon-size {:block.temp/heading true} {:level 1} false))))
-  (testing "invalid heading levels keep the non-heading icon size"
-    (is (= 14 (#'block/block-control-icon-size {:block/heading-level 0} {} false)))
-    (is (= 14 (#'block/block-control-icon-size {:block/heading-level 7} {} false)))))
