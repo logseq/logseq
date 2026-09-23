@@ -1929,8 +1929,11 @@ let strip_page_ref_syntax text =
   else text
 
 (* Coerces a markdown key:: value (always a string) to the property's schema
-   type; the worker normalizes ref-typed values further. *)
-let coerce_block_property_value entity value =
+   type; the worker normalizes ref-typed values further. Under --dry-run,
+   :page values become [:block/name] lookups so would-create-pages reports
+   pages the worker would create; real runs keep the string the worker's
+   :page branch requires. *)
+let coerce_block_property_value ~dry_run entity value =
   match Edn_util.as_string value with
   | None -> Ok value
   | Some text -> (
@@ -1958,6 +1961,13 @@ let coerce_block_property_value entity value =
               Error
                 (Error.invalid_options
                    ("property value is not a boolean: " ^ text)))
+      | Some "datetime" -> (
+          match Time.parse_time (String.trim text) with
+          | Some time -> Ok (Edn_util.float (Js.Date.getTime time))
+          | None ->
+              Error
+                (Error.invalid_options
+                   ("property value is not a datetime: " ^ text)))
       | Some "date" ->
           let text = String.trim text in
           if Cli_primitive.is_uuid_string text then
@@ -1974,8 +1984,24 @@ let coerce_block_property_value entity value =
                         (normalized_lookup_name
                            (strip_page_ref_syntax text));
                     |]))
-      | Some
-          ("page" | "node" | "entity" | "class" | "property" | "asset") ->
+      | Some "page" ->
+          let text = String.trim text in
+          if Cli_primitive.is_uuid_string text then
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array [| kw "block/uuid"; Edn_util.uuid text |]))
+          else if dry_run then
+            Ok
+              (Edn_util.vector_vec
+                 (Vec.of_array
+                    [|
+                      kw "block/name";
+                      Edn_util.string
+                        (normalized_lookup_name
+                           (strip_page_ref_syntax text));
+                    |]))
+          else Ok (Edn_util.string (strip_page_ref_syntax text))
+      | Some ("node" | "entity" | "class" | "property" | "asset") ->
           let text = String.trim text in
           if Cli_primitive.is_uuid_string text then
             Ok
@@ -1996,7 +2022,9 @@ let resolve_block_property_assignments ~dry_run invoke_config repo
           (function
           | Error err -> pure (Error err)
           | Ok (ident, entity) -> (
-              match coerce_block_property_value entity assignment.value with
+              match
+                coerce_block_property_value ~dry_run entity assignment.value
+              with
               | Error err -> pure (Error err)
               | Ok value ->
                   bind
