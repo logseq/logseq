@@ -1381,3 +1381,30 @@
                 "Stale Library :block/page is cleared"))))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest move-page-under-page-registers-namespace-in-library-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1274
+  ;; Moving a page under another page creates a namespace; its root page
+  ;; should be registered in Library like when the `#Page` tag is used.
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Parent"}}
+               {:page {:block/title "Child"}}])
+        library (ldb/get-library-page @conn)
+        _ (assert library "Library page exists")]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [parent (db-test/find-page-by-title @conn "Parent")
+            child (db-test/find-page-by-title @conn "Child")]
+        (is (nil? (:block/parent parent)) "Precondition: Parent has no parent")
+        ;; Move Child under Parent (mod+shift+m "Move to")
+        (outliner-core/move-blocks! conn [child] parent {:sibling? false})
+        (let [parent' (d/entity @conn (:db/id parent))
+              child' (d/entity @conn (:db/id child))]
+          (is (= (:db/id parent') (:db/id (:block/parent child')))
+              "Child is a namespace child of Parent")
+          (is (= (:db/id library) (:db/id (:block/parent parent')))
+              "Parent is registered in Library")
+          (is (ldb/page-in-library? @conn child')
+              "Parent/Child namespace shows up in Library")))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
