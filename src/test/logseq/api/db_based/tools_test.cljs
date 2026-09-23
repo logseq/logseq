@@ -55,4 +55,13 @@
         [{:operation "edit"
           :entityType "page"
           :id "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-          :data {:title "Nope"}}]))))
+          :data {:title "Nope"}}])))
+  (is (thrown-with-msg?
+       js/Error
+       #"must be a page uuid or the id of a page added"
+       (api-tools/build-upsert-nodes-edn
+        (conn/get-db)
+        [{:operation "add"
+          :entityType "block"
+          :data {:title "orphan"
+                 :page-id "Some Page Name"}}]))))

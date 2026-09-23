@@ -300,6 +300,22 @@
 (def ^:private Upsert-nodes-operations-schema
   [:sequential upsert-nodes-operation-schema])
 
+(defn- assert-add-block-page-ids!
+  "page-id must be a page uuid or the :id of a page added in the same call.
+   A page name is not resolved and would otherwise be silently dropped."
+  [operations]
+  (let [new-page-ids (->> operations
+                          (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))))
+                          (keep :id)
+                          set)]
+    (doseq [op (filter #(and (= "block" (:entityType %)) (= "add" (:operation %))) operations)]
+      (let [page-id (get-in op [:data :page-id])]
+        (when-not (or (common-util/uuid-string? page-id)
+                      (contains? new-page-ids page-id))
+          (throw (ex-info (str "Block page-id " (pr-str page-id)
+                               " must be a page uuid or the id of a page added in the same call")
+                          {:page-id page-id})))))))
+
 (defn- validate-import-edn
   "Validates everything as coming from add operations, failing fast on first invalid
   node. Will need to adjust add operation assumption when supporting editing pages"
@@ -343,6 +359,7 @@
         _ (when-let [errors (m/explain Upsert-nodes-operations-schema operations)]
             (throw (ex-info (str "Tool arguments are invalid:\n" (me/humanize errors))
                             {:errors errors})))
+        _ (assert-add-block-page-ids! operations)
         idents (operations->idents db operations)
         pages-and-blocks (ops->pages-and-blocks db operations idents)
         classes (ops->classes operations idents)
