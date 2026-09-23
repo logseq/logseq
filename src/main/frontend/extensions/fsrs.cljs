@@ -86,6 +86,15 @@
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due}))))))
 
+(declare update-due-cards-count!)
+
+(defn- rate-card!
+  "Persist a rating and refresh the sidebar due-cards counter."
+  [repo block-id rating]
+  (p/do!
+   (repeat-card! repo block-id rating)
+   (update-due-cards-count!)))
+
 (defn- <get-due-card-block-ids
   [repo cards-id]
   (state/<invoke-db-worker :thread-api/get-fsrs-due-card-block-ids repo cards-id))
@@ -199,7 +208,7 @@
                               :show-due? (not (:mobile? opts))
                               :mobile? (:mobile? opts)
                               :id (str "card-" (name rating))
-                              :on-click #(do (repeat-card! repo block-id rating)
+                              :on-click #(do (rate-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
       ratings)
