@@ -1,5 +1,3 @@
-external char_code_at : string -> int -> int = "charCodeAt" [@@mel.send]
-
 (* mldoc pos_meta positions are UTF-8 byte offsets, so titles must be sliced
    out of the UTF-8 encoding of the source text, not the UTF-16 JS string. *)
 let utf8_encode text =
@@ -21,22 +19,11 @@ let utf8_encode text =
       push (0x80 lor (codepoint land 0x3F)))
   in
   let rec loop index =
-    if index < String.length text then
-      let code = char_code_at text index in
-      if
-        code >= 0xD800 && code <= 0xDBFF
-        && index + 1 < String.length text
-        &&
-        let trail = char_code_at text (index + 1) in
-        trail >= 0xDC00 && trail <= 0xDFFF
-      then (
-        push_codepoint
-          (0x10000 + ((code - 0xD800) lsl 10) + (char_code_at text (index + 1)
-          - 0xDC00));
-        loop (index + 2))
-      else (
-        push_codepoint code;
-        loop (index + 1))
+    match Js.String.codePointAt ~index text with
+    | Some codepoint ->
+        push_codepoint codepoint;
+        loop (index + if codepoint < 0x10000 then 1 else 2)
+    | None -> ()
   in
   loop 0;
   Buffer.contents buffer
