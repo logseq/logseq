@@ -1897,11 +1897,7 @@ let strip_page_ref_syntax text =
     length >= 4
     && String.sub text 0 2 = "[["
     && String.sub text (length - 2) 2 = "]]"
-  then
-    let inner = String.sub text 2 (length - 4) in
-    match String.index_opt inner '|' with
-    | Some index -> String.sub inner 0 index
-    | None -> inner
+  then String.sub text 2 (length - 4)
   else text
 
 (* Coerces a markdown key:: value (always a string) to the property's schema
