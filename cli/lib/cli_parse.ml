@@ -1,12 +1,10 @@
+(* A `- ` token (dash + space) is a markdown list item in a quoted
+   free-text value such as --blocks, not an option. Every other dash
+   prefix keeps the strict option meaning so `--1`-style tokens are
+   still rejected as unknown options rather than swallowed as values. *)
 let is_option token =
-  let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
   let n = String.length token in
-  n > 1
-  && token.[0] = '-'
-  &&
-  match token.[1] with
-  | '-' -> n > 2 && is_alpha token.[2]
-  | c -> is_alpha c
+  n > 0 && token.[0] = '-' && not (n > 1 && token.[1] = ' ')
 
 let option_value key options =
   Vec.find_map
