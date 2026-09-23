@@ -3250,4 +3250,8 @@ let () =
     ; "pipeline", Test_pipeline_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
     ; "graph-view", Test_graph_view_native.cases
-    ; "db-core", Test_db_core_native.cases ]
+    ; "db-core", Test_db_core_native.cases
+    ; "gp-exporter", Test_gp_exporter_native.cases
+    ; "gp-extract", Test_gp_extract_native.cases
+    ; "gp-mldoc", Test_gp_mldoc_native.cases
+    ; "gp-text", Test_gp_text_native.cases ]
