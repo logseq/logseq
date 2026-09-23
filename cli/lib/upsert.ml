@@ -1905,11 +1905,10 @@ let strip_page_ref_syntax text =
   else text
 
 (* Coerces a markdown key:: value (always a string) to the property's schema
-   type; the worker normalizes ref-typed values further. Under --dry-run,
-   :page values become [:block/name] lookups so would-create-pages reports
-   pages the worker would create; real runs keep the string the worker's
-   :page branch requires. *)
-let coerce_block_property_value ~dry_run entity value =
+   type; name-typed ref values become [:block/name] lookups that
+   materialize_name_lookups resolves (creating missing pages) or
+   would-create-pages reports under --dry-run. *)
+let coerce_block_property_value entity value =
   match Edn_util.as_string value with
   | None -> Ok value
   | Some text -> (
@@ -1964,7 +1963,11 @@ let coerce_block_property_value ~dry_run entity value =
             Ok
               (Edn_util.vector_vec
                  (Vec.of_array [| kw "block/uuid"; Edn_util.uuid text |]))
-          else if dry_run then
+          else
+            (* A raw string reaches the worker's :page branch, whose
+               create! call lacks split-namespace? — `a/b` titles throw.
+               A [:block/name] lookup lets materialize create the page
+               (namespace-aware) and rewrite to an entity id. *)
             Ok
               (Edn_util.vector_vec
                  (Vec.of_array
@@ -1972,7 +1975,6 @@ let coerce_block_property_value ~dry_run entity value =
                       kw "block/name";
                       Edn_util.string (strip_page_ref_syntax text);
                     |]))
-          else Ok (Edn_util.string (strip_page_ref_syntax text))
       | Some "default" ->
           (* Ref-typed default values (closed enums like
              logseq.property/status, open text values) are resolved
@@ -2096,7 +2098,7 @@ let default_value_of_result result text =
                 "unknown value \"%s\" for closed property; choices: %s" bare
                 choices))
 
-let resolve_block_property_assignments ~dry_run ~entity_memo ~closed_memo
+let resolve_block_property_assignments ~entity_memo ~closed_memo
     invoke_config repo assignments =
   let open Cli_effect in
   (* The same `key::` can repeat on many blocks; effects fire on
@@ -2126,7 +2128,7 @@ let resolve_block_property_assignments ~dry_run ~entity_memo ~closed_memo
            | Error err -> pure (Error err)
            | Ok (ident, entity) -> (
                match
-                 coerce_block_property_value ~dry_run entity assignment.value
+                 coerce_block_property_value entity assignment.value
                with
                | Error err -> pure (Error err)
                | Ok value ->
@@ -2167,7 +2169,7 @@ let rec resolve_block_inline_properties ~dry_run ~entity_memo ~closed_memo
     invoke_config repo block =
   let open Cli_effect in
   bind
-    (resolve_block_property_assignments ~dry_run ~entity_memo ~closed_memo
+    (resolve_block_property_assignments ~entity_memo ~closed_memo
        invoke_config repo block.Block.properties) (function
     | Error err -> pure (Error (option_resolution_error "--blocks" err))
     | Ok resolved_assignments ->
