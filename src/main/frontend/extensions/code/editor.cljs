@@ -450,10 +450,11 @@
 (defn- apply-enhancer!
   [key enhancer payload]
   (let [result (enhancer payload)]
-    (when (instance? js/Promise result)
-      (.catch ^js result
-              (fn [e]
-                (log/error :code-editor/enhancer-failed {:key key :error e}))))))
+    ;; Promise.resolve assimilates thenables from the plugin iframe realm,
+    ;; which `instanceof` would not recognize.
+    (-> (js/Promise.resolve result)
+        (.catch (fn [e]
+                  (log/error :code-editor/enhancer-failed {:key key :error e}))))))
 
 (defn apply-enhancers!
   [context enhancers]
