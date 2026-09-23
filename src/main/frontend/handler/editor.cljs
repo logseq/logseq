@@ -785,14 +785,13 @@
         (do (show-cannot-embed-cycle!) nil)
 
         :else
-        (p/do!
-         (api-insert-new-block! ""
-                                {:block-uuid (:block/uuid host)
-                                 :sibling? sibling?
-                                 :replace-empty-target? replace-empty-target?
-                                 :outliner-op outliner-op
-                                 :other-attrs {:block/link (:db/id target')}})
-         :inserted))))))
+        (p/let [inserted (api-insert-new-block! ""
+                                                {:block-uuid (:block/uuid host)
+                                                 :sibling? sibling?
+                                                 :replace-empty-target? replace-empty-target?
+                                                 :outliner-op outliner-op
+                                                 :other-attrs {:block/link (:db/id target')}})]
+          (when inserted :inserted)))))))
 
 (defn unwrap-block-results
   [results]
