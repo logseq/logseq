@@ -92,6 +92,25 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
+(deftest slash-command-group-headings-test
+  (testing "unfiltered slash popup shows section headings"
+    (b/new-block "slash-headings")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
+    (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')")
+    (k/backspace)
+    (w/wait-for-not-visible ".ui__popover-content"))
+  (testing "typed slash filter hides section headings"
+    (b/new-block "slash-headings-filter")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (util/press-seq "node")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (assert/assert-is-hidden ".ui__ac-group-name")))
+
 (defn- chosen-slash-command-visibility
   []
   (json/read-value
