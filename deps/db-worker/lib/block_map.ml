@@ -121,8 +121,11 @@ let rec normalize_value (v : value) : value =
     else Map (List.map (fun (k, x) -> (k, normalize_value x)) kvs)
   | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
     (match x with
-     | Uuid _ | String _ | Int _ | Keyword _ ->
-       (* lookup-ref like [:block/uuid u] *)
+     | Uuid _ | String _ | Int _ | Keyword _
+       when Db_schema.is_unique_identity_attr a ->
+       (* lookup-ref like [:block/uuid u]; a non-unique head makes the
+          pair an ordinary collection value (datascript
+          maybe-wrap-multival), resolved later against the live schema *)
        Ref_to (Lookup_ref (a, x))
      | _ -> Vector [ Keyword a; normalize_value x ])
   | Vector vs -> Vector (List.map normalize_value vs)
@@ -256,6 +259,10 @@ let rec value_to_tx_value
      the live schema *)
   | (List [ Keyword a'; _ ] | Vector [ Keyword a'; _ ]) as v
       when unique_of a' || not many_ok ->
+    Some (One_value v)
+  | (List _ | Vector _ | Set _) when not many_ok ->
+    (* cljs maybe-wrap-multival: a non-multival attr keeps the whole
+       collection as a single value *)
     Some (One_value v)
   | List vs | Vector vs | Set vs ->
     let items = List.map (normalize_value) vs in

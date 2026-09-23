@@ -75,7 +75,7 @@ let keys (m : Wire.t) : string list =
         entries
   | _ -> []
 
-(* cljs conj on a set or vector *)
+(* cljs conj on a set, vector or list *)
 let conj (xs : Wire.t) (v : Wire.t) : Wire.t =
   match xs with
   | Wire.Set elems ->
@@ -83,5 +83,21 @@ let conj (xs : Wire.t) (v : Wire.t) : Wire.t =
   | Wire.Array elems | Wire.List elems -> Wire.Array (elems @ [ v ])
   | Wire.Nil -> Wire.Set [ v ]
   | _ -> invalid_arg "conj: not a collection"
+
+(* cljs set: coll -> deduped set *)
+let into_set (xs : Wire.t) : Wire.t =
+  let elems =
+    match xs with
+    | Wire.Set elems | Wire.Array elems | Wire.List elems -> elems
+    | Wire.Nil -> []
+    | _ -> invalid_arg "set: not a collection"
+  in
+  let rec dedupe acc = function
+    | [] -> List.rev acc
+    | hd :: tl ->
+        if List.exists (fun e -> e = hd) acc then dedupe acc tl
+        else dedupe (hd :: acc) tl
+  in
+  Wire.Set (dedupe [] elems)
 
 let empty_map : Wire.t = Wire.Map []

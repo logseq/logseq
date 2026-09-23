@@ -503,7 +503,13 @@ let inline_to_edn (text : string) (config : string) : value list =
           (Json.parse (inline_parse_json ~text ~config))
       in
       let ast = Clj_value.coll_items parsed in
-      if macro_with_script_markup text then List.map normalize_macro_asts ast
+      if macro_with_script_markup text then
+        (* the top-level list itself is an inline coll: normalize the whole
+           vector so sibling-level macro recovery runs on it, matching
+           cljs postwalk *)
+        (match normalize_macro_asts (Vector ast) with
+         | Vector xs -> xs
+         | v -> [ v ])
       else ast
   with _ -> []
 

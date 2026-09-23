@@ -230,7 +230,8 @@ let get_page_parents (n : node) : node list =
              | None -> acc)
         | None -> acc
       in
-      List.rev (walk (Some parent) [])
+      (* walk conses each parent on, so acc is already root-first *)
+      walk (Some parent) []
 
 let library_page_name = "Library" (* common-config/library-page-name *)
 let quick_add_page_name = "Quick add" (* common-config/quick-add-page-name *)

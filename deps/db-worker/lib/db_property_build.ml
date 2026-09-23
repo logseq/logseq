@@ -277,7 +277,7 @@ let build_property_value_block ?(block_uuid : string option)
   let uuid =
     match block_uuid with
     | Some u -> u
-    | None -> Common_uuid.gen_uuid "builtin-block-uuid" (str_of_value v)
+    | None -> Common_uuid.new_block_id ()
   in
   let created_from : value =
     if (match Block_map.attr_value property "db/ident" with
@@ -310,131 +310,142 @@ let build_property_value_block ?(block_uuid : string option)
      then [ "logseq.property/value", v ]
      else [ "block/title", v ])
   |> block_with_timestamps
-  |> fun m ->
-     match properties with
-     | Some p -> Block_map.merge m p
-     | None -> m
+  |> (fun m ->
+       match properties with
+       | Some ps -> Block_map.merge m ps
+       | None -> m)
 
-(* property-build/build-property-values-tx-m
-   Returns prop-ident -> value association list where value is a block-map
-   [Map], a lookup-ref [Ref_to], or a [Set] of those — the cljs map. *)
+
+(* property-build/build-property-values-tx-m *)
 let build_property_values_tx_m ?(pure = false) ?(pvalue_map = false)
-    (block : Block_map.t) (properties : (value * value) list) : (attr * value) list =
+    (block : Block_map.t) (properties : (value * value) list)
+    : (attr * value) list =
   let block' =
     match Block_map.attr_value block "db/id" with
     | Some _ -> block
     | None ->
-      (match Block_map.uuid_attr block "block/uuid" with
-       | Some u ->
-         block @ [ "db/id", Ref_to (Lookup_ref ("block/uuid", Uuid u)) ]
+      (match Block_map.attr_value block "block/uuid" with
+       | Some u -> Block_map.put block "db/id" (List [ Keyword "block/uuid"; u ])
        | None -> block)
   in
-  let gen_uuid_value_prefix =
+  let gen_uuid_value_prefix : string option =
     if pure then
-      match Block_map.attr_value block "db/ident", Block_map.uuid_attr block "block/uuid" with
-      (* cljs (str :ns/name "-v") keeps the leading colon. *)
-      | Some (Keyword i), _ -> Some (":" ^ i)
-      | _, Some u -> Some u
-      | _ -> invalid_arg "pure? requires block :db/ident or :block/uuid"
+      match Block_map.attr_value block "db/ident" with
+      | Some (Keyword i) | Some (String i) -> Some i
+      | _ -> Block_map.uuid_attr block "block/uuid"
     else None
   in
+  let pvalue (v : value) : value =
+    if pvalue_map then
+      match v with
+      | Map kvs ->
+        (match List.assoc_opt (Keyword "value") kvs with
+         | Some x -> x
+         | None -> Nil)
+      | _ -> v
+    else v
+  in
+  let value_block_opts (v' : value) : string option * Block_map.t option =
+    let props =
+      if pvalue_map then
+        match v' with
+        | Map kvs ->
+          (match List.assoc_opt (Keyword "attributes") kvs with
+           | Some (Map attrs) ->
+             Some
+               (List.filter_map
+                  (fun (kk, vv) ->
+                    match kk with
+                    | Keyword a | String a -> Some (a, vv)
+                    | _ -> None)
+                  attrs)
+           | _ -> None)
+        | _ -> None
+      else None
+    in
+    let buuid =
+      match gen_uuid_value_prefix with
+      | Some prefix ->
+        Some
+          (Common_uuid.gen_uuid "builtin-block-uuid"
+             (prefix ^ "-" ^ str_of_value (pvalue v')))
+      | None -> None
+    in
+    (buuid, props)
+  in
   List.map
-    (fun ((k : value), (v_star : value)) ->
+    (fun (k, vstar) ->
       let property_map : Block_map.t =
         match k with
         | Map kvs ->
-          List.filter_map (fun (k, v) ->
-              match k with Keyword a | String a -> Some (a, v) | _ -> None) kvs
-        | Keyword ident -> [ "db/ident", Keyword ident ]
-        | String ident -> [ "db/ident", Keyword ident ]
-        | _ -> invalid_arg "property key must be ident or map"
+          List.filter_map
+            (fun (kk, vv) ->
+              match kk with
+              | Keyword a | String a -> Some (a, vv)
+              | _ -> None)
+            kvs
+        | Keyword _ | String _ -> [ "db/ident", k ]
+        | _ -> []
       in
-      let to_pvalue (x : value) : value =
-        if pvalue_map then
-          match x with
-          | Map m ->
-            (match List.assoc_opt (Keyword "value") m with
-             | Some v -> v
-             | None -> Nil)
-          | _ -> x
-        else x
-      in
-      let v =
-        match v_star with
-        | Set vs -> Set (List.map to_pvalue vs)
-        | x -> to_pvalue x
-      in
-      let value_block_opts (v' : value) : string option * Block_map.t option =
-        let props =
-          if pvalue_map then
-            match v' with
-            | Map m ->
-              (match List.assoc_opt (Keyword "attributes") m with
-               | Some (Map attrs) ->
-                 Some
-                   (List.filter_map (fun (k, v) ->
-                        match k with
-                        | Keyword a | String a -> Some (a, v)
-                        | _ -> None)
-                      attrs)
-               | _ -> None)
-            | _ -> None
-          else None
-        in
-        let buuid =
-          if pure then
-            Option.map
-              (fun prefix ->
-                Common_uuid.gen_uuid "builtin-block-uuid"
-                  (prefix ^ "-" ^ str_of_value (to_pvalue v')))
-              gen_uuid_value_prefix
-          else None
-        in
-        (buuid, props)
+      if Block_map.attr_value property_map "db/ident" = None then
+        invalid_arg "Key in map must have a :db/ident";
+      if pure && gen_uuid_value_prefix = None then
+        invalid_arg "pure value-block seed requires :db/ident or :block/uuid";
+      let v : value =
+        match vstar with
+        | Set vs -> Set (List.map pvalue vs)
+        | _ -> pvalue vstar
       in
       let key : attr =
-        let attr_string a =
-          match Block_map.attr_value property_map a with
-          | Some (Keyword s) | Some (String s) -> Some s
-          | _ -> None
-        in
-        match attr_string "original-property-id" with
-        | Some i -> i
-        | None ->
-          (match attr_string "db/ident" with
-           | Some i -> i
-           | None -> invalid_arg "Key in map must have a :db/ident")
+        match
+          ( Block_map.attr_value property_map "original-property-id"
+          , Block_map.attr_value property_map "db/ident" )
+        with
+        | Some (String s), _ | Some (Keyword s), _ -> s
+        | _, Some (String s) | _, Some (Keyword s) -> s
+        | _ -> invalid_arg "property map missing :db/ident"
+      in
+      let block_map_value (m : Block_map.t) : value =
+        Map (List.map (fun (a, x) -> (Keyword a, x)) m)
       in
       let value : value =
-        match v_star, v with
-        | Set _, Set vlist
-          when List.for_all (function Uuid _ -> true | _ -> false) vlist ->
-          Set
-            (List.map (fun u -> Ref_to (Lookup_ref ("block/uuid", u))) vlist)
-        | Set vs, _ ->
+        match v with
+        | Set vs
+          when List.for_all
+                 (fun x -> match x with Uuid _ -> true | _ -> false)
+                 vs ->
           Set
             (List.map
                (fun x ->
-                 let buuid, props = value_block_opts x in
-                 block_map_value
-                   (build_property_value_block ?block_uuid:buuid
-                      ?properties:props block' property_map (to_pvalue x)))
+                 match x with
+                 | Uuid u -> List [ Keyword "block/uuid"; Uuid u ]
+                 | _ -> x)
                vs)
-        | _, Uuid u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
+        | Set _ ->
+          (match vstar with
+           | Set xs ->
+             Set
+               (List.map
+                  (fun x ->
+                    let buuid, props = value_block_opts x in
+                    block_map_value
+                      (build_property_value_block block' property_map
+                         (pvalue x) ?block_uuid:buuid ?properties:props))
+                  xs)
+           | _ -> Set [])
+        | Uuid u -> List [ Keyword "block/uuid"; Uuid u ]
         | _ ->
-          let buuid, props = value_block_opts v_star in
+          let buuid, props = value_block_opts vstar in
           block_map_value
-            (build_property_value_block ?block_uuid:buuid ?properties:props
-               block' property_map v)
+            (build_property_value_block block' property_map v
+               ?block_uuid:buuid ?properties:props)
       in
       (key, value))
     properties
 
-(* property-build/lookup-id? *)
+(* build.cljs lookup-id? — vector [(:block/uuid) <uuid>] *)
 let lookup_id (v : value) : bool =
   match v with
-  | Ref_to (Lookup_ref ("block/uuid", Uuid _)) -> true
-  | Vector [ Keyword "block/uuid"; Uuid _ ]
   | List [ Keyword "block/uuid"; Uuid _ ] -> true
   | _ -> false
 
@@ -486,9 +497,16 @@ let build_new_class (block : Block_map.t) : Block_map.t =
     | _ -> None
   in
   let tags =
+    let rec dedupe acc = function
+      | [] -> List.rev acc
+      | hd :: tl ->
+          if List.exists (fun e -> e = hd) acc then dedupe acc tl
+          else dedupe (hd :: acc) tl
+    in
     match Block_map.attr_value block "block/tags" with
-    | Some (Set ts) -> Set (ts @ [ Keyword "logseq.class/Tag" ])
-    | Some (Vector ts) | Some (List ts) -> Set (ts @ [ Keyword "logseq.class/Tag" ])
+    | Some (Set ts) -> Set (dedupe [] (ts @ [ Keyword "logseq.class/Tag" ]))
+    | Some (Vector ts) | Some (List ts) ->
+        Set (dedupe [] (ts @ [ Keyword "logseq.class/Tag" ]))
     | Some (Keyword t) -> Set [ Keyword t; Keyword "logseq.class/Tag" ]
     | _ -> Set [ Keyword "logseq.class/Tag" ]
   in

@@ -87,6 +87,7 @@ let build_new_class (block : Wire.t) : Wire.t =
        | Some t -> t
        | None -> Wire.Nil)
       (Wire.Keyword "logseq.class/Tag")
+    |> Cljs_map.into_set
     |> fun tags -> Cljs_map.assoc block "block/tags" tags
   in
   let block =

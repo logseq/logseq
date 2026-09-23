@@ -1423,21 +1423,29 @@ let extract_blocks (ast : value list) (content : string) (format : string)
   let all_blocks = List.rev ast in
   let ast_blocks = all_blocks in
   let headings, body, pre_block_properties =
+    (* `consumed` accumulates the ast blocks seen since the last heading, in
+       reverse order — the cljs `(take prev-block-num (drop ... all-blocks))`
+       slice without an O(n) list scan per heading. *)
     let rec loop headings ast_blocks block_idx timestamps properties body
-        prev_block_num =
+        consumed prev_block_num =
       match ast_blocks with
       | [] ->
-        (sanity_blocks_data (List.rev headings), List.rev body, properties)
+        (sanity_blocks_data headings, List.rev body, properties)
       | pair :: rest ->
         let ast_block, pos_meta =
           match pair with
           | Vector [ a; p ] | List [ a; p ] -> (a, p)
           | _ -> (pair, Map [])
         in
+        let consumed' =
+          match pair with
+          | Vector _ | List _ -> ast_block :: consumed
+          | _ -> consumed
+        in
         if paragraph_timestamp_block ast_block then
           let ts = extract_timestamps ast_block in
-          loop headings rest (block_idx + 1) (timestamps @ ts) properties body
-            (prev_block_num + 1)
+          loop headings rest (block_idx + 1) (List.rev_append ts timestamps)
+            properties body consumed' (prev_block_num + 1)
         else if Gp_property.properties_ast ast_block then
           let props_list =
             match ast_block with
@@ -1453,28 +1461,19 @@ let extract_blocks (ast : value list) (content : string) (format : string)
             | None -> empty_properties_result
           in
           loop headings rest (block_idx + 1) timestamps properties body
-            (prev_block_num + 1)
+            consumed' (prev_block_num + 1)
         else if heading_block ast_block then
           let cut_multiline =
             opts.export_to_db_graph_flag && prev_block_num = 0
           in
-          let prev_blocks =
-            List.filteri
-              (fun i _ -> i >= max 0 (block_idx - prev_block_num) && i < block_idx)
-              all_blocks
-            |> List.filter_map
-                 (fun pair ->
-                   match pair with
-                   | Vector [ a; _ ] | List [ a; _ ] -> Some a
-                   | _ -> None)
-          in
+          let prev_blocks = List.rev consumed in
           let pos_meta' =
             if cut_multiline then pos_meta
             else
               let e =
                 match headings with
                 | last :: _ ->
-                  (match Block_map.attr_value last "block/meta" with
+                  (match Block_map.attr_value last "meta" with
                    | Some m -> Clj_value.map_get m "start_pos"
                    | None -> Nil)
                 | [] -> Nil
@@ -1516,8 +1515,8 @@ let extract_blocks (ast : value list) (content : string) (format : string)
                 opts.export_to_db_graph_flag && has_deadline }
           in
           let block' =
-            construct_block ast_block properties timestamps (List.rev body)
-              encoded_content format pos_meta' opts'
+            construct_block ast_block properties (List.rev timestamps)
+              (List.rev body) encoded_content format pos_meta' opts'
           in
           let block'' =
             if opts.db_graph_mode then block'
@@ -1526,15 +1525,15 @@ let extract_blocks (ast : value list) (content : string) (format : string)
             else ("macros", extract_macros_from_ast (ast_block :: List.rev body)) :: block'
           in
           loop (block'' :: headings) rest (block_idx + 1) [] empty_properties_result
-            [] 0
+            [] [] 0
         else
           loop headings rest (block_idx + 1) timestamps properties
-            (ast_block :: body) (prev_block_num + 1)
+            (ast_block :: body) consumed' (prev_block_num + 1)
     in
-    loop [] ast_blocks 0 [] empty_properties_result [] 0
+    loop [] ast_blocks 0 [] empty_properties_result [] [] 0
   in
   let result =
-    with_pre_block_if_exists headings (List.rev body) pre_block_properties
+    with_pre_block_if_exists headings body pre_block_properties
       encoded_content opts
   in
   List.map

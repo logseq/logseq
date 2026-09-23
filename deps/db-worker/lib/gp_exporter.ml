@@ -41,6 +41,12 @@ let getv (m : BM.t) (a : attr) : value option = BM.attr_value m a
 let get_string (m : BM.t) (a : attr) : string option =
   match getv m a with Some (String s) -> Some s | _ -> None
 
+(* cljs keyword-valued schema attrs read as their name *)
+let get_kstring (m : BM.t) (a : attr) : string option =
+  match getv m a with
+  | Some (String s) | Some (Keyword s) -> Some s
+  | _ -> None
+
 let get_uuid (m : BM.t) (a : attr) : string option =
   match getv m a with
   | Some (Uuid s) -> Some s
@@ -348,9 +354,7 @@ let get_template_name (block : BM.t) : string option =
 let template_including_parent (block : BM.t) : bool =
   match List.assoc_opt "template-including-parent" (prop_map_of block) with
   | Some (Bool false) -> false
-  | Some Nil -> false
-  | Some _ -> true
-  | None -> false
+  | Some _ | None -> true
 
 let remove_template_property_lines (title : string) : string =
   String.split_on_char '\n' title
@@ -411,9 +415,10 @@ let handle_template_blocks (blocks : BM.t list)
   in
   let preserve = Hashtbl.create 63 in
   let out =
-    List.fold_left
-      (fun acc block ->
-        match get_template_name block with
+    List.rev
+      (List.fold_left
+         (fun acc block ->
+           match get_template_name block with
         | Some template_name ->
           let block_children = group_block_children_by_parent blocks in
           let parent_uuid = get_parent_uuid (getv block "block/parent") in
@@ -489,10 +494,9 @@ let handle_template_blocks (blocks : BM.t list)
               | Some u -> Hashtbl.replace preserve u ()
               | None -> ())
            | None -> ());
-          acc @ (template_root_block
-                 :: (match template_content_block with
-                     | Some t -> [ t ]
-                     | None -> []))
+          (match template_content_block with
+           | Some t -> t :: template_root_block :: acc
+           | None -> template_root_block :: acc)
         | None ->
           let block =
             match
@@ -504,8 +508,8 @@ let handle_template_blocks (blocks : BM.t list)
               BM.put block "block/parent" (vec [ kw "block/uuid"; uuidv cu ])
             | None -> block
           in
-          acc @ [ block ])
-      [] blocks
+          block :: acc)
+         [] blocks)
   in
   (out, preserve)
 
@@ -542,12 +546,11 @@ let replace_namespace_with_parent (block : BM.t)
     in
     match ns_name with
     | Some n ->
+      let resolved = get_page_uuid page_names_to_uuids n
+          [ "block", mv_of_bm block ] in
       BM.put (BM.dissoc block [ "block/namespace" ]) parent_k
         (mv_of_bm
-           [ "block/uuid",
-             uuidv
-               (get_page_uuid page_names_to_uuids n
-                  [ "block", mv_of_bm block ]) ])
+           [ "block/uuid", uuidv resolved ])
     | None -> BM.dissoc block [ "block/namespace" ]
   else block
 
@@ -635,6 +638,11 @@ let convert_tag (tag_name : string) (user_options : user_options) : bool =
 let find_existing_class (db : db) (tag_block : BM.t) : string option =
   let full_name = get_string tag_block "block/name" in
   let block_ns = getv tag_block "block/namespace" in
+  let ent_uuid (e : entity) : string option =
+    match Ldb.value e "block/uuid" with
+    | Some (Uuid s) | Some (String s) -> Some s
+    | _ -> None
+  in
   let name_entities page_name =
     List.filter_map
       (fun (d : datom) ->
@@ -648,6 +656,7 @@ let find_existing_class (db : db) (tag_block : BM.t) : string option =
     (match full_name with
      | None -> None
      | Some full_name ->
+       let leaf = Ns_util.get_last_part full_name in
        List.fold_left
          (fun acc (e : entity) ->
            match acc with
@@ -673,10 +682,10 @@ let find_existing_class (db : db) (tag_block : BM.t) : string option =
                  (parents @ [ e ])
              in
              if full_name = String.concat "/" names then
-               Ldb.string_value e "block/uuid"
+               ent_uuid e
              else None)
          None
-         (name_entities (Ns_util.get_last_part full_name)))
+         (name_entities leaf))
   | None ->
     (match full_name with
      | Some full_name ->
@@ -684,7 +693,7 @@ let find_existing_class (db : db) (tag_block : BM.t) : string option =
          (fun acc e ->
            match acc with
            | Some _ -> acc
-           | None -> Ldb.string_value e "block/uuid")
+           | None -> ent_uuid e)
          None (name_entities full_name)
      | None -> None)
 
@@ -775,15 +784,14 @@ let convert_tag_to_class (db : db) (tag_block : BM.t)
                ; Option.value ~default:Nil (getv class_m' "block/uuid") ]))
      | _ -> None)
 
+(* logseq-class-ident? — qualified kw in the logseq.class ns *)
 let logseq_class_ident (v : value) : bool =
-  match v with
-  | Keyword s ->
-    (match Clj_value.kw_namespace (Keyword s) with
-     | Some "logseq.class" -> true
-     | _ -> false)
-  | _ -> false
+  match kwq v with
+  | Some k -> Db_class.logseq_class_kw k
+  | None -> false
 
-(* convert-tags-to-classes *)
+(* convert-tags-to-classes — converts each non-logseq-class tag; when a
+   namespaced tag is present only its leaf child is kept on the block *)
 let convert_tags_to_classes (tags : value list) (db : db)
     (per_file_state : per_file_state) (user_options : user_options)
     (all_idents : (string, string) Hashtbl.t) : value list =
@@ -791,50 +799,51 @@ let convert_tags_to_classes (tags : value list) (db : db)
     List.filter_map
       (fun t ->
         if logseq_class_ident t then Some t
-        else convert_tag_to_class db (bm_of_value (Some t)) per_file_state user_options all_idents)
+        else
+          convert_tag_to_class db
+            (bm_of_value (Some t))
+            per_file_state user_options all_idents)
       tags
   in
-  match
-    (List.exists
-       (fun t ->
-         match t with
-         | Map _ -> bm_of_value (Some t) |> fun m -> getv m "block/namespace" <> None
-         | _ -> false)
-       tags,
-     tags')
-  with
-  | true, child_tag :: _ -> [ child_tag ]
-  | _ -> tags'
+  if
+    List.exists
+      (fun t -> getv (bm_of_value (Some t)) "block/namespace" <> None)
+      tags
+  then (match tags' with [] -> [] | child :: _ -> [ child ])
+  else tags'
 
 (* update-page-tags *)
 let update_page_tags (block : BM.t) (db : db) (user_options : user_options)
     (per_file_state : per_file_state) (all_idents : (string, string) Hashtbl.t)
     : BM.t =
-  match collv (getv block "block/tags") with
-  | [] -> BM.put block "block/tags" (List [ kw "logseq.class/Page" ])
-  | tags ->
+  let tags = collv (getv block "block/tags") in
+  if tags = [] then
+    BM.put block "block/tags" (List [ kw "logseq.class/Page" ])
+  else
     let page_tags =
-      List.filter_map
-        (fun t ->
-          let tm = bm_of_value (Some t) in
-          if getv tm "block.temp/new-class" <> None
-             || (match get_string tm "block/name" with
+      tags
+      |> List.filter
+           (fun t ->
+             let tm = bm_of_value (Some t) in
+             not
+               (getv tm "block.temp/new-class" <> None
+                ||
+                (match get_string tm "block/name" with
                  | Some n -> convert_tag n user_options
                  | None -> false)
-             || logseq_class_ident t
-          then None
-          else
-            match get_string tm "block/name" with
-            | Some n ->
-              Some
-                (vec
-                   [ kw "block/uuid"
-                   ; uuidv
-                       (get_page_uuid
-                          per_file_state.pfs_page_names_to_uuids n
-                          [ "block", t ]) ])
-            | None -> None)
-        tags
+                || logseq_class_ident t))
+      |> List.filter_map
+           (fun t ->
+             match get_string (bm_of_value (Some t)) "block/name" with
+             | Some n ->
+               Some
+                 (vec
+                    [ kw "block/uuid"
+                    ; uuidv
+                        (get_page_uuid
+                           per_file_state.pfs_page_names_to_uuids n
+                           [ "block", t ]) ])
+             | None -> None)
     in
     let block =
       BM.put block "block/tags"
@@ -1012,10 +1021,15 @@ let find_status_choice_by_content (db : db) (marker : string) : entity option =
       Db_property.closed_value_content e = Some (String marker))
     (Db_property.get_closed_property_values db "logseq.property/status")
 
+(* cljs build-status-choice-tx: the Status property (not db-ident) is passed
+   as `property`, so the choice block gets block/page, block/parent,
+   block/closed-value-property and created-from-property pointing at
+   :logseq.property/status and block/uuid materializes a new stub entity. *)
 let build_status_choice_tx (marker : string) (block_uuid : string) : BM.t =
   BM.put
-    (Db_property_build.build_closed_value_block ~db_ident:"logseq.property/status"
-       block_uuid (Some "default") (String marker) [])
+    (Db_property_build.build_closed_value_block block_uuid (Some "default")
+       (String marker)
+       [ "db/ident", kw "logseq.property/status" ])
     "block/order"
     (String (Db_order.gen_key None None))
 
@@ -1318,18 +1332,18 @@ let to_property_value_tx_m (new_block : BM.t) (properties : (attr * value) list)
           then
             Some
               ( Map
-                  [ Keyword "db/ident", String k
+                  [ Keyword "db/ident", Keyword k
                   ; Keyword "db/id", Ref_to (Ident k)
-                  ; Keyword "logseq.property/type", String t ]
+                  ; Keyword "logseq.property/type", Keyword t ]
               , v )
           else None
         | None ->
           let schema = Option.value ~default:[] (get_schema_fn k) in
-          (match get_string schema "logseq.property/type" with
+          (match get_kstring schema "logseq.property/type" with
            | Some t when List.mem t Db_schema.value_ref_property_types ->
              Some
                ( Map
-                   ((Keyword "db/ident", String (get_ident all_idents k))
+                   ((Keyword "db/ident", Keyword (get_ident all_idents k))
                     :: (Keyword "original-property-id", String k)
                     :: List.map
                          (fun (a, v') -> (Keyword a, v'))
@@ -1508,8 +1522,8 @@ let text_with_refs (prop_vals : string list) (val_text : string) : bool =
   let remaining =
     Regexp.replace_all re
       ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
-        match Array.to_list groups with
-        | Some g :: _ -> g
+        match groups.(1) with
+        | Some g -> g
         | _ -> "")
       val_text
   in
@@ -1579,41 +1593,42 @@ let infer_property_schema_and_get_property_change (db : db) (prop_val : value)
   in
   let prev_type =
     match Hashtbl.find_opt import_state.property_schemas prop with
-    | Some s -> get_string s "logseq.property/type"
+    | Some s -> get_kstring s "logseq.property/type"
     | None -> None
   in
   (match Hashtbl.find_opt import_state.property_schemas prop with
    | None ->
      create_property_ident db import_state.all_idents prop;
      let schema =
-       [ "logseq.property/type", String prop_type ]
+       [ "logseq.property/type", kw prop_type ]
        @ (if List.mem prop_type [ "node"; "date" ] then
-            [ "db/cardinality", String "many" ]
+            [ "db/cardinality", kw "many" ]
           else [])
      in
      Hashtbl.replace import_state.property_schemas prop schema
    | Some _ -> ());
-  match prev_type with
-  | Some t when t <> prop_type -> Some (t, prop_type)
-  | _ -> None
+  (match prev_type with
+   | Some pt when pt <> prop_type -> Some (pt, prop_type)
+   | _ -> None)
 
-(* ---------- built-in file-property tables ---------- *)
-
+(* get-file-pid — file-graph property id for a db graph ident *)
 let get_file_pid (db_ident : string) : string =
   match db_ident with
   | "logseq.property/order-list-type" -> "logseq.order-list-type"
   | "logseq.property/publishing-public?" -> "public"
   | _ ->
-    (match String.index_opt db_ident '/' with
-     | Some i -> String.sub db_ident (i + 1) (String.length db_ident - i - 1)
+    (match String.rindex_opt db_ident '/' with
+     | Some i ->
+       String.sub db_ident (i + 1) (String.length db_ident - i - 1)
      | None -> db_ident)
 
+(* built-in-property-file-to-db-idents — {file-id db-ident} *)
 let built_in_property_file_to_db_idents : (string * string) list =
   List.map
-    (fun (p : Builtin_data.builtin_property) ->
-      (get_file_pid p.Builtin_data.ident, p.Builtin_data.ident))
-    Builtin_data.built_in_properties
+    (fun (k, _, _) -> (get_file_pid k, k))
+    Db_property.built_in_properties
 
+(* all-built-in-property-file-ids *)
 let all_built_in_property_file_ids : string list =
   List.map fst built_in_property_file_to_db_idents
   @ [ "filters"; "query-table"; "query-properties"; "query-sort-by"
@@ -1888,7 +1903,26 @@ let update_page_or_date_values
 
 (* parse-double — cljs parse-double = js/parseFloat *)
 let parse_double (s : string) : value option =
-  Option.map floatv (Common_util.parse_float s)
+  let n = String.length s in
+  let rec scan i seen_digit seen_dot seen_exp =
+    if i >= n then i
+    else
+      let c = s.[i] in
+      if c >= '0' && c <= '9' then scan (i + 1) true seen_dot seen_exp
+      else if c = '.' && not seen_dot && not seen_exp then
+        scan (i + 1) seen_digit true seen_exp
+      else if (c = 'e' || c = 'E') && seen_digit && not seen_exp then
+        scan (i + 1) seen_digit seen_dot true
+      else if (c = '-' || c = '+') && (i = 0 || s.[i - 1] = 'e' || s.[i - 1] = 'E')
+      then scan (i + 1) seen_digit seen_dot seen_exp
+      else i
+  in
+  let stop = scan 0 false false false in
+  (* parse-double requires the whole string to be a number *)
+  if stop = n && stop > 0 then
+    try Some (floatv (float_of_string (String.sub s 0 stop)))
+    with _ -> None
+  else None
 
 (* handle-changed-property — changes : (string, (string*string)) Hashtbl *)
 let handle_changed_property (v : value) (prop : string)
@@ -1917,12 +1951,12 @@ let handle_changed_property (v : value) (prop : string)
          options.user_config)
   | Some ("date", "node") ->
     Hashtbl.replace options.upstream_properties prop
-      [ "schema", mv_of_bm [ "logseq.property/type", String "node" ]
+      [ "schema", mv_of_bm [ "logseq.property/type", kw "node" ]
       ; "from-type", String "date" ];
     (match Hashtbl.find_opt import_state.property_schemas prop with
      | Some s ->
        Hashtbl.replace import_state.property_schemas prop
-         (BM.put s "logseq.property/type" (String "node"))
+         (BM.put s "logseq.property/type" (kw "node"))
      | None -> ());
     Some
       (update_page_or_date_values page_names_to_uuids
@@ -1955,11 +1989,11 @@ let handle_changed_property (v : value) (prop : string)
       (match type_change with
        | Some (f, _) ->
          Hashtbl.replace options.upstream_properties prop
-           [ "schema", mv_of_bm [ "logseq.property/type", String "default" ]
+           [ "schema", mv_of_bm [ "logseq.property/type", kw "default" ]
            ; "from-type", String f ]
        | None -> ());
       Hashtbl.replace import_state.property_schemas prop
-        [ "logseq.property/type", String "default" ];
+        [ "logseq.property/type", kw "default" ];
       get_tv ()
     end
   | Some (f, t) ->
@@ -1996,7 +2030,7 @@ let update_user_property_values (props : (attr * value) list)
         | Set names ->
           let schema_type =
             match Hashtbl.find_opt import_state.property_schemas prop with
-            | Some s -> get_string s "logseq.property/type"
+            | Some s -> get_kstring s "logseq.property/type"
             | None -> None
           in
           if schema_type = Some "default" then
@@ -2053,7 +2087,10 @@ let build_properties_and_values (props : (attr * value) list) (_db : db)
   in
   let pvalue_tx_m =
     to_property_value_tx_m block props'
-      (fun k -> Some (get_property_schema import_state.property_schemas k))
+      (fun k ->
+        match Hashtbl.find_opt import_state.property_schemas k with
+        | Some m -> Some m
+        | None -> None)
       all_idents
   in
   let block_properties =
@@ -2063,11 +2100,14 @@ let build_properties_and_values (props : (attr * value) list) (_db : db)
   in
   ( block_properties
   , List.concat_map
-      (fun (_, v) -> match v with Set vs -> vs | _ -> [ v ])
-      pvalue_tx_m
-    |> List.filter_map (fun v -> match v with Map _ -> Some (bm_of_value (Some v)) | _ -> None) )
+      (fun (_, v) ->
+        List.map
+          (fun m -> bm_of_value (Some m))
+          (match v with Set vs -> vs | _ -> [ v ]))
+      pvalue_tx_m )
 
-(* ignored-built-in-properties *)
+(* ignored-built-in-properties — already imported via datascript attrs,
+   unsupported, or deprecated *)
 let ignored_built_in_properties : string list =
   [ "tags"; "alias"; "collapsed"; "id"; "now"; "later"; "doing"; "done"
   ; "canceled"; "cancelled"; "in-progress"; "todo"; "wait"; "waiting"
@@ -2142,39 +2182,42 @@ let handle_page_and_block_properties (block : BM.t) (db : db)
         (fun (k, _) -> not (List.mem k file_built_in_property_names))
         properties'
     in
-    let property_changes = Hashtbl.create 15 in
+    let property_changes =
+      List.filter_map
+        (fun (prop, v) ->
+          match
+            infer_property_schema_and_get_property_change db v prop
+              (get_string
+                 (bm_of_value (getv block "block/properties-text-values"))
+                 prop)
+              refs import_state options.macros
+          with
+          | Some pc -> Some (prop, pc)
+          | None -> None)
+        properties_to_infer
+    in
     List.iter
-      (fun (prop, v) ->
-        match
-          infer_property_schema_and_get_property_change db v prop
-            (text_value_of block prop) refs import_state options.macros
-        with
-        | Some change -> Hashtbl.replace property_changes prop change
-        | None -> ())
-      properties_to_infer;
-    let options' = { options with property_changes } in
+      (fun (prop, pc) -> Hashtbl.replace options.property_changes prop pc)
+      property_changes;
     let block_properties, pvalues_tx =
-      build_properties_and_values properties' db page_names_to_uuids
-        block options'
+      build_properties_and_values properties' db page_names_to_uuids block
+        options
     in
     let block' =
-      BM.merge block block_properties
-    in
-    let block' =
-      if classes_from_properties <> [] then
-        let tags_v =
-          match getv block' "block/tags" with
-          | Some (Set vs) | Some (List vs) -> vs
-          | Some v -> [ v ]
-          | None -> []
+      let b = BM.merge block block_properties in
+      if classes_from_properties = [] then b
+      else
+        let tags =
+          match getv b "block/tags" with
+          | Some (List xs) | Some (Vector xs) | Some (Set xs) -> xs
+          | _ -> []
         in
-        BM.put block' "block/tags"
-          (Set
-             (tags_v
+        BM.put b "block/tags"
+          (List
+             (tags
               @ List.map
-                  (fun c -> mv_of_bm [ "block.temp/new-class", String c ])
+                  (fun c -> Map [ kw "block.temp/new-class", String c ])
                   classes_from_properties))
-      else block'
     in
     ( BM.dissoc block'
         [ "block/properties"; "block/properties-text-values"
@@ -2182,68 +2225,76 @@ let handle_page_and_block_properties (block : BM.t) (db : db)
     , pvalues_tx )
   end
 
-(* handle-page-properties *)
-let handle_page_properties (block : BM.t) (db : db)
-    (page_names_to_uuids : (string, string) Hashtbl.t)
-    (classes_tx : BM.t list ref) (refs : value list) (options : options) :
-    BM.t * BM.t list =
-  let properties = prop_map_of_value (getv block "block/properties") in
-  let block', properties_tx =
-    handle_page_and_block_properties block db page_names_to_uuids refs options
+(* handle-page-properties — extends/parent handling after general property
+   processing *)
+let handle_page_properties (block_star : BM.t) (db : db)
+    (per_file_state : per_file_state) (refs : value list) (options : options)
+    : BM.t * BM.t list =
+  let page_names_to_uuids = per_file_state.pfs_page_names_to_uuids in
+  let block, properties_tx =
+    handle_page_and_block_properties block_star db page_names_to_uuids refs
+      options
   in
+  let import_state = options.import_state in
+  let classes_tx = per_file_state.pfs_classes_tx in
+  let properties = prop_map_of_value (getv block_star "block/properties") in
   let parent_classes_from_properties =
     List.filter
       (fun (k, _) -> List.mem k options.user_options.property_parent_classes)
       properties
-    |> List.concat_map (fun (_, v) ->
-           match collv (Some v) with
-           | [] -> (match v with String s -> [ s ] | _ -> [])
-           | vs ->
-             List.filter_map (function String s -> Some s | _ -> None) vs)
+    |> List.concat_map
+         (fun (_, v) ->
+           List.filter_map
+             (function String s -> Some s | _ -> None)
+             (match collv (Some v) with [] -> [ v ] | vs -> vs))
     |> distinct
   in
   let block'' =
-    if parent_classes_from_properties = [] then
-      replace_namespace_with_parent block' page_names_to_uuids "block/parent"
-    else begin
-      (match get_string block "block/title" with
-       | Some t ->
-         Hashtbl.replace
-           options.import_state.classes_from_property_parents t ()
-       | None -> ());
-      let title =
-        Option.value
-          ~default:(Option.value ~default:"" (get_string block' "block/title"))
-          (get_string block' (export_attr "original-title"))
-      in
-      let class_m, _ =
-        find_or_create_class db title options.import_state.all_idents
-          ~class_block:block' ()
-      in
-      let block' = BM.merge block' class_m in
-      let block' = BM.dissoc block' [ "block/namespace" ] in
-      let new_class = List.hd parent_classes_from_properties in
-      let parent_class_m, parent_new_class =
-        find_or_create_class db new_class options.import_state.all_idents ()
-      in
-      let parent_ident =
-        match getv parent_class_m "db/ident" with
-        | Some (Keyword i) | Some (String i) -> i
-        | _ -> ""
-      in
-      let parent_uuid =
-        find_or_gen_class_uuid page_names_to_uuids
-          (Common_util.page_name_sanity_lc new_class) parent_ident ()
-      in
-      let parent_class_m' =
-        BM.put parent_class_m "block/uuid" (uuidv parent_uuid)
-      in
-      if List.length parent_classes_from_properties > 1 then
-        options.log_fn
-          [ kw "skipped-parent-classes"
-          ; strv "Only one parent class is allowed so skipped ones after the first one"
-          ; mv_of_bm
-              [ "classes", vec (List.map (fun s -> String s) parent_classes_from_properties) ] ];
+    match parent_classes_from_properties with
+    | [] ->
+      replace_namespace_with_parent block page_names_to_uuids "block/parent"
+    | new_class :: _ ->
+      begin
+        (match get_string block_star "block/title" with
+         | Some t ->
+           Hashtbl.replace import_state.classes_from_property_parents t ()
+         | None -> ());
+        let class_title =
+          match get_string block (export_attr "original-title") with
+          | Some t -> t
+          | None ->
+            Option.value ~default:"" (get_string block "block/title")
+        in
+        let class_m, _ =
+          find_or_create_class db class_title import_state.all_idents
+            ~class_block:block ()
+        in
+        let parent_class_m, parent_new_class =
+          find_or_create_class db new_class import_state.all_idents ()
+        in
+        let parent_class_m' =
+          BM.merge parent_class_m
+            [ "block/uuid",
+              uuidv
+                (find_or_gen_class_uuid page_names_to_uuids
+                   (Common_util.page_name_sanity_lc new_class)
+                   (match getv parent_class_m "db/ident" with
+                    | Some (Keyword i) | Some (String i) -> i
+                    | _ -> "")
+                   ()) ]
+        in
+        let parent_uuid =
+          match getv parent_class_m' "block/uuid" with
+          | Some (Uuid u) -> u
+          | _ -> ""
+        in
+        let block' = BM.dissoc (BM.merge block class_m) [ "block/namespace" ] in
+        if List.length parent_classes_from_properties > 1 then
+          options.log_fn
+            [ kw "skipped-parent-classes"
+            ; strv "Only one parent class is allowed so skipped ones after the first one"
+            ; mv_of_bm
+                [ "classes", vec (List.map (fun s -> String s) parent_classes_from_properties) ] ];
       if parent_new_class then classes_tx := !classes_tx @ [ parent_class_m' ];
       BM.put block' "logseq.property.class/extends"
         (vec [ kw "block/uuid"; uuidv parent_uuid ])
@@ -2283,16 +2334,21 @@ let rec ast_to_text (ast_block : value) (options : options) : string =
     in
     let extract_emphasis (node : value) : string list =
       match coll_items node with
-      | [ String type'; coll' ] ->
-        let wrap w =
-          w :: (List.concat_map extract (coll_items coll')) @ [ w ]
-        in
-        (match type' with
-         | "Bold" -> wrap "**"
-         | "Italic" -> wrap "*"
-         | "Strike_through" -> wrap "~~"
-         | "Highlight" -> wrap "^^"
-         | _ -> failwith ("Failed to wrap Emphasis AST block of type " ^ type'))
+      | [ type'; coll' ] ->
+        (match coll_items type' with
+         | [ String t ] ->
+           let wrap w =
+             w :: (List.concat_map extract (coll_items coll')) @ [ w ]
+           in
+           (match t with
+            | "Bold" -> wrap "**"
+            | "Italic" -> wrap "*"
+            | "Strike_through" -> wrap "~~"
+            | "Highlight" -> wrap "^^"
+            | _ ->
+              failwith
+                ("Failed to wrap Emphasis AST block of type " ^ t))
+         | _ -> [])
       | _ -> []
     in
     let nth n (items : value list) =
@@ -2549,7 +2605,19 @@ let pdf_target_path (target : string) : string option =
     match Common_util.str_index_of target "://" with
     | Some i ->
       (match String.index_from_opt target (i + 3) '/' with
-       | Some j -> Some (String.sub target j (String.length target - j))
+       | Some j ->
+         let path = String.sub target j (String.length target - j) in
+         (* js/URL().pathname excludes query and fragment *)
+         let cut =
+           match
+             ( Common_util.str_index_of path "?"
+             , Common_util.str_index_of path "#" )
+           with
+           | Some a, Some b -> min a b
+           | Some a, None | None, Some a -> a
+           | None, None -> String.length path
+         in
+         Some (String.sub path 0 cut)
        | None -> Some "/")
     | None -> None
   else Some target
@@ -3511,7 +3579,14 @@ let ensure_asset_data (assets : (string, BM.t) Hashtbl.t)
                   put_linked_pdf_asset assets lon path asset_path None;
                 Eff.pure None)
             |> Eff.map
-                 (fun stat -> put_linked_pdf_asset assets lon path asset_path stat)
+                 (fun stat ->
+                   (* a missing local file yields no stat, like a rejected
+                      <get-file-stat — only external links still get an asset *)
+                   match stat with
+                   | Some _ -> put_linked_pdf_asset assets lon path asset_path stat
+                   | None ->
+                     if external_ then
+                       put_linked_pdf_asset assets lon path asset_path None)
           | None -> Eff.pure ())
        | None ->
          if external_ then
@@ -3755,10 +3830,8 @@ let import_hls_linked_pdf_assets (file : string) (options : options) :
   with
   | None -> Eff.pure []
   | Some extracted ->
-    let asset_links =
-      List.filter_map synthetic_pdf_asset_link
-        (hls_extracted_pdf_urls extracted)
-    in
+    let urls = hls_extracted_pdf_urls extracted in
+    let asset_links = List.filter_map synthetic_pdf_asset_link urls in
     if asset_links = [] then Eff.pure []
     else
       let wa = new_walked_ast () in
@@ -3770,190 +3843,159 @@ let import_hls_linked_pdf_assets (file : string) (options : options) :
 
 (* ---------- quotes / math / code / embeds (cljs ~1940-2158) ---------- *)
 
-let code_fence_re = Regexp.compile "```"
-
-let quote_node_to_markdown (ast : value) (options : options) (depth : int)
-    : string list =
-  let raw_md = Unicode.trim (ast_to_text ast options) in
-  let markdown =
-    String.concat "\n"
-      (List.map Unicode.trim (String.split_on_char '\n' raw_md))
+let rec quote_node_to_markdown (quote_node : value) (options : options)
+    (depth : int) : string =
+  let inner =
+    match coll_items quote_node with
+    | _ :: els :: _ -> coll_items els
+    | _ -> []
   in
-  let lines1 =
-    List.mapi
-      (fun i line ->
-        (if i = 0 then "" else "\n") ^ Unicode.trim line)
-      (String.split_on_char '\n' markdown)
-  in
-  let lines2 =
-    List.concat_map
-      (fun line ->
-        if
-          String.length line >= 2
-          && String.length line >= 1 && line.[0] = '>'
-        then
-          [ String.sub line 0 2; Unicode.trim (String.sub line 2 (String.length line - 2)) ]
-        else [ line ])
-      lines1
-  in
-  let split_fences line =
-    (* (string/split line #"```") — split on every fence marker *)
-    let rec loop i acc =
-      match
-        (try
-           Some
-             (let rec scan j =
-                if j + 3 > String.length line then -1
-                else if String.sub line j 3 = "```" then j
-                else scan (j + 1)
-              in
-              scan i)
-         with _ -> None)
-      with
-      | Some idx when idx >= 0 ->
-        loop (idx + 3) (String.sub line i (idx - i) :: acc)
-      | _ -> List.rev (String.sub line i (String.length line - i) :: acc)
-    in
-    loop 0 []
-  in
-  let lines3 =
-    List.concat_map
-      (fun line ->
-        if Common_util.str_includes line "```" then
-          let parts = split_fences line in
-          List.concat_map
-            (fun x -> [ Unicode.trim x; "```" ])
-            (match List.rev parts with _ :: tl -> List.rev tl | [] -> [])
-        else [ line ])
-      lines2
-  in
-  let markdown' =
+  let parts =
     List.map
-      (fun line ->
-        if Common_util.str_starts_with line "```" then line else "> " ^ line)
-      lines3
+      (fun el ->
+        match coll_items el with
+        | String "Quote" :: _ ->
+          quote_node_to_markdown el options (depth + 1)
+        | _ ->
+          let text = ast_to_text el options in
+          if depth > 0 then
+            String.concat "\n"
+              (List.map
+                 (fun l -> "> " ^ l)
+                 (String.split_on_char '\n' text))
+          else text)
+      inner
   in
-  if depth >= 1 then
-    List.map
-      (fun line -> "> " ^ line)
-      (String.split_on_char '\n' (String.concat "\n" markdown'))
-  else [ String.concat "\n" markdown' ]
+  String.concat "\n"
+    (List.filter (fun t -> String.trim t <> "") parts)
 
-let begin_quote_re = Regexp.compile "#\\+BEGIN_QUOTE"
+let org_quote_re = Regexp.compile "#\\+BEGIN_QUOTE"
 
+(* handle-quotes — cljs ~1950 *)
 let handle_quotes (block : BM.t) (options : options) : BM.t =
   let ast_blocks = collv (getv block "block.temp/ast-blocks") in
-  let is node ty =
-    match coll_items node with
-    | String s :: _ -> s = ty
-    | _ -> false
+  let el_type (el : value) : string option =
+    match coll_items el with String t :: _ -> Some t | _ -> None
   in
-  let heading = List.find_opt (fun n -> is n "Heading") ast_blocks in
-  let heading_title =
-    match heading with
-    | Some h ->
-      (match nth1 h with
-       | Some hm -> getv (bm_of_value (Some hm)) "title"
-       | None -> None)
-    | None -> None
+  let heading =
+    List.find_opt (fun el -> el_type el = Some "Heading") ast_blocks
   in
   let heading_empty =
-    heading = None
-    || (match heading_title with
-        | Some v -> coll_items v = [] && str_opt_of v = None
-        | None -> true)
+    match heading with
+    | None -> true
+    | Some h ->
+      (match coll_items h with
+       | _ :: m :: _ ->
+         (match Clj_value.map_get_opt m "title" with
+          | Some (String t) -> String.trim t = ""
+          | Some v -> coll_items v = []
+          | None -> true)
+       | _ -> true)
   in
-  let body_elements = List.filter (fun n -> not (is n "Heading")) ast_blocks in
+  let body_elements =
+    List.filter (fun el -> el_type el <> Some "Heading") ast_blocks
+  in
   let all_body_quotes =
-    body_elements <> [] && List.for_all (fun n -> is n "Quote") body_elements
+    body_elements <> []
+    && List.for_all (fun el -> el_type el = Some "Quote") body_elements
   in
-  let has_quote_body = List.exists (fun n -> is n "Quote") body_elements in
+  let has_quote_body =
+    List.exists (fun el -> el_type el = Some "Quote") body_elements
+  in
   let org_quote =
-    match getv block "block/title" with
-    | Some (String t) -> Regexp.test begin_quote_re t
-    | _ -> false
+    match get_string block "block/title" with
+    | Some t -> Regexp.test org_quote_re t
+    | None -> false
   in
   if heading_empty && all_body_quotes then
     let combined_title =
       String.concat "\n"
-        (List.filter (fun s -> Unicode.trim s <> "")
-           (List.concat_map
-              (fun n -> quote_node_to_markdown n options 0)
+        (List.filter
+           (fun t -> String.trim t <> "")
+           (List.map
+              (fun el -> quote_node_to_markdown el options 0)
               body_elements))
     in
     BM.merge block
       [ "block/title", String combined_title
       ; "logseq.property.node/display-type", kw "quote"
       ; "block/tags", List [ kw "logseq.class/Quote-block" ] ]
-  else if has_quote_body && org_quote then
+  else if has_quote_body && org_quote then begin
     let ordered_blocks =
       match ast_blocks with
-      | f :: rest -> f :: List.rev rest
+      | first :: rest -> first :: List.rev rest
       | [] -> []
     in
     let tagged_parts =
       List.filter_map
         (fun el ->
           let text =
-            match coll_items el with
-            | String "Heading" :: _ ->
-              (match nth1 el with
-               | Some hm ->
-                 (match getv (bm_of_value (Some hm)) "title" with
-                  | Some title when coll_items title <> [] ->
-                    ast_to_text (vec [ String "Paragraph"; title ]) options
-                  | _ -> "")
-               | None -> "")
-            | String "Quote" :: _ ->
-              String.concat "\n" (quote_node_to_markdown el options 1)
+            match el_type el with
+            | Some "Heading" ->
+              (match coll_items el with
+               | _ :: m :: _ ->
+                 (match Clj_value.map_get_opt m "title" with
+                  | Some t ->
+                    ast_to_text (List [ String "Paragraph"; t ]) options
+                  | None -> "")
+               | _ -> "")
+            | Some "Quote" -> quote_node_to_markdown el options 1
             | _ -> ast_to_text el options
           in
-          if Unicode.trim text = "" then None
-          else Some (is el "Quote", text))
+          if String.trim text = "" then None
+          else Some (el_type el = Some "Quote", text))
         ordered_blocks
     in
     let combined, _ =
       List.fold_left
-        (fun (result, prev_quote) (quote_, text) ->
-          ( (if Unicode.trim result = "" then text
-             else result ^ (if prev_quote then "\n\n" else "\n") ^ text)
-          , quote_ ))
+        (fun (result, prev_quote) (is_quote, text) ->
+          ( (if String.trim result = "" then text
+             else
+               result ^ (if prev_quote then "\n\n" else "\n") ^ text)
+          , is_quote ))
         ("", false) tagged_parts
     in
     BM.put block "block/title" (String combined)
+  end
   else block
 
+(* handle-math — cljs ~2015; a block whose whole title is one $$ formula
+   becomes a #Math-block *)
 let handle_math (block : BM.t) : BM.t =
-  match getv block "block/title" with
-  | Some (String t) ->
-    let title = Unicode.trim t in
-    let len = String.length title in
-    if
-      len > 4
-      && Common_util.str_starts_with title "$$"
-      && Common_util.str_ends_with title "$$"
-      && not (Common_util.str_includes (String.sub title 2 (len - 4)) "$$")
+  match get_string block "block/title" with
+  | Some raw ->
+    let title = String.trim raw in
+    let n = String.length title in
+    if n > 4 && String.sub title 0 2 = "$$"
+       && String.sub title (n - 2) 2 = "$$"
+       && not
+            (Common_util.str_includes
+               (String.sub title 2 (n - 4))
+               "$$")
     then
+      let math_content = String.trim (String.sub title 2 (n - 4)) in
       BM.merge block
-        [ "block/title", String (Unicode.trim (String.sub title 2 (len - 4)))
+        [ "block/title", String math_content
         ; "logseq.property.node/display-type", kw "math"
         ; "block/tags", List [ kw "logseq.class/Math-block" ] ]
     else block
-  | _ -> block
+  | None -> block
+
 
 let fence_line_re = Regexp.compile "^```.*$"
 
 type code_seg = { cs_text : string; cs_lang : string option }
 
-let split_title_by_code_fences (title : string) :
-    string list * code_seg list =
+(* split-title-by-code-fences — line scanner collecting non-code text parts and
+   fenced code segments; cs_lang is None when the opening fence has no tag *)
+let split_title_by_code_fences (title : string) : string list * code_seg list =
   let lines = String.split_on_char '\n' title in
   let rec loop remaining in_code lang current text_parts code_segs =
     match remaining with
     | [] ->
-      ( (if current <> [] then
-           text_parts @ [ String.concat "\n" (List.rev current) ]
-         else text_parts)
+      ( (match current with
+         | [] -> text_parts
+         | _ -> text_parts @ [ String.concat "\n" (List.rev current) ])
       , List.rev code_segs )
     | line :: rest ->
       let trimmed = Unicode.trim line in
@@ -3963,9 +4005,9 @@ let split_title_by_code_fences (title : string) :
           if Unicode.trim l = "" then None else Some l
         in
         loop rest true lang' []
-          (if current <> [] then
-             text_parts @ [ String.concat "\n" (List.rev current) ]
-           else text_parts)
+          (match current with
+           | [] -> text_parts
+           | _ -> text_parts @ [ String.concat "\n" (List.rev current) ])
           code_segs
       else if in_code && trimmed = "```" then
         loop rest false None [] text_parts
@@ -4253,7 +4295,7 @@ let build_blocks_tx (conn : conn) (blocks : BM.t list)
              acc)
           rest
   in
-  loop [] blocks' |> Eff.map (fun r -> List.rev r)
+  loop [] blocks' 
 
 (* ---------- page tx ---------- *)
 
@@ -4348,14 +4390,37 @@ let get_page_parents (node : BM.t)
     in
     Some (loop (Some parent) [])
 
+(* ident keyword of a tag value as it appears in saved tx nodes — plain
+   keyword, {:db/id kw} map, or [:block/uuid u] style vectors are all seen *)
+let saved_tag_ident (v : value) : string option =
+  match v with
+  | Keyword s | String s -> Some s
+  | Map pairs ->
+    List.find_map
+      (fun (k, v) ->
+        match Clj_value.string_of_kwish k with
+        | Some "db/id" ->
+          (match v with
+          | Keyword s | String s -> Some s
+          | _ -> None)
+        | _ -> None)
+      pairs
+  | _ -> None
+
+let saved_tag_mem (ident : string) (tags : value list) : bool =
+  List.exists (fun t -> saved_tag_ident t = Some ident) tags
+
+let bm_has_tag (m : BM.t) (ident : string) : bool =
+  saved_tag_mem ident (collv (getv m "block/tags"))
+
 let page_name_lookup_key (p : BM.t)
     (classes_from_property_parents : (string, unit) Hashtbl.t)
     (all_existing_page_uuids : (string, BM.t) Hashtbl.t) : string =
   let tags = collv (getv p "block/tags") in
   let title = Option.value ~default:"" (get_string p "block/title") in
   match
-    (List.mem (kw "logseq.class/Tag") tags
-     || List.mem (kw "logseq.class/Page") tags)
+    (saved_tag_mem "logseq.class/Tag" tags
+     || saved_tag_mem "logseq.class/Page" tags)
     && not (Hashtbl.mem classes_from_property_parents title)
     && get_page_parents p all_existing_page_uuids <> None
   with
@@ -4381,7 +4446,7 @@ let index_saved_page_names (import_state : import_state) (pages : BM.t list)
       match get_uuid p "block/uuid" with
       | Some uuid
         when not
-               (List.mem (kw "logseq.class/Property")
+               (saved_tag_mem "logseq.class/Property"
                   (collv (getv p "block/tags")))
              && not
                   (match getv p "db/ident" with
@@ -4646,9 +4711,9 @@ let modify_page_tx (page : BM.t)
     let b = build_new_namespace_page page'' in
     BM.merge b
       [ ( export_attr "original-name"
-        , Option.value ~default:Nil (getv b "block/name") )
+        , Option.value ~default:Nil (getv page'' "block/name") )
       ; ( export_attr "original-title"
-        , Option.value ~default:Nil (getv b "block/title") ) ]
+        , Option.value ~default:Nil (getv page'' "block/title") ) ]
   | _ -> page''
 
 (* sanitize-page-aliases-for-import! — drops conflicting alias declarations *)
@@ -4753,20 +4818,7 @@ let normalize_bm (m : BM.t) : BM.t =
   List.map (fun (a, v) -> (a, Block_map.normalize_value v)) m
 
 let bm_tx_op (db : db) (m : BM.t) : tx_op =
-  Sqlite_create_graph.entity_tx db (normalize_bm m)
-
-(* ---------- build-pages-tx ---------- *)
-
-let ident_eid_of (db : db) (ident : string) : int =
-  match Ldb.ent_of_ref db (Ident ident) with
-  | Some e -> e.id
-  | None -> -1
-
-let bm_has_tag (m : BM.t) (ident : string) : bool =
-  List.mem (kw ident) (collv (getv m "block/tags"))
-
-let uuid_str_of (v : value) : string option =
-  match v with Uuid u -> Some u | String s -> Some s | _ -> None
+  BM.to_tx_op db (normalize_bm m)
 
 type pages_tx_result =
   { pt_pages_tx : BM.t list
@@ -4864,7 +4916,7 @@ let build_pages_tx (conn : conn) (pages : BM.t list) (blocks : BM.t list)
   let all_pages_m =
     List.map
       (fun m ->
-        handle_page_properties m db page_names_to_uuids options.classes_tx
+        handle_page_properties m db per_file_state
           (List.map mv_of_bm all_pages)
           options)
       all_pages
@@ -4997,7 +5049,7 @@ let build_upstream_properties_tx_for_default (db : db) (prop : string)
       in
       let prop_value_content =
         match
-          Option.bind (getv m "block/uuid") uuid_str_of
+          get_uuid m "block/uuid"
           |> Fun.flip Option.bind (fun buuid ->
                  match Hashtbl.find_opt block_properties_text_values buuid with
                  | Some tbl ->
@@ -5114,7 +5166,7 @@ let existing_named_page_is_class (import_state : import_state)
     (page_uuid : string) : bool =
   match Hashtbl.find_opt import_state.all_existing_page_uuids page_uuid with
   | Some p ->
-    List.mem (kw "logseq.class/Tag") (collv (getv p "block/tags"))
+    saved_tag_mem "logseq.class/Tag" (collv (getv p "block/tags"))
     || (match getv p "db/ident" with
         | Some (Keyword i) | Some (String i) -> class_ident_kw i
         | _ -> false)
@@ -5275,30 +5327,41 @@ let fix_extracted_block_tags_and_refs (blocks : BM.t list) : BM.t list =
   let name_uuids : (string, string) Hashtbl.t = Hashtbl.create 255 in
   List.map
     (fun block ->
-      let fix_ref v =
+      let fix_ref ~is_ref ~properties v =
         match v with
         | Map _ ->
           let m = bm_of_value (Some v) in
           (match get_string m "block/name", get_uuid m "block/uuid" with
            | Some name, Some uuid ->
-             (match Hashtbl.find_opt name_uuids name with
-              | Some u when u <> uuid ->
-                mv_of_bm (BM.put m "block/uuid" (Uuid u))
-              | _ ->
-                Hashtbl.replace name_uuids name uuid;
-                v)
+             if is_ref && List.mem name properties then
+               (* don't change uuid if property since properties and tags have
+                  different uuids *)
+               v
+             else
+               (match Hashtbl.find_opt name_uuids name with
+                | Some u when u <> uuid ->
+                  mv_of_bm (BM.put m "block/uuid" (Uuid u))
+                | _ ->
+                  Hashtbl.replace name_uuids name uuid;
+                  v)
            | _ -> v)
         | _ -> v
       in
-      let fix_ref_list block a =
+      let fix_ref_list block a ~is_ref ~properties =
         match getv block a with
         | Some _ ->
           BM.put block a
-            (List (List.map fix_ref (collv (getv block a))))
+            (List (List.map (fix_ref ~is_ref ~properties) (collv (getv block a))))
         | None -> block
       in
-      let block = fix_ref_list block "block/refs" in
-      let block = fix_ref_list block "block/tags" in
+      let properties =
+        match Block_map.attr_value block "block/properties" with
+        | Some m ->
+          List.map fst (Clj_value.map_entries_named m)
+        | None -> []
+      in
+      let block = fix_ref_list block "block/tags" ~is_ref:false ~properties:[] in
+      let block = fix_ref_list block "block/refs" ~is_ref:true ~properties in
       block)
     blocks
 
@@ -5316,12 +5379,8 @@ let import_parse_outline_only (format : string) (content : string) : bool =
   (format = "markdown" || format = "md")
   && not (Regexp.test import_outline_only_re content)
 
-type extracted_pages_blocks =
-  { ex_pages : BM.t list
-  ; ex_blocks : BM.t list }
-
 let extract_pages_and_blocks (db : db) (file : string) (content : string)
-    (options : options) : extracted_pages_blocks option =
+    (options : options) : extracted option =
   let format =
     Common_util.get_format file
   in
@@ -5403,7 +5462,16 @@ let extract_pages_and_blocks (db : db) (file : string) (content : string)
     end
   in
   match extracted with
-  | Some (pages, blocks) -> Some { ex_pages = pages; ex_blocks = blocks }
+  | Some (pages, blocks) ->
+    let extracted = { ex_pages = pages; ex_blocks = blocks } in
+    if hls_annotation_md_file file then begin
+      (* Annotation markdown pages are saved for later as they are dependant
+         on the asset being annotated *)
+      Hashtbl.replace options.import_state.pdf_annotation_pages
+        (Gp_node_path.basename file) extracted;
+      None
+    end
+    else Some extracted
   | None -> None
 
 let build_journal_created_ats (pages : BM.t list) : (string, int64) Hashtbl.t =
@@ -5430,6 +5498,11 @@ let build_journal_created_ats (pages : BM.t list) : (string, int64) Hashtbl.t =
 type clean_result =
   { cl_pages_tx : BM.t list
   ; cl_retract_tx : tx_op list }
+
+let ident_eid_of (db : db) (ident : string) : int =
+  match Ldb.ent_of_ref db (Ident ident) with
+  | Some e -> e.id
+  | None -> -1
 
 let clean_extra_invalid_tags (db : db) (pages_tx : BM.t list)
     (classes_tx : BM.t list)
@@ -5591,67 +5664,66 @@ let transact_imported_maps (conn : conn) (maps : BM.t list) (meta : tx_meta)
     save_from_bm_tx maps options;
     Some report
 
-let track_placeholder_ref_uuids (import_state : import_state)
-    (blocks_tx : BM.t list) : unit =
-  List.iter
-    (fun b ->
-      List.iter
-        (fun r ->
-          if block_uuid_ref r then
-            match coll_items r with
-            | _ :: u :: _ ->
-              (match uuid_str_of u with
-               | Some u ->
-                 Hashtbl.replace import_state.placeholder_ref_uuids u ()
-               | None -> ())
-            | _ -> ())
-        (collv (getv b "block/refs")))
-    blocks_tx
-
+(* build-file-import-blocks-index — {:block/uuid _} stubs for block ids and
+   every [:block/uuid _] ref/link target inside blocks-tx *)
 let build_file_import_blocks_index (blocks_tx : BM.t list) : BM.t list =
-  List.concat_map
-    (fun b ->
-      match getv b "block/uuid" with
-      | Some uuid ->
-        let m = [ ("block/uuid", uuid) ] in
-        let m =
-          match getv b "block/page" with
-          | Some v -> BM.put m "block/page" v
-          | None -> m
-        in
-        let m =
-          match getv b "block/parent" with
-          | Some v -> BM.put m "block/parent" v
-          | None -> m
-        in
-        let m =
-          match getv b "block/name" with
-          | Some v -> BM.put m "block/name" v
-          | None -> m
-        in
-        let m =
-          match getv b "block/journal-day" with
-          | Some v -> BM.put m "block/journal-day" v
-          | None -> m
-        in
-        [ m ]
-      | None -> [])
-    blocks_tx
+  let block_uuid_index (v : value) : value option =
+    match v with
+    | Vector [ Keyword "block/uuid"; (Uuid _ as u) ] -> Some u
+    | List [ Keyword "block/uuid"; (Uuid _ as u) ] -> Some u
+    | _ -> None
+  in
+  let ref_uuids (b : BM.t) (attr : string) : value list =
+    match getv b attr with
+    | Some v ->
+      List.filter_map block_uuid_index (collv (Some v))
+    | None -> []
+  in
+  let dedupe_keep_order uuids =
+    let seen = Hashtbl.create (List.length uuids * 2) in
+    List.filter (fun u -> if Hashtbl.mem seen u then false else (Hashtbl.add seen u (); true)) uuids
+  in
+  (* cljs emits the ref/link-target stubs together with the block stubs as
+     one unordered set; emitting the referenced entities' stubs first in
+     collection order is a deterministic choice that matches the observed
+     outcome where e.g. an asset page-ref wins a lowest-eid lookup *)
+  let block_ids =
+    List.filter_map
+      (fun block ->
+        match getv block "block/uuid" with
+        | Some (Uuid _ as u) -> Some u
+        | _ -> None)
+      blocks_tx
+  in
+  let link_ids =
+    List.filter_map
+      (fun b ->
+        match getv b "block/link" with
+        | Some v when block_uuid_ref v -> block_uuid_index v
+        | _ -> None)
+      blocks_tx
+  in
+  let ref_ids =
+    List.concat_map (fun b -> ref_uuids b "block/refs") blocks_tx
+  in
+  List.map
+    (fun u -> [ "block/uuid", u ])
+    (dedupe_keep_order (ref_ids @ link_ids @ block_ids))
 
-(* cljs build-file-import-main-tx ordering *)
+(* build-file-import-main-tx — cljs ~2979 *)
 let build_file_import_main_tx (db : db) (pages_tx'' : BM.t list)
     (page_properties_tx : BM.t list)
     (property_page_properties_tx : BM.t list) (classes_tx : BM.t list)
     (classes_tx' : tx_op list) (custom_status_tx : BM.t list)
     (blocks_tx : BM.t list) : tx_op list =
   let pages_index =
-    List.map
-      (fun p ->
-                  [ ( "block/uuid"
-            , match getv p "block/uuid" with Some v -> v | None -> Nil ) ])
-      (pages_tx'' @ classes_tx)
-    |> List.sort_uniq (fun a b ->
-           compare (getv a "block/uuid") (getv b "block/uuid"))
+    distinct
+      (List.filter_map
+         (fun b ->
+           (match getv b "block/uuid" with
+            | Some (Uuid _ as u) -> Some [ "block/uuid", u ]
+            | _ -> None))
+         (pages_tx'' @ classes_tx))
   in
   let blocks_index = build_file_import_blocks_index blocks_tx in
   let bm_ops ms = List.map (bm_tx_op db) ms in
@@ -5663,6 +5735,22 @@ let build_file_import_main_tx (db : db) (pages_tx'' : BM.t list)
   @ bm_ops custom_status_tx
   @ bm_ops blocks_index
   @ bm_ops blocks_tx
+
+(* track-placeholder-ref-uuids! — cljs ~2938; collects uuid targets of
+   [:block/uuid _] refs so later passes can detect unresolved placeholders *)
+let track_placeholder_ref_uuids (import_state : import_state)
+    (blocks_tx : BM.t list) : unit =
+  List.iter
+    (fun b ->
+      List.iter
+        (fun r ->
+          match r with
+          | Vector [ Keyword "block/uuid"; (Uuid u | String u) ]
+          | List [ Keyword "block/uuid"; (Uuid u | String u) ] ->
+            Hashtbl.replace import_state.placeholder_ref_uuids u ()
+          | _ -> ())
+        (collv (getv b "block/refs")))
+    blocks_tx
 
 (* cljs file-graph-tx-options *)
 let file_graph_tx_options (options : options) (pages : BM.t list)
@@ -5874,7 +5962,12 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
     | Some v -> Common_util.timestamp_ms v
     | None -> None
   in
-  let to_i64 f = Option.map Int64.of_float f in
+  (* timestamp-ms treats non-positive times (e.g. epoch-0 birthtime) as absent *)
+  let to_i64 f =
+    match f with
+    | Some x when x > 0. && Float.is_finite x -> Some (Int64.of_float x)
+    | _ -> None
+  in
   let modified_at =
     pick_opt (file_ts "file-updated-at")
       (pick_opt
@@ -6617,7 +6710,7 @@ let read_and_copy_asset_files (asset_files_in : BM.t list)
     (read_and_copy_asset :
        BM.t -> (string, BM.t) Hashtbl.t
        -> (string -> (BM.t -> BM.t) * bool) -> unit Eff.t)
-    (options : options) : unit Eff.t =
+    (assets_tbl : (string, BM.t) Hashtbl.t) (options : options) : unit Eff.t =
   let assets =
     (if options.rpath_key <> "path" then
        let seen = Hashtbl.create 63 in
@@ -6673,7 +6766,7 @@ let read_and_copy_asset_files (asset_files_in : BM.t list)
       in
       (with_edn_content, pdf_annotation)
     in
-    read_and_copy_asset file options.import_state.assets buffer_handler
+    read_and_copy_asset file assets_tbl buffer_handler
     |> Fun.flip Eff.catch (fun error ->
        options.notify_user
          [ ( "msg"
@@ -6712,7 +6805,7 @@ let insert_favorites (conn : conn) (favorited_ids : string list)
 (* favorite-config-page-name — bare name or [[page]] ref *)
 let favorite_config_page_name (page_name : value option) : string option =
   match page_name with
-  | Some (String s) -> Page_ref.get_page_name (Unicode.trim s)
+  | Some (String s) -> Some (Page_ref.get_page_name_exn (String.trim s))
   | Some _ -> None
   | None -> None
 
@@ -6728,17 +6821,17 @@ let find_namespace_page (db : db) (page_name : string) : entity option =
         | None -> None
         | Some p ->
           let target = Ldb.page_name_sanity_lc part in
-          List.find_opt
-            (fun (child : entity) ->
-              page_entity child
-              && Ldb.string_value child "block/name" = Some target)
-            (List.filter_map
-               (fun (d : datom) ->
-                 match d.v with
-                 | Ref id -> Ldb.ent_of_id db id
-                 | _ -> None)
+          let r =
+            List.find_opt
+              (fun (child : entity) ->
+                page_entity child
+                && Ldb.string_value child "block/name" = Some target)
+              (List.filter_map
+               (fun (d : datom) -> Ldb.ent_of_id db d.e)
                (List.of_seq
-                  (datoms db Avet ~a:"block/parent" ~v:(Ref p.id) ()))))
+                  (datoms db Avet ~a:"block/parent" ~v:(Ref p.id) ())))
+          in
+          r)
       first_page rest
   | _ -> None
 
@@ -6795,9 +6888,10 @@ let build_doc_options (config : (attr * value) list) (options : options)
   { options with
     user_config = config
   ; user_options =
-      { options.user_options with
-        remove_inline_tags = true
-      ; convert_all_tags = true }
+      (* cljs merges {:remove-inline-tags? true :convert-all-tags? true}
+         under :user-options — user-supplied values win; the defaults are
+         already true in default_user_options *)
+      options.user_options
   ; import_state = new_import_state ()
   ; macros =
       (if options.macros <> [] then options.macros
@@ -6930,6 +7024,7 @@ let export_file_graph_steps (conn : conn) (config : (attr * value) list)
   (match options.read_and_copy_asset with
    | Some rc ->
      read_and_copy_asset_files partitioned.pf_asset_files rc
+       doc_options.import_state.assets
        { options with
          notify_user = options.notify_user
        ; set_ui_state = options.set_ui_state

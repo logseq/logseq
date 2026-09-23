@@ -24,7 +24,7 @@ let rec scan_node (s : string) (i : int) : int =
         (* discard next form *)
         let j = scan_node s (i + 2) in
         j
-      else if i + 1 < n && s.[i + 1] = '{' then scan_balanced s (i + 1) '{' '}'
+      else if i + 1 < n && s.[i + 1] = '{' then scan_balanced s (i + 2) '{' '}'
       else if i + 1 < n && s.[i + 1] = '"' then scan_string s (i + 1)
       else if i + 1 < n && (s.[i + 1] = ':' || s.[i + 1] = '?') then
         (* tagged literal: tag + form *)
@@ -128,13 +128,19 @@ let dissoc (s : string) (key : string) : string =
           String.sub key_str 1 (String.length key_str - 1)
         else key_str
       in
-      if kl = key then Some (prev_ws, val_end)
+      if kl = key then Some (prev_ws, key_start, val_end)
       else loop val_end key_start
   in
   match loop (i0 + 1) (i0 + 1) with
   | None -> s
-  | Some (wstart, vend) ->
-    String.sub s 0 wstart ^ String.sub s vend (n - vend)
+  | Some (wstart, kstart, vend) ->
+    (* rewrite-edn removes the whitespace after a removed entry so the next
+       entry moves up; when nothing follows, remove the preceding
+       whitespace instead *)
+    let next_i = skip_ws s vend in
+    if next_i < n && s.[next_i] <> '}' then
+      String.sub s 0 kstart ^ String.sub s next_i (n - next_i)
+    else String.sub s 0 wstart ^ String.sub s vend (n - vend)
 
 let dissoc_many (s : string) (keys : string list) : string =
   List.fold_left dissoc s keys

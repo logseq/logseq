@@ -133,18 +133,48 @@ let url_parse (s : string) : url_parts option =
     if not (starts_with rest "//") then
       Some { protocol = scheme; host = ""; pathname = rest }
     else
+      (* WHATWG: backslashes count as path separators for file: URLs *)
       let rest' = String.sub rest 2 (String.length rest - 2) in
-      let host =
-        match Common_util.str_index_of rest' "/" with
-        | None -> rest'
-        | Some i -> String.sub rest' 0 i
+      let rest' =
+        if scheme = "file:" then
+          String.map (fun c -> if c = '\\' then '/' else c) rest'
+        else rest'
       in
+      let host, pathname =
+        match Common_util.str_index_of rest' "/" with
+        | None -> (rest', "/")
+        | Some i ->
+          ( String.sub rest' 0 i
+          , String.sub rest' i (String.length rest' - i) )
+      in
+      (* WHATWG: in file: URLs a windows drive letter in host position is
+         part of the path, and localhost is dropped *)
+      let host, pathname =
+        if scheme = "file:" then
+          if String.length host = 2 && host.[1] = ':' then
+            ("", "/" ^ host ^ pathname)
+          else if String.lowercase_ascii host = "localhost" then
+            ("", pathname)
+          else (host, pathname)
+        else (host, pathname)
+      in
+      (* js/URL pathname excludes query and fragment *)
       let pathname =
-        match Common_util.str_index_of rest' "/" with
-        (* js/URL normalizes empty path to "/" *)
-        | None -> "/"
-        | Some i -> String.sub rest' i (String.length rest' - i)
+        let i =
+          match
+            ( Common_util.str_index_of pathname "?"
+            , Common_util.str_index_of pathname "#" )
+          with
+          | Some a, Some b -> Some (min a b)
+          | Some a, None | None, Some a -> Some a
+          | None, None -> None
+        in
+        match i with
+        | Some i -> String.sub pathname 0 i
+        | None -> pathname
       in
+      (* js/URL normalizes empty path to "/" *)
+      let pathname = if pathname = "" then "/" else pathname in
       (* js/URL lowercases the host *)
       Some { protocol = scheme; host = String.lowercase_ascii host; pathname }
 
