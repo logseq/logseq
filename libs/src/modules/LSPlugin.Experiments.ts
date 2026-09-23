@@ -57,6 +57,13 @@ type CodeMirror6LanguageDescriptorBase = {
 }
 
 /**
+ * A usable CodeMirror 6 extension instance (a LanguageSupport or Extension).
+ * `undefined` and `null` are excluded so that a declared `support`/`load`
+ * actually resolves a value at runtime.
+ */
+export type CodeMirror6ExtensionInstance = object
+
+/**
  * Descriptor shapes `registerLanguage` accepts. Every registration must
  * resolve to a LanguageSupport at runtime: `plain-text` intentionally
  * installs none; `plugin` supplies one through `support` or `load`.
@@ -70,15 +77,19 @@ export type CodeMirror6LanguageRegistration =
       source: 'plugin'
       /** An already-built CodeMirror 6 LanguageSupport (or Extension) used
        *  to highlight this language. */
-      support: unknown
+      support: CodeMirror6ExtensionInstance
       /** LanguageDescription.load-style loader resolving a
        *  LanguageSupport/Extension or a promise of one. */
-      load?: () => unknown | Promise<unknown>
+      load?: () =>
+        | CodeMirror6ExtensionInstance
+        | Promise<CodeMirror6ExtensionInstance>
     })
   | (CodeMirror6LanguageDescriptorBase & {
       source: 'plugin'
-      load: () => unknown | Promise<unknown>
-      support?: unknown
+      load: () =>
+        | CodeMirror6ExtensionInstance
+        | Promise<CodeMirror6ExtensionInstance>
+      support?: CodeMirror6ExtensionInstance
     })
 
 /**
