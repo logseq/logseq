@@ -1747,6 +1747,139 @@ let () =
             fail_promise
               (Printf.sprintf "expected four invoke requests, got %d" !step)));
 
+  test_promise
+    "upsert block --blocks resolves closed default property values" (fun () ->
+      let step = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"status" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",70,\"~:db/ident\",\"~:logseq.property/status\",\"~:logseq.property/type\",\"~:default\",\"~:db/valueType\",\"~:db.type/ref\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"closed-value-property" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",76,\"~:db/ident\",\"~:logseq.property/status.todo\",\"~:block/title\",\"todo\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | 4
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"batch-set-property" body)
+                then fail_test ("missing batch-set-property op: " ^ body);
+                if not (Js.String.includes ~search:"logseq.property/status" body)
+                then fail_test ("missing status property ident: " ^ body);
+                (* The closed value must arrive as its entity id — a bare
+                   word or lookup vec fails worker-side validation. *)
+                if not (Js.String.includes ~search:"76" body) then
+                  fail_test ("missing closed value entity id: " ^ body);
+                if Js.String.includes ~search:"block/name" body then
+                  fail_test ("unresolved name lookup leaked: " ^ body);
+                "[]"
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- Task one\n  status:: todo";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block closed default property" output);
+          if !step = 5 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+
+  test_promise
+    "upsert block --blocks sends open default property values as strings"
+    (fun () ->
+      let step = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"note" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",70,\"~:db/ident\",\"~:user.property/note\",\"~:logseq.property/type\",\"~:default\",\"~:db/valueType\",\"~:db.type/ref\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"closed-value-property" body ->
+                "[]"
+            | 3
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
+            | 4
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"batch-set-property" body)
+                then fail_test ("missing batch-set-property op: " ^ body);
+                (* Open default values must stay raw strings — the worker
+                   creates the text block itself; a [:block/name] lookup
+                   trips its 'should be a text block' check. *)
+                if not (Js.String.includes ~search:"answer" body) then
+                  fail_test ("missing raw property value: " ^ body);
+                if Js.String.includes ~search:"block/name" body then
+                  fail_test ("name lookup leaked into op: " ^ body);
+                "[]"
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--blocks";
+                "- Note block\n  note:: answer";
+              |]
+          in
+          ignore
+            (expect_cli_exit_zero "upsert block open default property" output);
+          if !step = 5 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected five invoke requests, got %d" !step)));
+
   test_promise "upsert block --blocks accepts tab-separated markdown" (fun () ->
       let step = ref 0 in
       let server =
