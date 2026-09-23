@@ -244,16 +244,38 @@
   [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
     (let [page-tag (d/entity db :logseq.class/Page)
-          library-page (ldb/get-library-page db-after)]
+          library-page (ldb/get-library-page db-after)
+          ;; Climb to the topmost page ancestor: namespaces created before
+          ;; registration existed can have a parentless root higher up.
+          move-parent-to-library-tx (fn [block-parent]
+                                      (let [root (loop [parent block-parent]
+                                                   (if (and (ldb/page? parent)
+                                                            (ldb/page? (:block/parent parent)))
+                                                     (recur (:block/parent parent))
+                                                     parent))]
+                                        (when (and (ldb/page? root)
+                                                   (nil? (:block/parent root))
+                                                   (not= (:db/id root) (:db/id library-page))
+                                                   (not (:db/ident root))
+                                                   (not (ldb/built-in? root)))
+                                          [{:db/id (:db/id root)
+                                            :block/parent (:db/id library-page)
+                                            :block/order (db-order/gen-key)}])))]
       (mapcat
        (fn [datom]
          (let [id (:e datom)
                page-tag-update? (and (= :block/tags (:a datom))
                                      (= (:db/id page-tag) (:v datom)))
-               move-to-library? (and (= :block/parent (:a datom))
-                                     (= (:db/id library-page) (:v datom))
-                                     (:added datom))]
-           (when (or page-tag-update? move-to-library?)
+               added-parent? (and (= :block/parent (:a datom))
+                                  (:added datom))
+               move-to-library? (and added-parent?
+                                     (= (:db/id library-page) (:v datom)))
+               ;; A page moved under another page creates a namespace
+               ;; whose root page should be registered in Library.
+               move-under-page? (and added-parent?
+                                     (not move-to-library?)
+                                     (ldb/internal-page? (d/entity db-after (:v datom))))]
+           (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)
                    ;; When a block becomes a page its descendant blocks still point
@@ -276,8 +298,14 @@
                      [:db/retract id :block/page]]
                     (children-page-tx))
 
+                   ;; page moved under another page
+                   (and move-under-page? (ldb/internal-page? block-after))
+                   (move-parent-to-library-tx (:block/parent block-after))
+
                    ;; block->page
-                   (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
+                   (and (not move-under-page?)
+                        (:added datom)
+                        (or (nil? block-before) (not (ldb/page? block-before))))
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
                          ;; remove inline #Page from title
@@ -289,17 +317,8 @@
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
-                                       [:db/retract id :block/order]]))
-                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
-                                                              (nil? (:block/parent block-parent))
-                                                              block-parent
-                                                              (not= (:db/id block-parent) (:db/id library-page))
-                                                              (not (:db/ident block-parent))
-                                                              (not (ldb/built-in? block-parent)))
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}])]
-                     (concat ->page-tx move-parent-to-library-tx (children-page-tx)))
+                                       [:db/retract id :block/order]]))]
+                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
