@@ -2849,8 +2849,8 @@ let test_validate_editing_built_in_property () =
        true
      with _ -> false)
 
-(* new-graph-should-be-valid is not ported — it iterates the full cljs
-   build-db-initial-data ontology which the fixture does not seed. *)
+(* new-graph-should-be-valid lives in test_outliner_native.ml
+   (the outliner validate_test.cljs port). *)
 
 (* ---------- src/test/frontend/worker/db_core_test.cljs ---------- *)
 
@@ -3254,4 +3254,6 @@ let () =
     ; "gp-exporter", Test_gp_exporter_native.cases
     ; "gp-extract", Test_gp_extract_native.cases
     ; "gp-mldoc", Test_gp_mldoc_native.cases
-    ; "gp-text", Test_gp_text_native.cases ]
+    ; "gp-text", Test_gp_text_native.cases
+    ; "gp-block", Test_gp_block_native.cases
+    ; "gp-property", Test_gp_property_native.cases ]

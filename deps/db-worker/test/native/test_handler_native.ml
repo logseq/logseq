@@ -20,10 +20,9 @@
    - cljs db-test/create-conn-with-blocks -> create_conn () +
      Db_test_util.build_blocks_tx + transact_maps (record DSL
      equivalents of the cljs {:properties :classes :pages-and-blocks}
-     options). Sqlite_build.create_blocks is NOT used: keyword-keyed
-     :build/properties entries crash it (Known issues) and
-     Edn_util.read_string maps #uuid literals to Tuple [Symbol; String]
-     rather than Uuid, losing :build/closed-values :uuid fields.
+     options). Sqlite_build.create_blocks works now (the keyword-keyed
+     :build/properties and #uuid-literal bugs below are fixed), but the
+     fixtures keep the Db_test_util DSL — same datoms, no EDN round-trip.
    - comments/property fixtures re-transact
      sqlite-create-graph/build-db-initial-data "{}" after
      create-conn-with-blocks; Sqlite_export.create_conn already seeds
@@ -64,36 +63,25 @@
      (Outliner_property.get_class_properties + property_plain_map);
      the cljs test calls the handler fn which returns the same maps.
 
-   Known lib bugs surfaced (asserted cljs-faithfully; left red):
-   - Db_property_build.build_property_values_tx_m reads
+   Resolved lib bugs (documented while red; all fixed since):
+   - Db_property_build.build_property_values_tx_m read
      original-property-id / db/ident via Block_map.string_attr
      (String-only) while Sqlite_build.build_property_map_for_pvalue_tx
-     writes them as Keyword values, so Sqlite_build.create_blocks
-     throws "Key in map must have a :db/ident" for any keyword-keyed
-     :build/properties entry. Fixtures use the Db_test_util DSL
-     instead; this is a lib bug to fix in lib/.
-   - :block/properties accepts arbitrary EDN maps in cljs datascript
-     (non-ref attr); OCaml datascript rejects nested Map values on
-     non-ref attrs, so the canonical-block fixture stores a plain
-     string under :block/properties (assertion intent — the attr is
-     excluded from canonical output — unchanged).
-   - Edn_util.read_string maps #uuid literals to
-     Tuple [Symbol "uuid"; String] instead of Datascript.Uuid. Any
-     fixture path feeding create_blocks options through it loses uuid
-     values (e.g. :build/closed-values :uuid -> "closed-value requires
-     :uuid"). Avoided by using the Db_test_util DSL; the tagged-literal
-     handling in edn_util is a lib bug to fix.
-  - Outliner_op.apply_ops does (Cljs_map.assoc opts "local-tx?" ...)
-    unconditionally; when callers pass Wire.Nil opts it raises
-    "assoc: not a map". Endpoint_comment.insert_comments_area and
-    delete_comment hit this, so 3 comments tests stay red.
-    cljs (assoc nil ...) returns a map instead of throwing.
-  - datascript-ocaml rejects nested Map values on non-ref attrs in
-    entity-map tx form (e.g. {:logseq.property/icon {:type ...}})
-    with "nested entity attribute requires ref schema"; cljs
-    datascript accepts them as raw map values. Fixtures emit the
-    same datoms via [:db/add ... :logseq.property/icon {...}] (see
-    Db_test_util.op_db_add); asserted values unchanged. *)
+     wrote them as Keyword values, so Sqlite_build.create_blocks threw
+     "Key in map must have a :db/ident" for keyword-keyed
+     :build/properties entries. Fixed — it now accepts both.
+   - Edn_util.read_string mapped #uuid literals to
+     Tuple [Symbol "uuid"; String] instead of Datascript.Uuid; fixture
+     paths feeding create_blocks options through it lost uuid values.
+     Fixed — it now returns Uuid.
+   - datascript-ocaml rejected nested Map values on non-ref attrs in
+     entity-map tx form ("nested entity attribute requires ref
+     schema"); cljs accepts them as raw map values. Fixed upstream.
+     The canonical-block fixture still stores a plain string under
+     :block/properties (the attr is excluded from canonical output —
+     assertion intent unchanged), and fixture code emits
+     :logseq.property/icon maps via [:db/add ...] ops rather than
+     entity-map form (see Db_test_util.op_db_add). *)
 
 open Datascript
 open Test_shared

@@ -685,6 +685,10 @@ let test_search_blocks_dangling_boolean () =
          (Search_index.get_match_input q))
     cases
 
+(* cljs search-blocks-large-graph-benchmark-regression: the cljs spy asserts
+   the generated SQL never orders by rank; on native the query SQL is a
+   compile-time literal inside search_blocks (no "order by rank" — visible
+   in search_index.ml) so only the empty-result half is asserted here. *)
 let test_search_blocks_large_graph_no_rank_scan () =
   let sdb = open_search_db () in
   let conn = T.create_conn () in
