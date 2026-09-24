@@ -336,7 +336,7 @@
               {:skip-ref-rebuild? true
                :outliner-op :save-block}]
              @tx-calls))
-      (reset! (#'editor/*blocks-pending-ref-rebuild) #{}))))
+      (reset! @#'editor/*blocks-pending-ref-rebuild #{}))))
 
 (deftest save-block-if-changed-commit-after-draft-rebuilds-refs-test
   (let [block-uuid #uuid "33333333-3333-4333-8333-333333333333"
@@ -347,7 +347,7 @@
         parse-calls (atom 0)
         save-calls (atom [])
         tx-calls (atom [])]
-    (reset! (#'editor/*blocks-pending-ref-rebuild) #{})
+    (reset! @#'editor/*blocks-pending-ref-rebuild #{})
     (with-redefs [db-subs/block-snapshot
                   (fn [_] @snapshot)
                   conn/get-db (constantly :test-db)
@@ -380,7 +380,7 @@
               []
               {:outliner-op :save-block}]
              @tx-calls))
-      (is (not (contains? @(#'editor/*blocks-pending-ref-rebuild) block-uuid))
+      (is (not (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid))
           "Commit clears the pending ref-rebuild mark"))))
 
 (deftest edit-box-on-change-auto-save-skips-ref-rebuild-test

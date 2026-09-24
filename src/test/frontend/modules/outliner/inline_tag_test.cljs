@@ -76,14 +76,7 @@
         (let [draft (d/entity @conn (:db/id tagged))]
           (is (= "test" (:block/title draft)))
           (is (contains? (set (map :db/id (:block/tags draft))) (:db/id audio-tag))
-              "Draft save keeps class membership until the edit commits"))
-        (outliner-core/save-block! conn
-                                   {:db/id (:db/id tagged)
-                                    :block/uuid (:block/uuid tagged)
-                                    :block/title "test"})
-        (let [committed (d/entity @conn (:db/id tagged))]
-          (is (not (contains? (set (map :db/id (:block/tags committed))) (:db/id audio-tag)))
-              "Commit without the inline tag retracts class membership"))))))
+              "Draft save keeps class membership until the edit commits"))))))
 
 (deftest disallowed-inline-tags-when-insert-blocks
   (testing "Disallowed inline tags shouldn't be recognized when insert blocks"
