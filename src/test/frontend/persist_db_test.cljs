@@ -1733,6 +1733,11 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest db-worker-script-url-is-relative-for-hosted-export
+  (is (= "./js/db-worker.js" (browser/db-worker-script-url)))
+  (with-redefs [config/publishing? true]
+    (is (= "./static/js/db-worker.js" (browser/db-worker-script-url)))))
+
 (deftest start-db-worker-skips-in-node-test-runtime
   (async done
     (let [invoke-calls (atom [])
