@@ -617,23 +617,20 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                           | Some bb -> Ldb.internal_page bb
                           | None -> false)
               then begin
-                (* page->block *)
-                match block_before with
-                | Some bb ->
-                    (match Ldb.ref_ent bb "block/parent" with
-                     | Some parent ->
-                         let rec find_parent_page (p : entity) =
-                           if Ldb.is_page p then Some p
-                           else
-                             match Ldb.ref_ent p "block/parent" with
-                             | Some pp -> find_parent_page pp
-                             | None -> None
-                         in
-                         (match find_parent_page parent with
-                          | Some pp ->
-                              [ retract_attr id "block/name"
-                              ; add id "block/page" (Int pp.id) ]
-                          | None -> [])
+                (* page->block — cljs uses (:block/parent block-after) *)
+                match Ldb.ref_ent ba "block/parent" with
+                | Some parent ->
+                    let rec find_parent_page (p : entity) =
+                      if Ldb.is_page p then Some p
+                      else
+                        match Ldb.ref_ent p "block/parent" with
+                        | Some pp -> find_parent_page pp
+                        | None -> None
+                    in
+                    (match find_parent_page parent with
+                     | Some pp ->
+                         [ retract_attr id "block/name"
+                         ; add id "block/page" (Int pp.id) ]
                      | None -> [])
                 | None -> []
               end

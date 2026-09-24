@@ -71,60 +71,16 @@ let get_journal_day_from_long (db : db) (v : value) : entity_id option =
       List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int day) ())
       |> List.find_map (fun (d : datom) -> Some d.e)
 
-(* private-built-in-props — built-in properties without :public? schema *)
-let private_built_in_props =
-  [ "logseq.property/type"; "logseq.property/view-context"
-  ; "logseq.property/ui-position"; "logseq.property/classes"
-  ; "logseq.property/value"; "block/parent"; "block/order"; "block/page"
-  ; "block/refs"; "block/link"; "block/title"; "block/closed-value-property"
-  ; "block/journal-day"; "block/created-at"; "block/updated-at"
-  ; "logseq.property.node/display-type"; "logseq.property.code/lang"
-  ; "logseq.property/default-value"; "logseq.property/scalar-default-value"
-  ; "logseq.property/background-color"; "logseq.property/heading"
-  ; "logseq.property/created-from-property"; "logseq.property/asset"
-  ; "logseq.property/ls-type"; "logseq.property.pdf/hl-type"
-  ; "logseq.property.pdf/hl-color"; "logseq.property.pdf/hl-page"
-  ; "logseq.property.pdf/hl-image"; "logseq.property.pdf/hl-value"
-  ; "logseq.property/order-list-type"
-  ; "logseq.property.linked-references/includes"
-  ; "logseq.property.linked-references/excludes"
-  ; "logseq.property.comments/blocks"
-  ; "logseq.property.journal/title-format"
-  ; "logseq.property/choice-checkbox-state"; "logseq.property/choice-classes"
-  ; "logseq.property/choice-exclusions"
-  ; "logseq.property/checkbox-display-properties"
-  ; "logseq.property.repeat/recur-unit"; "logseq.property.repeat/repeat-type"
-  ; "logseq.property.repeat/temporal-property"
-  ; "logseq.property.repeat/checked-property"; "logseq.property.view/type"
-  ; "logseq.property.view/feature-type"
-  ; "logseq.property.view/group-by-property"
-  ; "logseq.property.view/gallery-asset-property"
-  ; "logseq.property.view/gallery-display-properties"
-  ; "logseq.property.view/gallery-card-size"
-  ; "logseq.property.view/gallery-card-width"
-  ; "logseq.property.view/gallery-card-height"
-  ; "logseq.property.view/sort-groups-by-property"
-  ; "logseq.property.table/sorting"; "logseq.property.table/filters"
-  ; "logseq.property.table/hidden-columns"
-  ; "logseq.property.table/ordered-columns"
-  ; "logseq.property.table/sized-columns"
-  ; "logseq.property.table/pinned-columns"; "logseq.property/view-for"
-  ; "logseq.property.asset/type"; "logseq.property.asset/external-file-name"
-  ; "logseq.property.asset/size"; "logseq.property.asset/width"
-  ; "logseq.property.asset/height"; "logseq.property.asset/checksum"
-  ; "logseq.property.asset/last-visit-page"
-  ; "logseq.property.asset/remote-metadata"
-  ; "logseq.property.asset/resize-metadata"; "logseq.property.asset/align"
-  ; "logseq.property.fsrs/due"; "logseq.property.fsrs/state"
-  ; "logseq.property.history/block"; "logseq.property.history/property"
-  ; "logseq.property.history/ref-value"
-  ; "logseq.property.history/scalar-value"; "logseq.property/created-by-ref"
-  ; "logseq.property/deleted-at"; "logseq.property/deleted-by-ref"
-  ; "logseq.property.recycle/original-parent"
-  ; "logseq.property.recycle/original-page"
-  ; "logseq.property.recycle/original-order"
-  ; "logseq.property.reaction/emoji-id"; "logseq.property.reaction/target"
-  ; "logseq.property/used-template"; "logseq.property.sync/large-title-object" ]
+(* cljs private-built-in-props:
+   (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
+              db-property/built-in-properties)) *)
+let private_built_in_props : attr list =
+  List.filter_map
+    (fun (p : Db_property.built_in_property) ->
+       match List.assoc_opt "public?" p.bip_schema with
+       | Some (Bool true) -> None
+       | _ -> Some p.bip_ident)
+    Db_property.built_in_property_specs
 
 (* non-ref-properties — never produce :block/refs *)
 let non_ref_properties =
@@ -164,10 +120,12 @@ let properties_of (e : entity) : (attr * value list) list =
         in
         Some (a, vs))
 
-(* page-or-object?-helper *)
+(* page-or-object?-helper — cljs requires (de/entity? v): only a
+   materialized entity ref counts; bare eids/keywords/maps/lookup-refs are
+   not entities. *)
 let page_or_object_helper db (v : value) : bool =
-  match ref_to_id db v with
-  | Some id -> (
+  match v with
+  | Ref id | Ref_to (Entity_id id) -> (
       match entity db (Entity_id id) with
       | Some e ->
           (Ldb.is_page e || Ldb.is_object e)
@@ -175,7 +133,7 @@ let page_or_object_helper db (v : value) : bool =
                (Option.is_some
                   (Ldb.value e "logseq.property/created-from-property"))
       | None -> false)
-  | None -> false
+  | _ -> false
 
 (* build-journal-refs-for-datetime-properties *)
 let build_journal_refs_for_datetime_properties (db : db)

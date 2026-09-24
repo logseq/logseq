@@ -1461,9 +1461,19 @@ let validate_batch_set_property conn (block_eids : entity_id list)
   Outliner_validate.disallow_editing_private_built_in_nodes
     (List.filter_map (Ldb.ent_of_id db) block_eids);
   if property_id = "block/tags" then
-    (match to_entity_ids db v with
-     | [ vid ] -> Outliner_validate.validate_tags_property db block_eids vid
-     | _ -> ());
+    ((* cljs validate-tags-property: disallow-tagging inspects block-eids
+        regardless of v's shape; the tag-value checks see (d/entity db v)
+        which is nil for colls/unresolvable v and skips them. *)
+     Outliner_validate.disallow_tagging_a_built_in_entity db block_eids;
+     match entity_of_wire db v with
+     | Some tag ->
+         Outliner_validate.disallow_node_cant_tag_with_private_tags db
+           block_eids tag.id;
+         Outliner_validate.validate_block_can_tag_with_page_tag db block_eids
+           tag.id;
+         Outliner_validate.disallow_node_cant_tag_with_built_in_non_tags db
+           tag.id
+     | None -> ());
   if property_id = "logseq.property.class/extends" then
     List.iter
       (fun parent_id ->
@@ -1830,10 +1840,16 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
        else begin
          let block = Option.get block in
          if property_id = "block/tags" then
-           (match to_entity_ids db v' with
-            | [ vid ] ->
-                Outliner_validate.validate_tags_property db [ block.id ] vid
-            | _ -> ());
+           (Outliner_validate.disallow_tagging_a_built_in_entity db [ block.id ];
+            match entity_of_wire db v' with
+            | Some tag ->
+                Outliner_validate.disallow_node_cant_tag_with_private_tags db
+                  [ block.id ] tag.id;
+                Outliner_validate.validate_block_can_tag_with_page_tag db
+                  [ block.id ] tag.id;
+                Outliner_validate.disallow_node_cant_tag_with_built_in_non_tags
+                  db tag.id
+            | None -> ());
          if extends_ then
            List.iter
              (fun parent_id ->
