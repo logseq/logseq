@@ -34,6 +34,101 @@
   [graph-uuid page-uuid]
   (str (config/publish-api-base) "/pages/" graph-uuid "/" page-uuid))
 
+(defn- publish-short-endpoint
+  [short-id]
+  (str (config/publish-api-base) "/p/" short-id))
+
+(def ^:private published-page-path-re
+  #"(?i)^/pages?/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
+
+(def ^:private published-short-path-re
+  #"(?i)^/(?:p|s)/([^/]+)$")
+
+(defn- published-url-of-page
+  [page]
+  (let [v (:logseq.property.publish/published-url page)]
+    (cond
+      (string? v) v
+      (map? v) (or (:block/title v)
+                   (:logseq.property/value v))
+      :else nil)))
+
+(defn- published-url-path
+  [url]
+  (when (and (string? url) (not (string/blank? url)))
+    (try
+      (.-pathname (js/URL. url))
+      (catch :default _
+        (when (string/starts-with? url "/")
+          (or (first (string/split url #"[?#]"))
+              url))))))
+
+(defn- parse-published-url
+  "Extracts :short-id and/or :graph-uuid/:page-uuid from a stored Published URL."
+  [url]
+  (when-let [path (published-url-path url)]
+    (merge
+     (when-let [[_ short-id] (re-find published-short-path-re path)]
+       (when-not (string/blank? short-id)
+         {:short-id short-id}))
+     (when-let [[_ graph-uuid page-uuid] (re-find published-page-path-re path)]
+       {:graph-uuid graph-uuid
+        :page-uuid page-uuid}))))
+
+(defn- unpublish-targets
+  [graph-uuid page-uuid published-url]
+  (let [parsed (parse-published-url published-url)
+        current (when (and graph-uuid page-uuid)
+                  {:kind :page
+                   :graph-uuid graph-uuid
+                   :page-uuid page-uuid
+                   :url (publish-page-endpoint graph-uuid page-uuid)})
+        from-url (when (and (:graph-uuid parsed) (:page-uuid parsed))
+                   {:kind :page
+                    :graph-uuid (:graph-uuid parsed)
+                    :page-uuid (:page-uuid parsed)
+                    :url (publish-page-endpoint (:graph-uuid parsed) (:page-uuid parsed))})
+        short-target (when-let [short-id (:short-id parsed)]
+                       {:kind :short
+                        :short-id short-id
+                        :url (publish-short-endpoint short-id)})]
+    (->> [current from-url short-target]
+         (remove nil?)
+         distinct
+         vec)))
+
+(defn- <delete-published-url!
+  [url headers]
+  (p/let [resp (js/fetch url (clj->js {:method "DELETE"
+                                       :headers headers}))]
+    {:ok? (boolean (.-ok resp))
+     :status (.-status resp)}))
+
+(defn- <try-unpublish-targets
+  [targets headers]
+  (reduce
+   (fn [acc-p target]
+     (p/let [results acc-p]
+       (if (or (some :ok? results)
+               (some #(contains? #{401 403} (:status %)) results))
+         results
+         (p/let [result (<delete-published-url! (:url target) headers)]
+           (conj results (assoc result :kind (:kind target)))))))
+   (p/resolved [])
+   targets))
+
+(defn- <published-short-gone?
+  [short-id]
+  (p/let [resp (js/fetch (publish-short-endpoint short-id)
+                         (clj->js {:method "GET"}))]
+    (= 404 (.-status resp))))
+
+(defn- clear-local-published-url!
+  [page]
+  (when (:db/id page)
+    (property-handler/remove-block-property! (:db/id page)
+                                             :logseq.property.publish/published-url)))
+
 (defn- asset-upload-endpoint
   []
   (str (config/publish-api-base) "/assets"))
@@ -419,22 +514,35 @@
   (let [repo (state/get-current-repo)
         token (state/get-auth-id-token)
         headers (cond-> {}
-                  token (assoc "authorization" (str "Bearer " token)))]
+                  token (assoc "authorization" (str "Bearer " token)))
+        published-url (published-url-of-page page)]
     (p/let [graph-uuid (<get-graph-uuid repo)
-            page-uuid (some-> (:block/uuid page) str)]
-      (if (and graph-uuid page-uuid)
-        (-> (p/let [resp (js/fetch (publish-page-endpoint graph-uuid page-uuid)
-                                   (clj->js {:method "DELETE"
-                                             :headers headers}))]
-              (if (.-ok resp)
+            page-uuid (some-> (:block/uuid page) str)
+            targets (unpublish-targets graph-uuid page-uuid published-url)]
+      (if (seq targets)
+        (-> (p/let [results (<try-unpublish-targets targets headers)]
+              (cond
+                (some :ok? results)
                 (do
-                  (property-handler/remove-block-property! (:db/id page)
-                                                           :logseq.property.publish/published-url)
+                  (clear-local-published-url! page)
                   (notification/show! (t :publish/unpublished) :success false))
-                (p/let [body (.text resp)]
-                  (throw (ex-info "Unpublish failed"
-                                  {:status (.-status resp)
-                                   :body body})))))
+
+                (some #(contains? #{401 403} (:status %)) results)
+                (notification/show! (t :publish/unpublish-error) :error)
+
+                (every? #(= 404 (:status %)) results)
+                (p/let [short-id (:short-id (parse-published-url published-url))
+                        gone? (if short-id
+                                (<published-short-gone? short-id)
+                                true)]
+                  (if gone?
+                    (do
+                      (clear-local-published-url! page)
+                      (notification/show! (t :publish/unpublished-already-gone) :success false))
+                    (notification/show! (t :publish/unpublish-error) :error)))
+
+                :else
+                (notification/show! (t :publish/unpublish-error) :error)))
             (p/catch (fn [error]
                        (js/console.error error)
                        (notification/show! (t :publish/unpublish-error) :error))))
