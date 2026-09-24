@@ -538,7 +538,18 @@ async function stopOutdatedWorkers(storage, revision, repo) {
         }
         if (!pidExists(target.pid)) continue;
         if (!target.port) fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
-        const value = await health(ctx, target, target.port);
+        let value;
+        try { value = await health(ctx, target, target.port); }
+        catch (error) {
+          if (!ignorableDiscoveryError(error)) throw error;
+          // A worker mid-teardown can reset health checks while its process is
+          // still exiting; only a live unverified worker must be preserved.
+          if (!await waitExit(target.pid, 5000)) throw error;
+          await cleanup(ctx, current, [target]);
+          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+          writeJSON(ctx.stateFile, current);
+          continue;
+        }
         if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
         if (value.revision === revision) continue;
         await terminate(ctx, target, false);
