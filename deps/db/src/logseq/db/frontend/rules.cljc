@@ -297,12 +297,16 @@
     :task
     '[(task ?b ?statuses)
       (ref-property-with-default ?b :logseq.property/status ?val)
-      [(contains? ?statuses ?val)]]
+      [(str ?val) ?val-str]
+      [(clojure.string/lower-case ?val-str) ?val-lower]
+      [(contains? ?statuses ?val-lower)]]
 
     :priority
     '[(priority ?b ?priorities)
       (ref-property-with-default ?b :logseq.property/priority ?priority)
-      [(contains? ?priorities ?priority)]]}))
+      [(str ?priority) ?priority-str]
+      [(clojure.string/lower-case ?priority-str) ?priority-lower]
+      [(contains? ?priorities ?priority-lower)]]}))
 
 (def rules-dependencies
   "For db graphs, a map of rule names and the rules they depend on. If this map
