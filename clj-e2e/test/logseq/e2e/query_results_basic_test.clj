@@ -230,11 +230,8 @@
                        "blockid")
           parent (ls-api-call! :editor.getBlock parent-uuid)
           query-ref (get parent ":logseq.property/query")
-          query-uuid (cond
-                       (string? query-ref) query-ref
-                       (map? query-ref) (or (get query-ref "uuid")
-                                            (get (ls-api-call! :editor.getBlock (get query-ref "id")) "uuid"))
-                       :else nil)]
+          query-uuid (or (and (string? query-ref) query-ref)
+                         (get query-ref "uuid"))]
       (is (string? parent-uuid))
       (is (some? query-ref)
           "The /query command stores the live query on the block property.")
