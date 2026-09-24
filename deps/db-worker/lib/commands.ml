@@ -137,7 +137,7 @@ let get_value (ent : entity) (property : string) (value : value) : value =
     match Ldb.ref_ent ent "logseq.property.repeat/checked-property" with
     | Some p ->
         let choices =
-          Ldb.ref_ents p "property/closed-values"
+          Db_property.property_closed_values p
         in
         if Ldb.value p "logseq.property/type" = Some (Keyword "checkbox") then
           Some (Bool checked)

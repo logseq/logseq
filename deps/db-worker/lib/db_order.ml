@@ -304,6 +304,13 @@ let property_entities (db : db) : entity list =
       |> List.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
       |> List.stable_sort (fun a b -> compare_order (order_of a) (order_of b))
 
+(* entity-plus/lookup-kv-then-entity :property/closed-values — reverse
+   :block/_closed-value-property minus recycled, in :block/order. *)
+let closed_values (property : entity) : entity list =
+  Ldb.ref_ents property "block/_closed-value-property"
+  |> List.filter (fun e -> not (Ldb.recycled e))
+  |> Ldb.sort_by_order
+
 (* db-order/get-prev-order — nearest :block/order below the value's.
    [property] narrows the search to its :property/closed-values. *)
 let get_prev_order (db : db) (property : entity option) (value_id : entity_id)
@@ -322,7 +329,7 @@ let get_prev_order (db : db) (property : entity option) (value_id : entity_id)
       candidates
   in
   match property with
-  | Some property -> pick (List.rev (Ldb.ref_ents property "property/closed-values"))
+  | Some property -> pick (List.rev (closed_values property))
   | None -> pick (List.rev (property_entities db))
 
 (* db-order/get-next-order — nearest :block/order above the value's. *)
@@ -342,5 +349,5 @@ let get_next_order (db : db) (property : entity option) (value_id : entity_id)
       candidates
   in
   match property with
-  | Some property -> pick (Ldb.ref_ents property "property/closed-values")
+  | Some property -> pick (closed_values property)
   | None -> pick (property_entities db)
