@@ -1120,7 +1120,7 @@
         "Property columns mount after the name column has painted.")))
 
 (deftest table-rows-keep-horizontal-scrollbar-overflow
-  (let [class (#'views/table-rows-overflow-class)]
+  (let [class @#'views/table-rows-overflow-class]
     (is (string/includes? class "overflow-x-auto"))
     (is (string/includes? class "overflow-y-hidden")
         "overflow-x:auto alone computes overflow-y to auto and clips the horizontal scrollbar on auto-height tables.")
