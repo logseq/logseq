@@ -79,7 +79,7 @@
           :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
           :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn
-          :thread-api/get-fsrs-due-card-block-ids :thread-api/get-view-data
+          :thread-api/get-fsrs-due-card-block-ids :thread-api/get-fsrs-card-block-ids :thread-api/get-view-data
           :thread-api/get-class-objects :thread-api/validate-block-tag
           :thread-api/convert-tag-to-page
           :thread-api/convert-page-to-tag
