@@ -213,7 +213,8 @@ let fenced_mask title =
 
 (* Positions of `needle` outside fenced blocks and inline code spans — a
    code span opens on a backtick run and closes on an equal-length run.
-   A backslash before ASCII punctuation escapes it, so \` is literal. *)
+   Outside code, a backslash escapes ASCII punctuation, so \` is literal;
+   inside a code span backslashes are literal and cannot escape. *)
 let is_ascii_punct c =
   (c >= '!' && c <= '/') || (c >= ':' && c <= '@')
   || (c >= '[' && c <= '`')
@@ -231,7 +232,8 @@ let non_code_positions title inside needle =
       if !open_run = 0 then positions := !i :: !positions;
       i := !i + nlen)
     else if
-      title.[!i] = '\\' && !i + 1 < len && is_ascii_punct title.[!i + 1]
+      !open_run = 0 && title.[!i] = '\\' && !i + 1 < len
+      && is_ascii_punct title.[!i + 1]
     then i := !i + 2
     else if title.[!i] = '`' then (
       let j = ref !i in
