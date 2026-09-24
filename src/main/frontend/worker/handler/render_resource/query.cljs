@@ -152,8 +152,6 @@
 
         (quoted-query-text query-string)
         (let [query-text (quoted-query-text query-string)]
-          (when-not repo
-            (common/fail! "Full-text query resource requires repository" {}))
           (mapv vector
                 (search-handler/search-blocks
                  repo query-text
@@ -257,24 +255,24 @@
            :error {:message (or (ex-message error) (str error))}}
     (ex-data error) (assoc-in [:error :data] (ex-data error))))
 
-(defn- syntax-error?
-  [error]
-  (or (instance? js/SyntaxError error)
-      (= "SyntaxError" (.-name error))))
-
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))
-        watch (query-watch-keys db query-spec)]
+  (let [query-spec (require-query-spec! (second resource-key))]
+    (when (and (= :dsl (:kind query-spec))
+               (quoted-query-text (:query query-spec))
+               (not (:repo runtime)))
+      (common/fail! "Full-text query resource requires repository" {}))
     (try
-      [watch {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
-                                       query-spec)}]
+      [(query-watch-keys db query-spec)
+       {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
+                                 query-spec)}]
+      ;; A user-supplied query can fail in many ways: cljs.reader errors on
+      ;; incomplete syntax while editing, invalid regex, malformed datalog,
+      ;; a bad result-transform. Isolating the failure keeps sibling snapshot
+      ;; resources alive; watch-all re-evaluates once the query is fixed.
       (catch :default error
-        (if (syntax-error? error)
-          (do
-            (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
-            [watch (query-error-value error)])
-          (throw error))))))
+        (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
+        [common/watch-all (query-error-value error)]))))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})
