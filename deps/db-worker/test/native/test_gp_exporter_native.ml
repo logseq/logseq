@@ -36,6 +36,10 @@
      to enable it; it is not run by default, same as cljs (:integration tests
      are excluded by default in cljs test runs). The test is implemented fully —
      it just needs the fixture.
+   - import-generated-markdown-file-graph-fuzz and
+     import-large-flat-file-without-stack-overflow (^:integration): skipped
+     unless DB_WORKER_INTEGRATION_TESTS=1, matching cljs where ^:integration
+     tests are excluded from default runs.
    - import-missing-local-pdf-asset-link-is-ignored-quietly: the "quietly" part
      asserts nothing writes a console *error* via js/process.stderr.write
      redefinition. There is no equivalent interception point in the native
@@ -75,6 +79,11 @@ let await (t : 'a Eff.t) : 'a =
   match !result with
   | Some v -> v
   | None -> raise (Failure "await: Eff did not resolve")
+
+(* cljs marks these deftests ^:integration — excluded from default runs.
+   Opt in with DB_WORKER_INTEGRATION_TESTS=1 *)
+let integration_tests_enabled () =
+  Sys.getenv_opt "DB_WORKER_INTEGRATION_TESTS" = Some "1"
 
 let eq name expected actual msg =
   Alcotest.(check bool) (if msg = "" then name else name ^ " — " ^ msg) true
@@ -1810,6 +1819,7 @@ let test_import_generated_markdown_file_graph () =
 
 let test_import_generated_markdown_file_graph_fuzz () =
   (* ^:integration — seeds 1-100 *)
+  if not (integration_tests_enabled ()) then Alcotest.skip ();
   List.iter
     (assert_generated_md_file_graph_imports
        "import-generated-markdown-file-graph-fuzz")
@@ -2779,6 +2789,7 @@ let test_import_hls_pdfs_uses_annotation_file_identities () =
 
 let test_import_large_flat_file_without_stack_overflow () =
   (* ^:integration — 45000 lines *)
+  if not (integration_tests_enabled ()) then Alcotest.skip ();
   let content =
     Buffer.create (45000 * 30)
   in
