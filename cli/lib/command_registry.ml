@@ -336,8 +336,9 @@ let options_for_command =
           Vec.of_array
             [|
               value "content" "text" "Block content";
-              value "blocks" "edn" "Blocks EDN";
-              value "blocks-file" "path" "Path to blocks EDN file";
+              value "blocks" "markdown" "Blocks markdown";
+              value "blocks-file" "path" "Path to blocks markdown file";
+              flag "dry-run" "Print the planned outliner ops without writing";
             |];
           property_update_options;
         |]
