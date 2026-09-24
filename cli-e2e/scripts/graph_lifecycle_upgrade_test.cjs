@@ -168,7 +168,8 @@ test('targeted retirement tolerates a worker exiting mid-health-check', async t 
     script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
     extraArgs: ['--mode', 'teardown-exit'] });
   fs.writeFileSync(path.join(storage.root, 'begin-teardown'), '');
-  assert.deepEqual(await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo'), []);
+  const retired = await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+  assert.deepEqual(retired.map(worker => worker.ticket), [target.ticket]);
   assert.equal(lifecycle.pidExists(target.pid), false);
   assert.equal(lifecycle.snapshot(storage, 'demo').workers.length, 0);
   assert.equal(fs.readFileSync(path.join(storage.root, 'server-list'), 'utf8'), '');

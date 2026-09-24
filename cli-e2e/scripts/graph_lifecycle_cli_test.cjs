@@ -99,6 +99,26 @@ for (const command of [['server', 'stop'], ['graph', 'remove']]) {
   });
 }
 
+test('CLI stop succeeds when the worker exits during the retirement probe', async t => {
+  const { root, storage, ok } = fixture(t);
+  ok('demo', 'graph', 'create');
+  const target = await lifecycle.startGraph({ storage, repo: 'demo', owner: 'cli',
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
+    extraArgs: ['--mode', 'teardown-exit'] });
+  try {
+    fs.writeFileSync(path.join(root, 'begin-teardown'), '');
+    // execFile keeps this parent reaping the fixture child while the CLI sweeps;
+    // spawnSync would leave a zombie that fails waitExit's pidExists checks.
+    const result = await execFileAsync(process.execPath, [cli, 'server', 'stop', '--root-dir', root,
+      '--graph', 'demo', '--output', 'json'], { timeout: 45000 });
+    assert.equal(JSON.parse(result.stdout).status, 'ok');
+    assert.equal(lifecycle.snapshot(storage, 'demo').workers.length, 0);
+    assert.equal(lifecycle.pidExists(target.pid), false);
+  } finally {
+    if (lifecycle.pidExists(target.pid)) process.kill(target.pid, 'SIGKILL');
+  }
+});
+
 test('CLI fails pending retirement explicitly and succeeds after publication', async t => {
   const { root, storage, ok } = fixture(t);
   ok('demo', 'graph', 'create');

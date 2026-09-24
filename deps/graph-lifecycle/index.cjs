@@ -548,6 +548,7 @@ async function stopOutdatedWorkers(storage, revision, repo) {
           await cleanup(ctx, current, [target]);
           current.workers = current.workers.filter(record => record.ticket !== target.ticket);
           writeJSON(ctx.stateFile, current);
+          retired.push(target);
           continue;
         }
         if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
