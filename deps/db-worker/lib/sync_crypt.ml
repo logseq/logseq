@@ -1272,13 +1272,14 @@ let generate_and_upload_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
         | Some (Wire.String s) when seq_ (Some s) -> Some s
         | _ -> None
       in
-      bind (!generate_rsa_key_pair_fn ()) (fun kp ->
+      bind (catch (!generate_rsa_key_pair_fn ()) (fun e -> error e)) (fun kp ->
           bind
-            (match opt_password with
-             | Some p -> pure p
-             | None when interactive_runtime () ->
-                 !request_e2ee_password_from_ui_fn
-                   (Wire.kw_map [ ("reason", kw "generate-user-rsa-key-pair") ])
+            (catch
+               (match opt_password with
+                | Some p -> pure p
+                | None when interactive_runtime () ->
+                    !request_e2ee_password_from_ui_fn
+                      (Wire.kw_map [ ("reason", kw "generate-user-rsa-key-pair") ])
              | None ->
                  !fail_missing_e2ee_password_fn
                    [ ("reason", kw "missing-password-for-generate-user-rsa-key-pair");
@@ -1287,6 +1288,8 @@ let generate_and_upload_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
                          "Provide --e2ee-password when running sync ensure-keys --upload-keys."
                      ) ];
                  assert false)
+               (fun e ->
+                 error e))
             (fun password ->
               let private_key =
                 match Wire.get "privateKey" kp with
@@ -1327,7 +1330,7 @@ let ensure_user_rsa_key_pair_raw_impl base (opts : Wire.t) : Wire.t t =
         | Some (Wire.Bool b) -> Some b
         | _ -> None
       in
-      bind (!get_user_rsa_key_pair_raw_fn (Some base)) (fun existing ->
+      bind (catch (!get_user_rsa_key_pair_raw_fn (Some base)) (fun e -> error e)) (fun existing ->
           let existing_valid = user_rsa_key_pair_valid existing in
           bind
             (match server_keys_exists_opt with

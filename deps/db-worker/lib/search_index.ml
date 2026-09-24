@@ -1654,7 +1654,9 @@ let sync_search_indice ?(include_vector_title = false) (r : tx_report) :
       else begin
         let add =
           List.filter_map
-            (fun e -> block_to_index ~include_vector_title (Ev.of_entity e))
+            (fun e ->
+               let it = block_to_index ~include_vector_title (Ev.of_entity e) in
+               it)
             to_add
         in
         let added_uuids =

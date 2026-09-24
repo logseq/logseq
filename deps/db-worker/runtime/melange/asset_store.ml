@@ -74,8 +74,10 @@ let browser_pfs () =
        | None ->
            Db_worker_effect.error (Failure "browser pfs is not available"))
 
-(* cljs graph-assets-dir / asset-path: memory:///<graph>/assets/<name>
-   where <graph> strips one leading logseq_db_ prefix. *)
+(* cljs graph-assets-dir / asset-path: pfs paths are the url-to-path of
+   memory:///<graph>/assets/<name>, i.e. /<graph>/assets/<name> — the URL
+   parser drops the memory: scheme and its empty host. <graph> strips one
+   leading logseq_db_ prefix. *)
 let db_version_prefix = "logseq_db_"
 
 let strip_db_prefix repo =
@@ -88,7 +90,7 @@ let strip_db_prefix repo =
   else trimmed
 
 let browser_path ~repo ~name =
-  "memory:///" ^ strip_db_prefix repo ^ "/assets/" ^ name
+  "/" ^ strip_db_prefix repo ^ "/assets/" ^ name
 
 let base_dir () =
   match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
