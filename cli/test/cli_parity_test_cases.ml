@@ -3911,15 +3911,31 @@ let () =
       if not (String.contains title '`') then
         fail_test ("fenced code missing from title: " ^ title));
 
-  test "CLI parity add block markdown keeps ((uuid)) verbatim in titles"
+  test "CLI parity add block markdown normalizes ((uuid)) titles"
     (fun () ->
       let parsed =
-        expect_ok "block ref verbatim"
+        expect_ok "block ref rewrite"
           (Markdown_blocks.of_markdown
              "- see ((aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa)) done")
       in
-      expect_equal "verbatim ref"
-        "see ((aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa)) done"
+      expect_equal "normalized ref"
+        "see [[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]] done"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "code span kept"
+          (Markdown_blocks.of_markdown
+             "- real ((bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb)) code `((cccccccc-cccc-4ccc-8ccc-cccccccccccc))`")
+      in
+      expect_equal "code verbatim"
+        "real [[bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb]] code `((cccccccc-cccc-4ccc-8ccc-cccccccccccc))`"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "ambiguous ref kept"
+          (Markdown_blocks.of_markdown
+             "- real ((dddddddd-dddd-4ddd-8ddd-dddddddddddd)) code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`")
+      in
+      expect_equal "ambiguous verbatim"
+        "real ((dddddddd-dddd-4ddd-8ddd-dddddddddddd)) code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`"
         (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
   test "CLI parity add collect created block uuids depth-first and unique"

@@ -153,6 +153,68 @@ let strip_heading_marker title =
     String.sub title (spaces index) (length - spaces index)
   else title
 
+(* mldoc returns one Block_ref entry per occurrence of a real ((uuid))
+   ref — code spans and fenced blocks produce none — so when every
+   textual ((uuid)) occurrence is a real ref the title can be normalized
+   to the DB-graph [[uuid]] form, matching the importer's
+   convert-block-refs-to-page-refs. An ambiguous uuid (some occurrences
+   inside code) stays verbatim. *)
+let count_occurrences text ~needle =
+  let needle_len = String.length needle in
+  let rec loop index count =
+    if index + needle_len > String.length text then count
+    else if String.sub text index needle_len = needle then
+      loop (index + needle_len) (count + 1)
+    else loop (index + 1) count
+  in
+  loop 0 0
+
+let normalize_block_refs title =
+  let real_counts = Hashtbl.create 4 in
+  (match
+     try Js.Json.decodeArray (Mldoc.references title) with _ -> None
+   with
+   | Some items ->
+       Array.iter
+         (fun item ->
+           match Js.Json.decodeArray item with
+           | Some pair when Array.length pair >= 2 -> (
+               match
+                 ( Js.Json.decodeString pair.(0),
+                   Js.Json.decodeObject pair.(1) )
+               with
+               | Some "Link", Some link -> (
+                   match
+                     Option.bind (Js.Dict.get link "url")
+                       Js.Json.decodeArray
+                   with
+                   | Some url_parts when Array.length url_parts >= 2 -> (
+                       match
+                         ( Js.Json.decodeString url_parts.(0),
+                           Js.Json.decodeString url_parts.(1) )
+                       with
+                       | Some "Block_ref", Some uuid ->
+                           Hashtbl.replace real_counts uuid
+                             (Option.value
+                                (Hashtbl.find_opt real_counts uuid)
+                                ~default:0
+                             + 1)
+                       | _ -> ())
+                   | _ -> ())
+               | _ -> ())
+           | _ -> ())
+         items
+   | None -> ());
+  Hashtbl.fold
+    (fun uuid real_refs title ->
+      let needle = "((" ^ uuid ^ "))" in
+      if count_occurrences title ~needle = real_refs then
+        Graph_dir.replace_all ~needle
+          ~replacement:("[[" ^ uuid ^ "]]")
+          title
+      else title)
+    real_counts title
+
 let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let ranges = List.sort (fun (a, _) (b, _) -> compare a b) exclude_ranges in
   let rec parts cursor ranges =
@@ -173,6 +235,7 @@ let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let text = remove_indentation_spaces text (level + 1) in
   let text = match heading with Some _ -> strip_heading_marker text | None -> text in
   String.trim text |> Ustring.of_string |> Ustring.to_string
+  |> normalize_block_refs
 
 type frame = { node_index : int; parent_index : int; indent : int }
 
