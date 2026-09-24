@@ -3946,6 +3946,14 @@ let () =
         "lit \\` then [[eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee]]"
         (expect_some "block title" (Vec.nth parsed 0).Block.title);
       let parsed =
+        expect_ok "backslash inside code"
+          (Markdown_blocks.of_markdown
+             "- text `code\\` then ((ffffffff-ffff-4fff-8fff-ffffffffffff))")
+      in
+      expect_equal "ref after code backslash"
+        "text `code\\` then [[ffffffff-ffff-4fff-8fff-ffffffffffff]]"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
         expect_ok "crlf fence"
           (Markdown_blocks.of_markdown
              "- ex\r\n  ```\r\n  code\r\n  ```\r\n  see ((ffffffff-ffff-4fff-8fff-ffffffffffff))")
