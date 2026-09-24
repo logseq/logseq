@@ -26,13 +26,13 @@ val normalize_item_string_fields :
   Entity.t Rrbvec.t
 
 val fetch_uuid_entities :
-  Cli_config.t ->
+  Transport.invoke_config ->
   Cli_primitive.repo ->
   Cli_primitive.uuid Rrbvec.t ->
   uuid_label Rrbvec.t Cli_effect.t
 
 val fetch_uuid_labels :
-  Cli_config.t ->
+  Transport.invoke_config ->
   Cli_primitive.repo ->
   Cli_primitive.uuid Rrbvec.t ->
   (Cli_primitive.uuid * string) Rrbvec.t Cli_effect.t

@@ -782,7 +782,7 @@ let visible_title_fields = function
   | Page | Tag | Property | Task | Asset ->
       Vec.singleton (Edn_util.keyword_t "block/title")
 
-let normalize_visible_title_fields config repo kind items =
+let normalize_visible_title_fields invoke_config repo kind items =
   let fields = visible_title_fields kind in
   let entities = Vec.map Entity.of_value items in
   let uuids = Uuid_refs_types.collect_uuid_refs_from_items entities fields in
@@ -792,7 +792,7 @@ let normalize_visible_title_fields config repo kind items =
       (fun labels ->
         Uuid_refs_types.normalize_item_string_fields entities fields labels
         |> Vec.map (fun item -> item.Entity.raw))
-      (Uuid_refs_types.fetch_uuid_labels config repo uuids)
+      (Uuid_refs_types.fetch_uuid_labels invoke_config repo uuids)
 
 let add_optional key value fields =
   match value with
@@ -945,7 +945,7 @@ let execute_with_mode action config mode =
                     postprocess_items action.kind action.options items
                   in
                   bind
-                    (normalize_visible_title_fields config action.repo
+                    (normalize_visible_title_fields invoke_config action.repo
                        action.kind items) (fun items ->
                       let data = Edn_util.any (items_value items) in
                       pure

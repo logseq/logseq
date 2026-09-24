@@ -1147,14 +1147,14 @@ let fetch_property_value_labels invoke_config repo ids =
   in
   pull Vec.empty ids
 
-let replace_uuid_refs_in_property_value_labels config repo property_value_labels
+let replace_uuid_refs_in_property_value_labels invoke_config repo property_value_labels
     =
   let label_uuids =
     property_value_labels |> Vec.map snd
     |> Uuid_refs_types.collect_uuid_refs_from_strings
   in
   let open Cli_effect in
-  bind (Uuid_refs_types.fetch_uuid_entities config repo label_uuids)
+  bind (Uuid_refs_types.fetch_uuid_entities invoke_config repo label_uuids)
     (fun uuid_entities ->
       let labels =
         Vec.filter_map
@@ -1170,7 +1170,7 @@ let replace_uuid_refs_in_property_value_labels config repo property_value_labels
       in
       pure property_value_labels)
 
-let prepare_property_render_metadata config invoke_config action root
+let prepare_property_render_metadata invoke_config action root
     linked_references =
   let entries = collect_property_entries root linked_references in
   if Vec.is_empty entries then Cli_effect.pure empty_render_metadata
@@ -1199,7 +1199,7 @@ let prepare_property_render_metadata config invoke_config action root
         bind (fetch_property_value_labels invoke_config action.repo value_ids)
           (fun property_value_labels ->
             bind
-              (replace_uuid_refs_in_property_value_labels config action.repo
+              (replace_uuid_refs_in_property_value_labels invoke_config action.repo
                  property_value_labels) (fun property_value_labels ->
                 pure { property_titles; property_value_labels })))
 
@@ -1538,10 +1538,10 @@ let fetch_breadcrumb_line invoke_config (action : action) root =
           pure (render_breadcrumb_line parents))
   | _ -> pure None
 
-let prepare_uuid_refs config (action : action) root linked_references =
+let prepare_uuid_refs invoke_config (action : action) root linked_references =
   let uuids = referenced_uuids root linked_references in
   let open Cli_effect in
-  bind (Uuid_refs_types.fetch_uuid_entities config action.repo uuids)
+  bind (Uuid_refs_types.fetch_uuid_entities invoke_config action.repo uuids)
     (fun uuid_entities ->
       let labels = label_pairs uuid_entities in
       let root = replace_uuid_refs_in_value labels root in
@@ -1662,12 +1662,12 @@ let execute_single mode action config target =
                             (resolve_linked_references invoke_config action
                                linked_references) (fun linked_references ->
                               bind
-                                (prepare_uuid_refs config action value
+                                (prepare_uuid_refs invoke_config action value
                                    linked_references)
                                 (fun (value, linked_references, footer, _) ->
                                   let metadata =
                                     if human_output_for_mode mode then
-                                      prepare_property_render_metadata config
+                                      prepare_property_render_metadata
                                         invoke_config action value
                                         linked_references
                                     else pure empty_render_metadata
@@ -1727,7 +1727,7 @@ let execute_with_mode action config mode =
                                            action linked_references)
                                         (fun linked_references ->
                                           bind
-                                            (prepare_uuid_refs config action
+                                            (prepare_uuid_refs invoke_config action
                                                root linked_references)
                                             (fun
                                               ( root,
@@ -1739,7 +1739,7 @@ let execute_with_mode action config mode =
                                                 if human_output_for_mode mode
                                                 then
                                                   prepare_property_render_metadata
-                                                    config invoke_config action
+                                                    invoke_config action
                                                     root linked_references
                                                 else pure empty_render_metadata
                                               in

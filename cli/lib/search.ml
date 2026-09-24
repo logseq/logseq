@@ -249,7 +249,7 @@ let normalize_items scope include_hidden items =
   |> Vec.map select_search_item
   |> Vec.sort compare_search_item
 
-let normalize_uuid_refs config repo items =
+let normalize_uuid_refs invoke_config repo items =
   let entities = Vec.map Entity.of_value items in
   let uuids =
     Uuid_refs_types.collect_uuid_refs_from_items entities
@@ -263,7 +263,7 @@ let normalize_uuid_refs config repo items =
           (Vec.singleton (Edn_util.keyword_t "block/title"))
           labels
         |> Vec.map (fun item -> item.Entity.raw))
-      (Uuid_refs_types.fetch_uuid_labels config repo uuids)
+      (Uuid_refs_types.fetch_uuid_labels invoke_config repo uuids)
 
 let execute_with_mode action config mode =
   let open Cli_effect in
@@ -288,7 +288,7 @@ let execute_with_mode action config mode =
               | _ -> Vec.singleton value
             in
             let items = normalize_items action.scope action.include_hidden items in
-            bind (normalize_uuid_refs config action.repo items) (fun items ->
+            bind (normalize_uuid_refs invoke_config action.repo items) (fun items ->
                 pure
                   (Cli_result.ok ~command:action.command mode
                      (Raw (items_value items))))))
