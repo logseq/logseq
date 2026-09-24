@@ -294,19 +294,25 @@
 
        [(missing? $ ?b :block/link)]]]
 
+    ;; Matches a stored title exactly (direct callers pass capitalized values)
+    ;; or by its lowercase form (the DSL lowercases filter args)
     :task
     '[(task ?b ?statuses)
       (ref-property-with-default ?b :logseq.property/status ?val)
       [(str ?val) ?val-str]
       [(clojure.string/lower-case ?val-str) ?val-lower]
-      [(contains? ?statuses ?val-lower)]]
+      (or
+       [(contains? ?statuses ?val)]
+       [(contains? ?statuses ?val-lower)])]
 
     :priority
     '[(priority ?b ?priorities)
       (ref-property-with-default ?b :logseq.property/priority ?priority)
       [(str ?priority) ?priority-str]
       [(clojure.string/lower-case ?priority-str) ?priority-lower]
-      [(contains? ?priorities ?priority-lower)]]}))
+      (or
+       [(contains? ?priorities ?priority)]
+       [(contains? ?priorities ?priority-lower)])]}))
 
 (def rules-dependencies
   "For db graphs, a map of rule names and the rules they depend on. If this map
