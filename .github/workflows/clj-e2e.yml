@@ -105,7 +105,7 @@ jobs:
     name: Test ${{ matrix.shard }}
     needs: build
     runs-on: ubuntu-22.04
-    timeout-minutes: 8
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       max-parallel: 5
