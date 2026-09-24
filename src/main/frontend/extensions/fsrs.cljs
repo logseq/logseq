@@ -100,6 +100,11 @@
   [repo cards-id]
   (state/<invoke-db-worker :thread-api/get-fsrs-due-card-block-ids repo cards-id))
 
+(defn- <get-card-block-ids
+  "Block uuids of all cards in the scope of `cards-id`, whether due or not."
+  [repo cards-id]
+  (state/<invoke-db-worker :thread-api/get-fsrs-card-block-ids repo cards-id))
+
 (defn- global-cards-id?
   [cards-id]
   (contains? #{:global "global"} cards-id))
@@ -292,18 +297,26 @@
                         :block/title (t :flashcard/all-cards)}])
         *block-ids (hooks/use-memo #(atom nil) [])
         [block-ids] (hooks/use-atom *block-ids)
+        *all-block-ids (hooks/use-memo #(atom nil) [])
+        [all-block-ids] (hooks/use-atom *all-block-ids)
         *loading? (hooks/use-memo #(atom nil) [])
         [loading?] (hooks/use-atom *loading?)
         *card-index (hooks/use-memo #(atom 0) [])
         [card-index] (hooks/use-atom *card-index)
         *phase (hooks/use-memo #(atom :init) [])
+        practice-again! (fn []
+                          (reset! *card-index 0)
+                          (reset! *phase :init)
+                          (reset! *block-ids all-block-ids))
         progress-label (str (min (inc card-index) (count block-ids)) "/" (count block-ids))
         select-card! (fn [v]
                        (reset! *cards-id v)
                        (let [cards-id' (when-not (global-cards-id? v) v)]
-                         (p/let [result (<get-due-card-block-ids repo cards-id')]
+                         (p/let [result (<get-due-card-block-ids repo cards-id')
+                                 all-result (<get-card-block-ids repo cards-id')]
                            (reset! *card-index 0)
                            (reset! *phase :init)
+                           (reset! *all-block-ids all-result)
                            (reset! *block-ids result))))]
     (shortcut/use-shortcut-handler! :shortcut.handler/cards
                                     {:cards-id initial-cards-id
@@ -312,7 +325,9 @@
      (fn []
        (reset! *loading? true)
        (p/let [cards-class (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.class/Cards)
-               result (<get-due-card-block-ids repo initial-cards-id)]
+               result (<get-due-card-block-ids repo initial-cards-id)
+               all-result (<get-card-block-ids repo initial-cards-id)]
+         (reset! *all-block-ids all-result)
          (reset! *block-ids result)
          (reset! *loading? false)
          (when-let [cards-class-id (:db/id cards-class)]
@@ -384,14 +399,38 @@
             [card-view repo block-id *card-index *phase opts]]
 
            (empty? block-ids)
-           [:div.ls-card.content.ml-2
-            [:h2.font-medium (t :flashcard.empty/title)]
+           (if (empty? all-block-ids)
+             [:div.ls-card.content.ml-2
+              [:h2.font-medium (t :flashcard.empty/title)]
 
-            [:div
-             [:p (t :flashcard.empty/desc "#Card")]]]
+              [:div
+               [:p (t :flashcard.empty/desc "#Card")]]]
+             [:div.ls-card.content.ml-2
+              [:h2.font-medium (t :flashcard.empty/no-due-title)]
+
+              [:div
+               [:p (t :flashcard.empty/no-due-desc)]]
+
+              [:div.mt-4
+               (shui/button
+                {:variant :outline
+                 :size :sm
+                 :id "card-practice-again"
+                 :on-click (fn [_e] (practice-again!))}
+                (t :flashcard.review/practice-again))]])
 
            :else
-           [:p (t :flashcard.review/finished)]))])))
+           [:div.ls-card.content.ml-2
+            [:p (t :flashcard.review/finished)]
+
+            (when (seq all-block-ids)
+              [:div.mt-4
+               (shui/button
+                {:variant :outline
+                 :size :sm
+                 :id "card-practice-again"
+                 :on-click (fn [_e] (practice-again!))}
+                (t :flashcard.review/practice-again))])]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (defn- update-due-cards-count!
