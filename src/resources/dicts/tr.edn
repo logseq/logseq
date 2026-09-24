@@ -1919,7 +1919,6 @@
  :view/all "Tümü"
  :view/export-edn "EDN dışa aktar"
  :view/linked-references "Bağlantılı referanslar"
- :view/new "Yeni"
  :view/new-property "Yeni özellik"
  :view/new-view "Yeni görünüm"
  :view/rename "Yeniden adlandır"

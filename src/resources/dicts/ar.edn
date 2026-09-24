@@ -1749,7 +1749,6 @@
  :view/all "الكل"
  :view/export-edn "تصدير EDN"
  :view/linked-references "المراجع المرتبطة"
- :view/new "جديد"
  :view/new-property "خاصية جديدة"
  :view/new-view "عرض جديد"
  :view/rename "إعادة تسمية"

@@ -131,8 +131,32 @@
   }
 
   .ls-table-resize-handle {
-    @apply absolute top-0 -right-0.5 w-1 h-full cursor-col-resize bg-accent-08 rounded
-    hover:opacity-70 active:opacity-100 opacity-0 delay-300 transition-opacity;
+    @apply absolute top-0 h-full cursor-col-resize z-[2];
+    right: -6px;
+    width: 12px;
+    touch-action: none;
+  }
+
+  .ls-table-resize-handle::after {
+    content: "";
+    @apply absolute top-1 bottom-1 rounded-sm bg-accent-08;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 80ms ease;
+  }
+
+  .ls-table-header-cell:hover .ls-table-resize-handle::after,
+  .ls-table-resize-handle:hover::after,
+  .ls-table-resize-handle.is-active::after {
+    opacity: 1;
+  }
+
+  .ls-table-resize-handle:hover::after,
+  .ls-table-resize-handle.is-active::after {
+    @apply bg-primary;
+    width: 3px;
   }
 
   div[data-viewport-type="window"] {
