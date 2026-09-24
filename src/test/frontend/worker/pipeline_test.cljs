@@ -1241,7 +1241,7 @@
 
 (deftest journal-tag-template-applied-on-repeating-task-reschedule-test
   (testing "Journal pages created by repeating-task reschedule receive the Journal tag template"
-    (let [now (t/date-time 2026 9 20 12 0 0)
+    (let [now (t/local-date-time 2026 9 20 12 0 0)
           scheduled-ms (tc/to-long now)
           expected-next-day 20260926
           conn (db-test/create-conn-with-blocks
@@ -1441,8 +1441,8 @@
 (deftest clearing-past-deadline-removes-journal-linked-ref-test
   (let [past-day 20260923
         today-day 20260924
-        past-ms (date-time-util/journal-day->ms past-day)
-        today-ms (date-time-util/journal-day->ms today-day)
+        past-ms (.getTime (date-time-util/int->local-date past-day))
+        today-ms (.getTime (date-time-util/int->local-date today-day))
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal past-day}}
