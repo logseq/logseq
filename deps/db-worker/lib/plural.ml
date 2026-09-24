@@ -29,8 +29,9 @@ let restore_case (word : string) (token : string) : string =
 (* interpolate: replace $1..$12 in `s` using JS replace args
    (index 0 = match, index i = group i). *)
 let interpolate (s : string) ~(js_args : string option array) : string =
+  (* cljs (js/RegExp. "\\$(\\d{1,2})" "g") — global, all $N replaced *)
   let re = Regexp.compile "\\$(\\d{1,2})" in
-  Regexp.replace re
+  Regexp.replace_all re
     ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->
       match groups with
       | [| _; Some idx |] ->
@@ -112,10 +113,12 @@ let pluralize ?(inclusive = false) (word : string) (item_count : int) : string =
 (* Rule registration — string rules compile to case-insensitive
    whole-string regexes; regexp rules keep JS syntax. *)
 let add_plural_rule ~(pattern : string) ~(replacement : string) : unit =
-  plural_rules := !plural_rules @ [ (Regexp.compile pattern, replacement) ]
+  (* cljs (js/RegExp. pattern "i") *)
+  plural_rules := !plural_rules @ [ (Regexp.compile ~caseless:true pattern, replacement) ]
 
 let add_singular_rule ~(pattern : string) ~(replacement : string) : unit =
-  singular_rules := !singular_rules @ [ (Regexp.compile pattern, replacement) ]
+  (* cljs (js/RegExp. pattern "i") *)
+  singular_rules := !singular_rules @ [ (Regexp.compile ~caseless:true pattern, replacement) ]
 
 let add_uncountable_word (word : string) : unit =
   Hashtbl.replace uncountables (lower word) true

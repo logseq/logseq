@@ -96,11 +96,12 @@ let resolve_large_title_item_eid (db : db) ~(e : Wire.t) ~(obj : value)
   | Wire.Int64 n -> Some (Int64.to_int n)
   | Wire.Float f -> Some (int_of_float f)
   | _ ->
-      (match
-         (try entid_ref db (Ds_wire.entity_ref_of_transit e)
-          with _ -> None)
-       with
-       | Some id -> Some id
+      (* cljs (some-> (d/entity db e) :db/id) — d/entity resolves through
+         its guarded entid: non-resolvable refs (tempids, strings) yield
+         nil so resolution falls back to the object lookup; only true
+         entid violations (malformed lookup-refs) propagate *)
+      (match Datascript.entity db (Ds_wire.entity_ref_of_transit e) with
+       | Some ent -> Some ent.id
        | None -> find_large_title_object_eid db obj)
 
 (* asset-url — shared with sync-assets *)
@@ -281,21 +282,23 @@ let rehydrate_large_titles repo ~(graph_id : string option)
             (List.map
                (fun (e, obj_wire) ->
                   let obj_value = Ds_wire.value_of_transit obj_wire in
+                  (* cljs calls resolve-large-title-item-eid outside any
+                     try — errors propagate; only a nil result is
+                     entity-missing, and ex-data carries :obj *)
                   let eid =
                     match e with
                     | Wire.Int n -> Some n
                     | _ ->
-                        (try
-                           resolve_large_title_item_eid (Conn.db conn) ~e
-                             ~obj:obj_value
-                         with _ -> None)
+                        resolve_large_title_item_eid (Conn.db conn) ~e
+                          ~obj:obj_value
                   in
                   match eid with
                   | None ->
                       Sync_util.fail_fast "db-sync/large-title-entity-missing"
                         (Wire.Map
                            [ Wire.Keyword "repo", Wire.String repo
-                           ; Wire.Keyword "e", e ])
+                           ; Wire.Keyword "e", e
+                           ; Wire.Keyword "obj", obj_wire ])
                   | Some eid ->
                       download_fn ~repo ~graph_id ~obj:obj_wire ~aes_key
                       >>= fun title -> (

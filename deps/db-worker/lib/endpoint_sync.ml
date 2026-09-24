@@ -69,7 +69,9 @@ let () =
 
 let () =
   Dispatcher.register "thread-api/db-sync-update-presence" (fun args ->
-       Sync_client.update_presence (arg_str args 0);
+       (* cljs update-presence! forwards editing-block-uuid verbatim —
+          nil stays nil on the wire *)
+       Sync_client.update_presence (arg args 0);
        pure_nil)
 
 (* ---- assets ---- *)
