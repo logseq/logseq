@@ -940,7 +940,7 @@ let metadata_ops block_uuids status tags properties =
 (* Mldoc.get_references on a block title returns the AST-level references:
    [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
    code blocks or verbatim markup. *)
-let title_references ~block_refs title =
+let title_references title =
   (* Namespaced pages need a create-page op with split-namespace? — the
      worker's inline page-map resolution rejects "/" titles. A [:block/name]
      lookup routes them through materialize_name_lookups instead. *)
@@ -1030,29 +1030,23 @@ let title_references ~block_refs title =
                           | Some "Page_ref", Some name -> (
                               match String.trim name with
                               | "" -> (refs, tag_names)
-                              (* [[<uuid>]] is not a page name — the old
-                                 extractor filtered it the same way. *)
                               | name when Cli_primitive.is_uuid_string name ->
-                                  (refs, tag_names)
+                                  (* [[<uuid>]] is the unified node ref —
+                                     the uuid names whatever entity carries
+                                     it (block, page, tag), never a page
+                                     called "uuid". *)
+                                  ( Vec.push_back refs
+                                      (vector_vec
+                                         (Vec.of_array
+                                            [|
+                                              kw "block/uuid";
+                                              Edn_util.uuid name;
+                                            |])),
+                                    tag_names )
                               | name ->
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
-                          | Some "Block_ref", Some uuid ->
-                              (* ((uuid)) block refs resolve to real links
-                                 only for markdown --blocks; --content keeps
-                                 them as literal text like before. *)
-                              if
-                                block_refs && Cli_primitive.is_uuid_string uuid
-                              then
-                                ( Vec.push_back refs
-                                    (vector_vec
-                                       (Vec.of_array
-                                          [|
-                                            kw "block/uuid";
-                                            Edn_util.uuid uuid;
-                                          |])),
-                                  tag_names )
-                              else (refs, tag_names)
+                          | Some "Block_ref", _ -> (refs, tag_names)
                           | _ -> (refs, tag_names))
                       | _ -> (refs, tag_names))
                   | None -> (refs, tag_names))
@@ -1526,8 +1520,7 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                             match (block.Block.uuid, block.title) with
                             | Some uuid, Some title ->
                                 let refs, tag_names =
-                                  title_references
-                                    ~block_refs:action.markdown_blocks title
+                                  title_references title
                                 in
                                 (* #tags resolve to block/tags only for
                                    markdown --blocks input; literal --content
@@ -1546,11 +1539,21 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                       Vec.push_back refs
                                         (vector_vec
                                            (Vec.of_array
-                                              [|
-                                                kw "block/name";
-                                                Edn_util.string
-                                                  (normalized_lookup_name name);
-                                              |])))
+                                              (if
+                                                 Cli_primitive
+                                                   .is_uuid_string name
+                                               then
+                                                 [|
+                                                   kw "block/uuid";
+                                                   Edn_util.uuid name;
+                                                 |]
+                                               else
+                                                 [|
+                                                   kw "block/name";
+                                                   Edn_util.string
+                                                     (normalized_lookup_name
+                                                        name);
+                                                 |]))))
                                     refs tag_names
                                 in
                                 if
@@ -1568,7 +1571,12 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                       bind
                         (resolve_tags config action.repo
                            (Vec.map
-                              (fun name -> Selector.Tag_name name)
+                              (fun name ->
+                                (* #[[<tag-uuid>]] — a uuid names the tag
+                                   entity directly, same as [[uuid]] refs. *)
+                                if Cli_primitive.is_uuid_string name then
+                                  Selector.Tag_uuid name
+                                else Selector.Tag_name name)
                               block_tag_names))
                         (function
                         | Error err ->
