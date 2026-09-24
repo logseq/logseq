@@ -153,32 +153,6 @@ let strip_heading_marker title =
     String.sub title (spaces index) (length - spaces index)
   else title
 
-(* DB graphs spell every node ref [[uuid]]; the deprecated ((uuid))
-   spelling renders as literal text there, so titles are rewritten the same
-   flat way the importer's convert-block-refs-to-page-refs does. *)
-let normalize_block_refs title =
-  let length = String.length title in
-  let buf = Buffer.create length in
-  let rec loop i =
-    if
-      i + 40 <= length
-      && title.[i] = '('
-      && title.[i + 1] = '('
-      && title.[i + 38] = ')'
-      && title.[i + 39] = ')'
-      && Cli_primitive.is_uuid_string (String.sub title (i + 2) 36)
-    then (
-      Buffer.add_string buf "[[";
-      Buffer.add_string buf (String.sub title (i + 2) 36);
-      Buffer.add_string buf "]]";
-      loop (i + 40))
-    else if i < length then (
-      Buffer.add_char buf title.[i];
-      loop (i + 1))
-  in
-  loop 0;
-  Buffer.contents buf
-
 let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let ranges = List.sort (fun (a, _) (b, _) -> compare a b) exclude_ranges in
   let rec parts cursor ranges =
@@ -199,7 +173,6 @@ let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let text = remove_indentation_spaces text (level + 1) in
   let text = match heading with Some _ -> strip_heading_marker text | None -> text in
   String.trim text |> Ustring.of_string |> Ustring.to_string
-  |> normalize_block_refs
 
 type frame = { node_index : int; parent_index : int; indent : int }
 
