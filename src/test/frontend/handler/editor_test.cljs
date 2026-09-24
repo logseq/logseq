@@ -380,7 +380,7 @@
               []
               {:outliner-op :save-block}]
              @tx-calls))
-      (is (not (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid))
+      (is (not (#'editor/pending-ref-rebuild? block-uuid))
           "Commit clears the pending ref-rebuild mark"))))
 
 (deftest save-block-if-changed-keeps-pending-ref-rebuild-when-commit-fails-test
@@ -411,14 +411,65 @@
       (reset! snapshot {:status :ready
                         :value (assoc initial :block/title "[[PageA]]")})
       (is (thrown? js/Error (editor/save-block-if-changed! initial "[[PageA]]")))
-      (is (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid)
+      (is (#'editor/pending-ref-rebuild? block-uuid)
           "A rejected commit must keep the pending ref-rebuild mark")
       (reset! fail-commit? false)
       (reset! parse-calls 0)
       (is (= :tx (editor/save-block-if-changed! initial "[[PageA]]")))
       (is (= 1 @parse-calls)
           "Retrying the same title after a failed commit still wrap-parses")
-      (is (not (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid))))))
+      (is (not (#'editor/pending-ref-rebuild? block-uuid))))))
+
+(deftest save-block-if-changed-stale-commit-does-not-clear-later-draft-test
+  (let [block-uuid #uuid "55555555-5555-4555-8555-555555555555"
+        initial {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "seed"}
+        snapshot (atom {:status :ready :value initial})
+        parse-calls (atom 0)
+        async-commits? (atom true)
+        commit-deferreds (atom [])]
+    (reset! @#'editor/*blocks-pending-ref-rebuild {})
+    (with-redefs [db-subs/block-snapshot
+                  (fn [_] @snapshot)
+                  conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [_db _ops opts]
+                                                   (if (or (:skip-ref-rebuild? opts)
+                                                           (not @async-commits?))
+                                                     :tx
+                                                     (let [deferred (p/deferred)]
+                                                       (swap! commit-deferreds conj deferred)
+                                                       deferred)))
+                  editor/wrap-parse-block (fn [parsed-block]
+                                            (swap! parse-calls inc)
+                                            parsed-block)
+                  frontend-outliner-op/save-block! (constantly nil)]
+      (is (= :tx (editor/save-block-if-changed!
+                  initial
+                  "[[PageA]]"
+                  {:skip-ref-rebuild? true})))
+      (reset! snapshot {:status :ready
+                        :value (assoc initial :block/title "[[PageA]]")})
+      (editor/save-block-if-changed! initial "[[PageA]]")
+      (editor/save-block-if-changed! initial "[[PageA]]")
+      (is (= 2 (count @commit-deferreds)))
+      (p/resolve! (first @commit-deferreds) :tx)
+      (is (not (#'editor/pending-ref-rebuild? block-uuid)))
+      (is (= :tx (editor/save-block-if-changed!
+                  initial
+                  "[[PageB]]"
+                  {:skip-ref-rebuild? true})))
+      (reset! snapshot {:status :ready
+                        :value (assoc initial :block/title "[[PageB]]")})
+      (is (#'editor/pending-ref-rebuild? block-uuid))
+      (p/resolve! (second @commit-deferreds) :tx)
+      (is (#'editor/pending-ref-rebuild? block-uuid)
+          "A stale overlapping commit must not clear a later draft mark")
+      (reset! async-commits? false)
+      (reset! parse-calls 0)
+      (is (= :tx (editor/save-block-if-changed! initial "[[PageB]]")))
+      (is (= 1 @parse-calls)
+          "The later draft still wrap-parses on commit"))))
 
 (deftest edit-box-on-change-auto-save-skips-ref-rebuild-test
   (let [block {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"

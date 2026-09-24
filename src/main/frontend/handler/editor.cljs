@@ -112,20 +112,26 @@
 (defn- mark-pending-ref-rebuild!
   [block-uuid]
   (when block-uuid
-    (swap! *blocks-pending-ref-rebuild update block-uuid (fnil inc 0))))
+    (swap! *blocks-pending-ref-rebuild update block-uuid
+           (fn [state]
+             (let [gen (inc (or (:gen state) 0))]
+               {:gen gen
+                :pending-gen gen})))))
 
 (defn- pending-ref-rebuild-gen
   [block-uuid]
-  (get @*blocks-pending-ref-rebuild block-uuid))
+  (:pending-gen (get @*blocks-pending-ref-rebuild block-uuid)))
 
 (defn- clear-pending-ref-rebuild!
   [block-uuid expected-gen]
   (when (and block-uuid expected-gen)
-    (swap! *blocks-pending-ref-rebuild
-           (fn [pending]
-             (if (= expected-gen (get pending block-uuid))
-               (dissoc pending block-uuid)
-               pending)))))
+    (swap! *blocks-pending-ref-rebuild update block-uuid
+           (fn [state]
+             (cond
+               (nil? state) state
+               (= expected-gen (:pending-gen state))
+               (dissoc state :pending-gen)
+               :else state)))))
 
 (defn- pending-ref-rebuild?
   [block-uuid]
