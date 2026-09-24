@@ -3936,6 +3936,22 @@ let () =
       in
       expect_equal "only real ref normalized"
         "real [[dddddddd-dddd-4ddd-8ddd-dddddddddddd]] code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "escaped backtick"
+          (Markdown_blocks.of_markdown
+             "- lit \\` then ((eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee))")
+      in
+      expect_equal "escaped backtick ref"
+        "lit \\` then [[eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee]]"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "crlf fence"
+          (Markdown_blocks.of_markdown
+             "- ex\r\n  ```\r\n  code\r\n  ```\r\n  see ((ffffffff-ffff-4fff-8fff-ffffffffffff))")
+      in
+      expect_equal "ref after crlf fence"
+        "ex\r\n```\r\ncode\r\n```\r\nsee [[ffffffff-ffff-4fff-8fff-ffffffffffff]]"
         (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
   test "CLI parity add collect created block uuids depth-first and unique"
