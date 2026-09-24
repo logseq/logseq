@@ -107,26 +107,44 @@
   [block]
   (db-editor-handler/wrap-parse-block block))
 
-(defonce ^:private *blocks-pending-ref-rebuild (atom #{}))
+(defonce ^:private *blocks-pending-ref-rebuild (atom {}))
 
 (defn- mark-pending-ref-rebuild!
   [block-uuid]
   (when block-uuid
-    (swap! *blocks-pending-ref-rebuild conj block-uuid)))
+    (swap! *blocks-pending-ref-rebuild update block-uuid (fnil inc 0))))
+
+(defn- pending-ref-rebuild-gen
+  [block-uuid]
+  (get @*blocks-pending-ref-rebuild block-uuid))
 
 (defn- clear-pending-ref-rebuild!
-  [block-uuid]
-  (when block-uuid
-    (swap! *blocks-pending-ref-rebuild disj block-uuid)))
+  [block-uuid expected-gen]
+  (when (and block-uuid expected-gen)
+    (swap! *blocks-pending-ref-rebuild
+           (fn [pending]
+             (if (= expected-gen (get pending block-uuid))
+               (dissoc pending block-uuid)
+               pending)))))
 
 (defn- pending-ref-rebuild?
   [block-uuid]
-  (contains? @*blocks-pending-ref-rebuild block-uuid))
+  (some? (pending-ref-rebuild-gen block-uuid)))
+
+(defn- clear-pending-ref-rebuild-after-commit!
+  [result block-uuid commit-gen]
+  (if (p/promise? result)
+    (p/then result (fn [_]
+                     (clear-pending-ref-rebuild! block-uuid commit-gen)))
+    (clear-pending-ref-rebuild! block-uuid commit-gen))
+  result)
 
 (defn- save-block-inner!
   [block value opts]
   (let [skip-ref-rebuild? (boolean (:skip-ref-rebuild? opts))
         block-uuid (:block/uuid block)
+        commit-gen (when-not skip-ref-rebuild?
+                     (pending-ref-rebuild-gen block-uuid))
         block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
                      :block/title value)
         block' (if skip-ref-rebuild?
@@ -136,14 +154,16 @@
                      ;; a block that has been refed
                      (assoc :block/uuid block-uuid)))
         opts' (assoc opts :outliner-op :save-block)]
-    (if skip-ref-rebuild?
-      (mark-pending-ref-rebuild! block-uuid)
-      (clear-pending-ref-rebuild! block-uuid))
-    (ui-outliner-tx/transact!
-     opts'
-     (if skip-ref-rebuild?
-       (outliner-save-block! block' :skip-ref-rebuild? true)
-       (outliner-save-block! block')))))
+    (when skip-ref-rebuild?
+      (mark-pending-ref-rebuild! block-uuid))
+    (let [result (ui-outliner-tx/transact!
+                  opts'
+                  (if skip-ref-rebuild?
+                    (outliner-save-block! block' :skip-ref-rebuild? true)
+                    (outliner-save-block! block')))]
+      (if commit-gen
+        (clear-pending-ref-rebuild-after-commit! result block-uuid commit-gen)
+        result))))
 
 (defn- latest-renderer-block
   [block]

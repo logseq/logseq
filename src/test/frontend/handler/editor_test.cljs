@@ -336,7 +336,7 @@
               {:skip-ref-rebuild? true
                :outliner-op :save-block}]
              @tx-calls))
-      (reset! @#'editor/*blocks-pending-ref-rebuild #{}))))
+      (reset! @#'editor/*blocks-pending-ref-rebuild {}))))
 
 (deftest save-block-if-changed-commit-after-draft-rebuilds-refs-test
   (let [block-uuid #uuid "33333333-3333-4333-8333-333333333333"
@@ -347,7 +347,7 @@
         parse-calls (atom 0)
         save-calls (atom [])
         tx-calls (atom [])]
-    (reset! @#'editor/*blocks-pending-ref-rebuild #{})
+    (reset! @#'editor/*blocks-pending-ref-rebuild {})
     (with-redefs [db-subs/block-snapshot
                   (fn [_] @snapshot)
                   conn/get-db (constantly :test-db)
@@ -382,6 +382,43 @@
              @tx-calls))
       (is (not (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid))
           "Commit clears the pending ref-rebuild mark"))))
+
+(deftest save-block-if-changed-keeps-pending-ref-rebuild-when-commit-fails-test
+  (let [block-uuid #uuid "44444444-4444-4444-8444-444444444444"
+        initial {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "seed"}
+        snapshot (atom {:status :ready :value initial})
+        parse-calls (atom 0)
+        fail-commit? (atom true)]
+    (reset! @#'editor/*blocks-pending-ref-rebuild {})
+    (with-redefs [db-subs/block-snapshot
+                  (fn [_] @snapshot)
+                  conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [_db _ops opts]
+                                                   (if (and @fail-commit?
+                                                            (not (:skip-ref-rebuild? opts)))
+                                                     (throw (js/Error. "worker rejected commit"))
+                                                     :tx))
+                  editor/wrap-parse-block (fn [parsed-block]
+                                            (swap! parse-calls inc)
+                                            parsed-block)
+                  frontend-outliner-op/save-block! (constantly nil)]
+      (is (= :tx (editor/save-block-if-changed!
+                  initial
+                  "[[PageA]]"
+                  {:skip-ref-rebuild? true})))
+      (reset! snapshot {:status :ready
+                        :value (assoc initial :block/title "[[PageA]]")})
+      (is (thrown? js/Error (editor/save-block-if-changed! initial "[[PageA]]")))
+      (is (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid)
+          "A rejected commit must keep the pending ref-rebuild mark")
+      (reset! fail-commit? false)
+      (reset! parse-calls 0)
+      (is (= :tx (editor/save-block-if-changed! initial "[[PageA]]")))
+      (is (= 1 @parse-calls)
+          "Retrying the same title after a failed commit still wrap-parses")
+      (is (not (contains? @@#'editor/*blocks-pending-ref-rebuild block-uuid))))))
 
 (deftest edit-box-on-change-auto-save-skips-ref-rebuild-test
   (let [block {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
