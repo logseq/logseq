@@ -12,8 +12,6 @@
 
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";
-@import "codemirror/lib/codemirror.css";
-@import "codemirror/theme/solarized.css";
 @import "./resources/css/tabler-extension.css";
 @import "./resources/css/tabler-icons.min.css";
 @import "@logseq/simple-wave-record/dist/style.css";

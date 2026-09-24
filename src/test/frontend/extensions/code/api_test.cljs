@@ -269,7 +269,9 @@
                         (is (not-any? #(identical? loaded-ext (aget (.-effects ^js %) 0)) @dispatched)
                             "a stale load result is not reconfigured")
                         (done)))
-               (.catch done)))))
+               (.catch (fn [err]
+                         (is (nil? err) "language load chain rejected")
+                         (done)))))))
 
 (deftest plugin-language-load-reconfigures-while-selected
   (async done
@@ -294,7 +296,9 @@
                         (is (some #(identical? loaded-ext (aget (.-effects ^js %) 0)) @dispatched)
                             "settled load result is reconfigured while selected")
                         (done)))
-               (.catch done)))))
+               (.catch (fn [err]
+                         (is (nil? err) "language load chain rejected")
+                         (done)))))))
 
 (deftest cm6-enhancers-reject-legacy-cm5-enhancer-type
   (let [legacy-called? (atom false)

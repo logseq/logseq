@@ -131,7 +131,8 @@
   [context offset]
   (let [^js view (:view context)
         offset' (clamp-offset view offset)]
-    (.dispatch view #js {:selection #js {:anchor offset'}})
+    (.dispatch view #js {:selection #js {:anchor offset'}
+                         :scrollIntoView true})
     context))
 
 (defn set-cursor!
