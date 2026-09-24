@@ -55,6 +55,14 @@
        commands
        (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
 
+(defn slash-commands-search-filtered?
+  "True when the slash popup was narrowed by user search text.
+
+  Contextual filters such as hiding Clear heading on non-heading blocks
+  do not count as a search filter and must not hide group headings."
+  [search-matched initial-commands]
+  (not= search-matched initial-commands))
+
 (defn node-render
   [block q {:keys [db-tag?]}]
   (let [block' (cond-> block
@@ -98,7 +106,7 @@
         page? (entity/page? edit-block)
         has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
         matched (or (filter-commands page? has-heading? matched') no-matched-commands)
-        filtered? (not= matched @commands/*initial-commands)]
+        filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
     (ui/auto-complete
      matched
      (cond->
