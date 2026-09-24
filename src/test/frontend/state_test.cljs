@@ -326,6 +326,10 @@
                                               (enabled-for repo)))]
       (is (= ["Task"]
              (map :block/title (state/classes-for-tag-completion "off-graph" classes))))
+      (is (= ["Card" "Task"]
+             (map :block/title (state/classes-for-tag-completion "off-graph" classes
+                                                                [{:db/ident :logseq.class/Card}])))
+          "already-selected Card stays so it can be deselected")
       (is (= ["Card" "Cards" "Task"]
              (map :block/title (state/classes-for-tag-completion "on-graph" classes))))
       (is (nil? (state/classes-for-tag-completion "off-graph" nil))))))

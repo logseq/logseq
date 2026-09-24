@@ -138,7 +138,7 @@
              (when repo
                (p/let [classes (db-async/<get-all-classes repo {:except-root-class? true
                                                                  :except-private-tags? false})]
-                 (set-classes! (state/classes-for-tag-completion repo classes))))
+                 (set-classes! classes)))
              nil)
            [repo])
         schema-classes (:logseq.property/classes property)]
@@ -151,7 +151,7 @@
                    options (map (fn [class]
                                   {:label (:block/title class)
                                    :value (:block/uuid class)})
-                                classes)
+                                (state/classes-for-tag-completion repo classes schema-classes))
                    options (if no-class?
                              (cons {:label (t :property/skip-choosing-tag)
                                     :value :no-tag}
