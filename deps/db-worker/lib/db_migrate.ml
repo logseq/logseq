@@ -468,14 +468,11 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
   let db = Conn.db conn in
   let new_properties =
     Builtin_data.built_in_properties
+    (* cljs asserts on an existing property but the asserted string is
+       always truthy, so nothing is ever removed — all selected
+       properties are rebuilt regardless. *)
     |> List.filter (fun (b : Builtin_data.builtin_property) ->
-           if
-             List.mem b.Builtin_data.ident update.u_properties
-             && Ldb.ent_of_ref db (Ident b.Builtin_data.ident) <> None
-           then
-             failwith
-               ("DB migration: property already exists " ^ b.Builtin_data.ident)
-           else List.mem b.Builtin_data.ident update.u_properties)
+           List.mem b.Builtin_data.ident update.u_properties)
     |> Sqlite_create_graph.build_properties
     |> List.map (fun m ->
            wire_map (Sqlite_create_graph.mark_block_as_built_in m))
