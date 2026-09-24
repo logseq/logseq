@@ -20,7 +20,10 @@ let require_repo args =
 let arg args i = List.nth_opt args i
 let kw s = Wire.Keyword s
 
-let fail msg data = Db_worker_effect.error (Dispatcher.Exn_info (msg, data))
+(* cljs fail! throws synchronously; inside an E.bind continuation the
+   raise is captured into a rejection, so either context matches cljs
+   remote-function error semantics. *)
+let fail msg data = raise (Dispatcher.Exn_info (msg, data))
 
 (* ---------- transit <-> query forms ---------- *)
 
