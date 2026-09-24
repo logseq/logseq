@@ -107,9 +107,26 @@
   [block]
   (db-editor-handler/wrap-parse-block block))
 
+(defonce ^:private *blocks-pending-ref-rebuild (atom #{}))
+
+(defn- mark-pending-ref-rebuild!
+  [block-uuid]
+  (when block-uuid
+    (swap! *blocks-pending-ref-rebuild conj block-uuid)))
+
+(defn- clear-pending-ref-rebuild!
+  [block-uuid]
+  (when block-uuid
+    (swap! *blocks-pending-ref-rebuild disj block-uuid)))
+
+(defn- pending-ref-rebuild?
+  [block-uuid]
+  (contains? @*blocks-pending-ref-rebuild block-uuid))
+
 (defn- save-block-inner!
   [block value opts]
   (let [skip-ref-rebuild? (boolean (:skip-ref-rebuild? opts))
+        block-uuid (:block/uuid block)
         block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
                      :block/title value)
         block' (if skip-ref-rebuild?
@@ -117,8 +134,11 @@
                  (-> (wrap-parse-block block)
                      ;; :block/uuid might be changed when backspace/delete
                      ;; a block that has been refed
-                     (assoc :block/uuid (:block/uuid block))))
+                     (assoc :block/uuid block-uuid)))
         opts' (assoc opts :outliner-op :save-block)]
+    (if skip-ref-rebuild?
+      (mark-pending-ref-rebuild! block-uuid)
+      (clear-pending-ref-rebuild! block-uuid))
     (ui-outliner-tx/transact!
      opts'
      (if skip-ref-rebuild?
@@ -162,11 +182,12 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys [force?]
+    {:keys [force? skip-ref-rebuild?]
      :as opts}]
    (let [block (latest-renderer-block block)
+         block-uuid (:block/uuid block)
          content (get @*pending-block-save-titles
-                      (:block/uuid block)
+                      block-uuid
                       (:block/title block))]
      (cond
        force?
@@ -174,8 +195,10 @@
 
        :else
        (when content
-         (let [content-changed? (not= (string/trim content) (string/trim value))]
-           (when content-changed?
+         (let [content-changed? (not= (string/trim content) (string/trim value))
+               rebuild-refs? (and (not skip-ref-rebuild?)
+                                  (pending-ref-rebuild? block-uuid))]
+           (when (or content-changed? rebuild-refs?)
              (save-block-with-pending-title! block value opts))))))))
 
 (defn- compute-fst-snd-block-text

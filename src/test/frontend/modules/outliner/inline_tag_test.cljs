@@ -41,6 +41,50 @@
             (is (= (str "test #" (:block/title class)) (:block/title block')))
             (is (empty? (:block/tags block')))))))))
 
+(deftest save-block-draft-keeps-inline-tags-until-commit
+  (testing "idle draft save must not retract inline tags before commit"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
+          block (db-test/find-block-by-content @conn "test")
+          tag-uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007"
+          tagged-title (str "test #[[" tag-uuid "]]")]
+      (outliner-core/save-block! conn
+                                 {:block/uuid (:block/uuid block)
+                                  :block/refs [{:block/name "audio"
+                                                :block/title "audio"
+                                                :block/uuid tag-uuid
+                                                :block/created-at 1750253118663
+                                                :block/updated-at 1750253118663
+                                                :block/tags [:logseq.class/Page]}]
+                                  :block/tags [{:block/name "audio"
+                                                :block/title "audio"
+                                                :block/uuid tag-uuid
+                                                :block/created-at 1750253118663
+                                                :block/updated-at 1750253118663
+                                                :block/tags [:logseq.class/Tag]}]
+                                  :block/title tagged-title
+                                  :db/id (:db/id block)})
+      (let [audio-tag (ldb/get-page @conn "audio")
+            tagged (d/entity @conn (:db/id block))]
+        (is (some? audio-tag))
+        (is (contains? (set (map :db/id (:block/tags tagged))) (:db/id audio-tag)))
+        (outliner-core/save-block! conn
+                                   {:db/id (:db/id tagged)
+                                    :block/uuid (:block/uuid tagged)
+                                    :block/title "test"}
+                                   :skip-ref-rebuild? true)
+        (let [draft (d/entity @conn (:db/id tagged))]
+          (is (= "test" (:block/title draft)))
+          (is (contains? (set (map :db/id (:block/tags draft))) (:db/id audio-tag))
+              "Draft save keeps class membership until the edit commits"))
+        (outliner-core/save-block! conn
+                                   {:db/id (:db/id tagged)
+                                    :block/uuid (:block/uuid tagged)
+                                    :block/title "test"})
+        (let [committed (d/entity @conn (:db/id tagged))]
+          (is (not (contains? (set (map :db/id (:block/tags committed))) (:db/id audio-tag)))
+              "Commit without the inline tag retracts class membership"))))))
+
 (deftest disallowed-inline-tags-when-insert-blocks
   (testing "Disallowed inline tags shouldn't be recognized when insert blocks"
     (let [conn (db-test/create-conn-with-blocks

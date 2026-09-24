@@ -335,7 +335,53 @@
               []
               {:skip-ref-rebuild? true
                :outliner-op :save-block}]
-             @tx-calls)))))
+             @tx-calls))
+      (reset! (#'editor/*blocks-pending-ref-rebuild) #{}))))
+
+(deftest save-block-if-changed-commit-after-draft-rebuilds-refs-test
+  (let [block-uuid #uuid "33333333-3333-4333-8333-333333333333"
+        initial {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "seed"}
+        snapshot (atom {:status :ready :value initial})
+        parse-calls (atom 0)
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (reset! (#'editor/*blocks-pending-ref-rebuild) #{})
+    (with-redefs [db-subs/block-snapshot
+                  (fn [_] @snapshot)
+                  conn/get-db (constantly :test-db)
+                  db-transact/apply-outliner-ops (fn [db ops opts]
+                                                   (reset! tx-calls [db ops opts])
+                                                   :tx)
+                  editor/wrap-parse-block (fn [parsed-block]
+                                            (swap! parse-calls inc)
+                                            parsed-block)
+                  frontend-outliner-op/save-block! (fn [saved-block opts]
+                                                     (swap! save-calls conj [saved-block opts]))]
+      (is (= :tx (editor/save-block-if-changed!
+                  initial
+                  "[[foo]] block"
+                  {:skip-ref-rebuild? true})))
+      (is (zero? @parse-calls))
+      (reset! snapshot {:status :ready
+                        :value (assoc initial :block/title "[[foo]] block")})
+      (reset! parse-calls 0)
+      (reset! save-calls [])
+      (reset! tx-calls [])
+      (is (= :tx (editor/save-block-if-changed! initial "[[foo]] block")))
+      (is (= 1 @parse-calls)
+          "Enter/blur after idle draft must wrap-parse even when the title is unchanged")
+      (is (= [[{:block/uuid block-uuid
+                :block/title "[[foo]] block"}
+               nil]]
+             @save-calls))
+      (is (= [nil
+              []
+              {:outliner-op :save-block}]
+             @tx-calls))
+      (is (not (contains? @(#'editor/*blocks-pending-ref-rebuild) block-uuid))
+          "Commit clears the pending ref-rebuild mark"))))
 
 (deftest edit-box-on-change-auto-save-skips-ref-rebuild-test
   (let [block {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"

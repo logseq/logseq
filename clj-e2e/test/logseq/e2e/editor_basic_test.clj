@@ -1911,3 +1911,21 @@
       (doseq [merged merged-names]
         (is (false? (page-exists? merged))
             (str "Restored commit must not create " merged))))))
+
+(deftest enter-after-idle-draft-creates-page-ref-test
+  (testing "Enter after idle auto-save still creates [[page]] refs (db-test#1267)"
+    (let [page (str "idle-commit-" (random-uuid))
+          title (str "[[" page "]] block")
+          page-exists? (fn [name]
+                         (some? (ls-api-call! :editor.getBlock name)))]
+      (b/save-block title)
+      (is (= title (util/get-edit-content)))
+      (util/wait-timeout 800)
+      (is (some? (util/get-editor))
+          "Edit is still open after idle auto-save")
+      (is (false? (page-exists? page))
+          "Idle draft must not create the referenced page")
+      (k/enter)
+      (util/wait-timeout 800)
+      (is (true? (page-exists? page))
+          "Enter commits the draft and creates the referenced page"))))

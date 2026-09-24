@@ -443,7 +443,9 @@
         (swap! *txs-state conj
                (dissoc m :db/other-tx)))
 
-      (when (and (:block/tags block-entity) block-entity)
+      (when (and (not skip-ref-rebuild?)
+                 (:block/tags block-entity)
+                 block-entity)
         (let [;; delete tags when title changed
               tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)
