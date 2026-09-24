@@ -120,8 +120,9 @@
     {:db/id page-eid
      :block/updated-at (common-util/time-ms)}))
 
-(defn- source-page-eid-for-move
-  "Pages are not owned via :block/page; their previous parent page is :block/parent."
+(defn- container-page-eid
+  "Page-like entities (pages, tags, properties) are contained via :block/parent;
+   ordinary blocks via :block/page."
   [block]
   (if (ldb/page? block)
     (let [parent (:block/parent block)]
@@ -1185,7 +1186,16 @@
           :else
           (doseq [id block-ids]
             (let [node (d/entity db id)]
-              (otree/-del node txs-state db))))))
+              (otree/-del node txs-state db))))
+      (let [deleted-ids (into deleted-block-ids (map :db/id) orphaned-comments-areas)]
+        (swap! txs-state into
+               ;; Never stamp an entity being retracted: the :block/updated-at
+               ;; add would resurrect it.
+               (into [] (comp (keep container-page-eid)
+                              (remove deleted-ids)
+                              (distinct)
+                              (keep page-updated-at-tx))
+                     top-level-blocks)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -1261,7 +1271,7 @@
             property-tx (move-block-property-tx block target-block sibling?
                                                block-from-property restore-from-property)
             page-updated-txs (keep page-updated-at-tx
-                                   (distinct [(source-page-eid-for-move block) target-page]))]
+                                   (distinct [(container-page-eid block) target-page]))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx page-updated-txs)))))
 
 (defn- transact-move-blocks!

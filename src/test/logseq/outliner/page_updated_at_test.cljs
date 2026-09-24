@@ -16,7 +16,7 @@
   [conn page]
   (:block/updated-at (d/entity @conn (:db/id page))))
 
-(deftest page-updated-at-bumps-on-child-insert-reorder-and-move
+(deftest page-updated-at-bumps-on-child-insert-reorder-move-and-delete
   (testing "inserting a child block bumps the page updated-at"
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
@@ -111,4 +111,16 @@
         (is (> (page-updated-at conn archive) before-dest)
             "Adding a nested page must bump the destination page :block/updated-at")
         (is (= before-moved (page-updated-at conn alpha))
-            "Relocating a page does not rewrite that page's own :block/updated-at")))))
+            "Relocating a page does not rewrite that page's own :block/updated-at"))))
+
+  (testing "deleting a child block bumps the page updated-at"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "doomed"}]}])
+          page (db-test/find-page-by-title @conn "page1")
+          doomed (db-test/find-block-by-content @conn "doomed")
+          before (reset-page-updated-at! conn page)]
+      (outliner-core/delete-blocks! conn [doomed] {})
+      (is (nil? (db-test/find-block-by-content @conn "doomed")))
+      (is (> (page-updated-at conn page) before)
+          "Deleting a child block must bump the page :block/updated-at"))))
