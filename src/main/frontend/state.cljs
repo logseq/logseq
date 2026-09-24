@@ -720,11 +720,11 @@ should be done through this fn in order to get global config and config defaults
    (if (enable-flashcards? repo)
      classes
      (when classes
-       (let [keep (into #{} (mapcat class-lookup-keys) selected)]
+       (let [selected-keys (into #{} (mapcat class-lookup-keys) selected)]
          (into []
                (remove (fn [class]
                          (and (flashcard-class? class)
-                              (not (some keep (class-lookup-keys class))))))
+                              (not (some selected-keys (class-lookup-keys class))))))
                classes))))))
 
 ;; Enable by default
