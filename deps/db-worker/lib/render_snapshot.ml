@@ -105,9 +105,7 @@ let render_attr_schema (db : db) (a : attr)
 let renderer_display_title (db : db) (eid : entity_id) : string option =
   match eavt_scalar db eid "block/title" with
   | Some (String s) ->
-      if
-        (try String.index s '[' |> fun i -> s.[i + 1] = '['
-         with _ -> false)
+      if Common_util.str_index_of s "[[" <> None
       then
         (match Ldb.ent_of_id db eid with
          | Some e ->
@@ -131,9 +129,7 @@ let renderer_display_title (db : db) (eid : entity_id) : string option =
 let renderer_raw_title (db : db) (eid : entity_id) : string option =
   match eavt_scalar db eid "block/title" with
   | Some (String s) ->
-      if
-        (try String.index s '[' |> fun i -> s.[i + 1] = '['
-         with _ -> false)
+      if Common_util.str_index_of s "[[" <> None
       then
         (match Ldb.ent_of_id db eid with
          | Some e -> (
@@ -359,9 +355,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
   let stored_title = eavt_scalar db entity_id "block/title" in
   let replace_id_refs =
     match stored_title with
-    | Some (String s) -> (
-        try String.index s '[' |> fun i -> s.[i + 1] = '['
-        with _ -> false)
+    | Some (String s) -> Common_util.str_index_of s "[[" <> None
     | _ -> false
   in
   let raw_title = renderer_raw_title db entity_id in

@@ -39,9 +39,11 @@ let log level message fields =
   in
   Queue.add entry ring;
   !entry_sink entry;
-  while Queue.length ring > 1000 do
-    ignore (Queue.pop ring)
-  done;
+  (* cljs: (when (> (count @*log) 1000) (reset! *log (subvec @*log 800))) *)
+  if Queue.length ring > 1000 then
+    while Queue.length ring > 800 do
+      ignore (Queue.pop ring)
+    done;
   if level_rank level >= level_rank !min_level_ref then begin
     let fields_str =
       fields |> List.map (fun (k, v) -> k ^ "=" ^ v) |> String.concat " "

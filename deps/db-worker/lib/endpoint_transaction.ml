@@ -5,6 +5,10 @@ open Datascript
 
 let kw s = Wire.Keyword s
 
+let wire_truthy = function
+  | Wire.Nil | Wire.Bool false -> false
+  | _ -> true
+
 let require_repo (args : Wire.t list) : string =
   match args with
   | Wire.String repo :: _ -> repo
@@ -50,11 +54,6 @@ let maybe_run_recycle_gc (conn : conn) : unit =
               [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] ))
 
 (* :thread-api/transact [repo tx-data tx-meta context] *)
-let block_order_key_present (k, _) =
-  match k with
-  | Wire.Keyword "block/order" | Wire.String "block/order" -> true
-  | _ -> false
-
 let transact args : Wire.t Db_worker_effect.t =
   let repo = require_repo args in
   let conn = require_conn repo in
@@ -70,50 +69,74 @@ let transact args : Wire.t Db_worker_effect.t =
     | _ -> Wire.Map []
   in
   let context = List.nth_opt args 3 in
-  let outliner_op =
+  (* cljs (contains? #{:insert-blocks} (:outliner-op tx-meta)) — keyword
+     equality only; a wire string never matches. *)
+  let insert_blocks_op =
     match Cljs_map.get tx_meta_w "outliner-op" with
-    | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
-    | _ -> None
+    | Some (Wire.Keyword "insert-blocks") -> true
+    | _ -> false
   in
   let tx_data' =
-    if outliner_op = Some "insert-blocks" then
+    if insert_blocks_op then
       List.map
         (fun tx ->
           match tx with
-          | Wire.Map kvs
-            when not (List.exists block_order_key_present kvs) ->
+          (* cljs (and (map? tx) (nil? (:block/order tx))) — an explicit
+             nil still gets a fresh order. *)
+          | Wire.Map _
+            when (match Cljs_map.get tx "block/order" with
+                  | Some Wire.Nil | None -> true
+                  | Some _ -> false) ->
               Cljs_map.assoc tx "block/order"
                 (Wire.String (Db_order.gen_key None None))
           | t -> t)
         tx_data
     else tx_data
   in
-  (match context with
-   | Some w when w <> Wire.Nil ->
-       Worker_state.set_context w;
-       (* cljs e2e builds compile OUTLINER-PERF-LOGGING in; the runtime
-          signal for the same e2e/dev app build here is the :dev? flag
-          in the transact context (DEV-RELEASE). *)
-       (match Cljs_map.get w "dev?" with
-        | Some (Wire.Bool true) -> Sync_state.outliner_perf_logging := true
-        | _ -> ())
-   | _ -> ());
-  let tx_meta' = Cljs_map.dissoc tx_meta_w "insert-blocks?" in
-  let skip =
-    match
-      ( Cljs_map.get tx_meta' "create-today-journal?"
-      , Cljs_map.get tx_meta' "today-journal-name" )
-    with
-    | Some (Wire.Bool true), Some (Wire.String name) ->
-        tx_data' <> []
-        && Option.is_some (Ldb.get_page (Conn.db conn) (String name))
-    | _ -> false
-  in
-  if not skip then
-    ignore
-      (Db_transact.transact conn tx_data' (Ds_wire.tx_meta_of_transit tx_meta'));
-  maybe_run_recycle_gc conn;
-  Db_worker_effect.pure Wire.Nil
+  (try
+     (match context with
+      | Some w when w <> Wire.Nil ->
+          Worker_state.set_context w;
+          (* cljs e2e builds compile OUTLINER-PERF-LOGGING in; the runtime
+             signal for the same e2e/dev app build here is the :dev? flag
+             in the transact context (DEV-RELEASE). *)
+          (match Cljs_map.get w "dev?" with
+           | Some (Wire.Bool true) -> Sync_state.outliner_perf_logging := true
+           | _ -> ())
+      | _ -> ());
+     let tx_meta' = Cljs_map.dissoc tx_meta_w "insert-blocks?" in
+     (* cljs (and (:create-today-journal? m) (:today-journal-name m)
+        (seq tx-data') (ldb/get-page db name)) — all truthy, not typed. *)
+     let journal_name =
+       match Cljs_map.get tx_meta' "today-journal-name" with
+       | Some w when wire_truthy w -> Some w
+       | _ -> None
+     in
+     let skip =
+       (match Cljs_map.get tx_meta' "create-today-journal?" with
+        | Some w -> wire_truthy w
+        | None -> false)
+       && journal_name <> None
+       && tx_data' <> []
+       && (match journal_name with
+           | Some w ->
+               Option.is_some
+                 (Ldb.get_page (Conn.db conn) (Ds_wire.value_of_transit w))
+           | None -> false)
+     in
+     if not skip then
+       ignore
+         (Db_transact.transact conn tx_data'
+            (Ds_wire.tx_meta_of_transit tx_meta'));
+     maybe_run_recycle_gc conn;
+     Db_worker_effect.pure Wire.Nil
+   with e ->
+     (* cljs (log/error ::worker-transact-failed {...}) then rethrow *)
+     Worker_log.error "worker-transact-failed"
+       [ ("tx-meta", Ds_wire.edn_of_transit tx_meta_w)
+       ; ("tx-count", string_of_int (List.length tx_data))
+       ; ("error", Printexc.to_string e) ];
+     raise e)
 
 let () = Dispatcher.register "thread-api/transact" transact
 

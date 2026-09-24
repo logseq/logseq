@@ -70,7 +70,8 @@ let tree_opts_of_value (v : value) : Export_file.tree_opts =
        | None -> false)
   ; include_properties =
       (match Sqlite_build.bm_get_opt m "include-properties?" with
-       | Some Nil | Some (Bool false) -> false
+       (* cljs {:or {include-properties? true}} — nil falls back to true *)
+       | Some (Bool false) -> false
        | _ -> true)
   ; heading_to_list =
       (match Sqlite_build.bm_get_opt m "heading-to-list?" with
@@ -79,8 +80,8 @@ let tree_opts_of_value (v : value) : Export_file.tree_opts =
 
 (* cljs get-all-page->content — alias of common-file/get-all-page->content.
    cljs passes options through as the export context map. *)
-let get_all_page_content (db : db) (options_v : value) : (string * string) list
-    =
+let get_all_page_content (db : db) (options_v : value) :
+    (string option * string) list =
   Export_file.get_all_page_content db ~ctx:(context_of_value options_v)
 
 (* cljs string/trim-newline *)
@@ -112,15 +113,20 @@ let get_blocks_export_data (db : db) (root_block_uuids_or_page_uuid : value)
     | Vector vs | List vs | Set vs -> vs
     | _ -> [ root_block_uuids_or_page_uuid ]
   in
-  let blocks =
-    List.filter_map
+  (* cljs (mapv #(d/entity db [:block/uuid %]) root-block-uuids) —
+     unresolvable uuids stay in the vector as nil. *)
+  let blocks : entity option list =
+    List.map
       (fun v ->
         match uuid_of_v v with
         | Some u -> Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
         | None -> None)
       root_block_uuids
   in
-  let all_pages = blocks <> [] && List.for_all Ldb.is_page blocks in
+  (* cljs (every? ldb/page? blocks) — nil entity => not a page; empty => true *)
+  let all_pages =
+    List.for_all (function Some e -> Ldb.is_page e | None -> false) blocks
+  in
   let single_page = List.length blocks = 1 && all_pages in
   let content =
     if single_page then (
@@ -132,10 +138,13 @@ let get_blocks_export_data (db : db) (root_block_uuids_or_page_uuid : value)
           | None -> "")
       | None -> "")
     else if all_pages then
-      (* all pages => just send page titles *)
+      (* all pages => just send page titles; cljs (str nil) => "" in the join *)
       String.concat "\n"
-        (List.filter_map
-           (fun (e : entity) -> Ldb.string_value e "block/title")
+        (List.map
+           (fun (e : entity option) ->
+             match e with
+             | Some e -> Option.value ~default:"" (Ldb.string_value e "block/title")
+             | None -> "")
            blocks)
     else
       (* multiple root blocks => just the content of all the blocks *)
@@ -147,7 +156,11 @@ let get_blocks_export_data (db : db) (root_block_uuids_or_page_uuid : value)
         root_block_uuids
       |> String.concat "\n"
   in
-  let first_block = List.nth_opt blocks 0 in
+  let first_block =
+    match List.nth_opt blocks 0 with
+    | Some e -> e
+    | None -> None
+  in
   let format =
     match first_block with
     | Some e -> Option.value ~default:(Keyword "markdown") (Ldb.value e "block/format")
@@ -173,44 +186,41 @@ let get_debug_datoms (conn : conn) : datom list =
   let db = Datascript.db conn in
   datoms db Eavt ()
   |> List.of_seq
-  |> List.filter_map (fun (d : datom) ->
-       (* url-valued attrs get replaced *)
-       match d.v with
-       | String s when url_p s ->
-           Some { d with v = String "https://logseq.com/debug" }
-       | _ -> (
-           match d.a with
-           | "block/title" | "block/name" -> (
-               (* keep if entity is an ident, journal page, built-in page,
-                  or created-from :logseq.property/query *)
-               match Ldb.ent_of_id db d.e with
-               | Some e ->
-                   let ident = Ldb.ident_of e <> None in
-                   let query_created_from =
-                     match Ldb.ref_ent e "logseq.property/created-from-property" with
-                     | Some p -> Ldb.ident_of p = Some "logseq.property/query"
-                     | None -> false
-                   in
-                   if
-                     not ident
-                     && not (Ldb.is_journal e)
-                     && not (Ldb.built_in e)
-                     && not query_created_from
-                   then (
-                     match d.v with
-                     | String s ->
-                         Some
-                           { d with
-                             v =
-                               String
-                                 ("debug "
-                                  ^ string_of_int d.e
-                                  ^ " "
-                                  ^ String.make (String.length s) 'x') }
-                     | _ -> Some d)
-                   else Some d
-               | None -> Some d)
-           | _ -> Some d))
+  |> List.map (fun (d : datom) ->
+       if
+         d.a = "block/title"
+         && (match d.v with String s -> url_p s | _ -> false)
+       then { d with v = String "https://logseq.com/debug" }
+       else if
+         (d.a = "block/title" || d.a = "block/name")
+         &&
+         (* scrub unless entity is an ident, journal page, built-in page,
+            or created-from :logseq.property/query — a missing entity
+            still scrubs (cljs every check is true on nil) *)
+         match Ldb.ent_of_id db d.e with
+         | Some e ->
+             Ldb.ident_of e = None
+             && not (Ldb.is_journal e)
+             && not (Ldb.built_in e)
+             && (match
+                    Ldb.ref_ent e "logseq.property/created-from-property"
+                  with
+                  | Some p -> Ldb.ident_of p <> Some "logseq.property/query"
+                  | None -> true)
+         | None -> true
+       then (
+         match d.v with
+         | String s ->
+             (* cljs (count v) — UTF-16 code units *)
+             { d with
+               v =
+                 String
+                   ("debug "
+                    ^ string_of_int d.e
+                    ^ " "
+                    ^ String.make (Unicode.js_length s) 'x') }
+         | _ -> d)
+       else d)
 
 (* cljs worker/export.cljs content->ast — ->db-edn output with pos
    stripped and Properties asts removed. *)

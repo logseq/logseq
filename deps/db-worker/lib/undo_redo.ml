@@ -311,8 +311,18 @@ and apply_history_action_ repo ~undo (op : undo_op) (tx_meta : (Wire.t * Wire.t)
          else if skippable_worker_result ~undo worker_result then
            undo_redo_aux repo ~undo
          else begin
+           (* cljs (log/error ::undo-redo-worker-action-unavailable ...) *)
            if not (expected_invalid_history_action_reason worker_result) then
-            ();
+             Worker_log.error "undo-redo-worker-action-unavailable"
+               [ "undo?", string_of_bool undo
+               ; "repo", repo
+               ; "tx-id", (match tx_id with Some t -> t | None -> "")
+               ; "result",
+                   Ds_wire.edn_of_transit
+                     (Wire.Map
+                        (List.map
+                           (fun (k, v) -> Wire.Keyword k, v)
+                           worker_result)) ];
            clear_history repo;
            empty_stack_result ~undo
          end
@@ -322,6 +332,9 @@ and apply_history_action_ repo ~undo (op : undo_op) (tx_meta : (Wire.t * Wire.t)
           | Failure msg when msg = "invalid-history-action-ops" ->
               undo_redo_aux repo ~undo
           | _ ->
+              (* cljs (log/error ::undo-redo-worker-failed e) *)
+              Worker_log.error "undo-redo-worker-failed"
+                [ "error", Printexc.to_string e ];
               clear_history repo;
               raise e))
   | None ->

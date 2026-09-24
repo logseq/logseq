@@ -44,15 +44,17 @@ let read_string (s : string) : value = value_of_edn (Edn_parser.of_edn_string s)
 (* common-util/safe-read-string *)
 let safe_read_string (content : string) : value option =
   try Some (read_string content)
-  with _ ->
-    Worker_log.error "parse/read-string-failed" [ ("content", content) ];
+  with e ->
+    Worker_log.error "parse/read-string-failed"
+      [ ("error", Printexc.to_string e) ];
     None
 
 (* common-util/safe-read-map-string — {} on parse failure *)
 let safe_read_map_string (content : string) : value =
   try read_string content
-  with _ ->
-    Worker_log.error "parse/read-string-failed" [ ("content", content) ];
+  with e ->
+    Worker_log.error "parse/read-string-failed"
+      [ ("error", Printexc.to_string e) ];
     Map []
 
 (* common-util/valid-edn-keyword? *)

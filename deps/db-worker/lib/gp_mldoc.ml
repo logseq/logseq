@@ -11,11 +11,7 @@ let default_references = "{\"embed_blocks\":[],\"embed_pages\":[]}"
 let default_config_map ?export_heading_to_list ?export_keep_properties
     ?export_md_indent_style ?export_md_remove_options ?parse_outline_only
     (format : string) : (string * Wire.t) list =
-  let cap =
-    match Unicode.capitalize format with
-    | "Org" -> "Org"
-    | _ -> "Markdown"
-  in
+  let cap = Unicode.capitalize format in
   [ Some ("toc", Wire.Bool false)
   ; Some ("parse_outline_only", Wire.Bool (Option.value ~default:false parse_outline_only))
   ; Some ("heading_number", Wire.Bool false)
@@ -69,11 +65,28 @@ let ast_export_markdown ~ast ~config ~references : string =
 let remove_indentation_spaces (s : string) (level : int) (remove_first_line : bool)
     : string =
   let lines =
-    (* cljs string/split-lines: a single trailing newline does not produce a
-       final empty string. *)
-    match List.rev (String.split_on_char '\n' s) with
-    | "" :: tl -> List.rev tl
-    | l -> List.rev l
+    (* cljs string/split-lines: split on \n|\r\n and drops every trailing
+       empty string. *)
+    let raw = String.split_on_char '\n' s in
+    let n = List.length raw in
+    let ends_with_lf = Common_util.str_ends_with s "\n" in
+    let stripped =
+      List.mapi
+        (fun i l ->
+          let ln = String.length l in
+          if
+            ln > 0 && l.[ln - 1] = '\r'
+            && (i < n - 1 || ends_with_lf)
+          then String.sub l 0 (ln - 1)
+          else l)
+        raw
+    in
+    let rec drop_trailing_empty = function
+      | [] -> []
+      | "" :: tl -> drop_trailing_empty tl
+      | l -> l
+    in
+    List.rev (drop_trailing_empty (List.rev stripped))
   in
   let rest =
     match lines with
@@ -358,7 +371,10 @@ let recover_inline_macros (inline_list : value list) : value list =
                      ; String
                          (String.sub content offset (String.length content - offset)) ]
                in
-               let result = List.rev_append (list_take skip more) (item' :: result) in
+               (* cljs (take (dec skip) more) — skip counts item itself *)
+               let result =
+                 List.rev_append (list_take (skip - 1) more) (item' :: result)
+               in
                loop (list_drop skip remaining) 0 result)
           | None ->
             let suffix =
@@ -431,7 +447,14 @@ let collect_page_properties (ast : value list) (config : string) : value list =
         (fun pair ->
           match pair with
           | Vector [ Vector [ _dir; k; v ]; _ ] ->
-            let text = match v with String t -> t | _ -> Edn_util.pr_str v in
+            (* cljs (get-references v config) — v raw; nil short-circuits
+               on (string/blank? text), scalars reach JS coerced by (str). *)
+            let text =
+              match v with
+              | String t -> t
+              | Nil -> ""
+              | _ -> Edn_util.pr_str v
+            in
             Some (Vector [ k; v; get_references ~text ~config ])
           | _ -> None)
         directives
@@ -471,10 +494,6 @@ let to_edn ~(content : value) ~(config : string) : value =
       [ "content", Edn_util.pr_str content ];
     Nil
 
-(* get-default-config — file-graph import always uses a non-DB repo, so
-   db-based? is false and no extra keys are added *)
-let get_default_config ~repo:_ ~format : string = default_config format
-
 let to_edn_format ~(content : string) ~(format : string) : value =
   to_edn ~content:(String content) ~config:(default_config format)
 
@@ -488,6 +507,14 @@ let db_default_config (format : string) : string =
         @ [ ("enable_drawers", Wire.Bool false)
           ; ("parse_marker", Wire.Bool false)
           ; ("parse_priority", Wire.Bool false) ]))
+
+(* get-default-config — cljs adds the DB overrides when the repo is
+   db-based (name starts with db-version-prefix). *)
+let get_default_config ~repo ~format : string =
+  let db_based =
+    Common_util.str_starts_with repo Common_config.db_version_prefix
+  in
+  if db_based then db_default_config format else default_config format
 
 (* gp-mldoc/->db-edn — ->edn with the db-based default config. *)
 let to_db_edn ~(content : string) ~(format : string) : value =

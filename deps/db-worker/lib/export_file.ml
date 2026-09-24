@@ -524,17 +524,31 @@ and node_to_lines db (e : entity) level ~(opts : tree_opts) ~(ctx : context)
            ~include_properties:opts.include_properties ctx)
   in
   let children = node_children ~open_blocks_only:opts.open_blocks_only e in
+  (* cljs recurses with literal {:init-level (inc level)} — heading-to-
+     list?, link, include-page-properties? reset for descendants;
+     include-properties? picks its :or default true. open_blocks_only
+     stays: the OCaml walk prunes collapsed subtrees lazily, where
+     cljs pre-filters the pulled tree once via
+     remove-collapsed-descendants. *)
+  let child_opts =
+    { init_level = Some (level + 1)
+    ; link = false
+    ; include_page_properties = false
+    ; open_blocks_only = opts.open_blocks_only
+    ; heading_to_list = false
+    ; include_properties = true
+    }
+  in
   (match content with Some c -> [ c ] | None -> [])
   @ List.concat_map
-      (fun c -> node_to_lines db c (level + 1) ~opts ~ctx)
+      (fun c -> node_to_lines db c (level + 1) ~opts:child_opts ~ctx)
       children
 
 and tree_to_file_content db (root : entity) ~(opts : tree_opts) ~(ctx : context)
     : string =
   let level = Option.value opts.init_level ~default:1 in
-  node_to_lines db root level ~opts ~ctx
-  |> List.filter (fun c -> Unicode.trim c <> "")
-  |> String.concat "\n"
+  (* cljs (remove nil?) — keeps "" and whitespace lines *)
+  node_to_lines db root level ~opts ~ctx |> String.concat "\n"
 
 (* block->content — entity's subtree rendered as markdown. *)
 and block_to_content db ~block_uuid ~(opts : tree_opts) ~(ctx : context) : string =
@@ -550,7 +564,8 @@ and block_to_content db ~block_uuid ~(opts : tree_opts) ~(ctx : context) : strin
         ~opts:{ opts with init_level = Some init_level } ~ctx
 
 (* get-all-page->content — export every page as (title, content). *)
-let get_all_page_content db ~(ctx : context) : (string * string) list =
+let get_all_page_content db ~(ctx : context) :
+    (string option * string) list =
   let built_in_pages = [ "Library"; "Quick add"; "Contents" ] in
   Datascript.datoms db Datascript.Avet ~a:"block/name" ()
   |> Seq.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
@@ -560,9 +575,18 @@ let get_all_page_content db ~(ctx : context) : (string * string) list =
          || List.mem
               (Option.value (Ldb.string_value ent "block/title") ~default:"")
               built_in_pages)
-  |> List.filter_map (fun (e : entity) ->
-         match Ldb.string_value e "block/title", Ldb.value e "block/uuid" with
-         | Some title, Some (Uuid u) ->
-             Some
-               (title, block_to_content db ~block_uuid:u ~opts:default_tree_opts ~ctx)
-         | _ -> None)
+  (* cljs keeps [nil content] entries for pages lacking title/uuid *)
+  |> List.map (fun (e : entity) ->
+         let title =
+           match Ldb.value e "block/title" with
+           | Some (String s) -> Some s
+           | _ -> None
+         in
+         let content =
+           match Ldb.value e "block/uuid" with
+           | Some (Uuid u) ->
+               block_to_content db ~block_uuid:u ~opts:default_tree_opts
+                 ~ctx
+           | _ -> ""
+         in
+         (title, content))
