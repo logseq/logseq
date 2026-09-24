@@ -4,7 +4,8 @@
 //   --mode browser -> static/js/db-worker.js (the worker script the
 //                     UI thread spawns; installs the Comlink surface
 //                     on load — see js_api/entry_worker.ml)
-// Build order: `dune build` (deps/db-worker) then `vite build --mode ...`.
+// Build order: `dune build js_api` (deps/db-worker — plain `dune build`
+// does not run the melange emit) then `vite build --mode ...`.
 import { builtinModules } from "node:module";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
