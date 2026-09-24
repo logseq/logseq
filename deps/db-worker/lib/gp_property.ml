@@ -79,11 +79,29 @@ let contains_properties (content : string) : bool =
   && Common_util.str_includes content properties_start
   && Regexp.test properties_end_pattern content
 
+(* cljs string/split-lines: split on \r?\n, dropping every trailing
+   empty string (Java split semantics). *)
+let split_lines (s : string) : string list =
+  let raw = String.split_on_char '\n' s in
+  let stripped =
+    List.map
+      (fun l ->
+        let n = String.length l in
+        if n > 0 && l.[n - 1] = '\r' then String.sub l 0 (n - 1) else l)
+      raw
+  in
+  let rec drop_trailing_empty = function
+    | [] -> []
+    | "" :: tl -> drop_trailing_empty tl
+    | l -> l
+  in
+  List.rev (drop_trailing_empty (List.rev stripped))
+
 (* property/->new-properties *)
 let to_new_properties (content : string) : string =
   if not (contains_properties content) then content
   else
-    let lines = String.split_on_char '\n' content in
+    let lines = split_lines content in
     let index_of x xs =
       let rec go i = function
         | [] -> -1
@@ -135,7 +153,7 @@ let drop_while f xs =
 (* property/remove-properties *)
 let remove_properties (format : string) (content : string) : string =
   if contains_properties content then
-    let lines = String.split_on_char '\n' content in
+    let lines = split_lines content in
     let rec split_with acc = function
       | line :: rest
         when not (starts_with_upper (Common_util.str_triml line) properties_start) ->
@@ -168,7 +186,7 @@ let remove_properties (format : string) (content : string) : string =
     in
     String.concat "\n" (title_lines @ body)
   else if format <> "org" then
-    let lines = String.split_on_char '\n' content in
+    let lines = split_lines content in
     let lines =
       match lines with
       | first :: _rest when simplified_property first ->
@@ -182,7 +200,7 @@ let remove_properties (format : string) (content : string) : string =
 
 (* property/remove-logbook *)
 let remove_logbook (content : string) : string =
-  let lines = String.split_on_char '\n' content in
+  let lines = split_lines content in
   let acc, _in =
     List.fold_left
       (fun (acc, in_logbook) line ->
@@ -198,7 +216,7 @@ let remove_logbook (content : string) : string =
 
 (* property/remove-deadline-scheduled *)
 let remove_deadline_scheduled (content : string) : string =
-  let lines = String.split_on_char '\n' content in
+  let lines = split_lines content in
   match lines with
   | [ _ ] -> content
   | first_line :: rest_lines ->

@@ -29,7 +29,10 @@ let repo_large_upload_progress : ((string * string), int) Hashtbl.t =
 let max_remote_apply_snapshot_retries = 3
 let remote_apply_snapshot_retry_delay_ms = 50
 let upload_response_timeout_ms = 120_000
-let max_upload_request_datoms = 5000
+
+(* cljs def max-upload-request-datoms — a var so tests can rebind it
+   (with-redefs) the way the cljs suite does *)
+let max_upload_request_datoms = ref 5000
 
 let set_upload_stopped repo stopped =
   Hashtbl.replace repo_upload_stopped repo stopped;
@@ -791,7 +794,7 @@ let next_large_upload_request_chunk (db : db) (tx_data : Wire.t list)
     if idx < total then begin
       let next_idx, group = next_upload_tx_group tx_data range_by_start idx in
       let next_count = List.length chunk + List.length group in
-      if chunk <> [] && next_count > max_upload_request_datoms then
+      if chunk <> [] && next_count > !max_upload_request_datoms then
         (chunk, idx)
       else loop next_idx (chunk @ group)
     end
@@ -811,9 +814,9 @@ let cap_upload_request_tx_entries repo (db : db)
         in
         let entry_count = List.length tx_data in
         let next_count = datom_count + entry_count in
-        if result = [] && entry_count > max_upload_request_datoms then
+        if result = [] && entry_count > !max_upload_request_datoms then
           [ large_upload_request_entry repo db entry ]
-        else if next_count > max_upload_request_datoms then result
+        else if next_count > !max_upload_request_datoms then result
         else loop rest (result @ [ entry ]) next_count)
     | [] -> result
   and large_upload_request_entry repo (db : db) (entry : Wire.t)

@@ -100,7 +100,7 @@ let rec transit_of_value (v : value) : Wire.t =
   | Bool b -> Wire.Bool b
   | Keyword s -> Wire.Keyword s
   | Uuid s -> Wire.Uuid s
-  | Instant ms -> Wire.Int64 ms
+  | Instant ms -> Wire.Date_ms ms
   | Regex s -> Wire.String s
   | Ref n -> Wire.Int n
   | List vs -> Wire.List (List.map transit_of_value vs)

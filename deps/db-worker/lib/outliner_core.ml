@@ -1443,7 +1443,7 @@ let blocks_with_level (blocks : Block_map.t list) : Block_map.t list =
       let root = Block_map.put first "block/level" (Int 1) in
       let id_to_level = Hashtbl.create 16 in
       let uuid_to_level = Hashtbl.create 16 in
-      (match mget_int root "db/id" with
+      (match Option.bind (mget root "db/id") id_of_value with
        | Some id -> Hashtbl.replace id_to_level id 1
        | None -> ());
       (match mget_uuid root "block/uuid" with
@@ -1455,20 +1455,29 @@ let blocks_with_level (blocks : Block_map.t list) : Block_map.t list =
         | b :: tl ->
             (* cljs (cond (map? parent) (get id->level (:db/id parent))
                (vector? parent) (get uuid->level (second parent))) — a map
-               parent only ever uses :db/id; no uuid fallback. *)
+               parent only ever uses :db/id; no uuid fallback. of_entity
+               serializes ref parents as Ref_to/Ref values, which must resolve
+               through the same tables. *)
             let parent_level =
               match mget b "block/parent" with
               | Some (Map _ as v) -> (
                   match id_of_value v with
                   | Some id -> Hashtbl.find_opt id_to_level id
                   | None -> None)
-              | Some (Vector [ _; Uuid u ]) ->
+              | Some (Vector [ _; Uuid u ])
+              | Some (List [ _; Uuid u ]) ->
+                  Hashtbl.find_opt uuid_to_level u
+              | Some (Ref id)
+              | Some (Int id)
+              | Some (Ref_to (Entity_id id)) ->
+                  Hashtbl.find_opt id_to_level id
+              | Some (Ref_to (Lookup_ref ("block/uuid", Uuid u))) ->
                   Hashtbl.find_opt uuid_to_level u
               | _ -> None
             in
             let level = match parent_level with Some l -> l + 1 | None -> 1 in
             let b' = Block_map.put b "block/level" (Int level) in
-            (match mget_int b' "db/id" with
+            (match Option.bind (mget b' "db/id") id_of_value with
              | Some id -> Hashtbl.replace id_to_level id level
              | None -> ());
             (match mget_uuid b' "block/uuid" with
@@ -1926,9 +1935,10 @@ exception Not_allowed_move_block_page
    {:block/uuid ...} maps gain the page attrs the same tx created.
    page-txs enter as tx_ops — only Entity ops are the cljs "tx maps"
    the (map? tx) guard keeps; dissoc :db/id drops the entity id. *)
-let insert_history_blocks (blocks : Block_map.t list)
+let insert_history_blocks (db : db) (blocks : Block_map.t list)
     (page_txs : tx_op list list)
-    (id_to_new_uuid : (entity_id * string) list) : Block_map.t list =
+    (id_to_new_uuid : (entity_id * string) list)
+    (uuid_map : (string * string) list) : Block_map.t list =
   let value_of_tx_value (tv : tx_value) : value =
     match tv with
     | One_value v -> v
@@ -1973,19 +1983,45 @@ let insert_history_blocks (blocks : Block_map.t list)
           pages group)
       [] page_txs
   in
-  (* cljs walk/prewalk (de/entity? ...) *)
-  let rec prewalk (v : value) : value =
+  (* cljs walk/prewalk (de/entity? ...) — entity values become
+     [:block/uuid (id->new-uuid (:db/id v))]; the input's wire-decoded
+     maps carry raw eids for the same ref-attr values, so Ints under a
+     ref attr are remapped the same way *)
+  let rec prewalk ~(a : attr) (v : value) : value =
     match v with
     | Ref id | Ref_to (Entity_id id) -> (
         match List.assoc_opt id id_to_new_uuid with
         | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
         | None -> Int id)
+    | Int id when Ldb.ref_attr db a -> (
+        match List.assoc_opt id id_to_new_uuid with
+        | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
+        | None -> v)
+    (* serialized refs arrive as [:block/uuid u] lookup values pointing at
+       the source entity — map to the inserted copy's uuid like cljs
+       (de/entity? -> id->new-uuid) does for entity values *)
+    | Ref_to (Lookup_ref ("block/uuid", Uuid u))
+    | Vector [ Keyword "block/uuid"; Uuid u ]
+    | List [ Keyword "block/uuid"; Uuid u ] -> (
+        match List.assoc_opt u uuid_map with
+        | Some uu -> Ref_to (Lookup_ref ("block/uuid", Uuid uu))
+        | None -> v)
     | Map kvs ->
-        Map (List.map (fun (k, x) -> (prewalk k, prewalk x)) kvs)
-    | Vector vs -> Vector (List.map prewalk vs)
-    | List vs -> List (List.map prewalk vs)
-    | Set vs -> Set (List.map prewalk vs)
-    | Tuple vs -> Tuple (List.map (Option.map prewalk) vs)
+        Map
+          (List.map
+             (fun (k, x) ->
+               ( prewalk ~a:"" k
+               , prewalk
+                   ~a:
+                     (match k with
+                      | Keyword a' | String a' -> a'
+                      | _ -> "")
+                   x ))
+             kvs)
+    | Vector vs -> Vector (List.map (prewalk ~a) vs)
+    | List vs -> List (List.map (prewalk ~a) vs)
+    | Set vs -> Set (List.map (prewalk ~a) vs)
+    | Tuple vs -> Tuple (List.map (Option.map (prewalk ~a)) vs)
     | v -> v
   in
   (* cljs (:block/uuid ref) only reads maps — lookup-ref vectors and
@@ -2023,7 +2059,9 @@ let insert_history_blocks (blocks : Block_map.t list)
     | _ -> r
   in
   let blocks =
-    List.map (fun b -> List.map (fun (a, v) -> (a, prewalk v)) b) blocks
+    List.map
+      (fun b -> List.map (fun (a, v) -> (a, prewalk ~a v)) b)
+      blocks
   in
   List.map
     (fun b ->
@@ -2275,7 +2313,8 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
               (* cljs {:tx-meta {:outliner-ops [[:insert-blocks [blocks'
                   target-uuid insert-opts+keep-uuid?]]]}} *)
               let history_blocks =
-                insert_history_blocks tx page_txs id_to_new_uuid
+                insert_history_blocks db tx page_txs id_to_new_uuid
+                  uuid_map
               in
               let tx_meta =
                 [ ( "outliner-ops"
