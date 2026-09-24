@@ -366,20 +366,37 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
       let v = match d.v with Ref n -> Int n | v -> v in
       let m = try Hashtbl.find tbl d.e with Not_found -> [] in
       if m = [] then order := d.e :: !order;
+      (* cljs builds sets via (fnil conj #{})/#{existing v} — conj dedups
+         and a falsy existing value (nil/false) takes the plain assoc path
+         instead of collecting *)
+      let conj_set xs v =
+        if List.exists (fun x -> x = v) xs then xs else xs @ [ v ]
+      in
       let m' =
         if List.mem d.a Db_schema.card_many_attributes then
           let cur =
             match mget d.a m with
             | Some (Set xs) -> xs
-            | Some v -> [ v ]
+            | Some _ ->
+                (* cljs (conj non-collection v) — unreachable: card-many attrs
+                   are only ever built through this branch *)
+                failwith "conjoin on non-collection"
             | None -> []
           in
-          List.remove_assoc d.a m @ [ (d.a, Set (cur @ [ v ])) ]
+          List.remove_assoc d.a m @ [ (d.a, Set (conj_set cur v)) ]
         else
           match mget d.a m with
-          | Some (Set xs) -> List.remove_assoc d.a m @ [ (d.a, Set (xs @ [ v ])) ]
-          | Some existing ->
-              List.remove_assoc d.a m @ [ (d.a, Set [ existing; v ]) ]
+          | Some (Set xs) ->
+              List.remove_assoc d.a m @ [ (d.a, Set (conj_set xs v)) ]
+          | Some existing -> (
+              (* cljs (if-let ...) is falsy on nil/false *)
+              match existing with
+              | Nil | Bool false ->
+                  List.remove_assoc d.a m @ [ (d.a, v) ]
+              | _ ->
+                  (* cljs #{existing-val v} — set literal dedups *)
+                  List.remove_assoc d.a m
+                  @ [ (d.a, Set (conj_set [ existing ] v)) ])
           | None -> m @ [ (d.a, v) ]
       in
       Hashtbl.replace tbl d.e m')

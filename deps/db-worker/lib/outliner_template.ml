@@ -29,10 +29,9 @@ let journal_title (db : db) (offset_days : int) : string =
   let journal_day = journal_day_of_offset offset_days in
   match
     Datascript.q_string db
-      (Printf.sprintf
-         "[:find ?title . :in $ ?journal-day :where \
-          [?p :block/journal-day %d] [?p :block/title ?title]]"
-         journal_day)
+      ~inputs:[ Arg_scalar (Result_value (Int journal_day)) ]
+      "[:find ?title . :in $ ?journal-day :where \
+        [?p :block/journal-day ?journal-day] [?p :block/title ?title]]"
   with
   | [ [ Result_value (String t) ] ] -> t
   | _ -> string_of_int journal_day
@@ -42,10 +41,9 @@ let journal_page (db : db) (offset_days : int) : entity option =
   let journal_day = journal_day_of_offset offset_days in
   match
     Datascript.q_string db
-      (Printf.sprintf
-         "[:find ?p . :in $ ?journal-day :where \
-          [?p :block/journal-day %d]]"
-         journal_day)
+      ~inputs:[ Arg_scalar (Result_value (Int journal_day)) ]
+      "[:find ?p . :in $ ?journal-day :where \
+        [?p :block/journal-day ?journal-day]]"
   with
   | [ [ Result_entity id ] ] -> entity db (Entity_id id)
   | [ [ Result_value (Int id) ] ] -> entity db (Entity_id id)
