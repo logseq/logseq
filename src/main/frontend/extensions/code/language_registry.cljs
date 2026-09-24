@@ -1035,7 +1035,14 @@
   (duplicate-keys :extensions))
 
 (def ^:private name-index
-  (delay (into {} (lookup-pairs :names))))
+  ;; The language picker persists descriptor ids, so index the normalized
+  ;; id alongside :names (e.g. "ms-sql" and "common-lisp" are ids, not
+  ;; aliases).
+  (delay (into {}
+               (concat (lookup-pairs :names)
+                       (map (fn [descriptor]
+                              [(normalize-key (name (:id descriptor))) descriptor])
+                            languages)))))
 
 (def ^:private extension-index
   (delay (into {} (lookup-pairs :extensions))))

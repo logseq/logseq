@@ -45,6 +45,17 @@
     (is (nil? (registry/language-by-subname "")))
     (is (nil? (registry/language-by-subname nil)))))
 
+(deftest descriptor-ids-resolve-through-language-by-name
+  (testing "The language picker persists descriptor ids, so every id must
+            round-trip through name resolution (e.g. \"ms-sql\", \"vb-net\")"
+    (is (= :vb-net (:id (registry/language-by-name "vb-net"))))
+    (is (= :common-lisp (:id (registry/language-by-name "common-lisp"))))
+    (is (= :angular-template (:id (registry/language-by-name "angular-template"))))
+    (is (every? (fn [descriptor]
+                  (identical? descriptor
+                              (registry/language-by-name (name (:id descriptor)))))
+                (registry/supported-languages)))))
+
 (deftest registry-entries-have-unique-lookup-keys
   (testing "Names and file extensions are unambiguous"
     (is (empty? (registry/duplicate-name-keys)))
