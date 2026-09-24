@@ -131,10 +131,40 @@
             :value label})
          used-values)))
 
+(defn- nonempty-string
+  [value]
+  (when (and (string? value) (not (string/blank? value)))
+    value))
+
+(defn- property-display-title
+  "Prefer a property's :block/title over the random suffix in its :db/ident."
+  [ident entity]
+  (or (nonempty-string (:block/title (built-in-property ident)))
+      (nonempty-string (:block/title entity))
+      (when (or (keyword? ident) (symbol? ident))
+        (name ident))
+      (str ident)))
+
+(defn- clause-property-ident
+  [value]
+  (cond
+    (qualified-keyword? value) value
+    (and (symbol? value)
+         (qualified-keyword? (keyword value)))
+    (keyword value)))
+
+(hsx/defc loaded-property-title
+  [ident]
+  (property-display-title
+   ident
+   (db-hooks/use-block (common-uuid/gen-uuid :db-ident-block-uuid ident))))
+
 (defn- property-title
   [ident]
-  (or (:block/title (built-in-property ident))
-      (name ident)))
+  (or (nonempty-string (:block/title (built-in-property ident)))
+      (when (keyword? ident)
+        (loaded-property-title ident))
+      (property-display-title ident nil)))
 
 (hsx/defc datepicker
   [id placeholder {:keys [on-select]}]
@@ -453,19 +483,20 @@
                                (second (second clause))))]
 
       (contains? #{:property :private-property} (keyword f))
-      [:span (if (qualified-keyword? (second clause))
-               (property-title (second clause))
-               (some-> (second clause) name))
-       ": "
-       (cond
-         (and (vector? (last clause)) (= :page-ref (first (last clause))))
-         (page-title (second (last clause)))
+      (let [property-ident (clause-property-ident (second clause))]
+        [:span (if property-ident
+                 (property-title property-ident)
+                 (some-> (second clause) name))
+         ": "
+         (cond
+           (and (vector? (last clause)) (= :page-ref (first (last clause))))
+           (page-title (second (last clause)))
 
-         (= 2 (count clause))
-         (t :query.builder/all-values-label)
+           (= 2 (count clause))
+           (t :query.builder/all-values-label)
 
-         :else
-         (page-title (last clause)))]
+           :else
+           (page-title (last clause)))])
 
       ;; between timestamp start (optional end)
       (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
@@ -485,7 +516,7 @@
                (= k :block/updated-at)
                (t :query.builder/updated-label)
                :else
-               (property-title k))
+               (property-display-title k nil))
              " " start
              (when end
                (str " ~ " end))))
