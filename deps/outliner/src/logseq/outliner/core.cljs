@@ -130,6 +130,20 @@
         (:db/id parent)))
     (:db/id (:block/page block))))
 
+(defn- live-insert-source-page-eids
+  "Identity-preserving inserts can reparent a live block. Stamp the pages that
+  lose those blocks, excluding the destination page."
+  [db blocks dest-page-eid]
+  (into []
+        (comp
+         (keep (fn [block]
+                 (when-let [uuid' (:block/uuid block)]
+                   (when-let [live (d/entity db [:block/uuid uuid'])]
+                     (container-page-eid live)))))
+         (remove #{dest-page-eid})
+         (distinct))
+        blocks))
+
 (defn- update-page-when-save-block
   [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
@@ -1037,12 +1051,15 @@
                                                       (:db/ident (d/entity db (:db/id restore-from-property)))
                                                       [:block/uuid new-id]]]))
                                                 top-level-blocks)))
-                 page-updated-tx (page-updated-at-tx (get-target-block-page target-block sibling?))
+                 dest-page-eid (get-target-block-page target-block sibling?)
+                 page-updated-txs (keep page-updated-at-tx
+                                        (cons dest-page-eid
+                                              (live-insert-source-page-eids db blocks' dest-page-eid)))
                  full-tx (common-util/concat-without-nil page-txs
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
                                                          property-values-tx
-                                                         (when page-updated-tx [page-updated-tx]))
+                                                         page-updated-txs)
                 ;; Replace entities with eid because Datascript doesn't support entity transaction
                  full-tx' (walk/prewalk
                            (fn [f]

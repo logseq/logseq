@@ -113,6 +113,32 @@
         (is (= before-moved (page-updated-at conn alpha))
             "Relocating a page does not rewrite that page's own :block/updated-at")))))
 
+(deftest page-updated-at-bumps-source-page-on-keep-uuid-reparent
+  (testing "keep-uuid insert of a live block stamps the source and destination pages"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "moved"}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "anchor"}]}])
+          source (db-test/find-page-by-title @conn "source")
+          dest (db-test/find-page-by-title @conn "dest")
+          moved (db-test/find-block-by-content @conn "moved")
+          dest-anchor (db-test/find-block-by-content @conn "anchor")
+          before-src (reset-page-updated-at! conn source)
+          before-dest (reset-page-updated-at! conn dest)]
+      (outliner-core/insert-blocks!
+       conn
+       [moved]
+       dest-anchor
+       {:sibling? true
+        :keep-uuid? true})
+      (is (= (:db/id dest)
+             (:db/id (:block/page (d/entity @conn (:db/id moved))))))
+      (is (> (page-updated-at conn source) before-src)
+          "Reparenting a live block must bump the source page :block/updated-at")
+      (is (> (page-updated-at conn dest) before-dest)
+          "Reparenting a live block must bump the destination page :block/updated-at"))))
+
 (deftest page-updated-at-bumps-on-child-delete
   (testing "deleting a child block bumps the page updated-at"
     (let [conn (db-test/create-conn-with-blocks
