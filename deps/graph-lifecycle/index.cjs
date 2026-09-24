@@ -293,10 +293,19 @@ function validateRegistration(ctx, current, record) {
 }
 function readRuntime(ctx, record) {
   const file = runtimeFile(ctx, record.ticket);
-  const runtime = readJSON(file);
-  if (fs.existsSync(file) && (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)))
+  let runtime;
+  try {
+    runtime = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    // One read separates a missing file from malformed content. A later
+    // existsSync check treats a file published between the two calls as corrupt.
+    if (error.code === 'ENOENT') return null;
+    if (error instanceof SyntaxError) fail('Invalid worker runtime metadata');
+    throw error;
+  }
+  if (!runtime || typeof runtime !== 'object' || Array.isArray(runtime))
     fail('Invalid worker runtime metadata');
-  if (runtime && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
+  if (Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
     fail('Worker runtime identity differs from registration');
   return runtime;
 }
