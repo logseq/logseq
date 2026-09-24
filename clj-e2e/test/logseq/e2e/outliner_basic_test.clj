@@ -135,6 +135,7 @@
     (b/delete-blocks)                        ; delete b4
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
     (b/delete-blocks)
+    (util/wait-editor-visible)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
@@ -143,6 +144,7 @@
     (b/new-blocks ["b1" "b2" "b3"])
     (k/arrow-up)
     (k/delete)
+    (util/wait-editor-visible)
     (is (= "b2b3" (util/get-edit-content)))
     (is (= 2 (util/page-blocks-count)))))
 
