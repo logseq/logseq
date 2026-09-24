@@ -2915,9 +2915,21 @@ async function main() {
   }
 
   for (const client of clients) {
-    await waitForSyncSettled(client.opts, { op: "final-sync-settle", client: client.opts.clientName }, true);
-    await validateClientChecksum(client);
-    await validateClientGraph(client, "final");
+    let settleError = null;
+    try {
+      await waitForSyncSettled(client.opts, { op: "final-sync-settle", client: client.opts.clientName }, true);
+    } catch (error) {
+      settleError = error;
+    }
+    await validateClientChecksum(client).catch((error) => {
+      settleError = settleError || error;
+    });
+    await validateClientGraph(client, "final").catch((error) => {
+      settleError = settleError || error;
+    });
+    if (settleError) {
+      throw settleError;
+    }
   }
 
   logEvent(opts, {
