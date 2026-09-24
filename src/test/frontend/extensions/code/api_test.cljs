@@ -156,25 +156,32 @@
 (deftest cm6-enhancers-cannot-register-unresolvable-language-descriptors
   ;; native/legacy descriptors only carry package metadata for the statically
   ;; generated built-in table — they would register successfully but install
-  ;; no parser at runtime.
-  (let [context {:editor-id "editor-1"
-                 :view #js {}
-                 :*state (atom {:plugin-extensions {}
-                                :plugin-languages {}})}]
-    (doseq [source ["legacy" "native" "nextjournal"]]
-      (is (thrown? js/Error
-                   (code-editor-view/apply-enhancers!
-                    context
-                    [{:key :plugin-a
-                      :enhancer (fn [^js payload]
-                                  ((.-registerLanguage payload)
-                                   #js {:id "racket"
-                                        :names #js ["racket"]
-                                        :source source
-                                        :package "@codemirror/legacy-modes"
-                                        :entry "scheme"}))}]))
-          (str source " descriptors cannot be resolved at runtime")))
-    (is (empty? (:plugin-languages @(:*state context))))))
+  ;; no parser at runtime. The rejection is reported asynchronously so one
+  ;; faulty enhancer cannot abort the host editor mount.
+  (async done
+         (let [context {:editor-id "editor-1"
+                        :view #js {}
+                        :*state (atom {:plugin-extensions {}
+                                       :plugin-languages {}})}]
+           (doseq [source ["legacy" "native" "nextjournal"]]
+             (code-editor-view/apply-enhancers!
+              context
+              [{:key :plugin-a
+                :enhancer (fn [^js payload]
+                            ((.-registerLanguage payload)
+                             #js {:id "racket"
+                                  :names #js ["racket"]
+                                  :source source
+                                  :package "@codemirror/legacy-modes"
+                                  :entry "scheme"}))}]))
+           (-> (js/Promise.resolve nil)
+               (.then (fn [_] (js/Promise.resolve nil)))
+               (.then (fn [_]
+                        (is (empty? (:plugin-languages @(:*state context))))
+                        (done)))
+               (.catch (fn [err]
+                         (is (nil? err) "enhancer chain rejected")
+                         (done)))))))
 
 (deftest cm6-plugin-language-descriptors-keep-opaque-support-and-load
   (let [support #js {:opaque "language-support-instance"}
@@ -199,18 +206,8 @@
           "opaque support instance survives normalization untouched")
       (is (identical? load (:load descriptor))))
     (is (thrown? js/Error
-                 ((fn []
-                    (code-editor-view/apply-enhancers!
-                     {:editor-id "editor-1"
-                      :view #js {}
-                      :*state (atom {:plugin-extensions {}
-                                     :plugin-languages {}})}
-                     [{:key :plugin-b
-                       :enhancer (fn [^js payload]
-                                   ((.-registerLanguage payload)
-                                    #js {:id "badlang"
-                                         :names #js ["badlang"]
-                                         :source "plugin"}))}]))))
+                 (code-editor-view/assert-registerable-language!
+                  {:id :badlang :names #{"badlang"} :source :plugin}))
         "plugin source requires :support or :load")))
 
 (deftest registering-the-requested-language-re-resolves-the-editor

@@ -422,20 +422,25 @@
         (.dispatch view #js {:effects (.of (.-appendConfig StateEffect) extension)}))))
   context)
 
+(defn assert-registerable-language!
+  "Validates a normalized plugin language descriptor. Registered languages
+   must resolve a LanguageSupport at runtime — native/legacy descriptors
+   only carry package metadata for the statically generated built-in table."
+  [descriptor]
+  (when-not (language-registry/valid-language-descriptor? descriptor)
+    (throw (ex-info "Invalid CodeMirror 6 language descriptor"
+                    {:descriptor descriptor})))
+  (when-not (or (= :plain-text (:source descriptor))
+                (:support descriptor)
+                (:load descriptor))
+    (throw (ex-info "Plugin language descriptors must provide :support or :load"
+                    {:descriptor descriptor})))
+  descriptor)
+
 (defn- register-language!
   [context descriptor]
   (let [descriptor (api/normalize-language-descriptor descriptor)]
-    (when-not (language-registry/valid-language-descriptor? descriptor)
-      (throw (ex-info "Invalid CodeMirror 6 language descriptor"
-                      {:descriptor descriptor})))
-    ;; Registered languages must resolve a LanguageSupport at runtime —
-    ;; native/legacy descriptors only carry package metadata for the
-    ;; statically generated built-in table.
-    (when-not (or (= :plain-text (:source descriptor))
-                  (:support descriptor)
-                  (:load descriptor))
-      (throw (ex-info "Plugin language descriptors must provide :support or :load"
-                      {:descriptor descriptor})))
+    (assert-registerable-language! descriptor)
     (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor)
     ;; The fence language was resolved before enhancers ran; if this
     ;; registration now matches the requested name, re-resolve it.
@@ -474,7 +479,12 @@
 
 (defn- apply-enhancer!
   [key enhancer payload]
-  (let [result (enhancer payload)]
+  ;; A faulty plugin must not abort the host editor mount: fold synchronous
+  ;; throws into the same logged rejection path as async failures.
+  (let [result (try
+                 (enhancer payload)
+                 (catch :default e
+                   (js/Promise.reject e)))]
     ;; Promise.resolve assimilates thenables from the plugin iframe realm,
     ;; which `instanceof` would not recognize.
     (-> (js/Promise.resolve result)
