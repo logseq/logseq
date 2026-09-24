@@ -1276,6 +1276,31 @@
           (:query-result :all-pages) true
           false))))
 
+(defn property-objects-delete-needs-confirm?
+  "Property-page table trash retracts the property from pages and deletes
+   non-page blocks. Both are destructive, so the user must confirm first.
+   Built-in property pages never retract their values, so a page-only
+   selection there has nothing to confirm."
+  [view-parent view-feature-type pages blocks]
+  (boolean
+   (and (= view-feature-type :property-objects)
+        (or (seq blocks)
+            (and (seq pages)
+                 (not (:logseq.property/built-in? view-parent)))))))
+
+(defn- confirm-property-objects-delete!
+  [selected-rows]
+  (shui/dialog-confirm!
+   {:id :property-objects-delete
+    :title (t :view.table/delete-confirm-title)
+    :content [:ol.px-2
+              (for [row selected-rows]
+                ^{:key (or (:db/id row) (:block/uuid row))}
+                [:li (or (:block/title row) "")])]
+    :outside-cancel? true
+    :cancel-label (t :ui/cancel)
+    :ok-label (t :ui/confirm)}))
+
 (defn- on-delete-rows
   [view-parent view-feature-type table selected-ids]
   (p/let [results (db-async/<get-blocks (state/get-current-repo) selected-ids {:children? false})
@@ -1287,6 +1312,7 @@
           {:keys [set-row-selection!]} (:data-fns table)
           clear-selection! #(set-row-selection! {})
           confirm-pages? (delete-pages-needs-confirm? view-parent view-feature-type pages)
+          confirm-property-objects? (property-objects-delete-needs-confirm? view-parent view-feature-type pages blocks)
           ;; Everything that is not a page deletion. Held in a closure so that it can be
           ;; deferred until after confirmation instead of running straight away.
           delete-rest!
@@ -1301,7 +1327,8 @@
                  (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
                    (when (seq tx-data)
                      (outliner-op/transact! tx-data {:outliner-op :save-block})))))))]
-      (if confirm-pages?
+      (cond
+        confirm-pages?
         ;; Nothing at all is deleted until the user confirms. batch-delete-dialog invokes this
         ;; callback only from its "Yes" handler, so Cancel leaves the pages AND any blocks in
         ;; the same selection untouched.
@@ -1310,6 +1337,20 @@
                              (p/do!
                               (delete-rest!)
                               (clear-selection!)))])
+
+        confirm-property-objects?
+        ;; Same confirm-before-mutate gate as All Pages / tag tables, but the
+        ;; property-page trash does not delete pages: it retracts the property
+        ;; and deletes non-page blocks. Reusing :page/show-delete-dialog here
+        ;; would permanently delete those pages.
+        (-> (confirm-property-objects-delete! selected-rows)
+            (p/then (fn []
+                      (p/do!
+                       (delete-rest!)
+                       (clear-selection!))))
+            (p/catch (fn [_])))
+
+        :else
         (p/do!
          (delete-rest!)
          (when-not (and (= view-feature-type :property-objects)

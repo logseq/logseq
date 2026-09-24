@@ -1970,6 +1970,7 @@
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
  :view.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))
+ :view.table/delete-confirm-title "Are you sure you want to delete the selected nodes?"
  :view.table/delete-sort "Delete sort"
  :view.table/descending "Descending"
  :view.table/drag-to-reorder "Drag && Drop to reorder"

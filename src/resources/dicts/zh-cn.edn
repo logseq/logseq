@@ -1970,6 +1970,7 @@
  :view.table/ascending "升序"
  :view.table/columns-visibility "列可见性"
  :view.table/default-title "{1} 个节点"
+ :view.table/delete-confirm-title "确认要删除所选节点吗？"
  :view.table/delete-sort "删除排序"
  :view.table/descending "降序"
  :view.table/drag-to-reorder "拖放以重新排序"
