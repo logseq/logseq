@@ -1052,11 +1052,11 @@ let title_references ~block_refs title =
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
                           | Some "Block_ref", Some uuid ->
-                              (* Clean ((uuid)) titles were already normalized
-                                 to [[uuid]] by markdown_blocks; a verbatim
-                                 ((uuid)) here means an ambiguous title (the
-                                 uuid also appears inside code). --content
-                                 keeps it as literal text either way. *)
+                              (* markdown_blocks already rewrote outside-code
+                                 ((uuid)) occurrences to [[uuid]]; a verbatim
+                                 one reaching here is a corner the code
+                                 scanner disagreed with mldoc on. --content
+                                 keeps the literal spelling, no ref. *)
                               if
                                 block_refs && Cli_primitive.is_uuid_string uuid
                               then

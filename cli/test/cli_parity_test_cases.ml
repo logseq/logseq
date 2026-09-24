@@ -3930,12 +3930,12 @@ let () =
         "real [[bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb]] code `((cccccccc-cccc-4ccc-8ccc-cccccccccccc))`"
         (expect_some "block title" (Vec.nth parsed 0).Block.title);
       let parsed =
-        expect_ok "ambiguous ref kept"
+        expect_ok "real ref beside code"
           (Markdown_blocks.of_markdown
              "- real ((dddddddd-dddd-4ddd-8ddd-dddddddddddd)) code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`")
       in
-      expect_equal "ambiguous verbatim"
-        "real ((dddddddd-dddd-4ddd-8ddd-dddddddddddd)) code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`"
+      expect_equal "only real ref normalized"
+        "real [[dddddddd-dddd-4ddd-8ddd-dddddddddddd]] code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`"
         (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
   test "CLI parity add collect created block uuids depth-first and unique"
