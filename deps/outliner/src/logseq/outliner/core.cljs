@@ -115,10 +115,12 @@
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
 (defn- page-updated-at-tx
-  [page-eid]
-  (when page-eid
-    {:db/id page-eid
-     :block/updated-at (common-util/time-ms)}))
+  [db page-eid]
+  (when-let [page (when page-eid (d/entity db page-eid))]
+    (cond-> {:db/id page-eid
+             :block/updated-at (common-util/time-ms)}
+      (not (:block/created-at page))
+      (assoc :block/created-at (common-util/time-ms)))))
 
 (defn- container-page-eid
   "Page-like entities (pages, tags, properties) are contained via :block/parent;
@@ -145,11 +147,9 @@
         blocks))
 
 (defn- update-page-when-save-block
-  [txs-state block-entity]
+  [db txs-state block-entity]
   (when-let [e (:block/page block-entity)]
-    (let [m' (cond-> (page-updated-at-tx (:db/id e))
-               (not (:block/created-at e))
-               (assoc :block/created-at (common-util/time-ms)))]
+    (when-let [m' (page-updated-at-tx db (:db/id e))]
       (swap! txs-state conj m'))))
 
 (defn- remove-orphaned-refs-when-save
@@ -453,7 +453,7 @@
 
         ;; Update block's page attributes
         (when-not collapse-or-expand?
-          (update-page-when-save-block *txs-state block-entity))
+          (update-page-when-save-block db *txs-state block-entity))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save db *txs-state block-entity m)))
@@ -1052,7 +1052,7 @@
                                                       [:block/uuid new-id]]]))
                                                 top-level-blocks)))
                  dest-page-eid (get-target-block-page target-block sibling?)
-                 page-updated-txs (keep page-updated-at-tx
+                 page-updated-txs (keep #(page-updated-at-tx db %)
                                         (cons dest-page-eid
                                               (live-insert-source-page-eids db blocks' dest-page-eid)))
                  full-tx (common-util/concat-without-nil page-txs
@@ -1211,7 +1211,7 @@
                (into [] (comp (keep container-page-eid)
                               (remove deleted-ids)
                               (distinct)
-                              (keep page-updated-at-tx))
+                              (keep #(page-updated-at-tx db %)))
                      top-level-blocks)))))
     {:tx-data @txs-state}))
 
@@ -1287,7 +1287,7 @@
             block-from-property (:logseq.property/created-from-property block)
             property-tx (move-block-property-tx block target-block sibling?
                                                block-from-property restore-from-property)
-            page-updated-txs (keep page-updated-at-tx
+            page-updated-txs (keep #(page-updated-at-tx db %)
                                    (distinct [(container-page-eid block) target-page]))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx page-updated-txs)))))
 
