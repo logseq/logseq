@@ -87,4 +87,28 @@
       (is (= (:db/id first-block)
              (:db/id (:block/parent (db-test/find-block-by-content @conn "second")))))
       (is (> (page-updated-at conn page) before)
-          "move-blocks via apply-ops must bump the page :block/updated-at"))))
+          "move-blocks via apply-ops must bump the page :block/updated-at")))
+
+  (testing "moving a page between parent pages bumps both parents"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Projects"}}
+                 {:page {:block/title "Alpha"}}
+                 {:page {:block/title "Archive"}}])
+          projects (db-test/find-page-by-title @conn "Projects")
+          alpha (db-test/find-page-by-title @conn "Alpha")
+          archive (db-test/find-page-by-title @conn "Archive")]
+      (outliner-core/move-blocks! conn [alpha] projects {:sibling? false})
+      (is (= (:db/id projects)
+             (:db/id (:block/parent (d/entity @conn (:db/id alpha))))))
+      (let [before-src (reset-page-updated-at! conn projects)
+            before-dest (reset-page-updated-at! conn archive)
+            before-moved (reset-page-updated-at! conn alpha)]
+        (outliner-core/move-blocks! conn [alpha] archive {:sibling? false})
+        (is (= (:db/id archive)
+               (:db/id (:block/parent (d/entity @conn (:db/id alpha))))))
+        (is (> (page-updated-at conn projects) before-src)
+            "Removing a nested page must bump the former parent page :block/updated-at")
+        (is (> (page-updated-at conn archive) before-dest)
+            "Adding a nested page must bump the destination page :block/updated-at")
+        (is (= before-moved (page-updated-at conn alpha))
+            "Relocating a page does not rewrite that page's own :block/updated-at")))))

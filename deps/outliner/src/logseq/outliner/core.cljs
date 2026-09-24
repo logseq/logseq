@@ -120,6 +120,15 @@
     {:db/id page-eid
      :block/updated-at (common-util/time-ms)}))
 
+(defn- source-page-eid-for-move
+  "Pages are not owned via :block/page; their previous parent page is :block/parent."
+  [block]
+  (if (ldb/page? block)
+    (let [parent (:block/parent block)]
+      (when (and parent (ldb/page? parent))
+        (:db/id parent)))
+    (:db/id (:block/page block))))
+
 (defn- update-page-when-save-block
   [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
@@ -1252,7 +1261,7 @@
             property-tx (move-block-property-tx block target-block sibling?
                                                block-from-property restore-from-property)
             page-updated-txs (keep page-updated-at-tx
-                                   (distinct [first-block-page target-page]))]
+                                   (distinct [(source-page-eid-for-move block) target-page]))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx page-updated-txs)))))
 
 (defn- transact-move-blocks!
