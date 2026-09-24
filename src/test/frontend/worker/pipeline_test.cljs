@@ -4,6 +4,7 @@
             [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -132,6 +133,108 @@
 (defn- revision
   [db entity]
   (:block/tx-id (d/entity db (:db/id entity))))
+
+(defn- page-ref-titles
+  [page]
+  (set (map :block/title (:block/_refs page))))
+
+(defn- find-host-ref-block
+  [db]
+  (db-test/find-block-by-content db #".*1267-ref-block.*"))
+
+(deftest save-block-commit-creates-page-from-incomplete-nested-ref-test
+  (testing "commit-path parse of mid-edit [[PageA [[PageB]] creates a merged page (db-test#1267)"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "PageA"}}
+                 {:page {:block/title "PageB"}}
+                 {:page {:block/title "host"}
+                  :blocks [{:block/title "1267-ref-block [[PageA]] [[PageB]]"}]}])
+          block (find-host-ref-block @conn)
+          page-a (db-test/find-page-by-title @conn "PageA")
+          parsed (db-editor-handler/wrap-parse-block
+                  {:block/uuid (:block/uuid block)
+                   :block/title "1267-ref-block [[PageA [[PageB]]"})]
+      (is (some? block))
+      (is (contains? (page-ref-titles page-a) (:block/title block)))
+      (with-transact-pipeline
+        #(outliner-op/apply-ops!
+          conn
+          [[:save-block [(cond-> {:db/id (:db/id block)
+                                  :block/uuid (:block/uuid block)
+                                  :block/title (:block/title parsed)}
+                           (seq (:block/refs parsed))
+                           (assoc :block/refs (:block/refs parsed)))
+                         {}]]]
+          {:outliner-op :save-block}))
+      (let [merged (or (db-test/find-page-by-title @conn "PageA [[PageB]]")
+                       (db-test/find-page-by-title @conn "PageA [[PageB"))
+            page-a' (d/entity @conn (:db/id page-a))
+            block' (d/entity @conn (:db/id block))]
+        (is (some? merged)
+            "Current save path creates the accidental merged page")
+        (is (not (contains? (set (map :db/id (:block/refs block')))
+                            (:db/id page-a')))
+            "PageA is no longer a ref of the edited block")
+        (is (not (contains? (page-ref-titles page-a') (:block/title block')))
+            "Linked refs for PageA drop the block")))))
+
+(deftest save-block-draft-keeps-refs-for-incomplete-page-ref-test
+  (testing "auto-save of mid-edit [[PageA [[PageB]] keeps prior refs and does not create a page"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "PageA"}}
+                 {:page {:block/title "PageB"}}
+                 {:page {:block/title "host"}
+                  :blocks [{:block/title "1267-ref-block [[PageA]] [[PageB]]"}]}])
+          block (find-host-ref-block @conn)
+          page-a (db-test/find-page-by-title @conn "PageA")
+          page-b (db-test/find-page-by-title @conn "PageB")
+          draft-title "1267-ref-block [[PageA [[PageB]]"]
+      (is (contains? (set (map :db/id (:block/refs block))) (:db/id page-a)))
+      (is (contains? (set (map :db/id (:block/refs block))) (:db/id page-b)))
+      (with-transact-pipeline
+        #(outliner-op/apply-ops!
+          conn
+          [[:save-block [{:db/id (:db/id block)
+                          :block/uuid (:block/uuid block)
+                          :block/title draft-title}
+                         {:skip-ref-rebuild? true}]]]
+          {:outliner-op :save-block
+           :skip-ref-rebuild? true}))
+      (let [block' (d/entity @conn (:db/id block))
+            page-a' (d/entity @conn (:db/id page-a))
+            page-b' (d/entity @conn (:db/id page-b))
+            merged (or (db-test/find-page-by-title @conn "PageA [[PageB]]")
+                       (db-test/find-page-by-title @conn "PageA [[PageB"))]
+        (is (nil? merged)
+            "Draft save must not create a page from a half-deleted link")
+        (is (= draft-title (:block/title block'))
+            "Draft save still persists the in-progress title")
+        (is (contains? (set (map :db/id (:block/refs block'))) (:db/id page-a')))
+        (is (contains? (set (map :db/id (:block/refs block'))) (:db/id page-b')))
+        (is (contains? (set (map :db/id (:block/_refs page-a'))) (:db/id block'))
+            "Linked refs keep the prior PageA ref identity while editing"))
+      (let [parsed (db-editor-handler/wrap-parse-block
+                    {:block/uuid (:block/uuid block)
+                     :block/title "1267-ref-block [[PageA]] [[PageB]]"})]
+        (with-transact-pipeline
+          #(outliner-op/apply-ops!
+            conn
+            [[:save-block [(cond-> {:db/id (:db/id block)
+                                    :block/uuid (:block/uuid block)
+                                    :block/title (:block/title parsed)}
+                             (seq (:block/refs parsed))
+                             (assoc :block/refs (:block/refs parsed)))
+                           {}]]]
+            {:outliner-op :save-block}))
+        (let [block' (d/entity @conn (:db/id block))
+              page-a' (d/entity @conn (:db/id page-a))
+              page-b' (d/entity @conn (:db/id page-b))
+              merged (or (db-test/find-page-by-title @conn "PageA [[PageB]]")
+                         (db-test/find-page-by-title @conn "PageA [[PageB"))]
+          (is (nil? merged)
+              "Commit of the restored links must not keep a mid-edit page")
+          (is (contains? (set (map :db/id (:block/refs block'))) (:db/id page-a')))
+          (is (contains? (set (map :db/id (:block/refs block'))) (:db/id page-b'))))))))
 
 (deftest nested-insert-keeps-parent-revision-test
   (let [conn (db-test/create-conn-with-blocks

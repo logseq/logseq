@@ -35,7 +35,8 @@
   (let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
-          (:undo? tx-meta) (:redo? tx-meta)))))
+          (:undo? tx-meta) (:redo? tx-meta)
+          (:skip-ref-rebuild? tx-meta)))))
 
 (defn- imported-data?
   [tx-meta]

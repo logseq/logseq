@@ -354,7 +354,7 @@
 
 (extend-type Entity
   otree/INode
-  (-save [this *txs-state db {:keys [retract-attributes? retract-attributes outliner-op]
+  (-save [this *txs-state db {:keys [retract-attributes? retract-attributes outliner-op skip-ref-rebuild?]
                               :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
@@ -362,10 +362,13 @@
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
           data' (remove-disallowed-inline-classes db data)
-          {:keys [block page-txs]} (resolve-page-refs db
-                                                       (dissoc data' :block/children :block/meta :block/unordered
-                                                               :block.temp/ast-title :block.temp/ast-body :block/level
-                                                               :block.temp/load-status :block.temp/has-children?))
+          transient-attrs [:block/children :block/meta :block/unordered
+                           :block.temp/ast-title :block.temp/ast-body :block/level
+                           :block.temp/load-status :block.temp/has-children?]
+          {:keys [block page-txs]} (if skip-ref-rebuild?
+                                     {:block (apply dissoc data' (conj transient-attrs :block/refs :block/tags))
+                                      :page-txs nil}
+                                     (resolve-page-refs db (apply dissoc data' transient-attrs)))
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (fix-tag-ids block db)
@@ -427,7 +430,9 @@
         (when-not collapse-or-expand?
           (update-page-when-save-block *txs-state block-entity))
         ;; Remove orphaned refs from block
-        (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
+        (when (and (:block/title m)
+                   (not= (:block/title m) (:block/title block-entity))
+                   (not skip-ref-rebuild?))
           (remove-orphaned-refs-when-save db *txs-state block-entity m)))
 
       ;; handle others txs
@@ -438,7 +443,9 @@
         (swap! *txs-state conj
                (dissoc m :db/other-tx)))
 
-      (when (and (:block/tags block-entity) block-entity)
+      (when (and (not skip-ref-rebuild?)
+                 (:block/tags block-entity)
+                 block-entity)
         (let [;; delete tags when title changed
               tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)

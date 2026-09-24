@@ -107,18 +107,69 @@
   [block]
   (db-editor-handler/wrap-parse-block block))
 
+(defonce ^:private *blocks-pending-ref-rebuild (atom {}))
+
+(defn- mark-pending-ref-rebuild!
+  [block-uuid]
+  (when block-uuid
+    (swap! *blocks-pending-ref-rebuild update block-uuid
+           (fn [state]
+             (let [gen (inc (or (:gen state) 0))]
+               {:gen gen
+                :pending-gen gen})))))
+
+(defn- pending-ref-rebuild-gen
+  [block-uuid]
+  (:pending-gen (get @*blocks-pending-ref-rebuild block-uuid)))
+
+(defn- clear-pending-ref-rebuild!
+  [block-uuid expected-gen]
+  (when (and block-uuid expected-gen)
+    (swap! *blocks-pending-ref-rebuild update block-uuid
+           (fn [state]
+             (cond
+               (nil? state) state
+               (= expected-gen (:pending-gen state))
+               (dissoc state :pending-gen)
+               :else state)))))
+
+(defn- pending-ref-rebuild?
+  [block-uuid]
+  (some? (pending-ref-rebuild-gen block-uuid)))
+
+(defn- clear-pending-ref-rebuild-after-commit!
+  [result block-uuid commit-gen]
+  (if (p/promise? result)
+    (p/then result (fn [_]
+                     (clear-pending-ref-rebuild! block-uuid commit-gen)))
+    (clear-pending-ref-rebuild! block-uuid commit-gen))
+  result)
+
 (defn- save-block-inner!
   [block value opts]
-  (let [block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
+  (let [skip-ref-rebuild? (boolean (:skip-ref-rebuild? opts))
+        block-uuid (:block/uuid block)
+        commit-gen (when-not skip-ref-rebuild?
+                     (pending-ref-rebuild-gen block-uuid))
+        block (assoc (select-keys block [:block/uuid :logseq.property.node/display-type])
                      :block/title value)
-        block' (-> (wrap-parse-block block)
-                   ;; :block/uuid might be changed when backspace/delete
-                   ;; a block that has been refed
-                   (assoc :block/uuid (:block/uuid block)))
+        block' (if skip-ref-rebuild?
+                 block
+                 (-> (wrap-parse-block block)
+                     ;; :block/uuid might be changed when backspace/delete
+                     ;; a block that has been refed
+                     (assoc :block/uuid block-uuid)))
         opts' (assoc opts :outliner-op :save-block)]
-    (ui-outliner-tx/transact!
-     opts'
-     (outliner-save-block! block'))))
+    (when skip-ref-rebuild?
+      (mark-pending-ref-rebuild! block-uuid))
+    (let [result (ui-outliner-tx/transact!
+                  opts'
+                  (if skip-ref-rebuild?
+                    (outliner-save-block! block' :skip-ref-rebuild? true)
+                    (outliner-save-block! block')))]
+      (if commit-gen
+        (clear-pending-ref-rebuild-after-commit! result block-uuid commit-gen)
+        result))))
 
 (defn- latest-renderer-block
   [block]
@@ -157,11 +208,12 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys [force?]
+    {:keys [force? skip-ref-rebuild?]
      :as opts}]
    (let [block (latest-renderer-block block)
+         block-uuid (:block/uuid block)
          content (get @*pending-block-save-titles
-                      (:block/uuid block)
+                      block-uuid
                       (:block/title block))]
      (cond
        force?
@@ -169,8 +221,10 @@
 
        :else
        (when content
-         (let [content-changed? (not= (string/trim content) (string/trim value))]
-           (when content-changed?
+         (let [content-changed? (not= (string/trim content) (string/trim value))
+               rebuild-refs? (and (not skip-ref-rebuild?)
+                                  (pending-ref-rebuild? block-uuid))]
+           (when (or content-changed? rebuild-refs?)
              (save-block-with-pending-title! block value opts))))))))
 
 (defn- compute-fst-snd-block-text
@@ -1945,8 +1999,8 @@
                  (when (and (state/input-idle? repo :diff 450)
                           ;; don't auto-save block if it has tags
                             (not (re-find #"#\S+" value)))
-                   ; don't auto-save for page's properties block
-                   (save-current-block! {:skip-properties? true})))
+                   ;; Persist title only; parse refs/pages when the edit commits.
+                   (save-current-block! {:skip-ref-rebuild? true})))
                450))
       ;; Command / page-search triggers for the character just typed. This ran
       ;; in an effect of the editor box, which re-rendered on every keystroke.
