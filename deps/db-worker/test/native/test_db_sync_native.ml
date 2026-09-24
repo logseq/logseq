@@ -619,16 +619,80 @@ let apply_ops (conn : conn) (ops : Wire.t list) (opts : Wire.t) : Wire.t =
        (List.map (normalize_op_block_ids (Datascript.db conn)) ops))
     opts
 
+(* cljs sync-handler delete-outliner-ops *)
+let delete_outliner_ops = [ "delete-blocks"; "delete-page" ]
+
+(* cljs sync-handler large-tx-min-items / large-tx-max-chunk-items *)
+let large_tx_min_items = 500
+let large_tx_max_chunk_items = 500
+
+(* cljs sync-handler/reduce-ordered-tx-chunks — tempid-dependency groups
+   are kept inside one chunk; chunks are capped at large-tx-max-chunk-items *)
+let reduce_ordered_tx_chunks (db : db) (f : Wire.t list -> unit)
+    (tx_data : Wire.t list) : unit =
+  let item_count = List.length tx_data in
+  let range_by_start = Sync_apply.upload_tempid_range_by_start db tx_data in
+  let rec loop idx chunk =
+    if idx < item_count then begin
+      let next_idx, group =
+        Sync_apply.next_upload_tx_group tx_data range_by_start idx
+      in
+      let next_count = List.length chunk + List.length group in
+      if chunk <> [] && next_count > large_tx_max_chunk_items then begin
+        f chunk;
+        loop idx []
+      end
+      else loop next_idx (chunk @ group)
+    end
+    else if chunk <> [] then f chunk
+  in
+  loop 0 []
+
 (* f6fc6f78ac: cljs (d/with @server-conn tx-data) +
    #'sync-handler/apply-tx-entry! — the D1 sync-handler is not ported;
-   the faithful client-side equivalent validates the serialized tx-data
-   against the live server db and applies it straight onto server_conn *)
+   this mirrors it: dry-run the raw lookups, sanitize-tx-entry (which
+   always appends missing-retract-eids so every apply is descendant-closed
+   and cannot leave orphans mid-tree), then transact — chunked through
+   reduce-ordered-tx-chunks for large txs *)
 let server_apply_entry (server_conn : conn) (entry : Wire.t) : unit =
   let db = Datascript.db server_conn in
   match Wire.get "tx-data" entry with
   | Some tx_data ->
-      let ops = Db_transact.tx_ops_of_tx_data db (Wire.as_seq tx_data) in
-      ignore (Datascript.transact_conn server_conn ops)
+      let input_ops = Wire.as_seq tx_data in
+      let outliner_op =
+        match Wire.get "outliner-op" entry with
+        | Some (Wire.Keyword s) | Some (Wire.String s) -> s
+        | _ -> ""
+      in
+      (* cljs (d/with @server-conn tx-data) — validate raw lookups without
+         committing *)
+      ignore
+        (Datascript.db_with
+           (Db_transact.tx_ops_of_tx_data db input_ops) db);
+      (* cljs sanitize-tx-entry *)
+      let in_delete_ops = List.mem outliner_op delete_outliner_ops in
+      let sanitized =
+        List.map Ds_wire.value_of_transit input_ops
+        |> Db_sync_tx_sanitize.sanitize_tx db
+             ~drop_missing_retract_ops:(outliner_op = "fix" || in_delete_ops)
+             ~drop_ops_targeting_retracted_entities:in_delete_ops
+             ~retract_touched_descendants:in_delete_ops
+        |> List.map Ds_wire.transit_of_value
+      in
+      let tx_meta =
+        [ "op", Keyword "apply-client-tx" ]
+        @ (if outliner_op = "" then []
+           else [ "outliner-op", Keyword outliner_op ])
+      in
+      if sanitized <> [] then begin
+        if List.length sanitized >= large_tx_min_items then
+          reduce_ordered_tx_chunks db
+            (fun chunk ->
+               ignore (Db_transact.transact server_conn chunk tx_meta))
+            sanitized
+        else
+          ignore (Db_transact.transact server_conn sanitized tx_meta)
+      end
   | None -> ()
 
 (* cljs upload-pending-and-assert-converged! *)
@@ -669,10 +733,10 @@ let mk_client ?(graph_id = Some "graph-1") ?(ws : Sync_state.ws_endpoint option)
 
 (* cljs (let [remote-tx (:tx-data (ldb/transact! server-conn ops))]
           (sync-apply/apply-remote-tx! test-repo nil remote-tx)) —
-   transact on the server conn, then feed the produced datoms back to the
-   client through apply-remote-tx *)
+   worker transact on the server conn (pipeline runs), then feed the
+   produced datoms back to the client through apply-remote-tx *)
 let remote_tx_to_client (server_conn : conn) (ops : tx_op list) : unit =
-  let report = Datascript.transact_conn server_conn ops in
+  let report = Db_tx.transact server_conn ops in
   let remote_tx =
     Sync_apply.normalize_tx_data report.db_after report.db_before
       report.tx_data
@@ -11612,45 +11676,13 @@ let test_sync_conflict_clear () =
          = [ "other remote title" ]))
 
 (* f6fc6f78ac (deftest outliner-upload-chunks-preserve-entities-and-acknowledgment-test)
-   cljs rebinds sync-apply/max-upload-request-datoms (2 for delete, 15
-   for insert) to force chunking; the OCaml cap is a compile-time
-   constant, so the delete case uses a fixture large enough to exceed the
-   real 5000-datom cap. Chunking/ack/resend semantics are preserved. *)
+   cljs with-redefs sync-apply/max-upload-request-datoms (2 for delete,
+   15 for insert) — the OCaml cap is a ref for the same purpose. *)
 let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
   preserve_state (fun () ->
       List.iter
         (fun delete ->
-           let conn, ops, parent =
-             if delete then begin
-               let children =
-                 List.init 5500 (fun i ->
-                     { Db_test_util.default_block with
-                       b_title = Some (Printf.sprintf "del child %d" i) })
-               in
-               let conn =
-                 Db_test_util.create_conn_with_blocks
-                   ~pages_and_blocks:
-                     [ { Db_test_util.page =
-                           { Db_test_util.default_page with
-                             pg_title = Some "page" }
-                       ; blocks =
-                           [ { Db_test_util.default_block with
-                               b_title = Some "parent"
-                             ; b_children = children } ] } ]
-                   ()
-               in
-               ( conn
-               , new_client_ops_db ()
-               , Option.get
-                   (Db_test_util.find_block_by_content
-                      (Datascript.db conn) "parent") )
-             end
-             else
-               let conn, ops, parent, _c1, _c2, _c3 =
-                 setup_parent_child ()
-               in
-               (conn, ops, parent)
-           in
+           let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
            let parent_uuid = ent_block_uuid parent in
            (if delete then
               ignore
@@ -11685,7 +11717,14 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                                    [ "sibling?", Wire.Bool false
                                    ; "keep-uuid?", Wire.Bool true ] ] ]) ]
                     local_tx_meta);
-               let rec loop requests =
+               let prev_cap = !(Sync_apply.max_upload_request_datoms) in
+               Fun.protect
+                 ~finally:(fun () ->
+                    Sync_apply.max_upload_request_datoms := prev_cap)
+                 (fun () ->
+                    Sync_apply.max_upload_request_datoms :=
+                      (if delete then 2 else 15);
+                    let rec loop requests =
                  let pending = Sync_apply.pending_txs test_repo () in
                  let tx_entries, _drops, _drop_txs =
                    Sync_apply.prepare_upload_tx_entries ~repo:test_repo
@@ -11729,7 +11768,7 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                         loop (requests + 1)
                       end)
                in
-               loop 0))
+               loop 0)))
         [ false; true ])
 
 (* f6fc6f78ac (deftest additional-outliner-operations-upload-test) *)
@@ -12706,8 +12745,9 @@ let setup_template_text_property_state explicit_value_block
   , if with_reference then Some page_uuid else None )
 
 (* cljs assert-template-text-property *)
-let assert_template_text_property (db : db) inserted_uuid value_uuid
-    source_uuid text reference_uuid : unit =
+let assert_template_text_property ?(tag = "") (db : db) inserted_uuid
+    value_uuid source_uuid text reference_uuid : unit =
+  let check name v = check (tag ^ name) v in
   let copied = ent_by_block_uuid db inserted_uuid in
   let value_ent =
     Option.bind copied (fun c ->
@@ -12915,15 +12955,26 @@ let test_template_text_property_uploads_after_rebase_and_undo_redo () =
                                                 upload_pending_and_assert_converged
                                                   conn server_conn;
                                                 List.iter
-                                                  (fun db ->
+                                                  (fun (side, db) ->
                                                      assert_template_text_property
+                                                       ~tag:
+                                                         (Printf.sprintf
+                                                            "[ev=%b ref=%b nonempty=%b rebase=%b ur=%b edit=%b %s] "
+                                                            explicit_value_block
+                                                            with_reference
+                                                            nonempty_target
+                                                            rebase undo_redo
+                                                            edit_before_rebase
+                                                            side)
                                                        db inserted_uuid
                                                        value_uuid
                                                        template_3_uuid
                                                        property_text
                                                        reference_uuid)
-                                                  [ Datascript.db conn
-                                                  ; Datascript.db
+                                                  [ "client"
+                                                  , Datascript.db conn
+                                                  ; "server"
+                                                  , Datascript.db
                                                       server_conn ]))))
                              [ false; true ])
                         [ false; true ])
