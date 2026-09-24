@@ -793,6 +793,8 @@
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
 
+            (db-sync/reconcile-local-checksum! repo conn)
+
             (db-listener/listen-db-changes! repo conn)
 
             nil))))))

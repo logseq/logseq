@@ -39,15 +39,26 @@
       (fn [_db]
         (client-op/update-graph-uuid repo "graph-1")
         (client-op/update-local-tx repo 9)
-        (client-op/update-local-checksum repo "checksum-1")
+        (client-op/update-local-checksum repo "checksum-1" 9)
 
         (client-op/update-graph-uuid repo "graph-2")
         (client-op/update-local-tx repo 12)
-        (client-op/update-local-checksum repo "checksum-2")
+        (client-op/update-local-checksum repo "checksum-2" 12)
 
         (is (= "graph-2" (client-op/get-graph-uuid repo)))
         (is (= 12 (client-op/get-local-tx repo)))
-        (is (= "checksum-2" (client-op/get-local-checksum repo)))))))
+        (is (= "checksum-2" (client-op/get-local-checksum repo)))
+        (is (= 12 (client-op/get-local-checksum-covered-tx repo)))))))
+
+(deftest checksum-covered-tx-roundtrip-test
+  (let [repo "repo-checksum-covered-tx"]
+    (with-client-ops-db
+      repo
+      (fn [_db]
+        (is (nil? (client-op/get-local-checksum-covered-tx repo)))
+        (client-op/update-local-checksum repo "checksum-1" 41)
+        (is (= "checksum-1" (client-op/get-local-checksum repo)))
+        (is (= 41 (client-op/get-local-checksum-covered-tx repo)))))))
 
 (deftest sqlite-asset-ops-coalescing-test
   (let [repo "repo-asset"
