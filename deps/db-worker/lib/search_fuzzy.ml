@@ -477,11 +477,15 @@ let remove_accents (s : string) : string =
   let buf = Buffer.create len in
   let rec scan i =
     if i < len then begin
+      let matches_at (k : string) =
+        let klen = String.length k in
+        let rec eq j = j = klen || (s.[i + j] = k.[j] && eq (j + 1)) in
+        i + klen <= len && eq 0
+      in
       let rec try_keys = function
         | [] -> None
         | (k, rep) :: rest ->
-            let klen = String.length k in
-            if i + klen <= len && String.sub s i klen = k then Some (klen, rep)
+            if matches_at k then Some (String.length k, rep)
             else try_keys rest
       in
       match try_keys accent_map with

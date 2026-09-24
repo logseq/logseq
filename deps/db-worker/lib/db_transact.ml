@@ -644,27 +644,38 @@ let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
                    match eid_opt with
                    | None ->
                        if added then unresolved_entity_ref e else []
-                   | Some eid ->
-                   let v' =
+                   | Some eid -> (
                      match v with
                      (* cljs (and (ref? db a) (tempid? v)): a value tempid
-                        string resolves to its allocated eid — the entity's
-                        own add op runs earlier in the same tx, so its
-                        block/uuid or db/ident is already searchable *)
+                        string resolves through the tx's tempids map — the
+                        entity's own add op may land later in the same tx.
+                        Emitting the unresolved string as a raw datom value
+                        would both corrupt the ref and lose tempid tracking,
+                        so fall back to an op that keeps tempid semantics. *)
                      | Wire.String s when tx_ref_attr db attr -> (
                          match
                            ( Datascript.entid db "block/uuid" (Uuid s)
                            , Datascript.entid db "db/ident" (Keyword s) )
                          with
-                         | Some id, _ | _, Some id -> Ref id
-                         | _ -> String s)
-                     | Wire.Array _ | Wire.List _ | Wire.Keyword _ | Wire.Uuid _
-                       when tx_ref_attr db attr -> Ref (entid_strict db v)
-                     | _ -> Ds_wire.value_of_transit v
-                   in
-                   [ Raw_datom
-                       (Datascript.datom ~tx ~added ~e:eid ~a:attr ~v:v' ()) ])
-            ])
+                         | Some id, _ | _, Some id ->
+                           [ Raw_datom
+                               (Datascript.datom ~tx ~added ~e:eid ~a:attr
+                                  ~v:(Ref id) ()) ]
+                         | _ ->
+                           if added then
+                             [ Add (Entity_id eid, attr, String s) ]
+                           else
+                             [ Retract (Entity_id eid, attr, Some (String s)) ])
+                     | _ ->
+                       let v' =
+                         match v with
+                         | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                         | Wire.Uuid _
+                           when tx_ref_attr db attr -> Ref (entid_strict db v)
+                         | _ -> Ds_wire.value_of_transit v
+                       in
+                       [ Raw_datom
+                           (Datascript.datom ~tx ~added ~e:eid ~a:attr ~v:v' ()) ])) ])
   | _ -> None
 
 let tx_ops_of_tx_data (db : db) (tx_data : Wire.t list) : tx_op list =
@@ -716,7 +727,8 @@ let transact (conn : conn) (tx_data : Wire.t list) (tx_meta : tx_meta)
         if flags.Db_tx.skip_store then ("skip-store?", Bool true) :: m else m
       in
       let tx_ops = tx_ops_of_tx_data db tx_data in
-      Some (Db_tx.transact_sync conn tx_ops tx_meta)
+      let r = Db_tx.transact_sync conn tx_ops tx_meta in
+      Some r
 
 (* db.cljs batch-transact-with-temp-conn!. [f] receives the temp conn;
    datoms emitted by its transacts are collected and applied to [conn]

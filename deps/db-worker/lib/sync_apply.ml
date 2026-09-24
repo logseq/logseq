@@ -2247,6 +2247,11 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
       [ "repo", repo
       ; "pending-local-tx-count", string_of_int pending_count
       ; "has-db?", string_of_bool (conn <> None)
+      ; ( "local-tx"
+        , match local_tx with Some t -> string_of_int t | None -> "nil" )
+      ; ( "remote-tx"
+        , match remote_tx with Some t -> string_of_int t | None -> "nil" )
+      ; "inflight-count", string_of_int (List.length inflight)
       ; "ws-open?", string_of_bool ws_open_state
       ; "online?", string_of_bool online
       ; "upload-stopped?", string_of_bool upload_stopped_state ];

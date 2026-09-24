@@ -198,8 +198,8 @@ let send (ws : Sync_state.ws_endpoint) (message : Wire.t)
   if ws_open ws then
     match coerce_ws_client_message message with
     | Some coerced ->
-        Sync_state.ws_endpoint_send ws
-          (Json_codec.encode (normalize_tx_batch_ids coerced))
+        let encoded = Json_codec.encode (normalize_tx_batch_ids coerced) in
+        Sync_state.ws_endpoint_send ws encoded
     | None ->
         Worker_log.error "db-sync/ws-request-invalid"
           [ ("message", Json_codec.encode message) ];

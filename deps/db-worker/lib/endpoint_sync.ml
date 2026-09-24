@@ -238,11 +238,15 @@ let () =
 
 (* :thread-api/db-sync-start [repo] — db_core.cljs
    (def-thread-api :thread-api/db-sync-start [repo]
-     (p/let [_ (start-db! repo {:close-other-db? false})] nil)).
+     (if (db-sync-dbs-open? repo)
+       (db-sync/start! repo)
+       (p/do! (start-db! repo {:close-other-db? false})
+              (db-sync/start! repo)))).
    start-db! delegates to <create-or-open-db!; the cljs *master-client?
    guard has no worker-side counterpart here (no master-client concept),
    so this opens the db when not already open, same as create-or-open-db
-   with :close-other-db? false. *)
+   with :close-other-db? false — then db-sync/start! connects the ws
+   client. *)
 let () =
   Dispatcher.register "thread-api/db-sync-start" (fun args ->
       (match arg args 0 with

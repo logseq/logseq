@@ -13,19 +13,24 @@ module Idb_db = struct
   type store
   type request
   type idb_error
+  type event
 
   external indexed_db : idb Js.Undefined.t = "indexedDB"
     [@@mel.scope "globalThis"]
 
   external open_ : idb -> string -> int -> request = "open" [@@mel.send]
 
-  external set_onsuccess : request -> (request -> unit) -> unit = "onsuccess"
+  external event_target_request : event -> request = "target" [@@mel.get]
+
+  external event_target_tx : event -> tx = "target" [@@mel.get]
+
+  external set_onsuccess : request -> (event -> unit) -> unit = "onsuccess"
     [@@mel.set]
 
-  external set_onerror : request -> (request -> unit) -> unit = "onerror"
+  external set_onerror : request -> (event -> unit) -> unit = "onerror"
     [@@mel.set]
 
-  external set_onupgradeneeded : request -> (request -> unit) -> unit
+  external set_onupgradeneeded : request -> (event -> unit) -> unit
     = "onupgradeneeded" [@@mel.set]
 
   external req_error : request -> idb_error Js.Nullable.t = "error" [@@mel.get]
@@ -45,11 +50,14 @@ module Idb_db = struct
   external transaction : db -> string -> string -> tx = "transaction"
     [@@mel.send]
 
-  external set_tx_oncomplete : tx -> (tx -> unit) -> unit = "oncomplete"
+  external set_tx_oncomplete : tx -> (event -> unit) -> unit = "oncomplete"
     [@@mel.set]
 
-  external set_tx_onerror : tx -> (tx -> unit) -> unit = "onerror" [@@mel.set]
-  external set_tx_onabort : tx -> (tx -> unit) -> unit = "onabort" [@@mel.set]
+  external set_tx_onerror : tx -> (event -> unit) -> unit = "onerror"
+    [@@mel.set]
+
+  external set_tx_onabort : tx -> (event -> unit) -> unit = "onabort"
+    [@@mel.set]
   external tx_error : tx -> idb_error Js.Nullable.t = "error" [@@mel.get]
   external object_store : tx -> string -> store = "objectStore" [@@mel.send]
   external store_get : store -> string -> request = "get" [@@mel.send]
@@ -79,13 +87,21 @@ let db_task () =
                (Error (Failure "indexedDB is not available"))
          | Some idb ->
              let req = Idb_db.open_ idb "localforage" 2 in
-             Idb_db.set_onupgradeneeded req (fun r ->
-                 Idb_db.create_object_store (Idb_db.result_db r) "keyvaluepairs");
-             Idb_db.set_onsuccess req (fun r ->
-                 Db_worker_effect.wakeup resolver (Ok (Idb_db.result_db r)));
-             Idb_db.set_onerror req (fun r ->
+             Idb_db.set_onupgradeneeded req (fun event ->
+                 Idb_db.create_object_store
+                   (Idb_db.result_db (Idb_db.event_target_request event))
+                   "keyvaluepairs");
+             Idb_db.set_onsuccess req (fun event ->
                  Db_worker_effect.wakeup resolver
-                   (Error (Failure (error_message (Js.Nullable.toOption (Idb_db.req_error r)))))));
+                   (Ok (Idb_db.result_db (Idb_db.event_target_request event))));
+             Idb_db.set_onerror req (fun event ->
+                 Db_worker_effect.wakeup resolver
+                   (Error
+                      (Failure
+                         (error_message
+                            (Js.Nullable.toOption
+                               (Idb_db.req_error
+                                  (Idb_db.event_target_request event))))))));
         db_task_ref := Some task;
         task
   in
@@ -104,10 +120,15 @@ let with_store f =
       in
       let tx = Idb_db.transaction db "keyvaluepairs" "readwrite" in
       Idb_db.set_tx_oncomplete tx (fun _ -> finish (Ok ()));
-      Idb_db.set_tx_onerror tx (fun tx ->
-          finish (Error (Failure (error_message (Js.Nullable.toOption (Idb_db.tx_error tx))))));
-      Idb_db.set_tx_onabort tx (fun tx ->
-          finish (Error (Failure (error_message (Js.Nullable.toOption (Idb_db.tx_error tx))))));
+      let error_result event =
+        Error
+          (Failure
+             (error_message
+                (Js.Nullable.toOption
+                   (Idb_db.tx_error (Idb_db.event_target_tx event)))))
+      in
+      Idb_db.set_tx_onerror tx (fun event -> finish (error_result event));
+      Idb_db.set_tx_onabort tx (fun event -> finish (error_result event));
       (try f (Idb_db.object_store tx "keyvaluepairs")
        with exn -> finish (Error exn));
       Db_worker_effect.bind task (function
