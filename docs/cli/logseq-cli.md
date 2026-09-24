@@ -294,8 +294,8 @@ Inspect and edit commands:
   - CSV tokens are trimmed and empty tokens are ignored; if a provided filter becomes empty after normalization, CLI returns `invalid-options`.
 - `list asset [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list nodes tagged with `#Asset` (`:logseq.class/Asset`; defaults to `--sort updated-at --order desc`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
-- `upsert block --blocks <markdown> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - insert blocks from a markdown outline (`- item` nesting; `key:: value` lines resolve to existing properties with values coerced per property schema; `#tag` resolves to existing tags; all blocks are written in a single transaction)
-- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - insert blocks from a markdown file
+- `upsert block --blocks <markdown> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - create a block tree from inline Markdown (see [Markdown block input](#markdown-block-input))
+- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--dry-run]` - create a block tree from a Markdown file using the same rules
 - `upsert block --id <id>|--uuid <uuid> [--content <text>] [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
   - `--status` is not supported on `upsert block`; use `upsert task --status ...` for task status updates.
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
@@ -327,6 +327,35 @@ Inspect and edit commands:
   - Use `--page-hierarchy true` to display child pages connected through page hierarchy instead of normal page content blocks.
 - `show --uuid <uuid> [--level <n>]` - show block tree
 - `show --id <id> [--level <n>]` - show block tree by db/id
+
+### Markdown block input
+
+`--blocks` takes Markdown text; `--blocks-file` reads that text from a file. Supply one input source per command. Both flags create new blocks. They do not accept EDN block maps, and they cannot be used with `--id` or `--uuid` to update an existing block. Use `--content` for a literal single block. Each run of a Markdown insert creates a new tree, even when the input is unchanged.
+
+```bash
+logseq upsert block --graph demo --target-page Home \
+  --blocks $'- Parent\n  - Child\n- Sibling'
+```
+
+The equivalent `blocks.md` file is:
+
+```markdown
+- Parent
+  - Child
+- Sibling
+```
+
+```bash
+logseq upsert block --graph demo --target-page Home --blocks-file ./blocks.md
+```
+
+- Markdown bullets and headings become blocks; indentation makes child blocks. Code fences, quotes, tables, and other body lines stay in the containing block's title. An ordered list is not supported as block input.
+- `key:: value` on a block sets an existing graph property on that block and is removed from the stored title. Values are coerced to the property's schema type; unknown properties or invalid values fail. Property keys with spaces or colons cannot be written with this syntax. Create the property first with `upsert property` if needed.
+- `[[Page]]` in a title links to the page and creates it if missing. `#tag` associates an existing tag with the block and remains in the title; an unknown tag fails. References in code are treated as literal text.
+- `--target-page`, `--target-id`, and `--target-uuid` select one insertion target. Without a target, the blocks go on today's journal page. `--pos` defaults to `last-child`; `first-child` also works with a page or block target, while `sibling` requires `--target-id` or `--target-uuid`.
+- `--update-tags <edn-vector>` and `--update-properties <edn-map>` can be combined with either Markdown input flag; they apply to the top-level blocks only. Use Markdown `#tag` and `key:: value` for metadata on individual descendants. `--remove-tags` and `--remove-properties` are only for update mode.
+- `--dry-run` works in create mode with either Markdown input flag (and with `--content`). It resolves the input and prints planned outliner ops without writing. With `--output json` or `--output edn`, the response includes `dry-run`, `ops`, and `would-create-pages` under `data`.
+- The block tree and its metadata are written in one outliner transaction. Missing target or reference pages may be created before that transaction. JSON/EDN output lists the created block ids in tree preorder, including descendants.
 
 Help output:
 
