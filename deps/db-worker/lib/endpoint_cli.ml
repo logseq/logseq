@@ -16,7 +16,7 @@ let with_conn args f =
     match arg args 0 with
     | Some (Wire.String s) -> s
     | Some Wire.Nil | None -> ""
-    | _ -> invalid_arg "first arg must be repo name"
+    | _ -> "" (* cljs: conn lookup misses on any non-string arg *)
   in
   match Worker_state.datascript_conn repo with
   | None -> Db_worker_effect.pure Wire.nil

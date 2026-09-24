@@ -4,7 +4,7 @@ let require_repo args =
   match List.nth_opt args 0 with
   | Some (Wire.String repo) -> repo
   | Some Wire.Nil | None -> ""
-  | _ -> invalid_arg "first arg must be repo name"
+  | _ -> "" (* cljs: conn lookup misses on any non-string arg *)
 
 let set_enabled args =
   let repo = require_repo args in
