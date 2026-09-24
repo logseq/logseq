@@ -767,15 +767,9 @@ let resolve_tag_entities invoke_config repo tags =
       all_results
         (Vec.map (resolve_tag_entity invoke_config repo tag_list) tags))
 
-let resolve_tags config repo tags =
+let resolve_tags invoke_config repo tags =
   if Vec.is_empty tags then Cli_effect.pure (Ok Vec.empty)
-  else
-    let open Cli_effect in
-    bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-      (function
-      | Error err -> pure (Error err)
-      | Ok invoke_config ->
-          resolve_tag_entities invoke_config repo tags)
+  else resolve_tag_entities invoke_config repo tags
 
 let lookup_property_entity invoke_config repo = function
   | Property.Key_id id ->
@@ -818,15 +812,9 @@ let resolve_property_assignments invoke_config repo assignments =
   all_results
     (Vec.map (resolve_property_assignment invoke_config repo) assignments)
 
-let resolve_properties config repo properties =
+let resolve_properties invoke_config repo properties =
   if Vec.is_empty properties then Cli_effect.pure (Ok Vec.empty)
-  else
-    let open Cli_effect in
-    bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-      (function
-      | Error err -> pure (Error err)
-      | Ok invoke_config ->
-          resolve_property_assignments invoke_config repo properties)
+  else resolve_property_assignments invoke_config repo properties
 
 let resolve_created_ids config repo blocks =
   let open Cli_effect in
@@ -1521,14 +1509,14 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
           | Error err ->
               pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
           | Ok (target_lookup, would_create_pages) ->
-              bind (resolve_tags config action.repo action.tags) (function
+              bind (resolve_tags invoke_config action.repo action.tags) (function
                 | Error err ->
                     pure
                       (Cli_result.error ~command:Command_id.Upsert_block
                          mode err)
                 | Ok tags ->
                     bind
-                      (resolve_properties config action.repo action.properties)
+                      (resolve_properties invoke_config action.repo action.properties)
                       (function
                       | Error err ->
                           pure
@@ -1592,7 +1580,7 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                         |> unique
                       in
                       bind
-                        (resolve_tags config action.repo
+                        (resolve_tags invoke_config action.repo
                            (Vec.map
                               (fun name ->
                                 (* #[[<tag-uuid>]] — a uuid names the tag
