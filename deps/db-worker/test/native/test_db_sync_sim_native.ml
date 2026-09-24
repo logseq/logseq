@@ -639,7 +639,8 @@ type sim_client =
   ; online : bool
   ; gen_uuid : (unit -> string) option }
 
-let sync_client_bang (server : server) (c : sim_client) : bool =
+let sync_client_bang ?(upload = server_upload_bang) (server : server)
+    (c : sim_client) : bool =
   if not c.online then false
   else
     let progress = ref false in
@@ -667,7 +668,7 @@ let sync_client_bang (server : server) (c : sim_client) : bool =
           progress := true
         end);
        (if tx_entries <> [] then begin
-          let accepted, t = server_upload_bang server local_tx' tx_entries in
+          let accepted, t = upload server local_tx' tx_entries in
           let tx_ids =
             List.filter_map
               (fun e ->
@@ -3857,6 +3858,98 @@ let test_all_core_outliner_ops_local_undo_redo_random_sim () =
           check "db issues empty" (issues = []);
           assert_no_invalid_tx_bang seed history repro))
 
+(* deftest every-core-outliner-op-uploads-with-and-without-rebase-test
+   (f6fc6f78ac — cljs (with-redefs [server-upload! ...]) routes each
+   upload entry through #'sync-handler/apply-tx-entry! on a forked
+   server db and asserts the forked checksum converges with the live
+   server. The D1 sync-handler is not ported; the faithful equivalent
+   applies the entry's normalized tx-data via tx-ops-of-tx-data onto a
+   conn forked from the server db, then runs the real server upload. *)
+let test_every_core_outliner_op_uploads_with_and_without_rebase () =
+  List.iter
+    (fun op ->
+       List.iter
+         (fun rebase ->
+            let tag =
+              Printf.sprintf "%s rebase=%b" op rebase
+            in
+            let rng = make_rng 1337 in
+            let gen_uuid () = rng_uuid rng in
+            let base_uuid = gen_uuid () in
+            let remote_uuid = gen_uuid () in
+            let conn = create_conn () in
+            let server = make_server () in
+            let history = ref [] in
+            let state = new_state base_uuid in
+            let client =
+              { repo = repo_a; conn; client = make_client repo_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            in
+            let client_context : run_ctx =
+              { repo = Some repo_a; conn; base_uuid = Some base_uuid
+              ; state; gen_uuid = Some gen_uuid }
+            in
+            with_test_repos
+              [ repo_a, { conn; ops_conn = Some (new_client_ops_db ()) } ]
+              (fun () ->
+                Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+                Sync_client_op.update_local_tx repo_a 0;
+                ensure_base_page_bang conn base_uuid;
+                create_page_bang conn "Remote marker" remote_uuid;
+                ignore (sync_client_bang server client);
+                check (tag ^ " op recorded")
+                  (ensure_op_recorded_bang rng client_context history op
+                     120 ());
+                (if rebase then
+                   ignore
+                     (server_upload_bang server server.srv_counter
+                        [ Wire.Map
+                            [ ( kw "tx-data"
+                              , Wire.List
+                                  [ Wire.Array
+                                      [ kw "db/add"
+                                      ; Wire.Array
+                                          [ kw "block/uuid"
+                                          ; Wire.Uuid remote_uuid ]
+                                      ; kw "block/title"
+                                      ; Wire.String
+                                          "Remote marker edited" ] ] )
+                            ] ]));
+                let shadow_upload srv t_before entries =
+                  let actual_server =
+                    conn_from_db (db_of_conn srv.srv_conn)
+                  in
+                  List.iter
+                    (fun entry ->
+                       match Wire.get "tx-data" entry with
+                       | Some tx_data ->
+                           let ops =
+                             Db_transact.tx_ops_of_tx_data
+                               (Datascript.db actual_server)
+                               (Wire.as_seq tx_data)
+                           in
+                           ignore
+                             (Datascript.transact_conn actual_server ops)
+                       | None -> ())
+                    entries;
+                  let result = server_upload_bang srv t_before entries in
+                  check (tag ^ " shadow/server checksums converge")
+                    (Db_sync_checksum.recompute_checksum
+                       (Datascript.db actual_server)
+                     = Db_sync_checksum.recompute_checksum
+                         (db_of_conn srv.srv_conn));
+                  result
+                in
+                ignore (sync_client_bang ~upload:shadow_upload server client);
+                check (tag ^ " pending empty after upload")
+                  (Sync_apply.pending_txs repo_a () = []);
+                check (tag ^ " client/server checksums converge")
+                  (Db_sync_checksum.recompute_checksum (Datascript.db conn)
+                   = Db_sync_checksum.recompute_checksum
+                       (db_of_conn server.srv_conn))))
+         [ false; true ])
+    local_undo_redo_coverage_ops
+
 (* deftest two-clients-online-sim-test *)
 let test_two_clients_online_sim () =
   let seed = Option.value (env_seed ()) ~default:default_seed in
@@ -4629,6 +4722,10 @@ let () =
             "all-core-outliner-ops-local-undo-redo-random-sim-test"
             `Quick
             test_all_core_outliner_ops_local_undo_redo_random_sim
+        ; Alcotest.test_case
+            "every-core-outliner-op-uploads-with-and-without-rebase-test"
+            `Quick
+            test_every_core_outliner_op_uploads_with_and_without_rebase
         ; Alcotest.test_case "two-clients-online-sim-test" `Quick
             test_two_clients_online_sim
         ; Alcotest.test_case "two-clients-cut-paste-random-sim-test"

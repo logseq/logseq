@@ -39,13 +39,11 @@
      [deferred; broadcast] like cljs (broadcast happens after deferred
      handlers in process_committed_tx)
 
-   Skipped (3):
+   Skipped (2):
    - markdown-mirror-listener-enqueues-worker-mirror-work: cljs
      with-redefs markdown-mirror/<handle-tx-report! to spy; OCaml calls
      Markdown_mirror.handle_tx_report inside Db_worker_effect.async
      with no injection point.
-   - db-listener-skips-search-sync-for-imported-data: no "search"
-     deferred handler is registered yet (search sync unported).
    - rejected-deferred-listener-promises-are-reported: cljs asserts a
      *rejected promise* inside the deferred handler is captured and
      reported asynchronously. OCaml deferred handlers are synchronous;
@@ -54,15 +52,14 @@
      faithful OCaml equivalent (potential lib gap if lazy effects are
      expected to report).
 
-   Known lib/engine bugs hit by these tests (no workarounds — left red):
-     - runtime/native/transit_codec.ml decode mis-resolves Normal-mode
-       read-cache refs (^@, ^:, ^G …): repeated keyword/uuid values in
-       a broadcast payload (e.g. [:attr :block/uuid] inside
-       affected-keys) decode to wrong values (~u<uuid>, Tagged sets),
-       so `delta survives transit roundtrip` in
+   Resolved lib/engine bugs (documented while red; now green):
+     - runtime/native/transit_codec.ml decode mis-resolved Normal-mode
+       read-cache refs (^@, ^:, ^G …): repeated keyword/uuid values in a
+       broadcast payload (e.g. [:attr :block/uuid] inside affected-keys)
+       decoded to wrong values (~u<uuid>, Tagged sets), so `delta
+       survives transit roundtrip` in
        db-listener-builds-one-render-delta-for-origin-and-broadcast
-       fails. Verified in isolation — the decoded payload corrupts only
-       inside cached values.
+       failed. Fixed upstream; the test is green.
 *)
 
 open Datascript
@@ -510,6 +507,58 @@ let test_no_publish_skip_validation () =
         check "no broadcast for skip-validate-db?"
           (sync_db_broadcasts captured = [])))
 
+(* (deftest db-listener-skips-search-sync-for-imported-data-test)
+   cljs spies search/sync-search-indice and asserts it is never invoked
+   for imported-data?/from-disk? tx-meta. The OCaml equivalent observes
+   the same effect: sync-search-indice is the only path into the FTS
+   index, so an empty blocks table proves the listener skipped it. A
+   control tx without a flag proves the index is writable through this
+   machinery (keeps the skip assertion honest — an unregistered handler
+   would also leave the index empty). *)
+let test_db_listener_skips_search_sync_for_imported_data () =
+  Worker_core.init ();
+  check "search deferred handler registered"
+    (Hashtbl.mem Db_listener.deferred_handlers "search");
+  let run flag =
+    let conn = create_conn () in
+    let sdb = Sqlite.open_db ~path:":memory:" in
+    Search_index.create_tables_and_triggers sdb;
+    Worker_state.set_sqlite_conn_of test_repo Worker_state.Search sdb;
+    (try
+       Db_listener.listen_db_changes test_repo conn
+         ~handler_keys:[ "search" ];
+       (* block/uuid is explicit — a raw d/transact! does not assign
+          one and block->index drops uuid-less items *)
+       (match flag with
+        | Some f ->
+            transact conn ~tx_meta:[ f, Bool true ]
+              "[{:db/id -1 :block/uuid #uuid \"11111111-1111-4111-8111-111111111111\" :block/title \"hello-search-block\"}]"
+        | None ->
+            transact conn
+              "[{:db/id -1 :block/uuid #uuid \"11111111-1111-4111-8111-111111111111\" :block/title \"hello-search-block\"}]");
+       (match
+          Sqlite.query sdb ~sql:"SELECT COUNT(*) FROM blocks" ~bind:[||]
+        with
+        | [| Sqlite.Integer v |] :: _ -> Int64.to_int v
+        | _ -> -1)
+     with e ->
+       Worker_state.drop_sqlite_conn_of test_repo Worker_state.Search;
+       Sqlite.close sdb;
+       raise e)
+    |> fun n ->
+    Worker_state.drop_sqlite_conn_of test_repo Worker_state.Search;
+    Sqlite.close sdb;
+    n
+  in
+  List.iter
+    (fun flag ->
+      check (Printf.sprintf "no search sync for %s" flag)
+        (run (Some flag) = 0))
+    [ "logseq.graph-parser.exporter/imported-data?"
+    ; "logseq.db.sqlite.export/imported-data?"
+    ; "from-disk?" ];
+  check "control: unflagged tx indexes the block" (run None = 1)
+
 (* (deftest db-listener-reports-post-commit-failures-without-blocking-ui-sync-test) *)
 let test_post_commit_failures_dont_block () =
   List.iter
@@ -622,6 +671,9 @@ let cases =
   ; Alcotest.test_case
       "db-listener-does-not-publish-skip-validation-render-deltas-test"
       `Quick test_no_publish_skip_validation
+  ; Alcotest.test_case
+      "db-listener-skips-search-sync-for-imported-data-test" `Quick
+      test_db_listener_skips_search_sync_for_imported_data
   ; Alcotest.test_case
       "db-listener-reports-post-commit-failures-without-blocking-ui-sync-test"
       `Quick test_post_commit_failures_dont_block

@@ -2740,6 +2740,14 @@ let initial_data_ops : tx_op list =
       property_ident ~typ:"class" ~ref_:true
         ~extra:[ "db/index", One_value (Bool true) ]
         "block/tags"
+    ; (* cljs built-in "Node title" — needed so render-affected-keys treats
+         :block/title datoms as property-entity changes and emits
+         [:display-properties uuid] *)
+      property_ident ~typ:"string"
+        ~extra:[ "db/index", One_value (Bool true)
+               ; "logseq.property/hide?", One_value (Bool true)
+               ; "logseq.property/public?", One_value (Bool false) ]
+        "block/title"
     ; (* cljs build-initial-files — file entities are part of
          build-db-initial-data; :file/path is unique-identity, so the
          importer's default-save-file upserts onto config.edn, which must

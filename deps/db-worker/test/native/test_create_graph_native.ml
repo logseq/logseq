@@ -5,11 +5,9 @@
    db-schema/schema, the same one cljs db-test/create-conn uses) because
    test helpers can't be shared across dune executables.
 
-   Not ported (missing dependencies):
-   - new-graph-is-valid: needs db-validate/validate-local-db! (malli
-     validation machinery) — not yet ported to the worker.
-   - property-types: needs sqlite-build/create-blocks — belongs to the
-     sqlite-build package port.
+   cljs `validate-local-db!` maps to `Db_validate.validate_local_db`
+   (returns grouped errors; empty = valid) and `sqlite-build/create-blocks`
+   to `Sqlite_build.create_blocks`.
 
    cljs-vs-OCaml divergences asserted where observable:
    - Ldb.property_value_content only reads String values, so the cljs
@@ -295,6 +293,37 @@ let () =
           (Ldb.value dv "logseq.property/value" = Some (Int 1))
       | None -> check "properties config: numeric property created" false)
    | None -> check "properties config: numeric property created" false)
+
+(* ---------- (deftest new-graph-is-valid) ---------- *)
+
+let () =
+  let conn = create_conn () in
+  let errors = Db_validate.validate_local_db (Datascript.db conn) in
+  check "new-graph-is-valid: no validation errors" (errors = [])
+
+(* ---------- (deftest property-types) ---------- *)
+
+let () =
+  (* cljs (d/create-conn db-schema/schema) + build-db-initial-data with
+     {:macros {"docs-base-url" "https://docs.logseq.com/#/page/$1"}} *)
+  let conn = Datascript.create_conn ~schema:(schema ()) () in
+  ignore
+    (Datascript.transact_conn conn
+       (Sqlite_create_graph.initial_tx_data ~db:(Datascript.db conn)
+          ~config_content:
+            "{:macros {\"docs-base-url\" \"https://docs.logseq.com/#/page/$1\"}}"
+          ())
+       ~tx_meta:[ "initial-db?", Bool true ]);
+  (* testing ":url property" *)
+  Sqlite_build.create_blocks conn
+    (Edn_util.read_string
+       "{:properties {:url {:logseq.property/type :url}}
+         :pages-and-blocks
+         [{:page {:block/title \"page1\"}
+           :blocks [{:block/title \"b1\" :build/properties {:url \"https://logseq.com\"}}
+                    {:block/title \"b2\" :build/properties {:url \"{{docs-base-url test}}\"}}]}]}");
+  let errors = Db_validate.validate_local_db (Datascript.db conn) in
+  check "property-types: :url graph has no validation errors" (errors = [])
 
 (* ---------- (deftest build-db-initial-data-test — idempotent) ---------- *)
 

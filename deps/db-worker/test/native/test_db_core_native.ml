@@ -28,6 +28,9 @@
      query-dsl-worker-apis-run-against-worker-db
      task-spent-time-runs-against-worker-db
      get-block-children-stops-scanning-after-limit
+     get-display-properties-keeps-other-position-properties-for-page-properties
+     get-display-properties-filters-recycled-entity-values
+     get-display-properties-reads-current-worker-block-properties
      get-blocks-includes-render-critical-property-data
      get-blocks-default-payload-includes-created-at-and-proper-titles
      get-blocks-includes-projected-class-property
@@ -141,8 +144,6 @@
      - storage-pool-* (2 cases) / new-sqlite-storage / resolve-db-path /
        vector-index-path / checkpoint-db-* (3 cases): sqlite storage
        pool + OPFS paths are not ported
-     - get-display-properties-* (3 cases) / reorder-display-property:
-       thread APIs not registered on native
      - get-latest-journals-bounded-scan: moved — see "already translated
        in test_db_native.ml" above (Ldb.journal_day_scans is the OCaml
        counterpart of the cljs wrap-scan counter)
@@ -162,9 +163,6 @@
      - query-dsl-worker-results-include-renderable-block-fields: the cljs
        result post-processing (worker-db.result-block->map / renderable
        fields wrapper) is not ported — the endpoint returns raw pull maps
-     - worker-export-replaces-block-refs-with-uuis-test:
-       thread-api/export-blocks-as-format raises on native (mldoc
-       gp-mldoc/->db-edn has no OCaml port)
 
    cljs-vs-native divergences asserted where observable:
      - transact-insert-blocks-adds-block-order asserts a real generated
@@ -176,8 +174,21 @@
      - get-block-children-stops-scanning-after-limit drops the cljs
        scan-count sub-assertion (datoms call counting via with-redefs);
        the truncation assertion is kept.
-     - get-blocks-includes-render-critical-property-data drops the cljs
-       get-display-properties sub-call (endpoint not registered).
+     - get-display-properties-* / get-blocks-includes-...-data: cljs
+       passes the block as a plain map to
+       :thread-api/get-display-properties; the native endpoint resolves
+       :block via entity_of_arg, so tests address the same entity through
+       a [:block/uuid id] lookup-ref (or the {:db/id n} map cljs itself
+       supplies). In filters-recycled-entity-values the cljs value set
+       lives in the passed map's :block/properties; on native it is
+       materialized as two ref datoms on a property entity declared
+       :db.type/ref :db.cardinality/many (the canonical datascript
+       encoding of a multi-valued ref attr).
+     - get-blocks-includes-render-critical-property-data: the native seed
+       (Sqlite_create_graph.initial_tx_data) lacks some built-in property
+       entities cljs build-db-initial-data carries (e.g.
+       logseq.property/scheduled); the fixture declares the seeded attrs
+       explicitly — same values cljs seeds.
      - mobile-logs asserts Worker_log ring entries (cljs reads
        worker-state/*log atom) — same machinery, different container.
      - search-index-input-idle-absent-status-is-idle covers the cljs
@@ -189,40 +200,21 @@
      - get-view-filter-data uses Db_view.get_property_values_fn — the
        documented OCaml injection seam for the cljs with-redefs stub.
      - db-core-registers-* asserts every cljs-expected thread-api name
-       that has a native registration, instead of list equality (5 cljs
+       that has a native registration, instead of list equality (3 cljs
        names are intentionally unregistered on native: export-db-binary,
-       export-client-ops-db-binary, import-db-binary, get-display-
-       properties, reorder-display-property).
+       export-client-ops-db-binary, import-db-binary).
 
    Known lib/engine bugs hit by these tests (no workarounds — assertions
    left real and red):
-     - Endpoint_read.{set-page-favorite,set-page-unfavorite,
-       reorder-favorites} call
-       (Outliner_op.apply_ops conn ops Wire.Nil): apply_ops immediately
-       does (Cljs_map.assoc opts ...) which raises
-       [invalid_arg "assoc: not a map"] on Wire.Nil before any op runs —
-       every favorite endpoint fails for non-empty ops. Hits
-       set-page-favorite-is-durable-per-graph,
-       set-page-favorite-accepts-repeated-false-values,
-       reorder-favorites-is-idempotent.
-     - import-file-graph transacts the file entity
-       {:file/content :file/last-modified-at :file/path} without the
-       required file/created-at + block/uuid, so Db_tx.Invalid_tx aborts
-       the tx at the "config" step — import never reaches documents.
-       Hits import-file-graph-imports-documents,
-       import-file-graph-reports-lazy-read-failure,
-       import-file-graph-stores-page-refs-and-progress.
-     - Sqlite_build.tx_ops_of_values rejects [:db/retractEntity e] with
-       "Unexpected tx item: [:db/retractEntity 1]" — import-edn can't
-       apply the datom-format ops. Hits
-       import-edn-datom-format-imports-blocks,
+     - import-edn fails validate_import_tx_data: Db_validate flags the 5
+       file-block entities that build-export emits for the seeded graph
+       (2 errors each, dispatch key file-block) — cljs validation does
+       not flag them. Hits import-edn-datom-format-imports-blocks,
        import-edn-datom-format-strips-export-metadata.
-     - Endpoint_search.search_index_input_idle reads the thread atom
-       "search-input-idle-status" but the registered atom name is
-       "thread-atom/search-input-idle-status", so the stored status is
-       never found and the endpoint always reports idle (and
-       update_thread_atom raises invalid_arg on the unregistered name).
-       Hits search-index-input-idle-reports-not-idle-for-recent-input.
+     - worker-export-replaces-block-refs-with-worker-db-test: cljs asserts
+       the exported markdown contains the referenced block's title.
+       Worker_export.export_blocks_as_format runs but returns "" — the
+       export pipeline produces no content for this fixture (lib gap).
 *)
 
 open Datascript
@@ -395,11 +387,9 @@ let test_db_core_registers_db_sync_thread_apis () =
     expected
 
 (* (deftest db-core-registers-all-db-core-thread-apis ...) — the cljs
-   expected-db-core-thread-apis set minus the 5 names the native worker
+   expected-db-core-thread-apis set minus the 3 names the native worker
    does not register: export-client-ops-db-binary, export-db-binary,
-   import-db-binary (binary storage protocol unported),
-   get-display-properties, reorder-display-property (display-property
-   endpoints unported). *)
+   import-db-binary (binary storage protocol unported). *)
 let test_db_core_registers_all_db_core_thread_apis () =
   let expected =
     [ "thread-api/list-db"; "thread-api/init"; "thread-api/set-db-sync-config"
@@ -440,6 +430,7 @@ let test_db_core_registers_all_db_core_thread_apis () =
     ; "thread-api/get-all-classes"; "thread-api/get-structured-children"; "thread-api/get-class-extends-children-tree"
     ; "thread-api/get-property-node-selector-data"; "thread-api/get-view-filter-data"; "thread-api/get-alias-source-page"
     ; "thread-api/get-property-closed-values"; "thread-api/get-route-title"; "thread-api/get-first-url-property-value"
+    ; "thread-api/get-display-properties"; "thread-api/reorder-display-property"
     ; "thread-api/get-all-properties"; "thread-api/get-property-values"; "thread-api/get-bidirectional-properties"
     ; "thread-api/build-graph"; "thread-api/get-all-page-titles"; "thread-api/gc-graph"
     ; "thread-api/mobile-logs"; "thread-api/get-graph-uuid"; "thread-api/get-rtc-graph-uuid"
@@ -1118,9 +1109,169 @@ let test_get_block_children_stops_scanning_after_limit () =
   in
   check "block-children limit reached" large_page
 
-(* (deftest get-blocks-includes-render-critical-property-data ...) —
-   the cljs get-display-properties sub-call is dropped (endpoint not
-   registered on native). *)
+(* :thread-api/get-display-properties helper — cljs passes the whole block
+   map as :block; the native endpoint resolves :block via entity_of_arg, so
+   the same entity is addressed through a [:block/uuid u] lookup-ref (or a
+   {:db/id n} map where cljs does). *)
+let display_properties_api (block : Wire.t) (opts : (Wire.t * Wire.t) list) :
+    Wire.t =
+  api "get-display-properties"
+    [ Wire.String test_repo
+    ; Wire.Map
+        [ kw "block", block
+        ; kw "opts", Wire.Map opts
+        ; kw "show-empty-and-hidden-properties?", Wire.Bool false ] ]
+
+let uuid_lookup u = Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+
+(* rows of {:property-id kw, :value v} from a :full-properties wire array *)
+let display_property_id_values (props : Wire.t list) :
+    (Wire.t * Wire.t) list =
+  List.filter_map
+    (fun p ->
+       match p with
+       | Wire.Map pm -> (
+           match (wire_get "property-id" pm, wire_get "value" pm) with
+           | Some pid, Some v -> Some (pid, v)
+           | _ -> None)
+       | _ -> None)
+    props
+
+(* (deftest get-display-properties-keeps-other-position-properties-for-page-properties ...) *)
+let test_display_properties_keeps_other_position_for_page () =
+  let conn = Datascript.create_conn ~schema:(Db_schema.schema ()) () in
+  let page_id = "11111111-1111-1111-1111-111111111111" in
+  ignore
+    (Datascript.transact_conn_string conn
+       "[{:db/ident :logseq.class/Page}
+         {:db/ident :logseq.class/Property}
+         {:db/ident :user.property/date
+          :block/title \"Date\"
+          :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\"
+          :block/tags :logseq.class/Property
+          :logseq.property/type :date}
+         {:block/title \"Page Title\"
+          :block/name \"page-title\"
+          :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"
+          :block/tags :logseq.class/Page
+          :user.property/date \"Jun 23rd, 2026\"}]");
+  register_conn conn;
+  (match display_properties_api (uuid_lookup page_id)
+           [ kw "page-title?", Wire.Bool true ] with
+   | Wire.Map m -> (
+       match wire_get "full-properties" m with
+       | Some (Wire.Array props) ->
+           check "page full-properties"
+             (display_property_id_values props
+              = [ ( Wire.Keyword "user.property/date"
+                  , Wire.String "Jun 23rd, 2026" ) ])
+       | _ -> check "page full-properties array" false)
+   | _ -> check "page result map" false);
+  (match display_properties_api (uuid_lookup page_id)
+           [ kw "in-block-container?", Wire.Bool true ] with
+   | Wire.Map m ->
+       check "block-container full-properties empty"
+         (match wire_get "full-properties" m with
+          | Some (Wire.Array []) -> true
+          | _ -> false)
+   | _ -> check "block result map" false)
+
+(* (deftest get-display-properties-filters-recycled-entity-values ...) —
+   cljs carries the #{active recycled} set in the passed :block/properties
+   map; on native :block resolves to the worker-db entity, so the set is
+   materialized as two :user.property/node ref datoms declared
+   :db.type/ref + :db.cardinality/many on the property entity. *)
+let test_display_properties_filters_recycled () =
+  let conn = Datascript.create_conn ~schema:(Db_schema.schema ()) () in
+  let page_id = "11111111-1111-1111-1111-111111111111" in
+  ignore
+    (Datascript.transact_conn_string conn
+       "[{:db/ident :logseq.class/Page}
+         {:db/ident :logseq.class/Property}
+         {:db/ident :user.property/node
+          :block/title \"Node\"
+          :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\"
+          :block/tags :logseq.class/Property
+          :logseq.property/type :default
+          :db/valueType :db.type/ref
+          :db/cardinality :db.cardinality/many}
+         {:block/title \"Page Title\"
+          :block/name \"page-title\"
+          :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"
+          :block/tags :logseq.class/Page}
+         [:db/add [:block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"]
+           :user.property/node 101]
+         [:db/add 101 :block/title \"Active\"]
+         [:db/add [:block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"]
+           :user.property/node 102]
+         [:db/add 102 :block/title \"Recycled\"]
+         [:db/add 102 :logseq.property/deleted-at 1]]");
+  register_conn conn;
+  match display_properties_api (uuid_lookup page_id)
+          [ kw "page-title?", Wire.Bool true ] with
+  | Wire.Map m -> (
+      match wire_get "full-properties" m with
+      | Some (Wire.Array [ Wire.Map pm ]) -> (
+          match wire_get "value" pm with
+          | Some (Wire.Set vs) ->
+              let summaries =
+                List.map
+                  (fun v ->
+                     match v with
+                     | Wire.Map vm -> (
+                         ( wire_get "db/id" vm
+                         , wire_get "block/title" vm ))
+                     | _ -> (None, None))
+                  vs
+              in
+              check "active value kept, recycled filtered"
+                (summaries
+                 = [ (Some (Wire.Int 101), Some (Wire.String "Active")) ])
+          | _ -> check "value is a set" false)
+      | _ -> check "single property row" false)
+  | _ -> check "result map" false
+
+(* (deftest get-display-properties-reads-current-worker-block-properties ...) *)
+let test_display_properties_reads_current_block_properties () =
+  let conn = create_conn () in
+  let block_id = "11111111-1111-1111-1111-111111111111" in
+  ignore
+    (Datascript.transact_conn_string conn
+       "[{:db/ident :user.property/fresh
+          :block/title \"Fresh\"
+          :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\"
+          :block/tags :logseq.class/Property
+          :logseq.property/type :default}
+         {:block/title \"Block\"
+          :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"
+          :user.property/fresh \"fresh value\"}]");
+  register_conn conn;
+  let eid =
+    match entity_at_uuid (db_of conn) block_id with
+    | Some e -> e.id
+    | None -> Alcotest.fail "block missing"
+  in
+  (* cljs passes a stale block map {:db/id eid :block/uuid ... :block/properties {}} *)
+  let stale_block =
+    Wire.Map
+      [ kw "db/id", Wire.Int eid
+      ; kw "block/uuid", Wire.Uuid block_id
+      ; kw "block/properties", Wire.Map [] ]
+  in
+  match display_properties_api stale_block [] with
+  | Wire.Map m -> (
+      match wire_get "full-properties" m with
+      | Some (Wire.Array props) ->
+          check "fresh property read from worker db"
+            (List.exists
+               (fun (pid, v) ->
+                  pid = Wire.Keyword "user.property/fresh"
+                  && v = Wire.String "fresh value")
+               (display_property_id_values props))
+      | _ -> check "full-properties array" false)
+  | _ -> check "result map" false
+
+(* (deftest get-blocks-includes-render-critical-property-data ...) *)
 let test_get_blocks_includes_render_critical_property_data () =
   let conn = create_conn () in
   let block_uuid = "00000000-0000-0000-0000-000000000001"
@@ -1133,6 +1284,7 @@ let test_get_blocks_includes_render_critical_property_data () =
        ; [ "db/ident", Kw "logseq.property/status.backlog"
          ; "block/title", Str "Backlog" ]
        ; [ "db/ident", Kw "logseq.property/scheduled"
+         ; "block/title", Str "Scheduled"
          ; "logseq.property/type", Kw "datetime"
          ; "logseq.property/ui-position", Kw "block-below" ]
        ; [ "block/title", Str "Scheduled task"
@@ -1208,10 +1360,63 @@ let test_get_blocks_includes_render_critical_property_data () =
       in
       (match status_prop with
        | Some pm' ->
-           check "status title" (wire_get "block/title" pm' <> None)
+           check "status title"
+             (wire_get "block/title" pm' = Some (Wire.String "Status"));
+           check "status type"
+             (wire_get "logseq.property/type" pm'
+              = Some (Wire.Keyword "default"))
        | None -> check "status property present" false);
       check "scheduled property positioned below"
-        (prop_with_ident block_below "logseq.property/scheduled"))
+        (prop_with_ident block_below "logseq.property/scheduled");
+      let scheduled_prop =
+        List.find_map
+          (fun p ->
+            match p with
+            | Wire.Map pm'
+              when wire_get "db/ident" pm'
+                   = Some (Wire.Keyword "logseq.property/scheduled") ->
+                Some pm'
+            | _ -> None)
+          block_below
+      in
+      (match scheduled_prop with
+       | Some pm' ->
+           check "scheduled title"
+             (wire_get "block/title" pm' = Some (Wire.String "Scheduled"));
+           check "scheduled type"
+             (wire_get "logseq.property/type" pm'
+              = Some (Wire.Keyword "datetime"))
+       | None -> check "scheduled property present" false);
+      check "temp positioned-properties present"
+        (match wire_get "block.temp/positioned-properties" bm with
+         | Some (Wire.Map _) -> true
+         | _ -> false);
+      check "temp refs-count absent"
+        (wire_get "block.temp/refs-count" bm = None);
+      (match wire_get "block.temp/reactions" bm with
+       | Some (Wire.Array rs) ->
+           let emoji_ids =
+             List.filter_map
+               (fun r ->
+                  match r with
+                  | Wire.Map rm ->
+                      wire_get "logseq.property.reaction/emoji-id" rm
+                  | _ -> None)
+               rs
+           in
+           check "reactions emoji-ids" (emoji_ids = [ Wire.String "+1" ])
+       | _ -> check "temp reactions present" false);
+      check "temp display-properties map"
+        (match wire_get "block.temp/display-properties" bm with
+         | Some (Wire.Map _) -> true
+         | _ -> false);
+      check "block/properties map"
+        (match wire_get "block/properties" bm with
+         | Some (Wire.Map _) -> true
+         | _ -> false);
+      (match display_properties_api (uuid_lookup block_uuid) [] with
+       | Wire.Map _ -> ()
+       | _ -> check "get-display-properties returns map" false))
   | _ -> Alcotest.fail "get-blocks critical: unexpected shape"
 
 (* (deftest get-blocks-default-payload-includes-created-at-and-proper-titles ...) *)
@@ -1729,6 +1934,8 @@ let test_get_view_filter_data () =
          | _ -> false);
       check "view-filter value-source"
         (wire_str "value-source" result = Some "property-values");
+      check "view-filter many? for node property"
+        (wire_field "many?" result = Some (Wire.Bool true));
       check "view-filter values normalized"
         (match wire_field "values" result with
          | Some (Wire.Array [ Wire.Map v ]) ->
@@ -1737,7 +1944,37 @@ let test_get_view_filter_data () =
                 = Some (Wire.Uuid "33333333-3333-3333-3333-333333333333")
          | _ -> false);
       check "view-filter value-after-operator-change"
-        (wire_field "value-after-operator-change" result = Some Wire.Nil))
+        (wire_field "value-after-operator-change" result = Some Wire.Nil);
+      (* cljs second half: a :datetime property answers [:before :after]
+         operators, :timestamp value-source, many? false, nil values and the
+         passed value echoed as :value-after-operator-change *)
+      let option2 =
+        Wire.Map
+          [ kw "property"
+          , Wire.Map
+              [ kw "db/ident", kw "block/created-at"
+              ; kw "logseq.property/type", kw "datetime" ]
+          ; kw "property-ident", kw "block/created-at"
+          ; kw "operator", kw "before"
+          ; kw "value", Wire.Int 123 ]
+      in
+      let result2 =
+        api "get-view-filter-data" [ Wire.String test_repo; option2 ]
+      in
+      check "view-filter datetime operators"
+        (match wire_field "operators" result2 with
+         | Some (Wire.Array ops) ->
+             ops = [ Wire.Keyword "before"; Wire.Keyword "after" ]
+         | _ -> false);
+      check "view-filter datetime value-source"
+        (wire_str "value-source" result2 = Some "timestamp");
+      check "view-filter datetime many? false"
+        (wire_field "many?" result2 = Some (Wire.Bool false));
+      check "view-filter datetime values nil"
+        (wire_field "values" result2 = Some Wire.Nil);
+      check "view-filter datetime value-after-operator-change"
+        (wire_field "value-after-operator-change" result2
+         = Some (Wire.Int 123)))
 
 (* (deftest convert-tag-to-page-test ...) *)
 let test_convert_tag_to_page () =
@@ -2264,13 +2501,22 @@ let test_checksum_diagnostics () =
       ignore (Sync_client_op.update_local_checksum repo "local-checksum-1");
       Hashtbl.replace Sync_state.latest_remote_checksums repo "remote-checksum-1";
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
-      check "checksum local"
-        (local = Wire.String "local-checksum-1"
-         || wire_str "" local = Some "local-checksum-1"
-         || local <> Wire.Nil);
-      check "checksum remote"
-        (remote = Wire.String "remote-checksum-1"
-         || remote <> Wire.Nil))
+      check "checksum local" (local = Wire.String "local-checksum-1");
+      check "checksum remote" (remote = Wire.String "remote-checksum-1"))
+
+(* (deftest checksum-diagnostics-handles-missing-remote ...) — local checksum
+   present, no remote → remote reports nil. *)
+let test_checksum_diagnostics_missing_remote () =
+  let repo = fresh_repo () in
+  with_client_ops repo (fun () ->
+      let conn = create_conn () in
+      Worker_state.set_datascript_conn repo conn;
+      ignore (Sync_client_op.update_local_checksum repo "local-checksum-123");
+      Hashtbl.remove Sync_state.latest_remote_checksums repo;
+      let local, remote = Endpoint_validate.checksum_diagnostics repo in
+      check "checksum local present"
+        (local = Wire.String "local-checksum-123");
+      check "checksum remote nil" (remote = Wire.Nil))
 
 (* (deftest checksum-diagnostics-returns-empty-when-no-checksums-test ...) *)
 let test_checksum_diagnostics_empty () =
@@ -2280,8 +2526,8 @@ let test_checksum_diagnostics_empty () =
       Worker_state.set_datascript_conn repo conn;
       Hashtbl.remove Sync_state.latest_remote_checksums repo;
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
-      check "checksum empty local" (local = Wire.Nil || local = Wire.String "");
-      check "checksum empty remote" (remote = Wire.Nil || remote = Wire.String ""))
+      check "checksum empty local" (local = Wire.Nil);
+      check "checksum empty remote" (remote = Wire.Nil))
 
 (* (deftest notify-invalid-data-broadcasts-storage-error-test ...) *)
 let test_notify_invalid_data () =
@@ -2302,24 +2548,32 @@ let test_notify_invalid_data () =
            !captured))
 
 (* (deftest notify-invalid-data-skips-undo-redo-tx-meta-test ...) — undo/redo
-   tx_meta suppresses the broadcast. *)
+   tx_meta suppresses the broadcast; a normal tx-meta broadcasts. *)
 let test_notify_invalid_data_skips_undo_redo () =
-  let report : tx_report =
+  let report meta : tx_report =
     { db_before = db_of (create_conn ())
     ; db_after = db_of (create_conn ())
     ; tx_data = []
     ; tempids = []
-    ; tx_meta = [ "undo?", Bool true ] }
+    ; tx_meta = meta }
   in
   with_broadcast_capture (fun captured ->
-      Worker_db_validate.notify_invalid_data report [ "error-1" ];
+      let is_invalid_broadcast c =
+        c.kind = "notification"
+        && payload_has_i18n c.payload "storage/invalid-data-writing"
+      in
+      Worker_db_validate.notify_invalid_data
+        (report [ "undo?", Bool true ]) [ "error-1" ];
       check "undo tx-meta suppresses invalid-data broadcast"
-        (not
-           (List.exists
-              (fun c ->
-                 c.kind = "notification"
-                 && payload_has_i18n c.payload "storage/invalid-data-writing")
-              !captured)))
+        (not (List.exists is_invalid_broadcast !captured));
+      Worker_db_validate.notify_invalid_data
+        (report [ "redo?", Bool true ]) [ "error-1" ];
+      check "redo tx-meta suppresses invalid-data broadcast"
+        (not (List.exists is_invalid_broadcast !captured));
+      Worker_db_validate.notify_invalid_data
+        (report [ "normal", Bool true ]) [ "error-1" ];
+      check "normal tx-meta broadcasts"
+        (List.exists is_invalid_broadcast !captured))
 
 (* ---------- export / import-edn ---------- *)
 
@@ -2350,9 +2604,14 @@ let test_import_edn_datom_format () =
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
    | Wire.Map m ->
-       (match wire_get "error" m with
-        | Some e -> ignore e
-        | None -> ());
+       (* NOTE(lib-gap): fails "The Imported EDN has 5 validation error(s)" —
+          cljs encodes insts as transit ~t so file/created-at &
+          file/last-modified-at survive the export→import round-trip; OCaml
+          ds_wire.ml transit_of_value writes `Instant ms` as raw `Wire.Int64`
+          and value_of_transit reads small-enough Int64 back as `Int`, so the
+          5 built-in file entities trip file-block :inst? validation in
+          sqlite_export/validate-import-tx-data. Lib fix: encode Instant as
+          Wire.Date_ms (cljs ~t) — see ds_wire.ml ~line 103/130. *)
        check "import-edn no error" (wire_get "error" m = None);
        check "import-edn tx-count" (wire_get "tx-count" m <> None)
    | _ -> check "import-edn non-nil" (result <> Wire.Nil))
@@ -2368,7 +2627,10 @@ let test_import_edn_strips_export_metadata () =
   let export_edn = graph_export_of export_conn in
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
-   | Wire.Map m -> check "import-edn strip meta" (wire_get "error" m = None)
+   | Wire.Map m ->
+       (* NOTE(lib-gap): same Instant→Int transit loss as the test above —
+          see its inline NOTE. Not test-side. *)
+       check "import-edn strip meta" (wire_get "error" m = None)
    | _ -> check "import-edn strip meta" true);
   (* no entity should carry the export-format attr *)
   check "export-format not transacted"
@@ -2496,6 +2758,20 @@ let test_vector_embedding_title_uses_page () =
   in
   check "embedding title page"
     (Endpoint_search.vector_embedding_title item = "page title")
+
+(* (deftest vector-embedding-title-truncates-long-text-test ...) *)
+let test_vector_embedding_title_truncates () =
+  let long_title = String.make 5000 'x' in
+  let item =
+    Search_index.mk_index_item ~id:"id" ~page:"page" ~title:long_title ()
+  in
+  check "embedding title truncates to 2048"
+    (String.length (Endpoint_search.vector_embedding_title item) = 2048);
+  let short =
+    Search_index.mk_index_item ~id:"id" ~page:"page" ~title:"short title" ()
+  in
+  check "short title passthrough"
+    (Endpoint_search.vector_embedding_title short = "short title")
 
 (* (deftest search-index-input-idle-updates-and-checks-idle-test ...) *)
 let test_search_index_input_idle_updates () =
@@ -2725,6 +3001,31 @@ let test_close_other_dbs_clears () =
     (Worker_state.datascript_conn repo1 <> None
      || Worker_state.datascript_conn repo1 = None)
 
+(* (deftest worker-export-replaces-block-refs-with-worker-db-test)
+   cljs asserts the exported markdown contains the referenced block's
+   title. Native export_blocks_as_format returns "" for this fixture
+   (lib gap, documented in the header). *)
+let test_worker_export_replaces_block_refs () =
+  let conn = Sqlite_export.create_conn () in
+  ignore
+    (Datascript.transact_conn_string conn
+       "[{:db/id -1 :block/title \"Page\" :block/name \"page\" :block/uuid #uuid \"11111111-2222-3333-4444-555555555555\"}
+         {:db/id -2 :block/title \"Referenced block\" :block/uuid #uuid \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\" :block/page -1 :block/parent -1 :block/order \"a\"}
+         {:db/id -3 :block/title \"((aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee))\" :block/uuid #uuid \"99999999-8888-7777-6666-555555555555\" :block/page -1 :block/parent -1 :block/order \"b\"}]");
+  let result =
+    Worker_export.export_blocks_as_format (db_of conn)
+      (Uuid "99999999-8888-7777-6666-555555555555")
+      (Keyword "markdown")
+      (Map [ Keyword "remove-options", List [ Keyword "property" ] ])
+      (Map [])
+  in
+  check "export contains referenced block title"
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "Referenced block") result 0);
+       true
+     with _ -> false)
+
 (* ---------- cases ---------- *)
 
 let cases =
@@ -2762,6 +3063,12 @@ let cases =
       test_task_spent_time
   ; Alcotest.test_case "get-block-children-stops-scanning-after-limit" `Quick
       test_get_block_children_stops_scanning_after_limit
+  ; Alcotest.test_case "get-display-properties-keeps-other-position-properties-for-page-properties"
+      `Quick test_display_properties_keeps_other_position_for_page
+  ; Alcotest.test_case "get-display-properties-filters-recycled-entity-values"
+      `Quick test_display_properties_filters_recycled
+  ; Alcotest.test_case "get-display-properties-reads-current-worker-block-properties"
+      `Quick test_display_properties_reads_current_block_properties
   ; Alcotest.test_case "get-blocks-includes-render-critical-property-data" `Quick
       test_get_blocks_includes_render_critical_property_data
   ; Alcotest.test_case "get-blocks-default-payload-includes-created-at-and-proper-titles" `Quick
@@ -2836,6 +3143,8 @@ let cases =
       test_get_all_page_titles_with_app_state
   ; Alcotest.test_case "checksum-diagnostics-returns-local-and-remote-checksum-test" `Quick
       test_checksum_diagnostics
+  ; Alcotest.test_case "checksum-diagnostics-handles-missing-remote-test" `Quick
+      test_checksum_diagnostics_missing_remote
   ; Alcotest.test_case "checksum-diagnostics-returns-empty-when-no-checksums-test" `Quick
       test_checksum_diagnostics_empty
   ; Alcotest.test_case "notify-invalid-data-broadcasts-storage-error-test" `Quick
@@ -2868,6 +3177,8 @@ let cases =
       test_vector_embedding_title_prefers_block
   ; Alcotest.test_case "vector-embedding-title-uses-page-title-for-empty-blocks-test" `Quick
       test_vector_embedding_title_uses_page
+  ; Alcotest.test_case "vector-embedding-title-truncates-long-text-test" `Quick
+      test_vector_embedding_title_truncates
   ; Alcotest.test_case "search-index-input-idle-updates-and-checks-idle-test" `Quick
       test_search_index_input_idle_updates
   ; Alcotest.test_case "search-index-input-idle-reports-not-idle-for-recent-input-test" `Quick
@@ -2892,4 +3203,6 @@ let cases =
       test_list_db_empty
   ; Alcotest.test_case "close-other-dbs-keep-test" `Quick test_close_other_dbs_keep
   ; Alcotest.test_case "close-other-dbs-clears-test" `Quick test_close_other_dbs_clears
+  ; Alcotest.test_case "worker-export-replaces-block-refs-with-worker-db-test" `Quick
+      test_worker_export_replaces_block_refs
   ]

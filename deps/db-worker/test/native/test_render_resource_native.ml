@@ -11,9 +11,6 @@
    `Datascript.transact_conn_string`.
 
    Skipped cljs cases (unported dependency):
-   - block-comment-summary-follows-comment-lifecycle-and-author-renames-test:
-     needs frontend.worker.render-affected-keys (db-listener surface, not
-     ported).
    - unlinked-references-resource-normalizes-list-partitions-test and
      view-data-resource-watches-effective-persisted-configuration-test:
      `with-redefs db-view/get-view-data` — Db_view.get_view_data has no
@@ -52,7 +49,9 @@
      groups), and `ldb/write-transit-str` maps to Transit_codec to_string/
      of_string round-trip on the raw response.
 
-   Known lib/engine bugs (documented, NOT worked around — currently red):
+   Resolved lib/engine bugs (documented while red; all now green after
+   lib fixes — kept here as a record of the divergences the tests
+   exercised):
 
    lib (deps/db-worker/lib):
    - render_snapshot emits a canonical block wire Map with DUPLICATE keys
@@ -1711,8 +1710,68 @@ let test_block_comment_summary_plain_summary_and_watches () =
     ; wkey [ kw "entity"; wu (u "comment-author-a") ] ]
     expected' (call_resource db resource_key)
 
-(* SKIPPED: block-comment-summary-follows-comment-lifecycle-and-author-renames-test
-   — render-affected-keys is not ported. *)
+(* block-comment-summary-follows-comment-lifecycle-and-author-renames-test *)
+let test_block_comment_summary_lifecycle_and_author_renames () =
+  let conn, u = render_resource_fixture () in
+  let resource_key =
+    wkey [ kw "block-comment-summary"; wu (u "comment-thread") ]
+  in
+  let comment_uuid = next_uuid () and author_uuid = next_uuid () in
+  let add_report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf
+         "[{:block/uuid %s :block/tx-id 21 :block/title \"Gamma\"}
+           {:block/uuid %s :block/tx-id 21 :block/title \"Newest comment\"
+            :block/created-at 5000 :block/page [:block/uuid %s]
+            :block/parent [:block/uuid %s] :block/order \"c0\"
+            :block/tags :logseq.class/Comment
+            :logseq.property/created-by-ref [:block/uuid %s]}]"
+         (quid author_uuid) (quid comment_uuid) (quid (u "page"))
+         (quid (u "comment-thread")) (quid author_uuid))
+  in
+  let add_keys = Render_affected_keys.affected_keys add_report in
+  check "add-keys contains [:children comment-thread]"
+    (wkey_has add_keys (wkey [ kw "children"; wu (u "comment-thread") ]));
+  let r = call_resource (db_of conn) resource_key in
+  check "watch-keys contains [:entity author-uuid]"
+    (wkey_has r.watch_keys (wkey [ kw "entity"; wu author_uuid ]));
+  check "value after add"
+    (wire_eq r.value
+       (Wire.Map
+          [ kw "count", Wire.Int 3
+          ; kw "latest-author", Wire.String "Gamma"
+          ; kw "latest-created-at", Wire.Int 5000 ]));
+  let rename_report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf
+         "[[:db/add [:block/uuid %s] :block/title \"Gamma renamed\"]]"
+         (quid author_uuid))
+  in
+  let rename_keys = Render_affected_keys.affected_keys rename_report in
+  check "rename-keys contains [:entity author-uuid]"
+    (wkey_has rename_keys (wkey [ kw "entity"; wu author_uuid ]));
+  let r2 = call_resource (db_of conn) resource_key in
+  check "latest-author after rename"
+    (get_in r2.value [ kw "latest-author" ]
+     = Some (Wire.String "Gamma renamed"));
+  let remove_report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf "[[:db/retractEntity %d]]"
+         (entity_id (db_of conn) comment_uuid))
+  in
+  let remove_keys = Render_affected_keys.affected_keys remove_report in
+  check "remove-keys contains [:children comment-thread]"
+    (wkey_has remove_keys
+       (wkey [ kw "children"; wu (u "comment-thread") ]));
+  let r3 = call_resource (db_of conn) resource_key in
+  check "value after remove"
+    (wire_eq r3.value
+       (Wire.Map
+          [ kw "count", Wire.Int 2
+          ; kw "latest-author", Wire.String "Beta"
+          ; kw "latest-created-at", Wire.Int 3000 ]));
+  check "watch-keys contains [:entity comment-block-b]"
+    (wkey_has r3.watch_keys (wkey [ kw "entity"; wu (u "comment-block-b") ]))
 
 (* block-comment-summary-resource-has-an-authoritative-empty-value-test *)
 let test_block_comment_summary_empty_value () =
@@ -3132,6 +3191,8 @@ let cases : unit Alcotest.test_case list =
       test_block_comment_threads_empty_value
   ; Alcotest.test_case "block-comment-summary-resource-returns-plain-summary-and-exact-watches-test" `Quick
       test_block_comment_summary_plain_summary_and_watches
+  ; Alcotest.test_case "block-comment-summary-follows-comment-lifecycle-and-author-renames-test" `Quick
+      test_block_comment_summary_lifecycle_and_author_renames
   ; Alcotest.test_case "block-comment-summary-resource-has-an-authoritative-empty-value-test" `Quick
       test_block_comment_summary_empty_value
   ; Alcotest.test_case "block-comment-summary-resource-rejects-invalid-uuid-and-thread-test" `Quick

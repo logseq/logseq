@@ -212,7 +212,7 @@
 
 (executable
  (name test_db_sync_native)
- (modules test_db_sync_native db_test_util test_shared)
+ (modules test_db_sync_native test_db_sync_upload_native db_test_util test_shared)
  (modes native)
  (libraries
   logseq_db_worker
@@ -227,3 +227,6 @@
   (:test_bin ./test_db_sync_native.exe))
  (action
   (run %{test_bin})))
+
+
+

@@ -619,6 +619,36 @@ let apply_ops (conn : conn) (ops : Wire.t list) (opts : Wire.t) : Wire.t =
        (List.map (normalize_op_block_ids (Datascript.db conn)) ops))
     opts
 
+(* f6fc6f78ac: cljs (d/with @server-conn tx-data) +
+   #'sync-handler/apply-tx-entry! — the D1 sync-handler is not ported;
+   the faithful client-side equivalent validates the serialized tx-data
+   against the live server db and applies it straight onto server_conn *)
+let server_apply_entry (server_conn : conn) (entry : Wire.t) : unit =
+  let db = Datascript.db server_conn in
+  match Wire.get "tx-data" entry with
+  | Some tx_data ->
+      let ops = Db_transact.tx_ops_of_tx_data db (Wire.as_seq tx_data) in
+      ignore (Datascript.transact_conn server_conn ops)
+  | None -> ()
+
+(* cljs upload-pending-and-assert-converged! *)
+let upload_pending_and_assert_converged (conn : conn)
+    (server_conn : conn) : unit =
+  let tx_entries, drop_tx_ids, _drop_txs =
+    Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
+      (Sync_apply.pending_txs test_repo ())
+  in
+  List.iter (server_apply_entry server_conn) tx_entries;
+  check "client/server checksums converge"
+    (Db_sync_checksum.recompute_checksum (Datascript.db conn)
+     = Db_sync_checksum.recompute_checksum (Datascript.db server_conn));
+  let tx_ids =
+    drop_tx_ids @ List.filter_map (wire_get_str "tx-id") tx_entries
+  in
+  ignore (Sync_apply.mark_pending_txs_false test_repo tx_ids);
+  check "pending empty after upload"
+    (Sync_apply.pending_txs test_repo () = [])
+
 (* ---------- fake ws / client ---------- *)
 
 let fake_ws ?(ready_state = 1) ?(on_send = fun _ -> ())
@@ -636,6 +666,71 @@ let mk_client ?(graph_id = Some "graph-1") ?(ws : Sync_state.ws_endpoint option)
   c.online_users := online_users;
   c.ws_state := ws_state;
   c
+
+(* cljs (let [remote-tx (:tx-data (ldb/transact! server-conn ops))]
+          (sync-apply/apply-remote-tx! test-repo nil remote-tx)) —
+   transact on the server conn, then feed the produced datoms back to the
+   client through apply-remote-tx *)
+let remote_tx_to_client (server_conn : conn) (ops : tx_op list) : unit =
+  let report = Datascript.transact_conn server_conn ops in
+  let remote_tx =
+    Sync_apply.normalize_tx_data report.db_after report.db_before
+      report.tx_data
+  in
+  await_unit
+    (Sync_apply.apply_remote_tx test_repo (mk_client ()) remote_tx)
+
+(* cljs (assoc local-tx-meta :outliner-op op) *)
+let local_tx_meta_with_outliner_op (op : string) : Wire.t =
+  Cljs_map.assoc local_tx_meta "outliner-op" (Wire.Keyword op)
+
+(* cljs get-in on nested wire vectors ending at a map key *)
+let rec wire_ix_path (path : int list) (w : Wire.t) : Wire.t =
+  match path with
+  | [] -> w
+  | i :: rest -> (
+      match w with
+      | Wire.Array xs | Wire.List xs -> (
+          match List.nth_opt xs i with
+          | Some x -> wire_ix_path rest x
+          | None -> Wire.Nil)
+      | _ -> Wire.Nil)
+
+let wire_get_in (path : int list) (key : string) (w : Wire.t) : Wire.t =
+  match wire_ix_path path w with
+  | (Wire.Map _) as m -> Option.value ~default:Wire.Nil (Wire.get key m)
+  | _ -> Wire.Nil
+
+(* cljs (assoc-in w [i ... k] v) — the trailing key is a map key *)
+let rec wire_assoc_in (path : int list) (key : string) (v : Wire.t)
+    (w : Wire.t) : Wire.t =
+  match path with
+  | [] -> Cljs_map.assoc w key v
+  | i :: rest -> (
+      match w with
+      | Wire.Array xs ->
+          Wire.Array
+            (List.mapi
+               (fun j x -> if j = i then wire_assoc_in rest key v x else x)
+               xs)
+      | Wire.List xs ->
+          Wire.List
+            (List.mapi
+               (fun j x -> if j = i then wire_assoc_in rest key v x else x)
+               xs)
+      | _ -> w)
+
+(* cljs (client-op/upsert-local-tx-entry! test-repo (assoc pending ...)) —
+   rewrites a stored local tx entry, preserving pending/created_at *)
+let upsert_local_tx_entry_from (e : Sync_client_op.local_tx_entry)
+    ~(forward_outliner_ops : Wire.t list) : unit =
+  ignore
+    (Sync_client_op.upsert_local_tx_entry test_repo ~tx_id:e.tx_id
+       ~pending:true ~failed:false ~outliner_op:e.outliner_op
+       ~undo_redo:e.undo_redo ~forward_outliner_ops
+       ~inverse_outliner_ops:e.inverse_outliner_ops
+       ~inferred_outliner_ops:e.inferred_outliner_ops
+       ~normalized_tx_data:e.tx ~reversed_tx_data:e.reversed_tx ())
 
 let sent_wire_messages (raw : string list) : Wire.t list =
   List.map Json_codec.parse raw
@@ -709,6 +804,13 @@ let wire_uuid_str (u : Wire.t) : string =
   match u with
   | Wire.Uuid s | Wire.String s -> s
   | _ -> failwith "not a uuid"
+
+(* option-returning variant that also unwraps transit-tagged values *)
+let rec wire_uuid_string (w : Wire.t) : string option =
+  match w with
+  | Wire.Uuid s | Wire.String s -> Some s
+  | Wire.Tagged (_, inner) -> wire_uuid_string inner
+  | _ -> None
 
 (* cljs [:block/uuid u] lookup ref *)
 let block_uuid_lookup (u : Wire.t) : Wire.t =
@@ -7370,8 +7472,11 @@ let test_tx_batch_ok_broadcasts_cleared_pending_state () =
                   !broadcasts
               in
               let last = List.nth rtc_bcasts (List.length rtc_bcasts - 1) in
+              (* transit payload is [kind, state-map]; cljs captures the
+                 state map directly as the broadcast payload *)
+              let state = wire_ix_path [ 1 ] last in
               check "unpushed 0"
-                (Wire.get "unpushed-block-update-count" last
+                (Wire.get "unpushed-block-update-count" state
                  = Some (Wire.Int 0)))))
 
 (* cljs tx-batch-ok-removes-only-inflight-acked-pending-txs-test *)
@@ -9524,67 +9629,6 @@ let test_rebase_preserves_title_when_reversed_tx_ids_change () =
           check "local title kept"
             (Ldb.value block' "block/title" = Some (String "test"))))
 
-(* cljs sync-conflict-model-roundtrip-test *)
-let test_sync_conflict_model_roundtrip () =
-  preserve_state (fun () ->
-      wire_no_e2ee ();
-      ignore (new_client_ops_db ());
-      let block_uuid = fresh_uuid () in
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid, "block/title", "remote title", 42 ];
-      let conflicts =
-        Sync_client_op.get_sync_conflicts test_repo block_uuid
-      in
-      check "one conflict" (List.length conflicts = 1);
-      let (c : Sync_client_op.sync_conflict) = List.hd conflicts in
-      check "block-uuid" (c.block_uuid = block_uuid);
-      check "attr" (c.attr = "block/title");
-      check "value" (c.value = "remote title");
-      check "remote-t" (c.remote_t = Some 42);
-      check "created-at" (c.created_at > 0))
-
-(* cljs sync-conflict-model-title-conflict-keeps-latest-non-empty-value-test *)
-let test_sync_conflict_keeps_latest_non_empty () =
-  preserve_state (fun () ->
-      wire_no_e2ee ();
-      ignore (new_client_ops_db ());
-      let block_uuid = fresh_uuid () in
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid, "block/title", "a remote title", 41 ];
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid, "block/title", "b remote title", 42 ];
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid, "block/title", "", 43 ];
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid, "block/title", "c remote title", 44 ];
-      let conflicts =
-        Sync_client_op.get_sync_conflicts test_repo block_uuid
-      in
-      check "one conflict" (List.length conflicts = 1);
-      let (c : Sync_client_op.sync_conflict) = List.hd conflicts in
-      check "latest" (c.value = "c remote title");
-      check "remote-t" (c.remote_t = Some 44))
-
-(* cljs sync-conflict-model-clear-test *)
-let test_sync_conflict_model_clear () =
-  preserve_state (fun () ->
-      wire_no_e2ee ();
-      ignore (new_client_ops_db ());
-      let block_uuid_1 = fresh_uuid () in
-      let block_uuid_2 = fresh_uuid () in
-      Sync_client_op.add_sync_conflicts test_repo
-        [ block_uuid_1, "block/title", "remote title 1", 51
-        ; block_uuid_2, "block/title", "remote title 2", 52 ];
-      Sync_client_op.clear_sync_conflicts test_repo block_uuid_1;
-      check "block-1 cleared"
-        (Sync_client_op.get_sync_conflicts test_repo block_uuid_1 = []);
-      let conflicts_2 =
-        Sync_client_op.get_sync_conflicts test_repo block_uuid_2
-      in
-      check "block-2 kept" (List.length conflicts_2 = 1);
-      check "block-2 value"
-        ((List.hd conflicts_2).value = "remote title 2"))
-
 (* cljs rebase-saves-remote-title-and-name-conflicts-test *)
 let test_rebase_saves_remote_title_and_name_conflicts () =
   preserve_state (fun () ->
@@ -9802,7 +9846,7 @@ let test_apply_remote_txs_delete_parent_with_child_no_local () =
           check "unrelated child kept"
             (ent_by_block_uuid db child1_uuid <> None)))
 
-(* cljs apply-remote-txs-delete-expansion-includes-generated-property-value-children-test *)
+(* cljs delete-expansion-includes-generated-property-value-children-test *)
 let test_delete_expansion_includes_generated_pvalue_children () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -9948,7 +9992,7 @@ let test_apply_remote_txs_computes_remote_deletes_once () =
                  (ent_by_block_uuid (Datascript.db conn) child2_uuid
                   = None))))
 
-(* cljs apply-remote-txs-skips-block-ref-filters-when-no-block-uuid-refs-test *)
+(* cljs apply-remote-txs-skips-block-ref-filters-when-txs-have-no-block-uuid-refs-test *)
 let test_apply_remote_txs_skips_block_ref_filters_no_refs () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -10303,7 +10347,7 @@ let test_rechecks_local_edit_races_without_local_batch () =
             (Ldb.value child' "block/title"
              = Some (String "remote child"))))
 
-(* cljs apply-remote-txs-with-retry-delays-retry-when-local-txs-keep-changing-test *)
+(* cljs apply-remote-txs-delays-retry-when-local-txs-keep-changing-test *)
 let test_delays_retry_when_local_txs_keep_changing () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -10346,7 +10390,7 @@ let test_delays_retry_when_local_txs_keep_changing () =
           check "child deleted"
             (ent_by_block_uuid (Datascript.db conn) child_uuid = None)))
 
-(* cljs apply-remote-txs-with-retry-retries-snapshot-drift-even-if-pending-list-stabilizes-test *)
+(* cljs apply-remote-txs-retries-snapshot-drift-even-if-pending-list-stabilizes-test *)
 let test_retries_snapshot_drift_pending_list_stabilizes () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -10415,7 +10459,7 @@ let test_retries_snapshot_drift_pending_list_stabilizes () =
             (Ldb.value parent' "block/title"
              = Some (String "parent remote title"))))
 
-(* cljs apply-remote-txs-rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test *)
+(* cljs rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test *)
 let test_rebase_persisted_row_forward_and_inverse_ops () =
   preserve_state (fun () ->
       let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
@@ -11480,6 +11524,1414 @@ let test_undo_redo_apply_template_rewrites_property_value_refs () =
               redo_all test_repo;
               check_ref ())))
 
+(* (deftest sync-conflict-store-roundtrip-test)
+   add-sync-conflicts! persists title conflicts keyed by block uuid
+   outside graph data; get-sync-conflicts returns them. *)
+let test_sync_conflict_store_roundtrip () =
+  let ops = new_client_ops_db () in
+  let block_uuid = fresh_uuid () in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page 1" }
+          ; blocks =
+              [ { Db_test_util.default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  with_datascript_conns conn (Some ops) (fun () ->
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "remote title", 42 ];
+      match Sync_client_op.get_sync_conflicts test_repo block_uuid with
+      | [ c ] ->
+          check "conflict fields roundtrip"
+            (c.Sync_client_op.block_uuid = block_uuid
+             && c.Sync_client_op.attr = "block/title"
+             && c.Sync_client_op.value = "remote title"
+             && c.Sync_client_op.remote_t = Some 42)
+      | cs -> check "single conflict row" (List.length cs = 1))
+
+(* (deftest sync-title-conflict-store-keeps-only-latest-non-empty-value-test)
+   newer title conflicts replace previous ones per block; an empty value
+   clears the stored conflict. *)
+let test_sync_title_conflict_keeps_latest () =
+  let ops = new_client_ops_db () in
+  let block_uuid = fresh_uuid () in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page 1" }
+          ; blocks =
+              [ { Db_test_util.default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  with_datascript_conns conn (Some ops) (fun () ->
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "first remote title", 42
+        ; block_uuid, "block/title", "", 43
+        ; block_uuid, "block/title", "latest remote title", 44 ];
+      (match Sync_client_op.get_sync_conflicts test_repo block_uuid with
+       | [ c ] ->
+           check "keeps only latest non-empty conflict"
+             (c.Sync_client_op.value = "latest remote title"
+              && c.Sync_client_op.remote_t = Some 44)
+       | cs -> check "single conflict row" (List.length cs = 1));
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "", 45 ];
+      check "empty value clears the stored conflict"
+        (Sync_client_op.get_sync_conflicts test_repo block_uuid = []))
+
+(* (deftest sync-conflict-clear-test)
+   clear-sync-conflicts! removes resolved conflicts for one block and
+   leaves other blocks' conflicts intact. *)
+let test_sync_conflict_clear () =
+  let ops = new_client_ops_db () in
+  let block_uuid = fresh_uuid () in
+  let other_block_uuid = fresh_uuid () in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              { Db_test_util.default_page with pg_title = Some "page 1" }
+          ; blocks =
+              [ { Db_test_util.default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  with_datascript_conns conn (Some ops) (fun () ->
+      Sync_client_op.add_sync_conflicts test_repo
+        [ block_uuid, "block/title", "remote title", 42
+        ; other_block_uuid, "block/title", "other remote title", 43 ];
+      Sync_client_op.clear_sync_conflicts test_repo block_uuid;
+      check "cleared block has no conflicts"
+        (Sync_client_op.get_sync_conflicts test_repo block_uuid = []);
+      check "other block keeps its conflict"
+        (List.map
+           (fun (c : Sync_client_op.sync_conflict) -> c.value)
+           (Sync_client_op.get_sync_conflicts test_repo other_block_uuid)
+         = [ "other remote title" ]))
+
+(* f6fc6f78ac (deftest outliner-upload-chunks-preserve-entities-and-acknowledgment-test)
+   cljs rebinds sync-apply/max-upload-request-datoms (2 for delete, 15
+   for insert) to force chunking; the OCaml cap is a compile-time
+   constant, so the delete case uses a fixture large enough to exceed the
+   real 5000-datom cap. Chunking/ack/resend semantics are preserved. *)
+let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
+  preserve_state (fun () ->
+      List.iter
+        (fun delete ->
+           let conn, ops, parent =
+             if delete then begin
+               let children =
+                 List.init 5500 (fun i ->
+                     { Db_test_util.default_block with
+                       b_title = Some (Printf.sprintf "del child %d" i) })
+               in
+               let conn =
+                 Db_test_util.create_conn_with_blocks
+                   ~pages_and_blocks:
+                     [ { Db_test_util.page =
+                           { Db_test_util.default_page with
+                             pg_title = Some "page" }
+                       ; blocks =
+                           [ { Db_test_util.default_block with
+                               b_title = Some "parent"
+                             ; b_children = children } ] } ]
+                   ()
+               in
+               ( conn
+               , new_client_ops_db ()
+               , Option.get
+                   (Db_test_util.find_block_by_content
+                      (Datascript.db conn) "parent") )
+             end
+             else
+               let conn, ops, parent, _c1, _c2, _c3 =
+                 setup_parent_child ()
+               in
+               (conn, ops, parent)
+           in
+           let parent_uuid = ent_block_uuid parent in
+           (if delete then
+              ignore
+                (Outliner_page.delete_conn conn parent_uuid
+                   (Wire.Map [])));
+           let server_conn =
+             Datascript.conn_from_db (Datascript.db conn)
+           in
+           with_datascript_conns conn (Some ops) (fun () ->
+               ignore
+                 (apply_ops conn
+                    [ (if delete then
+                         Wire.Array
+                           [ kw "recycle-delete-permanently"
+                           ; Wire.Array [ Wire.Uuid parent_uuid ] ]
+                       else
+                         let blocks =
+                           List.init 6 (fun i ->
+                               wire_map
+                                 [ "block/uuid", Wire.Uuid (fresh_uuid ())
+                                 ; ( "block/title"
+                                   , Wire.String
+                                       (Printf.sprintf "Chunk block %d"
+                                          i) ) ])
+                         in
+                         Wire.Array
+                           [ kw "insert-blocks"
+                           ; Wire.Array
+                               [ Wire.Array blocks
+                               ; Wire.Int parent.id
+                               ; wire_map
+                                   [ "sibling?", Wire.Bool false
+                                   ; "keep-uuid?", Wire.Bool true ] ] ]) ]
+                    local_tx_meta);
+               let rec loop requests =
+                 let pending = Sync_apply.pending_txs test_repo () in
+                 let tx_entries, _drops, _drop_txs =
+                   Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+                     (Some conn) pending
+                 in
+                 match tx_entries with
+                 | [] ->
+                     check "permanent deletion spans requests"
+                       ((not delete) || requests > 1);
+                     check "insert stays one atomic request"
+                       (delete || requests = 1);
+                     check "pending empty after upload"
+                       (Sync_apply.pending_txs test_repo () = []);
+                     check "client/server checksums converge"
+                       (Db_sync_checksum.recompute_checksum
+                          (Datascript.db conn)
+                        = Db_sync_checksum.recompute_checksum
+                            (Datascript.db server_conn))
+                 | _ ->
+                     check "chunk progress bounded" (requests < 20);
+                     (if requests < 20 then begin
+                        let again, _, _ =
+                          Sync_apply.prepare_upload_tx_entries
+                            ~repo:test_repo (Some conn) pending
+                        in
+                        check "retry resends same chunk"
+                          (tx_entries = again);
+                        List.iter
+                          (fun entry ->
+                             server_apply_entry server_conn entry;
+                             (* a lost response resends the chunk before
+                                advancing the cursor *)
+                             server_apply_entry server_conn entry)
+                          tx_entries;
+                        Sync_apply.commit_large_upload_progress test_repo
+                          tx_entries;
+                        ignore
+                          (Sync_apply.mark_pending_txs_false test_repo
+                             (List.filter_map
+                                (wire_get_str "tx-id") tx_entries));
+                        loop (requests + 1)
+                      end)
+               in
+               loop 0))
+        [ false; true ])
+
+(* f6fc6f78ac (deftest additional-outliner-operations-upload-test) *)
+let test_additional_outliner_operations_upload () =
+  preserve_state (fun () ->
+      List.iter
+        (fun (op, rebase) ->
+           let conn, ops, _p, child1, child2, _c3 =
+             setup_parent_child ()
+           in
+           let recycled_uuid = fresh_uuid () in
+           page_create conn "Recycled upload page" ~uuid:recycled_uuid ();
+           ignore
+             (Outliner_page.delete_conn conn recycled_uuid
+                (Wire.Map []));
+           let source_conn =
+             Db_test_util.create_conn_with_blocks
+               ~pages_and_blocks:
+                 [ { Db_test_util.page =
+                       { Db_test_util.default_page with
+                         pg_title = Some "Imported upload page" }
+                   ; blocks =
+                       [ { Db_test_util.default_block with
+                           b_title = Some "Imported child" } ] } ]
+               ()
+           in
+           let source_db = Datascript.db source_conn in
+           let source_page =
+             Option.get (Ldb.get_page source_db (String "Imported upload page"))
+           in
+           let export_map =
+             Sqlite_export.build_export source_db
+               (Map
+                  [ Keyword "export-type", Keyword "page"
+                  ; Keyword "page-id", Int source_page.id ])
+           in
+           let child1_uuid = ent_block_uuid child1 in
+           let args =
+             match op with
+             | "restore-recycled" | "recycle-delete-permanently" ->
+                 Wire.Array [ Wire.Uuid recycled_uuid ]
+             | "collapse-expand-blocks" ->
+                 Wire.Array
+                   [ Wire.Array
+                       [ wire_map
+                           [ "block/uuid", Wire.Uuid child1_uuid
+                           ; "block/collapsed?", Wire.Bool true ] ]
+                   ; wire_map [] ]
+             | _ ->
+                 Wire.Array
+                   [ Ds_wire.transit_of_value export_map; wire_map [] ]
+           in
+           let server_conn =
+             Datascript.conn_from_db (Datascript.db conn)
+           in
+           with_datascript_conns conn (Some ops) (fun () ->
+               let result =
+                 apply_ops conn
+                   [ Wire.Array [ kw op; args ] ]
+                   local_tx_meta
+               in
+               check "apply-ops has no error"
+                 (match Wire.get "error" result with
+                  | Some Wire.Nil | None -> true
+                  | _ -> false);
+               (if rebase then
+                  remote_tx_to_client server_conn
+                    [ Add
+                        ( Entity_id child2.id
+                        , "block/title"
+                        , String "Remote edit" ) ]);
+               let db = Datascript.db conn in
+               (match op with
+                | "restore-recycled" ->
+                    check "restored page is not recycled"
+                      (match
+                         ent_by_block_uuid db recycled_uuid
+                       with
+                       | Some e -> not (Outliner_recycle.recycled e)
+                       | None -> false)
+                | "recycle-delete-permanently" ->
+                    check "page permanently deleted"
+                      (ent_by_block_uuid db recycled_uuid = None)
+                | "collapse-expand-blocks" ->
+                    check "child1 collapsed"
+                      (Ldb.value
+                         (Option.get
+                            (Datascript.entity db
+                               (Entity_id child1.id)))
+                         "block/collapsed?"
+                       = Some (Bool true))
+                | _ ->
+                    check "imported page exists"
+                      (Option.is_some
+                         (Ldb.get_page db
+                            (String "Imported upload page"))));
+               upload_pending_and_assert_converged conn server_conn))
+        (List.concat_map
+           (fun op ->
+              List.map
+                (fun rebase -> (op, rebase))
+                [ false; true ])
+           [ "restore-recycled"; "recycle-delete-permanently"
+           ; "collapse-expand-blocks"; "batch-import-edn" ]))
+
+(* cljs (count (d/q '[:find [?e ...] :where [?e :block/title t]] db t)) *)
+let count_blocks_by_title conn (title : string) : int =
+  match
+    Datascript.q_string
+      ~inputs:[ Arg_scalar (Result_value (String title)) ]
+      (Datascript.db conn)
+      "[:find [?e ...] :in $ ?title :where [?e :block/title ?title]]"
+  with
+  | [ row ] -> List.length row
+  | rows -> List.length rows
+
+(* cljs rebase-save-new-page-reference-and-insert-sibling-test *)
+let test_rebase_save_new_page_reference_and_insert_sibling () =
+  List.iter
+    (fun persisted_bad_history ->
+       List.iter
+         (fun recycle ->
+            List.iter
+              (fun move_reference_to_library ->
+                 preserve_state (fun () ->
+                     wire_no_e2ee ();
+                     let conn, ops, _parent, child1, child2, _c3 =
+                       setup_parent_child ()
+                     in
+                     let _, recycled_uuid_opt =
+                       Outliner_page.create_bang conn "TickTick" ()
+                     in
+                     let recycled_uuid = Option.get recycled_uuid_opt in
+                     let remote_conn =
+                       Datascript.conn_from_db (Datascript.db conn)
+                     in
+                     let parsed_ref =
+                       Option.get
+                         (Gp_block.page_name_to_map "New Contact"
+                            (Datascript.db conn) true None ())
+                     in
+                     let page_uuid =
+                       match List.assoc_opt "block/uuid" parsed_ref with
+                       | Some (Uuid u) -> u
+                       | _ -> failwith "parsed ref has no block/uuid"
+                     in
+                     with_datascript_conns conn (Some ops) (fun () ->
+                         let child1_uuid = ent_block_uuid child1 in
+                         ignore
+                           (apply_ops conn
+                              [ Wire.Array
+                                  [ kw "save-block"
+                                  ; Wire.Array
+                                      [ wire_map
+                                          [ "block/uuid",
+                                            Wire.Uuid child1_uuid
+                                          ; "block/title",
+                                            Wire.String
+                                              ("Call [[" ^ page_uuid ^ "]]")
+                                          ; "block/refs",
+                                            Wire.Array
+                                              [ Block_map.to_transit
+                                                  parsed_ref ] ]
+                                      ; wire_map [] ] ]
+                              ; Wire.Array
+                                  [ kw "insert-blocks"
+                                  ; Wire.Array
+                                      [ Wire.Array
+                                          [ wire_map
+                                              [ "block/title",
+                                                Wire.String ""
+                                              ; "block/uuid",
+                                                Wire.Uuid (fresh_uuid ()) ] ]
+                                      ; Wire.Int child1.id
+                                      ; wire_map
+                                          [ "sibling?", Wire.Bool true ] ] ] ]
+                              (local_tx_meta_with_outliner_op
+                                 "insert-blocks"));
+                         let inserted =
+                           Option.get
+                             (Ldb.get_right_sibling
+                                (Option.get
+                                   (Datascript.entity
+                                      (Datascript.db conn)
+                                      (Entity_id child1.id))))
+                         in
+                         let inserted_uuid = ent_block_uuid inserted in
+                         let pending =
+                           List.hd (Sync_apply.pending_txs test_repo ())
+                         in
+                         let tx_id = pending.tx_id in
+                         check "inserted uuid differs from page uuid"
+                           (page_uuid <> inserted_uuid);
+                         if not persisted_bad_history then
+                           check "forward ops carry inserted uuid"
+                             (wire_uuid_string
+                                (wire_get_in [ 1; 1; 0; 0 ] "block/uuid"
+                                   (Wire.Array
+                                      pending.forward_outliner_ops))
+                              = Some inserted_uuid)
+                         else
+                           (* cljs: the affected client stored the created
+                              reference UUID as the inserted sibling UUID,
+                              while its durable datoms stayed correct *)
+                           upsert_local_tx_entry_from pending
+                             ~forward_outliner_ops:
+                               (List.mapi
+                                  (fun i op ->
+                                     if i = 1 then
+                                       op
+                                       |> wire_assoc_in [ 1; 0; 0 ]
+                                            "block/uuid"
+                                            (Wire.Uuid page_uuid)
+                                       |> wire_assoc_in [ 1; 0; 0 ]
+                                            "block/parent"
+                                            (Wire.Array
+                                               [ kw "block/uuid"
+                                               ; Wire.Nil ])
+                                     else op)
+                                  pending.forward_outliner_ops);
+                         (if recycle then
+                            ignore
+                              (apply_ops conn
+                                 [ Wire.Array
+                                     [ kw "delete-page"
+                                     ; Wire.Array
+                                         [ Wire.Uuid recycled_uuid
+                                         ; wire_map [] ] ] ]
+                                 local_tx_meta));
+                         (if move_reference_to_library then
+                            let library =
+                              Option.get
+                                (Ldb.get_built_in_page
+                                   (Datascript.db conn)
+                                   Ldb.library_page_name)
+                            in
+                            ignore
+                              (apply_ops conn
+                                 [ Wire.Array
+                                     [ kw "move-blocks"
+                                     ; Wire.Array
+                                         [ Wire.Array
+                                             [ Wire.Uuid page_uuid ]
+                                         ; Wire.Uuid
+                                             (ent_block_uuid library)
+                                         ; wire_map
+                                             [ "sibling?", Wire.Bool false ]
+                                         ] ] ]
+                                 local_tx_meta));
+                         for attempt = 0 to 1 do
+                           let title =
+                             "Remote edit " ^ string_of_int attempt
+                           in
+                           check "remote tx applied"
+                             (try
+                                remote_tx_to_client remote_conn
+                                  [ Add
+                                      ( Entity_id child2.id
+                                      , "block/title"
+                                      , String title ) ];
+                                true
+                              with _ -> false);
+                           let db = Datascript.db conn in
+                           check "remote title applied"
+                             (Ldb.string_value
+                                (Option.get
+                                   (Datascript.entity db
+                                      (Entity_id child2.id)))
+                                "block/title"
+                              = Some title);
+                           check "New Contact page keeps title"
+                             (match ent_by_block_uuid db page_uuid with
+                              | Some e ->
+                                  Ldb.string_value e "block/title"
+                                  = Some "New Contact"
+                              | None -> false);
+                           check "reference parent is Library"
+                             ((if move_reference_to_library then
+                                 Option.map
+                                   (fun (l : entity) -> l.id)
+                                   (Ldb.get_built_in_page db
+                                      Ldb.library_page_name)
+                               else None)
+                              = (match
+                                   ent_by_block_uuid db page_uuid
+                                 with
+                                 | Some p -> (
+                                     match
+                                       Ldb.ref_ent p "block/parent"
+                                     with
+                                     | Some par -> Some par.id
+                                     | None -> None)
+                                 | None -> None));
+                           check "right sibling keeps inserted uuid"
+                             (Option.map ent_block_uuid
+                                (Ldb.get_right_sibling
+                                   (Option.get
+                                      (Datascript.entity db
+                                         (Entity_id child1.id))))
+                              = Some inserted_uuid);
+                           check "stored forward op keeps inserted uuid"
+                             (match
+                                Sync_client_op.get_local_tx_entry
+                                  test_repo tx_id
+                              with
+                              | Some e ->
+                                  wire_uuid_string
+                                    (wire_get_in [ 1; 1; 0; 0 ]
+                                       "block/uuid"
+                                       (Wire.Array e.forward_outliner_ops))
+                                  = Some inserted_uuid
+                              | None -> false)
+                         done;
+                         check "pending still records the tx"
+                           (List.exists
+                              (fun (e : Sync_client_op.local_tx_entry) ->
+                                 e.tx_id = tx_id)
+                              (Sync_apply.pending_txs test_repo ()));
+                         (if recycle then
+                            check "recycled page flagged"
+                              (match
+                                 ent_by_block_uuid
+                                   (Datascript.db conn) recycled_uuid
+                               with
+                               | Some e -> Outliner_recycle.recycled e
+                               | None -> false));
+                         upload_pending_and_assert_converged conn
+                           remote_conn)))
+              [ false; true ])
+         [ false; true ])
+    [ false; true ]
+
+(* cljs rebase-insert-page-in-library-with-reference-test *)
+let test_rebase_insert_page_in_library_with_reference () =
+  List.iter
+    (fun with_reference ->
+       preserve_state (fun () ->
+           wire_no_e2ee ();
+           let conn, ops, _parent, child1, _c2, _c3 =
+             setup_parent_child ()
+           in
+           let server_conn =
+             Datascript.conn_from_db (Datascript.db conn)
+           in
+           let db0 = Datascript.db conn in
+           let library =
+             Option.get
+               (Ldb.get_built_in_page db0 Ldb.library_page_name)
+           in
+           let parsed_ref =
+             Option.get
+               (Gp_block.page_name_to_map "Referenced Page" db0 true
+                  None ())
+           in
+           let ref_uuid =
+             match List.assoc_opt "block/uuid" parsed_ref with
+             | Some (Uuid u) -> u
+             | _ -> failwith "parsed ref has no block/uuid"
+           in
+           let title =
+             if with_reference then "Page with [[" ^ ref_uuid ^ "]]"
+             else "Library Page"
+           in
+           let page_map =
+             Option.get
+               (Gp_block.page_name_to_map title db0 true None ())
+           in
+           with_datascript_conns conn (Some ops) (fun () ->
+               let page_wire =
+                 if with_reference then
+                   Cljs_map.assoc
+                     (Block_map.to_transit page_map) "block/refs"
+                     (Wire.Array [ Block_map.to_transit parsed_ref ])
+                 else Block_map.to_transit page_map
+               in
+               let page_uuid =
+                 match List.assoc_opt "block/uuid" page_map with
+                 | Some (Uuid u) -> u
+                 | _ -> failwith "page map has no block/uuid"
+               in
+               ignore
+                 (apply_ops conn
+                    [ Wire.Array
+                        [ kw "insert-blocks"
+                        ; Wire.Array
+                            [ Wire.Array [ page_wire ]
+                            ; Wire.Int library.id
+                            ; wire_map
+                                [ "sibling?", Wire.Bool false
+                                ; "keep-uuid?", Wire.Bool true ] ] ] ]
+                    local_tx_meta);
+               let pending =
+                 List.hd (Sync_apply.pending_txs test_repo ())
+               in
+               check "forward op carries page uuid"
+                 (wire_uuid_string
+                    (wire_get_in [ 0; 1; 0; 0 ] "block/uuid"
+                       (Wire.Array pending.forward_outliner_ops))
+                  = Some page_uuid);
+               let db = Datascript.db conn in
+               let page_before =
+                 Option.get (ent_by_block_uuid db page_uuid)
+               in
+               ignore
+                 (Datascript.transact_conn server_conn
+                    [ Add
+                        ( Entity_id child1.id
+                        , "block/title"
+                        , String "Remote edit" ) ]);
+               await_unit
+                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                    [ db_add (Wire.Int child1.id) "block/title"
+                        (Wire.String "Remote edit") ]);
+               let db = Datascript.db conn in
+               let inserted =
+                 Option.get (ent_by_block_uuid db page_uuid)
+               in
+               check "inserted is page" (Ldb.is_page inserted);
+               check "title preserved"
+                 (Ldb.string_value inserted "block/title"
+                  = Ldb.string_value page_before "block/title");
+               check "parent is library"
+                 (Option.map ent_block_uuid
+                    (Ldb.ref_ent inserted "block/parent")
+                  = Some (ent_block_uuid library));
+               check "remote edit applied"
+                 (Ldb.string_value
+                    (Option.get
+                       (Datascript.entity db (Entity_id child1.id)))
+                    "block/title"
+                  = Some "Remote edit");
+               (if with_reference then begin
+                  let refs e =
+                    List.sort compare
+                      (List.map ent_block_uuid
+                         (Ldb.ref_ents e "block/refs"))
+                  in
+                  check "refs preserved"
+                    (refs page_before = refs inserted);
+                  check "refs contain parsed ref"
+                    (List.mem ref_uuid (refs inserted));
+                  check "parsed ref page title"
+                    (match ent_by_block_uuid db ref_uuid with
+                     | Some e ->
+                         Ldb.string_value e "block/title"
+                         = Some "Referenced Page"
+                     | None -> false)
+               end);
+               upload_pending_and_assert_converged conn server_conn)))
+    [ false; true ]
+
+(* cljs rebase-multiple-insertions-preserves-identities-test *)
+let test_rebase_multiple_insertions_preserves_identities () =
+  List.iter
+    (fun keep_uuid ->
+       List.iter
+         (fun replace_empty_target ->
+            preserve_state (fun () ->
+                wire_no_e2ee ();
+                let conn, ops, _parent, child1, child2, child3 =
+                  setup_parent_child ()
+                in
+                if replace_empty_target then
+                  ignore
+                    (Datascript.transact_conn conn
+                       [ Add
+                           ( Entity_id child1.id
+                           , "block/title"
+                           , String "" ) ]);
+                let server_conn =
+                  Datascript.conn_from_db (Datascript.db conn)
+                in
+                with_datascript_conns conn (Some ops) (fun () ->
+                    ignore
+                      (apply_ops conn
+                         [ Wire.Array
+                             [ kw "insert-blocks"
+                             ; Wire.Array
+                                 [ Wire.Array
+                                     [ wire_map
+                                         [ "block/uuid",
+                                           Wire.Uuid (fresh_uuid ())
+                                         ; "block/title",
+                                           Wire.String "First insertion"
+                                         ] ]
+                                 ; Wire.Int child1.id
+                                 ; wire_map
+                                     [ "sibling?", Wire.Bool true
+                                     ; "keep-uuid?", Wire.Bool keep_uuid
+                                     ; "replace-empty-target?",
+                                       Wire.Bool replace_empty_target ] ]
+                             ]
+                         ; Wire.Array
+                             [ kw "insert-blocks"
+                             ; Wire.Array
+                                 [ Wire.Array
+                                     [ wire_map
+                                         [ "block/uuid",
+                                           Wire.Uuid (fresh_uuid ())
+                                         ; "block/title",
+                                           Wire.String "Second insertion"
+                                         ] ]
+                                 ; Wire.Int child2.id
+                                 ; wire_map
+                                     [ "sibling?", Wire.Bool true
+                                     ; "keep-uuid?", Wire.Bool keep_uuid ]
+                                 ] ] ]
+                         local_tx_meta);
+                    let db = Datascript.db conn in
+                    let first_uuid =
+                      if replace_empty_target then ent_block_uuid child1
+                      else
+                        ent_block_uuid
+                          (Option.get
+                             (Ldb.get_right_sibling
+                                (Option.get
+                                   (Datascript.entity db
+                                      (Entity_id child1.id)))))
+                    in
+                    let second_uuid =
+                      ent_block_uuid
+                        (Option.get
+                           (Ldb.get_right_sibling
+                              (Option.get
+                                 (Datascript.entity db
+                                    (Entity_id child2.id)))))
+                    in
+                    ignore
+                      (apply_ops conn
+                         [ Wire.Array
+                             [ kw "save-block"
+                             ; Wire.Array
+                                 [ wire_map
+                                     [ "block/uuid",
+                                       Wire.Uuid second_uuid
+                                     ; "block/title",
+                                       Wire.String "Second edited" ]
+                                 ; wire_map [] ] ] ]
+                         local_tx_meta);
+                    check "remote tx applied"
+                      (try
+                         remote_tx_to_client server_conn
+                           [ Add
+                               ( Entity_id child3.id
+                               , "block/title"
+                               , String "Remote edit" ) ];
+                         true
+                       with _ -> false);
+                    let db = Datascript.db conn in
+                    check "first insertion kept"
+                      (match ent_by_block_uuid db first_uuid with
+                       | Some e ->
+                           Ldb.string_value e "block/title"
+                           = Some "First insertion"
+                       | None -> false);
+                    check "second insertion kept"
+                      (match ent_by_block_uuid db second_uuid with
+                       | Some e ->
+                           Ldb.string_value e "block/title"
+                           = Some "Second edited"
+                       | None -> false);
+                    let tx_entries, _, _ =
+                      Sync_apply.prepare_upload_tx_entries
+                        ~repo:test_repo (Some conn)
+                        (Sync_apply.pending_txs test_repo ())
+                    in
+                    List.iter
+                      (fun entry ->
+                         check "apply-tx-entry succeeded"
+                           (try
+                              server_apply_entry server_conn entry;
+                              true
+                            with _ -> false))
+                      tx_entries;
+                    check "client/server checksums converge"
+                      (Db_sync_checksum.recompute_checksum
+                         (Datascript.db conn)
+                       = Db_sync_checksum.recompute_checksum
+                           (Datascript.db server_conn)))))
+         [ false; true ])
+    [ false; true ]
+
+(* cljs compound-save-empty-target-then-insert-preserves-identities-test *)
+let test_compound_save_empty_target_then_insert_preserves_identities () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _parent, child1, child2, _c3 = setup_parent_child () in
+      ignore
+        (Datascript.transact_conn conn
+           [ Add (Entity_id child1.id, "block/title", String "") ]);
+      let server_conn =
+        Datascript.conn_from_db (Datascript.db conn)
+      in
+      let first_uuid = fresh_uuid () in
+      let second_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "save-block"
+                   ; Wire.Array
+                       [ wire_map
+                           [ "block/uuid", Wire.Uuid (ent_block_uuid child1)
+                           ; "block/title", Wire.String "Typed" ]
+                       ; wire_map [] ] ]
+               ; Wire.Array
+                   [ kw "insert-blocks"
+                   ; Wire.Array
+                       [ Wire.Array
+                           [ wire_map
+                               [ "block/uuid", Wire.Uuid first_uuid
+                               ; "block/title", Wire.String "First" ]
+                           ; wire_map
+                               [ "block/uuid", Wire.Uuid second_uuid
+                               ; "block/title", Wire.String "Second" ] ]
+                       ; Wire.Int child1.id
+                       ; wire_map
+                           [ "sibling?", Wire.Bool true
+                           ; "keep-uuid?", Wire.Bool true
+                           ; "replace-empty-target?", Wire.Bool false ] ]
+                   ] ]
+               local_tx_meta);
+          remote_tx_to_client server_conn
+            [ Add
+                ( Entity_id child2.id
+                , "block/title"
+                , String "Remote" ) ];
+          let db = Datascript.db conn in
+          List.iter
+            (fun (id, title) ->
+               check ("title of " ^ title)
+                 (match ent_by_block_uuid db id with
+                  | Some e -> Ldb.string_value e "block/title" = Some title
+                  | None -> false))
+            [ ent_block_uuid child1, "Typed"; first_uuid, "First"
+            ; second_uuid, "Second" ];
+          upload_pending_and_assert_converged conn server_conn))
+
+(* cljs rebase-nested-insert-then-delete-preserves-tree-test *)
+let test_rebase_nested_insert_then_delete_preserves_tree () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _parent, child1, child2, _c3 = setup_parent_child () in
+      let server_conn =
+        Datascript.conn_from_db (Datascript.db conn)
+      in
+      let root_uuid = fresh_uuid () in
+      let child_uuid = fresh_uuid () in
+      let grandchild_uuid = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "insert-blocks"
+                   ; Wire.Array
+                       [ Wire.Array
+                           [ wire_map
+                               [ "block/uuid", Wire.Uuid root_uuid
+                               ; "block/title",
+                                 Wire.String "Inserted root" ]
+                           ; wire_map
+                               [ "block/uuid", Wire.Uuid child_uuid
+                               ; "block/title",
+                                 Wire.String "Inserted child"
+                               ; "block/parent",
+                                 block_uuid_lookup
+                                   (Wire.Uuid root_uuid) ]
+                           ; wire_map
+                               [ "block/uuid",
+                                 Wire.Uuid grandchild_uuid
+                               ; "block/title",
+                                 Wire.String "Inserted grandchild"
+                               ; "block/parent",
+                                 block_uuid_lookup
+                                   (Wire.Uuid child_uuid) ] ]
+                       ; Wire.Int child1.id
+                       ; wire_map
+                           [ "sibling?", Wire.Bool true
+                           ; "keep-uuid?", Wire.Bool true ] ] ] ]
+               local_tx_meta);
+          let db = Datascript.db conn in
+          check "grandchild under child"
+            (match ent_by_block_uuid db grandchild_uuid with
+             | Some g ->
+                 Option.map ent_block_uuid
+                   (Ldb.ref_ent g "block/parent")
+                 = Some child_uuid
+             | None -> false);
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "delete-blocks"
+                   ; Wire.Array
+                       [ Wire.Array [ Wire.Uuid child_uuid ]
+                       ; wire_map [] ] ]
+               ; Wire.Array
+                   [ kw "recycle-delete-permanently"
+                   ; Wire.Array [ Wire.Uuid child_uuid ] ] ]
+               local_tx_meta);
+          let db = Datascript.db conn in
+          check "grandchild deleted"
+            (ent_by_block_uuid db grandchild_uuid = None);
+          check "remote tx applied"
+            (try
+               remote_tx_to_client server_conn
+                 [ Add
+                     ( Entity_id child2.id
+                     , "block/title"
+                     , String "Remote edit" ) ];
+               true
+             with _ -> false);
+          let db = Datascript.db conn in
+          check "inserted root kept"
+            (match ent_by_block_uuid db root_uuid with
+             | Some e ->
+                 Ldb.string_value e "block/title"
+                 = Some "Inserted root"
+             | None -> false);
+          check "inserted child deleted"
+            (ent_by_block_uuid db child_uuid = None);
+          check "inserted grandchild deleted"
+            (ent_by_block_uuid db grandchild_uuid = None);
+          let tx_entries, _, _ =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+              (Some conn) (Sync_apply.pending_txs test_repo ())
+          in
+          List.iter
+            (fun entry ->
+               check "apply-tx-entry succeeded"
+                 (try
+                    server_apply_entry server_conn entry;
+                    true
+                  with _ -> false))
+            tx_entries;
+          check "client/server checksums converge"
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn)
+             = Db_sync_checksum.recompute_checksum
+                 (Datascript.db server_conn))))
+
+(* cljs compound-template-and-insert-upload-test *)
+let test_compound_template_and_insert_upload () =
+  List.iter
+    (fun keep_uuid ->
+       List.iter
+         (fun template_first ->
+            List.iter
+              (fun explicit_sibling ->
+                 preserve_state (fun () ->
+                     wire_no_e2ee ();
+                     let ( template_root_uuid, _t1, _t2, _t3
+                         , empty_target_uuid, _local_empty
+                         , seed_conn, ops ) =
+                       setup_rebase_apply_template_repro_state ()
+                     in
+                     let conn =
+                       Datascript.conn_from_db (Datascript.db seed_conn)
+                     in
+                     let server_conn =
+                       Datascript.conn_from_db (Datascript.db seed_conn)
+                     in
+                     let seed =
+                       Option.get
+                         (Db_test_util.find_block_by_content
+                            (Datascript.db conn) "seed")
+                     in
+                     let template_op =
+                       Wire.Array
+                         [ kw "apply-template"
+                         ; Wire.Array
+                             [ Wire.Uuid template_root_uuid
+                             ; Wire.Uuid empty_target_uuid
+                             ; (if explicit_sibling then
+                                  wire_map
+                                    [ "sibling?", Wire.Bool true ]
+                                else wire_map []) ] ]
+                     in
+                     let insert_op =
+                       Wire.Array
+                         [ kw "insert-blocks"
+                         ; Wire.Array
+                             [ Wire.Array
+                                 [ wire_map
+                                     [ "block/uuid",
+                                       Wire.Uuid (fresh_uuid ())
+                                     ; "block/title",
+                                       Wire.String "Compound followup" ]
+                                 ]
+                             ; block_uuid_lookup
+                                 (Wire.Uuid (ent_block_uuid seed))
+                             ; wire_map
+                                 [ "sibling?", Wire.Bool true
+                                 ; "keep-uuid?", Wire.Bool keep_uuid ] ]
+                         ]
+                     in
+                     with_datascript_conns conn (Some ops) (fun () ->
+                         ignore
+                           (apply_ops conn
+                              (if template_first then
+                                 [ template_op; insert_op ]
+                               else [ insert_op; template_op ])
+                              local_tx_meta);
+                         let followup_uuid =
+                           ent_block_uuid
+                             (Option.get
+                                (Db_test_util.find_block_by_content
+                                   (Datascript.db conn)
+                                   "Compound followup"))
+                         in
+                         remote_tx_to_client server_conn
+                           [ Add
+                               ( Entity_id seed.id
+                               , "block/title"
+                               , String "Remote seed" ) ];
+                         let db = Datascript.db conn in
+                         check "followup title"
+                           (match ent_by_block_uuid db followup_uuid with
+                            | Some e ->
+                                Ldb.string_value e "block/title"
+                                = Some "Compound followup"
+                            | None -> false);
+                         check "two '3' blocks"
+                           (count_blocks_by_title conn "3" = 2);
+                         upload_pending_and_assert_converged conn
+                           server_conn)))
+              [ false; true ])
+         [ false; true ])
+    [ false; true ]
+
+(* cljs rebase-template-after-target-permanently-deleted-test *)
+let test_rebase_template_after_target_permanently_deleted () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let ( template_root_uuid, _t1, _t2, _t3, empty_target_uuid
+          , _local_empty, seed_conn, ops ) =
+        setup_rebase_apply_template_repro_state ()
+      in
+      let conn = Datascript.conn_from_db (Datascript.db seed_conn) in
+      let server_conn =
+        Datascript.conn_from_db (Datascript.db seed_conn)
+      in
+      let seed =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "seed")
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_template_to_empty_target conn template_root_uuid
+               empty_target_uuid);
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "delete-blocks"
+                   ; Wire.Array
+                       [ Wire.Array [ Wire.Uuid empty_target_uuid ]
+                       ; wire_map [] ] ]
+               ; Wire.Array
+                   [ kw "recycle-delete-permanently"
+                   ; Wire.Array [ Wire.Uuid empty_target_uuid ] ] ]
+               local_tx_meta);
+          remote_tx_to_client server_conn
+            [ Add
+                ( Entity_id seed.id
+                , "block/title"
+                , String "Remote seed" ) ];
+          let db = Datascript.db conn in
+          check "empty target deleted"
+            (ent_by_block_uuid db empty_target_uuid = None);
+          check "one '2' block" (count_blocks_by_title conn "2" = 1);
+          upload_pending_and_assert_converged conn server_conn))
+
+(* cljs template-uploads-after-rebase-and-undo-redo-test *)
+let test_template_uploads_after_rebase_and_undo_redo () =
+  List.iter
+    (fun rebase ->
+       List.iter
+         (fun undo_redo ->
+            preserve_state (fun () ->
+                wire_no_e2ee ();
+                let ( template_root_uuid, _t1, _t2, _t3
+                    , empty_target_uuid, _local_empty, seed_conn, ops ) =
+                  setup_rebase_apply_template_repro_state ()
+                in
+                let conn =
+                  Datascript.conn_from_db (Datascript.db seed_conn)
+                in
+                let server_conn =
+                  Datascript.conn_from_db (Datascript.db seed_conn)
+                in
+                let seed =
+                  Option.get
+                    (Db_test_util.find_block_by_content
+                       (Datascript.db conn) "seed")
+                in
+                with_datascript_conns conn (Some ops) (fun () ->
+                    with_apply_history_action (fun () ->
+                        ignore
+                          (apply_template_to_empty_target conn
+                             template_root_uuid empty_target_uuid);
+                        let inserted =
+                          Option.get
+                            (select_offline_inserted conn
+                               template_root_uuid "3")
+                        in
+                        let inserted_uuid = ent_block_uuid inserted in
+                        (if undo_redo then begin
+                           ignore (Undo_redo.undo test_repo);
+                           ignore (Undo_redo.redo test_repo)
+                        end);
+                        (if rebase then
+                           remote_tx_to_client server_conn
+                             [ Add
+                                 ( Entity_id seed.id
+                                 , "block/title"
+                                 , String "Remote seed" ) ]);
+                        check "inserted title 3"
+                          (match
+                             ent_by_block_uuid (Datascript.db conn)
+                               inserted_uuid
+                           with
+                           | Some e ->
+                               Ldb.string_value e "block/title"
+                               = Some "3"
+                           | None -> false);
+                        upload_pending_and_assert_converged conn
+                          server_conn))))
+         [ false; true ])
+    [ false; true ]
+
+(* cljs setup-template-text-property-state *)
+let setup_template_text_property_state explicit_value_block
+    with_reference nonempty_target =
+  let ( template_root_uuid, _t1, _t2, template_3_uuid
+      , empty_target_uuid, local_empty_uuid, seed_conn, ops ) =
+    setup_rebase_apply_template_repro_state ()
+  in
+  let property_id = "user.property/template-notes" in
+  let page_uuid =
+    ent_block_uuid
+      (Option.get
+         (Db_test_util.find_page_by_title (Datascript.db seed_conn)
+            "page 1"))
+  in
+  let text =
+    "Template notes"
+    ^ (if with_reference then "\n" ^ Db_content.page_ref page_uuid
+       else "")
+  in
+  ignore
+    (Outliner_property.upsert_property seed_conn (Some property_id)
+       (wire_map
+          [ "logseq.property/type", Wire.Keyword "default"
+          ; "db/cardinality", Wire.Keyword "db.cardinality/one" ])
+       ~property_name:(Some "template-notes") ~properties:[]);
+  (if explicit_value_block then
+     ignore
+       (Outliner_property.create_property_text_block seed_conn
+          ~block_id:
+            (Some (block_uuid_lookup (Wire.Uuid template_3_uuid)))
+          property_id (Wire.String text) ())
+   else
+     Outliner_property.set_block_property seed_conn
+       (block_uuid_lookup (Wire.Uuid template_3_uuid)) property_id
+       (Wire.String text));
+  (if nonempty_target then
+     ignore
+       (Datascript.transact_conn seed_conn
+          [ Add
+              ( Lookup_ref ("block/uuid", Uuid empty_target_uuid)
+              , "block/title"
+              , String "Existing target" ) ]));
+  ( template_root_uuid, template_3_uuid, empty_target_uuid
+  , local_empty_uuid, seed_conn, ops, text
+  , if with_reference then Some page_uuid else None )
+
+(* cljs assert-template-text-property *)
+let assert_template_text_property (db : db) inserted_uuid value_uuid
+    source_uuid text reference_uuid : unit =
+  let copied = ent_by_block_uuid db inserted_uuid in
+  let value_ent =
+    Option.bind copied (fun c ->
+        Ldb.ref_ent c "user.property/template-notes")
+  in
+  let original =
+    Option.bind
+      (ent_by_block_uuid db source_uuid)
+      (fun e -> Ldb.ref_ent e "user.property/template-notes")
+  in
+  let value_title =
+    Option.bind value_ent (fun e -> Ldb.string_value e "block/title")
+  in
+  check "copied title 3"
+    (Option.bind copied (fun c -> Ldb.string_value c "block/title")
+     = Some "3");
+  check "copied value edited title"
+    (value_title = Some ("Edited " ^ text));
+  check "original value keeps title"
+    (Option.bind original (fun e -> Ldb.string_value e "block/title")
+     = Some text);
+  check "value uuid"
+    (Option.map ent_block_uuid value_ent = Some value_uuid);
+  check "value parent is inserted"
+    (Option.bind value_ent
+       (fun e ->
+          Option.map ent_block_uuid (Ldb.ref_ent e "block/parent"))
+     = Some inserted_uuid);
+  check "original parent is source"
+    (Option.bind original
+       (fun e ->
+          Option.map ent_block_uuid (Ldb.ref_ent e "block/parent"))
+     = Some source_uuid);
+  match reference_uuid with
+  | Some r ->
+      check "value refs page"
+        (List.exists
+           (fun (e : entity) -> ent_block_uuid e = r)
+           (match value_ent with
+            | Some v -> Ldb.ref_ents v "block/refs"
+            | None -> []))
+  | None -> ()
+
+(* cljs template-text-property-uploads-after-rebase-and-undo-redo-test *)
+let test_template_text_property_uploads_after_rebase_and_undo_redo () =
+  List.iter
+    (fun explicit_value_block ->
+       List.iter
+         (fun with_reference ->
+            List.iter
+              (fun nonempty_target ->
+                 List.iter
+                   (fun rebase ->
+                      List.iter
+                        (fun undo_redo ->
+                           List.iter
+                             (fun edit_before_rebase ->
+                                preserve_state (fun () ->
+                                    wire_no_e2ee ();
+                                    let ( template_root_uuid
+                                        , template_3_uuid
+                                        , empty_target_uuid
+                                        , _local_empty
+                                        , seed_conn, ops
+                                        , property_text
+                                        , reference_uuid ) =
+                                      setup_template_text_property_state
+                                        explicit_value_block
+                                        with_reference nonempty_target
+                                    in
+                                    let conn =
+                                      Datascript.conn_from_db
+                                        (Datascript.db seed_conn)
+                                    in
+                                    let server_conn =
+                                      Datascript.conn_from_db
+                                        (Datascript.db seed_conn)
+                                    in
+                                    let seed =
+                                      Option.get
+                                        (Db_test_util
+                                           .find_block_by_content
+                                           (Datascript.db conn)
+                                           "seed")
+                                    in
+                                    let db = Datascript.db conn in
+                                    let source_value =
+                                      Ldb.ref_ent
+                                        (Option.get
+                                           (ent_by_block_uuid db
+                                              template_3_uuid))
+                                        "user.property/template-notes"
+                                    in
+                                    with_datascript_conns conn
+                                      (Some ops) (fun () ->
+                                          with_apply_history_action
+                                            (fun () ->
+                                                ignore
+                                                  (apply_template_with_opts
+                                                     conn
+                                                     template_root_uuid
+                                                     empty_target_uuid
+                                                     [ "sibling?",
+                                                       Wire.Bool true ]);
+                                                let inserted =
+                                                  Option.get
+                                                    (select_offline_inserted
+                                                       conn
+                                                       template_root_uuid
+                                                       "3")
+                                                in
+                                                let inserted_uuid =
+                                                  ent_block_uuid inserted
+                                                in
+                                                let value_uuid =
+                                                  ent_block_uuid
+                                                    (Option.get
+                                                       (Ldb.ref_ent
+                                                          inserted
+                                                          "user.property/\
+                                                           template-notes"))
+                                                in
+                                                let edit () =
+                                                  ignore
+                                                    (apply_ops conn
+                                                       [ Wire.Array
+                                                           [ kw
+                                                               "save-block"
+                                                           ; Wire.Array
+                                                               [ (match
+                                                                    reference_uuid
+                                                                  with
+                                                                  | Some
+                                                                      r ->
+                                                                    wire_map
+                                                                      [ "block/uuid",
+                                                                        Wire
+                                                                          .Uuid
+                                                                          value_uuid
+                                                                      ; "block/title",
+                                                                        Wire
+                                                                          .String
+                                                                          ("Edited "
+                                                                           ^ property_text)
+                                                                      ; "block/refs",
+                                                                        Wire
+                                                                          .Array
+                                                                          [ wire_map
+                                                                              [ "block/uuid",
+                                                                                Wire
+                                                                                  .Uuid
+                                                                                  r ]
+                                                                          ] ]
+                                                                  | None ->
+                                                                    wire_map
+                                                                      [ "block/uuid",
+                                                                        Wire
+                                                                          .Uuid
+                                                                          value_uuid
+                                                                      ; "block/title",
+                                                                        Wire
+                                                                          .String
+                                                                          ("Edited "
+                                                                           ^ property_text)
+                                                                      ])
+                                                               ; wire_map
+                                                                   [] ] ]
+                                                       ]
+                                                       local_tx_meta)
+                                                in
+                                                check
+                                                  "value uuid differs from \
+                                                   source"
+                                                  (Option.map
+                                                     ent_block_uuid
+                                                     source_value
+                                                   <> Some value_uuid);
+                                                (if undo_redo then begin
+                                                   ignore
+                                                     (Undo_redo.undo
+                                                        test_repo);
+                                                   ignore
+                                                     (Undo_redo.redo
+                                                        test_repo)
+                                                end);
+                                                (if edit_before_rebase then
+                                                   edit ());
+                                                (if rebase then
+                                                   List.iter
+                                                     (fun title ->
+                                                        remote_tx_to_client
+                                                          server_conn
+                                                          [ Add
+                                                              ( Entity_id
+                                                                  seed.id
+                                                              , "block/title"
+                                                              , String
+                                                                  title )
+                                                          ])
+                                                     [ "Remote seed"
+                                                     ; "Remote seed again" ]);
+                                                (if
+                                                   not edit_before_rebase
+                                                 then edit ());
+                                                upload_pending_and_assert_converged
+                                                  conn server_conn;
+                                                List.iter
+                                                  (fun db ->
+                                                     assert_template_text_property
+                                                       db inserted_uuid
+                                                       value_uuid
+                                                       template_3_uuid
+                                                       property_text
+                                                       reference_uuid)
+                                                  [ Datascript.db conn
+                                                  ; Datascript.db
+                                                      server_conn ]))))
+                             [ false; true ])
+                        [ false; true ])
+                   [ false; true ])
+              [ false; true ])
+         [ false; true ])
+    [ false; true ]
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -12037,13 +13489,6 @@ let () =
         ; Alcotest.test_case
             "rebase-preserves-title-when-reversed-tx-ids-change" `Quick
             test_rebase_preserves_title_when_reversed_tx_ids_change
-        ; Alcotest.test_case "sync-conflict-model-roundtrip" `Quick
-            test_sync_conflict_model_roundtrip
-        ; Alcotest.test_case
-            "sync-conflict-keeps-latest-non-empty" `Quick
-            test_sync_conflict_keeps_latest_non_empty
-        ; Alcotest.test_case "sync-conflict-model-clear" `Quick
-            test_sync_conflict_model_clear
         ; Alcotest.test_case
             "rebase-saves-remote-title-and-name-conflicts" `Quick
             test_rebase_saves_remote_title_and_name_conflicts
@@ -12142,4 +13587,47 @@ let () =
         ; Alcotest.test_case
             "undo-redo-apply-template-rewrites-property-value-refs" `Quick
             test_undo_redo_apply_template_rewrites_property_value_refs
-        ] ) ]
+        ; Alcotest.test_case "sync-conflict-store-roundtrip-test" `Quick
+            test_sync_conflict_store_roundtrip
+        ; Alcotest.test_case
+            "sync-title-conflict-store-keeps-only-latest-non-empty-value-test" `Quick
+            test_sync_title_conflict_keeps_latest
+        ; Alcotest.test_case "sync-conflict-clear-test" `Quick
+            test_sync_conflict_clear
+        ; Alcotest.test_case
+            "outliner-upload-chunks-preserve-entities-and-acknowledgment-test"
+            `Quick
+            test_outliner_upload_chunks_preserve_entities_and_acknowledgment
+        ; Alcotest.test_case "additional-outliner-operations-upload-test"
+            `Quick test_additional_outliner_operations_upload
+        ; Alcotest.test_case
+            "rebase-save-new-page-reference-and-insert-sibling-test" `Quick
+            test_rebase_save_new_page_reference_and_insert_sibling
+        ; Alcotest.test_case
+            "rebase-insert-page-in-library-with-reference-test" `Quick
+            test_rebase_insert_page_in_library_with_reference
+        ; Alcotest.test_case
+            "rebase-multiple-insertions-preserves-identities-test" `Quick
+            test_rebase_multiple_insertions_preserves_identities
+        ; Alcotest.test_case
+            "compound-save-empty-target-then-insert-preserves-identities-test"
+            `Quick
+            test_compound_save_empty_target_then_insert_preserves_identities
+        ; Alcotest.test_case
+            "rebase-nested-insert-then-delete-preserves-tree-test" `Quick
+            test_rebase_nested_insert_then_delete_preserves_tree
+        ; Alcotest.test_case "compound-template-and-insert-upload-test"
+            `Quick test_compound_template_and_insert_upload
+        ; Alcotest.test_case
+            "rebase-template-after-target-permanently-deleted-test" `Quick
+            test_rebase_template_after_target_permanently_deleted
+        ; Alcotest.test_case
+            "template-uploads-after-rebase-and-undo-redo-test" `Quick
+            test_template_uploads_after_rebase_and_undo_redo
+        ; Alcotest.test_case
+            "template-text-property-uploads-after-rebase-and-undo-redo-test"
+            `Quick
+            test_template_text_property_uploads_after_rebase_and_undo_redo
+        ] )
+    ; ( "db-sync-upload"
+      , Test_db_sync_upload_native.cases ) ]

@@ -61,19 +61,13 @@
      d/transact! (deps/db sqlite-build/create-blocks). OCaml
      Sqlite_build.create_blocks transacts through Db_tx.transact —
      the worker transactor — which runs the malli validate hook
-     (Worker_core registers Db_validate.validate_tx_report) and rejects
-     the fixture's own generated blocks with "invalid dispatch value",
-     and additionally its :build/properties path throws "Key in map must
-     have a :db/ident" (spec maps store db/ident as Keyword but
-     Block_map.string_attr only accepts String — breaks any builtin
-     value_ref-type property like logseq.property.repeat/recur-frequency)
-     and its :build/tags emits bare keyword elements the engine rejects
-     for ref attrs ("Expected number or lookup ref"). The four fixtures
-     that used create-conn-with-blocks (repeated-task-with-deadline and
-     the three publish tests) instead emit the same entities via
+     (Worker_core registers Db_validate.validate_tx_report). It
+     previously rejected these fixtures ("invalid dispatch value",
+     keyword-keyed :build/properties, bare-keyword :build/tags) — all
+     fixed since; the fixtures below still emit the same entities via
      Datascript.transact_conn_string entity maps on the same
      Sqlite_export.create_conn seed — same graph, same d/transact!
-     semantics.
+     semantics, and now the equal of calling create_blocks directly.
 
    cljs-vs-OCaml divergences asserted where observable:
    - state_test: Sync_state.online on native always returns true
