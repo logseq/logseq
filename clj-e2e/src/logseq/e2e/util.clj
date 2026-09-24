@@ -99,18 +99,31 @@
   (w/fill ".cp__cmdk-search-input" "")
   (w/fill ".cp__cmdk-search-input" text))
 
+(defn- cmdk-open?
+  "Press mod+k and give the async cmdk mount a moment to render. `visible?`
+  polls instantly and loses the race to the delayed open, dropping us into
+  the fallback while the dialog is actually opening."
+  []
+  (k/press "ControlOrMeta+k")
+  (try
+    (w/wait-for ".cp__cmdk-search-input" {:timeout 2000})
+    true
+    (catch TimeoutError _e
+      false)))
+
 (defn search
   [text]
-  (if (w/visible? ".cp__cmdk-search-input")
-    (fill-cmdk-search text)
-    (do
-      (k/press "ControlOrMeta+k")
-      (when-not (w/visible? ".cp__cmdk-search-input")
-        (double-esc)
-        (assert/assert-in-normal-mode?)
-        (w/click :#search-button))
-      (w/wait-for ".cp__cmdk-search-input")
-      (fill-cmdk-search text)))
+  (when-not (w/visible? ".cp__cmdk-search-input")
+    (when-not (cmdk-open?)
+      (double-esc)
+      ;; the header button only renders once a graph is loaded, so wait for
+      ;; it instead of asserting instantly — a still-loading page makes the
+      ;; assert fail with AssertionFailedError, which escapes callers' waits
+      (w/wait-for "#search-button" {:timeout 15000})
+      (assert/assert-in-normal-mode?)
+      (w/click :#search-button)
+      (w/wait-for ".cp__cmdk-search-input")))
+  (fill-cmdk-search text)
   (wait-timeout cmdk-search-settle-ms))
 
 (defn search-and-click
