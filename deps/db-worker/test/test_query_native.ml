@@ -365,17 +365,25 @@ let () =
   check "query-custom plain"
     (string_contains res "b1 content" && string_contains res "task one");
 
-  (* query-custom: invalid context -> error *)
-  let res =
-    invoke "thread-api/query-custom"
-      [ Wire.String repo;
-        Wire.Map
-          [ ( kw "query",
-              Wire.Array [ kw "find"; Wire.Symbol "?b"; kw "where" ] ) ];
-        Wire.Map [ (kw "bogus", Wire.String "x") ] ]
+  (* query-custom: invalid context -> fail!'s synchronous throw escapes
+     remoteInvoke as a rejection (cljs remote-function re-throws handler
+     sync throws instead of resolving to error transit) *)
+  let msg =
+    try
+      ignore
+        (invoke "thread-api/query-custom"
+           [ Wire.String repo;
+             Wire.Map
+               [ ( kw "query",
+                   Wire.Array [ kw "find"; Wire.Symbol "?b"; kw "where" ] ) ];
+             Wire.Map [ (kw "bogus", Wire.String "x") ] ]);
+      "no-error"
+    with
+    | Dispatcher.Exn_info (msg, _) -> msg
+    | _ -> "other-error"
   in
   check "query-custom invalid context errors"
-    (string_contains res "Invalid custom query context");
+    (string_contains msg "Invalid custom query context");
 
   (* query-custom: built-in :between rule + :today input *)
   let res =

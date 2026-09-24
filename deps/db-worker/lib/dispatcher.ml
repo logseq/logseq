@@ -80,12 +80,13 @@ let invoke_transit name transit_args =
   in
   (* cljs remote-function: `invoke` raising synchronously — unknown
      endpoint or an eager raise inside the handler call — makes
-     remoteInvoke reject: the error escapes as a rejected effect rather
-     than error transit. A handler's failure arriving as a rejected
-     effect (settled or pending) is cljs's p/catch path: it resolves to
-     error transit. *)
+     remoteInvoke throw/reject: the error escapes untouched rather
+     than error transit. In an effect context the E.bind/E.catch
+     machinery captures it as a rejection. A handler's failure
+     arriving as a rejected effect (settled or pending) is cljs's
+     p/catch path: it resolves to error transit. *)
   match (try `Task (invoke_raw name args) with exn -> `Raise exn) with
-  | `Raise exn -> Db_worker_effect.error exn
+  | `Raise exn -> raise exn
   | `Task task ->
       Db_worker_effect.catch task (fun exn ->
           Db_worker_effect.pure (encode_error name exn))
