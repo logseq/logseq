@@ -1119,6 +1119,13 @@
            (#'views/visible-unpinned-columns columns true))
         "Property columns mount after the name column has painted.")))
 
+(deftest table-rows-keep-horizontal-scrollbar-overflow
+  (let [class (#'views/table-rows-overflow-class)]
+    (is (string/includes? class "overflow-x-auto"))
+    (is (string/includes? class "overflow-y-hidden")
+        "overflow-x:auto alone computes overflow-y to auto and clips the horizontal scrollbar on auto-height tables.")
+    (is (string/includes? class "force-visible-scrollbar"))))
+
 (deftest table-cell-plain-value-exposes-clipped-text
   (is (nil? (#'views/table-cell-plain-value {:block/title "Movie"} {:id :select})))
   (is (= "You Can't Say No (2018)"
