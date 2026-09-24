@@ -228,9 +228,14 @@ let invoke_transit ~(proxy : proxy) ~(method_str : string)
           ; "elapsed-ms",
             string_of_int (int_of_float (Clock.now_ms () -. started_at)) ])
   in
-  E.finally
-    (proxy.remote_invoke method_str args_transit)
-    (fun () -> Timers.clear timeout_id; E.pure ())
+  (* remoteInvoke may raise synchronously (cljs remote-function rethrow
+     semantics) — surface it as a rejected task so the finally cleanup
+     still runs and E.catch sees the failure. *)
+  let task =
+    try proxy.remote_invoke method_str args_transit
+    with exn -> E.error exn
+  in
+  E.finally task (fun () -> Timers.clear timeout_id; E.pure ())
 
 let invoke_args ~(proxy : proxy) ~(method_str : string)
     ~(method_label : string) ~(args : Wire.t list) : string E.t =
@@ -248,9 +253,11 @@ let invoke_binary ~(proxy : proxy) ~(method_str : string)
           ; "elapsed-ms",
             string_of_int (int_of_float (Clock.now_ms () -. started_at)) ])
   in
-  E.finally
-    (proxy.remote_invoke_binary method_str repo payload)
-    (fun () -> Timers.clear timeout_id; E.pure ())
+  let task =
+    try proxy.remote_invoke_binary method_str repo payload
+    with exn -> E.error exn
+  in
+  E.finally task (fun () -> Timers.clear timeout_id; E.pure ())
 
 (* with-redefs seams — cljs tests substitute db-core/init-core!'s
    remoteInvoke and lifecycle/assertOwnership. *)
