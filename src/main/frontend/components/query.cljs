@@ -179,31 +179,37 @@
 (hsx/defc custom-query
   [{:keys [built-in-query?] :as config}
    {:keys [collapsed?] :as q}]
-  ;; Key the boundary by the evaluated query so a changed query remounts it:
-  ;; an error caught for stale syntax must not mask a corrected query.
-  ^{:key (pr-str (select-keys q [:query :view :result-transform
-                                :inputs :rules]))}
-  [:<>
-   (ui/catch-error
-    (ui/block-error (t :query/error) {:content (:query q)})
-    (let [repo-config (state/config-for-repo (rfx/use-sub [:config])
-                                             (state/get-current-repo))
-          current-block-uuid (or (:block/uuid (:block config))
-                                 (:block/uuid config))
-          current-block (:block config)
-          temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
-                                        (state/get-current-repo)
-                                        (state/resolve-container-id (:container-id config))
-                                        current-block-uuid])
-          ;; Get query result
-          collapsed?' (calculate-collapsed? current-block
-                                            {:collapsed? false
-                                             :temp-collapsed? temp-collapsed?})
-          built-in-collapsed? (and collapsed? built-in-query?)
-          config' (assoc config
-                         :current-block current-block
-                         :current-block-uuid current-block-uuid
-                         :collapsed? collapsed?'
-                         :built-in-query? (resolve-built-in-query? repo-config built-in-query? q))]
-      (when (or built-in-collapsed? (not collapsed?'))
-        (custom-query* config' q))))])
+  (let [repo-config (state/config-for-repo (rfx/use-sub [:config])
+                                           (state/get-current-repo))
+        ;; The boundary remounts whenever an input that decides evaluation
+        ;; changes: the query fields, or the repo-config named transforms/views
+        ;; that keyword values resolve to. This lives outside the boundary so
+        ;; an error caught for stale inputs cannot mask a corrected query.
+        boundary-key (pr-str {:q (select-keys q [:query :view :result-transform
+                                                 :inputs :rules])
+                              :config (select-keys repo-config
+                                                   [:query/result-transforms
+                                                    :query/views])})]
+    ^{:key boundary-key}
+    [:<>
+     (ui/catch-error
+      (ui/block-error (t :query/error) {:content (:query q)})
+      (let [current-block-uuid (or (:block/uuid (:block config))
+                                   (:block/uuid config))
+            current-block (:block config)
+            temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                          (state/get-current-repo)
+                                          (state/resolve-container-id (:container-id config))
+                                          current-block-uuid])
+            ;; Get query result
+            collapsed?' (calculate-collapsed? current-block
+                                              {:collapsed? false
+                                               :temp-collapsed? temp-collapsed?})
+            built-in-collapsed? (and collapsed? built-in-query?)
+            config' (assoc config
+                           :current-block current-block
+                           :current-block-uuid current-block-uuid
+                           :collapsed? collapsed?'
+                           :built-in-query? (resolve-built-in-query? repo-config built-in-query? q))]
+        (when (or built-in-collapsed? (not collapsed?'))
+          (custom-query* config' q))))]))
