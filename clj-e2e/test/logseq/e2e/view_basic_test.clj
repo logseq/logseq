@@ -259,7 +259,7 @@
 
 (defn- table-overflow-metrics
   []
-  (let [[overflow-x overflow-y client-width scroll-width scrolled]
+  (let [[overflow-x overflow-y client-width scroll-width scrolled fold-overflow]
         (-> (w/eval-js
              "(() => {
                 const rows = document.querySelector('.ls-table-rows');
@@ -267,18 +267,21 @@
                   return '';
                 }
                 const style = getComputedStyle(rows);
+                const foldInner = rows.closest('.ls-foldable-content-inner');
+                const foldOverflow = foldInner ? getComputedStyle(foldInner).overflow : '';
                 rows.scrollLeft = 80;
                 const scrolled = rows.scrollLeft;
                 rows.scrollLeft = 0;
                 return [style.overflowX, style.overflowY, rows.clientWidth,
-                        rows.scrollWidth, scrolled].join('|');
+                        rows.scrollWidth, scrolled, foldOverflow].join('|');
               })()")
             (string/split #"\|"))]
     {:overflow-x overflow-x
      :overflow-y overflow-y
      :client-width (parse-long client-width)
      :scroll-width (parse-long scroll-width)
-     :scrolled (parse-long scrolled)}))
+     :scrolled (parse-long scrolled)
+     :fold-overflow fold-overflow})))
 
 (deftest table-view-horizontal-scrollbar-when-wider-than-viewport-test
   (let [container-page (page/get-page-name)]
@@ -297,7 +300,9 @@
       (is (> (:scroll-width initial) (:client-width initial))
           (str "Task table columns must exceed the viewport. " initial))
       (is (pos? (:scrolled initial))
-          (str "The table must be horizontally scrollable. " initial)))
+          (str "The table must be horizontally scrollable. " initial))
+      (is (= "visible" (:fold-overflow initial))
+          (str "An expanded foldable must not clip the table scrollbar. " initial)))
     (dotimes [_ 3]
       (w/click ".views button[title='Add new view']")
       (assert/assert-is-visible
@@ -306,7 +311,8 @@
       (is (= "hidden" (:overflow-y after-views)) after-views)
       (is (> (:scroll-width after-views) (:client-width after-views))
           after-views)
-      (is (pos? (:scrolled after-views)) after-views))))
+      (is (pos? (:scrolled after-views)) after-views)
+      (is (= "visible" (:fold-overflow after-views)) after-views))))
 
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
