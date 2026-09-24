@@ -344,6 +344,7 @@ let closed_values_of (property : entity) : entity list =
 let entity_of_wire db (v : Wire.t) : entity option =
   match v with
   | Wire.Int id -> Ldb.ent_of_id db id
+  | Wire.Int64 id -> Ldb.ent_of_id db (Int64.to_int id)
   | Wire.Keyword k -> entity db (Ident k)
   | Wire.Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | Wire.Array [ Wire.Keyword a; x ] ->
