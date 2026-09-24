@@ -98,8 +98,9 @@ let to_new_properties (content : string) : string =
       let middle =
         List.filteri (fun i _ -> i > start_idx && i < end_idx) lines
         |> List.map (fun text ->
+               (* cljs (subs text 1) — throws on an empty drawer line. *)
                match Common_util.split_first ":"
-                       (Common_util.safe_subs text 1 ()) with
+                       (String.sub text 1 (String.length text - 1)) with
                | Some (k, v) ->
                  let k = Common_util.str_replace_all k "_" "-" in
                  let compare_k = Unicode.lowercase k in

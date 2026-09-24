@@ -55,10 +55,22 @@ let () =
 let () =
   Dispatcher.register "thread-api/update-thread-atom" (fun args ->
       match args with
-      | key_t :: v :: _ ->
-          let key = Ds_wire.wire_key key_t in
-          Worker_state.update_thread_atom key v;
-          pure' Wire.nil
+      | key_t :: v :: _ -> (
+          (* cljs (assert (and (keyword? atom-key) (identical?
+             "thread-atom" (namespace atom-key)))) *)
+          match key_t with
+          | Wire.Keyword s
+            when String.length s > 12
+                 && String.sub s 0 12 = "thread-atom/" -> (
+              let key = Ds_wire.wire_key key_t in
+              (* cljs (when-let [a (get @*state atom-key)] ...) — an
+                 unregistered atom key is a no-op, not an error. *)
+              match Worker_state.thread_atom key with
+              | Some _ ->
+                  Worker_state.update_thread_atom key v;
+                  pure' Wire.nil
+              | None -> pure' Wire.nil)
+          | _ -> assert false)
       | _ -> invalid_arg "update-thread-atom expects (atom-key value)")
 
 (* :thread-api/resolve-ui-request [request-id result] *)
@@ -141,7 +153,8 @@ let () =
       pure'
         (Wire.Map [ (kw "ok", Wire.Bool true); (kw "cancelled", Wire.Int n) ]))
 
-(* :thread-api/mobile-logs [] — last 800 entries of the log ring. *)
+(* :thread-api/mobile-logs [] — returns @*log wholesale (the ring
+   itself enforces the >1000 → 800 trim). *)
 let () =
   Dispatcher.register "thread-api/mobile-logs" (fun _ ->
       let level_str = function
@@ -152,11 +165,6 @@ let () =
         | Worker_log.Error -> "error"
       in
       let entries = Worker_log.entries () in
-      let rec drop n l = if n <= 0 then l else match l with [] -> [] | _ :: t -> drop (n - 1) t in
-      let trimmed =
-        let len = List.length entries in
-        if len > 800 then drop (len - 800) entries else entries
-      in
       pure'
         (Wire.Array
            (List.map
@@ -170,7 +178,7 @@ let () =
                          (List.map (fun (k, v) -> (Wire.String k, Wire.String v)) e.fields) );
                      (kw "time-ms", Wire.Float e.time_ms);
                    ])
-              trimmed)))
+              entries)))
 
 (* :thread-api/get|set-db-sync-config — registered once in
    endpoint_sync.ml (sanitized via Sync_state.non_auth_db_sync_config). *)

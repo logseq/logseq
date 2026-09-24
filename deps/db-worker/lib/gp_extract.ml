@@ -85,24 +85,19 @@ let get_page_name ~(file_path : string) ~(ast : value list) ~(uri_encoded : bool
           | List (String ("Properties" | "Property_Drawer") :: rest) ->
             (match rest with
              | props :: _ ->
-               List.find_map
-                 (fun prop ->
+               (* cljs (zipmap lower-cased-keys values) — last-wins on
+                  duplicate keys. *)
+               List.fold_left
+                 (fun acc prop ->
                    match prop with
-                   | Vector (k :: _v :: _) | List (k :: _v :: _) ->
+                   | Vector (k :: v :: _) | List (k :: v :: _) ->
                      (match k with
-                      | String ks when Unicode.lowercase ks = "title" ->
-                        (match prop with
-                         | Vector (_ :: v :: _) | List (_ :: v :: _) ->
-                           (match v with String s -> Some s | _ -> None)
-                         | _ -> None)
-                      | Keyword ks when Unicode.lowercase ks = "title" ->
-                        (match prop with
-                         | Vector (_ :: v :: _) | List (_ :: v :: _) ->
-                           (match v with String s -> Some s | _ -> None)
-                         | _ -> None)
-                      | _ -> None)
-                   | _ -> None)
-                 (Clj_value.coll_items props)
+                      | String ks | Keyword ks
+                        when Unicode.lowercase ks = "title" ->
+                        (match v with String s -> Some s | _ -> acc)
+                      | _ -> acc)
+                   | _ -> acc)
+                 None (Clj_value.coll_items props)
              | [] -> None)
           | _ -> None)
         ast_nodes
@@ -131,6 +126,14 @@ let get_page_name ~(file_path : string) ~(ast : value list) ~(uri_encoded : bool
     | None, None, Some f -> f
     | None, None, None -> ""
 
+(* cljs (str v) — coercion applied to a lone (non-coll) :alias/:tags
+   value and to raw elements before blank?/sanity-lc checks. *)
+let cljs_str (v : value) : string =
+  match v with
+  | String s -> s
+  | Nil -> ""
+  | _ -> Edn_util.pr_str v
+
 (* extract/extract-page-alias-and-tags *)
 let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
     (properties : (attr * value) list) : Block_map.t =
@@ -140,25 +143,28 @@ let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
     | Some v ->
       (match v with
        | Set xs | Vector xs | List xs -> xs
-       | Nil -> []
-       | s -> [ s ])
+       | Nil -> [ String "" ] (* cljs [(str nil)] — [""] filtered as blank *)
+       | s -> [ String (cljs_str s) ])
     | None -> []
   in
+  (* cljs (remove #(or (= page-name (sanity-lc %)) (blank? %)) aliases)
+     then maps each kept element to {:block/name lc :block/title raw}. *)
   let aliases =
-    List.filter_map Clj_value.string_of_kwish alias_items
-    |> List.filter (fun a ->
-           not (page_name = Ldb.page_name_sanity_lc a || Unicode.trim a = ""))
+    List.filter_map
+      (fun v ->
+        let s = cljs_str v in
+        if s = "" || Unicode.trim s = "" then None
+        else
+          let n = Ldb.page_name_sanity_lc s in
+          if n = page_name then None else Some (v, n))
+      alias_items
   in
   let aliases' =
-    List.filter_map
-      (fun alias ->
-        let n = Ldb.page_name_sanity_lc alias in
-        if n = "" then None
-        else
-          Some
-            (Map
-               [ Keyword "block/name", String n
-               ; Keyword "block/title", String alias ]))
+    List.map
+      (fun (v, n) ->
+        Map
+          [ Keyword "block/name", String n
+          ; Keyword "block/title", v ])
       aliases
   in
   let page_m =
@@ -176,16 +182,20 @@ let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
         @ (let tags_items =
              match tags_v with
              | Set xs | Vector xs | List xs -> xs
-             | s -> [ s ]
+             | Nil -> [ String "" ]
+             | s -> [ String (cljs_str s) ]
            in
-           List.filter_map Clj_value.string_of_kwish tags_items
-           |> List.filter (fun t -> Unicode.trim t <> "")
+           List.filter_map
+             (fun v ->
+               let s = cljs_str v in
+               if Unicode.trim s = "" then None else Some (v, s))
+             tags_items
            |> List.map
-                (fun tag ->
+                (fun (v, s) ->
                   Map
                     [ Keyword "block/name",
-                      String (Ldb.page_name_sanity_lc tag)
-                    ; Keyword "block/title", String tag ]))
+                      String (Ldb.page_name_sanity_lc s)
+                    ; Keyword "block/title", v ]))
       in
       Block_map.put page_m "block/tags" (List tags)
     | None -> page_m
@@ -197,22 +207,37 @@ let extract_page_alias_and_tags (page_m : Block_map.t) (page_name : string)
       (Clj_value.map_dissoc m Gp_property.editable_linkable_built_in_properties)
   | None -> page_m
 
+(* cljs (into {} pairs) — assoc semantics: first-inserted key position,
+   last-written value. *)
+let dedup_assoc_last (pairs : (attr * value) list) : (attr * value) list =
+  List.fold_left
+    (fun acc (k, v) ->
+      if List.mem_assoc k acc then
+        List.map (fun (k', v') -> if k' = k then (k', v) else (k', v')) acc
+      else acc @ [ (k, v) ])
+    [] pairs
+
 (* extract/build-page-map *)
 let build_page_map ~(properties : (attr * value) list)
     ~(invalid_properties : string list) ~(properties_text_values : (attr * value) list)
     ~(file : string) ~(page : string) ~(page_name : string)
     ~(date_formatter : string option) ~(db : db) ~(from_page : string)
     ~(skip_journal : bool) : Block_map.t * string list =
+  (* cljs properties / properties-text-values arrive as maps (into {}),
+     i.e. duplicate keys keep their first position but last value. *)
+  let properties = dedup_assoc_last properties in
+  let properties_text_values = dedup_assoc_last properties_text_values in
   let valid, invalid =
     List.partition
       (fun (k, _v) -> Gp_property.valid_property_name (":" ^ k))
       properties
   in
-  let invalid_names =
-    List.map fst invalid
-    |> Common_util.distinct_by Fun.id
+  let invalid_names = List.map fst invalid in
+  (* cljs (set (concat invalid-properties invalid-names)) — a set, so
+     duplicates across both sources collapse. *)
+  let invalid_properties =
+    Common_util.distinct_by Fun.id (invalid_properties @ invalid_names)
   in
-  let invalid_properties = invalid_properties @ invalid_names in
   let page_m =
     match
       Gp_block.page_name_to_map page db true date_formatter
@@ -248,7 +273,9 @@ let build_page_map ~(properties : (attr * value) list)
   let page_m =
     if invalid_properties <> [] then
       Block_map.put page_m "block/invalid-properties"
-        (Set (List.map (fun s -> Keyword s) invalid_properties))
+        (* cljs (set (concat invalid-properties (map name bad-props)))
+           — a set of name strings, not keywords. *)
+        (Set (List.map (fun s -> String s) invalid_properties))
     else page_m
   in
   (page_m, invalid_properties)
@@ -303,7 +330,7 @@ let build_pages_aux db (page_map : Block_map.t) (ref_pages : value list)
     @ List.map bm_map_value namespace_pages
     |> List.filter (fun p -> match p with Vector _ -> false | _ -> true)
     |> List.filter (fun p -> p <> Nil)
-    |> List.filter (fun p -> Clj_value.map_get_str p "block/name" <> None)
+    |> List.filter (fun p -> Clj_value.truthy (Clj_value.map_get p "block/name"))
     |> Common_util.distinct_by (fun p -> Clj_value.map_get p "block/name")
     |> List.filter (fun p -> p <> Nil)
   in
@@ -531,7 +558,7 @@ let with_ref_pages (pages : Block_map.t list) (blocks : Block_map.t list)
            match Block_map.attr_value b "block/refs" with
            | Some v -> Clj_value.coll_items v
            | None -> [])
-    |> List.filter (fun p -> Clj_value.map_get_str p "block/name" <> None)
+    |> List.filter (fun p -> Clj_value.truthy (Clj_value.map_get p "block/name"))
   in
   let merged =
     Hashtbl.create 127

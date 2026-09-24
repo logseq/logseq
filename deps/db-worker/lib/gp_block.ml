@@ -162,9 +162,10 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
          ; "db/ident", Keyword (Option.get (Ldb.ident_of e)) ]
        | _ ->
          let new_uuid =
+           (* cljs (uuid? page-uuid) — a malformed string is not a uuid. *)
            match opts.page_uuid with
-           | Some u -> u
-           | None ->
+           | Some u when Common_util.uuid_string u -> u
+           | _ ->
              (match journal_day with
               | Some d -> Common_uuid.gen_journal_page_uuid d
               | None -> Common_uuid.new_block_id ())
@@ -177,8 +178,8 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
                (match Ldb.value e "block/uuid" with
                 | Some (Uuid u) -> u
                 | _ -> new_uuid)
-             | None, Some u -> u
-             | None, None -> new_uuid
+             | None, Some u when Common_util.uuid_string u -> u
+             | _ -> new_uuid
          in
          [ "block/uuid", Uuid new_uuid ])
     @ (if namespace then
@@ -298,7 +299,9 @@ let inline_nodes_to_plain_text (nodes : value list) : string option =
 let get_page_reference (block : value) (format : string) : value option =
   let page : value option =
     match block with
-    | Vector [ String "Link"; data ] ->
+    (* cljs (= "Link" (first block)) then (second block) — tolerates
+       extra vector elements. *)
+    | Vector (String "Link" :: data :: _) ->
       let url = Clj_value.map_get data "url" in
       let url_items = Clj_value.coll_items url in
       let url_type = match url_items with String t :: _ -> Some t | _ -> None in
@@ -325,12 +328,17 @@ let get_page_reference (block : value) (format : string) : value option =
           | Some s -> Some (String s)
           | None -> None)
        | _ -> None)
-    | Vector [ String "Nested_link"; data ] ->
-      (match Clj_value.map_get_str data "content" with
-       | Some content when String.length content >= 4 ->
-         Some (String (String.sub content 2 (String.length content - 4)))
-       | _ -> None)
-    | Vector [ String "Macro"; data ] ->
+    | Vector (String "Nested_link" :: _) -> (
+      (* cljs (:content (last block)) then (subs c 2 (- (count c) 2)) —
+         unguarded: missing/short content throws. *)
+      match List.rev (Clj_value.coll_items block) with
+      | last :: _ ->
+          (match Clj_value.map_get_str last "content" with
+           | Some content ->
+               Some (String (String.sub content 2 (String.length content - 4)))
+           | None -> invalid_arg "Nested_link: content")
+      | [] -> None)
+    | Vector (String "Macro" :: data :: _) ->
       let name = Clj_value.map_get_str data "name" in
       let arguments =
         List.filter_map Clj_value.string_of_kwish
@@ -369,13 +377,15 @@ let get_block_reference (block : value) : string option =
     | Vector [ String "Block_reference"; String id ] -> Some id
     | Vector (String "Block_reference" :: rest) ->
       (match List.rev rest with String id :: _ -> Some id | _ -> None)
-    | Vector [ String "Link"; data ] when Clj_value.is_map data ->
+    | Vector (String "Link" :: data :: _) when Clj_value.is_map data ->
       (match Clj_value.map_get data "url" with
        | url ->
          (match Clj_value.coll_items url with
           | String "Block_ref" :: _ ->
+            (* cljs (second (:url ...)) — second element regardless of
+               the url vector's length. *)
             (match Clj_value.coll_items url with
-             | [ _; String id ] -> Some id
+             | _ :: String id :: _ -> Some id
              | _ -> None)
           | _ :: (second :: _) ->
             (match second with

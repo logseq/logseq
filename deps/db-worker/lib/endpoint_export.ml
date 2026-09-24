@@ -74,7 +74,12 @@ let export_get_all_page_content args =
         (Wire.Array
            (List.map
               (fun (name, content) ->
-                Wire.Array [ Wire.String name; Wire.String content ])
+                Wire.Array
+                  [ (match name with
+                     | Some s -> Wire.String s
+                     | None -> Wire.Nil)
+                  ; Wire.String content
+                  ])
               pairs))
 
 let () =
@@ -244,25 +249,27 @@ let post_export_error_notification () : unit =
       (Transit_codec.to_string
          (Wire.Array
             [ kw "notification"
-            ; Wire.Array [ Wire.Nil; kw "export/error-unexpected" ] ]))
+            ; Wire.Array
+                [ Wire.Nil; kw "error"; Wire.Nil; Wire.Nil; Wire.Nil
+                ; Wire.Map [ kw "i18n-key", kw "export/error-unexpected" ] ] ]))
 
 (* :thread-api/export-edn [repo options] *)
 let export_edn_endpoint args =
   let repo = repo_of args in
   let options_v = value_arg args 1 in
-  match Worker_state.datascript_conn repo with
-  | None -> Db_worker_effect.pure Wire.Nil
-  | Some conn -> (
-      try
+  try
+    match Worker_state.datascript_conn repo with
+    | None -> failwith "graph not opened"
+    | Some conn ->
         let v =
           Sqlite_export.build_export (Datascript.db conn) options_v
         in
         Db_worker_effect.pure (Ds_wire.transit_of_value v)
-      with e ->
-        post_export_error_notification ();
-        Db_worker_effect.pure
-          (Wire.Map
-             [ kw "export-edn-error", Wire.String (Printexc.to_string e) ]))
+  with e ->
+    post_export_error_notification ();
+    Db_worker_effect.pure
+      (Wire.Map
+         [ kw "export-edn-error", Wire.String (Printexc.to_string e) ])
 
 let () = Dispatcher.register "thread-api/export-edn" export_edn_endpoint
 
@@ -313,7 +320,8 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
   match
     (try Sqlite_export.build_import export_map db None
      with e ->
-       Printf.eprintf "Import EDN error: %s\n" (Printexc.to_string e);
+       Worker_log.error "Import EDN error: "
+         [ ("error", Printexc.to_string e) ];
        Error
          "An unexpected error occurred building the import. See the \
           javascript console for details.")
@@ -347,8 +355,12 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
                  conn tx_ops);
             None
           with e ->
+            (* cljs (js/console.error "Unexpected Import EDN error:" e) *)
+            Worker_log.error "Unexpected Import EDN error:"
+              [ ("error", Printexc.to_string e) ];
             error_result
-              ("Unexpected Import EDN error: " ^ Printexc.to_string e)))
+              ("Unexpected Import EDN error: "
+               ^ Edn_util.pr_str (String (Dispatcher.exn_message e)))))
 
 let () = Sync_deps.batch_import_edn_fn := Some import_edn_data
 

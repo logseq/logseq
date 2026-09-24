@@ -70,8 +70,19 @@ let page_exists args =
   with_conn args (fun db ->
       let name = Option.bind (arg args 1) Wire.as_string in
       let tags =
+        (* cljs (if (coll? tags) (set tags) #{tags}) — entries are kept
+           verbatim; non-keywords can never match a :db/ident so they
+           map to "" here. *)
         match arg args 2 with
-        | Some t -> List.filter_map Wire.as_keyword (Wire.as_seq t)
+        | Some t ->
+            let entries =
+              match t with
+              | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
+              | single -> [ single ]
+            in
+            List.map
+              (fun w -> Option.value (Wire.as_keyword w) ~default:"")
+              entries
         | None -> []
       in
       Db_worker_effect.pure
@@ -133,9 +144,7 @@ let block_ref_entity db (t : Wire.t) : entity option =
   | Wire.Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | Wire.String s when Ldb.is_uuid_string s ->
       entity db (Lookup_ref ("block/uuid", Uuid s))
-  | t ->
-      (try entity db (Ds_wire.entity_ref_of_transit t)
-       with Invalid_argument _ -> None)
+  | t -> entity db (Ds_wire.entity_ref_of_transit t)
 
 (* :thread-api/get-block-page-info [repo block-ref] *)
 let get_block_page_info args =
@@ -400,21 +409,17 @@ let () = Dispatcher.register "thread-api/get-recent-pages" get_recent_pages
    :block/_alias of the entity. *)
 let get_block_source args =
   with_conn args (fun db ->
+      (* cljs (d/entity @conn id) throws on unparseable refs *)
       let r =
-        match arg args 1 with
-        | Some (Wire.Int id) -> Some (Entity_id id)
-        | Some t -> (try Some (Ds_wire.entity_ref_of_transit t) with _ -> None)
-        | None -> None
+        Ds_wire.entity_ref_of_transit
+          (Option.value (arg args 1) ~default:Wire.Nil)
       in
       Db_worker_effect.pure
-        (match r with
-         | Some r ->
-             (match entity db r with
-              | Some e ->
-                  (match Ldb.ref_ents e "block/_alias" with
-                   | src :: _ -> Wire.Int src.id
-                   | [] -> Wire.nil)
-              | None -> Wire.nil)
+        (match entity db r with
+         | Some e ->
+             (match Ldb.ref_ents e "block/_alias" with
+              | src :: _ -> Wire.Int src.id
+              | [] -> Wire.nil)
          | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/get-block-source" get_block_source
@@ -427,18 +432,14 @@ let get_block_parents args =
         Option.value (Option.bind (arg args 2) Wire.as_int) ~default:3
       in
       let r =
-        match arg args 1 with
-        | Some (Wire.Int id) -> Some (Entity_id id)
-        | Some t -> (try Some (Ds_wire.entity_ref_of_transit t) with _ -> None)
-        | None -> None
+        Ds_wire.entity_ref_of_transit
+          (Option.value (arg args 1) ~default:Wire.Nil)
       in
       Db_worker_effect.pure
-        (match r with
-         | Some r ->
-             (match entity db r with
-              | Some e ->
-                  (match Ldb.value e "block/uuid" with
-                   | Some (Uuid u) ->
+        (match entity db r with
+         | Some e ->
+             (match Ldb.value e "block/uuid" with
+              | Some (Uuid u) ->
                        Wire.List
                          (List.map
                             (fun (p : entity) ->
@@ -465,9 +466,8 @@ let get_block_parents args =
                               in
                               Wire.Map m)
                             (Ldb.get_block_parents db ~depth u))
-                   | _ -> Wire.nil)
-              | None -> Wire.nil)
-         | None -> Wire.nil))
+              | _ -> Wire.List [])
+         | None -> Wire.List []))
 
 let () = Dispatcher.register "thread-api/get-block-parents" get_block_parents
 
@@ -624,20 +624,169 @@ let get_block_refs args =
 
 let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs
 
-(* :thread-api/get-page-blocks-tree — non-:initial-limit path
-   (block-index path deferred). *)
+module IntSet = Set.Make (Int)
+
+let wire_truthy = function
+  | Wire.Nil | Wire.Bool false -> false
+  | _ -> true
+
+(* handler/page.cljs block-index-entry *)
+let block_index_entry (b : entity) (parent_ids : IntSet.t) (level : int)
+    : Wire.t =
+  let parent_id =
+    match Ldb.ref_ent b "block/parent" with
+    | Some p -> Wire.Int p.id
+    | None -> Wire.Nil
+  in
+  let attr k =
+    match Ldb.value b k with
+    | Some v -> Ds_wire.transit_of_value v
+    | None -> Wire.Nil
+  in
+  Wire.Map
+    [ (kw "db/id", Wire.Int b.id)
+    ; (kw "block/uuid", attr "block/uuid")
+    ; (kw "block/parent", Wire.Map [ (kw "db/id", parent_id) ])
+    ; (kw "block/order", attr "block/order")
+    ; (kw "block/collapsed?", Wire.Bool (Ldb.truthy (Ldb.value b "block/collapsed?")))
+    ; (kw "block/level", Wire.Int level)
+    ; (kw "block.temp/has-children?", Wire.Bool (IntSet.mem b.id parent_ids))
+    ]
+
+(* handler/page.cljs visible-index-entries — walks the index, hiding
+   entries nested under a collapsed parent. *)
+let visible_index_entries (index : Wire.t list) : Wire.t list =
+  let int_field w k =
+    match Cljs_map.get w k with
+    | Some (Wire.Int n) -> n
+    | _ -> 0
+  in
+  let bool_field w k =
+    match Cljs_map.get w k with
+    | Some (Wire.Bool b) -> b
+    | _ -> false
+  in
+  let rec aux collapsed_level result = function
+    | [] -> List.rev result
+    | entry :: rest ->
+        let level = int_field entry "block/level" in
+        let hidden =
+          match collapsed_level with
+          | Some cl -> level > cl
+          | None -> false
+        in
+        let collapsed_level =
+          if hidden then collapsed_level
+          else if bool_field entry "block/collapsed?" then Some level
+          else None
+        in
+        if hidden then aux collapsed_level result rest
+        else aux collapsed_level (entry :: result) rest
+  in
+  aux None [] index
+
+(* cljs take: non-positive n yields the empty seq *)
+let cljs_take n xs = if n <= 0 then [] else List.filteri (fun i _ -> i < n) xs
+
+(* handler/page.cljs get-page-block-index *)
+let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
+  let root =
+    match block_ref_entity db ref_t with
+    | Some _ as e -> e
+    | None ->
+        Ldb.get_page db (Ds_wire.value_of_transit ref_t)
+  in
+  match root with
+  | None -> Wire.Nil
+  | Some root ->
+      let tree_entities =
+        match Ldb.value root "block/uuid" with
+        | Some (Uuid u) -> Ldb.get_block_and_children db u
+        | _ -> []
+      in
+      let children = match tree_entities with _ :: cs -> cs | [] -> [] in
+      let parent_ids =
+        List.fold_left
+          (fun s (c : entity) ->
+            match Ldb.ref_ent c "block/parent" with
+            | Some p -> IntSet.add p.id s
+            | None -> s)
+          IntSet.empty children
+      in
+      let levels = Hashtbl.create 64 in
+      Hashtbl.replace levels root.id 0;
+      let index =
+        List.map
+          (fun (b : entity) ->
+            let level =
+              match Ldb.ref_ent b "block/parent" with
+              | Some p -> (
+                  match Hashtbl.find_opt levels p.id with
+                  | Some l -> l + 1
+                  | None -> 1)
+              | None -> 1
+            in
+            Hashtbl.replace levels b.id level;
+            block_index_entry b parent_ids level)
+          children
+      in
+      let entry_id e =
+        match Cljs_map.get e "db/id" with
+        | Some (Wire.Int n) -> n
+        | _ -> 0
+      in
+      let n = match initial_limit with Wire.Int n -> n | _ -> 0 in
+      let initial_ids =
+        index |> visible_index_entries
+        |> List.map entry_id |> cljs_take n
+      in
+      let block_opts =
+        { Endpoint_block.gb_all = false
+        ; gb_children = false
+        ; gb_properties = []
+        ; gb_render_data = Some true
+        ; gb_root_render_data = false
+        ; gb_include_collapsed_children = false
+        ; gb_include_property_block = false
+        }
+      in
+      let block_of eid =
+        match
+          Endpoint_block.get_block_and_children db (Int eid) block_opts
+        with
+        | Wire.Map _ as m -> Option.value (Cljs_map.get m "block") ~default:Wire.Nil
+        | _ -> Wire.Nil
+      in
+      let blocks = List.map block_of initial_ids in
+      let block = block_of root.id in
+      Wire.Map
+        [ (kw "block", block)
+        ; (kw "index", Wire.Array index)
+        ; (kw "blocks", Wire.Array blocks)
+        ]
+
+(* :thread-api/get-page-blocks-tree *)
 let get_page_blocks_tree args =
   with_conn args (fun db ->
-      let ref_v = Option.map Ds_wire.value_of_transit (arg args 1) in
+      let ref_t = arg args 1 in
+      let option =
+        match arg args 2 with
+        | Some (Wire.Map _ as m) -> m
+        | _ -> Wire.Map []
+      in
       Db_worker_effect.pure
-        (match ref_v with
-         | Some v ->
-             (match Ldb.get_page db v with
-              | Some page ->
-                  let blocks = Ldb.get_page_blocks db page.id in
-                  Wire.List
-                    (Outliner_tree.page_blocks_vec_tree db blocks page.id)
-              | None -> Wire.nil)
+        (match ref_t with
+         | Some ref_t -> (
+             match Cljs_map.get option "initial-limit" with
+             | Some w when wire_truthy w ->
+                 get_page_block_index db ref_t w
+             | _ -> (
+                 match Ldb.get_page db (Ds_wire.value_of_transit ref_t) with
+                 | Some page ->
+                     let blocks = Ldb.get_page_blocks db page.id in
+                     Wire.Array
+                       (Outliner_tree.page_blocks_vec_tree db blocks page.id)
+                 | None -> Wire.nil))
          | None -> Wire.nil))
 
 let () =

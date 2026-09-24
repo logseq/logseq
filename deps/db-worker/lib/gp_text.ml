@@ -51,12 +51,11 @@ let remove_level_spaces_aux (text : string) (pattern : string) (space : bool)
 
 let remove_level_spaces (text : string) (format : string) (block_pattern : string)
     ?(space = false) ?(trim_left = true) () : string =
-  match format with
-  | "" -> text
-  | _ ->
-    if Unicode.trim text = "" then ""
-    else if format = "markdown" && Common_util.str_starts_with text "---" then text
-    else remove_level_spaces_aux text block_pattern space trim_left
+  (* cljs (when format (cond (blank? text) "" ...)) — "" is truthy, so an
+     empty format still runs the cond. *)
+  if Unicode.trim text = "" then ""
+  else if format = "markdown" && Common_util.str_starts_with text "---" then text
+  else remove_level_spaces_aux text block_pattern space trim_left
 
 (* text/parse-non-string-property-value *)
 let parse_non_string_property_value (v : string) : value option =
@@ -71,14 +70,10 @@ let rec get_ref_from_ast (node : value) : string option =
   match node with
   | Vector [ String "Link"; data ] ->
     (match Clj_value.coll_items (Clj_value.map_get data "url") with
-     | String "Page_ref" :: _ ->
-       (match Clj_value.coll_items (Clj_value.map_get data "url") with
-        | [ _; String s ] -> Some s
-        | _ -> None)
-     | String "Search" :: _ ->
-       (match Clj_value.coll_items (Clj_value.map_get data "url") with
-        | [ _; String s ] -> Some s
-        | _ -> None)
+     | String ("Page_ref" | "Search") :: String s :: _ ->
+       (* cljs (second (:url data)) — second element regardless of the
+          url vector's length. *)
+       Some s
      | _ -> None)
   | Vector [ String "Nested_link"; data ] ->
     (match Clj_value.map_get_str data "content" with
@@ -158,8 +153,13 @@ let parse_property (k : attr) (v : string) (mldoc_references_ast : value list)
   let unparsed =
     Gp_property.unparsed_built_in_properties ()
     @ (match List.assoc_opt "ignored-page-references-keywords" config_state with
-       | Some iv -> List.filter_map Clj_value.string_of_kwish
-                      (Clj_value.coll_items iv)
+       (* cljs unions the raw config set into the membership test —
+          only String elements can ever equal (name k); keywords and
+          other elements are inert there. *)
+       | Some iv ->
+           List.filter_map
+             (function String s -> Some s | _ -> None)
+             (Clj_value.coll_items iv)
        | None -> [])
   in
   if List.mem (kw_name_string k) unparsed then String v'

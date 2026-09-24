@@ -137,17 +137,15 @@ let block_search_content (block : entity) : string option =
   if raw = "" then None
   else begin
     (* cljs (recur-replace-uuid-in-block-title (assoc block :block/title
-       raw-content)) — the fn only reads :block/title/:block/refs off the
-       entity, and raw is already the block's title *)
+       raw-content)) — uuid-replace sees the trimmed title *)
     let content =
-      match Db_content.recur_replace_uuid_in_block_title block with
+      match Db_content.recur_replace_uuid_in_block_title ~title:raw block with
       | Some s -> s
       | None -> raw
     in
+    (* cljs (count content)/(subs content 0 n) are UTF-16 units, not bytes *)
     let content =
-      if String.length content > publish_search_max_length then
-        String.sub content 0 publish_search_max_length
-      else content
+      Search_index.utf16_truncate ~max_units:publish_search_max_length content
     in
     Some (Unicode.trim content)
   end
@@ -214,7 +212,7 @@ let collect_embedded_blocks db (blocks : entity list) : entity list =
   loop linked_eids []
 
 (* cljs publish-collect-page-eids *)
-let publish_collect_page_eids db (e : entity) : entity list * IntSet.t =
+let publish_collect_page_eids db (e : entity) : entity list * int list =
   let page_id = e.id in
   let blocks =
     List.filter (publishable_block db) (collect_publish_blocks db e)
@@ -276,7 +274,9 @@ let publish_collect_page_eids db (e : entity) : entity list * IntSet.t =
     @ property_eids
     |> dedup
   in
-  (blocks, IntSet.of_list eids)
+  (* cljs (->> (concat ...) (remove nil?) distinct) — first-occurrence
+     order, not sorted *)
+  (blocks, eids)
 
 (* cljs normalize-block-publish-datoms *)
 let normalize_block_publish_datoms (datoms : datom list) (block_eids : IntSet.t)
@@ -312,7 +312,7 @@ let build_publish_page_payload db (e : entity) : Wire.t =
   let raw_datoms =
     List.concat_map
       (fun eid -> List.of_seq (datoms db Eavt ~e:eid ()))
-      (IntSet.elements eids)
+      eids
     |> List.filter (fun (d : datom) ->
          d.a <> "block/tx-id"
          && d.a <> "logseq.property.user/email")

@@ -209,8 +209,16 @@ let block_ref_id_to_title (ent : entity) max_depth replace_block_refs =
 
 (* db-content/recur-replace-uuid-in-block-title *)
 let recur_replace_uuid_in_block_title ?(max_depth = 10)
-    ?(replace_block_refs = true) (ent : entity) : string option =
-  match Ldb.string_value ent "block/title" with
+    ?(replace_block_refs = true) ?(title : string option) (ent : entity) :
+    string option =
+  (* cljs callers may (assoc block :block/title t) first — `title` stands in
+     for that override. *)
+  let title =
+    match title with
+    | Some _ -> title
+    | None -> Ldb.string_value ent "block/title"
+  in
+  match title with
   | Some title when Regexp.test id_ref_re title ->
       let id_to_title =
         block_ref_id_to_title ent max_depth replace_block_refs
