@@ -702,14 +702,30 @@ should be done through this fn in order to get global config and config defaults
                class
                (:db/ident class))))
 
+(defn- class-lookup-keys
+  [class]
+  (cond-> #{}
+    (keyword? class) (conj class)
+    (:db/ident class) (conj (:db/ident class))
+    (:block/uuid class) (conj (:block/uuid class))
+    (:db/id class) (conj (:db/id class))))
+
 (defn classes-for-tag-completion
-  "Return `classes` with built-in flashcard classes removed when Flashcards is off for `repo`.
+  "Return `classes` with unselected built-in flashcard classes removed when Flashcards is off for `repo`.
+  `selected` keeps already chosen Card/Cards so they can be deselected.
   Use at UI class/tag pickers. Leave shared fetches unfiltered."
-  [repo classes]
-  (if (enable-flashcards? repo)
-    classes
-    (when classes
-      (into [] (remove flashcard-class?) classes))))
+  ([repo classes]
+   (classes-for-tag-completion repo classes nil))
+  ([repo classes selected]
+   (if (enable-flashcards? repo)
+     classes
+     (when classes
+       (let [keep (into #{} (mapcat class-lookup-keys) selected)]
+         (into []
+               (remove (fn [class]
+                         (and (flashcard-class? class)
+                              (not (some keep (class-lookup-keys class))))))
+               classes))))))
 
 ;; Enable by default
 (defn show-brackets?
