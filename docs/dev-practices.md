@@ -215,7 +215,7 @@ There are a couple different ways to run tests:
 * [Autorun tests](#autorun-tests) - Autorun tests from the CLI
 * [Repl tests](#repl-tests) - Run tests from REPL
 
-There a couple types of tests and they can overlap with each other:
+There are a couple types of tests and they can overlap with each other:
 
 * [Database tests](#database-tests) - Tests that involve a datascript DB.
 * [Performance tests](#performance-tests) - Tests that aim to measure and enforce a performance characteristic.
