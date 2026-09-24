@@ -240,30 +240,16 @@ let remove_orphaned_page_refs (db : db) (db_id : entity_id) (txs_state : txs_sta
 let update_page_when_save_block (txs_state : txs_state) (block_entity : entity) : unit =
   match Ldb.ref_ent block_entity "block/page" with
   | Some e ->
-      let now = Instant (Date_time_util.time_ms ()) in
-      let m =
-        [ ("db/id", Ref e.id); ("block/updated-at", now) ]
+      (* cljs: {:db/id eid :block/updated-at now :block/created-at? now} *)
+      let attrs =
+        [ ("block/updated-at", One_value (Instant (Date_time_util.time_ms ()))) ]
       in
-      let m =
+      let attrs =
         if not (Option.is_some (Ldb.value e "block/created-at")) then
-          m @ [ ("block/created-at", now) ]
-        else m
+          attrs @ [ ("block/created-at", One_value (Instant (Date_time_util.time_ms ()))) ]
+        else attrs
       in
-      txs_push txs_state [ Entity { db_id = Some (Entity_id e.id); attrs = [] } ];
-      (* cljs appends raw maps; encode as Entity ops via Block_map *)
-      let te =
-        { db_id = Some (Entity_id e.id)
-        ; attrs =
-            List.filter_map
-              (fun (a, v) ->
-                match v with
-                | Ref id -> Some (a, One_entity { db_id = Some (Entity_id id); attrs = [] })
-                | Int n -> Some (a, One_value (Int n))
-                | _ -> None)
-              m
-        }
-      in
-      txs_push txs_state [ Entity te ]
+      txs_push txs_state [ Entity { db_id = Some (Entity_id e.id); attrs } ]
   | None -> ()
 
 (* ---------- remove-orphaned-refs-when-save ---------- *)
@@ -329,22 +315,22 @@ let tx_op_of_value (db : db) (v : value) : tx_op option =
           pairs
       in
       Some (Block_map.to_tx_op db m)
-  | Vector [ Keyword ":db/add"; e; String a; v' ]
-  | List [ Keyword ":db/add"; e; String a; v' ]
-  | Vector [ Keyword "db/add"; e; String a; v' ]
-  | List [ Keyword "db/add"; e; String a; v' ] ->
+  | Vector [ Keyword ":db/add"; e; (String a | Keyword a); v' ]
+  | List [ Keyword ":db/add"; e; (String a | Keyword a); v' ]
+  | Vector [ Keyword "db/add"; e; (String a | Keyword a); v' ]
+  | List [ Keyword "db/add"; e; (String a | Keyword a); v' ] ->
       Option.map
         (fun r -> Add (r, a, v'))
         (Block_map.entity_ref_of_value e)
-  | Vector [ Keyword ":db/retract"; e; String a ]
-  | List [ Keyword ":db/retract"; e; String a ]
-  | Vector [ Keyword "db/retract"; e; String a ]
-  | List [ Keyword "db/retract"; e; String a ] ->
+  | Vector [ Keyword ":db/retract"; e; (String a | Keyword a) ]
+  | List [ Keyword ":db/retract"; e; (String a | Keyword a) ]
+  | Vector [ Keyword "db/retract"; e; (String a | Keyword a) ]
+  | List [ Keyword "db/retract"; e; (String a | Keyword a) ] ->
       Option.map (fun r -> RetractAttr (r, a)) (Block_map.entity_ref_of_value e)
-  | Vector [ Keyword ":db/retract"; e; String a; v' ]
-  | List [ Keyword ":db/retract"; e; String a; v' ]
-  | Vector [ Keyword "db/retract"; e; String a; v' ]
-  | List [ Keyword "db/retract"; e; String a; v' ] ->
+  | Vector [ Keyword ":db/retract"; e; (String a | Keyword a); v' ]
+  | List [ Keyword ":db/retract"; e; (String a | Keyword a); v' ]
+  | Vector [ Keyword "db/retract"; e; (String a | Keyword a); v' ]
+  | List [ Keyword "db/retract"; e; (String a | Keyword a); v' ] ->
       Option.map
         (fun r -> Retract (r, a, Some v'))
         (Block_map.entity_ref_of_value e)
@@ -2056,7 +2042,7 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
             let insert_opts' =
               { opts with sibling; replace_empty_target }
             in
-            let blocks_tx, page_txs, id_to_new_uuid, _uuid_map =
+            let blocks_tx, page_txs, id_to_new_uuid, uuid_map =
               insert_blocks_aux db blocks' target_block insert_opts'
             in
             let invalid =
@@ -2111,12 +2097,27 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
                            (fun b ->
                              if mget_int b "block/level" = Some 1 then
                                let new_id =
-                                 match mget_int b "db/id" with
-                                 | Some id -> (
-                                     match List.assoc_opt id id_to_new_uuid with
-                                     | Some u -> Some u
-                                     | None -> mget_uuid b "block/uuid")
-                                 | None -> mget_uuid b "block/uuid"
+                                 (* cljs: (or (id->new-uuid dbid)
+                                            (uuid->new-uuid uuid)
+                                            (:block/uuid block)) *)
+                                 match
+                                   mget b "db/id"
+                                   |> Option.map id_of_value
+                                   |> Option.join
+                                   |> Option.map
+                                        (fun id ->
+                                          List.assoc_opt id id_to_new_uuid)
+                                   |> Option.join
+                                 with
+                                 | Some u -> Some u
+                                 | None -> (
+                                     match mget_uuid b "block/uuid" with
+                                     | Some u ->
+                                         Some
+                                           (Option.value
+                                              ~default:u
+                                              (List.assoc_opt u uuid_map))
+                                     | None -> None)
                                in
                                (match new_id with
                                 | Some uuid ->
@@ -2293,7 +2294,7 @@ let delete_blocks (db : db) (blocks : Block_map.t list) : tx_result =
              &&
              (match Ldb.ref_ent fp "logseq.property/default-value" with
               | Some dv -> dv.id <> start_block.id
-              | None -> false)
+              | None -> true)
              && not (Option.is_some (Ldb.value start_block "block/closed-value-property"))
          | None -> false
        in
@@ -2529,6 +2530,29 @@ let transact_move_blocks (conn : conn) (blocks : entity list)
         blocks)
   |> ignore
 
+(* cljs sort-non-consecutive-blocks: group-by :block/page, then
+   sort-page-random-blocks per group. Groups keep first-occurrence order;
+   a nil-page group yields [] in cljs (every order-path is nil). *)
+let sort_non_consecutive_blocks (db : db) (blocks : entity list) : entity list =
+  let rec add (groups : (entity_id option * entity list) list) (b : entity)
+      : (entity_id option * entity list) list =
+    let key =
+      match Ldb.ref_ent b "block/page" with
+      | Some p -> Some p.id
+      | None -> None
+    in
+    match groups with
+    | [] -> [ (key, [ b ]) ]
+    | (k, bs) :: rest when k = key -> (k, bs @ [ b ]) :: rest
+    | g :: rest -> g :: add rest b
+  in
+  blocks
+  |> List.fold_left add []
+  |> List.concat_map (fun (page_id, bs) ->
+      match page_id with
+      | Some _ -> Ldb.sort_page_random_blocks db bs
+      | None -> [])
+
 (* cljs move-blocks callers pass a literal opts map like
    {:outliner-op o :sibling? s :up? u :indent? i} which is recorded in
    :outliner-ops tx-meta; rebuild that map from insert_opts. *)
@@ -2573,7 +2597,7 @@ let move_blocks (conn : conn) (blocks : entity list) (target_block : entity)
         in
         let top_level = get_top_level_blocks top_level non_consecutive in
         let blocks =
-          (if non_consecutive then Ldb.sort_page_random_blocks db top_level
+          (if non_consecutive then sort_non_consecutive_blocks db top_level
            else top_level)
           |> List.filter_map (fun (b : entity) -> Ldb.ent_of_id db b.id)
         in
