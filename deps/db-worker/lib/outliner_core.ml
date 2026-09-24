@@ -166,32 +166,33 @@ let block_with_updated_at (block : Block_map.t) : Block_map.t =
 
 (* ---------- filter-top-level-blocks ---------- *)
 
+(* cljs parent-ids = set((comp :db/id :block/parent) over blocks) ∩
+   set(:db/id over blocks) — a nil db/id intersects a nil parent-id, and
+   (contains? parent-ids nil) then removes parentless blocks too. *)
+type parent_id = Pid of entity_id | Pnil | Pother
+
 let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list =
-  let block_ids =
-    List.filter_map
-      (fun m ->
-        match mget m "db/id" with
-        | Some v -> id_of_value v
-        | None -> None)
-      blocks
+  let parent_key m =
+    (* (:db/id (:block/parent b)) — non-map/entity parents read as nil *)
+    match mget m "block/parent" with
+    | Some (Map _ as v) | Some (Ref _ as v) | Some (Ref_to _ as v) -> (
+        match id_of_value v with
+        | Some id -> Pid id
+        | None -> Pnil)
+    | Some _ | None -> Pnil
   in
-  let parent_ids =
-    List.filter_map
-      (fun m ->
-        match mget m "block/parent" with
-        | Some v -> id_of_value v
-        | None -> None)
-      blocks
+  let self_key m =
+    match mget m "db/id" with
+    | Some (Int id) | Some (Ref id) -> Pid id
+    | Some Nil | None -> Pnil
+    | Some _ -> Pother
   in
-  let top_parent_ids = List.filter (fun id -> List.mem id block_ids) parent_ids in
+  let self_keys = List.map self_key blocks in
+  let top_parent_ids =
+    List.filter (fun k -> List.mem k self_keys) (List.map parent_key blocks)
+  in
   blocks
-  |> List.filter (fun m ->
-      match mget m "block/parent" with
-      | Some v ->
-          (match id_of_value v with
-           | Some pid -> not (List.mem pid top_parent_ids)
-           | None -> true)
-      | None -> true)
+  |> List.filter (fun m -> not (List.mem (parent_key m) top_parent_ids))
   |> List.filter_map (fun m ->
       match mget m "db/id" with
       | Some (Int id) | Some (Ref id) -> Ldb.ent_of_id db id
@@ -1096,36 +1097,36 @@ exception Block_eid_missing
 
 type tx_result = { tx_data : tx_op list; tx_meta : tx_meta }
 
-let save_block (db : db) (block : Block_map.t) (opts : save_opts) : tx_result =
+let save_block (db : db) (block : Block_map.t) (opts : save_opts)
+    : tx_result option =
   let eid =
     match mget_int block "db/id" with
     | Some _ -> true
     | None -> mget_uuid block "block/uuid" <> None
   in
   if not eid then raise Block_eid_missing;
-  let entity_ =
-    match mget_int block "db/id" with
-    | Some id -> Ldb.ent_of_id db id
-    | None -> (
-        match mget_uuid block "block/uuid" with
-        | Some u -> entity db (Lookup_ref ("block/uuid", Uuid u))
-        | None -> None)
-  in
-  (match entity_ with
-   | Some e when Outliner_validate.built_in_entity e ->
-       raise
-         (Outliner_validate.Notification
-            (Outliner_validate.notification_payload
-               ~message:"Built-in nodes can't be modified" ~i18n_key:"" ~i18n_args:[]))
-   | _ -> ());
-  let txs_state = new_txs_state () in
-  let block' =
-    match entity_ with
-    | Some e -> Block_map.merge (Block_map.of_entity e) block
-    | None -> block
-  in
-  save_in_txs db txs_state block' opts;
-  { tx_data = txs_state.txs; tx_meta = [] }
+  (* cljs when-let: nothing is saved (and op-transact! sees nil) when the
+     entity is missing. *)
+  match
+    (match mget_int block "db/id" with
+     | Some id -> Ldb.ent_of_id db id
+     | None -> (
+         match mget_uuid block "block/uuid" with
+         | Some u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+         | None -> None))
+  with
+  | None -> None
+  | Some e ->
+      if Outliner_validate.built_in_entity e then
+        raise
+          (Outliner_validate.Notification
+             (Outliner_validate.notification_payload
+                ~message:"Built-in nodes can't be modified" ~i18n_key:""
+                ~i18n_args:[]));
+      let txs_state = new_txs_state () in
+      let block' = Block_map.merge (Block_map.of_entity e) block in
+      save_in_txs db txs_state block' opts;
+      Some { tx_data = txs_state.txs; tx_meta = [] }
 
 (* ---------- insert-blocks ---------- *)
 
@@ -1452,21 +1453,18 @@ let blocks_with_level (blocks : Block_map.t list) : Block_map.t list =
         match bs with
         | [] -> List.rev acc
         | b :: tl ->
+            (* cljs (cond (map? parent) (get id->level (:db/id parent))
+               (vector? parent) (get uuid->level (second parent))) — a map
+               parent only ever uses :db/id; no uuid fallback. *)
             let parent_level =
               match mget b "block/parent" with
-              | Some v -> (
+              | Some (Map _ as v) -> (
                   match id_of_value v with
                   | Some id -> Hashtbl.find_opt id_to_level id
-                  | None -> (
-                      match v with
-                      | Vector [ _; Uuid u ] | List [ _; Uuid u ] ->
-                          Hashtbl.find_opt uuid_to_level u
-                      | Map _ -> (
-                          match uuid_of_value v with
-                          | Some u -> Hashtbl.find_opt uuid_to_level u
-                          | None -> None)
-                      | _ -> None))
-              | None -> None
+                  | None -> None)
+              | Some (Vector [ _; Uuid u ]) ->
+                  Hashtbl.find_opt uuid_to_level u
+              | _ -> None
             in
             let level = match parent_level with Some l -> l + 1 | None -> 1 in
             let b' = Block_map.put b "block/level" (Int level) in
@@ -1972,11 +1970,11 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
     if opts.outliner_op = Some "paste" || opts.insert_template then
       List.filter
         (fun b ->
-          match mget_int b "db/id" with
-          | Some id -> (
-              match Ldb.ent_of_id db id with
-              | Some e -> not (Ldb.asset e)
-              | None -> true)
+          (* cljs (remove ldb/asset?) — (some?
+             (:logseq.property.asset/type b)) on the block map itself *)
+          match mget b "logseq.property.asset/type" with
+          | Some Nil -> true
+          | Some _ -> false
           | None -> true)
         blocks
     else blocks
@@ -2758,14 +2756,18 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
               let last_direct_child_id =
                 Ldb.get_block_last_direct_child_id db left.id
               in
-              let blocks' =
-                List.filter
-                  (fun b ->
-                    match Ldb.ref_ent b "block/parent" with
-                    | Some p -> p.id <> left.id
-                    | None -> true)
-                  top_level
+              (* cljs drop-while: skips the leading run of blocks parented
+                 to `left`, keeps everything from the first other-parent
+                 block onward. *)
+              let rec drop_while l =
+                match l with
+                | b :: rest ->
+                    (match Ldb.ref_ent b "block/parent" with
+                     | Some p when p.id = left.id -> drop_while rest
+                     | _ -> l)
+                | [] -> []
               in
+              let blocks' = drop_while top_level in
               match blocks' with
               | [] -> None
               | _ ->
@@ -2812,28 +2814,22 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                 | Some p -> Ldb.ref_ent p "block/parent"
                 | None -> None
               in
-              let blocks' =
-                List.filter
-                  (fun b ->
-                    match Ldb.ref_ent b "block/parent", parent_parent with
-                    | Some bp, Some pp -> bp.id <> pp.id
-                    | _ -> true)
-                  top_level
-              in
-              (* cljs take-while: stops at first block whose parent ==
-                 parent's parent *)
+              (* cljs take-while: stops at the first block whose
+                 (:block/parent) id equals parent's parent's — nil parent
+                 vs nil parent-parent also stops the take. *)
               let rec take_while acc l =
                 match l with
                 | b :: rest ->
                     let stop =
                       match Ldb.ref_ent b "block/parent", parent_parent with
                       | Some bp, Some pp -> bp.id = pp.id
+                      | None, None -> true
                       | _ -> false
                     in
                     if stop then List.rev acc else take_while (b :: acc) rest
                 | [] -> List.rev acc
               in
-              let blocks' = take_while [] blocks' in
+              let blocks' = take_while [] top_level in
               let opts' = { opts with sibling = true; indent = false } in
               move_blocks conn blocks' parent_original opts'
                 (move_opts_map opts')
@@ -2848,6 +2844,7 @@ let indent_outdent_blocks (conn : conn) (blocks : entity list) (indent : bool)
                         let stop =
                           match Ldb.ref_ent b "block/parent", parent_parent with
                           | Some bp, Some pp -> bp.id = pp.id
+                          | None, None -> true
                           | _ -> false
                         in
                         if stop then List.rev acc else take_while (b :: acc) rest
@@ -2926,8 +2923,7 @@ let save_block_conn (conn : conn) (block : Block_map.t) (opts : save_opts)
   let outliner_op = Option.value opts.outliner_op ~default:"save-block" in
   let opts = { opts with outliner_op = Some outliner_op } in
   op_transact "save-block"
-    (fun () ->
-      Some (save_block (Conn.db conn) block opts))
+    (fun () -> save_block (Conn.db conn) block opts)
     [ Ref 0 (* conn placeholder — cljs args[0] is conn, unused *)
     ; bmap_arg block; opts_arg opts_entry ]
     conn

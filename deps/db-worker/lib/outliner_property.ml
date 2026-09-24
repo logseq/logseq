@@ -570,28 +570,17 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
   | Wire.Nil -> []
   | _ ->
       let db = Datascript.db conn in
-      let old_value = Ldb.values block property_id in
       let property = entity db (Ident property_id) in
       let multiple_values =
         match property with Some p -> ent_many p | None -> false
       in
+      (* cljs (and multiple-values? (sequential? value)) — sequential? is
+         false on sets, so only lists/vectors trigger the bulk retract. *)
       let retract_multiple_values =
         multiple_values
         && (match value with
-            | Wire.Array _ | Wire.List _ | Wire.Set _ -> true
+            | Wire.Array _ | Wire.List _ -> true
             | _ -> false)
-      in
-      let multiple_values_empty =
-        List.exists
-          (fun v ->
-             match v with
-             | Ref id ->
-                 (match Ldb.ent_of_id db id with
-                  | Some e ->
-                      Ldb.ident_of e = Some "logseq.property/empty-placeholder"
-                  | None -> false)
-             | _ -> false)
-          old_value
       in
       let extends_ = property_id = "logseq.property.class/extends" in
       let tx_value =
@@ -618,12 +607,10 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
           Cljs_map.assoc m "block/tags" (kw "logseq.class/Template")
         else m
       in
-      (if multiple_values_empty then
-         [ Wire.Array
-             [ kw "db/retract"; Wire.Int block.id; kw property_id
-             ; kw "logseq.property/empty-placeholder" ] ]
-       else [])
-      @ (if retract_multiple_values then
+      (* cljs multiple-values-empty? is dead: (sequential? old-value) is
+         false on the set/scalar an entity attr read yields — the
+         empty-placeholder retract is never emitted there either. *)
+      (if retract_multiple_values then
            [ Wire.Array [ kw "db/retract"; Wire.Int block.id; kw property_id ] ]
          else [])
       @ (if extends_ then
@@ -955,9 +942,11 @@ let validate_bang (db : db) (property : entity) (value : value)
 let throw_error_if_invalid_property_value db (property : entity) (value : value)
     : unit =
   let many = ent_many property in
+  (* cljs (if (and many? (not (sequential? value))) #{value} value) — a set
+     is not sequential, so it is wrapped again like a scalar. *)
   let value' =
     if many then
-      match value with List _ | Vector _ | Set _ -> value | _ -> Set [ value ]
+      match value with List _ | Vector _ -> value | _ -> Set [ value ]
     else value
   in
   validate_bang db property value' ~new_closed_value:false
@@ -1406,16 +1395,20 @@ let batch_remove_property conn (block_ids : Wire.t list) (property_id : string)
     validate_batch_deletion_of_property db blocks property_id;
     if blocks <> [] then
       if entity db (Ident property_id) <> None then begin
+          (* cljs: (get block property-id) on a cardinality/many attr yields
+             a set — (sequential? value) fails, so entities is nil; only a
+             single entity value reaches deleting-entities. *)
+          let many_attr = Ldb.many_attr db property_id in
           let txs =
             List.concat_map
               (fun block ->
                  let value_ents =
-                   List.filter_map
-                     (fun v ->
-                        match v with
-                        | Ref id -> Ldb.ent_of_id db id
-                        | _ -> None)
-                     (Ldb.values block property_id)
+                   match Ldb.values block property_id with
+                   | [ Ref id ] when not many_attr ->
+                       (match Ldb.ent_of_id db id with
+                        | Some e -> [ e ]
+                        | None -> [])
+                   | _ -> []
                  in
                  let deleting_entities =
                    List.filter
