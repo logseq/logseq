@@ -526,6 +526,7 @@
   (is (every? #{:block.temp/positioned-properties
                 :block.temp/refs-count
                 :block.temp/order-list-index
+                :block.temp/class-property-idents
                 :block.temp/has-children?}
               (filter #(= "block.temp" (namespace %)) (keys block))))
   (doseq [reference (concat (keep block [:block/page :block/parent])
