@@ -342,6 +342,14 @@ Separately from `key::`, markdown title markers keep working:
   `--blocks`); rejected in update mode (`--dry-run is only for create
   mode`). JSON/EDN output emits `{:dry-run true :ops [...] :
   would-create-pages [...]}`.
+- **Command-level metadata options**: the implemented `upsert block` path
+  accepts `--update-tags` and `--update-properties` with Markdown input.
+  They apply to top-level blocks only; inline `#tag` and `key:: value`
+  apply to the block where they appear. This supersedes the earlier
+  rejection decision above.
+- **Missing pages**: target and reference pages may be materialized before
+  the block insert transaction. The block tree and metadata ops are applied
+  together; created pages are tracked for rollback if that apply fails.
 - **`block/level`**: emitted per computed depth (roots 1); the worker's
   `blocks-with-level` recalculates it from `block/parent` regardless.
 - **Ref/tag extraction**: implemented via `Mldoc.getReferences` —
