@@ -516,6 +516,33 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
   else
     let page_tag = entity db (Ident "logseq.class/Page") in
     let library_page = Ldb.get_library_page report.db_after in
+    (* cljs move-parent-to-library-tx — climb to the topmost page
+       ancestor: namespaces created before registration existed can
+       have a parentless root higher up. *)
+    let move_parent_to_library_tx (block_parent : entity option) =
+      let rec climb (p : entity) =
+        match Ldb.ref_ent p "block/parent" with
+        | Some pp when Ldb.is_page p && Ldb.is_page pp -> climb pp
+        | _ -> p
+      in
+      match block_parent with
+      | None -> []
+      | Some bp ->
+          let root = climb bp in
+          (match library_page with
+           | Some lp
+             when Ldb.is_page root
+                  && Ldb.value root "block/parent" = None
+                  && root.id <> lp.id
+                  && Ldb.value root "db/ident" = None
+                  && not (Ldb.built_in root) ->
+               [ Block_map.to_tx_op db
+                   [ "db/id", Int root.id
+                   ; "block/parent", Int lp.id
+                   ; "block/order",
+                     String (Db_order.gen_key None None) ] ]
+           | _ -> [])
+    in
     List.concat_map
       (fun (d : datom) ->
         let id = d.e in
@@ -525,13 +552,25 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
               | Some pt, Int i | Some pt, Ref i -> i = pt.id
               | _ -> false)
         in
+        let added_parent = d.a = "block/parent" && d.added in
         let move_to_library =
-          d.a = "block/parent" && d.added
+          added_parent
           && (match library_page, d.v with
               | Some lp, Int i | Some lp, Ref i -> i = lp.id
               | _ -> false)
         in
-        if page_tag_update || move_to_library then
+        (* A page moved under another page creates a namespace whose
+           root page should be registered in Library. *)
+        let move_under_page =
+          added_parent && not move_to_library
+          && (match d.v with
+              | Int i | Ref i ->
+                  (match entity report.db_after (Entity_id i) with
+                   | Some e -> Ldb.internal_page e
+                   | None -> false)
+              | _ -> false)
+        in
+        if page_tag_update || move_to_library || move_under_page then
           let block_before = entity report.db_before (Entity_id id) in
           let block_after = entity report.db_after (Entity_id id) in
           let children_page_tx () =
@@ -563,7 +602,11 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                   ; "block/tags", Keyword "logseq.class/Page" ]
                 :: retract_attr id "block/page"
                 :: children_page_tx ()
-              else if d.added
+              else if move_under_page && Ldb.internal_page ba then
+                (* page moved under another page — register the
+                   topmost namespace root in Library *)
+                move_parent_to_library_tx (Ldb.ref_ent ba "block/parent")
+              else if (not move_under_page) && d.added
                       && (match block_before with
                           | None -> true
                           | Some bb -> not (Ldb.is_page bb))
@@ -594,22 +637,8 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                         ; retract_attr id "block/order" ]
                     | _ -> []))
                 in
-                let move_parent_to_library_tx =
-                  match block_parent, library_page with
-                  | Some bp, Some lp
-                    when Ldb.is_page bp
-                         && Ldb.value bp "block/parent" = None
-                         && bp.id <> lp.id
-                         && Ldb.value bp "db/ident" = None
-                         && not (Ldb.built_in bp) ->
-                      [ Block_map.to_tx_op db
-                          [ "db/id", Int bp.id
-                          ; "block/parent", Int lp.id
-                          ; "block/order",
-                            String (Db_order.gen_key None None) ] ]
-                  | _ -> []
-                in
-                to_page_tx @ move_parent_to_library_tx
+                to_page_tx
+                @ move_parent_to_library_tx block_parent
                 @ children_page_tx ()
               end
               else if (not d.added)
@@ -922,7 +951,8 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
       ; "logseq.property/type"; "db/cardinality"
       ; "logseq.property/built-in?"; "logseq.property.class/extends" ]
     in
-    List.sort_uniq compare
+    (* cljs (distinct tx-data') — first-occurrence order preserved *)
+    Common_util.distinct_by Fun.id
       (List.concat_map
          (fun (d : datom) ->
            if not d.added then []
@@ -948,24 +978,27 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
                    entity db_before (Entity_id d.e)
                  with
                  | Some after, Some before ->
+                     (* cljs (not= (get block a) (get before a)) — compares
+                        the whole value set, not first values *)
+                     let sorted_values (e : entity) =
+                       List.sort Util.compare_value (Ldb.values e d.a)
+                     in
                      Ldb.built_in after
-                     && Ldb.value after d.a <> Ldb.value before d.a
+                     && sorted_values after <> sorted_values before
                  | _ -> false)
            then
              (match entity db_before (Entity_id d.e) with
               | Some before ->
-                  (match Ldb.value before d.a with
-                   | Some prev_v ->
-                       if d.a = "logseq.property.class/extends" then
-                         retract_attr d.e d.a
-                         :: [ Block_map.to_tx_op db_after
-                                [ "db/id", Int d.e
-                                ; (d.a),
-                                  (match prev_v with
-                                   | Set vs -> Set vs
-                                   | v -> Set [ v ]) ] ]
-                       else [ add d.e d.a prev_v ]
-                   | None -> [ retract d.e d.a d.v ])
+                  (match Ldb.values before d.a with
+                   | prev_v :: _ when d.a <> "logseq.property.class/extends" ->
+                       [ add d.e d.a prev_v ]
+                   | (_ :: _) as prev_vs ->
+                       (* cljs {e a (map :db/id prev-v)} — restores the
+                          whole extends set *)
+                       retract_attr d.e d.a
+                       :: [ Block_map.to_tx_op db_after
+                              [ "db/id", Int d.e; d.a, Set prev_vs ] ]
+                   | [] -> [ retract d.e d.a d.v ])
               | None -> [])
            else if
              d.a = "logseq.property.class/extends"
@@ -987,16 +1020,13 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
              retract d.e d.a d.v
              :: (match entity db_before (Entity_id d.e) with
                  | Some before ->
-                     (match Ldb.value before d.a with
-                      | Some (Set vs) when vs <> [] ->
+                     (match Ldb.values before d.a with
+                      | (_ :: _) as prev_vs ->
+                          (* cljs {e a (map :db/id prev-v)} *)
                           [ Block_map.to_tx_op db_after
                               [ "db/id", Int d.e
-                              ; d.a, Set vs ] ]
-                      | Some v when v <> Nil ->
-                          [ Block_map.to_tx_op db_after
-                              [ "db/id", Int d.e
-                              ; d.a, Set [ v ] ] ]
-                      | _ ->
+                              ; d.a, Set prev_vs ] ]
+                      | [] ->
                           [ add d.e d.a
                               (Keyword "logseq.class/Root") ])
                  | None ->
@@ -1135,16 +1165,29 @@ let reference_attrs (db : db) : string list =
          | None -> None)
        tag_datoms
 
-(* WeakMap keyed on db values → physical-identity table (db values are
-   boxed records; == matches the same allocation, like cljs .get) *)
+(* cljs js/WeakMap keyed on db identity — a WeakMap entry dies with its
+   db value. A bounded fifo approximates that here: only the most recent
+   dbs stay cached so stale immutable dbs are not pinned forever. *)
+let reference_attrs_cache_max = 8
+
 let reference_attrs_cache : (db * string list) list ref = ref []
+
+let cache_push (db : db) (attrs : string list) : unit =
+  let rec take n l =
+    match n, l with
+    | 0, _ -> []
+    | _, [] -> []
+    | n, x :: tl -> x :: take (n - 1) tl
+  in
+  reference_attrs_cache :=
+    (db, attrs) :: take (reference_attrs_cache_max - 1) !reference_attrs_cache
 
 let reference_attrs_cached (db : db) : string list =
   match List.find_opt (fun (d, _) -> d == db) !reference_attrs_cache with
   | Some (_, attrs) -> attrs
   | None ->
     let attrs = reference_attrs db in
-    reference_attrs_cache := (db, attrs) :: !reference_attrs_cache;
+    cache_push db attrs;
     attrs
 
 let reference_owner_ids_at (db : db) (attrs : string list)
@@ -1176,9 +1219,7 @@ let projected_reference_owner_ids (report : tx_report) : entity_id list =
     (if not reference_attrs_changed then
        match List.find_opt (fun (d, _) -> d == db_before)
               !reference_attrs_cache with
-       | Some (_, attrs) ->
-           reference_attrs_cache :=
-             (db_after, attrs) :: !reference_attrs_cache
+       | Some (_, attrs) -> cache_push db_after attrs
        | None -> ());
     []
   end else begin
@@ -1196,10 +1237,8 @@ let projected_reference_owner_ids (report : tx_report) : entity_id list =
           if reference_attrs_changed then reference_attrs db_after
           else before_reference_attrs
     in
-    reference_attrs_cache :=
-      (db_after, after_reference_attrs)
-      :: (db_before, before_reference_attrs)
-      :: !reference_attrs_cache;
+    cache_push db_after after_reference_attrs;
+    cache_push db_before before_reference_attrs;
     List.sort_uniq compare
       (List.concat_map
          (fun target_id ->

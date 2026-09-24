@@ -804,11 +804,103 @@ let template_children_blocks_for_history db (template_ref : Wire.t) : Wire.t lis
        | _ -> [])
   | None -> []
 
-(* op-construct/canonicalize-insert-blocks-op — returns [blocks' target-ref opts'] *)
+(* op-construct/inserted-block-uuids-from-tx-data — entities of the
+   inserted tree are the ones with parent writes in this transaction;
+   saving a reference creates a page + block but only the inserted
+   tree has parent writes. *)
+let inserted_block_uuids_from_tx_data (tx_data : Wire.t list) : Wire.t list =
+  (* cljs entity-id — (some? (:a item)) -> (:e item); (vector? item) ->
+     (second item); else (:db/id item) or [:block/uuid (:block/uuid item)] *)
+  let entity_id (item : Wire.t) : Wire.t =
+    match item with
+    | Wire.Array xs -> (match xs with _ :: e :: _ -> e | _ -> Wire.Nil)
+    | _ ->
+        (match item_get "a" item with
+         | Some a when a <> Wire.Nil ->
+             Option.value (item_get "e" item) ~default:Wire.Nil
+         | _ ->
+             (match item_get "db/id" item with
+              | Some id when id <> Wire.Nil -> id
+              | _ ->
+                  Wire.Array
+                    [ kw "block/uuid"
+                    ; Option.value (item_get "block/uuid" item)
+                        ~default:Wire.Nil ]))
+  in
+  let parent_write (item : Wire.t) : bool =
+    truthy_opt (item_get "block/parent" item)
+    || (match item_get "a" item, item_get "added" item with
+        | Some (Wire.Keyword "block/parent"), Some (Wire.Bool true) -> true
+        | _ -> false)
+    || (match item with
+        | Wire.Array (Wire.Keyword "db/add" :: _ :: Wire.Keyword "block/parent"
+                      :: _) -> true
+        | _ -> false)
+  in
+  let parent_ids =
+    List.map entity_id (List.filter parent_write tx_data)
+  in
+  created_block_uuids_from_tx_data
+    (List.filter (fun item -> List.mem (entity_id item) parent_ids) tx_data)
+
+(* cljs string/blank? *)
+let string_blank (s : string) : bool =
+  let rec all i =
+    i >= String.length s
+    || ((match s.[i] with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true
+         | _ -> false)
+        && all (i + 1))
+  in
+  all 0
+
+(* op-construct/replaces-empty-target? *)
+let replaces_empty_target (db : db) (tx_data : Wire.t list)
+    (source_uuids : Wire.t list) (target_ref : Wire.t) (opts : Wire.t) : bool =
+  (truthy_opt (mget "replace-empty-target?" opts)
+   || (truthy_opt (mget "sibling?" opts) && List.length source_uuids > 1))
+  && ((match source_uuids with
+       | u :: _ ->
+           (match entity_of_ref_wire db target_ref with
+            | Some t ->
+                (match Ldb.value t "block/uuid" with
+                 | Some (Uuid tu) -> u = Wire.Uuid tu
+                 | _ -> false)
+            | None -> false)
+       | [] ->
+           (* cljs (= nil (:block/uuid missing-entity)) *)
+           (match entity_of_ref_wire db target_ref with
+            | Some t -> Ldb.value t "block/uuid" = None
+            | None -> true))
+      || List.exists
+           (fun item ->
+              let e, a, v, added =
+                match item with
+                | Wire.Array xs ->
+                    ( (match xs with _ :: e :: _ -> e | _ -> Wire.Nil)
+                    , Option.value (List.nth_opt xs 2) ~default:Wire.Nil
+                    , Option.value (List.nth_opt xs 3) ~default:Wire.Nil
+                    , (match xs with
+                       | Wire.Keyword "db/add" :: _ -> true
+                       | _ -> false) )
+                | _ ->
+                    ( Option.value (item_get "e" item) ~default:Wire.Nil
+                    , Option.value (item_get "a" item) ~default:Wire.Nil
+                    , Option.value (item_get "v" item) ~default:Wire.Nil
+                    , truthy_opt (item_get "added" item) )
+              in
+              a = kw "block/title"
+              && not added
+              && (match v with
+                  | Wire.String s -> string_blank s
+                  | _ -> false)
+              && stable_entity_ref db e = target_ref)
+           tx_data)
+
+(* op-construct/canonicalize-insert-blocks-op — 2-arity shares the
+   available-uuid pool across ops in one transaction (master). *)
 let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
-    : Wire.t list =
+    (available_uuids : Wire.t list) : Wire.t list =
   let blocks = arg args 0 and target_id = arg args 1 and opts = arg args 2 in
-  let created_uuids = created_block_uuids_from_tx_data tx_data in
   let source_blocks =
     List.map (sanitize_insert_block_payload db tx_data) (Wire.as_seq blocks)
   in
@@ -818,7 +910,27 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
       source_blocks
   in
   let target_ref = stable_entity_ref db target_id in
-  let target = entity_of_ref_wire db target_id in
+  let target = entity_of_ref_wire db target_ref in
+  let replaced_target =
+    (not (List.for_all (fun u -> List.mem u available_uuids) source_uuids))
+    && replaces_empty_target db tx_data source_uuids target_ref opts
+  in
+  let new_source_uuids =
+    if replaced_target then
+      match source_uuids with _ :: tl -> tl | [] -> []
+    else source_uuids
+  in
+  let created_uuids =
+    if List.for_all (fun u -> List.mem u available_uuids) new_source_uuids
+    then new_source_uuids
+    else
+      let rec take n = function
+        | _ when n <= 0 -> []
+        | [] -> []
+        | x :: tl -> x :: take (n - 1) tl
+      in
+      take (List.length new_source_uuids) available_uuids
+  in
   let block_with_new_id block block_uuid =
     let parent_uuid =
       match entity_of_ref_wire db (Wire.Array [ kw "block/uuid"; block_uuid ]) with
@@ -838,10 +950,11 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
                | None -> Wire.Nil) ] ) ]
   in
   let blocks' =
-    if created_uuids = [] then source_blocks
+    if not (replaced_target || created_uuids <> []) then source_blocks
     else if
-      truthy_opt (mget "replace-empty-target?" opts)
-      && List.length created_uuids + 1 = List.length source_blocks
+      replaced_target
+      || (truthy_opt (mget "replace-empty-target?" opts)
+          && List.length created_uuids + 1 = List.length source_blocks)
     then
       match source_blocks with
       | fst_block :: rst_blocks ->
@@ -851,7 +964,8 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
             | None -> Wire.Nil
           in
           Cljs_map.assoc fst_block "block/uuid" target_uuid
-          :: map2_trunc block_with_new_id rst_blocks created_uuids
+          :: (if created_uuids = [] then rst_blocks
+              else map2_trunc block_with_new_id rst_blocks created_uuids)
       | [] -> []
     else map2_trunc block_with_new_id source_blocks created_uuids
   in
@@ -876,6 +990,79 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
   ; Cljs_map.assoc
       (Cljs_map.dissoc (or_map opts) "outliner-op")
       "keep-uuid?" (Wire.Bool true) ]
+
+(* op-construct/canonicalize-template-op *)
+let canonicalize_template_op db tx_data (args : Wire.t list)
+    (available_uuids : Wire.t list) : Wire.t =
+  let template_ref = stable_entity_ref db (arg args 0) in
+  let target_ref = stable_entity_ref db (arg args 1) in
+  let opts = arg args 2 in
+  let template_blocks =
+    match mget "template-blocks" opts with
+    | Some w when Wire.as_seq w <> [] -> Wire.as_seq w
+    | _ -> template_children_blocks_for_history db template_ref
+  in
+  let opts_base =
+    Cljs_map.dissoc_list (or_map opts) [ "template-id"; "outliner-op" ]
+  in
+  let opts' =
+    match template_blocks with
+    | [] -> Cljs_map.dissoc opts_base "template-blocks"
+    | _ ->
+        (match
+           canonicalize_insert_blocks_op db tx_data
+             [ Wire.Array template_blocks; arg args 1; opts_base ]
+             available_uuids
+         with
+         | [ blocks'; _target_ref; insert_opts ] ->
+             Cljs_map.assoc insert_opts "template-blocks" blocks'
+         | _ -> invalid_arg "canonicalize-insert-blocks-op arity")
+  in
+  (match template_ref, target_ref with
+   | Wire.Nil, _ | _, Wire.Nil ->
+       invalid_arg
+         ("Invalid apply-template args: "
+          ^ Transit_codec.to_string (Wire.Array args))
+   | _ -> ());
+  op_entry "apply-template" [ template_ref; target_ref; opts' ]
+
+(* op-construct/canonicalize-insert-ops — ^:api; threads the
+   available-uuid pool across insert ops in one transaction. *)
+let canonicalize_insert_ops db tx_data (ops : Wire.t list) : Wire.t list =
+  let rec loop (available : Wire.t list) (acc : Wire.t list) = function
+    | [] -> List.rev acc
+    | entry :: rest ->
+        (match Outliner_op.op_of_entry entry with
+         | Some (("insert-blocks" | "apply-template") as op, args) ->
+             let entry' =
+               if op = "insert-blocks" then
+                 op_entry "insert-blocks"
+                   (canonicalize_insert_blocks_op db tx_data args
+                      available)
+               else canonicalize_template_op db tx_data args available
+             in
+             let blocks =
+               match Outliner_op.op_of_entry entry' with
+               | Some ("insert-blocks", args') -> arg args' 0
+               | Some ("apply-template", args') ->
+                   Option.value
+                     (mget "template-blocks" (arg args' 2)) ~default:Wire.Nil
+               | _ -> Wire.Nil
+             in
+             let inserted_uuids =
+               List.filter_map
+                 (fun b -> mget "block/uuid" b)
+                 (Wire.as_seq blocks)
+             in
+             let available' =
+               List.filter
+                 (fun u -> not (List.mem u inserted_uuids))
+                 available
+             in
+             loop available' (entry' :: acc) rest
+         | _ -> loop available (entry :: acc) rest)
+  in
+  loop (inserted_block_uuids_from_tx_data tx_data) [] ops
 
 (* op-construct/canonical-move-op-for-block *)
 let canonical_move_op_for_block db (block_id : Wire.t) (opts : Wire.t)
@@ -1340,41 +1527,11 @@ let canonicalize_semantic_outliner_op db tx_data (entry : Wire.t) : Wire.t =
              ; arg args 1 ]
        | "insert-blocks" ->
            op_entry "insert-blocks"
-             (canonicalize_insert_blocks_op db tx_data args)
+             (canonicalize_insert_blocks_op db tx_data args
+                (inserted_block_uuids_from_tx_data tx_data))
        | "apply-template" ->
-           let template_ref = stable_entity_ref db (arg args 0) in
-           let target_ref = stable_entity_ref db (arg args 1) in
-           let opts = arg args 2 in
-           let template_blocks =
-             match mget "template-blocks" opts with
-             | Some w when Wire.as_seq w <> [] -> w
-             | _ ->
-                 Wire.Array
-                   (template_children_blocks_for_history db template_ref)
-           in
-           let opts_base =
-             Cljs_map.dissoc_list (or_map opts)
-               [ "template-id"; "outliner-op" ]
-           in
-           let opts' =
-             match Wire.as_seq template_blocks with
-             | [] -> Cljs_map.dissoc opts_base "template-blocks"
-             | _ ->
-                 (match
-                    canonicalize_insert_blocks_op db tx_data
-                      [ template_blocks; arg args 1; opts_base ]
-                  with
-                  | [ blocks'; _target_ref; insert_opts ] ->
-                      Cljs_map.assoc insert_opts "template-blocks" blocks'
-                  | _ -> invalid_arg "canonicalize-insert-blocks-op arity")
-           in
-           (match template_ref, target_ref with
-            | Wire.Nil, _ | _, Wire.Nil ->
-                invalid_arg
-                  ("Invalid apply-template args: "
-                   ^ Transit_codec.to_string (Wire.Array args))
-            | _ -> ());
-           op_entry "apply-template" [ template_ref; target_ref; opts' ]
+           canonicalize_template_op db tx_data args
+             (inserted_block_uuids_from_tx_data tx_data)
        | "move-blocks-up-down" ->
            op_entry "move-blocks-up-down"
              [ stable_id_coll db (arg args 0); arg args 1 ]
@@ -1667,11 +1824,16 @@ let canonicalize_explicit_outliner_op_groups db tx_data (ops : Wire.t)
     : Wire.t list list option =
   match normalize_op_entries ops with
   | Some (_ :: _ as entries) ->
+      (* master: share the inserted-uuid pool across insert ops, and
+         skip re-canonicalization of insert-blocks/apply-template *)
+      let entries = canonicalize_insert_ops db tx_data entries in
       Some
         (List.map
            (fun entry ->
               let canonical =
-                canonicalize_semantic_outliner_op db tx_data entry
+                match Outliner_op.op_of_entry entry with
+                | Some (("insert-blocks" | "apply-template"), _) -> entry
+                | _ -> canonicalize_semantic_outliner_op db tx_data entry
               in
               match canonical with
               | Wire.Array ((Wire.Array _ | Wire.List _) :: _)

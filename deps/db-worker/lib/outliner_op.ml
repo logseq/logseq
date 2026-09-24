@@ -651,10 +651,18 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
               (match user_uuid with
                | Wire.Nil -> None
                | w -> uuid_of_wire w)))
-  | _ -> raise (Invalid_outliner_op ("unknown outliner op: " ^ op))
+  (* cljs case's default nil — spec'd-but-undispatched ops like
+     :collapse-expand-block-property (ops-validator already rejected
+     unspec'd ops) silently return nil *)
+  | _ -> None
 
 (* apply-ops! — runs all ops in one batch transaction, returns the last
-   op result. *)
+   op result. cljs master collects committed semantic op entries from
+   each op result's :tx-meta :outliner-ops (rewritten for
+   insert-blocks/apply-template), then commits once with
+   :transform-tx-meta #(assoc % :outliner-ops @semantic-ops) — the
+   temp-conn batch is inlined here because Db_tx's version takes no
+   transform hook (db_tx.ml is outside this port's ownership). *)
 let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   let raw_entries =
     match ops with
@@ -663,29 +671,19 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   in
   validate_ops raw_entries;
   let op_entries = List.filter_map op_of_entry raw_entries in
-  let semantic_ops =
-    List.filter_map
-      (fun entry ->
-        match op_of_entry entry with
-        | Some (op, _) when List.mem op semantic_outliner_op_names -> Some entry
-        | _ -> None)
-      raw_entries
-  in
   let single_op_outliner_op =
     match op_entries with [ (op, _) ] -> Some op | _ -> None
   in
   let import_edn_op =
     List.exists (fun (op, _) -> op = "batch-import-edn") op_entries
   in
-  (* opts' enrichment *)
+  (* opts' enrichment — cljs master: :transact-opts {:conn conn}
+     :local-tx? :db-sync/tx-id; :outliner-ops is no longer carried in
+     opts', it lands in tx-meta via transform-tx-meta *)
   let opts' =
-    let m =
-      Cljs_map.assoc opts "local-tx?" (Wire.Bool true)
-    in
-    let m =
-      Cljs_map.assoc m "outliner-ops" (Wire.Array semantic_ops)
-    in
-    Cljs_map.assoc m "db-sync/tx-id"
+    Cljs_map.assoc
+      (Cljs_map.assoc opts "local-tx?" (Wire.Bool true))
+      "db-sync/tx-id"
       (match Cljs_map.get opts "db-sync/tx-id" with
        | Some (Wire.Uuid _ as u) -> u
        | _ -> Wire.Uuid (Common_uuid.new_block_id ()))
@@ -706,24 +704,99 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   in
   let tx_meta = Ds_wire.tx_meta_of_transit tx_meta_wire in
   let result_ref = ref Wire.Nil in
-  ignore (Db_tx.batch_transact_with_temp_conn ~tx_meta conn (fun conn' ->
-      List.iter
-        (fun (op, args) ->
-          match apply_op conn' opts' op args with
-          | Some v -> result_ref := v
-          | None -> ())
-        op_entries;
-      match Cljs_map.get opts' "additional-tx" with
+  let semantic_ops : Wire.t list ref = ref [] in
+  (* cljs [_ [blocks target-id insert-opts]] destructure of
+     (first (get-in result [:tx-meta :outliner-ops])) *)
+  let insert_history_args (result : Wire.t) : Wire.t list option =
+    match Cljs_map.get_in result [ "tx-meta"; "outliner-ops" ] with
+    | Some (Wire.Array (Wire.Array [ _; Wire.Array args ] :: _))
+    | Some (Wire.List (Wire.List [ _; Wire.List args ] :: _)) -> Some args
+    | _ -> None
+  in
+  (* cljs conn-from-db + :batch-tx?/:skip-store?/:skip-validate-db? —
+     the temp conn reads storage but never writes *)
+  let temp = conn_from_db { (Conn.db conn) with storage_ref = None } in
+  let fl = Db_tx.flags_of temp in
+  fl.batch_tx <- true;
+  fl.skip_store <- true;
+  fl.skip_validate <- true;
+  let collected : datom list list ref = ref [] in
+  let key =
+    listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
+        collected := !collected @ [ r.tx_data ])
+  in
+  (try
+     List.iter
+       (fun entry ->
+         match op_of_entry entry with
+         | Some (op, args) -> (
+             let result = apply_op temp opts' op args in
+             (match result with
+              | Some v -> result_ref := v
+              | None -> ());
+             (* cljs rewrites the op entry from the result's
+                :tx-meta :outliner-ops before conj *)
+             let op_entry' =
+               match op with
+               | "insert-blocks" ->
+                   Option.map
+                     (fun result ->
+                       Wire.Array
+                         [ Wire.Keyword "insert-blocks"
+                         ; (match insert_history_args result with
+                            | Some args3 -> Wire.Array args3
+                            | None ->
+                                Wire.Array [ Wire.Nil; Wire.Nil; Wire.Nil ]) ])
+                     result
+               | "apply-template" ->
+                   Option.map
+                     (fun result ->
+                       let blocks, target_id, insert_opts =
+                         match insert_history_args result with
+                         | Some (b :: t :: o :: _) -> (b, t, o)
+                         | _ -> (Wire.Nil, Wire.Nil, Wire.Nil)
+                       in
+                       Wire.Array
+                         [ Wire.Keyword "apply-template"
+                         ; Wire.Array
+                             [ (match args with a :: _ -> a | [] -> Wire.Nil)
+                             ; target_id
+                             ; Cljs_map.assoc insert_opts "template-blocks"
+                                 blocks ] ])
+                     result
+               | _ -> Some entry
+             in
+             match op_entry' with
+             | Some e when List.mem op semantic_outliner_op_names ->
+                 semantic_ops := !semantic_ops @ [ e ]
+             | _ -> ())
+         | None -> ())
+       raw_entries;
+     (match Cljs_map.get opts' "additional-tx" with
       | Some (Wire.Array txs) | Some (Wire.List txs) when txs <> [] ->
           let tx_ops =
             List.filter_map
               (fun w ->
-                Outliner_core.tx_op_of_value (Conn.db conn')
+                Outliner_core.tx_op_of_value (Conn.db temp)
                   (Ds_wire.value_of_transit w))
               txs
           in
-          ignore (Db_tx.transact conn' tx_ops)
-      | _ -> ()));
+          ignore (Db_tx.transact temp tx_ops)
+      | _ -> ());
+     let tx_data = List.concat !collected in
+     unlisten temp key;
+     if tx_data <> [] then
+       ignore
+         (Db_tx.transact
+            ~tx_meta:
+              (Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
+                 (Vector
+                    (List.map Ds_wire.value_of_transit !semantic_ops)))
+            conn
+            (List.map (fun d -> Raw_datom d) tx_data))
+   with e ->
+     unlisten temp key;
+     raise e);
   !result_ref
 
 (* ---------- Sync_deps hook wiring ----------
