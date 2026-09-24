@@ -940,7 +940,7 @@ let metadata_ops block_uuids status tags properties =
 (* Mldoc.get_references on a block title returns the AST-level references:
    [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
    code blocks or verbatim markup. *)
-let title_references title =
+let title_references ~block_refs title =
   (* Namespaced pages need a create-page op with split-namespace? — the
      worker's inline page-map resolution rejects "/" titles. A [:block/name]
      lookup routes them through materialize_name_lookups instead. *)
@@ -1030,11 +1030,14 @@ let title_references title =
                           | Some "Page_ref", Some name -> (
                               match String.trim name with
                               | "" -> (refs, tag_names)
-                              | name when Cli_primitive.is_uuid_string name ->
-                                  (* [[<uuid>]] is the unified node ref —
-                                     the uuid names whatever entity carries
-                                     it (block, page, tag), never a page
-                                     called "uuid". *)
+                              | name
+                                when
+                                  block_refs
+                                  && Cli_primitive.is_uuid_string name ->
+                                  (* DB graphs spell every node ref [[uuid]]
+                                     — the uuid names whatever entity carries
+                                     it (block, page, tag). --content keeps
+                                     the literal spelling, no ref. *)
                                   ( Vec.push_back refs
                                       (vector_vec
                                          (Vec.of_array
@@ -1043,10 +1046,28 @@ let title_references title =
                                               Edn_util.uuid name;
                                             |])),
                                     tag_names )
+                              | name when Cli_primitive.is_uuid_string name ->
+                                  (refs, tag_names)
                               | name ->
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
-                          | Some "Block_ref", _ -> (refs, tag_names)
+                          | Some "Block_ref", Some uuid ->
+                              (* ((uuid)) resolves to a ref only for markdown
+                                 --blocks; --content keeps it as literal text,
+                                 matching how the DB renderer prints Block_ref
+                                 nodes verbatim. *)
+                              if
+                                block_refs && Cli_primitive.is_uuid_string uuid
+                              then
+                                ( Vec.push_back refs
+                                    (vector_vec
+                                       (Vec.of_array
+                                          [|
+                                            kw "block/uuid";
+                                            Edn_util.uuid uuid;
+                                          |])),
+                                  tag_names )
+                              else (refs, tag_names)
                           | _ -> (refs, tag_names))
                       | _ -> (refs, tag_names))
                   | None -> (refs, tag_names))
@@ -1520,7 +1541,8 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                             match (block.Block.uuid, block.title) with
                             | Some uuid, Some title ->
                                 let refs, tag_names =
-                                  title_references title
+                                  title_references
+                                    ~block_refs:action.markdown_blocks title
                                 in
                                 (* #tags resolve to block/tags only for
                                    markdown --blocks input; literal --content

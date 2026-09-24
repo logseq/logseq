@@ -3911,22 +3911,15 @@ let () =
       if not (String.contains title '`') then
         fail_test ("fenced code missing from title: " ^ title));
 
-  test "CLI parity add block markdown rewrites ((uuid)) to [[uuid]]" (fun () ->
+  test "CLI parity add block markdown keeps ((uuid)) verbatim in titles"
+    (fun () ->
       let parsed =
-        expect_ok "block ref normalize"
+        expect_ok "block ref verbatim"
           (Markdown_blocks.of_markdown
              "- see ((aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa)) done")
       in
-      let title =
-        expect_some "block title" (Vec.nth parsed 0).Block.title
-      in
-      expect_equal "rewritten ref"
-        "see [[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]] done" title;
-      let parsed =
-        expect_ok "non-uuid parens"
-          (Markdown_blocks.of_markdown "- see ((not-a-uuid)) done")
-      in
-      expect_equal "literal parens" "see ((not-a-uuid)) done"
+      expect_equal "verbatim ref"
+        "see ((aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa)) done"
         (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
   test "CLI parity add collect created block uuids depth-first and unique"
