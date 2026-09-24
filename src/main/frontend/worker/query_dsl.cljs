@@ -4,7 +4,6 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [cljs.reader :as reader]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -646,44 +645,44 @@ Some bindings in this fn:
 
 (def simplify-query shared-query-dsl/simplify-query)
 (def custom-readers shared-query-dsl/custom-readers)
+(def read-query-form shared-query-dsl/read-query-form)
 (defn parse
   [s db {:keys [cards?]}]
   (when (and (string? s)
              (not (string/blank? s)))
-    (binding [*current-db* db]
-      (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
-            form (some->> s
-                          (pre-transform)
-                          (reader/read-string custom-readers))
-            sort-by (atom nil)
-            blocks? (atom nil)
-            sample (atom nil)
-            form (simplify-query form)
-            {result :query rules :rules}
-            (when form (build-query form {:form form
-                                          :sort-by sort-by
-                                          :blocks? blocks?
-                                          :sample sample
-                                          :cards? cards?}))
-            result' (when (seq result)
-                      (let [key (if (coll? (first result))
+    (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
+          form (read-query-form s)]
+      (when form
+        (binding [*current-db* db]
+          (let [sort-by (atom nil)
+                blocks? (atom nil)
+                sample (atom nil)
+                form (simplify-query form)
+                {result :query rules :rules}
+                (when form (build-query form {:form form
+                                              :sort-by sort-by
+                                              :blocks? blocks?
+                                              :sample sample
+                                              :cards? cards?}))
+                result' (when (seq result)
+                          (let [key (if (coll? (first result))
                                 ;; Only queries for this branch are not's like:
                                 ;; [(not (page-ref ?b "page 2"))]
-                                  (keyword (ffirst result))
-                                  (keyword (first result)))]
-                        (add-bindings! (if (= key :and) (rest result) result))))
-            extract-rules (fn [rules]
-                            (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
-            rule-names (if (contains? (set rules) :page-ref)
-                         (conj (set rules) :self-ref)
-                         (set rules))
-            rules' (extract-rules rule-names)]
-        {:query result'
-         :rules rules'
-         :rule-names rule-names
-         :sort-by @sort-by
-         :blocks? (boolean @blocks?)
-         :sample sample}))))
+                                      (keyword (ffirst result))
+                                      (keyword (first result)))]
+                            (add-bindings! (if (= key :and) (rest result) result))))
+                extract-rules (fn [rules]
+                                (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
+                rule-names (if (contains? (set rules) :page-ref)
+                             (conj (set rules) :self-ref)
+                             (set rules))
+                rules' (extract-rules rule-names)]
+            {:query result'
+             :rules rules'
+             :rule-names rule-names
+             :sort-by @sort-by
+             :blocks? (boolean @blocks?)
+             :sample sample}))))))
 
 ;; Main fns
 ;; ========
@@ -722,7 +721,8 @@ Some bindings in this fn:
   [query-string db options]
   (if (or (not (string? query-string))
           (string/blank? query-string)
-          (common-util/wrapped-by-quotes? query-string))
+          (common-util/wrapped-by-quotes? query-string)
+          (nil? (read-query-form query-string)))
     {:attrs #{} :opaque? true}
     (let [{query* :query :keys [rule-names rules]} (parse-query query-string db options)
           safe? (every? attr-watch-safe-rules rule-names)

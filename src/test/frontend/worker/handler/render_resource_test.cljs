@@ -2187,6 +2187,44 @@
                                     {:rows []}
                                     response))))))
 
+(deftest incomplete-dsl-query-resource-skips-live-evaluation-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          incomplete-query "(and (task TODO)"
+          resource-key [:query {:kind :dsl :query incomplete-query}]
+          calls (atom [])]
+      (with-redefs [query-dsl/execute-query
+                    (fn [query-string & _args]
+                      (swap! calls conj query-string)
+                      [])]
+        (let [response (call-resource-raw api conn resource-key)]
+          (is (= [] @calls)
+              "Mid-edit incomplete /query syntax must not be executed.")
+          (assert-resource-envelope @conn
+                                    resource-key
+                                    #{[:graph]}
+                                    {:rows []}
+                                    response)
+          (is (nil? (:error (:value response)))
+              "Incomplete syntax is a transient edit state, not a query error."))))))
+
+(deftest render-snapshots-isolates-incomplete-dsl-query-resources-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        journals-key [:journals]
+        incomplete-query
+        [:query {:kind :dsl :query "(and (task TODO)"}]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [incomplete-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "An incomplete /query must not fail sibling resources in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (= [] (get-in response [:slots [:resource incomplete-query] :value :rows])))
+    (is (nil? (get-in response [:slots [:resource incomplete-query] :value :error])))))
+
 (deftest query-resource-resolves-advanced-page-block-and-today-inputs-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn journal-child-a journal-grandchild]}

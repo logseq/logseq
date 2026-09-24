@@ -72,3 +72,14 @@
 
 (def custom-readers
   {:readers {'tag page-ref/->page-ref}})
+
+(defn read-query-form
+  "Read a DSL query string after the shared pre-transform.
+
+  Returns nil when the syntax is incomplete or otherwise unreadable so live
+  editors can skip evaluation instead of throwing."
+  [s]
+  (when (and (string? s) (not (string/blank? s)))
+    (common-util/safe-read-string
+     (assoc custom-readers :log-error? false)
+     (pre-transform s))))

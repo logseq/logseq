@@ -2,6 +2,7 @@
   "Query result related functionality for query components"
   (:require [clojure.string :as string]
             [frontend.db.hooks :as db-hooks]
+            [frontend.db.query-dsl :as query-dsl]
             [logseq.shui.hooks :as hooks]))
 
 (defn get-group-by-page
@@ -46,9 +47,21 @@
       (:result-transform query)
       (assoc :result-transform-edn (pr-str (:result-transform query))))))
 
+(defn- executable-query
+  "Rewrite incomplete DSL to a blank query so live mid-edit syntax is not
+  evaluated. Hooks stay unconditional."
+  [config query]
+  (if-not (and (:dsl-query? config) (string? (:query query)))
+    query
+    (let [query-string (:query query)]
+      (if (or (string/blank? query-string)
+              (some? (query-dsl/read-query-form query-string)))
+        query
+        (assoc query :query "")))))
+
 (defn use-query-result
   [config query]
-  (let [resource (db-hooks/use-resource [:query (query-spec config query)])
+  (let [resource (db-hooks/use-resource [:query (query-spec config (executable-query config query))])
         result (:rows resource)
         query-result (:query-result config)
         error (:error resource)]

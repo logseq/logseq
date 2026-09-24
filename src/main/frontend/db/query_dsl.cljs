@@ -7,6 +7,7 @@
   (:require [clojure.string :as string]
             [frontend.db.async :as db-async]
             [frontend.template :as template]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.query-dsl :as shared-query-dsl]))
 
 (def pre-transform shared-query-dsl/pre-transform)
@@ -18,6 +19,14 @@
   [q]
   (let [q' (template/resolve-dynamic-template! q)]
     (pre-transform q')))
+
+(defn read-query-form
+  "Read a DSL query after template expansion. Nil means the syntax is still incomplete."
+  [s]
+  (when (and (string? s) (not (string/blank? s)))
+    (common-util/safe-read-string
+     (assoc custom-readers :log-error? false)
+     (pre-transform-query s))))
 
 (def db-block-attrs
   "Block fields needed to render query results without a renderer DB."

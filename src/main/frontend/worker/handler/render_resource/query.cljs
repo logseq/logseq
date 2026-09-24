@@ -141,13 +141,21 @@
                                     [(conj pattern :block/uuid)])))
       query-spec)))
 
+(defn- incomplete-dsl-query?
+  [query-string]
+  (and (string? query-string)
+       (not (string/blank? query-string))
+       (nil? (quoted-query-text query-string))
+       (nil? (query-dsl/read-query-form query-string))))
+
 (defn- execute-query-spec
   [db query-spec {:keys [repo]}]
   (case (:kind query-spec)
     :dsl
     (let [query-string (:query query-spec)]
       (cond
-        (string/blank? query-string)
+        (or (string/blank? query-string)
+            (incomplete-dsl-query? query-string))
         []
 
         (quoted-query-text query-string)
@@ -257,24 +265,16 @@
            :error {:message (or (ex-message error) (str error))}}
     (ex-data error) (assoc-in [:error :data] (ex-data error))))
 
-(defn- syntax-error?
-  [error]
-  (or (instance? js/SyntaxError error)
-      (= "SyntaxError" (.-name error))))
-
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))
-        watch (query-watch-keys db query-spec)]
+  (let [query-spec (require-query-spec! (second resource-key))]
     (try
-      [watch {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
-                                       query-spec)}]
+      (let [watch (query-watch-keys db query-spec)]
+        [watch {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
+                                         query-spec)}])
       (catch :default error
-        (if (syntax-error? error)
-          (do
-            (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
-            [watch (query-error-value error)])
-          (throw error))))))
+        (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
+        [common/watch-all (query-error-value error)]))))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})

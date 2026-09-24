@@ -96,3 +96,20 @@
            :current-block-uuid (random-uuid)}
           {:query "(task TODO)"}))
         "Query syntax errors stay in the query error boundary instead of emptying the page.")))
+
+(deftest use-query-result-skips-incomplete-dsl-query-test
+  (let [resource-keys (atom [])
+        current-block-uuid (random-uuid)]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-keys conj resource-key)
+                    {:rows []})
+                  hooks/use-effect! (fn [& _args])]
+      (is (= []
+             (query-result/use-query-result
+              {:dsl-query? true
+               :current-block-uuid current-block-uuid}
+              {:query "(and (task TODO)"}))
+          "Live mid-edit incomplete /query syntax must not crash rendering.")
+      (is (= "" (get-in (first @resource-keys) [1 :query]))
+          "Incomplete DSL is not sent to the worker for evaluation."))))
