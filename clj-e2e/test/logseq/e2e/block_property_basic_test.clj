@@ -402,10 +402,14 @@
          0)
         (assert/assert-is-visible
          (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
+        (is (w/visible? (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
+            "Show hidden properties is visible on a tagged page whose tag properties are all hide-empty")
         (w/click
          (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
         (assert/assert-is-visible
-         (loc/filter ".ls-page-properties .property-pair" :has-text property-name))))))
+         (loc/filter ".ls-page-properties .property-pair" :has-text property-name))
+        (is (w/visible? (loc/filter ".ls-page-properties .property-pair" :has-text property-name))
+            "Clicking the toggle reveals the empty hide-empty tag property")))))
 
 (deftest property-delete-and-bidirectional-refresh-test
   (testing "bidirectional values refresh both sides and deleting the definition removes usages"
