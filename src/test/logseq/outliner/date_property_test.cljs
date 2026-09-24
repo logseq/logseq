@@ -44,7 +44,7 @@
 (deftest clearing-past-deadline-drops-journal-ref-from-rebuild
   (testing "Set a past Deadline, then clear it the same way the UI does"
     (let [past-day 20260923
-          timestamp (date-time-util/journal-day->ms past-day)
+          timestamp (.getTime (date-time-util/int->local-date past-day))
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:build/journal past-day}}
