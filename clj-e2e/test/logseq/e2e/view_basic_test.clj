@@ -281,7 +281,7 @@
      :client-width (parse-long client-width)
      :scroll-width (parse-long scroll-width)
      :scrolled (parse-long scrolled)
-     :fold-overflow fold-overflow})))
+     :fold-overflow fold-overflow}))
 
 (deftest table-view-horizontal-scrollbar-when-wider-than-viewport-test
   (let [container-page (page/get-page-name)]
