@@ -17,14 +17,20 @@ let register name f = Hashtbl.replace handlers name f
 let registered name = Hashtbl.mem handlers name
 let registered_names () = Hashtbl.fold (fun k _ acc -> k :: acc) handlers []
 
-let invoke name args =
+(* invoke_raw lets a synchronous raise escape the handler call — cljs
+   (apply f args) throwing inside remote-function's try rejects
+   remoteInvoke instead of resolving error transit. *)
+let invoke_raw name args =
   match Hashtbl.find_opt handlers name with
-  | Some f -> (try f args with exn -> Db_worker_effect.error exn)
+  | Some f -> f args
   | None ->
       (* cljs (throw (ex-info (str "not found thread-api: " qkw) {})) —
          a synchronous throw: remoteInvoke rejects, the failure never
          enters the handler's promise channel. *)
       raise (Exn_info ("not found thread-api: " ^ name, []))
+
+let invoke name args =
+  try invoke_raw name args with exn -> Db_worker_effect.error exn
 
 (* cljs (ex-message e) — the raw message, not Printexc.to_string's
    Constructor(...) rendering. *)
@@ -72,12 +78,16 @@ let invoke_transit name transit_args =
     | Wire.Nil -> []
     | other -> [ other ]
   in
-  let task = invoke name args in
-  (* cljs remote-function: `invoke` raising synchronously (unknown
-     endpoint, unreadable args, or the dispatch machinery itself) makes
-     remoteInvoke reject — the raise escapes here untouched. A handler's
-     failure arrives as a rejected effect (settled or pending), which is
-     cljs's p/catch path: it resolves to error transit. *)
-  Db_worker_effect.catch task (fun exn ->
-      Db_worker_effect.pure (encode_error name exn))
-  >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)
+  (* cljs remote-function: `invoke` raising synchronously — unknown
+     endpoint or an eager raise inside the handler call — makes
+     remoteInvoke reject: the error escapes as a rejected effect rather
+     than error transit. A handler's failure arriving as a rejected
+     effect (settled or pending) is cljs's p/catch path: it resolves to
+     error transit. *)
+  match (try `Task (invoke_raw name args) with exn -> `Raise exn) with
+  | `Raise exn -> Db_worker_effect.error exn
+  | `Task task ->
+      Db_worker_effect.catch task (fun exn ->
+          Db_worker_effect.pure (encode_error name exn))
+      >>= fun result ->
+      Db_worker_effect.pure (Transit_codec.to_string result)
