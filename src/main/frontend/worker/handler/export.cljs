@@ -53,7 +53,7 @@
           recomputed-checksum (:recomputed-checksum result)]
       (when (and (some? recomputed-checksum)
                  (worker-state/get-client-ops-conn repo))
-        (client-op/update-local-checksum repo recomputed-checksum))
+        (client-op/update-local-checksum repo recomputed-checksum (:max-tx @conn)))
       (cond-> result
         (some? recomputed-checksum)
         (assoc :local-checksum recomputed-checksum)))))
