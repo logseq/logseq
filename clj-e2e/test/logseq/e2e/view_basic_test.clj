@@ -9,7 +9,8 @@
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w])
-  (:import (com.microsoft.playwright Locator$ClickOptions)))
+  (:import (com.microsoft.playwright Locator$ClickOptions)
+           (java.util.regex Pattern)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -246,27 +247,39 @@
     (is (string/includes? content "Alpha table object"))
     (is (string/includes? content "Beta table object"))))
 
-(defn- table-body-text
-  []
-  (.innerText (.locator (w/get-page) ".ls-view-body")))
+(defn- sort-direction-icon
+  [direction]
+  (case direction
+    "Sort ascending" ".ls-icon-arrow-up"
+    "Sort descending" ".ls-icon-arrow-down"))
 
 (defn- sort-table-column!
   [column-name direction]
   (w/click (loc/filter ".ls-view-body .ls-table-header-cell" :has-text column-name))
   (w/click (loc/filter "[role='menuitem']" :has-text direction))
   (assert/assert-is-visible
-   (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
+   (loc/filter ".ls-view-body .ls-table-header-cell"
+               :has-text column-name
+               :has (sort-direction-icon direction))))
+
+(defn- assert-table-text-order
+  "Retry until the rendered table body shows `earlier` before `later`.
+  Header state updates before the sorted rows, so a single innerText read
+  observes the previous order."
+  [earlier later]
+  (-> (w/-query ".ls-view-body")
+      .first
+      assert/assert-that
+      (.hasText (Pattern/compile (str (Pattern/quote earlier)
+                                      "[\\s\\S]*"
+                                      (Pattern/quote later))))))
 
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
   (sort-table-column! "Name" "Sort ascending")
-  (let [body-text (table-body-text)]
-    (is (< (string/index-of body-text "Alpha table object")
-           (string/index-of body-text "Beta table object"))))
+  (assert-table-text-order "Alpha table object" "Beta table object")
   (sort-table-column! "Priority" "Sort ascending")
-  (let [body-text (table-body-text)]
-    (is (< (string/index-of body-text "Beta table object")
-           (string/index-of body-text "Alpha table object"))))
+  (assert-table-text-order "Beta table object" "Alpha table object")
   (sort-table-column! "Created At" "Sort descending")
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
