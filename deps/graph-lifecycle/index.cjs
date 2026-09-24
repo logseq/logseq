@@ -293,12 +293,20 @@ function validateRegistration(ctx, current, record) {
 }
 function readRuntime(ctx, record) {
   const file = runtimeFile(ctx, record.ticket);
-  const runtime = readJSON(file);
-  if (fs.existsSync(file) && (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)))
-    fail('Invalid worker runtime metadata');
-  if (runtime && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
-    fail('Worker runtime identity differs from registration');
-  return runtime;
+  // A worker can create or remove its file mid-check (admission, publish,
+  // close, cleanup); confirm an empty read is stable before judging it.
+  for (let attempt = 0; ; attempt++) {
+    const runtime = readJSON(file);
+    if (runtime === null && fs.existsSync(file)) {
+      if (attempt < 3) continue;
+      fail('Invalid worker runtime metadata');
+    }
+    if (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))
+      fail('Invalid worker runtime metadata');
+    if (runtime !== null && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
+      fail('Worker runtime identity differs from registration');
+    return runtime;
+  }
 }
 async function health(ctx, target, port) {
   const response = await request(port, '/healthz');
