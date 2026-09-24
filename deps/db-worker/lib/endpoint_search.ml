@@ -15,10 +15,9 @@
    - Sync_deps.search_truncate_table hook for other packages that need to
      clear the FTS tables without depending on this module.
 
-   cljs opens the :search sqlite conn in get-dbs during create-or-open-db.
-   Here get-search-db opens it lazily on first use (same path convention +
-   create-tables-and-triggers!), keeping repo-open wiring out of the
-   lifecycle module. *)
+   cljs opens the :search sqlite conn in get-dbs during create-or-open-db;
+   endpoint_lifecycle does the same via get-search-db, which also lazily
+   opens it on first use (same path convention + create-tables-and-triggers!). *)
 
 open Datascript
 module Ev = Entity_view
@@ -68,6 +67,20 @@ let search_db_path repo =
   in
   Filename.concat base (sanitize_repo_name repo ^ "-search.sqlite")
 
+(* cljs get-dbs/resolve-db-path: the search sqlite lives inside the
+   graph's OPFS pool as "search/db.sqlite" (browser path is the identity
+   through resolve-db-path); on node it is a sibling file. *)
+let open_search_db repo : Sqlite.db =
+  let db =
+    if Worker_state.publishing () then Sqlite.open_db ~path:"/search-db.sqlite"
+    else if Sqlite.pooled_runtime () then
+      Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo)
+        ~path:"search/db.sqlite"
+    else Sqlite.open_db ~path:(search_db_path repo)
+  in
+  Search_index.create_tables_and_triggers db;
+  db
+
 let get_search_db repo : Sqlite.db option =
   match Worker_state.sqlite_conn_of repo Worker_state.Search with
   | Some db -> Some db
@@ -76,8 +89,7 @@ let get_search_db repo : Sqlite.db option =
       match Worker_state.sqlite_conn repo with
       | None -> None
       | Some _ ->
-          let db = Sqlite.open_db ~path:(search_db_path repo) in
-          Search_index.create_tables_and_triggers db;
+          let db = open_search_db repo in
           Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
           Some db)
 
@@ -711,15 +723,19 @@ let invalidate_search_db args : Wire.t E.t =
           E.pure Wire.nil
       | None ->
           if Worker_state.publishing () then E.pure Wire.nil
-          else begin
-            let db = Sqlite.open_db ~path:(search_db_path repo) in
-            (try Search_index.truncate_table db
-             with exn ->
-               Worker_log.error "search/invalidate-search-db-failed"
-                 [ ("repo", repo); ("error", Printexc.to_string exn) ]);
-            Sqlite.close db;
-            E.pure Wire.nil
-          end)
+          else
+            (* cljs <invalidate-search-db!: even without a cached conn it
+               opens the pool's search db and truncates it. *)
+            E.bind
+              (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
+              (fun () ->
+                let db = open_search_db repo in
+                (try Search_index.truncate_table db
+                 with exn ->
+                   Worker_log.error "search/invalidate-search-db-failed"
+                     [ ("repo", repo); ("error", Printexc.to_string exn) ]);
+                Sqlite.close db;
+                E.pure Wire.nil))
   | _ -> invalid_arg "db-sync-invalidate-search-db expects (repo)"
 
 (* ---- db-listener :search method ----
@@ -732,32 +748,44 @@ let search_listener repo (r : tx_report) : unit =
   (* cljs wraps the whole handler in p/do! — async so it does not block the
      commit's broadcast to the main thread. *)
   Db_worker_effect.async (fun () ->
-      let meta k =
-        match List.assoc_opt k r.tx_meta with
-        | Some (Bool b) -> b
-        | _ -> false
-      in
-      if meta "from-disk?"
-         || meta "logseq.graph-parser.exporter/imported-data?"
-         || meta "logseq.db.sqlite.export/imported-data?"
-      then Db_worker_effect.pure ()
-      else
-        let include_vector_title =
-          Option.is_some (Worker_state.vector_index repo)
+      try
+        let meta k =
+          match List.assoc_opt k r.tx_meta with
+          | Some (Bool b) -> b
+          | _ -> false
         in
-        match Search_index.sync_search_indice ~include_vector_title r with
-        | None -> Db_worker_effect.pure ()
-        | Some { Search_index.blocks_to_remove; blocks_to_add } ->
-            Db_worker_effect.bind
-              (search_delete_blocks
-                 [ Wire.String repo
-                 ; Wire.Array (List.map (fun s -> Wire.String s) blocks_to_remove) ])
-              (fun _ ->
-                Db_worker_effect.map
-                  (fun _ -> ())
-                  (search_upsert_blocks
-                     [ Wire.String repo
-                     ; Wire.Array (List.map wire_of_index_item blocks_to_add) ])))
+        if meta "from-disk?"
+           || meta "logseq.graph-parser.exporter/imported-data?"
+           || meta "logseq.db.sqlite.export/imported-data?"
+        then Db_worker_effect.pure ()
+        else
+          let include_vector_title =
+            Option.is_some (Worker_state.vector_index repo)
+          in
+          match Search_index.sync_search_indice ~include_vector_title r with
+          | None -> Db_worker_effect.pure ()
+          | Some { Search_index.blocks_to_remove; blocks_to_add } ->
+              Db_worker_effect.catch
+                (Db_worker_effect.bind
+                   (search_delete_blocks
+                      [ Wire.String repo
+                      ; Wire.Array
+                          (List.map (fun s -> Wire.String s) blocks_to_remove) ])
+                   (fun _ ->
+                     Db_worker_effect.map
+                       (fun _ -> ())
+                       (search_upsert_blocks
+                          [ Wire.String repo
+                          ; Wire.Array
+                              (List.map wire_of_index_item blocks_to_add) ])))
+                (fun e ->
+                  Worker_log.error "search/sync-search-indice-failed"
+                    [ ("repo", repo); ("error", Printexc.to_string e) ];
+                  Db_worker_effect.pure ())
+      with e ->
+        Worker_log.error "search/search-listener-failed"
+          [ ("repo", repo); ("error", Printexc.to_string e) ];
+        Db_worker_effect.pure ())
 
 (* ---- init wiring ---- *)
 

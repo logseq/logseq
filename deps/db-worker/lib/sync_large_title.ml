@@ -243,8 +243,8 @@ let rehydrate_large_titles repo ~(graph_id : string option)
             List.filter_map
               (fun item ->
                  match item with
-                 | Wire.Array [ op; e; a; obj ]
-                 | Wire.List [ op; e; a; obj ]
+                 | Wire.Array (op :: e :: a :: obj :: _)
+                 | Wire.List (op :: e :: a :: obj :: _)
                    when op = Wire.Keyword "db/add"
                         && a = Wire.Keyword large_title_object_attr -> (
                      match large_title_object_wire_of obj with

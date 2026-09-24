@@ -92,10 +92,12 @@ let clear_import_state import_id : unit Db_worker_effect.t =
 
 let create_import_rows_db repo : Sqlite.db Db_worker_effect.t =
   let dir = import_temp_dir repo in
-  File_sys.mkdir_p dir >>= fun () ->
   let path = import_rows_path repo in
-  File_sys.exists path >>= fun exists ->
-  (if exists then File_sys.remove path else Db_worker_effect.pure ())
+  (if Sqlite.pooled_runtime () then Db_worker_effect.pure ()
+   else
+     File_sys.mkdir_p dir >>= fun () ->
+     File_sys.exists path >>= fun exists ->
+     if exists then File_sys.remove path else Db_worker_effect.pure ())
   >>= fun () ->
   Sqlite.prepare_pool ~name:(Graph_dir.pool_name ("download-import-" ^ repo))
   >>= fun () ->

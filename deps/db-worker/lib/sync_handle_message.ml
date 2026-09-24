@@ -16,7 +16,9 @@ let broadcast_rtc_state (client : Sync_state.client) : unit =
   Broadcast.to_clients ~kind:"rtc-sync-state"
     ~transit_payload:
       (Transit_codec.to_string
-         (Sync_presence.rtc_state_payload ~sync_counts client))
+         (Wire.Array
+            [ kw "rtc-sync-state"
+            ; Sync_presence.rtc_state_payload ~sync_counts client ]))
 
 let update_online_users (client : Sync_state.client) (users : Wire.t list) =
   Sync_presence.update_online_users ~broadcast:broadcast_rtc_state client users

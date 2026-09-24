@@ -95,12 +95,18 @@ let create_or_open_db args =
   match args with
   | Wire.String repo :: opts_rest ->
       let opts = match opts_rest with t :: _ -> t | [] -> Wire.Nil in
+      let creating_remote_graph = opt_bool "creating-remote-graph?" false opts in
       let current =
         match Worker_state.state_get "git/current-repo" with
         | Some (Wire.String r) -> Some r
         | _ -> None
       in
       if current <> Some repo then Worker_state.reset_deleted_blocks ();
+      (* cljs <create-or-open-db!: seed local-tx for a freshly created
+         remote graph (client-ops conn may already be open). *)
+      (if creating_remote_graph && Sync_state.has_client_ops_conn repo
+         && Sync_client_op.get_local_tx repo = None
+       then Sync_client_op.update_local_tx repo 0);
       (match Worker_state.datascript_conn repo with
        | Some conn ->
            Db_worker_effect.pure
@@ -138,6 +144,9 @@ let create_or_open_db args =
            (* cljs get-dbs-open also opens the client-ops sqlite beside
               the graph db. *)
            if created_sqlite then ignore (Sync_state.client_ops_conn repo);
+           (* cljs get-dbs opens the :search sqlite inside the pool on every
+              open so tx-listener upserts hit it immediately. *)
+           ignore (Endpoint_search.get_search_db repo);
            Graph_store.create_kvs_table db;
            let storage = Graph_store.storage db in
            let conn =
@@ -147,6 +156,17 @@ let create_or_open_db args =
                  (* cljs get-storage-conn always uses db-schema/schema *)
                  Datascript.create_conn ~schema:(Db_schema.schema ()) ~storage ()
            in
+           (* cljs <create-or-open-db!: the datascript conn is registered
+              before the initial transact so sync bookkeeping (local-tx
+              seed, handle-local-tx!) can see it. *)
+           Worker_state.set_datascript_conn repo conn;
+           (* cljs: after client-op/ensure-sqlite-schema!, seed local-tx
+              when creating a remote graph. *)
+           (if creating_remote_graph && Sync_client_op.get_local_tx repo = None
+            then Sync_client_op.update_local_tx repo 0);
+           (* cljs <start-db! wires the periodic client-ops history cleanup
+              when the sqlite conn is (re)created. *)
+           if created_sqlite then ensure_client_ops_cleanup_timer repo;
            (* cljs <create-or-open-db!: on a fresh graph (no initial data,
               not a sync-download) transact build-db-initial-data; run
               db-migrate on every open. *)
@@ -160,43 +180,47 @@ let create_or_open_db args =
                  | Some e -> Ldb.value e "kv/value" = Some (Datascript.String "db")
                  | None -> false)
            in
-           (if not (initial_data_exists || sync_download) then
-              let config_content =
-                match Wire.get "config" opts with
-                | Some (Wire.String c) -> c
-                | _ -> Templates.config_edn
-              in
-              let opt_str name =
-                match Wire.get name opts with
-                | Some (Wire.String s) -> Some s
-                | _ -> None
-              in
-              let tx =
-                Sqlite_create_graph.initial_tx_data
-                  ~db:(Datascript.db conn)
-                  ~config_content
-                  ?import_type:
-                    (Option.map Ds_wire.value_of_transit
-                       (Wire.get "import-type" opts))
-                  ?graph_git_sha:(opt_str "graph-git-sha")
-                  ?creating_remote_graph:
-                    (match Wire.get "creating-remote-graph?" opts with
-                     | Some (Wire.Bool b) -> Some b
-                     | _ -> None)
-                  ()
-              in
-              ignore
-                (Datascript.transact_conn conn tx
-                   ~tx_meta:[ "initial-db?", Datascript.Bool true ]));
+           let initial_tx_report =
+             if not (initial_data_exists || sync_download) then
+               let config_content =
+                 match Wire.get "config" opts with
+                 | Some (Wire.String c) -> c
+                 | _ -> Templates.config_edn
+               in
+               let opt_str name =
+                 match Wire.get name opts with
+                 | Some (Wire.String s) -> Some s
+                 | _ -> None
+               in
+               let tx =
+                 Sqlite_create_graph.initial_tx_data
+                   ~db:(Datascript.db conn)
+                   ~config_content
+                   ?import_type:
+                     (Option.map Ds_wire.value_of_transit
+                        (Wire.get "import-type" opts))
+                   ?graph_git_sha:(opt_str "graph-git-sha")
+                   ?creating_remote_graph:
+                     (match Wire.get "creating-remote-graph?" opts with
+                      | Some (Wire.Bool b) -> Some b
+                      | _ -> None)
+                   ()
+               in
+               Some
+                 (Datascript.transact_conn conn tx
+                    ~tx_meta:[ "initial-db?", Datascript.Bool true ])
+             else None
+           in
            (if not sync_download then
               (* cljs then runs handle-migrate-result-local-txs! /
                  maybe-enqueue-built-in-sync-repair! and recycle-gc — they
                  need the client-ops db + sync plumbing, not yet ported. *)
               ignore (Db_migrate.migrate conn));
-           Worker_state.set_datascript_conn repo conn;
-           (* cljs <start-db! wires the periodic client-ops history cleanup
-              when the sqlite conn is (re)created. *)
-           if created_sqlite then ensure_client_ops_cleanup_timer repo;
+           (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
+              initial-tx-report)). *)
+           (match initial_tx_report with
+            | Some report -> Sync_apply.handle_local_tx repo report
+            | None -> ());
            Db_listener.listen_db_changes repo conn;
            (match Worker_state.datascript_conn repo with
             | Some conn ->
