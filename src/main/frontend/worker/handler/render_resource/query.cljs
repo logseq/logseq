@@ -249,11 +249,43 @@
                     [:attr :logseq.property/deleted-at]
                     [:attr :block/parent]}))))
 
+(defn- transit-safe-value
+  "Convert values transit cannot encode (parser deftypes, functions, atoms)
+   into their printed form so renderer payloads always serialize."
+  [value]
+  (cond
+    (map? value)
+    (into {} (map (fn [[k v]]
+                    [(transit-safe-value k) (transit-safe-value v)]))
+          value)
+
+    (set? value)
+    (into #{} (map transit-safe-value) value)
+
+    (and (sequential? value) (not (string? value)))
+    (mapv transit-safe-value value)
+
+    (or (nil? value)
+        (string? value)
+        (number? value)
+        (boolean? value)
+        (keyword? value)
+        (symbol? value)
+        (uuid? value)
+        (inst? value)
+        (de/entity? value)
+        (instance? ExceptionInfo value)
+        (instance? js/Error value))
+    value
+
+    :else
+    (pr-str value)))
+
 (defn- query-error-value
   [error]
   (cond-> {:rows []
            :error {:message (or (ex-message error) (str error))}}
-    (ex-data error) (assoc-in [:error :data] (ex-data error))))
+    (ex-data error) (assoc-in [:error :data] (transit-safe-value (ex-data error)))))
 
 (defn- query
   [db resource-key runtime]
