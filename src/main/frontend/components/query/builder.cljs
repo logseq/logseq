@@ -131,10 +131,15 @@
             :value label})
          used-values)))
 
+(hsx/defc loaded-property-title
+  [ident fallback]
+  (let [title (db-hooks/use-resource [:entity-title ident])]
+    (or title fallback)))
+
 (defn- property-title
   [ident]
   (or (:block/title (built-in-property ident))
-      (name ident)))
+      [loaded-property-title ident (name ident)]))
 
 (hsx/defc datepicker
   [id placeholder {:keys [on-select]}]
@@ -479,16 +484,16 @@
                         (symbol? end))
                   (name end)
                   (second end))]
-        (str (cond
-               (= k :block/created-at)
-               (t :query.builder/created-label)
-               (= k :block/updated-at)
-               (t :query.builder/updated-label)
-               :else
-               (property-title k))
-             " " start
-             (when end
-               (str " ~ " end))))
+        [:span (cond
+                 (= k :block/created-at)
+                 (t :query.builder/created-label)
+                 (= k :block/updated-at)
+                 (t :query.builder/updated-label)
+                 :else
+                 (property-title k))
+               " " start
+               (when end
+                 (str " ~ " end))])
 
       ;; between journal start end
       (= (keyword f) :between)
