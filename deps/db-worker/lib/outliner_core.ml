@@ -1616,14 +1616,20 @@ let build_insert_block_tx (db : db) (block : Block_map.t)
         ; Some ("block/parent", parent)
         ; Some ("block/order", String order)
         ; (match target_page with
-           | Some tp -> Some ("block/page", Ref tp)
+           | Some tp -> Some ("block/page", Ref_to (Entity_id tp))
            | None -> Some ("block/page", Nil))
         ; Some ("block/title", String "")
         ; Some ("block/created-at", (match mget block "block/created-at" with
            | Some v -> v | None -> Nil))
         ; Some ("block/updated-at", (match mget block "block/updated-at" with
            | Some v -> v | None -> Nil))
-        ; Some ("block/link", Ref ep.id) ]
+        (* cljs (:db/id existing-page) is a raw eid that the prewalk
+           remap skips; an Entity_id would land in id_to_new_uuid and
+           remap to the pasted node, so link via the live uuid instead *)
+        ; (match Ldb.value ep "block/uuid" with
+           | Some (Uuid u) ->
+               Some ("block/link", Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+           | _ -> Some ("block/link", Ref_to (Entity_id ep.id))) ]
   | None ->
       if page_ then Block_map.dissoc result [ "block/page" ]
       else
@@ -1914,6 +1920,130 @@ let rewrite_tx_op (id_to_new_uuid : (entity_id * string) list) (op : tx_op)
 exception Invalid_outliner_data
 exception Not_allowed_move_block_page
 
+(* cljs insert-history-blocks — rebuild the insert-blocks history
+   entry: entity values inside each block are replaced by their new
+   :block/uuid (or raw eid like cljs (:db/id v)), then refs written as
+   {:block/uuid ...} maps gain the page attrs the same tx created.
+   page-txs enter as tx_ops — only Entity ops are the cljs "tx maps"
+   the (map? tx) guard keeps; dissoc :db/id drops the entity id. *)
+let insert_history_blocks (blocks : Block_map.t list)
+    (page_txs : tx_op list list)
+    (id_to_new_uuid : (entity_id * string) list) : Block_map.t list =
+  let value_of_tx_value (tv : tx_value) : value =
+    match tv with
+    | One_value v -> v
+    | Many_values vs -> Set vs
+    | One_entity { db_id = Some r; _ } -> Ref_to r
+    | One_entity { db_id = None; _ } -> Nil
+    | Many_entities tes ->
+        Set
+          (List.filter_map
+             (fun (t : tx_entity) -> Option.map (fun r -> Ref_to r) t.db_id)
+             tes)
+  in
+  let pages =
+    List.fold_left
+      (fun pages group ->
+        List.fold_left
+          (fun pages op ->
+            match op with
+            | Entity te -> (
+                match
+                  List.find_map
+                    (fun (a, tv) ->
+                      match a, tv with
+                      | "block/uuid", One_value (Uuid u) -> Some u
+                      | _ -> None)
+                    te.attrs
+                with
+                | Some u ->
+                    let m =
+                      List.map
+                        (fun (a, tv) -> (a, value_of_tx_value tv))
+                        (List.filter (fun (a, _) -> a <> "db/id") te.attrs)
+                    in
+                    let merged =
+                      match List.assoc_opt u pages with
+                      | Some existing -> Block_map.merge existing m
+                      | None -> m
+                    in
+                    (u, merged) :: List.remove_assoc u pages
+                | None -> pages)
+            | _ -> pages)
+          pages group)
+      [] page_txs
+  in
+  (* cljs walk/prewalk (de/entity? ...) *)
+  let rec prewalk (v : value) : value =
+    match v with
+    | Ref id | Ref_to (Entity_id id) -> (
+        match List.assoc_opt id id_to_new_uuid with
+        | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
+        | None -> Int id)
+    | Map kvs ->
+        Map (List.map (fun (k, x) -> (prewalk k, prewalk x)) kvs)
+    | Vector vs -> Vector (List.map prewalk vs)
+    | List vs -> List (List.map prewalk vs)
+    | Set vs -> Set (List.map prewalk vs)
+    | Tuple vs -> Tuple (List.map (Option.map prewalk) vs)
+    | v -> v
+  in
+  (* cljs (:block/uuid ref) only reads maps — lookup-ref vectors and
+     eids answer nil, so only Map values merge the page attrs *)
+  let update_ref (r : value) : value =
+    match r with
+    | Map kvs -> (
+        match
+          List.find_map
+            (fun (k, v) ->
+              match k, v with
+              | Keyword "block/uuid", Uuid u | String "block/uuid", Uuid u
+              | Keyword "block/uuid", String u | String "block/uuid", String u ->
+                  Some u
+              | _ -> None)
+            kvs
+        with
+        | Some u -> (
+            match List.assoc_opt u pages with
+            | Some page ->
+                let ref_bm =
+                  List.filter_map
+                    (fun (k, v) ->
+                      match k with
+                      | Keyword a | String a -> Some (a, v)
+                      | _ -> None)
+                    kvs
+                in
+                Map
+                  (List.map
+                     (fun (a, v) -> (Keyword a, v))
+                     (Block_map.merge page ref_bm))
+            | None -> r)
+        | None -> r)
+    | _ -> r
+  in
+  let blocks =
+    List.map (fun b -> List.map (fun (a, v) -> (a, prewalk v)) b) blocks
+  in
+  List.map
+    (fun b ->
+      match mget b "block/refs" with
+      | Some (List vs) | Some (Vector vs) | Some (Set vs) when vs <> [] ->
+          Block_map.put b "block/refs" (Vector (List.map update_ref vs))
+      | _ -> b)
+    blocks
+
+(* cljs the insert-opts map recorded in the history op entry *)
+let insert_opts_value (opts : insert_opts) : value =
+  Map
+    [ Keyword "sibling?", Bool opts.sibling
+    ; Keyword "replace-empty-target?", Bool opts.replace_empty_target
+    ; Keyword "keep-uuid?", Bool true
+    ; Keyword "keep-block-order?", Bool opts.keep_block_order
+    ; ( Keyword "outliner-op"
+      , match opts.outliner_op with Some o -> Keyword o | None -> Nil )
+    ; Keyword "insert-template?", Bool opts.insert_template ]
+
 (* insert-blocks — full port *)
 let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_map.t)
     (opts : insert_opts) : tx_result * Block_map.t list =
@@ -2142,7 +2272,31 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
               let full_tx' =
                 List.map (rewrite_tx_op id_to_new_uuid) full_tx
               in
-              ({ tx_data = full_tx'; tx_meta = [] }, tx)
+              (* cljs {:tx-meta {:outliner-ops [[:insert-blocks [blocks'
+                  target-uuid insert-opts+keep-uuid?]]]}} *)
+              let history_blocks =
+                insert_history_blocks tx page_txs id_to_new_uuid
+              in
+              let tx_meta =
+                [ ( "outliner-ops"
+                  , Vector
+                      [ Vector
+                          [ Keyword "insert-blocks"
+                          ; Vector
+                              [ Vector
+                                  (List.map
+                                     (fun b ->
+                                       Map
+                                         (List.map
+                                            (fun (a, v) -> (Keyword a, v))
+                                            b))
+                                     history_blocks)
+                              ; (match Ldb.value target_block "block/uuid" with
+                                 | Some (Uuid _ as u) -> u
+                                 | _ -> Nil)
+                              ; insert_opts_value insert_opts' ] ] ] ) ]
+              in
+              ({ tx_data = full_tx'; tx_meta }, tx)
           end
           else ({ tx_data = []; tx_meta = [] }, []))
 
@@ -2346,15 +2500,72 @@ let move_to_original_position db (blocks : entity list) (target_block : entity)
          | None -> false)
   | [] -> false
 
+(* cljs move-block-property-tx — split out of move-block for
+   lint:large-vars. *)
+let move_block_property_tx (block : entity) (target_block : entity)
+    (sibling : bool) (block_from_property : entity option)
+    (restore_from_property : entity option) : tx_op list =
+  let retract_property_tx =
+    match block_from_property, Ldb.ref_ent block "block/parent" with
+    | Some bp, Some parent -> (
+        match Ldb.ident_of bp with
+        | Some ident ->
+            [ Retract (Entity_id parent.id, ident, Some (Ref block.id))
+            ; RetractAttr (Entity_id block.id, "logseq.property/created-from-property") ]
+        | None -> [])
+    | _ -> []
+  in
+  let add_property_tx =
+    match restore_from_property with
+    | Some rfp -> (
+        let owner_id =
+          if sibling then
+            match Ldb.ref_ent target_block "block/parent" with
+            | Some p -> Some p.id
+            | None -> None
+          else Some target_block.id
+        in
+        match owner_id, Ldb.ident_of rfp with
+        | Some owner_id, Some ident ->
+            [ Add (Entity_id block.id, "logseq.property/created-from-property",
+                   Ref rfp.id)
+            ; Add (Entity_id owner_id, ident, Ref block.id) ]
+        | _ -> [])
+    | None -> []
+  in
+  retract_property_tx @ add_property_tx
+
 let move_block (db : db) (block : entity) (target_block : entity) (sibling : bool)
     (created_from_property : value option) : tx_op list =
   let target_without_parent =
     sibling && Ldb.ref_ent target_block "block/parent" = None
   in
-  let move_page_as_block_child =
-    (not sibling) && not (Ldb.is_page target_block) && Ldb.is_page block
+  let target_from_property =
+    if sibling then
+      Ldb.ref_ent target_block "logseq.property/created-from-property"
+    else None
   in
-  if target_without_parent || move_page_as_block_child then
+  let explicit_restore_from_property =
+    resolve_created_from_property db created_from_property
+  in
+  let restore_from_property =
+    match target_from_property with
+    | Some p -> Some p
+    | None -> explicit_restore_from_property
+  in
+  let new_parent =
+    if sibling then Ldb.ref_ent target_block "block/parent"
+    else Some target_block
+  in
+  (* The Library page only holds normal pages; blocks, classes,
+     properties and other page types can't be moved into it. *)
+  let move_disallowed =
+    match new_parent with
+    | Some np when Ldb.is_library np -> not (Ldb.internal_page block)
+    | Some np -> Ldb.is_page block && not (Ldb.is_page np)
+    | None -> Ldb.is_page block
+  in
+  if target_without_parent || move_disallowed then
     raise Not_allowed_move_block_page
   else
     let first_block_page = Ldb.ref_ent block "block/page" in
@@ -2380,6 +2591,7 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
         in
         Db_order.gen_key None down
     in
+    let page_after_move = Ldb.is_page block in
     let parent_ref =
       if sibling then
         match Ldb.ref_ent target_block "block/parent" with
@@ -2392,7 +2604,7 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
         (fun x -> x)
         [ Some ("block/parent", One_entity { db_id = Some (Entity_id parent_ref); attrs = [] })
         ; Some ("block/order", One_value (String block_order))
-        ; (if not (Ldb.is_page block) then
+        ; (if not page_after_move then
              match target_page with
              | Some tp ->
                  Some
@@ -2405,7 +2617,7 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
       [ Entity { db_id = Some (Entity_id block.id); attrs } ]
     in
     let children_page_tx =
-      if not_same_page && not (Ldb.is_page block) then
+      if not_same_page && not page_after_move then
         Ldb.get_block_full_children_ids db block.id
         |> List.filter_map (fun id ->
             match Ldb.ent_of_id db id with
@@ -2427,48 +2639,14 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
             | _ -> None)
       else []
     in
-    let target_from_property =
-      if sibling then
-        Ldb.ref_ent target_block "logseq.property/created-from-property"
-      else None
-    in
     let block_from_property =
       Ldb.ref_ent block "logseq.property/created-from-property"
     in
-    let restore_from_property =
-      match target_from_property with
-      | Some p -> Some p
-      | None -> resolve_created_from_property db created_from_property
+    let property_tx =
+      move_block_property_tx block target_block sibling
+        block_from_property restore_from_property
     in
-    let retract_property_tx =
-      match block_from_property, Ldb.ref_ent block "block/parent" with
-      | Some bp, Some parent -> (
-          match Ldb.ident_of bp with
-          | Some ident ->
-              [ Retract (Entity_id parent.id, ident, Some (Ref block.id))
-              ; RetractAttr (Entity_id block.id, "logseq.property/created-from-property") ]
-          | None -> [])
-      | _ -> []
-    in
-    let add_property_tx =
-      match restore_from_property with
-      | Some rfp -> (
-          let owner_id =
-            if sibling then
-              match Ldb.ref_ent target_block "block/parent" with
-              | Some p -> Some p.id
-              | None -> None
-            else Some target_block.id
-          in
-          match owner_id, Ldb.ident_of rfp with
-          | Some owner_id, Some ident ->
-              [ Add (Entity_id block.id, "logseq.property/created-from-property",
-                     Ref rfp.id)
-              ; Add (Entity_id owner_id, ident, Ref block.id) ]
-          | _ -> [])
-      | None -> []
-    in
-    tx_data @ children_page_tx @ retract_property_tx @ add_property_tx
+    tx_data @ children_page_tx @ property_tx
 
 (* ldb/transact! alias for worker path *)
 let ldb_transact (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta) : unit =
@@ -2956,7 +3134,12 @@ let insert_blocks_result_map (r : tx_result) (bms : Block_map.t list)
       , Wire.Array (List.map Ds_wire.transit_of_tx_op r.tx_data) )
     ; ( Wire.Keyword "blocks"
       , Wire.Array
-          (List.map (fun m -> Ds_wire.transit_of_value (bmap_arg m)) bms) ) ]
+          (List.map (fun m -> Ds_wire.transit_of_value (bmap_arg m)) bms) )
+    ; ( Wire.Keyword "tx-meta"
+      , Wire.Map
+          (List.map
+             (fun (a, v) -> (Wire.Keyword a, Ds_wire.transit_of_value v))
+             r.tx_meta) ) ]
 
 let delete_blocks_conn (conn : conn) (blocks : Block_map.t list)
     (opts_entry : Block_map.t) : tx_result option =

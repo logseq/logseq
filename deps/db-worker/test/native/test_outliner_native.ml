@@ -3226,13 +3226,63 @@ let test_undo_restore_keeps_live_child_uuid () =
          (List.map uuid_of children = [ d_uuid ])
    | None -> ())
 
+(* (deftest paste-page-entity-links-to-existing-page) — cljs 4608885d40:
+   pasting a copied page entity links to the existing page instead of
+   creating a duplicate page with the same name. *)
+let test_paste_page_entity_links_to_existing_page () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "PageA" }
+          ; blocks = [ { default_block with b_title = Some "a-child" } ] }
+        ; { page = { default_page with pg_title = Some "PageB" }
+          ; blocks = [ { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let page_a = Option.get (Ldb.get_page db (String "pagea")) in
+  let copied = [ clipboard_block db page_a ] in
+  let target = Option.get (find_block_by_content db "target") in
+  insert_blocks_bang conn copied (target_bm target)
+    ~opts:
+      { Outliner_core.default_insert_opts with
+        sibling = true; outliner_op = Some "paste" }
+    ();
+  let db = db_of conn in
+  let pagea_ids =
+    Datascript.q_string db
+      "[:find [?e ...] :where [?e :block/name \"pagea\"]]"
+    |> List.filter_map (function
+         | [ Result_entity i ] | [ Result_value (Int i) ] -> Some i
+         | _ -> None)
+  in
+  check "paste must not create a second page entity"
+    (List.sort compare pagea_ids = [ page_a.id ]);
+  let target' = Option.get (Ldb.ent_of_id db target.id) in
+  let siblings =
+    match Ldb.ref_ent target' "block/parent" with
+    | Some p -> Ldb.sort_by_order (Ldb.ref_ents p "block/_parent")
+    | None -> []
+  in
+  let pasted =
+    List.find_opt (fun b -> Ldb.value b "block/link" <> None) siblings
+  in
+  check "pasted node should be a link node" (pasted <> None);
+  (match pasted with
+   | Some p -> (
+       match Ldb.ref_ent p "block/link" with
+       | Some l -> check "link points to existing page" (l.id = page_a.id)
+       | None -> ())
+   | None -> ())
+
 let copy_paste_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "copy-paste-keeps-original-children-when-uuids-still-exist" `Quick test_copy_paste_keeps_original_children_when_uuids_still_exist;
     Alcotest.test_case "copy-paste-keeps-original-children-when-pasting-beside-existing-block" `Quick test_copy_paste_keeps_original_children_when_pasting_beside_existing_block;
     Alcotest.test_case "copy-paste-with-keep-uuid-false-duplicates-nested-tree" `Quick test_copy_paste_with_keep_uuid_false_duplicates_nested_tree;
     Alcotest.test_case "cut-paste-moves-nested-tree" `Quick test_cut_paste_moves_nested_tree;
     Alcotest.test_case "non-paste-keep-uuid-reuses-live-child-identities" `Quick test_non_paste_keep_uuid_reuses_live_child_identities;
-    Alcotest.test_case "undo-restore-keeps-live-child-uuid" `Quick test_undo_restore_keeps_live_child_uuid ]
+    Alcotest.test_case "undo-restore-keeps-live-child-uuid" `Quick test_undo_restore_keeps_live_child_uuid;
+    Alcotest.test_case "paste-page-entity-links-to-existing-page" `Quick test_paste_page_entity_links_to_existing_page ]
 
 (* ---------- cut_paste_property_test.cljs ---------- *)
 
@@ -4375,9 +4425,16 @@ let test_derive_apply_template_captures_template_blocks () =
   let target = Option.get (find_block_by_content db "target") in
   let inserted_child_1_uuid = gen_uuid () in
   let inserted_child_2_uuid = gen_uuid () in
+  let target_parent_id =
+    match Ldb.ref_ent target "block/parent" with
+    | Some p -> p.id
+    | None -> failwith "target parent"
+  in
   let tx_data =
     [ tx_datom 900001 "block/uuid" (Wire.Uuid inserted_child_1_uuid) true
-    ; tx_datom 900002 "block/uuid" (Wire.Uuid inserted_child_2_uuid) true ]
+    ; tx_datom 900001 "block/parent" (Wire.Int target_parent_id) true
+    ; tx_datom 900002 "block/uuid" (Wire.Uuid inserted_child_2_uuid) true
+    ; tx_datom 900002 "block/parent" (Wire.Int target_parent_id) true ]
   in
   ignore
     (Datascript.transact_conn conn
