@@ -2252,6 +2252,48 @@
     (is (= response
            (-> response ldb/write-transit-str ldb/read-transit-str)))))
 
+(deftest render-snapshots-isolates-incomplete-dsl-query-resources-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        journals-key [:journals]
+        ;; Incomplete syntax while editing a /query block: cljs.reader throws
+        ;; a plain js/Error, not a js/SyntaxError.
+        failing-query [:query {:kind :dsl :query "((and)"}]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "An unreadable DSL query must not fail sibling resources in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-query] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str)))))
+
+(deftest render-snapshots-keeps-query-error-data-transit-safe-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        journals-key [:journals]
+        ;; A readable but invalid DSL query: datascript's parser reports
+        ;; unknown vars with ex-data containing deftyped AST nodes that
+        ;; transit cannot encode.
+        failing-query [:query {:kind :dsl :query "((and))"}]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "An invalid DSL query must not fail sibling resources in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-query] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Query error payloads must stay transit-encodable.")))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}
