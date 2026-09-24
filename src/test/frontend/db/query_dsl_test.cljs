@@ -474,6 +474,26 @@
          (map testable-content
               (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
 
+(deftest task-queries-with-multi-word-and-custom-statuses
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "review task"
+               :build/properties {:logseq.property/status :logseq.property/status.in-review}}
+              {:block/title "waiting task"
+               :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}]}])
+
+  (testing "multi-word statuses match case-insensitively"
+    (is (= ["review task"]
+           (map testable-content (dsl-query "(task \"In Review\")"))))
+    (is (= ["review task"]
+           (map testable-content (dsl-query "(task \"in review\")")))))
+
+  (testing "custom status values match case-insensitively"
+    (is (= ["waiting task"]
+           (map testable-content (dsl-query "(task \"QA Ready\")"))))
+    (is (= ["waiting task"]
+           (map testable-content (dsl-query "(task \"qa ready\")"))))))
+
 ;; Ensure some filters work when no data with relevant properties exist
 (deftest queries-with-no-data
   (load-test-files {:pages-and-blocks []})
@@ -522,6 +542,16 @@
          (set (map :block/title
                    (dsl-query "(priority high medium low)"))))
       "Three arg queries and args that have no match"))
+
+(deftest priority-queries-with-multi-word-and-custom-values
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "urgent b"
+               :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}])
+  (is (= ["urgent b"]
+         (map :block/title (dsl-query "(priority \"Very High\")"))))
+  (is (= ["urgent b"]
+         (map :block/title (dsl-query "(priority \"very high\")")))))
 
 (deftest nested-boolean-queries
   (load-test-files
