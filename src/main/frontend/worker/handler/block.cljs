@@ -210,6 +210,8 @@
                      (block-refs-count db entity-id)
                      :block.temp/has-children?
                      (block-has-children? db entity-id)
+                     :block.temp/class-property-idents
+                     (property-handler/block-class-property-idents db {:db/id entity-id})
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
         (and (:logseq.property/view-for block)

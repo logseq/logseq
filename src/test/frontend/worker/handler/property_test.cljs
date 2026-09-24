@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.property :as worker-property]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -127,6 +128,42 @@
       (d/transact! conn [[:db/retract :logseq.property/status :logseq.property/default-value]])
       (is (not (contains? (positioned-idents @conn (:db/id task-only) :block-left)
                           :logseq.property/status))))))
+
+(deftest class-declared-property-defaults-apply-only-to-members
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:SubTask {:build/class-extends #{:logseq.class/Task}}}
+               :pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "task only"
+                           :build/tags [:logseq.class/Task]}
+                          {:block/title "sub task"
+                           :build/tags [:SubTask]}
+                          {:block/title "plain"}]}]})
+        db @conn
+        task-block (db-test/find-block-by-content db "task only")
+        sub-task-block (db-test/find-block-by-content db "sub task")
+        plain-block (db-test/find-block-by-content db "plain")]
+    (testing "entity lookup resolves the class default for Task members"
+      (is (= :logseq.property/status.todo
+             (:db/ident (entity-plus/lookup-kv-then-entity task-block :logseq.property/status))))
+      (is (= :logseq.property/status.todo
+             (:db/ident (entity-plus/lookup-kv-then-entity sub-task-block :logseq.property/status)))
+          "Class ancestors count: a subclass member also gets the class default"))
+    (testing "non-member blocks do not get the status default"
+      (is (nil? (entity-plus/lookup-kv-then-entity plain-block :logseq.property/status))))
+    (testing "block-class-property-idents reflects class membership"
+      (is (contains? (worker-property/block-class-property-idents db task-block)
+                     :logseq.property/status))
+      (is (contains? (worker-property/block-class-property-idents db sub-task-block)
+                     :logseq.property/status))
+      (is (not (contains? (worker-property/block-class-property-idents db plain-block)
+                          :logseq.property/status))))
+    (testing "property-plain-map flags class-declared properties"
+      (is (true? (:block.temp/class-declared?
+                  (worker-property/property-plain-map db (d/entity db :logseq.property/status)))))
+      (is (false? (:block.temp/class-declared?
+                   (worker-property/property-plain-map db (d/entity db :logseq.property.repeat/recur-unit))))
+          "A property declared by no class keeps its global default flag off"))))
 
 (deftest get-class-properties-keeps-closed-values-for-icons
   (let [conn (db-test/create-conn-with-blocks
