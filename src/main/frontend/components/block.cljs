@@ -3755,7 +3755,11 @@
   (when-not (dnd-same-block? uuid)
     (util/stop-propagation event)
     (haptics/haptics)
-    (let [block-uuids (state/get-selection-block-ids)
+    (let [block-uuids (->> (state/get-selection-blocks)
+                           (keep #(or (some-> (dom/attr % "originalblockid") uuid)
+                                      (util/selection-node-block-id %)))
+                           (distinct)
+                           (seq))
           dragging-block @*dragging-block
           repo (state/get-current-repo)
           move-to @*move-to']

@@ -161,6 +161,32 @@ test('targeted retirement ignores an unrelated unverifiable worker and reports t
   assert.ok(lifecycle.pidExists(unrelated.pid));
 });
 
+test('targeted retirement tolerates a worker exiting mid-health-check', async t => {
+  const storage = fixture(t);
+  await lifecycle.createGraph(storage, 'demo');
+  const target = await lifecycle.startGraph({ storage, repo: 'demo', owner: 'cli',
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
+    extraArgs: ['--mode', 'teardown-exit'] });
+  fs.writeFileSync(path.join(storage.root, 'begin-teardown'), '');
+  const retired = await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+  assert.deepEqual(retired.map(worker => worker.ticket), [target.ticket]);
+  assert.equal(lifecycle.pidExists(target.pid), false);
+  assert.equal(lifecycle.snapshot(storage, 'demo').workers.length, 0);
+  assert.equal(fs.readFileSync(path.join(storage.root, 'server-list'), 'utf8'), '');
+});
+
+test('targeted retirement still rejects a live worker it cannot verify', async t => {
+  const storage = fixture(t);
+  await lifecycle.createGraph(storage, 'demo');
+  const target = await lifecycle.startGraph({ storage, repo: 'demo', owner: 'cli',
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
+    extraArgs: ['--mode', 'teardown-stuck'] });
+  fs.writeFileSync(path.join(storage.root, 'begin-teardown'), '');
+  await assert.rejects(lifecycle.stopOutdatedWorkers(storage, 'current', 'demo'));
+  assert.ok(lifecycle.pidExists(target.pid));
+  assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].ticket, target.ticket);
+});
+
 test('targeted retirement migrates matching legacy revisions and skips absent graphs', async t => {
   const storage = fixture(t);
   const current = await worker(t, storage, { revision: 'current' });

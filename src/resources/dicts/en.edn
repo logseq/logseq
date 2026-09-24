@@ -702,6 +702,8 @@
  :flashcard/shortcut-tooltip "Shortcut: {1}"
 
  :flashcard.empty/desc "You can add \"{1}\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
+ :flashcard.empty/no-due-desc "You've reviewed all the cards for this query. Come back later or practice again now."
+ :flashcard.empty/no-due-title "No cards due"
  :flashcard.empty/title "Time to create a card!"
 
  :flashcard.rating/again "Again"
@@ -715,6 +717,7 @@
 
  :flashcard.review/finished "Congrats, you've reviewed all the cards for this query, see you next time! 💯"
  :flashcard.review/hide-answers "Hide answers"
+ :flashcard.review/practice-again "Practice again"
  :flashcard.review/show-answers "Show answers"
  :flashcard.review/show-clozes "Show clozes"
 

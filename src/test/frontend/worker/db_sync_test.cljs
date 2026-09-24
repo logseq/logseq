@@ -1758,7 +1758,7 @@
              (with-datascript-conns conn client-ops-conn
                (fn []
                  (reset! db-sync/*repo->latest-remote-tx {})
-                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
                  (d/listen! conn ::pull-ok-checksum
                             (fn [tx-report]
                               (when (and (seq (:tx-data tx-report))
@@ -1900,7 +1900,7 @@
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [child1] {})
           (let [tx-id (:tx-id (first (#'sync-apply/pending-txs test-repo)))
@@ -1950,7 +1950,7 @@
           parent-uuid (:block/uuid parent)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [parent] {})
           (let [tx-id (:tx-id (first (#'sync-apply/pending-txs test-repo)))
@@ -1990,7 +1990,7 @@
           deleted-uuid (:block/uuid a-child-1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [a-child-1] {})
           (outliner-core/move-blocks! conn [b-child-1] parent-a {:sibling? false})
@@ -2690,19 +2690,45 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (with-redefs [worker-util/dev-or-test? false]
             (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
             (d/transact! conn [[:db/add (:db/id parent) :block/title "Release checksum block"]])
             (is (= (sync-checksum/recompute-checksum @conn)
                    (client-op/get-local-checksum test-repo)))))))))
 
+(deftest local-checksum-heals-when-covered-commit-lags-test
+  (testing "a checksum write lost to process death is recomputed on reopen"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo
+                                           (sync-checksum/recompute-checksum @conn)
+                                           (:max-tx @conn))
+          ;; Commit lands without its checksum write, as when the process dies
+          ;; between the graph store and the post-commit checksum update
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "lost checksum write"]])
+          (is (not= (sync-checksum/recompute-checksum @conn)
+                    (client-op/get-local-checksum test-repo)))
+          (db-sync/reconcile-local-checksum! test-repo conn)
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
+(deftest local-checksum-untouched-when-covered-commit-current-test
+  (testing "an up-to-date checksum is not recomputed on reopen"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo "stale" (:max-tx @conn))
+          (db-sync/reconcile-local-checksum! test-repo conn)
+          (is (= "stale" (client-op/get-local-checksum test-repo))))))))
+
 (deftest local-checksum-ignores-aborted-batch-transact-test
   (testing "an aborted batch transaction must not advance the stored checksum"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (let [checksum-before (client-op/get-local-checksum test-repo)
                 title-before (:block/title parent)]
@@ -2734,7 +2760,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2754,7 +2780,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2773,7 +2799,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2838,7 +2864,7 @@
                                   "stale child update"]]}]]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (with-silenced-console-error
             (fn []
               (is (= :ok
@@ -4410,6 +4436,7 @@
                 {:pages-and-blocks
                  [{:page {:block/title "page1"}
                    :blocks [{:block/title "task"
+                             :build/tags [:logseq.class/Task]
                              :build/properties {:status "Todo"}}]}]})
           client-ops-conn (new-client-ops-db)]
       (with-datascript-conns conn client-ops-conn
@@ -5385,7 +5412,7 @@
                 tx-ids (mapv :tx-id pending-before)
                 local-checksum (sync-checksum/recompute-checksum @conn)]
             (is (seq pending-before))
-            (client-op/update-local-checksum test-repo local-checksum)
+            (client-op/update-local-checksum test-repo local-checksum (:max-tx @conn))
             (reset! (:inflight client) tx-ids)
             (with-redefs [sync-log-state/rtc-log (fn [type payload]
                                                    (reset! *captured {:type type
@@ -5463,7 +5490,7 @@
           (reset! db-sync/*repo->latest-remote-tx {test-repo 5})
           (reset! db-sync/*repo->latest-remote-checksum {test-repo actual-checksum})
           (client-op/update-local-tx test-repo 5)
-          (client-op/update-local-checksum test-repo actual-checksum)
+          (client-op/update-local-checksum test-repo actual-checksum (:max-tx @conn))
           (try
             (with-redefs [sync-log-state/rtc-log (fn [type payload]
                                                    (reset! *captured {:type type
@@ -5493,7 +5520,7 @@
                                                    :checksum remote-checksum}))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo stale-checksum)
+          (client-op/update-local-checksum test-repo stale-checksum (:max-tx @conn))
           (is (= :ok
                  (try
                    (sync-handle-message/handle-message! test-repo client raw-message)
@@ -5507,7 +5534,7 @@
           inserted-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (d/listen! conn ::checksum-sync
                      (fn [tx-report]
                        (when-not (:batch-tx? @conn)
@@ -7154,7 +7181,7 @@
         (-> (with-datascript-conns
               conn client-ops-conn
               (fn []
-                (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+                (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
                 (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
                 (js/Promise.resolve
                  (p/with-redefs [ldb/batch-transact!

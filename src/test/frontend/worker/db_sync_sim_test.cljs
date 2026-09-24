@@ -1739,8 +1739,8 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b]]
                 (client-op/update-local-tx repo 0))
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               ;; Seed stable anchors (non-empty titles) that A won't touch.
               (let [base-a (d/entity @conn-a [:block/uuid base-uuid])
@@ -1877,8 +1877,8 @@
               (reset! db-sync/*repo->latest-remote-tx {})
               (client-op/update-local-tx repo-a 0)
               (client-op/update-local-tx repo-b 0)
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
               (ensure-base-page! conn-a base-uuid)
               (let [base (d/entity @conn-a [:block/uuid base-uuid])]
                 (create-block! conn-a base "before" block-uuid))
@@ -2164,8 +2164,8 @@
               (ensure-base-page! conn-a base-uuid)
               (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
                                   {:repo repo-b :conn conn-b :client client-b :online? true}])
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               (run-offline-seq! repo-a conn-a "a")
               (run-offline-seq! repo-b conn-b "b")
@@ -2227,8 +2227,8 @@
               (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
                                         {:repo repo-b :conn conn-b :client client-b :online? true}]
                                 128)
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               ;; A stays online and adds an empty child under block 1.
               (create-block! conn-a (d/entity @conn-a [:block/uuid root-uuid]) "" child-a-uuid)
@@ -3000,9 +3000,9 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b repo-c]]
                 (client-op/update-local-tx repo 0))
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
-              (client-op/update-local-checksum repo-c (sync-checksum/recompute-checksum @conn-c))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
+              (client-op/update-local-checksum repo-c (sync-checksum/recompute-checksum @conn-c) (:max-tx @conn-c))
               (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
                              {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}
                              {:repo repo-c :conn conn-c :client client-c :online? true :gen-uuid gen-uuid}]

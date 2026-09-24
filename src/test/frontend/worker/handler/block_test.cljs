@@ -248,8 +248,26 @@
                     (remove #{:block.temp/positioned-properties
                               :block.temp/order-list-index
                               :block.temp/refs-count
-                              :block.temp/has-children?}
+                              :block.temp/has-children?
+                              :block.temp/class-property-idents}
                             (keys block)))))))
+
+(deftest canonical-block-marks-class-provided-property-idents-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page"}
+                  :blocks [{:block/title "task only"
+                            :build/tags [:logseq.class/Task]}
+                           {:block/title "plain"}]}])
+          db @conn
+          task-row (canonical-block db (db-test/find-block-by-content db "task only"))
+          plain-row (canonical-block db (db-test/find-block-by-content db "plain"))]
+      (is (contains? (:block.temp/class-property-idents task-row)
+                     :logseq.property/status)
+          "A Task member row advertises the class-provided status property")
+      (is (not (contains? (:block.temp/class-property-idents plain-row)
+                          :logseq.property/status))
+          "An untagged row does not advertise the class-provided status"))))
 
 (deftest canonical-block-numbers-ref-typed-list-siblings-test
   (when-let [canonical-block (canonical-block-api)]

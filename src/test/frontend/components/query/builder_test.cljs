@@ -4,11 +4,13 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.property :as db-property]))
 
-(deftest closed-filter-choices-include-all-built-in-values-test
-  (is (= ["Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"]
-         (#'query-builder/closed-filter-choices :logseq.property/status)))
-  (is (= ["Low" "Medium" "High" "Urgent"]
-         (#'query-builder/closed-filter-choices :logseq.property/priority)))
+(deftest closed-value-choice-items-test
+  (is (= [{:value "Backlog"} {:value "Waiting"}]
+         (#'query-builder/closed-value-choice-items
+          [{:block/title "Backlog"} {:block/title "Waiting"}])))
+  (is (= [{:value "1"}]
+         (#'query-builder/closed-value-choice-items [{:logseq.property/value 1}])))
+  (is (empty? (#'query-builder/closed-value-choice-items [{} nil])))
   (is (= ["Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"]
          (mapv db-property/property-value-content
                (:property/closed-values
