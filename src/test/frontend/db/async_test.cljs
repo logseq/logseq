@@ -570,7 +570,7 @@
                     (is false (str error))))
                  (p/finally done))))))
 
-(deftest get-all-classes-hides-flashcard-classes-when-feature-disabled
+(deftest get-all-classes-returns-worker-result-without-feature-filter
   (async done
     (let [card {:db/id 1 :db/ident :logseq.class/Card :block/title "Card"}
           cards {:db/id 2 :db/ident :logseq.class/Cards :block/title "Cards"}
@@ -582,10 +582,15 @@
                   enabled (p/with-redefs [state/enable-flashcards? (constantly true)
                                           db-async/<invoke-db-worker
                                           (fn [& _] (p/resolved [card cards task]))]
+                            (db-async/<get-all-classes "graph" {:except-root-class? true}))
+                  missing (p/with-redefs [db-async/<invoke-db-worker
+                                          (fn [& _] (p/resolved nil))]
                             (db-async/<get-all-classes "graph" {:except-root-class? true}))]
-            (is (= ["Task"] (map :block/title disabled))
-                "#Card and #Cards must not be offered when Flashcards is off")
+            (is (= ["Card" "Cards" "Task"] (map :block/title disabled))
+                "Shared class fetch stays complete when Flashcards is off")
             (is (= ["Card" "Cards" "Task"] (map :block/title enabled))
-                "#Card and #Cards stay available when Flashcards is on"))
+                "Shared class fetch stays complete when Flashcards is on")
+            (is (nil? missing)
+                "Worker nil is preserved instead of being rewritten to []"))
           (p/catch #(is false (str %)))
           (p/finally done)))))

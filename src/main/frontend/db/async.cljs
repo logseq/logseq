@@ -139,10 +139,7 @@
 
 (defn <get-all-classes
   [graph opts]
-  (p/let [classes (<invoke-db-worker :thread-api/get-all-classes graph opts)]
-    (if (state/enable-flashcards?)
-      classes
-      (into [] (remove state/flashcard-class?) (or classes [])))))
+  (<invoke-db-worker :thread-api/get-all-classes graph opts))
 
 (defn <get-structured-children
   [graph class-id]

@@ -702,6 +702,14 @@ should be done through this fn in order to get global config and config defaults
                class
                (:db/ident class))))
 
+(defn classes-for-tag-completion
+  "Return `classes` with built-in flashcard classes removed when Flashcards is off for `repo`."
+  [repo classes]
+  (if (enable-flashcards? repo)
+    classes
+    (when classes
+      (into [] (remove flashcard-class?) classes))))
+
 ;; Enable by default
 (defn show-brackets?
   []

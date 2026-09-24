@@ -1064,11 +1064,17 @@
                 :db/ident :logseq.class/Task
                 :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
                 :block/title "Task"}]
-      (-> (p/let [disabled (p/with-redefs [state/enable-flashcards? (constantly false)
+      (-> (p/let [disabled (p/with-redefs [state/enable-flashcards? (fn
+                                                                     ([]
+                                                                      (throw (js/Error. "tag completion must pass repo")))
+                                                                     ([_repo] false))
                                            db-async/<invoke-db-worker
                                            (fn [& _] (p/resolved [card cards task]))]
                              (editor/get-matched-classes "card"))
-                  enabled (p/with-redefs [state/enable-flashcards? (constantly true)
+                  enabled (p/with-redefs [state/enable-flashcards? (fn
+                                                                    ([]
+                                                                     (throw (js/Error. "tag completion must pass repo")))
+                                                                    ([_repo] true))
                                           db-async/<invoke-db-worker
                                           (fn [& _] (p/resolved [card cards task]))]
                             (editor/get-matched-classes "card"))]
