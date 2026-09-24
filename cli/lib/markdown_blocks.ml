@@ -154,20 +154,86 @@ let strip_heading_marker title =
   else title
 
 (* mldoc returns one Block_ref entry per occurrence of a real ((uuid))
-   ref — code spans and fenced blocks produce none — so when every
-   textual ((uuid)) occurrence is a real ref the title can be normalized
-   to the DB-graph [[uuid]] form, matching the importer's
-   convert-block-refs-to-page-refs. An ambiguous uuid (some occurrences
-   inside code) stays verbatim. *)
-let count_occurrences text ~needle =
-  let needle_len = String.length needle in
-  let rec loop index count =
-    if index + needle_len > String.length text then count
-    else if String.sub text index needle_len = needle then
-      loop (index + needle_len) (count + 1)
-    else loop (index + 1) count
+   ref — code spans and fenced blocks produce none — so occurrences of
+   ((uuid)) that fall outside markdown code can be normalized to the
+   DB-graph [[uuid]] form, matching the importer's
+   convert-block-refs-to-page-refs. When the outside-code count disagrees
+   with the AST count the scanner is out of sync with mldoc, so that uuid
+   stays verbatim rather than guessing. *)
+let fenced_mask title =
+  let len = String.length title in
+  let inside = Array.make (len + 1) false in
+  let pos = ref 0 in
+  let open_fence = ref ('\000', 0) in
+  let contains text s e c =
+    let rec loop i = i < e && (text.[i] = c || loop (i + 1)) in
+    loop s
   in
-  loop 0 0
+  let only_spaces text s e =
+    let rec loop i =
+      i >= e || ((text.[i] = ' ' || text.[i] = '\t') && loop (i + 1))
+    in
+    loop s
+  in
+  while !pos < len do
+    let eol =
+      match String.index_from_opt title !pos '\n' with
+      | Some i -> i
+      | None -> len
+    in
+    let s = ref !pos in
+    while !s < eol && title.[!s] = ' ' && !s - !pos < 4 do
+      incr s
+    done;
+    let c = if !s < eol then title.[!s] else '\000' in
+    let run = ref !s in
+    while !run < eol && title.[!run] = c do
+      incr run
+    done;
+    let run_len = if c = '`' || c = '~' then !run - !s else 0 in
+    let was_in = fst !open_fence <> '\000' in
+    (match fst !open_fence with
+     | '\000' ->
+         (* Backtick fences may not carry a backtick in their info string. *)
+         if run_len >= 3 && (c = '~' || not (contains title !run eol '`'))
+         then open_fence := (c, run_len)
+     | fc ->
+         let _, flen = !open_fence in
+         if c = fc && run_len >= flen && only_spaces title !run eol then
+           open_fence := ('\000', 0));
+    if was_in || fst !open_fence <> '\000' then
+      for i = !pos to eol do
+        inside.(i) <- true
+      done;
+    pos := eol + 1
+  done;
+  inside
+
+(* Positions of `needle` outside fenced blocks and inline code spans — a
+   code span opens on a backtick run and closes on an equal-length run. *)
+let non_code_positions title inside needle =
+  let len = String.length title in
+  let nlen = String.length needle in
+  let open_run = ref 0 in
+  let positions = ref [] in
+  let i = ref 0 in
+  while !i < len do
+    if inside.(!i) then incr i
+    else if !i + nlen <= len && String.sub title !i nlen = needle then (
+      if !open_run = 0 then positions := !i :: !positions;
+      i := !i + nlen)
+    else if title.[!i] = '`' then (
+      let j = ref !i in
+      while !j < len && title.[!j] = '`' do
+        incr j
+      done;
+      let run = !j - !i in
+      if !open_run = 0 then open_run := run
+      else if run = !open_run then open_run := 0;
+      i := !j)
+    else incr i
+  done;
+  List.rev !positions
 
 let normalize_block_refs title =
   let real_counts = Hashtbl.create 4 in
@@ -205,15 +271,25 @@ let normalize_block_refs title =
            | _ -> ())
          items
    | None -> ());
-  Hashtbl.fold
-    (fun uuid real_refs title ->
-      let needle = "((" ^ uuid ^ "))" in
-      if count_occurrences title ~needle = real_refs then
-        Graph_dir.replace_all ~needle
-          ~replacement:("[[" ^ uuid ^ "]]")
-          title
-      else title)
-    real_counts title
+  if Hashtbl.length real_counts = 0 then title
+  else
+    let inside = fenced_mask title in
+    Hashtbl.fold
+      (fun uuid real_refs title ->
+        let needle = "((" ^ uuid ^ "))" in
+        let positions = non_code_positions title inside needle in
+        if List.length positions = real_refs then (
+          (* ((u)) and [[u]] have equal length, so positions stay valid. *)
+          let bytes = Bytes.of_string title in
+          let replacement = "[[" ^ uuid ^ "]]" in
+          List.iter
+            (fun p ->
+              Bytes.blit_string replacement 0 bytes p
+                (String.length needle))
+            positions;
+          Bytes.unsafe_to_string bytes)
+        else title)
+      real_counts title
 
 let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let ranges = List.sort (fun (a, _) (b, _) -> compare a b) exclude_ranges in
