@@ -204,17 +204,13 @@
        names are intentionally unregistered on native: export-db-binary,
        export-client-ops-db-binary, import-db-binary).
 
-   Known lib/engine bugs hit by these tests (no workarounds — assertions
-   left real and red):
-     - import-edn fails validate_import_tx_data: Db_validate flags the 5
-       file-block entities that build-export emits for the seeded graph
-       (2 errors each, dispatch key file-block) — cljs validation does
-       not flag them. Hits import-edn-datom-format-imports-blocks,
-       import-edn-datom-format-strips-export-metadata.
-     - worker-export-replaces-block-refs-with-worker-db-test: cljs asserts
-       the exported markdown contains the referenced block's title.
-       Worker_export.export_blocks_as_format runs but returns "" — the
-       export pipeline produces no content for this fixture (lib gap).
+   (The Instant→~t transit loss that made import-edn trip file-block :inst?
+   validation was fixed in ds_wire.ml — those tests are green. The
+   export_blocks_as_format "" result for the worker-export fixture traced
+   to datascript-ocaml's bulk transact fast path resolving ref-attr tempid
+   values against an empty tempids table — fixed upstream in
+   datascript-ocaml 2bf1a4d, which threads the shared table through the
+   fast paths like upstream DataScript.)
 *)
 
 open Datascript
@@ -2604,14 +2600,10 @@ let test_import_edn_datom_format () =
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
    | Wire.Map m ->
-       (* NOTE(lib-gap): fails "The Imported EDN has 5 validation error(s)" —
-          cljs encodes insts as transit ~t so file/created-at &
-          file/last-modified-at survive the export→import round-trip; OCaml
-          ds_wire.ml transit_of_value writes `Instant ms` as raw `Wire.Int64`
-          and value_of_transit reads small-enough Int64 back as `Int`, so the
-          5 built-in file entities trip file-block :inst? validation in
-          sqlite_export/validate-import-tx-data. Lib fix: encode Instant as
-          Wire.Date_ms (cljs ~t) — see ds_wire.ml ~line 103/130. *)
+       (* cljs encodes insts as transit ~t so file/created-at &
+          file/last-modified-at survive the export→import round-trip;
+          ds_wire.ml transit_of_value maps Instant to Wire.Date_ms for the
+          same round-trip fidelity *)
        check "import-edn no error" (wire_get "error" m = None);
        check "import-edn tx-count" (wire_get "tx-count" m <> None)
    | _ -> check "import-edn non-nil" (result <> Wire.Nil))
@@ -2628,8 +2620,7 @@ let test_import_edn_strips_export_metadata () =
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
    | Wire.Map m ->
-       (* NOTE(lib-gap): same Instant→Int transit loss as the test above —
-          see its inline NOTE. Not test-side. *)
+       (* requires the Instant→~t transit fidelity noted in the test above *)
        check "import-edn strip meta" (wire_get "error" m = None)
    | _ -> check "import-edn strip meta" true);
   (* no entity should carry the export-format attr *)
@@ -3003,8 +2994,7 @@ let test_close_other_dbs_clears () =
 
 (* (deftest worker-export-replaces-block-refs-with-worker-db-test)
    cljs asserts the exported markdown contains the referenced block's
-   title. Native export_blocks_as_format returns "" for this fixture
-   (lib gap, documented in the header). *)
+   title. *)
 let test_worker_export_replaces_block_refs () =
   let conn = Sqlite_export.create_conn () in
   ignore
@@ -3019,6 +3009,7 @@ let test_worker_export_replaces_block_refs () =
       (Map [ Keyword "remove-options", List [ Keyword "property" ] ])
       (Map [])
   in
+
   check "export contains referenced block title"
     (try
        ignore
