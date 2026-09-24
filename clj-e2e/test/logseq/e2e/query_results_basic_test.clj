@@ -225,13 +225,21 @@
     (w/click "a.menu-link:has-text('page reference')")
     (w/click (loc/filter ".cp__select-results a.menu-link" :has-text reference))
     (assert-query-count! 1)
-    (let [page-name (get (ls-api-call! :editor.getCurrentPage) "name")
-          query-ref (some #(get % ":logseq.property/query")
-                          (ls-api-call! :editor.getPageBlocksTree page-name))
-          query-id (if (map? query-ref) (get query-ref "id") query-ref)
-          query-uuid (get (ls-api-call! :editor.getBlock query-id) "uuid")]
-      (is (string? query-uuid)
+    (let [parent-uuid (.getAttribute
+                       (.first (w/-query ".ls-block:has(.ls-query-setting)"))
+                       "blockid")
+          parent (ls-api-call! :editor.getBlock parent-uuid)
+          query-ref (get parent ":logseq.property/query")
+          query-uuid (cond
+                       (string? query-ref) query-ref
+                       (map? query-ref) (or (get query-ref "uuid")
+                                            (get (ls-api-call! :editor.getBlock (get query-ref "id")) "uuid"))
+                       :else nil)]
+      (is (string? parent-uuid))
+      (is (some? query-ref)
           "The /query command stores the live query on the block property.")
+      (is (string? query-uuid)
+          (str "query property should resolve to a uuid, got " (pr-str query-ref)))
       (testing "live mid-edit incomplete syntax does not crash the page"
         (ls-api-call! :editor.updateBlock query-uuid (str "(and [[" reference "]]"))
         (assert/assert-is-visible ".ls-page-blocks")
