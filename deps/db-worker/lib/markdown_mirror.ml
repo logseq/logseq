@@ -23,8 +23,9 @@ let property_line_re = Regexp.compile "^(\\s*)[^:\\s][^:]*::\\s?.*$"
 
 let ref_or_tag_re = Regexp.compile "(#?)\\[\\[([^\\[\\]]+)\\]\\]"
 
+(* cljs #"(?i)(^|\s)#..." *)
 let simple_hashtag_re =
-  Regexp.compile "(^|\\s)#([^\\s#\\[\\]\\(\\),.;:'\"`]+)"
+  Regexp.compile ~caseless:true "(^|\\s)#([^\\s#\\[\\]\\(\\),.;:'\"`]+)"
 
 let whitespace_re = Regexp.compile "\\s+"
 

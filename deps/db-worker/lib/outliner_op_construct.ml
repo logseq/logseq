@@ -83,14 +83,14 @@ let kw_name (s : string) : string =
 
 
 (* cljs distinct — keeps first occurrence order *)
+(* cljs distinct — hash-seen set, O(n) *)
 let distinct (xs : Wire.t list) : Wire.t list =
-  let rec go acc = function
-    | x :: tl ->
-        if List.exists (fun y -> y = x) acc then go acc tl
-        else go (x :: acc) tl
-    | [] -> List.rev acc
-  in
-  go [] xs
+  let seen = Hashtbl.create 101 in
+  List.filter
+    (fun x ->
+       if Hashtbl.mem seen x then false
+       else (Hashtbl.replace seen x (); true))
+    xs
 
 (* cljs (map f xs ys) — truncates to the shorter list *)
 let map2_trunc f xs ys =
@@ -559,6 +559,11 @@ let created_block_uuids_from_tx_data (tx_data : Wire.t list) : Wire.t list =
                  | Some (Wire.Keyword "block/uuid"), Some (Wire.Bool true) ->
                      item_get "v" item
                  | _ -> None))
+       | Wire.Tagged ("datascript/Datom", _) ->
+           (match (item_get "a" item, item_get "added" item) with
+            | Some (Wire.Keyword "block/uuid"), Some (Wire.Bool true) ->
+                item_get "v" item
+            | _ -> None)
        | _ when is_datom_item item ->
            (match (item_get "a" item, item_get "added" item) with
             | Some (Wire.Keyword "block/uuid"), Some (Wire.Bool true) ->
@@ -588,21 +593,19 @@ let created_page_uuid_from_tx_data (tx_data : Wire.t list) (title : Wire.t)
   with
   | Some u -> Some u
   | None ->
-      (* group datoms by e *)
-      let by_e =
-        List.fold_left
-          (fun groups item ->
-             match item_get "e" item with
-             | Some e ->
-                 let rec put = function
-                   | (k, items) :: rest when k = e ->
-                       (k, item :: items) :: rest
-                   | g :: rest -> g :: put rest
-                   | [] -> [ (e, [ item ]) ]
-                 in
-                 put groups
-             | None -> groups)
-          [] tx_data
+      (* cljs group-by :e — hash-grouped, not assoc-list *)
+      let by_e = Hashtbl.create 101 in
+      List.iter
+        (fun item ->
+           match item_get "e" item with
+           | Some e ->
+               let prev = Option.value (Hashtbl.find_opt by_e e) ~default:[] in
+               Hashtbl.replace by_e e (item :: prev)
+           | None -> ())
+        tx_data;
+      (* datoms consed reversed — List.rev restores tx order per group *)
+      let groups =
+        Hashtbl.fold (fun e datoms acc -> (e, List.rev datoms) :: acc) by_e []
       in
       List.find_map
         (fun (_, datoms) ->
@@ -626,7 +629,7 @@ let created_page_uuid_from_tx_data (tx_data : Wire.t list) (title : Wire.t)
            match title', uuid' with
            | Some t, Some (Wire.Uuid _ as u) when t = title -> Some u
            | _ -> None)
-        by_e
+        groups
 
 (* op-construct/created-db-ident-from-tx-data *)
 let created_db_ident_from_tx_data (tx_data : Wire.t list) : Wire.t option =
@@ -804,57 +807,74 @@ let template_children_blocks_for_history db (template_ref : Wire.t) : Wire.t lis
        | _ -> [])
   | None -> []
 
-(* op-construct/inserted-block-uuids-from-tx-data — entities of the
-   inserted tree are the ones with parent writes in this transaction;
-   saving a reference creates a page + block but only the inserted
-   tree has parent writes. *)
+(* op-construct/inserted-block-uuids-from-tx-data — created uuids of the
+   inserted tree only: entity-ids that received a :block/parent write.
+   Saving a reference and inserting a sibling creates both a page and a
+   block; only the inserted tree has parent writes in that transaction. *)
 let inserted_block_uuids_from_tx_data (tx_data : Wire.t list) : Wire.t list =
   (* cljs entity-id — (some? (:a item)) -> (:e item); (vector? item) ->
      (second item); else (:db/id item) or [:block/uuid (:block/uuid item)] *)
   let entity_id (item : Wire.t) : Wire.t =
     match item with
-    | Wire.Array xs -> (match xs with _ :: e :: _ -> e | _ -> Wire.Nil)
-    | _ ->
-        (match item_get "a" item with
-         | Some a when a <> Wire.Nil ->
-             Option.value (item_get "e" item) ~default:Wire.Nil
-         | _ ->
-             (match item_get "db/id" item with
-              | Some id when id <> Wire.Nil -> id
-              | _ ->
+    | Wire.Map _ ->
+        (match Wire.get "a" item with
+         | Some _ -> Option.value (Wire.get "e" item) ~default:Wire.Nil
+         | None ->
+             (match Wire.get "db/id" item with
+              | Some id -> id
+              | None ->
                   Wire.Array
                     [ kw "block/uuid"
-                    ; Option.value (item_get "block/uuid" item)
+                    ; Option.value (Wire.get "block/uuid" item)
                         ~default:Wire.Nil ]))
+    | Wire.Tagged ("datascript/Datom", _) ->
+        Option.value (item_get "e" item) ~default:Wire.Nil
+    | _ when is_datom_item item ->
+        (match item with
+         | Wire.Array (e :: _) | Wire.List (e :: _) -> e
+         | _ -> Wire.Nil)
+    | Wire.Array (_ :: e :: _) | Wire.List (_ :: e :: _) -> e
+    | _ -> Wire.Nil
   in
-  let parent_write (item : Wire.t) : bool =
-    truthy_opt (item_get "block/parent" item)
-    || (match item_get "a" item, item_get "added" item with
-        | Some (Wire.Keyword "block/parent"), Some (Wire.Bool true) -> true
-        | _ -> false)
-    || (match item with
-        | Wire.Array (Wire.Keyword "db/add" :: _ :: Wire.Keyword "block/parent"
-                      :: _) -> true
-        | _ -> false)
-  in
-  let parent_ids =
-    List.map entity_id (List.filter parent_write tx_data)
-  in
-  created_block_uuids_from_tx_data
-    (List.filter (fun item -> List.mem (entity_id item) parent_ids) tx_data)
-
-(* cljs string/blank? *)
-let string_blank (s : string) : bool =
-  let rec all i =
-    i >= String.length s
-    || ((match s.[i] with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true
+  let has_parent_write (item : Wire.t) : bool =
+    match item with
+    | Wire.Map _ ->
+        (match Wire.get "block/parent" item with
+         | Some v when truthy v -> true
+         | _ ->
+             (match (item_get "a" item, item_get "added" item) with
+              | Some (Wire.Keyword "block/parent"), Some (Wire.Bool true) ->
+                  true
+              | _ -> false))
+    (* d/with-style datom vectors [e :block/parent v tx added] *)
+    | Wire.Tagged ("datascript/Datom", _) ->
+        (match (item_get "a" item, item_get "added" item) with
+         | Some (Wire.Keyword "block/parent"), Some (Wire.Bool true) -> true
          | _ -> false)
-        && all (i + 1))
+    | _ when is_datom_item item ->
+        (match (item_get "a" item, item_get "added" item) with
+         | Some (Wire.Keyword "block/parent"), Some (Wire.Bool true) -> true
+         | _ -> false)
+    | Wire.Array (Wire.Keyword "db/add" :: _ :: Wire.Keyword "block/parent" :: _)
+    | Wire.List (Wire.Keyword "db/add" :: _ :: Wire.Keyword "block/parent" :: _)
+      -> true
+    | _ -> false
   in
-  all 0
+  (* cljs (into #{} ...) — a set, not List.mem, so this stays O(n) on
+     large tx_data *)
+  let parent_ids = Hashtbl.create 101 in
+  List.iter
+    (fun item ->
+       if has_parent_write item then
+         Hashtbl.replace parent_ids (entity_id item) ())
+    tx_data;
+  created_block_uuids_from_tx_data
+    (List.filter
+       (fun item -> Hashtbl.mem parent_ids (entity_id item))
+       tx_data)
 
 (* op-construct/replaces-empty-target? *)
-let replaces_empty_target (db : db) (tx_data : Wire.t list)
+let replaces_empty_target db (tx_data : Wire.t list)
     (source_uuids : Wire.t list) (target_ref : Wire.t) (opts : Wire.t) : bool =
   (truthy_opt (mget "replace-empty-target?" opts)
    || (truthy_opt (mget "sibling?" opts) && List.length source_uuids > 1))
@@ -862,42 +882,49 @@ let replaces_empty_target (db : db) (tx_data : Wire.t list)
        | u :: _ ->
            (match entity_of_ref_wire db target_ref with
             | Some t ->
-                (match Ldb.value t "block/uuid" with
-                 | Some (Uuid tu) -> u = Wire.Uuid tu
-                 | _ -> false)
+                (match uuid_wire_of_entity t with
+                 | Some tu -> u = tu
+                 | None -> false)
             | None -> false)
        | [] ->
            (* cljs (= nil (:block/uuid missing-entity)) *)
            (match entity_of_ref_wire db target_ref with
-            | Some t -> Ldb.value t "block/uuid" = None
+            | Some t -> uuid_wire_of_entity t = None
             | None -> true))
       || List.exists
            (fun item ->
               let e, a, v, added =
                 match item with
-                | Wire.Array xs ->
-                    ( (match xs with _ :: e :: _ -> e | _ -> Wire.Nil)
-                    , Option.value (List.nth_opt xs 2) ~default:Wire.Nil
-                    , Option.value (List.nth_opt xs 3) ~default:Wire.Nil
-                    , (match xs with
-                       | Wire.Keyword "db/add" :: _ -> true
-                       | _ -> false) )
-                | _ ->
+                | _ when is_datom_item item ->
                     ( Option.value (item_get "e" item) ~default:Wire.Nil
                     , Option.value (item_get "a" item) ~default:Wire.Nil
                     , Option.value (item_get "v" item) ~default:Wire.Nil
-                    , truthy_opt (item_get "added" item) )
+                    , match item_get "added" item with
+                      | Some (Wire.Bool true) -> true
+                      | _ -> false )
+                | Wire.Array (_ :: e :: a :: v :: _)
+                | Wire.List (_ :: e :: a :: v :: _) ->
+                    let added =
+                      match item with
+                      | Wire.Array (Wire.Keyword "db/add" :: _)
+                      | Wire.List (Wire.Keyword "db/add" :: _) -> true
+                      | _ -> false
+                    in
+                    (e, a, v, added)
+                | _ ->
+                    ( Option.value (mget "e" item) ~default:Wire.Nil
+                    , Option.value (mget "a" item) ~default:Wire.Nil
+                    , Option.value (mget "v" item) ~default:Wire.Nil
+                    , match mget "added" item with
+                      | Some (Wire.Bool true) -> true
+                      | _ -> false )
               in
-              a = kw "block/title"
-              && not added
-              && (match v with
-                  | Wire.String s -> string_blank s
-                  | _ -> false)
+              a = Wire.Keyword "block/title" && not added
+              && (match v with Wire.String s -> String.trim s = "" | _ -> false)
               && stable_entity_ref db e = target_ref)
            tx_data)
 
-(* op-construct/canonicalize-insert-blocks-op — 2-arity shares the
-   available-uuid pool across ops in one transaction (master). *)
+(* op-construct/canonicalize-insert-blocks-op — returns [blocks' target-ref opts'] *)
 let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
     (available_uuids : Wire.t list) : Wire.t list =
   let blocks = arg args 0 and target_id = arg args 1 and opts = arg args 2 in
@@ -911,8 +938,12 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
   in
   let target_ref = stable_entity_ref db target_id in
   let target = entity_of_ref_wire db target_ref in
+  (* cljs available-set = (set available-uuids) — hash membership, O(n) *)
+  let available_set = Hashtbl.create 101 in
+  List.iter (fun u -> Hashtbl.replace available_set u ()) available_uuids;
+  let in_available u = Hashtbl.mem available_set u in
   let replaced_target =
-    (not (List.for_all (fun u -> List.mem u available_uuids) source_uuids))
+    (not (List.for_all in_available source_uuids))
     && replaces_empty_target db tx_data source_uuids target_ref opts
   in
   let new_source_uuids =
@@ -921,7 +952,7 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
     else source_uuids
   in
   let created_uuids =
-    if List.for_all (fun u -> List.mem u available_uuids) new_source_uuids
+    if List.for_all in_available new_source_uuids
     then new_source_uuids
     else
       let rec take n = function
@@ -966,7 +997,15 @@ let canonicalize_insert_blocks_op db tx_data (args : Wire.t list)
           Cljs_map.assoc fst_block "block/uuid" target_uuid
           :: (if created_uuids = [] then rst_blocks
               else map2_trunc block_with_new_id rst_blocks created_uuids)
-      | [] -> []
+      | [] ->
+          (* cljs [fst-block & rst-blocks] on [] binds nils; (assoc nil ...) =
+             {:block/uuid _} *)
+          let target_uuid =
+            match target with
+            | Some t -> Option.value (uuid_wire_of_entity t) ~default:Wire.Nil
+            | None -> Wire.Nil
+          in
+          [ Cljs_map.assoc (Wire.Map []) "block/uuid" target_uuid ]
     else map2_trunc block_with_new_id source_blocks created_uuids
   in
   let uuid_remap =
@@ -1049,14 +1088,17 @@ let canonicalize_insert_ops db tx_data (ops : Wire.t list) : Wire.t list =
                      (mget "template-blocks" (arg args' 2)) ~default:Wire.Nil
                | _ -> Wire.Nil
              in
-             let inserted_uuids =
-               List.filter_map
-                 (fun b -> mget "block/uuid" b)
-                 (Wire.as_seq blocks)
-             in
+             (* cljs inserted-uuids = (set (map :block/uuid blocks)) *)
+             let inserted = Hashtbl.create 101 in
+             List.iter
+               (fun b ->
+                  match mget "block/uuid" b with
+                  | Some u -> Hashtbl.replace inserted u ()
+                  | None -> ())
+               (Wire.as_seq blocks);
              let available' =
                List.filter
-                 (fun u -> not (List.mem u inserted_uuids))
+                 (fun u -> not (Hashtbl.mem inserted u))
                  available
              in
              loop available' (entry' :: acc) rest

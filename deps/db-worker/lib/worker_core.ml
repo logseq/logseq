@@ -195,8 +195,9 @@ let init_service (graph : string option) (start_opts : Wire.t)
                ~on_become_master_handler:(fun _service_name ->
                   on_become_master g start_opts)
                ~broadcast_data_types
+               (* cljs {:import? (some? (:import-type start-opts))} *)
                ~import:
-                 (match Wire.get "import-type?" start_opts with
+                 (match Wire.get "import-type" start_opts with
                   | Some w when w <> Wire.Nil -> true
                   | _ -> false)
                ()

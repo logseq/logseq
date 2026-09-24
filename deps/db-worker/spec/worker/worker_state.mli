@@ -41,6 +41,11 @@ val set_publishing : bool -> unit
 val repos : unit -> string list
 val close_other_sqlite_conns : string -> unit
 
+(* Hook installed by the lifecycle layer (which knows how to fully close a
+   graph's resources) so close_other_sqlite_conns can drop all per-repo
+   state without a module dependency cycle. *)
+val close_graph_resources_fn : (string -> unit) ref
+
 (* :worker/context — Wire.Map of context keys consumed by pipeline
    and transact options (:dev? :node-test? :importing? ...). *)
 val context : unit -> Wire.t
@@ -70,8 +75,8 @@ val db_sync_config : unit -> Wire.t
 
 (* In-flight ui-request deferreds, keyed by transit-encoded
    request-id. Resolves Ok result or Error normalized error map. *)
-val ui_request_put : string -> (Wire.t, Wire.t) result Db_worker_effect.resolver -> unit
-val ui_request_take : string -> (Wire.t, Wire.t) result Db_worker_effect.resolver option
+val ui_request_put : string -> (Wire.t, Wire.t) result Db_worker_effect.resolver -> Wire.t -> unit
+val ui_request_take : string -> ((Wire.t, Wire.t) result Db_worker_effect.resolver * Wire.t) option
 val ui_request_ids : unit -> string list
 
 (* uuid -> db-id of blocks deleted while a graph is open; reset on

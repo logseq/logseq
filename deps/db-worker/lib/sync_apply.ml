@@ -338,9 +338,19 @@ let semantic_outliner_op (op : Wire.t) : bool =
         s
   | _ -> false
 
+(* cljs rebase-history-ops: forward ops are canonicalized so replay
+   preserves the inserted block identities (op-construct/canonicalize-
+   insert-ops on the pre-rebase db). *)
 let rebase_history_ops (local_tx : Sync_client_op.local_tx_entry)
-    : Wire.t list * Wire.t list =
-  (local_tx.forward_outliner_ops, local_tx.inverse_outliner_ops)
+    (rebase_db_before : db option) : Wire.t list * Wire.t list =
+  let forward =
+    match rebase_db_before with
+    | Some db ->
+        Outliner_op_construct.canonicalize_insert_ops db
+          (Wire.as_seq local_tx.tx) local_tx.forward_outliner_ops
+    | None -> local_tx.forward_outliner_ops
+  in
+  (forward, local_tx.inverse_outliner_ops)
 
 let normalize_tx_data_for_rebase (tx_data : Wire.t) : Wire.t list =
   let items =
@@ -488,6 +498,7 @@ let tx_item_retract_entity_block_uuid (item : Wire.t) : string option =
 
 (* set ops on string lists *)
 module SSet = Set.Make (String)
+module Int_set = Set.Make (Int)
 
 let remote_txs_retract_entity_block_uuid_suffixes (remote_txs : Wire.t list)
     : SSet.t list =
@@ -629,11 +640,15 @@ let drop_local_reversal_stale_target_ops (db_before_local_reversal : db)
          else None)
       tx_data
   in
+  let recreated_eids =
+    List.fold_left (fun s e -> Int_set.add e s) Int_set.empty
+      recreated_eids
+  in
   List.filter
     (fun item ->
        match tx_item_entity item with
        | Wire.Int eid ->
-           if List.mem eid recreated_eids then true
+           if Int_set.mem eid recreated_eids then true
            else
              (match entity_block_uuid db_before_local_reversal eid with
               | Some _ -> entity_block_uuid db eid <> None
@@ -663,8 +678,12 @@ let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
          else None)
       tx_data
   in
+  (* cljs (set/difference deleted-eids recreated-eids) *)
+  let to_set =
+    List.fold_left (fun s e -> Int_set.add e s) Int_set.empty
+  in
   let stale_eids =
-    List.filter (fun e -> not (List.mem e recreated_eids)) deleted_eids
+    Int_set.diff (to_set deleted_eids) (to_set recreated_eids)
   in
   List.filter
     (fun item ->
@@ -672,7 +691,7 @@ let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
          (tx_item_add item
           &&
           match tx_item_entity item with
-          | Wire.Int n -> List.mem n stale_eids
+          | Wire.Int n -> Int_set.mem n stale_eids
           | _ -> false))
     tx_data
 
@@ -2072,7 +2091,9 @@ let rebase_local_op (_repo : string) (conn : conn)
     : string * string =
   if local_tx.outliner_op = Some "fix" then (local_tx.tx_id, "kept")
   else
-    let forward_ops, inverse_ops = rebase_history_ops local_tx in
+    let forward_ops, inverse_ops =
+      rebase_history_ops local_tx rebase_db_before
+    in
     let tx_meta : tx_meta =
       [ "outliner-op", Keyword "rebase"
       ; ( "original-outliner-op"
@@ -2565,53 +2586,62 @@ let apply_remote_tx_with_local_changes repo conn local_txs remote_txs
   let rebase_results = ref [] in
   let remote_tx_results = ref [] in
   let rebase_db_before = Conn.db conn in
-  let conflicts = remote_sync_conflicts rebase_db_before local_txs remote_txs in
-  if conflicts <> [] then begin
-    Sync_client_op.add_sync_conflicts repo conflicts;
-    broadcast_sync_conflicts repo conflicts
-  end;
-  let tx_report =
+  let outcome =
     try
-      batch_transact_with_temp_conn conn tx_meta
-        ~listen_db:(fun report ->
-           match
-             ( tx_meta_get "outliner-op" report.tx_meta
-             , tx_meta_get "db-sync/rebased-local?" report.tx_meta )
-           with
-           | Some (Keyword "rebase"), Some (Bool true)
-             when report.tx_data <> [] ->
-               rebase_tx_reports := !rebase_tx_reports @ [ report ]
-           | _ -> ())
-        ~before_commit:(fun () ->
-           fail_if_pending_tx_snapshot_changed repo local_txs)
-        (fun c ->
-           ignore (reverse_local_txs c local_txs);
-           remote_tx_results :=
-             transact_remote_txs c remote_txs
-               ~db_before_local_reversal:rebase_db_before ();
-           rebase_results :=
-             rebase_local_txs repo c local_txs (Some rebase_db_before))
-        ()
+      let conflicts =
+        remote_sync_conflicts rebase_db_before local_txs remote_txs
+      in
+      if conflicts <> [] then begin
+        Sync_client_op.add_sync_conflicts repo conflicts;
+        broadcast_sync_conflicts repo conflicts
+      end;
+      let tx_report =
+        batch_transact_with_temp_conn conn tx_meta
+          ~listen_db:(fun report ->
+             match
+               ( tx_meta_get "outliner-op" report.tx_meta
+               , tx_meta_get "db-sync/rebased-local?" report.tx_meta )
+             with
+             | Some (Keyword "rebase"), Some (Bool true)
+               when report.tx_data <> [] ->
+                 rebase_tx_reports := !rebase_tx_reports @ [ report ]
+             | _ -> ())
+          ~before_commit:(fun () ->
+             fail_if_pending_tx_snapshot_changed repo local_txs)
+          (fun c ->
+             ignore (reverse_local_txs c local_txs);
+             remote_tx_results :=
+               transact_remote_txs c remote_txs
+                 ~db_before_local_reversal:rebase_db_before ();
+             rebase_results :=
+               rebase_local_txs repo c local_txs (Some rebase_db_before))
+          ()
+      in
+      List.iter (handle_local_tx repo) !rebase_tx_reports;
+      repair_applied_txs conn tx_report;
+      (* Mark only explicitly stale rebases as non-pending — cljs
+         apply-remote-tx-with-local-changes! *)
+      let stale_tx_ids =
+        !rebase_results
+        |> List.filter (fun (_, s) -> s = "failed" || s = "no-op")
+        |> List.map fst |> List.sort_uniq compare
+      in
+      ignore (mark_pending_txs_false repo stale_tx_ids);
+      `Ok !remote_tx_results
     with e ->
       Worker_log.error "db-sync/apply-remote-txs-inner-error"
         [ "repo", repo; "error", Printexc.to_string e ];
-      (match !Sync_deps.clear_history with
-       | Some f -> f repo
-       | None -> ());
-      raise e
+      `Exn e
   in
-  List.iter (handle_local_tx repo) !rebase_tx_reports;
-  repair_applied_txs conn tx_report;
-  let stale_tx_ids =
-    !rebase_results
-    |> List.filter (fun (_, s) -> s = "failed" || s = "no-op")
-    |> List.map fst |> List.sort_uniq compare
-  in
-  ignore (mark_pending_txs_false repo stale_tx_ids);
+  (* cljs finally: reset atoms + clear-history! on every path *)
+  rebase_tx_reports := [];
+  rebase_results := [];
   (match !Sync_deps.clear_history with
    | Some f -> f repo
    | None -> ());
-  Db_worker_effect.pure !remote_tx_results
+  match outcome with
+  | `Ok results -> Db_worker_effect.pure results
+  | `Exn e -> raise e
 
 let apply_remote_tx_without_local_changes repo conn local_txs remote_txs
     db_migrate skip_final_validate

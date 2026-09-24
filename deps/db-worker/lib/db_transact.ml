@@ -378,7 +378,8 @@ let replace_ref_with_deleted_block_title (block : entity)
          (List.of_seq (String.to_seq s)))
   in
   let sub_first pat s =
-    Regexp.replace (Regexp.compile pat)
+    (* cljs embed pattern carries (?i) *)
+    Regexp.replace (Regexp.compile ~caseless:true pat)
       ~f:(fun ~match_:_ ~groups:_ ~offset:_ ~input:_ -> block_content)
       s
   in

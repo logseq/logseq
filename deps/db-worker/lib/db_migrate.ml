@@ -177,9 +177,11 @@ let add_missing_page_name (db : db) : Wire.t list =
               | _ -> None)
          | None -> None)
 
-(* db-migrate/schema-version->updates *)
+(* db-migrate/schema-version->updates — u_fix carries the cljs fix fn's
+   name so the :migrate-updates map on each upgrade report can encode it
+   (the cljs value is the fn itself). *)
 type update_spec =
-  { u_fix : (db -> Wire.t list) option
+  { u_fix : (string * (db -> Wire.t list)) option
   ; u_properties : attr list
   ; u_classes : string list
   ; u_delete_properties : attr list
@@ -192,23 +194,41 @@ let update ?fix ?(properties = []) ?(classes = [])
   ; u_classes = classes
   ; u_delete_properties = delete_properties }
 
+(* cljs (assoc r :migrate-updates <updates-spec>) — carried on the report's
+   tx_meta; absent spec keys stay absent. *)
+let migrate_updates_value (u : update_spec) : value =
+  let kws ss = Vector (List.map (fun s -> Keyword s) ss) in
+  Map
+    ( (if u.u_properties = [] then []
+      else [ (String "properties", kws u.u_properties) ])
+    @ (if u.u_classes = [] then []
+       else [ (String "classes", kws u.u_classes) ])
+    @ (match u.u_fix with
+       | Some (name, _) -> [ (String "fix", Keyword name) ]
+       | None -> [])
+    @ (if u.u_delete_properties = [] then []
+       else [ (String "delete-properties", kws u.u_delete_properties) ]) )
+
 let schema_version_updates : (string * update_spec) list =
-  [ "65.7", update ~fix:add_quick_add_page ()
-  ; "65.8", update ~fix:add_missing_page_name ()
+  [ "65.7", update ~fix:("add-quick-add-page", add_quick_add_page) ()
+  ; "65.8", update ~fix:("add-missing-page-name", add_missing_page_name) ()
   ; ( "65.10"
     , update
         ~properties:
           [ "block/journal-day"
           ; "logseq.property.view/sort-groups-by-property"
           ; "logseq.property.view/sort-groups-desc?" ] () )
-  ; "65.11", update ~fix:remove_block_path_refs ()
-  ; "65.12", update ~fix:remove_position_property_from_url_properties ()
+  ; "65.11", update ~fix:("remove-block-path-refs", remove_block_path_refs) ()
+  ; "65.12", update
+      ~fix:("remove-position-property-from-url-properties",
+            remove_position_property_from_url_properties) ()
   ; "65.13",
     update ~properties:[ "logseq.property.asset/width"; "logseq.property.asset/height" ] ()
   ; "65.14", update ~properties:[ "logseq.property.asset/external-src" ] ()
   ; "65.16", update ~properties:[ "logseq.property.asset/external-file-name" ] ()
   ; "65.17", update ~properties:[ "logseq.property.publish/published-url" ] ()
-  ; "65.18", update ~fix:deprecated_ensure_graph_uuid ()
+  ; "65.18", update
+      ~fix:("deprecated-ensure-graph-uuid", deprecated_ensure_graph_uuid) ()
   ; "65.19",
     update
       ~properties:[ "logseq.property/choice-classes"; "logseq.property/choice-exclusions" ] ()
@@ -237,11 +257,15 @@ let schema_version_updates : (string * update_spec) list =
   ; "65.27",
     update ~classes:[ "logseq.class/Comments" ]
       ~properties:[ "logseq.property.comments/blocks" ] ()
-  ; "65.28", update ~classes:[ "logseq.class/Comment" ] ~fix:tag_comment_blocks ()
-  ; "65.29", update ~fix:add_single_block_comment_targets ()
+  ; "65.28", update ~classes:[ "logseq.class/Comment" ]
+      ~fix:("tag-comment-blocks", tag_comment_blocks) ()
+  ; "65.29", update
+      ~fix:("add-single-block-comment-targets", add_single_block_comment_targets) ()
   ; "65.30", update ~properties:[ "logseq.property/assignee" ] ()
   ; "65.31", update ~properties:[ "logseq.property.agent/session-id" ] ()
-  ; "65.32", update ~fix:repair_comment_classes_and_targets ()
+  ; "65.32", update
+      ~fix:("repair-comment-classes-and-targets",
+            repair_comment_classes_and_targets) ()
   ; "65.33",
     update
       ~properties:
@@ -455,11 +479,19 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
      tx_op path (entity_tx) keeps Map values on non-ref attrs as stored
      values like cljs datascript, which the EDN fast path
      (Db_transact.transact) cannot express. *)
+  (* cljs (assoc r :migrate-updates {:fix (constantly
+     :ensure-built-in-data-exists!)}) *)
   Some
-    (Db_tx.transact
-       ~tx_meta:[ "fix-db?", Bool true; "db-migrate?", Bool true ]
-       conn
-       (List.map (Sqlite_create_graph.entity_tx db) data'))
+    ( (fun (r : tx_report) ->
+        { r with
+          tx_meta =
+            r.tx_meta
+            @ [ ( "migrate-updates"
+                , Map [ (String "fix", Keyword "ensure-built-in-data-exists!") ] ) ] })
+      (Db_tx.transact
+         ~tx_meta:[ "fix-db?", Bool true; "db-migrate?", Bool true ]
+         conn
+         (List.map (Sqlite_create_graph.entity_tx db) data')) )
 
 (* db-migrate/upgrade-version! *)
 let upgrade_version (conn : conn) (version : string) (update : update_spec) :
@@ -507,7 +539,7 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
   in
   let new_classes = List.map wire_map new_class_maps in
   let fixes =
-    match update.u_fix with Some f -> f db | None -> []
+    match update.u_fix with Some (_, f) -> f db | None -> []
   in
   let delete_properties_tx =
     List.concat_map (fun a -> delete_property db a) update.u_delete_properties
@@ -532,8 +564,16 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
     kv_tx @ new_class_idents @ new_properties @ new_classes @ fixes
     @ delete_properties_tx
   in
-  Db_transact.transact conn tx_data
-    [ "db-migrate?", Bool true; "skip-validate-db?", Bool true ]
+  (* cljs (assoc r :migrate-updates migrate-updates) *)
+  match
+    Db_transact.transact conn tx_data
+      [ "db-migrate?", Bool true; "skip-validate-db?", Bool true ]
+  with
+  | Some (r : tx_report) ->
+      Some
+        { r with
+          tx_meta = r.tx_meta @ [ ("migrate-updates", migrate_updates_value update) ] }
+  | None -> None
 
 type migrate_result =
   { from_version : Db_schema.schema_version
@@ -585,11 +625,19 @@ let migrate ?(target_version = Db_schema.version) (conn : conn) :
     (* upgrades run before ensure-built-in-data-exists! — OCaml evaluates
        @'s right operand first, so the call must be sequenced explicitly
        (cljs runs it after the upgrade doseq). *)
-    let reports =
-      List.map (fun (v_str, u) -> upgrade_version conn v_str u) updates
-    in
-    let reports = reports @ [ ensure_built_in_data_exists conn ] in
-    Some
-      { from_version = version_in_db
-      ; to_version = target_version
-      ; upgrade_reports = reports })
+    try
+      let reports =
+        List.map (fun (v_str, u) -> upgrade_version conn v_str u) updates
+      in
+      let reports = reports @ [ ensure_built_in_data_exists conn ] in
+      Some
+        { from_version = version_in_db
+        ; to_version = target_version
+        ; upgrade_reports = reports }
+    with e ->
+      (* cljs (catch :default e (prn :error ...) (js/console.error e) (throw e)) *)
+      Worker_log.error "DB migration failed to migrate"
+        [ ("target-version", Db_schema.schema_version_to_string target_version)
+        ; ("from-version", Db_schema.schema_version_to_string version_in_db)
+        ; ("error", Printexc.to_string e) ];
+      raise e)

@@ -80,7 +80,7 @@ let () =
       | id_t :: result :: _ ->
           let id = Ds_wire.wire_key id_t in
           (match Worker_state.ui_request_take id with
-           | Some resolver ->
+           | Some (resolver, _) ->
                Db_worker_effect.wakeup resolver (Ok result);
                pure' (ok_map true)
            | None ->
@@ -101,16 +101,14 @@ let () =
       | id_t :: error :: _ ->
           let id = Ds_wire.wire_key id_t in
           (match Worker_state.ui_request_take id with
-           | Some resolver ->
+           | Some (resolver, action) ->
+               (* cljs reject-request! uses the stored request's :action *)
                let err =
                  Wire.Map
                    [
                      (kw "code", kw "ui-request-rejected");
                      (kw "request-id", id_t);
-                     ( kw "action",
-                       match Wire.get "action" error with
-                       | Some a -> a
-                       | None -> Wire.Nil );
+                     (kw "action", action);
                      (kw "data", error);
                    ]
                in
@@ -132,14 +130,14 @@ let cancel_ui_requests context =
   List.iter
     (fun id ->
       match Worker_state.ui_request_take id with
-      | Some resolver ->
+      | Some (resolver, action) ->
           Db_worker_effect.wakeup resolver
             (Error
                (Wire.Map
                   [
                     (kw "code", kw "ui-request-cancelled");
                     (kw "request-id", Wire.String id);
-                    (kw "action", Wire.Nil);
+                    (kw "action", action);
                     (kw "context", context);
                   ]))
       | None -> ())

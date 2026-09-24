@@ -65,12 +65,21 @@ let is_stale_import (e : exn) : bool =
   | _ -> false
 
 let close_import_state (state : import_state) : unit Db_worker_effect.t =
+  (* cljs close-import-state!: try/catch around close, p/catch around
+     remove-storage-pool! *)
   (match state.rows_db with
-   | Some db -> Sqlite.close db
+   | Some db -> (try Sqlite.close db with _ -> ())
    | None -> ());
-  let path = import_rows_path state.repo in
-  File_sys.exists path >>= fun exists ->
-  if exists then File_sys.remove path else Db_worker_effect.pure ()
+  if Sqlite.pooled_runtime () then
+    (* the rows file lives inside the download-import pool —
+       remove-storage-pool! drops the whole pool *)
+    Db_worker_effect.catch
+      (Sqlite.remove_vfs ~repo:("download-import-" ^ state.repo))
+      (fun _ -> Db_worker_effect.pure ())
+  else
+    let path = import_rows_path state.repo in
+    File_sys.exists path >>= fun exists ->
+    if exists then File_sys.remove path else Db_worker_effect.pure ()
 
 let close_import_state_for_repo repo : unit Db_worker_effect.t =
   match !import_state with
@@ -255,13 +264,10 @@ let replay_imported_rows (state : import_state) : unit Db_worker_effect.t =
   | None -> Db_worker_effect.pure ()
   | Some rows_db ->
       let storage = Graph_store.storage rows_db in
+      (* cljs (common-sqlite/get-storage-conn source-storage schema) —
+         creates the conn when restore returns none *)
       let source_conn =
-        match Datascript.restore_conn storage with
-        | Some c -> c
-        | None ->
-            raise
-              (Sync_util.ex_info "db-sync import source conn restore failed"
-                 [ Wire.Keyword "repo", Wire.String state.repo ])
+        Common_sqlite.get_storage_conn storage (Db_schema.schema ())
       in
       let remaining = ref (snapshot_datoms_in_import_order source_conn) in
       let rec loop () : unit Db_worker_effect.t =
@@ -507,9 +513,10 @@ let row_of_wire (w : Wire.t) : int * string * string option =
   | _ -> invalid_arg "snapshot row must be [addr content addresses]"
 
 (* <stream-snapshot-row-batches! — framed rows through [on_batch] in
-   [batch_size] chunks; a gzip-magic first chunk buffers the whole body
-   and decompresses before framing (cljs tees the stream the same way). *)
-let stream_snapshot_row_batches read_fn batch_size
+   [batch_size] chunks. cljs only decompresses when the response has
+   content-encoding: gzip AND the first bytes carry the gzip magic —
+   encoding alone is never trusted, magic alone never decodes. *)
+let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     (on_batch : (int * string * string option) list -> unit Db_worker_effect.t)
     : unit Db_worker_effect.t =
   let buffer = ref None in
@@ -556,7 +563,7 @@ let stream_snapshot_row_batches read_fn batch_size
         let rows = !pending @ tail in
         if rows <> [] then on_batch rows else Db_worker_effect.pure ()
     | Some chunk ->
-        if !first_chunk && gzip_bytes chunk then begin
+        if !first_chunk && gzip_encoded && gzip_bytes chunk then begin
           first_chunk := false;
           collect [ chunk ] >>= Compression.gzip_decode
           >>= fun decoded -> process_chunk decoded >>= loop
@@ -585,17 +592,19 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
          Sync_util.fetch_json (base ^ "/sync/" ^ graph_id ^ "/pull")
            ~response_schema:"sync/pull" ()
          >>= fun pull_resp ->
+         (* cljs (when-not (integer? remote-tx) throw) — non-integer
+            :t (float, string, nil) is a hard failure *)
          let remote_tx =
            match Wire.get "t" pull_resp with
            | Some (Wire.Int t) -> t
-           | Some (Wire.Float f) -> int_of_float f
-           | _ ->
+           | Some (Wire.Int64 t) -> Int64.to_int t
+           | v ->
                raise
                  (Sync_util.ex_info
                     "non-integer remote-tx when downloading graph"
                     [ Wire.Keyword "repo", Wire.String repo
                     ; Wire.Keyword "remote-tx"
-                    , Option.value (Wire.get "t" pull_resp) ~default:Wire.Nil ])
+                    , Option.value v ~default:Wire.Nil ])
          in
          stage := "fetch-snapshot-download";
          Sync_util.fetch_json
@@ -626,7 +635,14 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
            ; method_ = "GET"
            ; headers = Sync_util.auth_headers ()
            ; body = None }
-           (fun status _headers read ->
+           (fun status headers read ->
+              let gzip_encoded =
+                List.exists
+                  (fun (k, v) ->
+                     String.lowercase_ascii k = "content-encoding"
+                     && v = "gzip")
+                  headers
+              in
               rtc_download_log
                 (Wire.Map
                    [ Wire.Keyword "sub-type"
@@ -657,7 +673,7 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
                               [ Wire.Keyword "repo", Wire.String repo ]))
               in
               stage := "stream-snapshot";
-              stream_snapshot_row_batches read 25000
+              stream_snapshot_row_batches ~gzip_encoded read 25000
                 (fun rows ->
                    ensure_import () >>= fun import_id ->
                    import_rows_chunk rows graph_id import_id >>= fun _ ->
@@ -697,17 +713,28 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
                 ; Wire.Keyword "graph-uuid", Wire.String graph_id
                 ; Wire.Keyword "message"
                 , Wire.String "Graph snapshot download failed" ]);
+           (* cljs log/error carries :graph-e2ee?, :error-stack,
+              :error-cause; rethrown ex-info forwards :code from the
+              inner error's ex-data and the error as cause *)
            Worker_log.error "db-sync/download-graph-by-id-failed"
-             [ ("repo", repo); ("graph-id", graph_id); ("stage", !stage)
-             ; ("error", Printexc.to_string e) ];
+             [ ("repo", repo); ("graph-id", graph_id)
+             ; ("graph-e2ee?", string_of_bool graph_e2ee)
+             ; ("stage", !stage)
+             ; ("error", Printexc.to_string e)
+             ; ("error-stack", Printexc.get_backtrace ()) ];
            Db_worker_effect.error
              (Sync_util.ex_info "db-sync download failed"
                 [ Wire.Keyword "repo", Wire.String repo
                 ; Wire.Keyword "graph-id", Wire.String graph_id
                 ; Wire.Keyword "graph-e2ee?", Wire.Bool graph_e2ee
                 ; Wire.Keyword "stage", Wire.String !stage
+                ; Wire.Keyword "code"
+                , (match Wire.get "code" (Sync_util.ex_data e) with
+                   | Some v -> v
+                   | None -> Wire.Nil)
                 ; Wire.Keyword "error-message"
-                , Wire.String (Printexc.to_string e) ]))
+                , Wire.String (Sync_util.ex_message e)
+                ; Wire.Keyword "error-cause", Wire.Nil ]))
   | _ ->
       Db_worker_effect.error
         (Sync_util.ex_info "db-sync missing graph download info"

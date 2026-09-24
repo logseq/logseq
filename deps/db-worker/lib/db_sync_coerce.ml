@@ -8,12 +8,11 @@ exception Coerce_error of string * Wire.t
 let err what v = raise (Coerce_error (what, v))
 
 let uuid_re =
-  Regexp.compile
+  (* cljs exactly-uuid-pattern = re-pattern "(?i)^uuid$" *)
+  Regexp.compile ~caseless:true
     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
 let as_str v = match v with Wire.String s -> s | _ -> err "string" v
-let as_str_or_uuid v =
-  match v with Wire.String s | Wire.Uuid s -> s | _ -> err "string" v
 
 let as_uuid v =
   match v with
@@ -31,14 +30,15 @@ let as_int v =
 
 let as_bool v = match v with Wire.Bool b -> b | _ -> err "boolean" v
 let as_seq v =
+  (* malli :sequential / cljs sequential? — sets are not sequential *)
   match v with
-  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
+  | Wire.Array xs | Wire.List xs -> xs
   | _ -> err "seq" v
 
+(* malli :keyword — a plain string is NOT a keyword *)
 let as_kw v =
   match v with
   | Wire.Keyword s -> s
-  | Wire.String s -> s
   | _ -> err "keyword" v
 
 let opt_kw s = Wire.Keyword s
@@ -97,7 +97,7 @@ let coerce_seq elem xs = List.map elem xs
 let user_presence v =
   let kvs = map_kv v in
   let m = Wire.Map kvs in
-  ignore (req m "user-id" as_str_or_uuid);
+  ignore (req m "user-id" as_str);
   ignore (optm m "email" as_str);
   ignore (optm m "username" as_str);
   ignore (optm m "name" as_str);
@@ -157,7 +157,7 @@ let ws_server_message v =
   | "online-users" -> online_users v
   | "presence" ->
       let m = Wire.Map (map_kv v) in
-      ignore (req m "user-id" as_str_or_uuid);
+      ignore (req m "user-id" as_str);
       ignore (req m "editing-block-uuid" (fun x -> match x with Wire.Nil -> "" | v -> as_str v));
       m
   | "pull/ok" -> pull_ok v
@@ -228,8 +228,8 @@ let graph_delete_response v =
 
 let graph_member_info v =
   let m = Wire.Map (map_kv v) in
-  ignore (req m "user-id" as_str_or_uuid);
-  ignore (req m "graph-id" as_str_or_uuid);
+  ignore (req m "user-id" as_str);
+  ignore (req m "graph-id" as_str);
   ignore (req m "role" (fun x -> ignore (graph_member_role x); ()));
   ignore (optm m "invited-by" as_str);
   ignore (req m "created-at" as_int);
@@ -295,10 +295,17 @@ let graph_create_request v =
 
 let graph_member_create_request v =
   let m = Wire.Map (map_kv v) in
-  (match (field m "user-id", field m "email") with
-   | Some u, _ -> ignore (as_str_or_uuid u)
-   | _, Some e -> ignore (as_str e)
-   | _ -> err "user-id or :email required" v);
+  (* malli [:or {user-id :string} {email :string}] — a present-but-invalid
+     user-id still lets the email branch match (open maps) *)
+  let user_id_ok =
+    match field m "user-id" with
+    | Some u -> (try ignore (as_str u); true with Coerce_error _ -> false)
+    | None -> false
+  in
+  if not user_id_ok then
+    (match field m "email" with
+     | Some e -> ignore (as_str e)
+     | None -> err "user-id or :email required" v);
   ignore (opt m "role" (fun x -> ignore (graph_member_role x); ()));
   m
 
@@ -338,14 +345,13 @@ let asset_get_response v = v
 let ws_type_opt v = try Some (ws_type v) with Coerce_error _ -> None
 
 let tx_batch_response v =
-  (* [:or tx-batch-ok tx-reject http-error] *)
+  (* malli [:or tx-batch-ok tx-reject http-error] — tx-batch-ok requires
+     :type "tx/batch/ok"; http-error is an open map needing :error :string.
+     A bare {:ok} or {:t} map matches neither. *)
   match ws_type_opt v with
   | Some "tx/reject" -> tx_reject v
-  | _ ->
-      (match (Wire.get "ok" v, Wire.get "t" v) with
-       | Some _, _ -> ok_response v
-       | _, Some _ -> tx_batch_ok v
-       | _ -> error_response v)
+  | Some "tx/batch/ok" -> tx_batch_ok v
+  | _ -> error_response v
 
 let http_request_coercers : (string, Wire.t -> Wire.t) Hashtbl.t =
   let t = Hashtbl.create 16 in

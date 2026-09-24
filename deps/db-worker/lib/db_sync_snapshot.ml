@@ -50,9 +50,11 @@ let finalize_framed_buffer (buffer : string option) : Wire.t list =
   | Some b when String.length b = 0 -> []
   | _ ->
       let rows, rest = parse_framed_chunk buffer "" in
+      (* cljs requires (seq rows) AND a fully-consumed buffer — an empty
+         or partial result is "incomplete framed buffer" *)
       (match rest with
-       | None -> rows
-       | Some _ ->
+       | None when rows <> [] -> rows
+       | _ ->
            raise
              (Dispatcher.Exn_info
                 ("incomplete framed buffer", [])))

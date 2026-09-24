@@ -342,7 +342,8 @@ let replace_tag_ref (content : string) (page_name : string) (id : string) : stri
   (* Re.Pcre has no lookahead — group 3 consumes the lookahead body
      ([,.]* followed by terminator) and is re-emitted. *)
   let re =
-    Regexp.compile
+    (* cljs (str "(?i)" ...) *)
+    Regexp.compile ~caseless:true
       ("(^|\\s|\\()(" ^ Common_util.escape_regex_chars page_name'
        ^ ")([,\\.\\)]*($|\\s|\\)))")
   in
@@ -357,7 +358,9 @@ let replace_tag_ref (content : string) (page_name : string) (id : string) : stri
 let replace_page_ref (content : string) (page_name : string) (id : string) : string =
   let page = page_ref page_name and wrapped_id = page_ref id in
   let re =
-    Regexp.compile ("(^|[^#])" ^ Common_util.escape_regex_chars page)
+    (* cljs (str "(?i)" ...) *)
+    Regexp.compile ~caseless:true
+      ("(^|[^#])" ^ Common_util.escape_regex_chars page)
   in
   Regexp.replace_all re
     ~f:(fun ~match_:_ ~groups ~offset:_ ~input:_ ->

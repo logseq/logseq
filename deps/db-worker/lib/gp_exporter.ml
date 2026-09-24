@@ -3318,7 +3318,8 @@ let build_new_asset (asset_data : BM.t) : BM.t =
 let build_annotation_images (parent_asset_paths : string list)
     (assets : (string, BM.t) Hashtbl.t) (options : options) :
     BM.t list * (string * string) list =
-  let strip_pdf = Regexp.compile "\\.pdf$" in
+  (* cljs #"(?i)\\.pdf$" *)
+  let strip_pdf = Regexp.compile ~caseless:true "\\.pdf$" in
   let image_dirs =
     List.map
       (fun p ->
@@ -3375,7 +3376,8 @@ let pdf_annotation_edn_path (parent_asset_path : string) : string =
   Common_path.path_join Common_config.local_assets_dir
     [ safe_sanitize_file_name
         (Gp_node_path.basename
-           (Common_util.regex_replace (Regexp.compile "\\.pdf$")
+           (Common_util.regex_replace
+              (Regexp.compile ~caseless:true "\\.pdf$")
               ~replacement:".edn" parent_asset_path)) ]
 
 (* pdf-annotation-md-name *)
@@ -3383,7 +3385,8 @@ let pdf_annotation_md_name (parent_asset_path : string) : string =
   "hls__"
   ^ safe_sanitize_file_name
       (Gp_node_path.basename
-         (Common_util.regex_replace (Regexp.compile "\\.pdf$")
+         (Common_util.regex_replace
+            (Regexp.compile ~caseless:true "\\.pdf$")
             ~replacement:".md" parent_asset_path))
 
 (* build-pdf-annotations-tx *)
@@ -3652,7 +3655,9 @@ let build_asset_tx (asset_data : BM.t) (asset_name : string option)
     | Some annotation_file ->
       let base = Gp_node_path.basename annotation_file in
       let pdf_base =
-        Common_util.regex_replace (Regexp.compile "\\.md$") ~replacement:".pdf"
+        (* cljs #"(?i)\\.md$" *)
+        Common_util.regex_replace (Regexp.compile ~caseless:true "\\.md$")
+          ~replacement:".pdf"
           (String.sub base 5 (String.length base - 5))
       in
       [ Common_path.path_join Common_config.local_assets_dir [ pdf_base ] ]
@@ -3881,7 +3886,8 @@ let rec quote_node_to_markdown (quote_node : value) (options : options)
   String.concat "\n"
     (List.filter (fun t -> String.trim t <> "") parts)
 
-let org_quote_re = Regexp.compile "#\\+BEGIN_QUOTE"
+(* cljs #"(?i)#\\+BEGIN_QUOTE" *)
+let org_quote_re = Regexp.compile ~caseless:true "#\\+BEGIN_QUOTE"
 
 (* handle-quotes — cljs ~1950 *)
 let handle_quotes (block : BM.t) (options : options) : BM.t =
@@ -5381,10 +5387,10 @@ let get_block_pattern (format : string) : string =
   match format with "org" -> "*" | _ -> "-"
 
 (* cljs #"(?im)```|\{\{|#\+BEGIN_|:LOGBOOK:|^\s*(?:(?:[-*+]|\d+\.)\s+)?>|\]\(|^\s*-\s+\S+::"
-   — platform Regexp compiles case-insensitive already and has no multiline
+   — ~caseless carries the i flag; the platform Regexp has no multiline
    flag, so ^ becomes (?:^|\n). *)
 let import_outline_only_re =
-  Regexp.compile
+  Regexp.compile ~caseless:true
     "```|\\{\\{|#\\+BEGIN_|:LOGBOOK:|(?:^|\\n)\\s*(?:(?:[-*+]|\\d+\\.)\\s+)?>|\\]\\(|(?:^|\\n)\\s*-\\s+\\S+::"
 
 let import_parse_outline_only (format : string) (content : string) : bool =

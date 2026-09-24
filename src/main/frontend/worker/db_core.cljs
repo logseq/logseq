@@ -883,8 +883,9 @@
      (if (thread-api/ocaml-registered? "thread-api/create-or-open-db")
        ;; The OCaml worker owns the graph conn and db.sqlite exclusively;
        ;; opening the cljs conn would deadlock on its exclusive sqlite lock.
-       (thread-api/<ocaml-invoke "thread-api/create-or-open-db"
-                                [repo (dissoc opts :close-other-db?)])
+       ;; Keep :close-other-db? in opts — the OCaml worker closes other
+       ;; repos' dbs itself.
+       (thread-api/<ocaml-invoke "thread-api/create-or-open-db" [repo opts])
        (<create-or-open-db! repo (dissoc opts :close-other-db?))))
    nil))
 

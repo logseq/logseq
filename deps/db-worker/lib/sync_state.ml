@@ -110,11 +110,14 @@ let new_client repo : client =
 (* worker-state/*db-sync-client — a single active client *)
 let db_sync_client : client option ref = ref None
 
-(* cljs queue semantics: promise-chained atoms.
-   send/asset queues chain plainly (a rejected task poisons the chain);
-   the receive queue additionally catches + logs errors to keep draining. *)
+(* cljs queue semantics: promise-chained atoms. Every queue catches the
+   previous tail so one failed task doesn't stall later enqueues; the
+   receive/send queues additionally catch+log each task's own error. *)
 let enqueue (queue : unit Db_worker_effect.t ref) (task : unit -> unit Db_worker_effect.t) : unit =
-  queue := Db_worker_effect.bind !queue (fun () -> task ())
+  queue :=
+    Db_worker_effect.bind
+      (Db_worker_effect.catch !queue (fun _ -> Db_worker_effect.pure ()))
+      (fun () -> task ())
 
 let enqueue_catching queue task ~on_error =
   queue :=
@@ -157,6 +160,8 @@ let client_ops_conn repo : Sqlite.db =
       if not (Sqlite.pooled_runtime ()) then
         ignore (File_sys.mkdir_p (Filename.dirname path));
       let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
+      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens *)
+      Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
       Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
       Hashtbl.replace client_ops_conns repo db;
       db
@@ -236,7 +241,8 @@ let distinct_by f xs =
     xs
 
 (* common-util/uuid-string? *)
-let uuid_re = Regexp.compile "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+(* cljs exactly-uuid-pattern = re-pattern "(?i)^uuid$" *)
+let uuid_re = Regexp.compile ~caseless:true "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
 let uuid_string s = Regexp.test uuid_re s
 

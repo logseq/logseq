@@ -771,11 +771,11 @@ let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : 
           | _ -> default_ui_timeout_ms
         in
         let task, resolver = wait () in
-        Worker_state.ui_request_put request_id resolver;
+        Worker_state.ui_request_put request_id resolver action;
         let timer =
           Timers.set_timeout timeout_ms (fun () ->
               match Worker_state.ui_request_take request_id with
-              | Some r ->
+              | Some (r, _) ->
                   wakeup r
                     (Error
                        (Wire.kw_map
@@ -797,7 +797,7 @@ let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : 
                          ("timeout-ms", Wire.Int timeout_ms) ] ]))
          with e ->
            (match Worker_state.ui_request_take request_id with
-            | Some r ->
+            | Some (r, _) ->
                 Timers.clear timer;
                 wakeup r
                   (Error
@@ -830,12 +830,13 @@ let cancel_all_ui_requests context =
   List.iter
     (fun id ->
       match Worker_state.ui_request_take id with
-      | Some r ->
+      | Some (r, action) ->
           wakeup r
             (Error
                (Wire.kw_map
                   [ ("code", kw "ui-request-cancelled");
                     ("request-id", str id);
+                    ("action", action);
                     ("context", context) ]))
       | None -> ())
     ids;

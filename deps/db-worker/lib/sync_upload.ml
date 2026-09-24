@@ -250,14 +250,26 @@ let prepare_upload_temp_sqlite repo graph_id (source_conn : conn)
                 aes_key
                 (List.map Ds_wire.transit_of_datom kept))
          >>= fun encrypted ->
+         (* cljs (mapv datom->tx encrypted-datoms): no drop — every item
+            yields [:db/add e a v]; fields that can't be read destructure
+            to nil like cljs *)
          let tx_data =
-           List.filter_map
-             (fun w -> try Some (Ds_wire.datom_of_transit w) with _ -> None)
+           List.map
+             (fun w ->
+                match
+                  (try Some (Ds_wire.datom_of_transit w) with _ -> None)
+                with
+                | Some (d : datom) ->
+                    Wire.Array
+                      [ Wire.Keyword "db/add"; Wire.Int d.e
+                      ; Wire.Keyword d.a; Ds_wire.transit_of_value d.v ]
+                | None ->
+                    Wire.Array
+                      [ Wire.Keyword "db/add"
+                      ; Option.value (Wire.get "e" w) ~default:Wire.Nil
+                      ; Option.value (Wire.get "a" w) ~default:Wire.Nil
+                      ; Option.value (Wire.get "v" w) ~default:Wire.Nil ])
              encrypted
-           |> List.map (fun (d : datom) ->
-                  Wire.Array
-                    [ Wire.Keyword "db/add"; Wire.Int d.e
-                    ; Wire.Keyword d.a; Ds_wire.transit_of_value d.v ])
          in
          ignore
            (Db_transact.transact conn tx_data [ ("initial-db?", Bool true) ]);
@@ -276,9 +288,9 @@ let prepare_upload_temp_sqlite repo graph_id (source_conn : conn)
                        Printf.sprintf "Encrypting %d/%d" processed total) ]))
   >>= fun () -> Db_worker_effect.pure db
 
-let normalize_graph_e2ee = function
-  | Some b -> b
-  | None -> true
+(* cljs normalize-graph-e2ee? : (if (nil? g) true (true? g)) *)
+let normalize_graph_e2ee (v : Wire.t) : bool =
+  match v with Wire.Nil -> true | Wire.Bool true -> true | _ -> false
 
 let graph_id_uuid repo graph_id =
   if graph_id = "" then
@@ -395,10 +407,14 @@ let create_remote_graph_aux repo ~graph_e2ee ~graph_ready_for_use
              [ Wire.Keyword "repo", Wire.String repo
              ; Wire.Keyword "field", Wire.Keyword "graph-id"
              ; Wire.Keyword "op", Wire.Keyword "create-graph" ]);
+      (* cljs (normalize-graph-e2ee? (if (contains? result :graph-e2ee?)
+          (:graph-e2ee? result) graph-e2ee?)): a present-but-nil response
+          key normalizes to true, a missing key keeps the request value *)
       let graph_e2ee' =
-        match Wire.get "graph-e2ee?" result with
-        | Some (Wire.Bool b) -> b
-        | _ -> graph_e2ee
+        normalize_graph_e2ee
+          (match Wire.get "graph-e2ee?" result with
+           | Some v -> v
+           | None -> Wire.Bool graph_e2ee)
       in
       ignore (persist_upload_graph_identity repo graph_id graph_e2ee');
       Db_worker_effect.pure
@@ -451,17 +467,14 @@ let create_remote_graph repo ~graph_e2ee ~graph_ready_for_use
            ; Wire.Keyword "graph-name", Wire.String target_graph_name
            ; Wire.Keyword "match-count", Wire.Int n ])
   | 1 ->
-      let graph_id =
-        match List.hd matching |> Wire.get "graph-id" with
-        | Some (Wire.String s) -> s
-        | _ -> ""
-      in
+      (* cljs calls (fail-upload-graph-already-exists! repo {:graph-name
+          target-graph-name}) — :graph-id destructures to nil *)
       Db_worker_effect.error
         (Sync_util.ex_info
            "remote graph already exists; delete it before uploading again"
            [ Wire.Keyword "code", Wire.Keyword "db-sync/graph-already-exists"
            ; Wire.Keyword "repo", Wire.String repo
-           ; Wire.Keyword "graph-id", Wire.String graph_id
+           ; Wire.Keyword "graph-id", Wire.Nil
            ; Wire.Keyword "graph-name", Wire.String target_graph_name ])
   | _ ->
       Sync_deps.require "preflight_upload_e2ee"
@@ -474,7 +487,23 @@ let update_upload_progress payload =
 (* upload-graph! *)
 let upload_graph repo : Wire.t Db_worker_effect.t =
   match (http_base (), Worker_state.datascript_conn repo) with
-  | Some base, Some source_conn when base <> "" ->
+  | Some "", _ ->
+      (* cljs ex-info "db-sync missing base" {:repo :base} *)
+      Db_worker_effect.error
+        (Sync_util.ex_info "db-sync missing base"
+           [ Wire.Keyword "repo", Wire.String repo
+           ; Wire.Keyword "base", Wire.String "" ])
+  | None, _ ->
+      Db_worker_effect.error
+        (Sync_util.ex_info "db-sync missing base"
+           [ Wire.Keyword "repo", Wire.String repo
+           ; Wire.Keyword "base", Wire.Nil ])
+  | _, None ->
+      (* cljs ex-info "db-sync missing datascript conn" {:repo} *)
+      Db_worker_effect.error
+        (Sync_util.ex_info "db-sync missing datascript conn"
+           [ Wire.Keyword "repo", Wire.String repo ])
+  | Some base, Some source_conn ->
       let graph_e2ee =
         (* cljs normalize-graph-e2ee? (crypt/graph-e2ee? repo) : nil -> true,
            else (true? v) — the dep's truthy semantics (missing -> false) do
@@ -573,7 +602,3 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
            match !temp_db_ref with
            | Some db -> Sync_temp_sqlite.cleanup_temp_sqlite db
            | None -> Db_worker_effect.pure ())
-  | _ ->
-      Db_worker_effect.error
-        (Sync_util.ex_info "db-sync missing datascript conn or base"
-           [ Wire.Keyword "repo", Wire.String repo ])

@@ -26,15 +26,33 @@ let repos () =
        if kind = Db && not (List.mem repo acc) then repo :: acc else acc)
     sqlite_conns []
 
+(* cljs close-other-dbs! -> close-db-aux!: the per-repo teardown is
+   registered by the lifecycle module (it needs sync/import/search state
+   that can't be depended on from here); the default drops just the
+   sqlite/datascript conns. *)
+let close_graph_resources_fn : (string -> unit) ref =
+  ref (fun repo ->
+    Hashtbl.iter
+      (fun (r, kind) db ->
+        if r = repo then begin
+          (try Sqlite.close db with _ -> ());
+          drop_sqlite_conn_of r kind;
+          if kind = Db then drop_datascript_conn r
+        end)
+      sqlite_conns)
+
 let close_other_sqlite_conns keep_repo =
-  Hashtbl.iter
-    (fun (repo, kind) db ->
-      if repo <> keep_repo then begin
-        (try Sqlite.close db with _ -> ());
-        drop_sqlite_conn_of repo kind;
-        if kind = Db then drop_datascript_conn repo
-      end)
-    sqlite_conns
+  let repos =
+    Hashtbl.fold
+      (fun (repo, _) _ acc ->
+        if List.mem repo acc then acc else repo :: acc)
+      sqlite_conns []
+  in
+  List.iter
+    (fun repo ->
+      if not (Graph_dir.same_repo keep_repo repo) then
+        !close_graph_resources_fn repo)
+    repos
 
 (* cljs worker-state/*vector-indexes* *)
 let vector_indexes : (string, Vector_index.index) Hashtbl.t = Hashtbl.create 7
@@ -169,12 +187,15 @@ let db_sync_config_ref : Wire.t ref = ref Wire.Nil
 let set_db_sync_config t = db_sync_config_ref := t
 let db_sync_config () = !db_sync_config_ref
 
-(* ui-request deferreds *)
+(* ui-request deferreds — cljs *ui-requests-in-flight entries carry
+   {:action :deferred ...}; action rides along so cancel/reject/timeout
+   errors report the request's own action. *)
 let ui_requests :
-    (string, (Wire.t, Wire.t) result Db_worker_effect.resolver) Hashtbl.t =
+    (string, (Wire.t, Wire.t) result Db_worker_effect.resolver * Wire.t)
+    Hashtbl.t =
   Hashtbl.create 17
 
-let ui_request_put id r = Hashtbl.replace ui_requests id r
+let ui_request_put id r action = Hashtbl.replace ui_requests id (r, action)
 
 let ui_request_take id =
   match Hashtbl.find_opt ui_requests id with

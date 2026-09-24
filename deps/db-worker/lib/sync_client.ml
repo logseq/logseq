@@ -142,8 +142,9 @@ let enqueue_receive_message (client : Sync_state.client)
            [ "repo", client.repo; "error", Printexc.to_string error ];
          Db_worker_effect.pure ())
 
-(* update-presence! *)
-let update_presence (editing_block_uuid : string) : unit =
+(* update-presence! — editing-block-uuid forwarded verbatim (nil on the
+   wire when unset) *)
+let update_presence (editing_block_uuid : Wire.t) : unit =
   match !Sync_state.db_sync_client with
   | Some client -> (
       match client.ws with
@@ -152,8 +153,7 @@ let update_presence (editing_block_uuid : string) : unit =
                send ws
                  (Wire.Map
                     [ kw "type", Wire.String "presence"
-                    ; kw "editing-block-uuid"
-                    , Wire.String editing_block_uuid ]))
+                    ; kw "editing-block-uuid", editing_block_uuid ]))
       | None -> ())
   | None -> ()
 
@@ -328,8 +328,8 @@ and connect repo (client : Sync_state.client) (url : string)
            | Web_socket.Message data ->
                touch_last_ws_message updated;
                enqueue_receive_message updated (fun () ->
-                    Db_worker_effect.pure
-                      (Sync_handle_message.handle_message repo updated data))
+                    Sync_handle_message.handle_message_effect repo updated
+                      data)
            | Web_socket.Binary _ -> ()
            | Web_socket.Error e ->
                Worker_log.error "db-sync/ws-error" [ "error", e ]

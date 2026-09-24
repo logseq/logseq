@@ -273,7 +273,8 @@ let url_to_path (original_url : string) : string =
         else path
       in
       let path =
-        if Regexp.test (Regexp.compile "^/[a-zA-Z]:") path (* Win path fix *)
+        (* cljs #"(?i)^/[a-zA-Z]:" — Win path fix *)
+        if Regexp.test (Regexp.compile ~caseless:true "^/[a-zA-Z]:") path
         then String.sub path 1 (String.length path - 1)
         else path
       in

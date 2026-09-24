@@ -89,8 +89,9 @@ let wire_to_int (value : Wire.t) : int option =
   | _ -> None
 
 let require_seq (value : Wire.t) (context : Wire.t) =
+  (* cljs sequential? — sets are not sequential *)
   match value with
-  | Wire.Array _ | Wire.List _ | Wire.Set _ -> ()
+  | Wire.Array _ | Wire.List _ -> ()
   | _ -> fail_fast "db-sync/invalid-field" context
 
 let seq_items (value : Wire.t) : Wire.t list =
@@ -320,7 +321,7 @@ let handle_hello repo (client : Sync_state.client) local_tx remote_tx
 
 let handle_online_users repo (client : Sync_state.client) (message : Wire.t) =
   match Wire.get "online-users" message with
-  | Some ((Wire.Array users | Wire.List users | Wire.Set users)) ->
+  | Some ((Wire.Array users | Wire.List users)) ->
       update_online_users client users
   | Some _ ->
       fail_fast "db-sync/invalid-field"
@@ -430,14 +431,15 @@ let validate_local_tx repo (message : Wire.t) (local_tx : int option) =
 
 let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
     (remote_tx : Wire.t) (remote_checksum : Wire.t option)
-    (message : Wire.t) : unit =
+    (message : Wire.t) : unit Db_worker_effect.t =
   clear_pending_pull client;
   (* cljs (> remote-tx local-tx) throws on a missing/nil :t before the
      branch is entered *)
   require_non_negative remote_tx (context ~repo ~typ:"pull/ok" ());
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let local_tx_n = Option.value local_tx ~default:0 in
-  if remote_tx_n > local_tx_n then begin
+  if remote_tx_n <= local_tx_n then Db_worker_effect.pure ()
+  else begin
     let txs = Wire.get "txs" message in
     (match txs with
      | Some t -> require_seq t (context ~repo ~typ:"pull/ok" ~field:"txs" ())
@@ -462,7 +464,7 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
                   ; Some (kw "tx-data", tx_data) ]))
     in
     match remote_txs with
-    | [] -> ()
+    | [] -> Db_worker_effect.pure ()
     | _ ->
         let eff : unit Db_worker_effect.t =
           (match Worker_state.datascript_conn repo with
@@ -522,14 +524,13 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
           Sync_apply.enqueue_flush_pending repo client;
           Db_worker_effect.pure ()
         in
-        Db_worker_effect.async (fun () ->
-             Db_worker_effect.catch
-               (Db_worker_effect.bind eff (fun () ->
-                     Db_worker_effect.pure
-                       (Sync_util.clear_last_sync_error client)))
-               (fun error ->
-                  Db_worker_effect.pure
-                    (Sync_util.set_last_sync_error client error)))
+        Db_worker_effect.catch
+          (Db_worker_effect.bind eff (fun () ->
+                Db_worker_effect.pure
+                  (Sync_util.clear_last_sync_error client)))
+          (fun error ->
+             Db_worker_effect.pure
+               (Sync_util.set_last_sync_error client error))
 end
 
 let handle_changed repo (client : Sync_state.client) (local_tx : int option)
@@ -541,7 +542,11 @@ let handle_changed repo (client : Sync_state.client) (local_tx : int option)
   | Some l when l < remote_tx_n -> request_pull client l
   | _ -> ()
 
-let handle_message repo (client : Sync_state.client) (raw : string) : unit =
+(* cljs handle-message! — returns the pull/ok apply promise so the
+   receive-queue serializes it against later messages; all other handlers are
+   synchronous and resolve immediately. *)
+let handle_message_effect repo (client : Sync_state.client) (raw : string)
+    : unit Db_worker_effect.t =
   let message =
     match Sync_transport.parse_message raw with
     | Some m -> Sync_transport.coerce_ws_server_message m
@@ -556,22 +561,30 @@ let handle_message repo (client : Sync_state.client) (raw : string) : unit =
       ignore (update_latest_remote_state repo message);
       match Wire.get "type" message with
       | Some (Wire.String "hello") ->
-          handle_hello repo client local_tx remote_tx remote_checksum
+          Db_worker_effect.pure
+            (handle_hello repo client local_tx remote_tx remote_checksum)
       | Some (Wire.String "online-users") ->
-          handle_online_users repo client message
-      | Some (Wire.String "presence") -> handle_presence client message
+          Db_worker_effect.pure (handle_online_users repo client message)
+      | Some (Wire.String "presence") ->
+          Db_worker_effect.pure (handle_presence client message)
       | Some (Wire.String "tx/batch/ok") ->
-          handle_tx_batch_ok repo client remote_tx remote_checksum
+          Db_worker_effect.pure
+            (handle_tx_batch_ok repo client remote_tx remote_checksum)
       | Some (Wire.String "pull/ok") ->
           handle_pull_ok repo client local_tx remote_tx remote_checksum message
       | Some (Wire.String "changed") ->
-          handle_changed repo client local_tx remote_tx
+          Db_worker_effect.pure
+            (handle_changed repo client local_tx remote_tx)
       | Some (Wire.String "tx/reject") ->
-          handle_tx_reject repo client message local_tx
-      | Some (Wire.String "pong") -> ()
+          Db_worker_effect.pure
+            (handle_tx_reject repo client message local_tx)
+      | Some (Wire.String "pong") -> Db_worker_effect.pure ()
       | Some (Wire.String typ) ->
           fail_fast "db-sync/invalid-field"
             (context ~repo ~typ ())
       | _ -> fail_fast "db-sync/invalid-field" (context ~repo ~typ:"" ()))
   | _ -> fail_fast "db-sync/response-parse-failed"
            (context ~repo ~typ:"" ~field:"raw" ())
+
+let handle_message repo (client : Sync_state.client) (raw : string) : unit =
+  Db_worker_effect.async (fun () -> handle_message_effect repo client raw)
