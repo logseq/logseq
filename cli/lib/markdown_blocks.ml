@@ -171,7 +171,9 @@ let fenced_mask title =
   in
   let only_spaces text s e =
     let rec loop i =
-      i >= e || ((text.[i] = ' ' || text.[i] = '\t') && loop (i + 1))
+      i >= e
+      || ((text.[i] = ' ' || text.[i] = '\t' || text.[i] = '\r')
+          && loop (i + 1))
     in
     loop s
   in
@@ -210,7 +212,13 @@ let fenced_mask title =
   inside
 
 (* Positions of `needle` outside fenced blocks and inline code spans — a
-   code span opens on a backtick run and closes on an equal-length run. *)
+   code span opens on a backtick run and closes on an equal-length run.
+   A backslash before ASCII punctuation escapes it, so \` is literal. *)
+let is_ascii_punct c =
+  (c >= '!' && c <= '/') || (c >= ':' && c <= '@')
+  || (c >= '[' && c <= '`')
+  || (c >= '{' && c <= '~')
+
 let non_code_positions title inside needle =
   let len = String.length title in
   let nlen = String.length needle in
@@ -222,6 +230,9 @@ let non_code_positions title inside needle =
     else if !i + nlen <= len && String.sub title !i nlen = needle then (
       if !open_run = 0 then positions := !i :: !positions;
       i := !i + nlen)
+    else if
+      title.[!i] = '\\' && !i + 1 < len && is_ascii_punct title.[!i + 1]
+    then i := !i + 2
     else if title.[!i] = '`' then (
       let j = ref !i in
       while !j < len && title.[!j] = '`' do
