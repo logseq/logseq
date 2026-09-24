@@ -296,11 +296,16 @@
     (sqlite-set-meta! store :local-tx 0)))
 
 (defn update-local-checksum
-  [repo checksum]
-  {:pre [(some? checksum)]}
+  "Stores the checksum together with the graph commit (:max-tx) it covers. The
+  checksum is written post-commit to the client-ops sqlite file, separate from
+  the graph store, so process death between the two writes leaves it stale; the
+  covered commit lets graph open detect that and recompute."
+  [repo checksum covered-tx]
+  {:pre [(some? checksum) (integer? covered-tx)]}
   (let [store (sqlite-store-or-throw repo)]
     (assert (some? store) repo)
-    (sqlite-set-meta! store :db-sync/checksum checksum)))
+    (sqlite-set-meta! store :db-sync/checksum checksum)
+    (sqlite-set-meta! store :db-sync/checksum-covered-tx covered-tx)))
 
 (defn get-pending-local-tx-count
   [repo]
@@ -329,6 +334,14 @@
   (let [store (sqlite-store-or-throw repo)]
     (assert (some? store) repo)
     (sqlite-get-meta store :db-sync/checksum)))
+
+(defn get-local-checksum-covered-tx
+  "The graph commit the stored checksum covers, nil when never recorded."
+  [repo]
+  (let [store (sqlite-store-or-throw repo)]
+    (assert (some? store) repo)
+    (some-> (sqlite-get-meta store :db-sync/checksum-covered-tx)
+            (js/parseInt 10))))
 
 (defn rtc-db-graph?
   "Is RTC enabled"

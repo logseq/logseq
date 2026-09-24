@@ -74,7 +74,28 @@
                                :recomputed-checksum recomputed-checksum
                                :tx-meta tx-meta
                                :tx-count (count tx-data)}))))))
-      (client-op/update-local-checksum repo new-checksum))))
+      (client-op/update-local-checksum repo new-checksum (:max-tx (:db-after tx-report))))))
+
+(defn reconcile-local-checksum!
+  "Heals a checksum left stale when a commit's checksum write never landed: the
+  checksum is stored post-commit in the client-ops sqlite file, separate from
+  the graph store, so process death between the two writes drops it. The stored
+  covered commit is compared with the reopened db's :max-tx; a mismatch means
+  commits were missed and the checksum is recomputed."
+  [repo conn]
+  (when (worker-state/get-client-ops-conn repo)
+    (let [checksum (client-op/get-local-checksum repo)
+          covered-tx (client-op/get-local-checksum-covered-tx repo)
+          current-tx (:max-tx @conn)]
+      (when (and checksum (not= covered-tx current-tx))
+        (let [recomputed (sync-checksum/recompute-checksum @conn)]
+          (when-not (= checksum recomputed)
+            (log/info :db-sync/checksum-healed-on-open {:repo repo
+                                                      :stored-checksum checksum
+                                                      :recomputed-checksum recomputed
+                                                      :covered-tx covered-tx
+                                                      :current-tx current-tx}))
+          (client-op/update-local-checksum repo recomputed current-tx))))))
 
 (defn- broadcast-rtc-state!
   [client]
