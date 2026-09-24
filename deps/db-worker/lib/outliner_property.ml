@@ -547,7 +547,10 @@ let normalize_extends_value db (v : Wire.t) : Wire.t =
   let ids = canonical_extends_ids db v in
   if single_entity_ref v then
     match ids with [ id ] -> Wire.Int id | _ -> Wire.Nil
-  else Wire.Set (List.map (fun id -> Wire.Int id) ids)
+  (* cljs (vec ids) — a vector, not a set; build-property-value-tx-data
+     re-wraps coll? -> set for the tx value and validation needs a
+     sequential form *)
+  else Wire.Array (List.map (fun id -> Wire.Int id) ids)
 
 (* redundant-extends-retraction-tx-data *)
 let redundant_extends_retraction_tx_data db (class_ : entity) (v : Wire.t)
@@ -586,7 +589,7 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
       let tx_value =
         if extends_ then
           (match normalize_extends_value db value with
-           | Wire.Set _ as s -> s
+           | Wire.Array vs | Wire.List vs | Wire.Set vs -> Wire.Set vs
            | other -> other)
         else value
       in

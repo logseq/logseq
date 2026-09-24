@@ -34,6 +34,8 @@ let ensure_unique_db_ident db (db_ident : string) : string =
           idents
       in
       let suffix =
+        (* cljs (apply max '()) evaluates via the variadic arity to
+           undefined — if-let treats it as nil and falls back to "-1" *)
         match nums with
         | [] -> 1
         | _ -> List.fold_left max min_int nums + 1

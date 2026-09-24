@@ -167,10 +167,8 @@ let retracted_entities db (txs : Wire.t list) : entity list =
        | _ -> None)
     txs
   |> fun es ->
-     List.fold_left
-       (fun acc e ->
-          if List.exists (fun x -> x.id = e.id) acc then acc else acc @ [ e ])
-       [] es
+     (* cljs (common-util/distinct-by :db/id) *)
+     Common_util.distinct_by (fun e -> e.id) es
 
 let property_history_ref_attrs =
   [ "logseq.property.history/block"; "logseq.property.history/property";
@@ -210,27 +208,34 @@ let property_history_ref_retracted_entities db (txs : Wire.t list) : entity list
             | None -> None)
        | _ -> None)
     txs
+  |> fun es ->
+     (* cljs (common-util/distinct-by :db/id) *)
+     Common_util.distinct_by (fun e -> e.id) es
 
-(* delete-blocks/vector-adds-by-eid *)
+(* delete-blocks/vector-adds-by-eid — cljs guards only
+   (vector? tx) (:db/add first) (integer? second) and reads (nth tx 2)
+   (nth tx 3), so any ≥4-elem [:db/add e a v ...] form counts *)
 let vector_adds_by_eid (txs : Wire.t list) : (int * (string * Wire.t) list) list =
   List.fold_left
     (fun acc tx ->
        match tx with
-       | Wire.Array
-           [ Wire.Keyword "db/add"; Wire.Int e; Wire.Keyword a; v ] ->
-           let prev =
-             match List.assoc_opt e acc with Some m -> m | None -> []
-           in
-           (e, (a, v) :: List.remove_assoc a prev)
-           :: List.remove_assoc e acc
-       | Wire.Array
-           [ Wire.Keyword "db/add"; Wire.Int64 e; Wire.Keyword a; v ] ->
-           let e = Int64.to_int e in
-           let prev =
-             match List.assoc_opt e acc with Some m -> m | None -> []
-           in
-           (e, (a, v) :: List.remove_assoc a prev)
-           :: List.remove_assoc e acc
+       | Wire.Array (Wire.Keyword "db/add" :: e :: a :: v :: _) -> (
+           match
+             ( (match e with
+                | Wire.Int n -> Some n
+                | Wire.Int64 n -> Some (Int64.to_int n)
+                | _ -> None)
+             , (match a with
+                | Wire.Keyword s | Wire.String s -> Some s
+                | _ -> None) )
+           with
+           | Some e, Some a ->
+               let prev =
+                 match List.assoc_opt e acc with Some m -> m | None -> []
+               in
+               (e, (a, v) :: List.remove_assoc a prev)
+               :: List.remove_assoc e acc
+           | _ -> acc)
        | _ -> acc)
     [] txs
 
@@ -297,9 +302,8 @@ let new_property_history_retract_tx db (txs : Wire.t list)
          else None)
       (vector_adds_by_eid txs)
   in
-  List.fold_left
-    (fun acc t -> if List.exists (fun x -> x = t) acc then acc else acc @ [ t ])
-    [] (map_retract_tx @ vector_retract_tx)
+  (* cljs (distinct (concat map-retract-tx vector-retract-tx)) *)
+  Common_util.distinct_by (fun x -> x) (map_retract_tx @ vector_retract_tx)
 
 (* delete-blocks/block-entity? *)
 let block_entity (e : entity) : bool =
@@ -343,9 +347,8 @@ let expand_delete_blocks_tx db (txs : Wire.t list) (tx_meta : tx_meta)
       |> List.concat
       |> List.map (fun e -> vec [ kw "db/retractEntity"; Wire.Int e.id ])
     in
-    List.fold_left
-      (fun acc t -> if List.exists (fun x -> x = t) acc then acc else acc @ [ t ])
-      [] (txs @ subtree_tx)
+    (* cljs (distinct (concat txs subtree-tx)) *)
+    Common_util.distinct_by (fun x -> x) (txs @ subtree_tx)
   else txs
 
 (* delete-blocks/replace-ref-with-deleted-block-title *)
@@ -423,10 +426,8 @@ let build_retracted_tx ?(extra_retract_ids : int list = [])
            match retracted_blocks with
            | [] -> None
            | b :: _ -> Ldb.ent_of_id b.db id)
-    |> List.fold_left
-         (fun acc e ->
-            if List.exists (fun x -> x.id = e.id) acc then acc else acc @ [ e ])
-         []
+    (* cljs (common-util/distinct-by :db/id refs) *)
+    |> Common_util.distinct_by (fun e -> e.id)
   in
   let retract_ids =
     List.sort_uniq compare
@@ -479,10 +480,8 @@ let direct_cleanup_tx db (entities : entity list) : Wire.t list =
     List.concat_map
       (fun e -> reverse_refs db "logseq.property.reaction/target" e.id)
       entities
-    |> List.fold_left
-         (fun acc e ->
-            if List.exists (fun x -> x.id = e.id) acc then acc else acc @ [ e ])
-         []
+    (* cljs (common-util/distinct-by :db/id) *)
+    |> Common_util.distinct_by (fun e -> e.id)
   in
   let retract_reactions_tx =
     List.map
@@ -493,10 +492,8 @@ let direct_cleanup_tx db (entities : entity list) : Wire.t list =
     List.concat_map
       (fun e -> reverse_refs db "logseq.property/view-for" e.id)
       entities
-    |> List.fold_left
-         (fun acc e ->
-            if List.exists (fun x -> x.id = e.id) acc then acc else acc @ [ e ])
-         []
+    (* cljs (common-util/distinct-by :db/id) *)
+    |> Common_util.distinct_by (fun e -> e.id)
   in
   let history_entities =
     List.concat_map
@@ -505,10 +502,8 @@ let direct_cleanup_tx db (entities : entity list) : Wire.t list =
          @ reverse_refs db "logseq.property.history/property" e.id
          @ reverse_refs db "logseq.property.history/ref-value" e.id)
       entities
-    |> List.fold_left
-         (fun acc e ->
-            if List.exists (fun x -> x.id = e.id) acc then acc else acc @ [ e ])
-         []
+    (* cljs (common-util/distinct-by :db/id) *)
+    |> Common_util.distinct_by (fun e -> e.id)
   in
   let retract_history_tx =
     List.map
@@ -548,10 +543,8 @@ let build_cleanup_tx db (txs : Wire.t list) : Wire.t list =
   in
   loop initial_entities []
     (new_property_history_retract_tx db txs initial_ids)
-  |> fun txs ->
-     List.fold_left
-       (fun acc t -> if List.exists (fun x -> x = t) acc then acc else acc @ [ t ])
-       [] txs
+  (* cljs (distinct cleanup-tx) *)
+  |> Common_util.distinct_by (fun x -> x)
 
 (* delete-blocks/update-refs-history *)
 let update_refs_history db (txs : Wire.t list) : Wire.t list =
