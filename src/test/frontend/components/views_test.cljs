@@ -134,6 +134,32 @@
                (some #(get-in (vec %) [2 :view-parent]) @calls*))
             (pr-str @calls*))))))
 
+(deftest resolved-property-value-default-is-scoped-to-class-members-test
+  (let [resolve #'property-value/resolved-property-value-for-render
+        status-property {:db/ident :logseq.property/status
+                         :block.temp/class-declared? true
+                         :logseq.property/default-value {:db/ident :logseq.property/status.todo}}
+        unbound-property {:db/ident :user.property/mood
+                          :block.temp/class-declared? false
+                          :logseq.property/default-value "happy"}]
+    (is (nil? (resolve {:block/uuid (random-uuid)}
+                       status-property false))
+        "Non-member rows do not render a class-declared default")
+    (is (= {:db/ident :logseq.property/status.todo}
+           (resolve {:block/uuid (random-uuid)
+                     :block.temp/class-property-idents #{:logseq.property/status}}
+                    status-property false))
+        "Class member rows still render the class default")
+    (is (= "happy"
+           (resolve {:block/uuid (random-uuid)}
+                    unbound-property false))
+        "Defaults of properties declared by no class still apply everywhere")
+    (is (= :logseq.property/status.doing
+           (resolve {:block/uuid (random-uuid)
+                     :logseq.property/status :logseq.property/status.doing}
+                    status-property false))
+        "A stored value wins over any default")))
+
 (deftest gallery-property-value-receives-view-parent
   (let [view-parent {:db/ident :logseq.class/Task}]
     (is (= {:view? true
