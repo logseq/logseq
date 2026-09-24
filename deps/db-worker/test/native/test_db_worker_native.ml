@@ -134,7 +134,10 @@ let wal_cleaned path =
   (not (Sys.file_exists wal))
   || (Unix.stat wal).Unix.st_size = 0
 
-(* wire a sql file at <db_dir repo>/<path> and return expected bytes *)
+(* wire a sql file at <db_dir repo>/<path> and return expected bytes.
+   For the real client-ops path the already-open client-ops conn is used:
+   it holds locking_mode=exclusive, so a second Sqlite.open_db would BUSY.
+   Alternative candidate paths get their own conn. *)
 let place_client_ops_file repo path =
   let dir = Endpoint_lifecycle.db_dir repo in
   (match Filename.dirname path with
@@ -142,14 +145,21 @@ let place_client_ops_file repo path =
    | sub ->
        ignore
          (File_sys.mkdir_p (Filename.concat dir sub) |> await));
-  let db =
-    Sqlite.open_db ~path:(Filename.concat dir path)
+  let full = Filename.concat dir path in
+  let is_ops_path =
+    (try
+       Unix.realpath full = Unix.realpath (Sync_state.client_ops_path repo)
+     with _ -> false)
   in
-  ignore (Sqlite.exec db ~sql:"create table t_placed (x)" ~bind:[||]);
+  let db =
+    if is_ops_path then Sync_state.client_ops_conn repo
+    else Sqlite.open_db ~path:full
+  in
+  ignore (Sqlite.exec db ~sql:"create table if not exists t_placed (x)" ~bind:[||]);
   ignore (Sqlite.exec db ~sql:"insert into t_placed values (1)" ~bind:[||]);
   ignore (Sqlite.exec db ~sql:"PRAGMA wal_checkpoint(TRUNCATE)" ~bind:[||]);
-  Sqlite.close db;
-  let ic = open_in_bin (Filename.concat dir path) in
+  if not is_ops_path then Sqlite.close db;
+  let ic = open_in_bin full in
   Fun.protect
     ~finally:(fun () -> close_in_noerr ic)
     (fun () -> In_channel.input_all ic)
