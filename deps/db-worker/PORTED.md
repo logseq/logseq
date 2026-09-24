@@ -6,6 +6,17 @@ db worker and its deps as of:
     master 50e184962fb5e28f20c0ec34013284ecd09db8db
     fix: hide library blocks and collapse nested pages (#13349)
 
+Post-base upstream commits already merged into the port (worker/outliner
+dependency cone):
+
+    f6fc6f78ac  fix: preserve outliner insert identities during sync replay (#13316)
+    062343d463  fix: only allow normal pages to be moved into the Library page (#13384)
+    4608885d40  fix: drag and paste of page-embed nodes (#13359)
+
+When diffs against the baseline reference these, the OCaml side already
+carries them (canonicalize-insert-ops, Library move restriction,
+page-embed paste-link).
+
 When master moves, diff the cljs sources against this commit to find
 what must be re-ported:
 
