@@ -1052,10 +1052,11 @@ let title_references ~block_refs title =
                                   ( Vec.push_back refs (page_ref_map name),
                                     tag_names ))
                           | Some "Block_ref", Some uuid ->
-                              (* ((uuid)) resolves to a ref only for markdown
-                                 --blocks; --content keeps it as literal text,
-                                 matching how the DB renderer prints Block_ref
-                                 nodes verbatim. *)
+                              (* Clean ((uuid)) titles were already normalized
+                                 to [[uuid]] by markdown_blocks; a verbatim
+                                 ((uuid)) here means an ambiguous title (the
+                                 uuid also appears inside code). --content
+                                 keeps it as literal text either way. *)
                               if
                                 block_refs && Cli_primitive.is_uuid_string uuid
                               then
