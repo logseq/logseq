@@ -3,25 +3,22 @@
    Source: src/test/frontend/worker/pipeline_test.cljs
    cljs deftest names are kept as OCaml test names.
 
-   Skipped cljs cases (unported dependency):
-   - save-block-resolves-page-refs-in-worker-test: outliner-core/save-block!
-     not ported
-   - sibling-reorder-keeps-parent-revision-test: move-blocks-up-down! not
-     ported
-   - nested-move-keeps-old-and-new-parent-revisions-test: move-blocks! not
-     ported
-   - nested-delete-keeps-surviving-parent-revision-test: delete-blocks! not
-     ported
-   - renderer-hook-uses-explicit-resource-affected-keys-test: invoke-hooks /
-     affected-keys is the db-listener surface, not this package
-   - batch-import-edn-datom-format-with-shifted-builtin-eids-test,
-     batch-import-edn-invalid-datom-format-does-not-change-db-test:
-     :batch-import-edn op + sqlite-export not ported
-   - move-block-to-library-then-delete-clears-stale-namespace-test:
-     move-blocks!/delete-blocks! not ported
+   Skipped cljs cases: none remaining — all pipeline_test.cljs deftests are
+   ported below.
+
+   Post-base upstream changes folded in (latest origin/master):
+   - 062343d463 rewrote the Library test as
+     move-page-to-library-then-delete-clears-stale-namespace-test (a page is
+     moved to Library, not a block) and 43a540f350 added
+     move-page-under-page-registers-namespace-in-library-test; both are
+     ported here against master semantics.
 
    Known cljs-vs-OCaml divergences surfaced by these tests (asserted where
    observable, not papered over):
+   - cljs (:affected-keys result) is a set of key vectors; OCaml
+     Worker_pipeline.invoke_hooks returns a record — the affected-keys set
+     is compared as sorted transit strings. The two (contains? result ...)
+     asserts have no OCaml analogue (closed record has no such fields).
    - cljs exception ex-data {:type :journal-page-protected-attr-updated
      :attr ...} becomes Worker_pipeline.Journal_protected_attr_updated
      carrying (attr, old-v, new-v, journal-day).
@@ -34,6 +31,21 @@
      OCaml apply_template_op derives the same block maps via
      template_children_blocks when "template-blocks" is absent, so the
      apply-template tests pass empty opts.
+   - cljs (:block/title e) goes through entity-plus lookup-kv-then-entity,
+     which returns the display title (id-ref->title-ref over raw title +
+     :block/refs); OCaml entity attr reads stay raw, so
+     save-block-resolves-page-refs-in-worker-test applies
+     Db_content.id_ref_to_title_ref explicitly for the [[foo]] assert.
+
+   Currently failing on lib-side gaps (tests kept running, upstream-parity
+   asserts unchanged):
+   - batch-import-edn-datom-format-with-shifted-builtin-eids-test: the
+     imported graph fails OCaml Db_validate validation ("5 validation
+     error(s)") where cljs reports none — same initial_tx_data self-
+     validation gap documented in db_test_util.ml.
+   - move-page-under-page-registers-namespace-in-library-test: relies on
+     43a540f350 (register topmost parentless root page under Library on
+     move) which is not yet ported to lib/.
 
    *)
 
@@ -108,6 +120,40 @@ let uuid_of (e : entity) : string =
   match Ldb.value e "block/uuid" with
   | Some (Uuid u) -> u
   | _ -> failwith "entity has no uuid"
+
+(* cljs (into {} block-map) — nested block map as a value *)
+let bm_as_value (m : Block_map.t) : value =
+  Datascript.Map (List.map (fun (a, v) -> Datascript.Keyword a, v) m)
+
+(* cljs outliner-core/save-block! *)
+let save_block_bang conn (block : Block_map.t) () : unit =
+  ignore
+    (Outliner_core.save_block_conn conn block
+       Outliner_core.default_save_opts [])
+
+(* cljs outliner-core/delete-blocks! *)
+let delete_blocks_bang conn (blocks : entity list) () : unit =
+  ignore
+    (Outliner_core.delete_blocks_conn conn
+       (List.map Block_map.of_entity blocks) [])
+
+(* cljs outliner-core/move-blocks! (all call sites here pass
+   {:sibling? false}, the cljs insert-blocks default) *)
+let move_blocks_bang conn (blocks : entity list) (target : entity) () : unit =
+  Outliner_core.move_blocks_conn conn blocks target
+    Outliner_core.default_insert_opts []
+
+(* cljs outliner-core/move-blocks-up-down! *)
+let move_blocks_up_down_bang conn (blocks : entity list) (up : bool) () : unit =
+  Outliner_core.move_blocks_up_down_conn conn blocks up
+
+(* cljs (:block/page e) / (:block/parent e) — single ref entity *)
+let ref_ent_of (e : entity) (a : attr) : entity option = Ldb.ref_ent e a
+
+(* sorted transit strings for set-of-keys comparisons *)
+let key_strings (keys : Wire.t list) : string list =
+  List.sort String.compare
+    (List.map (fun k -> Transit_codec.to_string k) keys)
 
 (* ---------- nested-insert-keeps-parent-revision-test ---------- *)
 let test_nested_insert_keeps_parent_revision_test () =
@@ -2077,8 +2123,616 @@ let test_ordinary_transactions_reuse_cached_reference_attrs_test () =
   Db_tx.transact_pipeline_fn := Some (fun r -> r)
 
 
+(* ---------- sibling-reorder-keeps-parent-revision-test ---------- *)
+let test_sibling_reorder_keeps_parent_revision_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks =
+                [ { default_block with
+                    b_title = Some "ancestor"
+                  ; b_children =
+                      [ { default_block with
+                          b_title = Some "parent"
+                        ; b_children =
+                            [ { default_block with b_title = Some "first" }
+                            ; { default_block with b_title = Some "second" } ] }
+                      ] } ] } ]
+      ()
+  in
+  let db_before = db_of conn in
+  let ancestor =
+    Option.get (Db_test_util.find_block_by_content db_before "ancestor")
+  in
+  let parent =
+    Option.get (Db_test_util.find_block_by_content db_before "parent")
+  in
+  let second_block =
+    Option.get (Db_test_util.find_block_by_content db_before "second")
+  in
+  let page = Option.get (ref_ent_of second_block "block/page") in
+  with_transact_pipeline (fun () ->
+      move_blocks_up_down_bang conn [ second_block ] true ());
+  check "reordering children does not revise their direct parent"
+    (revision db_before parent = revision (db_of conn) parent);
+  check "reordering does not revise ancestor"
+    (revision db_before ancestor = revision (db_of conn) ancestor);
+  check "reordering does not revise page"
+    (revision db_before page = revision (db_of conn) page)
+
+(* ---------- nested-move-keeps-old-and-new-parent-revisions-test ---------- *)
+let test_nested_move_keeps_old_and_new_parent_revisions_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks =
+                [ { default_block with
+                    b_title = Some "ancestor"
+                  ; b_children =
+                      [ { default_block with
+                          b_title = Some "old parent"
+                        ; b_children =
+                            [ { default_block with b_title = Some "moved" } ] }
+                      ; { default_block with
+                          b_title = Some "new parent"
+                        ; b_children =
+                            [ { default_block with b_title = Some "existing" }
+                            ] } ] } ] } ]
+      ()
+  in
+  let db_before = db_of conn in
+  let ancestor =
+    Option.get (Db_test_util.find_block_by_content db_before "ancestor")
+  in
+  let old_parent =
+    Option.get (Db_test_util.find_block_by_content db_before "old parent")
+  in
+  let new_parent =
+    Option.get (Db_test_util.find_block_by_content db_before "new parent")
+  in
+  let moved =
+    Option.get (Db_test_util.find_block_by_content db_before "moved")
+  in
+  let page = Option.get (ref_ent_of moved "block/page") in
+  with_transact_pipeline (fun () -> move_blocks_bang conn [ moved ] new_parent ());
+  check "removing a child does not revise its old direct parent"
+    (revision db_before old_parent = revision (db_of conn) old_parent);
+  check "adding a child does not revise its new direct parent"
+    (revision db_before new_parent = revision (db_of conn) new_parent);
+  check "moving does not revise ancestor"
+    (revision db_before ancestor = revision (db_of conn) ancestor);
+  check "moving does not revise page"
+    (revision db_before page = revision (db_of conn) page)
+
+(* ---------- nested-delete-keeps-surviving-parent-revision-test ---------- *)
+let test_nested_delete_keeps_surviving_parent_revision_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks =
+                [ { default_block with
+                    b_title = Some "ancestor"
+                  ; b_children =
+                      [ { default_block with
+                          b_title = Some "parent"
+                        ; b_children =
+                            [ { default_block with b_title = Some "deleted" } ] }
+                      ] } ] } ]
+      ()
+  in
+  let db_before = db_of conn in
+  let ancestor =
+    Option.get (Db_test_util.find_block_by_content db_before "ancestor")
+  in
+  let parent =
+    Option.get (Db_test_util.find_block_by_content db_before "parent")
+  in
+  let deleted =
+    Option.get (Db_test_util.find_block_by_content db_before "deleted")
+  in
+  let page = Option.get (ref_ent_of deleted "block/page") in
+  with_transact_pipeline (fun () -> delete_blocks_bang conn [ deleted ] ());
+  check "deleted block is gone"
+    (entity (db_of conn) (Lookup_ref ("block/uuid", Uuid (uuid_of deleted)))
+    = None);
+  check "deleting a child does not revise its surviving direct parent"
+    (revision db_before parent = revision (db_of conn) parent);
+  check "deleting does not revise ancestor"
+    (revision db_before ancestor = revision (db_of conn) ancestor);
+  check "deleting does not revise page"
+    (revision db_before page = revision (db_of conn) page)
+
+(* ---------- save-block-resolves-page-refs-in-worker-test ---------- *)
+let test_save_block_resolves_page_refs_in_worker_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks =
+                [ { default_block with b_title = Some "first" }
+                ; { default_block with b_title = Some "second" } ] } ]
+      ()
+  in
+  let db0 = db_of conn in
+  let first_block =
+    Option.get (Db_test_util.find_block_by_content db0 "first")
+  in
+  let second_block =
+    Option.get (Db_test_util.find_block_by_content db0 "second")
+  in
+  let first_page_uuid = Common_uuid.new_block_id () in
+  let second_page_uuid = Common_uuid.new_block_id () in
+  let tag_uuid = Common_uuid.new_block_id () in
+  let tag_ref_uuid = Common_uuid.new_block_id () in
+  let journal_uuid = Common_uuid.new_block_id () in
+  (* cljs (gp-block/page-name->map "foo" @conn true
+     date-time-util/default-journal-title-formatter
+     {:page-uuid u :skip-existing-page-check? true}) *)
+  let page_ref_map (page_uuid : string) : value =
+    match
+      Gp_block.page_name_to_map "foo" (db_of conn) true
+        (Some Date_time_util.default_journal_title_formatter)
+        ~opts:
+          { Gp_block.default_page_map_opts with
+            page_uuid = Some page_uuid
+          ; skip_existing_page_check = true }
+        ()
+    with
+    | Some bm -> bm_as_value bm
+    | None -> failwith "page-name->map returned nil"
+  in
+  with_transact_pipeline (fun () ->
+      save_block_bang conn
+        [ "db/id", Int first_block.id
+        ; "block/uuid", Uuid (uuid_of first_block)
+        ; "block/title", String (Page_ref.to_page_ref first_page_uuid)
+        ; "block/refs", Vector [ page_ref_map first_page_uuid ] ]
+        ();
+      let page =
+        match Ldb.get_page (db_of conn) (String "foo") with
+        | Some p -> p
+        | None -> failwith "page foo missing"
+      in
+      check "page foo tagged Page class"
+        (match Ldb.ref_ents page "block/tags" with
+         | [ t ] -> Ldb.ident_of t = Some "logseq.class/Page"
+         | _ -> false);
+      save_block_bang conn
+        [ "db/id", Int second_block.id
+        ; "block/uuid", Uuid (uuid_of second_block)
+        ; "block/title", String (Page_ref.to_page_ref second_page_uuid)
+        ; "block/refs", Vector [ page_ref_map second_page_uuid ] ]
+        ();
+      let second_block' =
+        Option.get (entity (db_of conn) (Entity_id second_block.id))
+      in
+      check "second block ref resolves to the same foo page"
+        (match Ldb.ref_ents second_block' "block/refs" with
+         | r :: _ -> uuid_of r = uuid_of page
+         | [] -> false);
+      check "single :block/name foo datom"
+        (List.length
+           (List.of_seq
+              (datoms (db_of conn) Avet ~a:"block/name" ~v:(String "foo") ()))
+        = 1);
+      (* cljs `(:block/title e)` goes through entity-plus lookup-kv-then-entity,
+         which computes the display title via id-ref->title-ref over the raw
+         title + :block/refs. The port keeps entity attr reads raw, so apply the
+         same computation explicitly. *)
+      let raw_title =
+        Option.value ~default:"" (Ldb.string_value second_block' "block/title")
+      in
+      let display_title =
+        Db_content.id_ref_to_title_ref raw_title
+          (Ldb.ref_ents second_block' "block/refs")
+      in
+      check "second block title rewritten to [[foo]]" (display_title = "[[foo]]");
+      (* tag-refs: a tag map also resolves to a class *)
+      save_block_bang conn
+        [ "db/id", Int second_block.id
+        ; "block/uuid", Uuid (uuid_of second_block)
+        ; "block/title", String ("#" ^ Page_ref.to_page_ref tag_ref_uuid)
+        ; ( "block/tags"
+          , Vector
+              [ bm_as_value
+                  [ "block/uuid", Uuid tag_uuid
+                  ; "block/title", String "tag"
+                  ; "block/name", String "tag"
+                  ; "block/type", String "page" ] ] )
+        ; ( "block/refs"
+          , Vector
+              [ bm_as_value
+                  [ "block/uuid", Uuid tag_ref_uuid
+                  ; "block/title", String "tag"
+                  ; "block/name", String "tag"
+                  ; "block/type", String "page" ] ] ) ]
+        ();
+      let second_block'' =
+        Option.get (entity (db_of conn) (Entity_id second_block.id))
+      in
+      let tag =
+        match Ldb.ref_ents second_block'' "block/tags" with
+        | t :: _ -> t
+        | [] -> failwith "tag missing on second block"
+      in
+      check "tag is a class" (Ldb.is_class tag);
+      check "tag is also a block ref"
+        (List.exists
+           (fun (r : entity) -> uuid_of r = uuid_of tag)
+           (Ldb.ref_ents second_block'' "block/refs"));
+      (* cljs (empty? (:errors (validate-db conn :fix false))) *)
+      let vres = Worker_db_validate.validate_db conn ~fix:false in
+      check "validate-db reports no errors"
+        (match vres with
+         | Wire.Map kvs -> (
+             match List.assoc_opt (Wire.Keyword "errors") kvs with
+             | Some (Wire.Array []) | Some (Wire.List []) | Some Wire.Nil ->
+                 true
+             | None -> true
+             | _ -> false)
+         | _ -> false);
+      (* journal page refs get the Journal class *)
+      let now = Date_time_util.time_ms () in
+      save_block_bang conn
+        [ "db/id", Int second_block.id
+        ; "block/uuid", Uuid (uuid_of second_block)
+        ; "block/title", String (Page_ref.to_page_ref journal_uuid)
+        ; ( "block/refs"
+          , Vector
+              [ bm_as_value
+                  [ "block/uuid", Uuid journal_uuid
+                  ; "block/title", String "Jul 9th, 2026"
+                  ; "block/name", String "jul 9th, 2026"
+                  ; "block/journal-day", Int 20260709
+                  ; "block/created-at", Instant now
+                  ; "block/updated-at", Instant now
+                  ; "block/type", String "journal" ] ] ) ]
+        ();
+      let journal =
+        match Ldb.get_page (db_of conn) (String "jul 9th, 2026") with
+        | Some j -> j
+        | None -> failwith "journal page missing"
+      in
+      check "journal-day kept"
+        (Ldb.value journal "block/journal-day" = Some (Int 20260709));
+      check "journal tagged Journal class"
+        (match Ldb.ref_ents journal "block/tags" with
+         | [ t ] -> Ldb.ident_of t = Some "logseq.class/Journal"
+         | _ -> false))
+
+(* ---------- renderer-hook-uses-explicit-resource-affected-keys-test ---------- *)
+let test_renderer_hook_uses_explicit_resource_affected_keys_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks = [ { default_block with b_title = Some "before" } ] } ]
+      ()
+  in
+  let block =
+    Option.get
+      (Db_test_util.find_block_by_content (db_of conn) "before")
+  in
+  let block_uuid = uuid_of block in
+  let tx_report =
+    Db_tx.with_report ~tx_meta:[] (db_of conn)
+      [ add block.id "block/title" (String "after") ]
+  in
+  let result = Worker_pipeline.invoke_hooks conn tx_report in
+  let expected =
+    key_strings
+      [ Wire.Array [ Wire.Keyword "entity"; Wire.Uuid block_uuid ]
+      ; Wire.Array [ Wire.Keyword "attr"; Wire.Keyword "block/title" ]
+      ; Wire.Array
+          [ Wire.Keyword "display-properties"; Wire.Uuid block_uuid ]
+      ; Wire.Array
+          [ Wire.Keyword "property-membership"
+          ; Wire.Keyword "block/title" ] ]
+  in
+  check "affected keys"
+    (key_strings result.Worker_pipeline.hooks_affected_keys = expected)
+
+(* ---------- batch-import-edn-datom-format-with-shifted-builtin-eids-test ---------- *)
+let test_batch_import_edn_datom_format_with_shifted_builtin_eids_test () =
+  let source_conn = Datascript.create_conn ~schema:(Db_schema.schema ()) () in
+  (* Shift subsequent built-in eids without leaving invalid datoms in the
+     export. *)
+  ignore
+    (Datascript.transact_conn source_conn
+       [ Datascript.Entity
+           { db_id = Some (Entity_id 1)
+           ; attrs =
+               [ ( "block/uuid"
+                 , One_value (Uuid (Common_uuid.new_block_id ())) ) ] }
+       ]);
+  ignore
+    (Datascript.transact_conn source_conn
+       [ Datascript.RetractEntity (Entity_id 1) ]);
+  ignore
+    (Datascript.transact_conn source_conn
+       (Sqlite_create_graph.initial_tx_data
+          ~db:(Datascript.db source_conn) ~config_content:"{}" ()));
+  let export_edn =
+    Sqlite_export.build_export (Datascript.db source_conn)
+      (Map [ Keyword "export-type", Keyword "graph" ])
+  in
+  let source_purple_eid =
+    match export_edn with
+    | Map kvs -> (
+        match List.assoc_opt (Keyword "datoms") kvs with
+        | Some (Vector ds) | Some (List ds) ->
+            List.find_map
+              (fun d ->
+                match d with
+                | Vector
+                    [ Int e
+                    ; Keyword "db/ident"
+                    ; Keyword "logseq.property/color.purple" ]
+                | List
+                    [ Int e
+                    ; Keyword "db/ident"
+                    ; Keyword "logseq.property/color.purple" ] ->
+                    Some e
+                | _ -> None)
+              ds
+        | _ -> None)
+    | _ -> None
+  in
+  let conn = Sqlite_export.create_conn () in
+  let dest_purple_eid =
+    match
+      entity (db_of conn) (Ident "logseq.property/color.purple")
+    with
+    | Some e -> Some e.id
+    | None -> None
+  in
+  check "test relies on a datom-format export"
+    (match export_edn with
+     | Map kvs ->
+         List.assoc_opt
+           (Keyword "logseq.db.sqlite.export/graph-format") kvs
+         = Some (Keyword "datoms")
+     | _ -> false);
+  check "test relies on shifted built-in eids between source and dest"
+    (match source_purple_eid, dest_purple_eid with
+     | Some s, Some d -> s <> d
+     | _ -> false);
+  let result =
+    with_transact_pipeline (fun () ->
+        Outliner_op.apply_ops conn
+          (Wire.List
+             [ Wire.List
+                 [ Wire.Keyword "batch-import-edn"
+                 ; Wire.List
+                     [ Ds_wire.transit_of_value export_edn
+                     ; Wire.Map
+                         [ ( Wire.Keyword "tx-meta"
+                           , Wire.Map
+                               [ Wire.Keyword "import-db?", Wire.Bool true ]
+                           ) ] ] ] ])
+          (Wire.Map []))
+  in
+  check "no error" (Cljs_map.get result "error" = None);
+  check "color.purple ident preserved after datom import despite eid shift"
+    (match
+       entity (db_of conn) (Ident "logseq.property/color.purple")
+     with
+     | Some e -> Ldb.ident_of e = Some "logseq.property/color.purple"
+     | None -> false)
+
+(* ---------- batch-import-edn-invalid-datom-format-does-not-change-db-test ---------- *)
+let test_batch_import_edn_invalid_datom_format_does_not_change_db_test () =
+  let conn = Sqlite_export.create_conn () in
+  let page_class_id =
+    (Option.get
+       (entity (db_of conn) (Ident "logseq.class/Page"))).id
+  in
+  let vec (xs : value list) = Vector xs in
+  let invalid_export_edn =
+    Map
+      [ ( Keyword "logseq.db.sqlite.export/export-type"
+        , Keyword "graph" )
+      ; ( Keyword "logseq.db.sqlite.export/graph-format"
+        , Keyword "datoms" )
+      ; ( Keyword "datoms"
+        , Vector
+            [ vec [ Int 1; Keyword "block/title"; String "Orphan Page" ]
+            ; vec [ Int 1; Keyword "block/name"; String "orphan page" ]
+            ; vec
+                [ Int 1
+                ; Keyword "block/uuid"
+                ; Uuid "33333333-3333-4333-8333-000000000001" ]
+            ; vec [ Int 1; Keyword "block/tags"; Int 2 ]
+            ; vec [ Int 2; Keyword "block/title"; String "Page" ]
+            ; vec [ Int 2; Keyword "block/name"; String "page" ]
+            ; vec [ Int 2; Keyword "db/ident"; Keyword "logseq.class/Page" ]
+            ; vec
+                [ Int 2
+                ; Keyword "block/uuid"
+                ; Uuid "33333333-3333-4333-8333-000000000002" ] ] ) ]
+  in
+  let result =
+    with_transact_pipeline (fun () ->
+        Outliner_op.apply_ops conn
+          (Wire.List
+             [ Wire.List
+                 [ Wire.Keyword "batch-import-edn"
+                 ; Wire.List
+                     [ Ds_wire.transit_of_value invalid_export_edn
+                     ; Wire.Map
+                         [ ( Wire.Keyword "tx-meta"
+                           , Wire.Map
+                               [ Wire.Keyword "import-db?", Wire.Bool true ]
+                           ) ] ] ] ])
+          (Wire.Map []))
+  in
+  check "error is a string"
+    (match Cljs_map.get result "error" with
+     | Some (Wire.String _) -> true
+     | _ -> false);
+  check "invalid datom import does not replace the existing graph"
+    (match entity (db_of conn) (Ident "logseq.class/Page") with
+     | Some e -> e.id = page_class_id
+     | None -> false)
+
+(* ---------- move-page-to-library-then-delete-clears-stale-namespace-test ---------- *)
+let test_move_page_to_library_then_delete_clears_stale_namespace_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks = [ { default_block with b_title = Some "Block 2" } ] }
+        ]
+      ()
+  in
+  let library =
+    match Ldb.get_library_page (db_of conn) with
+    | Some l -> l
+    | None -> failwith "Library page missing"
+  in
+  with_transact_pipeline (fun () ->
+      let page1 =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "page1")
+      in
+      (* Move page1 to the Library page (mod+shift+m "Move to") *)
+      move_blocks_bang conn [ page1 ] library ();
+      let page1' = Option.get (entity (db_of conn) (Entity_id page1.id)) in
+      let block2 =
+        Option.get
+          (Db_test_util.find_block_by_content (db_of conn) "Block 2")
+      in
+      check "page is a namespace child of Library"
+        (match ref_ent_of page1' "block/parent" with
+         | Some p -> p.id = library.id
+         | None -> false);
+      check "child block's block/page still points to the page"
+        (match ref_ent_of block2 "block/page" with
+         | Some p -> p.id = page1'.id
+         | None -> false);
+      (* Delete page1 from the Library page: un-parents the page *)
+      delete_blocks_bang conn [ page1' ] ();
+      let page1'' = Option.get (entity (db_of conn) (Entity_id page1'.id)) in
+      let block2' = Option.get (entity (db_of conn) (Entity_id block2.id)) in
+      check "Library/page1 namespace is removed"
+        (ref_ent_of page1'' "block/parent" = None);
+      check "child block's block/page still points to its own page, not Library"
+        (match ref_ent_of block2' "block/page" with
+         | Some p -> p.id = page1''.id
+         | None -> false);
+      check "stale Library block/page is cleared"
+        (match ref_ent_of block2' "block/page" with
+         | Some p -> p.id <> library.id
+         | None -> false))
+
+(* ---------- move-page-under-page-registers-namespace-in-library-test ---------- *)
+let test_move_page_under_page_registers_namespace_in_library_test () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_title = Some "Parent" }; blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Child" }; blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Grandparent" }
+            ; blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Nested" }; blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "Leaf" }; blocks = [] }
+        ]
+      ()
+  in
+  let library =
+    match Ldb.get_library_page (db_of conn) with
+    | Some l -> l
+    | None -> failwith "Library page missing"
+  in
+  with_transact_pipeline (fun () ->
+      let parent =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "Parent")
+      in
+      let child =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "Child")
+      in
+      check "precondition: Parent has no parent"
+        (ref_ent_of parent "block/parent" = None);
+      (* Move Child under Parent (mod+shift+m "Move to") *)
+      move_blocks_bang conn [ child ] parent ();
+      let parent' = Option.get (entity (db_of conn) (Entity_id parent.id)) in
+      let child' = Option.get (entity (db_of conn) (Entity_id child.id)) in
+      check "Child is a namespace child of Parent"
+        (match ref_ent_of child' "block/parent" with
+         | Some p -> p.id = parent'.id
+         | None -> false);
+      check "Parent is registered in Library"
+        (match ref_ent_of parent' "block/parent" with
+         | Some p -> p.id = library.id
+         | None -> false);
+      check "Parent/Child namespace shows up in Library"
+        (Entity_view.page_in_library (db_of conn)
+           (Entity_view.of_entity child'));
+      (* nested move registers the topmost parentless root *)
+      let grandparent =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "Grandparent")
+      in
+      let nested =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "Nested")
+      in
+      let leaf =
+        Option.get
+          (Db_test_util.find_page_by_title (db_of conn) "Leaf")
+      in
+      (* Simulate a namespace created before this fix: Nested is under
+         Grandparent, but Grandparent was never registered in Library. Raw
+         d/transact! bypasses the pipeline like legacy data did. *)
+      ignore
+        (Datascript.transact_conn conn
+           [ Datascript.Entity
+               { db_id = Some (Entity_id nested.id)
+               ; attrs =
+                   [ ( "block/parent"
+                     , One_entity
+                         { db_id = Some (Entity_id grandparent.id)
+                         ; attrs = [] } ) ] } ]);
+      move_blocks_bang conn [ leaf ] nested ();
+      let grandparent' =
+        Option.get (entity (db_of conn) (Entity_id grandparent.id))
+      in
+      let leaf' = Option.get (entity (db_of conn) (Entity_id leaf.id)) in
+      check "topmost parentless page ancestor is registered in Library"
+        (match ref_ent_of grandparent' "block/parent" with
+         | Some p -> p.id = library.id
+         | None -> false);
+      check "Grandparent/Nested/Leaf shows up in Library"
+        (Entity_view.page_in_library (db_of conn)
+           (Entity_view.of_entity leaf')))
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "nested-insert-keeps-parent-revision-test" `Quick test_nested_insert_keeps_parent_revision_test;
+    Alcotest.test_case "sibling-reorder-keeps-parent-revision-test" `Quick test_sibling_reorder_keeps_parent_revision_test;
+    Alcotest.test_case "nested-move-keeps-old-and-new-parent-revisions-test" `Quick test_nested_move_keeps_old_and_new_parent_revisions_test;
+    Alcotest.test_case "nested-delete-keeps-surviving-parent-revision-test" `Quick test_nested_delete_keeps_surviving_parent_revision_test;
+    Alcotest.test_case "save-block-resolves-page-refs-in-worker-test" `Quick test_save_block_resolves_page_refs_in_worker_test;
+    Alcotest.test_case "renderer-hook-uses-explicit-resource-affected-keys-test" `Quick test_renderer_hook_uses_explicit_resource_affected_keys_test;
+    Alcotest.test_case "batch-import-edn-datom-format-with-shifted-builtin-eids-test" `Quick test_batch_import_edn_datom_format_with_shifted_builtin_eids_test;
+    Alcotest.test_case "batch-import-edn-invalid-datom-format-does-not-change-db-test" `Quick test_batch_import_edn_invalid_datom_format_does_not_change_db_test;
+    Alcotest.test_case "move-page-to-library-then-delete-clears-stale-namespace-test" `Quick test_move_page_to_library_then_delete_clears_stale_namespace_test;
+    Alcotest.test_case "move-page-under-page-registers-namespace-in-library-test" `Quick test_move_page_under_page_registers_namespace_in_library_test;
     Alcotest.test_case "top-level-insert-keeps-page-revision-test" `Quick test_top_level_insert_keeps_page_revision_test;
     Alcotest.test_case "referenced-entity-content-change-invalidates-owning-block-test" `Quick test_referenced_entity_content_change_invalidates_owning_block_test;
     Alcotest.test_case "referenced-entity-timestamp-change-does-not-revise-rendered-blocks-test" `Quick test_referenced_entity_timestamp_change_does_not_revise_rendered_blocks_test;

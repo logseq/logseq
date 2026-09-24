@@ -1198,10 +1198,10 @@ let test_db_rebuild_block_refs_removes_recursive_self_ref () =
 
 (* (deftest bulk-block-refs-preserve-datetime-and-content-rules ...)
 
-   cljs uses create-conn-with-import-map (sqlite-export/build-import —
-   not ported); the fixture has no upserts so create-conn-with-blocks is
-   equivalent. Covers both the db-rebuild-block-refs and
-   db-rebuild-block-refs-fn asserts. *)
+   cljs uses create-conn-with-import-map (sqlite-export/build-import);
+   the fixture has no upserts so create-conn-with-blocks is equivalent.
+   Covers both the db-rebuild-block-refs and db-rebuild-block-refs-fn
+   asserts. *)
 let test_bulk_block_refs_preserve_datetime_and_content_rules () =
   (* (.getTime (js/Date. 2026 8 8 12)) — Sep 8 2026 noon UTC *)
   let timestamp = 1788868800000 in
@@ -1923,7 +1923,12 @@ let test_delete_page () =
     (match Ldb.value d1' "logseq.property/deleted-at" with
      | Some (Int _) -> true
      | _ -> false);
-  check "b1 raw-title cleared"
+  (* f6fc6f78ac: assert the stored :block/title datom keeps the internal
+     page ref; :block/raw-title is a derived lookup with no stored datoms *)
+  check "b1 title keeps original page ref"
+    (Ldb.string_value b1' "block/title"
+     = Some ("b1 " ^ Db_content.page_ref (uuid_of d1)));
+  check "b1 stores no raw-title datom"
     (Ldb.value b1' "block/raw-title" = None);
   check "b1 still refs d1" (List.mem d1.id (Ldb.ref_ids b1' "block/refs"));
   check "b1 page is d1"
@@ -2130,9 +2135,44 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "apply-ops-permanently-delete-recycled-block-removes-subtree-only" `Quick test_apply_ops_permanently_delete_recycled_block;
     Alcotest.test_case "new-graph-should-be-valid" `Quick test_new_graph_should_be_valid ]
 
+(* f6fc6f78ac (deftest insert-blocks-preserves-existing-reference-ids):
+   an inserted block whose title refs a page and whose :block/refs already
+   names that entity must keep the caller-supplied reference id, not a
+   re-allocated one *)
+let test_insert_blocks_preserves_existing_reference_ids () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "Test" }
+          ; blocks =
+              [ { default_block with b_title = Some "Target" }
+              ; { default_block with b_title = Some "Referenced" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let target = Option.get (find_block_by_content db "Target") in
+  let referenced = Option.get (find_block_by_content db "Referenced") in
+  let referenced_uuid = uuid_of referenced in
+  let new_uuid = gen_uuid () in
+  let opts =
+    { Outliner_core.default_insert_opts with
+      sibling = true; keep_uuid = true }
+  in
+  ignore
+    (Outliner_core.insert_blocks_conn conn
+       [ [ "block/uuid", Uuid new_uuid
+         ; "block/title", String (Db_content.page_ref referenced_uuid)
+         ; "block/refs", List [ Ref referenced.id ] ] ]
+       (Block_map.of_entity target) opts []);
+  let inserted = entity_by_uuid_exn conn new_uuid in
+  check "insert keeps explicit reference ids"
+    (List.map uuid_of (Ldb.ref_ents inserted "block/refs")
+     = [ referenced_uuid ])
+
 (* op_test.cljs *)
 let op_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "toggle-reaction-op" `Quick test_toggle_reaction_op;
+  [ Alcotest.test_case "insert-blocks-preserves-existing-reference-ids" `Quick test_insert_blocks_preserves_existing_reference_ids;
+    Alcotest.test_case "toggle-reaction-op" `Quick test_toggle_reaction_op;
     Alcotest.test_case "collapse-expand-blocks-op" `Quick test_collapse_expand_blocks_op;
     Alcotest.test_case "resolve-indent-outdent-parent-original-test" `Quick test_resolve_indent_outdent_parent_original;
     Alcotest.test_case "apply-ops-plugin-property-sequence-test" `Quick test_apply_ops_plugin_property_sequence;
