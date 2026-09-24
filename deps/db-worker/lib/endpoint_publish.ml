@@ -11,7 +11,7 @@ let repo_of args =
   match arg args 0 with
   | Some (Wire.String s) -> s
   | Some Wire.Nil | None -> ""
-  | _ -> invalid_arg "first arg must be repo name"
+  | _ -> "" (* cljs: conn lookup misses on any non-string arg *)
 
 (* :thread-api/build-publish-page-payload [repo eid] *)
 let build_publish_page_payload args =
