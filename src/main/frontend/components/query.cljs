@@ -182,14 +182,17 @@
   (let [repo-config (state/config-for-repo (rfx/use-sub [:config])
                                            (state/get-current-repo))
         ;; The boundary remounts whenever an input that decides evaluation
-        ;; changes: the query fields, or the repo-config named transforms/views
-        ;; that keyword values resolve to. This lives outside the boundary so
-        ;; an error caught for stale inputs cannot mask a corrected query.
-        boundary-key (pr-str {:q (select-keys q [:query :view :result-transform
-                                                 :inputs :rules])
-                              :config (select-keys repo-config
-                                                   [:query/result-transforms
-                                                    :query/views])})]
+        ;; changes: the query fields, or the repo-config definition that a
+        ;; keyword :view/:result-transform resolves to. This lives outside
+        ;; the boundary so an error caught for stale inputs cannot mask a
+        ;; corrected query.
+        boundary-key (pr-str [(select-keys q [:query :view :result-transform
+                                              :inputs :rules])
+                              (when (keyword? (:view q))
+                                (get-in repo-config [:query/views (:view q)]))
+                              (when (keyword? (:result-transform q))
+                                (get-in repo-config [:query/result-transforms
+                                                     (:result-transform q)]))])]
     ^{:key boundary-key}
     [:<>
      (ui/catch-error
