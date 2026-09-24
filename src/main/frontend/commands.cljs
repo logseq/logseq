@@ -767,7 +767,6 @@
 (defmethod handle-step :editor/toggle-own-number-list [[_]]
   (when-let [block (state/get-edit-block)]
     (-> (<number-list-command-target block)
-        (p/catch (fn [_] block))
         (p/then (fn [target]
                   (state/pub-event! [:editor/toggle-own-number-list target]))))))
 
