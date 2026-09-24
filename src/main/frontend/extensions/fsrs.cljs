@@ -304,6 +304,10 @@
         *card-index (hooks/use-memo #(atom 0) [])
         [card-index] (hooks/use-atom *card-index)
         *phase (hooks/use-memo #(atom :init) [])
+        practice-again! (fn []
+                          (reset! *card-index 0)
+                          (reset! *phase :init)
+                          (reset! *block-ids all-block-ids))
         progress-label (str (min (inc card-index) (count block-ids)) "/" (count block-ids))
         select-card! (fn [v]
                        (reset! *cards-id v)
@@ -412,14 +416,21 @@
                 {:variant :outline
                  :size :sm
                  :id "card-practice-again"
-                 :on-click (fn [_e]
-                             (reset! *card-index 0)
-                             (reset! *phase :init)
-                             (reset! *block-ids all-block-ids))}
+                 :on-click (fn [_e] (practice-again!))}
                 (t :flashcard.review/practice-again))]])
 
            :else
-           [:p (t :flashcard.review/finished)]))])))
+           [:div.ls-card.content.ml-2
+            [:p (t :flashcard.review/finished)]
+
+            (when (seq all-block-ids)
+              [:div.mt-4
+               (shui/button
+                {:variant :outline
+                 :size :sm
+                 :id "card-practice-again"
+                 :on-click (fn [_e] (practice-again!))}
+                (t :flashcard.review/practice-again))])]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (defn- update-due-cards-count!
