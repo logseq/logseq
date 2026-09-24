@@ -348,17 +348,64 @@ def wait_for_codex_events(codex_log, event_name, count, bridge, bridge_log, brid
     raise SystemExit("codex event {!r} count {} was not observed; events={!r}".format(event_name, count, events))
 
 
-def write_comment_blocks_file(path, task_uuid, hostname):
-    path.write_text(
-        """[{{:block/title "Comments"
-   :block/tags [:logseq.class/Comments]
-   :logseq.property.comments/blocks [[:block/uuid #uuid "{task_uuid}"]]
-   :block/children [{{:block/title "[[{hostname}]] please continue from the comment"
-                     :block/tags [:logseq.class/Comment]}}]}}]""".format(
-            task_uuid=task_uuid,
-            hostname=hostname,
+def create_comment_blocks(cli, repo_root, root_dir, config, graph, task_id, task_uuid, hostname):
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        [
+            "upsert",
+            "block",
+            "--graph",
+            graph,
+            "--target-id",
+            str(task_id),
+            "--pos",
+            "last-child",
+            "--content",
+            "Comments",
+            "--update-tags",
+            "[:logseq.class/Comments]",
+            "--update-properties",
+            '{{:logseq.property.comments/blocks [[:block/uuid #uuid "{}"]]}}'.format(
+                task_uuid
+            ),
+        ],
+    )
+    comments_id = run_json(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        "[:find ?e . :where [?e :block/parent {}] [?e :block/tags :logseq.class/Comments]]".format(
+            task_id
         ),
-        encoding="utf8",
+    )
+    if comments_id is None:
+        raise SystemExit("comments block was not found")
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        [
+            "upsert",
+            "block",
+            "--graph",
+            graph,
+            "--target-id",
+            str(comments_id),
+            "--pos",
+            "last-child",
+            "--content",
+            "[[{}]] please continue from the comment".format(hostname),
+            "--update-tags",
+            "[:logseq.class/Comment]",
+        ],
     )
 
 
@@ -409,26 +456,15 @@ def run_comment_mention_check(cli, repo_root, root_dir, config, graph, tmp_dir):
 
         task_id = find_task_id(cli, repo_root, root_dir, config, graph, TASK_TITLE)
         task_uuid = find_task_uuid(cli, repo_root, root_dir, config, graph, TASK_TITLE)
-        blocks_file = tmp_dir / "comment-blocks.edn"
-        write_comment_blocks_file(blocks_file, task_uuid, os.uname().nodename)
-        run_cli(
+        create_comment_blocks(
             cli,
             repo_root,
             root_dir,
             config,
             graph,
-            [
-                "upsert",
-                "block",
-                "--graph",
-                graph,
-                "--target-id",
-                str(task_id),
-                "--pos",
-                "last-child",
-                "--blocks-file",
-                str(blocks_file),
-            ],
+            task_id,
+            task_uuid,
+            os.uname().nodename,
         )
 
         resume_events = wait_for_codex_events(codex_log, "resume", 2, bridge, bridge_log, bridge_err)

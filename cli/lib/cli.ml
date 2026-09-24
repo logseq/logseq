@@ -39,7 +39,12 @@ let make_app ?version:_ () =
 
 let make_app_context = make_app
 let env_lookup env key = Vec.assoc_opt key env
-let is_option token = String.length token > 0 && token.[0] = '-'
+(* See cli_parse.ml — only a dash followed by markdown whitespace is a
+   list-item value; every other dash prefix is still an option. *)
+let is_option token =
+  let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
+  let n = String.length token in
+  n > 0 && token.[0] = '-' && not (n > 1 && is_blank token.[1])
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
@@ -75,7 +80,7 @@ let boolean_option = function
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" ->
+  | "upload-keys" | "dry-run" ->
       true
   | _ -> false
 
