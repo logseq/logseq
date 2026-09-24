@@ -309,8 +309,8 @@ let compact_error_notification (n : BM.t) : Wire.t =
         | None -> Wire.Nil )
     ; ( "level"
       , match BM.attr_value n "level" with
-        | Some (Keyword s) | Some (String s) -> Wire.Keyword s
-        | _ -> Wire.Nil ) ]
+        | Some v -> Ds_wire.transit_of_value v
+        | None -> Wire.Nil ) ]
 
 let compact_import_result (result : BM.t) (notifications : BM.t list)
     (validation : Wire.t) : Wire.t =
@@ -345,7 +345,7 @@ let compact_import_result (result : BM.t) (notifications : BM.t list)
     List.filter
       (fun (n : BM.t) ->
         match BM.attr_value n "level" with
-        | Some (Keyword "error") | Some (String "error") -> true
+        | Some (Keyword "error") -> true
         | _ -> false)
       notifications
   in
@@ -379,7 +379,9 @@ let compact_import_result (result : BM.t) (notifications : BM.t list)
                | _ -> []
              in
              (match BM.attr_value m "path" with
-              | Some (String p) -> Common_path.file_ext p = "org"
+              | Some (String p) ->
+                  (* cljs (string/ends-with? (lower-case path) ".org") *)
+                  Common_path.ends_with (String.lowercase_ascii p) ".org"
               | _ -> false)
            | _ -> false)
          files)

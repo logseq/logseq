@@ -185,3 +185,61 @@ let get_initial_data db : initial_data =
                 ; "logseq.property/created-by-ref" ]))
   in
   { initial_schema = Datascript.schema db; initial_datoms = data }
+
+(* cljs common-initial-data/with-parent — post-processing applied to a
+   :thread-api/pull result map. When the pulled entity carries
+   :block/page, :block/parent is replaced by the parent's
+   {db/id, block/uuid} select-keys map, nil top-level values are removed
+   non-nested, and every :block/refs entry is expanded to a full [*]
+   pull (cljs (map f refs) — a seq on the wire, not a set). *)
+let with_parent (db : db) (block : Wire.t) : Wire.t =
+  match block with
+  | Wire.Map _ -> (
+      let truthy = function Wire.Nil | Wire.Bool false -> false | _ -> true in
+      match Cljs_map.get block "block/page" with
+      | Some page_v when truthy page_v ->
+          let parent =
+            match Cljs_map.get block "block/parent" with
+            | Some (Wire.Map _ as pm) -> (
+                match Cljs_map.get pm "db/id" with
+                | Some (Wire.Int eid) -> (
+                    match Datascript.entity db (Entity_id eid) with
+                    | Some e ->
+                        let uuid_kv =
+                          match Db_normalize.entity_block_uuid e with
+                          | Some u -> [ (Wire.Keyword "block/uuid", u) ]
+                          | None -> []
+                        in
+                        Wire.Map ((Wire.Keyword "db/id", Wire.Int eid) :: uuid_kv)
+                    | None -> Wire.Nil)
+                | _ -> Wire.Nil)
+            | _ -> Wire.Nil
+          in
+          let block = Cljs_map.assoc block "block/parent" parent in
+          let block =
+            match block with
+            | Wire.Map kvs ->
+                Wire.Map (List.filter (fun (_, v) -> v <> Wire.Nil) kvs)
+            | other -> other
+          in
+          let refs =
+            match Cljs_map.get block "block/refs" with
+            | Some (Wire.Set xs) | Some (Wire.Array xs) | Some (Wire.List xs) ->
+                xs
+            | Some Wire.Nil | None -> []
+            | Some _ -> invalid_arg "block/refs is not sequential"
+          in
+          let refs' =
+            List.map
+              (fun r ->
+                 match Cljs_map.get r "db/id" with
+                 | Some (Wire.Int eid) -> (
+                     match Datascript.pull_string db "[*]" (Entity_id eid) with
+                     | Some pulled -> Ds_wire.transit_of_pulled pulled
+                     | None -> Wire.Nil)
+                 | _ -> Wire.Nil)
+              refs
+          in
+          Cljs_map.assoc block "block/refs" (Wire.List refs')
+      | _ -> block)
+  | _ -> block

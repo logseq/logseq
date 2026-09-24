@@ -1527,16 +1527,20 @@ let parse ?(cards : bool = false) (db : db) (s : string) : parsed option =
         Page_ref.to_page_ref (String.sub s 1 (String.length s - 1))
       else s
     in
+    (* cljs (reader/read-string custom-readers) — malformed EDN throws *)
     let form =
-      try Some (apply_custom_readers (Parser.read_edn (pre_transform s)))
-      with _ -> None
+      simplify_query (apply_custom_readers (Parser.read_edn (pre_transform s)))
     in
     let env =
-      { db; form = Option.value form ~default:QueryFormNil; blocks = false;
+      { db; form; blocks = false;
         sample = None; vars = Hashtbl.create 8; private_property = false }
     in
-    let form = Option.map simplify_query form in
-    let built = match form with Some f -> build_query f env 0 None | None -> None in
+    (* cljs (when form (build-query form {:form form ...})) *)
+    let built =
+      match form with
+      | QueryFormNil -> None
+      | f -> build_query f env 0 None
+    in
     let result =
       match built with
       | Some { bquery = q; _ } -> (match coll_elems q with [] -> None | elems -> Some (q, elems))

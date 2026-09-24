@@ -1678,7 +1678,10 @@ let translate_query_properties (prop_value : string)
       in
       vec (List.map (fun v -> v) cols)
     | None -> vec []
-  with _ -> vec []
+  with e ->
+    Worker_log.error "Translating query properties failed with:"
+      [ ("error", Printexc.to_string e) ];
+    vec []
 
 (* translate-linked-ref-filters — returns (ident * value) pairs *)
 let translate_linked_ref_filters (prop_value : string)
@@ -1701,7 +1704,13 @@ let translate_linked_ref_filters (prop_value : string)
           (fun n ->
             match Hashtbl.find_opt page_names_to_uuids n with
             | Some u -> Some (vec [ kw "block/uuid"; uuidv u ])
-            | None -> None)
+            | None ->
+              (* cljs (js/console.error (str "No uuid found ..." (pr-str %))) *)
+              Worker_log.error
+                ("No uuid found for linked reference filter page "
+                 ^ Edn_util.pr_str (String n))
+                [];
+              None)
           names
       in
       let includes' = vec (to_refs includes) in
@@ -1713,7 +1722,10 @@ let translate_linked_ref_filters (prop_value : string)
            [ "logseq.property.linked-references/excludes", excludes' ]
          else [])
     | _ -> []
-  with _ -> []
+  with e ->
+    Worker_log.error "Translating linked reference filters failed with: "
+      [ ("error", Printexc.to_string e) ];
+    []
 
 (* emoji icon support *)
 let emoji_icons : (string * BM.t) list Lazy.t =

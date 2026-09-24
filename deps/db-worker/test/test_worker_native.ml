@@ -78,8 +78,17 @@ let () =
   Worker_core.init ();
   check "registered q" (Dispatcher.registered "thread-api/q");
   check "not registered" (not (Dispatcher.registered "thread-api/nope"));
-  let err = await (Worker_core.invoke "thread-api/nope" "[]") in
-  check "unregistered returns error transit" (string_contains err "error");
+  (* cljs (throw (ex-info "not found thread-api: ...")) — a synchronous
+     throw makes remoteInvoke reject, so invoke raises before a task
+     exists. *)
+  let err =
+    try
+      ignore (Worker_core.invoke "thread-api/nope" "[]");
+      "no-error"
+    with e -> Printexc.to_string e
+  in
+  check "unregistered endpoint rejects"
+    (string_contains err "not found thread-api");
 
   (* --- lifecycle end-to-end --- *)
   let _dir = setup () in

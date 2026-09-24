@@ -18,3 +18,7 @@ val registered_names : unit -> string list
 (* Tagged "error" wire value for an exception, the same payload
    cljs `read-transit-str` decodes back into ExceptionInfo. *)
 val encode_error : string -> exn -> Wire.t
+
+(* cljs (ex-message e) — the raw message, not Printexc.to_string's
+   Constructor(...) rendering. *)
+val exn_message : exn -> string
