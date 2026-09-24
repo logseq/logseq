@@ -198,7 +198,9 @@
   [db property]
   (let [m (worker-plain/entity-forward-map db property {})
         closed-values (property-closed-values db property)]
-    (cond-> m
+    (cond-> (assoc m :block.temp/class-declared?
+                   (boolean (seq (d/datoms db :avet :logseq.property.class/properties
+                                           (:db/id property)))))
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
@@ -793,6 +795,12 @@
         class-keys (map :db/ident
                         (:classes-properties (block-class-properties db (d/entity db block-id))))]
     (vec (distinct (concat own-keys class-keys)))))
+
+(defn block-class-property-idents
+  "Idents of properties provided by the block's classes (including ancestors)."
+  [db block]
+  (set (map :db/ident
+            (:classes-properties (block-class-properties db block)))))
 
 (defn- property-has-closed-values?
   [db property]
