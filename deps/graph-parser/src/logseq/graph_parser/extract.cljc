@@ -82,6 +82,18 @@
     :triple-lowbar (tri-lb-title-parsing file-name-body)
     (legacy-title-parsing file-name-body)))
 
+(defn- org-roam-file-created-at
+  [file]
+  (when-let [[_ year month day hour minute sec]
+             (some->> (path->file-body file)
+                      (re-find #"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-"))]
+    (.getTime (js/Date. (parse-long year)
+                        (dec (parse-long month))
+                        (parse-long day)
+                        (parse-long hour)
+                        (parse-long minute)
+                        (parse-long sec)))))
+
 (defn- get-page-name
   "Get page name with overridden order of
      `title::` property
@@ -266,7 +278,12 @@
              (:block/invalid-properties (first blocks))
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
+          file-created-at (org-roam-file-created-at file)
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
+          property-created-at (get-in page-map [:block/properties :created-at])
+          page-map (cond-> page-map
+                     (integer? (or property-created-at file-created-at))
+                     (assoc :block/created-at (or property-created-at file-created-at)))
           pages (build-pages-aux db page-map ref-pages date-formatter format)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]
