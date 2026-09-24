@@ -35,15 +35,112 @@ export type BlockPropertiesPredicate = (
   props: BlockPropertiesRendererProps
 ) => boolean
 
-export type BlockRendererPredicate = (
-  props: BlockRendererProps
-) => boolean
+export type BlockRendererPredicate = (props: BlockRendererProps) => boolean
+
+export type CodeMirror6LanguageSource =
+  | 'native'
+  | 'nextjournal'
+  | 'legacy'
+  | 'plain-text'
+  | 'plugin'
+
+export type CodeMirror6PluginCapability =
+  | 'code-editor/cm6'
+  | 'code-editor/extensions'
+  | 'code-editor/language-registry'
+
+type CodeMirror6LanguageDescriptorBase = {
+  id: string
+  names: Array<string>
+  extensions?: Array<string>
+  options?: Record<string, any>
+}
+
+/**
+ * A usable CodeMirror 6 extension instance (a LanguageSupport or Extension).
+ * `undefined` and `null` are excluded so that a declared `support`/`load`
+ * actually resolves a value at runtime.
+ */
+export type CodeMirror6ExtensionInstance = object
+
+/**
+ * Descriptor shapes `registerLanguage` accepts. Every registration must
+ * resolve to a LanguageSupport at runtime: `plain-text` intentionally
+ * installs none; `plugin` supplies one through `support` or `load`.
+ * `native`, `nextjournal`, and `legacy` sources are not registrable — their
+ * package/entry fields only describe entries of the statically generated
+ * built-in language table.
+ */
+export type CodeMirror6LanguageRegistration =
+  | (CodeMirror6LanguageDescriptorBase & { source: 'plain-text' })
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'plugin'
+      /** An already-built CodeMirror 6 LanguageSupport (or Extension) used
+       *  to highlight this language. */
+      support: CodeMirror6ExtensionInstance
+      /** LanguageDescription.load-style loader resolving a
+       *  LanguageSupport/Extension or a promise of one. */
+      load?: () =>
+        | CodeMirror6ExtensionInstance
+        | Promise<CodeMirror6ExtensionInstance>
+    })
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'plugin'
+      load: () =>
+        | CodeMirror6ExtensionInstance
+        | Promise<CodeMirror6ExtensionInstance>
+      support?: CodeMirror6ExtensionInstance
+    })
+
+/**
+ * Full descriptor shape, e.g. as returned by `getLanguage`. Built-in
+ * registry entries carry package/entry metadata for the statically
+ * generated language table; plugins register the narrower
+ * {@link CodeMirror6LanguageRegistration} subset.
+ */
+export type CodeMirror6LanguageDescriptor =
+  | CodeMirror6LanguageRegistration
+  | (CodeMirror6LanguageDescriptorBase & {
+      source: 'native' | 'nextjournal' | 'legacy'
+      package: string
+      entry: string
+    })
+
+export type CodeMirror6ExtensionFactoryContext = {
+  apiVersion: 1
+  blockUuid?: string
+  editorId?: string
+  view?: unknown
+  state?: unknown
+  language?: CodeMirror6LanguageDescriptor
+  dispatch?: (transactionSpec: unknown) => void
+}
+
+export type CodeMirror6ExtensionFactory = (
+  context: CodeMirror6ExtensionFactoryContext
+) => unknown
+
+export type CodeMirror6ExtensionValue =
+  | CodeMirror6ExtensionFactory
+  | ReadonlyArray<unknown>
+  | object
+  | null
+  | undefined
+
+export type CodeMirror6EnhancerAPI = CodeMirror6ExtensionFactoryContext & {
+  enhancerType: 'codemirror-6'
+  capabilities: Array<CodeMirror6PluginCapability>
+  registerExtension: (key: string, extension: CodeMirror6ExtensionValue) => void
+  registerLanguage: (descriptor: CodeMirror6LanguageRegistration) => void
+  getLanguage: (languageName: string) => CodeMirror6LanguageDescriptor | null
+}
 
 /**
  * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
  * may not be supported on the Marketplace.
  */
+
 export class LSPluginExperiments {
   constructor(private ctx: LSPluginUser) {}
 
@@ -248,8 +345,18 @@ export class LSPluginExperiments {
     )
   }
 
+  registerExtensionsEnhancer(
+    type: 'codemirror-6',
+    enhancer: (v: CodeMirror6EnhancerAPI) => Promise<any>
+  ): any
+
   registerExtensionsEnhancer<T = any>(
     type: 'katex' | 'codemirror',
+    enhancer: (v: T) => Promise<any>
+  ): any
+
+  registerExtensionsEnhancer<T = any>(
+    type: 'katex' | 'codemirror' | 'codemirror-6',
     enhancer: (v: T) => Promise<any>
   ) {
     const host = this.ensureHostScope()

@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.context.i18n :refer [t]]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.security :as security]
@@ -168,15 +169,16 @@
            [:div.flex.justify-end.pt-2.gap-2
             (shui/button {:size :sm :variant :ghost
                           :on-click (fn [^js e]
-                                      (let [^js cm (util/get-cm-instance (-> (.-target e) (.closest ".code-mode-wrap")))
-                                            content' (some-> (.toJSON plugin-settings) (js/JSON.stringify nil 2))]
-                                        (.setValue cm content')))}
+                                      (when-let [editor (some-> (.-target e) (.closest ".code-mode-wrap")
+                                                                util/get-code-editor-context)]
+                                        (let [content' (some-> (.toJSON plugin-settings) (js/JSON.stringify nil 2))]
+                                          (code-editor/set-value! editor content'))))}
                          (t :ui/reset))
             (shui/button {:size :sm
                           :on-click (fn [^js e]
                                       (try
-                                        (let [^js cm (util/get-cm-instance (-> (.-target e) (.closest ".code-mode-wrap")))
-                                              content (.getValue cm)
+                                        (let [editor (util/get-code-editor-context (-> (.-target e) (.closest ".code-mode-wrap")))
+                                              content (code-editor/get-value editor)
                                               content' (js/JSON.parse content)]
                                           (set! (. plugin-settings -settings) content')
                                           (set-edit-mode! nil))

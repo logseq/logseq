@@ -1372,10 +1372,19 @@
                 (walk/keywordize-keys)))))))
 
 #?(:cljs
-   (defn get-cm-instance
+   (defn get-code-editor-context
+     "CodeMirror 6 context map stored on the code editor DOM (`:view`,
+     :*state, :parent, :language-compartment, :editor-id, :block-uuid),
+     or nil for `target`s that do not hit a code editor."
      [^js target]
      (when target
-       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
+       (or (gobj/get target "__logseqCodeEditorContext")
+           (some-> target (.closest "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target (.querySelector "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target (.querySelector ".cm-editor")
+                   (gobj/get "__logseqCodeEditorContext"))))))
 
 #?(:cljs
    (defn rtc-test?

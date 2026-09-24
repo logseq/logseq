@@ -1,7 +1,7 @@
 // Fork from https://github.com/mozilla/pdf.js
 
 import { binarySearchFirstItem, getCharacterType, getPdfjsLib } from './utils'
-import { scrollIntoView } from 'codemirror/src/display/scrolling'
+import { scrollIntoView } from './scroll.mjs'
 
 const FindState = {
   FOUND: 0, NOT_FOUND: 1, WRAPPED: 2, PENDING: 3,

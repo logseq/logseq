@@ -8,6 +8,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.extensions.code.language-registry :as language-registry]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.assets :as editor-assets]
@@ -423,7 +424,9 @@
   [id format]
   (let [pos          (hooks/use-memo state/get-editor-last-pos [])
         edit-content (or (use-current-edit-content) "")
-        modes        (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))
+        modes        (->> (mapcat :names (language-registry/supported-languages))
+                          distinct
+                          sort)
         ^js input    (gdom/getElement id)]
     (when (and modes input)
       (let [current-pos  (cursor/pos input)

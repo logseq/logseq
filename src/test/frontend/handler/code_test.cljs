@@ -1,22 +1,25 @@
 (ns frontend.handler.code-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.db.async :as db-async]
-            [frontend.handler.code :as code-handler]
+            [frontend.handler.code :as code]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(defn- fake-code-editor
+  "Minimal CodeMirror 6 context map: `:view` exposes `state.doc.toString()`,
+   `:*state` holds the tracked default value."
+  [value default-value]
+  {:view #js {:state #js {:doc (reify Object (toString [_] value))}}
+   :*state (atom {:default-value default-value})})
 
 (deftest save-code-editor-saves-graph-file-after-worker-file-lookup-test
   (async done
     (let [repo "logseq_db_code_handler"
           worker-calls (atom [])
           saved-files (atom [])
-          textarea #js {:dataset #js {:v "old content"}
-                        :defaultValue "old content"
-                        :value "new content"}
-          editor #js {:save (fn [])
-                      :getTextArea (fn [] textarea)}
+          editor (fake-code-editor "new content" "old content")
           previous-state (state/get-state)]
       (state/swap-state! assoc
              :git/current-repo repo
@@ -31,14 +34,15 @@
                           (fn [path content]
                             (swap! saved-files conj [path content])
                             (p/resolved nil))]
-            (code-handler/save-code-editor!))
+            (code/save-code-editor!))
           (p/then
            (fn [_]
-            (is (= [[:thread-api/pull repo [:db/id] [:file/path "logseq/config.edn"]]]
-                   @worker-calls))
-            (is (= [["logseq/config.edn" "new content"]]
+             (is (= [[:thread-api/pull repo [:db/id] [:file/path "logseq/config.edn"]]]
+                    @worker-calls))
+             (is (= [["logseq/config.edn" "new content"]]
                     @saved-files))
-             (is (= "new content" (.-v ^js (.-dataset textarea))))))
+             (is (= "new content"
+                    (:default-value @(:*state editor))))))
           (p/catch
            (fn [error]
              (is false (str error))))
@@ -56,11 +60,7 @@
                  :block/raw-title "aaOLDzz"}
           edit-content (atom nil)
           saved-block (atom nil)
-          textarea #js {:dataset #js {:v "OLD"}
-                        :defaultValue "OLD"
-                        :value "NEW"}
-          editor #js {:save (fn [])
-                      :getTextArea (fn [] textarea)}
+          editor (fake-code-editor "NEW" "OLD")
           previous-state (state/get-state)]
       (state/swap-state! assoc
              :git/current-repo repo
@@ -83,7 +83,7 @@
                           (fn [block' content]
                             (reset! saved-block [block' content])
                             (p/resolved nil))]
-            (code-handler/save-code-editor!))
+            (code/save-code-editor!))
           (p/then
            (fn [_]
              (is (= ["edit-input" "aaNEW\nzz"] @edit-content))
@@ -95,3 +95,24 @@
            (fn []
              (state/replace-state! previous-state)
              (done)))))))
+
+(deftest fenced-code-content-test
+  (testing "byte offsets from :pos_meta splice the new value into block content"
+    (is (= "```clojure\n(+ 1 2)\n```"
+           (code/fenced-code-content "```clojure\n(+ 1 1)\n```"
+                                     {:start_pos 13 :end_pos 21}
+                                     "(+ 1 2)")))
+    (is (= "```calc\n1 = 1\n```"
+           (code/fenced-code-content "```calc\n1 = 0\n```"
+                                     {:start_pos 10 :end_pos 16}
+                                     "1 = 1")))
+    (testing "blank values remove the fenced body"
+      (is (= "```clojure\n```"
+             (code/fenced-code-content "```clojure\n(+ 1 1)\n```"
+                                       {:start_pos 13 :end_pos 21}
+                                       ""))))
+    (testing "utf8 content keeps byte-accurate offsets"
+      (is (= "```\n你好\n```"
+             (code/fenced-code-content "```\n世界\n```"
+                                       {:start_pos 6 :end_pos 13}
+                                       "你好"))))))
