@@ -216,20 +216,22 @@ let () =
   check "render-snapshots block-ref-count value" ref_count_ok
 
 let () =
-  (* invalid request (non-map) resolves to tagged "error" transit —
-     matching cljs remote-function, which catches the endpoint throw and
-     resolves with the error's transit string *)
-  match
-    invoke "thread-api/get-render-snapshots"
-      [ Wire.String repo; Wire.Array [] ]
-  with
-  | Wire.Tagged ("error", Wire.Map kvs) -> (
-      match List.assoc_opt (Wire.Keyword "message") kvs with
-      | Some (Wire.String msg) ->
-          check "render-snapshots invalid request errors"
-            (string_contains msg "snapshot request")
-      | _ -> check "render-snapshots invalid request errors" false)
-  | _ -> check "render-snapshots invalid request errors" false
+  (* invalid request (non-map): fail!'s synchronous throw escapes
+     remoteInvoke as a rejection — matching cljs remote-function, which
+     re-throws a handler's synchronous throw instead of resolving to
+     error transit *)
+  let msg =
+    try
+      ignore
+        (invoke "thread-api/get-render-snapshots"
+           [ Wire.String repo; Wire.Array [] ]);
+      "no-error"
+    with
+    | Dispatcher.Exn_info (msg, _) -> msg
+    | _ -> "other-error"
+  in
+  check "render-snapshots invalid request errors"
+    (string_contains msg "snapshot request")
 
 let () =
   if !failures > 0 then begin
