@@ -12,6 +12,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -20,6 +21,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest save-block-resolves-page-refs-in-worker-test
@@ -1427,3 +1429,67 @@
                 "Grandparent/Nested/Leaf shows up in Library"))))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(defn- block-ref-ids
+  [block]
+  (set (map :db/id (:block/refs block))))
+
+(defn- linked-ref-ids
+  [db page]
+  (set (map :db/id (:ref-blocks (db-reference/get-linked-references db (:db/id page))))))
+
+(deftest clearing-past-deadline-removes-journal-linked-ref-test
+  (let [past-day 20260923
+        today-day 20260924
+        past-ms (date-time-util/journal-day->ms past-day)
+        today-ms (date-time-util/journal-day->ms today-day)
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal past-day}}
+                {:page {:build/journal today-day}
+                 :blocks [{:block/title "task"
+                           :build/tags [:logseq.class/Task]}]}]})
+        task (db-test/find-block-by-content @conn "task")
+        past-journal (db-test/find-journal-by-journal-day @conn past-day)
+        today-journal (db-test/find-journal-by-journal-day @conn today-day)]
+    (with-transact-pipeline
+      (fn []
+        (testing "Clearing a past Deadline to empty-placeholder drops the journal ref"
+          (outliner-property/batch-set-property! conn [(:block/uuid task)]
+                                                 :logseq.property/deadline past-ms)
+          (let [task' (d/entity @conn (:db/id task))]
+            (is (contains? (block-ref-ids task') (:db/id past-journal))
+                "Setting a past Deadline adds the journal to :block/refs")
+            (is (contains? (linked-ref-ids @conn past-journal) (:db/id task))
+                "The past journal lists the task as a linked reference"))
+          (outliner-property/batch-set-property! conn [(:block/uuid task)]
+                                                 :logseq.property/deadline
+                                                 :logseq.property/empty-placeholder)
+          (let [task' (d/entity @conn (:db/id task))]
+            (is (= :logseq.property/empty-placeholder (:logseq.property/deadline task'))
+                "UI clear keeps Deadline on the node")
+            (is (not (contains? (block-ref-ids task') (:db/id past-journal)))
+                "Clearing a past Deadline retracts the journal from :block/refs")
+            (is (not (contains? (linked-ref-ids @conn past-journal) (:db/id task)))
+                "The past journal no longer lists the task as a linked reference")))
+
+        (testing "Clearing today's Deadline also drops the journal ref"
+          (outliner-property/batch-set-property! conn [(:block/uuid task)]
+                                                 :logseq.property/deadline today-ms)
+          (is (contains? (block-ref-ids (d/entity @conn (:db/id task))) (:db/id today-journal)))
+          (outliner-property/batch-set-property! conn [(:block/uuid task)]
+                                                 :logseq.property/deadline
+                                                 :logseq.property/empty-placeholder)
+          (is (not (contains? (block-ref-ids (d/entity @conn (:db/id task)))
+                              (:db/id today-journal)))
+              "Clearing today's Deadline retracts today's journal from :block/refs"))
+
+        (testing "Removing the property still clears the journal ref"
+          (outliner-property/batch-set-property! conn [(:block/uuid task)]
+                                                 :logseq.property/deadline past-ms)
+          (is (contains? (block-ref-ids (d/entity @conn (:db/id task))) (:db/id past-journal)))
+          (outliner-property/remove-block-property! conn (:block/uuid task) :logseq.property/deadline)
+          (let [task' (d/entity @conn (:db/id task))]
+            (is (nil? (:logseq.property/deadline task')))
+            (is (not (contains? (block-ref-ids task') (:db/id past-journal)))
+                "Fully removing Deadline retracts the past journal from :block/refs")))))))
