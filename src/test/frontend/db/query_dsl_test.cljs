@@ -135,6 +135,22 @@
 ;; Tests
 ;; =====
 
+(deftest incomplete-query-parse-does-not-throw-test
+  (testing "mid-edit incomplete /query syntax is not executable"
+    (doseq [query ["(and (task TODO)"
+                   "(and [[foo]]"
+                   "("]]
+      (is (nil? (query-dsl/parse-query query (conn/get-db test-helper/test-db) {}))
+          (str "parse-query should skip incomplete syntax: " query))
+      (is (nil? (query-dsl/execute-query query
+                                         (conn/get-db test-helper/test-db)
+                                         {:block-attrs db-block-attrs}))
+          (str "execute-query should skip incomplete syntax: " query))))
+  (testing "complete DSL still parses"
+    (is (seq (:query (query-dsl/parse-query "(task TODO)"
+                                            (conn/get-db test-helper/test-db)
+                                            {}))))))
+
 (deftest pre-transform-test
   (testing "page references should be quoted and tags should be handled"
     (are [x y] (= (query-dsl/pre-transform x) y)

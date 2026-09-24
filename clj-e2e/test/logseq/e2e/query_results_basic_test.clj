@@ -214,3 +214,27 @@
     (doseq [journal journals]
       (assert/assert-is-visible
        (loc/filter ".custom-query-results .ls-table-row" :has-text (get journal "title"))))))
+
+(deftest simple-query-incomplete-syntax-does-not-crash-test
+  (let [reference "query-mid-edit-ref"
+        seed (str "[[" reference "]] query seed")]
+    (b/new-blocks [seed ""])
+    (util/input-command "query")
+    (w/click (util/-query-last "button:text('filter')"))
+    (util/input "page reference")
+    (w/click "a.menu-link:has-text('page reference')")
+    (w/click (loc/filter ".cp__select-results a.menu-link" :has-text reference))
+    (assert-query-count! 1)
+    (let [page-name (get (ls-api-call! :editor.getCurrentPage) "name")
+          query-uuid (some #(get % ":logseq.property/query")
+                           (ls-api-call! :editor.getPageBlocksTree page-name))]
+      (is (string? query-uuid)
+          "The /query command stores the live query on the block property.")
+      (testing "live mid-edit incomplete syntax does not crash the page"
+        (ls-api-call! :editor.updateBlock query-uuid (str "(and [[" reference "]]"))
+        (assert/assert-is-visible ".ls-page-blocks")
+        (assert/assert-is-visible ".cp__query-builder")
+        (assert/assert-is-visible (loc/filter ".ls-block" :has-text "query seed")))
+      (testing "completing the query resumes evaluation"
+        (ls-api-call! :editor.updateBlock query-uuid (str "(and [[" reference "]])"))
+        (assert-query-count! 1)))))
