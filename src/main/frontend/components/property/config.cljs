@@ -138,7 +138,7 @@
              (when repo
                (p/let [classes (db-async/<get-all-classes repo {:except-root-class? true
                                                                  :except-private-tags? false})]
-                 (set-classes! classes)))
+                 (set-classes! (state/classes-for-tag-completion repo classes))))
              nil)
            [repo])
         schema-classes (:logseq.property/classes property)]
