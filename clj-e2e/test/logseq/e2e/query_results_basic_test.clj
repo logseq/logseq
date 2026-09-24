@@ -226,8 +226,10 @@
     (w/click (loc/filter ".cp__select-results a.menu-link" :has-text reference))
     (assert-query-count! 1)
     (let [page-name (get (ls-api-call! :editor.getCurrentPage) "name")
-          query-uuid (some #(get % ":logseq.property/query")
-                           (ls-api-call! :editor.getPageBlocksTree page-name))]
+          query-ref (some #(get % ":logseq.property/query")
+                          (ls-api-call! :editor.getPageBlocksTree page-name))
+          query-id (if (map? query-ref) (get query-ref "id") query-ref)
+          query-uuid (get (ls-api-call! :editor.getBlock query-id) "uuid")]
       (is (string? query-uuid)
           "The /query command stores the live query on the block property.")
       (testing "live mid-edit incomplete syntax does not crash the page"
