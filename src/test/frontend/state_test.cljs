@@ -313,3 +313,19 @@
   (is (true? (state/flashcard-class? {:db/ident :logseq.class/Cards})))
   (is (false? (state/flashcard-class? :logseq.class/Task)))
   (is (false? (state/flashcard-class? {:db/ident :logseq.class/Query}))))
+
+(deftest classes-for-tag-completion-uses-repo-feature-flag
+  (let [classes [{:db/ident :logseq.class/Card :block/title "Card"}
+                 {:db/ident :logseq.class/Cards :block/title "Cards"}
+                 {:db/ident :logseq.class/Task :block/title "Task"}]
+        enabled-for (fn [repo] (not= repo "off-graph"))]
+    (with-redefs [state/enable-flashcards? (fn
+                                             ([]
+                                              (throw (js/Error. "classes-for-tag-completion must pass repo")))
+                                             ([repo]
+                                              (enabled-for repo)))]
+      (is (= ["Task"]
+             (map :block/title (state/classes-for-tag-completion "off-graph" classes))))
+      (is (= ["Card" "Cards" "Task"]
+             (map :block/title (state/classes-for-tag-completion "on-graph" classes))))
+      (is (nil? (state/classes-for-tag-completion "off-graph" nil))))))
