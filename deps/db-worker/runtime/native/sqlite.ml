@@ -41,9 +41,40 @@ let open_db ~path =
   { handle; filename = path; tx_depth = 0; savepoint_seq = 0 }
 
 let prepare_pool ~name:_ = Db_worker_effect.pure ()
-let open_db_pool ~name:_ ~path = open_db ~path
 
-let close t = ignore (Sqlite3.db_close t.handle)
+(* OPFS-pool parity: conns opened through the same pool name share one
+   conn per filename, like cljs pool.open sharing the VFS — a second
+   open_db_pool on the same path reuses the live conn instead of opening
+   a competing file handle (locking_mode=exclusive would BUSY it). *)
+let pool_conns : (string, (string, db) Hashtbl.t) Hashtbl.t = Hashtbl.create 7
+
+let open_db_pool ~name ~path =
+  let by_path =
+    match Hashtbl.find_opt pool_conns name with
+    | Some by_path -> by_path
+    | None ->
+        let by_path = Hashtbl.create 7 in
+        Hashtbl.replace pool_conns name by_path;
+        by_path
+  in
+  match Hashtbl.find_opt by_path path with
+  | Some db -> db
+  | None ->
+      let db = open_db ~path in
+      Hashtbl.replace by_path path db;
+      db
+
+let close t =
+  ignore (Sqlite3.db_close t.handle);
+  let empty_names = ref [] in
+  Hashtbl.iter
+    (fun name by_path ->
+       Hashtbl.filter_map_inplace
+         (fun _ db -> if db == t then None else Some db)
+         by_path;
+       if Hashtbl.length by_path = 0 then empty_names := name :: !empty_names)
+    pool_conns;
+  List.iter (Hashtbl.remove pool_conns) !empty_names
 
 let exec t ~sql ~bind =
   if Array.length bind = 0 then begin

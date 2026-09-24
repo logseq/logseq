@@ -159,7 +159,8 @@ let remove_properties (format : string) (content : string) : string =
         when starts_with_upper (Common_util.str_triml first) properties_end ->
         let line =
           Common_util.regex_replace
-            (Regexp.compile ":END:\\s?")
+            (* cljs #"(?i):END:\\s?" *)
+            (Regexp.compile ~caseless:true ":END:\\s?")
             ~replacement:"" first
         in
         if Unicode.trim line = "" then rest else line :: rest
@@ -201,7 +202,10 @@ let remove_deadline_scheduled (content : string) : string =
   match lines with
   | [ _ ] -> content
   | first_line :: rest_lines ->
-    let re = Regexp.compile "(?:^|\\s)(DEADLINE|SCHEDULED):\\s+<[^>]*>" in
+    (* cljs #"(?i)(?:^|\\s)(DEADLINE|SCHEDULED):\\s+<[^>]*>" *)
+    let re =
+      Regexp.compile ~caseless:true "(?:^|\\s)(DEADLINE|SCHEDULED):\\s+<[^>]*>"
+    in
     let rest_lines =
       List.filter_map
         (fun line ->

@@ -420,7 +420,8 @@ let split_namespace_pages (title : string) : string list =
     in
     List.map Unicode.trim (loop [ first ] first others)
 
-let url_encoded_pattern = Regexp.compile "%[0-9a-f]{2}"
+(* cljs #"(?i)%[0-9a-f]{2}" *)
+let url_encoded_pattern = Regexp.compile ~caseless:true "%[0-9a-f]{2}"
 
 let page_name_sanity (s : string) : string = Ldb.page_name_sanity s
 let page_name_sanity_lc (s : string) : string = Ldb.page_name_sanity_lc s
@@ -479,7 +480,9 @@ let get_file_ext (file : string) : string option =
 
 (* common-util/uuid-string? *)
 let uuid_pattern = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-let uuid_string_re = Regexp.compile ("^" ^ uuid_pattern ^ "$")
+(* cljs exactly-uuid-pattern = re-pattern "(?i)^uuid$" *)
+let uuid_string_re =
+  Regexp.compile ~caseless:true ("^" ^ uuid_pattern ^ "$")
 
 let uuid_string (s : string) : bool = Regexp.test uuid_string_re s
 
@@ -551,7 +554,7 @@ let regex_replace_first re ~replacement s =
 
 (* common-util/replace-ignore-case *)
 let replace_ignore_case (s : string) (old_value : string) (new_value : string) : string =
-  regex_replace (Regexp.compile ("" ^ escape_regex_chars old_value)) ~replacement:new_value s
+  regex_replace (Regexp.compile ~caseless:true ("" ^ escape_regex_chars old_value)) ~replacement:new_value s
 
 (* common-util/clear-markdown-heading *)
 let markdown_heading_pattern = Regexp.compile "^#+\\s+"

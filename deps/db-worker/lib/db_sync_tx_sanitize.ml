@@ -174,7 +174,8 @@ let drop_conflicted_encrypted_retracts tx_data =
   List.iter
     (fun item ->
        match vec_items item with
-       | Some [ Keyword op; e; Keyword a; v ]
+       (* cljs (<= 4 (count item)) — 5+ element tx items count too *)
+       | Some (Keyword op :: e :: Keyword a :: v :: _)
          when List.mem op entity_op_kinds && List.mem a encrypted_attrs ->
            let key = (e, a, v) in
            let entry =
@@ -199,7 +200,7 @@ let drop_conflicted_encrypted_retracts tx_data =
       List.filter
         (fun item ->
            match vec_items item with
-           | Some [ Keyword "db/retract"; e; Keyword a; v ] ->
+           | Some (Keyword "db/retract" :: e :: Keyword a :: v :: _) ->
                not (List.mem (e, a, v) conflicted)
            | _ -> true)
         tx_data
@@ -220,10 +221,13 @@ let touched_entity_eid db item : entity_id option =
         | _ -> None
       else None
 
+(* cljs (when (:block/uuid entity) ...) — any truthy block/uuid counts *)
 let entity_has_uuid db eid =
   match entity db (Entity_id eid) with
   | Some ent ->
-      (match Ldb.value ent "block/uuid" with Some (Uuid _) -> true | _ -> false)
+      (match Ldb.value ent "block/uuid" with
+       | Some (Bool false) | None -> false
+       | Some _ -> true)
   | None -> false
 
 let sanitize_tx ?(drop_missing_retract_ops = false)

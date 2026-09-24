@@ -12,6 +12,18 @@ let repo_missing_asset_upload_files : (string, Wire.t list) Hashtbl.t =
 
 let str_or = function Some s -> Wire.String s | None -> Wire.Nil
 
+(* cljs distinct — first occurrence wins, order preserved *)
+let distinct (l : 'a list) : 'a list =
+  let seen = Hashtbl.create 8 in
+  List.filter
+    (fun x ->
+       if Hashtbl.mem seen x then false
+       else begin
+         Hashtbl.add seen x ();
+         true
+       end)
+    l
+
 let graph_aes_key repo : Wire.t option Db_worker_effect.t =
   match Worker_state.datascript_conn repo with
   | Some conn
@@ -143,23 +155,34 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
         (graph_aes_key repo >>= fun aes_key ->
          let asset_id = asset_uuid in
          let put_url = asset_url base gid asset_id at in
+         (* cljs: (log/error :read-asset-failed e) + mark-missing +
+            (throw (ex-info "read-asset failed" {:type ...} e)) *)
          Db_worker_effect.catch
            (read_asset_bytes repo asset_id at)
-           (fun _ ->
+           (fun e ->
+              Worker_log.error "read-asset-failed"
+                [ ("repo", repo); ("asset-id", asset_id)
+                ; ("error", Printexc.to_string e) ];
               mark_missing_asset_upload_file repo asset_id at;
               raise
                 (err "rtc.exception/read-asset-failed" "read-asset failed"))
          >>= fun asset_bytes ->
          clear_missing_asset_upload_file repo asset_id;
          (match aes_key with
-          | None -> Db_worker_effect.pure asset_bytes
+          | None -> Db_worker_effect.pure (asset_bytes, false)
           | Some key ->
               Sync_deps.require "encrypt_bytes" Sync_deps.encrypt_bytes key asset_bytes
               >>= fun encrypted ->
               Db_worker_effect.pure
-                (Transit_codec.to_string encrypted))
-         >>= fun payload ->
-         let total = String.length payload in
+                (Transit_codec.to_string encrypted, true))
+         >>= fun (payload, text_payload) ->
+         (* cljs payload-size: (count s) for strings = UTF-16 code
+            units; .-byteLength for bytes. e2ee payload is transit text,
+            raw payload is opaque bytes *)
+         let total =
+           if text_payload then Search_fuzzy.utf16_length payload
+           else String.length payload
+         in
          notify_asset_progress repo asset_id "upload" 0 total;
          !http_send_fn
            { Http.url = put_url
@@ -188,10 +211,15 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
            | _ ->
                raise (err "rtc.exception/upload-asset-failed" "upload-asset failed"))
   | _ ->
+      (* cljs ex-data: {:repo :asset-uuid :asset-type :checksum :base
+         :graph-id} *)
       Db_worker_effect.error
         (Sync_util.ex_info "missing asset upload info"
            [ Wire.Keyword "repo", Wire.String repo
            ; Wire.Keyword "asset-uuid", Wire.String asset_uuid
+           ; Wire.Keyword "asset-type", str_or asset_type
+           ; Wire.Keyword "checksum", str_or checksum
+           ; Wire.Keyword "base", str_or (http_base ())
            ; Wire.Keyword "graph-id", str_or graph_id ])
 
 (* test hook — cljs tests rebind upload-remote-asset! *)
@@ -212,17 +240,20 @@ let drop_asset_op repo asset_uuid reason data ~current_client ~broadcast_rtc_sta
 (* process-asset-op! — asset-op = {:block/uuid u, :update-asset|:remove-asset [...]} *)
 let process_asset_op repo graph_id (asset_op : Wire.t)
     ~current_client ~broadcast_rtc_state : unit Db_worker_effect.t =
-  let asset_uuid =
+  (* cljs (when-not asset-uuid fail-fast): "" is truthy — only an
+     absent/non-uuid :block/uuid fails *)
+  let asset_uuid_opt =
     match Wire.get "block/uuid" asset_op with
-    | Some (Wire.Uuid u) | Some (Wire.String u) -> u
-    | _ -> ""
+    | Some (Wire.Uuid u) | Some (Wire.String u) -> Some u
+    | _ -> None
   in
+  let asset_uuid = Option.value asset_uuid_opt ~default:"" in
   let op_type =
     if Wire.get "update-asset" asset_op <> None then "update-asset"
     else if Wire.get "remove-asset" asset_op <> None then "remove-asset"
     else "unknown"
   in
-  if asset_uuid = "" then
+  if asset_uuid_opt = None then
     Sync_util.fail_fast "db-sync/missing-field"
       (Wire.Map
          [ Wire.Keyword "repo", Wire.String repo
@@ -356,6 +387,8 @@ let process_asset_ops repo (client : Sync_state.client)
       let rec worker () : unit Db_worker_effect.t =
         match pop () with
         | Some asset_op ->
+            (* cljs p/catch outside the recur: a failed op kills this
+               parallel slot instead of draining the queue *)
             Db_worker_effect.catch
               (process_asset_op repo graph_id asset_op ~current_client
                  ~broadcast_rtc_state
@@ -363,7 +396,7 @@ let process_asset_ops repo (client : Sync_state.client)
               (fun e ->
                  Worker_log.error "db-sync/process-asset-op-loop-failed"
                    [ ("repo", repo); ("error", Printexc.to_string e) ];
-                 worker ())
+                 Db_worker_effect.pure ())
         | None -> Db_worker_effect.pure ()
       in
       let n = min 10 (List.length asset_ops) in
@@ -556,9 +589,11 @@ let remote_asset_download_candidates db : (string * string) list =
 (* download-remote-assets-if-missing! *)
 let download_remote_assets_if_missing_impl repo graph_id candidates :
     Wire.t Db_worker_effect.t =
+  (* cljs: filter -> distinct -> (sort-by (juxt uuid type)) —
+     distinct preserves first-occurrence order, sort is stable *)
   let candidates =
     List.filter (fun (_, t) -> t <> "") candidates
-    |> List.sort_uniq compare
+    |> distinct |> List.sort compare
   in
   let queue = ref candidates in
   let pop () =
@@ -575,20 +610,18 @@ let download_remote_assets_if_missing_impl repo graph_id candidates :
         Asset_store.exists ~repo
           ~name:(asset_file_name asset_uuid asset_type)
         >>= fun exists ->
+        (* cljs has no per-asset catch here — a download rejection
+           propagates through p/all and rejects the whole batch *)
         (if exists then begin
            incr skipped_existing;
            Db_worker_effect.pure ()
          end
          else
-           Db_worker_effect.catch
-             (download_remote_asset repo (Some graph_id) asset_uuid
-                (Some asset_type)
-              >>= fun () ->
-              incr downloaded;
-              Db_worker_effect.pure ())
-             (fun e ->
-                log_request_asset_download_failed repo asset_uuid e;
-                Db_worker_effect.pure ()))
+           download_remote_asset repo (Some graph_id) asset_uuid
+             (Some asset_type)
+           >>= fun () ->
+           incr downloaded;
+           Db_worker_effect.pure ())
         >>= worker
     | None -> Db_worker_effect.pure ()
   in
@@ -617,7 +650,7 @@ let remote_asset_download_candidates_in_tx db (tx_data : datom list)
          | None -> None
        else None)
     tx_data
-  |> List.sort_uniq compare
+  |> distinct
 
 (* download-remote-assets-if-missing! — rebindable like
    download_remote_asset_fn so tests can stub the download path. *)

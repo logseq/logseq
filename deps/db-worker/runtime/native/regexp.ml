@@ -63,8 +63,10 @@ let translate s =
   loop 0;
   Buffer.contents b
 
-let compile s =
-  Re.compile (Re.Pcre.re ~flags:[ `CASELESS ] (translate s))
+(* cljs re-pattern is case-sensitive; (?i) maps to CASELESS. *)
+let compile ?(caseless = false) s =
+  Re.compile
+    (Re.Pcre.re ~flags:(if caseless then [ `CASELESS ] else []) (translate s))
 
 let test t s = Re.execp t s
 

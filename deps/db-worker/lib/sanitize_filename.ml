@@ -6,8 +6,9 @@
 let illegal_re = Regexp.compile "[/\\?<>\\\\:\\*\\|\"]"
 let control_re = Regexp.compile "[\\u0000-\\u001f\\u0080-\\u009f]"
 let reserved_re = Regexp.compile "^\\.+$"
+(* npm windowsReservedRe = /.../i *)
 let windows_reserved_re =
-  Regexp.compile "^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\..*)?$"
+  Regexp.compile ~caseless:true "^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\..*)?$"
 let windows_trailing_re = Regexp.compile "[\\. ]+$"
 
 let sanitize ?(replacement : string = "") (input : string) : string =

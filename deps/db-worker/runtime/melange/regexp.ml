@@ -9,9 +9,16 @@ external make_regexp : string -> string -> Js.Re.t = "RegExp" [@@mel.new]
 
 external source : Js.Re.t -> string = "source" [@@mel.get]
 
+external ignoreCase : Js.Re.t -> bool = "ignoreCase" [@@mel.get]
+
 external set_lastIndex : Js.Re.t -> int -> unit = "lastIndex" [@@mel.set]
 
-let compile s = make_regexp s "i"
+(* cljs re-pattern is case-sensitive; (?i) maps to the "i" flag. *)
+let compile ?(caseless = false) s =
+  make_regexp s (if caseless then "i" else "")
+
+let global t =
+  make_regexp (source t) (if ignoreCase t then "gi" else "g")
 
 let exec_result_to_match (result : Js.Re.result) : re_match =
   let groups = Array.map Js.Nullable.toOption (Js.Re.captures result) in
@@ -29,7 +36,7 @@ let exec ?(pos = 0) t s =
     Option.map exec_result_to_match (Js.Re.exec ~str:s t)
   else
     (* global flag makes lastIndex meaningful *)
-    let g = make_regexp (source t) "gi" in
+    let g = global t in
     set_lastIndex g pos;
     Option.map exec_result_to_match (Js.Re.exec ~str:s g)
 
@@ -48,7 +55,7 @@ let replace t ~f s =
 
 let replace_all t ~f s =
   let b = Buffer.create (String.length s) in
-  let g = make_regexp (source t) "gi" in
+  let g = global t in
   let rec loop pos =
     set_lastIndex g pos;
     match Js.Re.exec ~str:s g with
