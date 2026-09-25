@@ -9,8 +9,7 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.page :as outliner-page]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
 (def *commands
@@ -110,8 +109,8 @@
 
 (defn- advance-from-completion
   "`.+` semantics: next occurrence = now + frequency * unit."
-  [recur-unit frequency]
-  (t/plus (t/now) (recur-unit frequency)))
+  [now recur-unit frequency]
+  (t/plus now (recur-unit frequency)))
 
 (defn- advance-from-scheduled
   "`+` semantics: next occurrence = scheduled + frequency * unit. Can land in
@@ -124,9 +123,8 @@
   "`++` semantics: advance from scheduled in frequency*unit steps until strictly
   after now. cljs-time arithmetic is UTC, so adding whole weeks preserves
   day-of-week by construction — no fix-up needed."
-  [datetime recur-unit period-f frequency]
-  (let [now (t/now)
-        periods (max 1
+  [now datetime recur-unit period-f frequency]
+  (let [periods (max 1
                      (if (t/after? datetime now)
                        1
                        (period-f (t/interval datetime now))))
@@ -143,32 +141,39 @@
   "Dispatch on repeat-type db-ident to compute the next occurrence. Mirrors the
   three org-mode repeater cookies documented at
   docs.logseq.com: `.+` (dotted-plus), `+` (plus), `++` (double-plus)."
-  [datetime recur-unit period-f frequency repeat-type]
-  (case repeat-type
-    :logseq.property.repeat/repeat-type.dotted-plus
-    (advance-from-completion recur-unit frequency)
+  ([datetime recur-unit period-f frequency repeat-type]
+   (repeat-next-timestamp datetime recur-unit period-f frequency repeat-type (t/now)))
+  ([datetime recur-unit period-f frequency repeat-type now]
+   (case repeat-type
+     :logseq.property.repeat/repeat-type.dotted-plus
+     (advance-from-completion now recur-unit frequency)
 
-    :logseq.property.repeat/repeat-type.plus
-    (advance-from-scheduled datetime recur-unit frequency)
+     :logseq.property.repeat/repeat-type.plus
+     (advance-from-scheduled datetime recur-unit frequency)
 
-    ;; :double-plus or unknown fallback
-    (advance-until-future datetime recur-unit period-f frequency)))
+     ;; :double-plus or unknown fallback
+     (advance-until-future now datetime recur-unit period-f frequency))))
 
 (defn- get-next-time
-  [current-value unit frequency repeat-type]
-  (let [current-date-time (tc/to-date-time current-value)
-        [recur-unit period-f] (case (:db/ident unit)
-                                :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
-                                :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
-                                :logseq.property.repeat/recur-unit.day [t/days t/in-days]
-                                :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
-                                :logseq.property.repeat/recur-unit.month [t/months t/in-months]
-                                :logseq.property.repeat/recur-unit.year [t/years t/in-years]
-                                nil)]
-    ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
-    ;; on zero-length intervals, and the other variants produce nonsense.
-    (when (and recur-unit (pos? frequency))
-      (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type)))))
+  "The next occurrence, in milliseconds, of a repeat whose current value is
+  `current-value` (milliseconds). `now` defaults to the current time; a date
+  repeat passes today's UTC midnight so that it computes in whole UTC days."
+  ([current-value unit frequency repeat-type]
+   (get-next-time current-value unit frequency repeat-type (t/now)))
+  ([current-value unit frequency repeat-type now]
+   (let [current-date-time (tc/to-date-time current-value)
+         [recur-unit period-f] (case (:db/ident unit)
+                                 :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
+                                 :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
+                                 :logseq.property.repeat/recur-unit.day [t/days t/in-days]
+                                 :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
+                                 :logseq.property.repeat/recur-unit.month [t/months t/in-months]
+                                 :logseq.property.repeat/recur-unit.year [t/years t/in-years]
+                                 nil)]
+     ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
+     ;; on zero-length intervals, and the other variants produce nonsense.
+     (when (and recur-unit (pos? frequency))
+       (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type now))))))
 
 (defn- resolve-recur-frequency
   "Returns `[frequency default-value-tx-data]` for a recurring task entity:
@@ -205,14 +210,25 @@
         current-value (cond->
                        (get entity property-ident)
                         date?
-                        (#(date-time-util/journal-day->ms (:block/journal-day %))))]
+                        (#(date-time-util/journal-day->ms (:block/journal-day %))))
+        ;; A :date value is a day, carried here as its UTC midnight. It is
+        ;; advanced in whole UTC days against today's UTC midnight and read
+        ;; back as a UTC day; read in the local zone, UTC midnight is the
+        ;; previous evening west of UTC and the repeat landed a day early.
+        now (if date?
+              (tc/from-long (date-time-util/journal-day->ms
+                             (date-time-util/ms->journal-day (tc/to-long (t/now)))))
+              (t/now))]
     (when (and frequency unit current-value)
-      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type)]
-        (let [journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
-              {:keys [tx-data page-uuid]} (if journal-day
-                                            {:page-uuid (:block/uuid (d/entity db journal-day))}
+      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type now)]
+        (let [next-day (if date?
+                         (date-time-util/utc-ms->journal-day next-time-long)
+                         (date-time-util/ms->journal-day next-time-long))
+              journal-page-id (:e (first (d/datoms db :avet :block/journal-day next-day)))
+              {:keys [tx-data page-uuid]} (if journal-page-id
+                                            {:page-uuid (:block/uuid (d/entity db journal-page-id))}
                                             (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                                  title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
+                                                  title (date-time-util/int->journal-title next-day formatter)]
                                               (outliner-page/create db title {})))
               value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat
