@@ -188,14 +188,26 @@ let () =
   with_client_ops_db repo (fun _db ->
       Sync_client_op.update_graph_uuid repo (Some "graph-1");
       Sync_client_op.update_local_tx repo 9;
-      Sync_client_op.update_local_checksum repo "checksum-1";
+      Sync_client_op.update_local_checksum repo "checksum-1" 9;
       Sync_client_op.update_graph_uuid repo (Some "graph-2");
       Sync_client_op.update_local_tx repo 12;
-      Sync_client_op.update_local_checksum repo "checksum-2";
+      Sync_client_op.update_local_checksum repo "checksum-2" 12;
       check "sqlite sync-meta roundtrip"
         (Sync_client_op.get_graph_uuid repo = Some "graph-2"
          && Sync_client_op.get_local_tx repo = Some 12
-         && Sync_client_op.get_local_checksum repo = Some "checksum-2"))
+         && Sync_client_op.get_local_checksum repo = Some "checksum-2"
+         && Sync_client_op.get_local_checksum_covered_tx repo = Some 12))
+
+(* cljs checksum-covered-tx-roundtrip-test *)
+let () =
+  let repo = "repo-checksum-covered-tx" in
+  with_client_ops_db repo (fun _db ->
+      check "no covered tx"
+        (Sync_client_op.get_local_checksum_covered_tx repo = None);
+      Sync_client_op.update_local_checksum repo "checksum-1" 41;
+      check "covered tx roundtrip"
+        (Sync_client_op.get_local_checksum repo = Some "checksum-1"
+         && Sync_client_op.get_local_checksum_covered_tx repo = Some 41))
 
 let () =
   let repo = "repo-asset" in

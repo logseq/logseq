@@ -2494,7 +2494,9 @@ let test_checksum_diagnostics () =
   with_client_ops repo (fun () ->
       let conn = create_conn () in
       Worker_state.set_datascript_conn repo conn;
-      ignore (Sync_client_op.update_local_checksum repo "local-checksum-1");
+      ignore
+        (Sync_client_op.update_local_checksum repo "local-checksum-1"
+           (Datascript.db conn).max_tx);
       Hashtbl.replace Sync_state.latest_remote_checksums repo "remote-checksum-1";
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
       check "checksum local" (local = Wire.String "local-checksum-1");
@@ -2507,7 +2509,9 @@ let test_checksum_diagnostics_missing_remote () =
   with_client_ops repo (fun () ->
       let conn = create_conn () in
       Worker_state.set_datascript_conn repo conn;
-      ignore (Sync_client_op.update_local_checksum repo "local-checksum-123");
+      ignore
+        (Sync_client_op.update_local_checksum repo "local-checksum-123"
+           (Datascript.db conn).max_tx);
       Hashtbl.remove Sync_state.latest_remote_checksums repo;
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
       check "checksum local present"

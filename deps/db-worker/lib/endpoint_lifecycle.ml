@@ -465,6 +465,8 @@ let create_or_open_db args =
              (match initial_tx_report with
               | Some report -> Sync_apply.handle_local_tx repo report
               | None -> ());
+             (* cljs (db-sync/reconcile-local-checksum! repo conn) *)
+             Sync_client.reconcile_local_checksum repo conn;
              Db_listener.listen_db_changes repo conn;
              match Worker_state.datascript_conn repo with
              | Some conn ->

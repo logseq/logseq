@@ -172,10 +172,24 @@ let update_local_tx repo (t : int) =
 
 let reset_local_tx repo = set_meta (store repo) "local-tx" "0"
 
-let update_local_checksum repo checksum =
-  set_meta (store repo) "db-sync/checksum" checksum
+(* cljs update-local-checksum — stores the checksum together with the
+   graph commit (:max-tx) it covers. The checksum is written post-commit
+   to the client-ops sqlite file, separate from the graph store, so
+   process death between the two writes leaves it stale; the covered
+   commit lets graph open detect that and recompute. *)
+let update_local_checksum repo checksum covered_tx =
+  let st = store repo in
+  set_meta st "db-sync/checksum" checksum;
+  set_meta st "db-sync/checksum-covered-tx" (string_of_int covered_tx)
 
 let get_local_checksum repo = get_meta (store repo) "db-sync/checksum"
+
+(* cljs get-local-checksum-covered-tx — the graph commit the stored
+   checksum covers, None when never recorded. *)
+let get_local_checksum_covered_tx repo : int option =
+  match get_meta (store repo) "db-sync/checksum-covered-tx" with
+  | Some s -> Common_util.parse_long ~radix:10 s
+  | None -> None
 
 let get_pending_local_tx_count repo : int =
   match Worker_state.pending_local_tx_count repo with

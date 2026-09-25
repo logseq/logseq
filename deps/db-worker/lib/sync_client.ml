@@ -56,6 +56,37 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
          end
      | _ -> ());
     Sync_client_op.update_local_checksum repo new_checksum
+      tx_report.db_after.max_tx
+  end
+
+(* cljs reconcile-local-checksum! — heals a checksum left stale when a
+   commit's checksum write never landed: the checksum is stored
+   post-commit in the client-ops sqlite file, separate from the graph
+   store, so process death between the two writes drops it. The stored
+   covered commit is compared with the reopened db's :max-tx; a
+   mismatch means commits were missed and the checksum is recomputed. *)
+let reconcile_local_checksum repo conn =
+  if Sync_state.has_client_ops_conn repo then begin
+    let checksum = Sync_client_op.get_local_checksum repo in
+    let covered_tx = Sync_client_op.get_local_checksum_covered_tx repo in
+    let current_tx = (Datascript.db conn).max_tx in
+    (match checksum with
+     | Some _ when covered_tx <> Some current_tx ->
+         let recomputed =
+           Db_sync_checksum.recompute_checksum (Datascript.db conn)
+         in
+         if Some recomputed <> checksum then
+           Worker_log.info "db-sync/checksum-healed-on-open"
+             [ "repo", repo
+             ; "stored-checksum", Option.value checksum ~default:""
+             ; "recomputed-checksum", recomputed
+             ; "covered-tx",
+               (match covered_tx with
+                | Some t -> string_of_int t
+                | None -> "nil")
+             ; "current-tx", string_of_int current_tx ];
+         Sync_client_op.update_local_checksum repo recomputed current_tx
+     | _ -> ())
   end
 
 let broadcast_rtc_state (client : Sync_state.client option) : unit =
