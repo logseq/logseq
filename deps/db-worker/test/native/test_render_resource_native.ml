@@ -2123,6 +2123,104 @@ let test_view_data_resource_supports_every_feature_flat_rows () =
        | None -> check ("case rows uuid " ^ string_of_int i) false))
     cases
 
+(* Bug 25 — a save-block title edit emits :block/refs datoms whose
+   [:refs page-uuid] affected key intersects the linked-references view
+   watch; the unlinked-references view keeps no keys (cljs parity). Both
+   view values flip on refetch. *)
+let test_view_ref_watch_keys_cover_block_ref_edits () =
+  let conn, u = render_resource_fixture () in
+  let linked_view = add_view ~owner:(u "page") conn "linked-references" in
+  let unlinked_view = add_view ~owner:(u "page") conn "unlinked-references" in
+  let block_uuid = next_uuid () in
+  tx conn
+    (Printf.sprintf
+       "[{:block/uuid %s :block/tx-id 20 :block/title \"mentions page \
+        identity\" :block/page %s :block/parent %s :block/order \"m0\" \
+        :block/created-at 1000 :block/updated-at 1000}]"
+       (quid block_uuid) (uref (u "journal-a")) (uref (u "journal-a")));
+  let db = db_of conn in
+  let block_id = entity_id db block_uuid in
+  let page_id = entity_id db (u "page") in
+  let linked_key =
+    wkey [ kw "view-data"; wu linked_view
+         ; Wire.Map [ kw "feature-type", kw "linked-references" ] ]
+  in
+  let unlinked_key =
+    wkey [ kw "view-data"; wu unlinked_view
+         ; Wire.Map [ kw "feature-type", kw "unlinked-references" ] ]
+  in
+  let row_has rows w_uuid =
+    match get_in rows [ kw "rows" ] with
+    | Some rows -> List.exists (wire_eq (wu w_uuid)) (Wire.as_seq rows)
+    | _ -> false
+  in
+  let lr = call_resource db linked_key in
+  check "linked watch [:refs page]"
+    (wkey_has lr.watch_keys (wkey [ kw "refs"; wu (u "page") ]));
+  check "linked watch [:entity page]"
+    (wkey_has lr.watch_keys (wkey [ kw "entity"; wu (u "page") ]));
+  let ur = call_resource db unlinked_key in
+  check "unlinked watch empty (cljs parity)" (ur.watch_keys = []);
+  check "baseline unlinked rows contain block" (row_has ur.value block_uuid);
+  (* save-block through the real apply-ops endpoint: title gains
+     [[<page-uuid>]] while keeping the name text *)
+  let report =
+    match
+      Db_tx.last_report_during conn (fun () ->
+          ignore
+            (Outliner_op.apply_ops conn
+               (Wire.Array
+                  [ Wire.Array
+                      [ Wire.Keyword "save-block"
+                      ; Wire.Array
+                          [ Wire.Map
+                              [ Wire.Keyword "block/uuid", Wire.Uuid block_uuid
+                              ; ( Wire.Keyword "block/title"
+                                , Wire.String
+                                    ("mentions page identity [[" ^ u "page"
+                                     ^ "]]") ) ]
+                          ; Wire.Map [] ] ] ])
+               (Wire.Map [])))
+    with
+    | Some r -> r
+    | None -> Alcotest.fail "apply_ops committed nothing"
+  in
+  check "tx-data emits :block/refs datom"
+    (List.exists (fun (d : datom) -> d.a = "block/refs" && d.added)
+       report.tx_data);
+  check "block refs page after link"
+    (match Datascript.entity (db_of conn) (Entity_id block_id) with
+     | Some e ->
+         List.exists (fun v -> v = Ref page_id) (Ldb.values e "block/refs")
+     | None -> false);
+  let keys = Render_affected_keys.affected_keys report in
+  check "affected-keys emits [:refs page]"
+    (wkey_has keys (wkey [ kw "refs"; wu (u "page") ]));
+  let db = db_of conn in
+  let lr2 = call_resource db linked_key in
+  check "linked rows contain block after link" (row_has lr2.value block_uuid);
+  let ur2 = call_resource db unlinked_key in
+  check "unlinked rows exclude block after link"
+    (not (row_has ur2.value block_uuid));
+  (* save-block back: title drops the link but keeps the name text *)
+  let report2 =
+    Db_tx.transact ~tx_meta:[ "outliner-op", Keyword "save-block" ] conn
+      [ Add (Entity_id block_id, "block/title",
+             String "mentions page identity") ]
+  in
+  check "tx-data emits :block/refs retract"
+    (List.exists (fun (d : datom) -> d.a = "block/refs" && not d.added)
+       report2.tx_data);
+  let keys2 = Render_affected_keys.affected_keys report2 in
+  check "affected-keys emits [:refs page] on unlink"
+    (wkey_has keys2 (wkey [ kw "refs"; wu (u "page") ]));
+  let db = db_of conn in
+  let lr3 = call_resource db linked_key in
+  check "linked rows drop block after unlink"
+    (not (row_has lr3.value block_uuid));
+  let ur3 = call_resource db unlinked_key in
+  check "unlinked rows regain block after unlink" (row_has ur3.value block_uuid)
+
 (* query-view-data-resource-returns-property-maps-for-columns-test *)
 let test_query_view_data_returns_property_maps_for_columns () =
   let conn, u = render_resource_fixture () in
@@ -3371,6 +3469,8 @@ let cases : unit Alcotest.test_case list =
       test_views_resource_returns_only_ordered_definition_uuids
   ; Alcotest.test_case "view-data-resource-supports-every-feature-with-flat-uuid-rows-test" `Quick
       test_view_data_resource_supports_every_feature_flat_rows
+  ; Alcotest.test_case "view-ref-watch-keys-cover-block-ref-edits-test" `Quick
+      test_view_ref_watch_keys_cover_block_ref_edits
   ; Alcotest.test_case "query-view-data-resource-returns-property-maps-for-columns-test" `Quick
       test_query_view_data_returns_property_maps_for_columns
   ; Alcotest.test_case "query-view-data-keeps-projected-columns-even-without-values-test" `Quick
