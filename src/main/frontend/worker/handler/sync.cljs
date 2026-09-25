@@ -1,6 +1,7 @@
 (ns frontend.worker.handler.sync
   "Sync operations for the db worker."
-  (:require [frontend.common.thread-api :refer [def-thread-api]]
+  (:require [clojure.string :as string]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -11,6 +12,15 @@
 (def-thread-api :thread-api/set-db-sync-config
   [config]
   (reset! worker-state/*db-sync-config (worker-state/non-auth-db-sync-config config))
+  ;; LOGSEQ_SYNC_URL/LOGSEQ_SYNC_TOKEN override the pushed config for headless
+  ;; node workers, whose stock CLI frontend still resolves the cloud default.
+  (when-let [url (when (exists? js/process)
+                   (some-> (aget (.-env js/process) "LOGSEQ_SYNC_URL") not-empty))]
+    (let [http-base (string/replace url #"/+$" "")
+          ws-url (str (string/replace http-base #"^http" "ws") "/sync/%s")]
+      (swap! worker-state/*db-sync-config assoc :http-base http-base :ws-url ws-url)
+      (when-let [token (some-> (aget (.-env js/process) "LOGSEQ_SYNC_TOKEN") not-empty)]
+        (worker-state/set-new-state! {:auth/static-sync-token token}))))
   nil)
 
 (def-thread-api :thread-api/get-db-sync-config

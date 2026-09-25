@@ -444,6 +444,7 @@
                                           :auth/access-token "access-token"
                                           :auth/refresh-token "refresh-token"
                                           :auth/oauth-token-url nil
+                                          :auth/static-sync-token nil
                                           :user/info {:sub "user-1"}}
                                    (seq config/OAUTH-DOMAIN)
                                    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)

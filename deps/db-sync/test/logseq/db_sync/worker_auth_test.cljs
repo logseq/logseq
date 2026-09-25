@@ -88,6 +88,76 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest auth-claims-local-token-match-returns-claims-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" "Bearer local-secret"}})
+               env #js {"DB_SYNC_LOCAL_TOKEN" "local-secret"}
+               verify-called? (atom false)]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_token _env]
+                                 (reset! verify-called? true)
+                                 (p/rejected (ex-info "should-not-be-called" {})))]
+                 (p/let [claims (auth/auth-claims request env)]
+                   (is (= "local-user" (aget claims "sub")))
+                   (is (false? @verify-called?))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest auth-claims-local-token-custom-user-id-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs?token=local-secret")
+               env #js {"DB_SYNC_LOCAL_TOKEN" "local-secret"
+                        "DB_SYNC_LOCAL_USER_ID" "felipe"}]
+           (-> (p/let [claims (auth/auth-claims request env)]
+                 (is (= "felipe" (aget claims "sub"))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest auth-claims-local-token-mismatch-returns-nil-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" "Bearer wrong-secret"}})
+               env #js {"DB_SYNC_LOCAL_TOKEN" "local-secret"}]
+           (-> (p/let [claims (auth/auth-claims request env)]
+                 (is (nil? claims)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest auth-claims-local-token-rejects-jwt-when-set-test
+  ;; When local-token mode is enabled it is the only accepted credential;
+  ;; a JWT that would otherwise verify must not authenticate.
+  (async done
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" "Bearer some-jwt"}})
+               env #js {"DB_SYNC_LOCAL_TOKEN" "local-secret"}]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [token _env]
+                                 (js/Promise.resolve #js {"sub" (str "jwt:" token)}))]
+                 (p/let [claims (auth/auth-claims request env)]
+                   (is (nil? claims))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest auth-claims-local-token-without-request-token-returns-nil-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs")
+               env #js {"DB_SYNC_LOCAL_TOKEN" "local-secret"}]
+           (-> (p/let [claims (auth/auth-claims request env)]
+                 (is (nil? claims)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest auth-claims-expired-jwt-short-circuits-verification-test
   (async done
          (let [expired-token "eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjEsInN1YiI6InUxIn0.signature"

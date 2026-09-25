@@ -208,7 +208,7 @@
         route-match (rfx/use-sub [:route-match])
         _preferred-language (rfx/use-sub [:preferred-language])
         [tab] (hooks/use-atom mobile-state/*tab)
-        login? (boolean id-token)
+        login? (boolean (or id-token (config/local-sync-token)))
         route-name (get-in route-match [:data :name])
         visible? (and (= tab "graphs")
                       (not (contains? #{:import :export} route-name)))

@@ -419,6 +419,11 @@
                       token (<resolve-ws-token)
                       connected (connect! repo connected url token)]
                 (reset! worker-state/*db-sync-client connected)
+                ;; Backfill missing remote assets on every sync start.
+                (-> (sync-assets/download-missing-remote-assets! repo graph-id)
+                    (p/catch (fn [e]
+                               (log/info :db-sync/asset-backfill-failed
+                                         {:repo repo :error (str e)}))))
                 nil))
              (p/finally
                (fn []
