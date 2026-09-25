@@ -269,20 +269,26 @@
     (let [tag-names (into #{} (keep :block/name) (:block/tags block))
           ;; Track pages created during this pass: db doesn't see them yet, so a
           ;; repeated [[same name]] ref would otherwise create a duplicate page.
+          ;; Class titles are case-sensitive (#Movie and #movie are distinct
+          ;; classes), so class refs dedupe by :block/title instead.
           [resolved-refs _]
           (reduce
            (fn [[resolved seen] ref]
-             (if-let [seen-ref (and (new-page-ref? ref)
-                                    (get seen (:block/name ref)))]
-               [(conj resolved [(merge seen-ref
-                                       (select-keys ref [:block.temp/original-page-name]))
-                                 nil])
-                seen]
-               (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
-                 [(conj resolved resolved-ref)
-                  (if (and (new-page-ref? ref) (seq tx-data))
-                    (assoc seen (:block/name ref) ref')
-                    seen)])))
+             (let [dedup-key (if (contains? tag-names (:block/name ref))
+                               [:class (:block/title ref)]
+                               [:page (:block/name ref)])
+                   seen-ref (and (new-page-ref? ref)
+                                 (get seen dedup-key))]
+               (if seen-ref
+                 [(conj resolved [(merge seen-ref
+                                         (select-keys ref [:block.temp/original-page-name]))
+                                   nil])
+                  seen]
+                 (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+                   [(conj resolved resolved-ref)
+                    (if (and (new-page-ref? ref) (seq tx-data))
+                      (assoc seen dedup-key ref')
+                      seen)]))))
            [[] {}]
            refs)
           refs' (mapv first resolved-refs)
