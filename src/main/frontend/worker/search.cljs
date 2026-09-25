@@ -588,7 +588,6 @@ DROP TRIGGER IF EXISTS blocks_au;
   ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title?]
                                                :or {include-vector-title? false}}]
   (when-not (or
-             (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
     (try
