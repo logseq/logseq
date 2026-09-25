@@ -468,6 +468,54 @@ let test_gc_recycled_converted_page_removes_property_value_blocks () =
   check "gc-recycled-converted-page-removes-property-value-blocks unrelated"
     (Option.is_some (Datascript.entity (db_of conn) (Entity_id unrelated.id)))
 
+(* deleted-at carries the full epoch-ms — int_of_float once truncated it
+   to int32 (Dec 1969) *)
+let test_recycle_stores_full_deleted_at_ms () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [] } ]
+      ()
+  in
+  let page = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
+  let page_uuid = uuid_of page in
+  ldb_transact conn ~outliner_op:"delete-page"
+    (Outliner_recycle.recycle_page_tx_data (db_of conn) page
+       ~now_ms:1783612800123. ());
+  let page' = entity_by_uuid_exn conn page_uuid in
+  check "deleted-at stores full epoch-ms"
+    (Ldb.int64_value page' "logseq.property/deleted-at"
+     = Some 1783612800123L)
+
+(* cljs stamps block/created-at+updated-at with (common-util/time-ms) — a
+   plain number, never a js/Date — on every save *)
+let test_insert_blocks_stores_numeric_timestamps () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let new_uuid = gen_uuid () in
+  ignore
+    (Outliner_core.insert_blocks_conn conn
+       [ [ "block/uuid", Uuid new_uuid
+         ; "block/title", String "fresh" ] ]
+       (Block_map.of_entity
+          (Option.get (find_block_by_content (db_of conn) "target")))
+       { Outliner_core.default_insert_opts with keep_uuid = true } []);
+  let e = entity_by_uuid_exn conn new_uuid in
+  let is_numeric = function
+    | Some (Datascript.Int _) | Some (Datascript.Float _) -> true
+    | _ -> false
+  in
+  check "block/created-at stored as a plain number"
+    (is_numeric (Ldb.value e "block/created-at"));
+  check "block/updated-at stored as a plain number"
+    (is_numeric (Ldb.value e "block/updated-at"))
+
 (* (deftest gc-keeps-unexpired-recycled-page ...) *)
 let test_gc_keeps_unexpired_recycled_page () =
   let conn =
@@ -2127,6 +2175,8 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "permanently-delete-recycled-page-removes-blocks-parented-by-page" `Quick test_permanently_delete_recycled_page_removes_blocks_parented_by_page;
     Alcotest.test_case "permanently-delete-recycled-converted-page-removes-property-value-blocks" `Quick test_permanently_delete_recycled_converted_page_removes_property_value_blocks;
     Alcotest.test_case "gc-recycled-converted-page-removes-property-value-blocks" `Quick test_gc_recycled_converted_page_removes_property_value_blocks;
+    Alcotest.test_case "recycle-stores-full-deleted-at-ms" `Quick test_recycle_stores_full_deleted_at_ms;
+    Alcotest.test_case "insert-blocks-stores-numeric-timestamps" `Quick test_insert_blocks_stores_numeric_timestamps;
     Alcotest.test_case "gc-keeps-unexpired-recycled-page" `Quick test_gc_keeps_unexpired_recycled_page;
     Alcotest.test_case "permanently-delete-recycled-block-removes-subtree-only" `Quick test_permanently_delete_recycled_block_removes_subtree_only;
     Alcotest.test_case "permanently-delete-recycled-block-removes-corresponding-view-history" `Quick test_permanently_delete_recycled_block_removes_corresponding_view_history;

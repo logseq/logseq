@@ -3021,6 +3021,28 @@ let test_worker_export_replaces_block_refs () =
        true
      with _ -> false)
 
+(* epoch-ms arrives over transit as Int64 (a 31-bit int can't hold it
+   under melange): it must stay numeric — never Instant-by-magnitude *)
+let test_epoch_ms_value_of_transit_stays_numeric () =
+  let ms = 1783612800123L in
+  let v = Ds_wire.value_of_transit (Wire.Int64 ms) in
+  check "epoch-ms decodes to a number, not Instant"
+    (match v with Int _ | Float _ -> true | _ -> false);
+  check "epoch-ms keeps its ms"
+    (match v with
+     | Int n -> Int64.of_int n = ms
+     | Float f -> Int64.of_float f = ms
+     | _ -> false);
+  check "epoch-ms re-encodes as a transit number, not ~t"
+    (match Ds_wire.transit_of_value v with
+     | Wire.Int _ | Wire.Int64 _ | Wire.Float _ -> true
+     | _ -> false)
+
+let test_date_ms_transit_decodes_to_instant () =
+  let ms = 1783612800123L in
+  check "a real ~t still decodes to Instant"
+    (Ds_wire.value_of_transit (Wire.Date_ms ms) = Instant ms)
+
 (* ---------- cases ---------- *)
 
 let cases =
@@ -3200,4 +3222,8 @@ let cases =
   ; Alcotest.test_case "close-other-dbs-clears-test" `Quick test_close_other_dbs_clears
   ; Alcotest.test_case "worker-export-replaces-block-refs-with-worker-db-test" `Quick
       test_worker_export_replaces_block_refs
+  ; Alcotest.test_case "epoch-ms-value-of-transit-stays-numeric-test" `Quick
+      test_epoch_ms_value_of_transit_stays_numeric
+  ; Alcotest.test_case "date-ms-transit-decodes-to-instant-test" `Quick
+      test_date_ms_transit_decodes_to_instant
   ]

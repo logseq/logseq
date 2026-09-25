@@ -717,14 +717,19 @@ and build_core_fns () =
       match args with
       | [ (Fn _ | V (Keyword _ | Map _ | Vector _ | Set _)) ] -> V (Bool true)
       | _ -> V (Bool false));
+  (* cljs number?/float? are all "is a JS number" — Instant (js/Date)
+     fails all of them *)
   reg "number?" (fun args ->
       match args with
-      | [ V (Int _ | Float _ | Instant _) ] -> V (Bool true)
+      | [ V (Int _ | Float _) ] -> V (Bool true)
       | _ -> V (Bool false));
   reg "integer?" (fun args ->
-      match args with [ V (Int _ | Instant _) ] -> V (Bool true) | _ -> V (Bool false));
+      match args with
+      | [ V (Int _) ] -> V (Bool true)
+      | [ V (Float f) ] -> V (Bool (Malli.integer_float f))
+      | _ -> V (Bool false));
   reg "float?" (fun args ->
-      match args with [ V (Float _) ] -> V (Bool true) | _ -> V (Bool false));
+      match args with [ V (Int _ | Float _) ] -> V (Bool true) | _ -> V (Bool false));
   reg "string?" (fun args ->
       match args with [ V (String _) ] -> V (Bool true) | _ -> V (Bool false));
   reg "keyword?" (fun args ->

@@ -405,7 +405,11 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                 of the journal day *)
              Some (journal_day_to_ms day)
          | _ -> None)
+    (* cljs untyped get — epoch-ms reads back as the platform's numeric
+       rep (Int/Float); Instant only for legacy ~t-decoded data *)
     | true, _, Some (Int ms) -> Some (Int64.of_int ms)
+    | true, _, Some (Float f) -> Some (Int64.of_float f)
+    | true, _, Some (Instant ms) -> Some ms
     | _ -> None
   in
   match frequency > 0, unit, current_value with
@@ -415,7 +419,7 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
        | Some next_time_long ->
            let journal_day =
              Outliner_pipeline.get_journal_day_from_long db
-               (Instant next_time_long)
+               (Common_util.value_of_ms next_time_long)
            in
            let page_uuid, page_txs =
              match journal_day with
@@ -456,7 +460,7 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                | Some u ->
                    Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
                | None -> None
-             else Some (Int (Int64.to_int next_time_long))
+             else Some (Common_util.value_of_ms next_time_long)
            in
            default_value_tx_data @ page_txs
            @ (match value with
