@@ -539,7 +539,8 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
       let snapshot_checksum =
         Db_sync_checksum.recompute_checksum (Conn.db source_conn)
       in
-      Sync_client_op.update_local_checksum repo snapshot_checksum;
+      Sync_client_op.update_local_checksum repo snapshot_checksum
+        (Conn.db source_conn).max_tx;
       update_upload_progress
         (Wire.Map
            [ Wire.Keyword "sub-type", Wire.Keyword "upload-progress"

@@ -1785,7 +1785,9 @@ let test_sync_counts_reports_stored_local_checksum () =
                Sync_client_op.update_local_tx test_repo 42;
                Sync_client_op.update_graph_uuid test_repo (Some "graph-1");
                (match cached_checksum with
-                | Some c -> Sync_client_op.update_local_checksum test_repo c
+                | Some c ->
+                    Sync_client_op.update_local_checksum test_repo c
+                      (Datascript.db conn).max_tx
                 | None -> ());
                let counts =
                  Option.get (Sync_apply.sync_counts test_repo)
@@ -1949,7 +1951,8 @@ let test_pull_ok_does_not_anchor_remote_checksum_before_verify () =
           with_pull_ok_prelude (fun () ->
               Sync_state.dev_or_test := true;
               Sync_client_op.update_local_checksum test_repo
-                (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+                (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+                (Datascript.db conn).max_tx;
               let listen_key =
                 Datascript.listen conn "pull-ok-checksum"
                   (fun (r : tx_report) ->
@@ -2174,7 +2177,8 @@ let test_tx_reject_db_transact_failed_keeps_checksum_aligned () =
       let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ child1 ];
@@ -2248,7 +2252,8 @@ let test_tx_reject_db_transact_failed_rolls_back_property_value_delete () =
       let parent_uuid = ent_block_uuid parent in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ parent ];
@@ -2302,7 +2307,8 @@ let test_tx_reject_db_transact_failed_rebase_keeps_checksum_aligned () =
       let deleted_uuid = ent_block_uuid a_child_1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ a_child_1 ];
@@ -3261,7 +3267,8 @@ let test_local_checksum_listener_updates_in_release_mode () =
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Sync_state.dev_or_test := false;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
@@ -3276,13 +3283,51 @@ let test_local_checksum_listener_updates_in_release_mode () =
              = Some
                  (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
 
+(* cljs local-checksum-heals-when-covered-commit-lags-test *)
+let test_local_checksum_heals_when_covered_commit_lags () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
+          (* Commit lands without its checksum write, as when the process
+             dies between the graph store and the post-commit checksum
+             update *)
+          ignore
+            (Datascript.transact_conn conn
+               [ Add
+                   ( Entity_id parent.id, "block/title"
+                   , String "lost checksum write") ]);
+          check "stale checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             <> Some
+                  (Db_sync_checksum.recompute_checksum (Datascript.db conn)));
+          Sync_client.reconcile_local_checksum test_repo conn;
+          check "checksum healed"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)))))
+
+(* cljs local-checksum-untouched-when-covered-commit-current-test *)
+let test_local_checksum_untouched_when_covered_commit_current () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo "stale"
+            (Datascript.db conn).max_tx;
+          Sync_client.reconcile_local_checksum test_repo conn;
+          check "checksum untouched"
+            (Sync_client_op.get_local_checksum test_repo = Some "stale")))
+
 (* cljs local-checksum-ignores-aborted-batch-transact-test *)
 let test_local_checksum_ignores_aborted_batch_transact () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           let checksum_before =
@@ -3334,7 +3379,8 @@ let test_local_checksum_updates_for_final_batch_report_with_batch_flag () =
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           let flags = Db_tx.flags_of conn in
@@ -3362,7 +3408,8 @@ let test_local_checksum_updates_non_batch_report_with_stale_batch_flag () =
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           let flags = Db_tx.flags_of conn in
@@ -3392,7 +3439,8 @@ let test_local_checksum_updates_ldb_non_batch_report_with_stale_batch_flag
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           let flags = Db_tx.flags_of conn in
@@ -3495,7 +3543,8 @@ let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
       in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           with_pull_ok_prelude (fun () ->
               (match
                  (try
@@ -7587,7 +7636,8 @@ let test_tx_batch_ok_does_not_anchor_remote_checksum () =
             Db_sync_checksum.recompute_checksum (Datascript.db conn)
           in
           check "pending" (pending_before <> []);
-          Sync_client_op.update_local_checksum test_repo local_checksum;
+          Sync_client_op.update_local_checksum test_repo local_checksum
+            (Datascript.db conn).max_tx;
           client.inflight
           := List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
                pending_before;
@@ -7701,7 +7751,8 @@ let test_tx_batch_ok_stale_ack_does_not_regress_checksum_state () =
           Hashtbl.replace Sync_apply.repo_latest_remote_checksum test_repo
             actual_checksum;
           Sync_client_op.update_local_tx test_repo 5;
-          Sync_client_op.update_local_checksum test_repo actual_checksum;
+          Sync_client_op.update_local_checksum test_repo actual_checksum
+            (Datascript.db conn).max_tx;
           Sync_state.dev_or_test := true;
           Sync_log_and_state.rtc_log := Wire.Nil;
           Sync_handle_message.handle_message test_repo client raw;
@@ -7730,7 +7781,8 @@ let test_tx_batch_ok_real_checksum_mismatch_logs_warning () =
           ; "checksum", Wire.String remote_checksum ]
       in
       with_datascript_conns conn (Some ops) (fun () ->
-          Sync_client_op.update_local_checksum test_repo stale_checksum;
+          Sync_client_op.update_local_checksum test_repo stale_checksum
+            (Datascript.db conn).max_tx;
           check "no throw"
             (handle_message_error test_repo client raw = None)))
 
@@ -7742,7 +7794,8 @@ let test_local_checksum_stays_in_sync_after_undo_redo () =
       let inserted_uuid = fresh_uuid () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes
             ~handler_keys:[ "checksum-undo-redo" ] test_repo conn;
           ignore
@@ -10261,7 +10314,8 @@ let test_rechecks_local_delete_races_temp_snapshot () =
       let parent_uuid = ent_block_uuid parent in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ child1 ];
@@ -10311,7 +10365,8 @@ let test_rechecks_local_delete_races_temp_commit () =
       let parent_uuid = ent_block_uuid parent in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ child1 ];
@@ -10358,7 +10413,8 @@ let test_rechecks_local_edit_races_without_local_batch () =
       let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           let remote_txs =
@@ -10420,7 +10476,8 @@ let test_delays_retry_when_local_txs_keep_changing () =
       let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ child1 ];
@@ -10462,7 +10519,8 @@ let test_retries_snapshot_drift_pending_list_stabilizes () =
       let parent_uuid = ent_block_uuid parent in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
-            (Db_sync_checksum.recompute_checksum (Datascript.db conn));
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
           Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
             test_repo conn;
           delete_blocks conn [ child1 ];
@@ -13135,6 +13193,12 @@ let () =
         ; Alcotest.test_case
             "local-checksum-listener-updates-in-release-mode"
             `Quick test_local_checksum_listener_updates_in_release_mode
+        ; Alcotest.test_case
+            "local-checksum-heals-when-covered-commit-lags"
+            `Quick test_local_checksum_heals_when_covered_commit_lags
+        ; Alcotest.test_case
+            "local-checksum-untouched-when-covered-commit-current"
+            `Quick test_local_checksum_untouched_when_covered_commit_current
         ; Alcotest.test_case
             "local-checksum-ignores-aborted-batch-transact"
             `Quick test_local_checksum_ignores_aborted_batch_transact
