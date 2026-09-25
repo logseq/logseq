@@ -63,17 +63,23 @@ let integer_float (f : float) : bool =
   | FP_nan | FP_infinite -> false
   | _ -> Float.equal f (Float.floor f)
 
-(* cljs pred semantics over datascript values. Instant maps to js/Date,
-   which fails number?/integer?/double? — cljs :datetime values arrive as
-   plain numbers and land in Int/Float instead. *)
+(* cljs pred semantics over datascript values. Instant doubles as the
+   int64 scalar rep: epoch-ms values (block/created-at, updated-at,
+   tx-id, datetime property values) exceed int32 on melange and decode
+   from storage/transit as Instant, so it counts wherever cljs would
+   see the plain number (integer?, double?, number?). *)
 let prim_ok (p : prim) (v : value) : bool =
   match p with
   | PAny -> true
   (* cljs int? — integer? accepts any number with no decimal part *)
-  | PInt -> (match v with Int _ -> true | Float f -> integer_float f | _ -> false)
+  | PInt ->
+      (match v with
+       | Int _ | Instant _ -> true
+       | Float f -> integer_float f
+       | _ -> false)
   (* cljs double? is number? — JS numbers are all doubles, ints included *)
-  | PDouble -> (match v with Int _ | Float _ -> true | _ -> false)
-  | PNumber -> (match v with Int _ | Float _ -> true | _ -> false)
+  | PDouble -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
+  | PNumber -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
   | PBoolean -> (match v with Bool _ -> true | _ -> false)
   | PString -> (match v with String _ -> true | _ -> false)
   | PKeyword -> (match v with Keyword _ -> true | _ -> false)
