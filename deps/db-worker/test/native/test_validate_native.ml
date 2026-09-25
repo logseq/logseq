@@ -184,6 +184,75 @@ let test_repairs_invalid_pages_properties_and_classes () =
   check "no errors after repair"
     (errors_empty (Worker_db_validate.validate_db conn))
 
+(* Set-wrapped single values on cardinality-one property attrs of
+   built-in class entities (e.g. :logseq.property.class/hide-from-node
+   #{true}) — the old-graph data shape behind bug 9 / bug 14. cljs flags
+   them identically and has no repair case; the port heals them through
+   db-migrate/ensure-built-in-data-exists (invoked by validate-db's fix
+   phase), whose update path unwraps single-element collections to their
+   scalar. Multi-element collections stay invalid. *)
+let test_repairs_set_wrapped_single_property_values () =
+  Worker_core.init ();
+  let conn = create_db_graph_conn () in
+  let comments = ident_ent_exn (Datascript.db conn) "logseq.class/Comments" in
+  let comment = ident_ent_exn (Datascript.db conn) "logseq.class/Comment" in
+  let journal_class =
+    ident_ent_exn (Datascript.db conn) "logseq.class/Journal"
+  in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add
+           ( Entity_id comments.id
+           , "logseq.property.class/hide-from-node"
+           , Set [ Bool true ] )
+       ; Add
+           ( Entity_id journal_class.id
+           , "logseq.property.journal/title-format"
+           , Set [ String "MMM do, yyyy" ] )
+       ; Add
+           ( Entity_id comment.id
+           , "logseq.property.class/hide-from-node"
+           , Set [ Bool true; Bool false ] ) ]);
+  check "set-wrapped singles flagged"
+    (db_error_count (Datascript.db conn) = 3);
+  (* a tx writing the class revalidates the whole entity and raises
+     Invalid_tx while #{v} remains *)
+  check "class-touch tx raises Invalid_tx"
+    (try
+       ignore
+         (with_transact_pipeline (fun () ->
+              Db_tx.transact conn
+                [ Add (Entity_id comments.id, "block/tx-id", Int 7) ]));
+       false
+     with Db_tx.Invalid_tx _ -> true);
+  ignore
+    (with_transact_pipeline (fun () -> Worker_db_validate.validate_db conn));
+  let db = Datascript.db conn in
+  check "singles healed, multi-element left invalid"
+    (db_error_count db = 1);
+  check "hide-from-node healed to scalar"
+    (Ldb.value (ident_ent_exn db "logseq.class/Comments")
+       "logseq.property.class/hide-from-node" = Some (Bool true));
+  check "title-format healed to scalar"
+    (Ldb.value (ident_ent_exn db "logseq.class/Journal")
+       "logseq.property.journal/title-format"
+     = Some (String "MMM do, yyyy"));
+  check "multi-element set stays a collection"
+    (match
+       Ldb.value (ident_ent_exn db "logseq.class/Comment")
+         "logseq.property.class/hide-from-node"
+     with
+     | Some (List _) -> true
+     | _ -> false);
+  check "class-touch tx succeeds after heal"
+    (try
+       ignore
+         (with_transact_pipeline (fun () ->
+              Db_tx.transact conn
+                [ Add (Entity_id comments.id, "block/tx-id", Int 8) ]));
+       true
+     with _ -> false)
+
 let () =
   Alcotest.run "db-validate-test"
     [ ( "db_validate_test",
@@ -194,4 +263,7 @@ let () =
             `Quick test_repairs_block_missing_uuid
         ; Alcotest.test_case
             "validate-db-repairs-invalid-pages-properties-and-classes"
-            `Quick test_repairs_invalid_pages_properties_and_classes ] ) ]
+            `Quick test_repairs_invalid_pages_properties_and_classes
+        ; Alcotest.test_case
+            "validate-db-repairs-set-wrapped-single-property-values"
+            `Quick test_repairs_set_wrapped_single_property_values ] ) ]
