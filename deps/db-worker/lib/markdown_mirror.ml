@@ -245,10 +245,22 @@ let page_relative_path repo db (page : entity) ~(opts : opts) : string option =
         in
         Some ("pages/" ^ stem' ^ ".md")
 
+(* cljs platform/node.cljs path-under-data-dir — cljs mirror paths stay
+   relative ("<enc>/mirror/markdown") and the platform storage functions
+   join them onto the graphs data dir. OCaml resolves the same join here:
+   LOGSEQ_WORKER_DB_DIR is the graphs data dir (the env runtime
+   sqlite.ml data_dir uses); without it mirror writes landed in the
+   worker cwd. *)
+let data_dir () =
+  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+  | Some dir -> dir
+  | None -> "."
+
 let repo_mirror_dir repo =
-  match Graph_dir.repo_to_encoded_graph_dir_name repo with
-  | Some d -> d ^ "/mirror/markdown"
-  | None -> "mirror/markdown"
+  Filename.concat (data_dir ())
+    (match Graph_dir.repo_to_encoded_graph_dir_name repo with
+     | Some d -> d ^ "/mirror/markdown"
+     | None -> "mirror/markdown")
 
 let mirror_path repo relative_path =
   repo_mirror_dir repo ^ "/" ^ relative_path
