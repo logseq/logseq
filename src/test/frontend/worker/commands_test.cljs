@@ -345,6 +345,52 @@
           (is (= :logseq.property/status.todo
                  (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
 
+(defn- reschedule-date-property
+  "Completes a weekly repeating task whose temporal property is the user :date
+  property `due`, set to journal day 20260910, and returns the commands' tx."
+  [repeat-type now pages]
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:due {:logseq.property/type :date}}
+               :pages-and-blocks
+               (into
+                (mapv (fn [day] {:page {:build/journal day}}) pages)
+                [{:page {:block/title "Inbox"}
+                  :blocks [{:block/title "weekly task"
+                            :build/properties
+                            {:logseq.property.repeat/repeated? true
+                             :logseq.property.repeat/recur-frequency 1
+                             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week
+                             :due [:build/page {:build/journal 20260910}]
+                             :logseq.property/status :logseq.property/status.todo}}]}])})
+        block (db-test/find-block-by-content @conn "weekly task")
+        _ (d/transact! conn [[:db/add (:db/id block) :logseq.property.repeat/repeat-type repeat-type]
+                             [:db/add (:db/id block) :logseq.property.repeat/temporal-property :user.property/due]])
+        report (d/transact! conn [[:db/add (:db/id block)
+                                   :logseq.property/status
+                                   :logseq.property/status.done]])]
+    (with-redefs [t/now (fn [] now)]
+      {:db @conn
+       :block block
+       :tx (doall (commands/run-commands report))})))
+
+(deftest repeated-date-property-keeps-its-weekday-test
+  (testing "A weekly repeat of a :date property lands 7 days later in any time zone"
+    ;; The day was carried as UTC midnight and read back in the local zone, so
+    ;; west of UTC it came back 6 days later. Run with TZ west and east of UTC.
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [db block tx]} (reschedule-date-property double-plus now [20260910 20260917])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260917 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "`.+` on a :date property counts from today's date"
+    (let [now (t/local-date-time 2026 9 12 21 0 0)
+          {:keys [db block tx]} (reschedule-date-property dotted-plus now [20260910 20260919])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260919 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "A missing journal page is created for the right day"
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [tx]} (reschedule-date-property double-plus now [20260910])]
+      (is (some #(= 20260917 (:block/journal-day %)) (filter map? tx))))))
+
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]
     (testing "returns the explicit frequency when the property has a value"
