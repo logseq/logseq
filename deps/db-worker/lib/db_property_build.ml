@@ -93,9 +93,9 @@ let property_value_content (block_type : string option) (property : Block_map.t)
           | Some t -> List.mem t original_value_ref_property_types
           | None -> false))
 
-(* common-util/block-with-timestamps *)
+(* common-util/block-with-timestamps — cljs writes plain epoch-ms numbers *)
 let block_with_timestamps (m : Block_map.t) : Block_map.t =
-  let now = Instant (Date_time_util.time_ms ()) in
+  let now = Common_util.value_of_ms (Date_time_util.time_ms ()) in
   let m = Block_map.put m "block/updated-at" now in
   if Block_map.mem m "block/created-at" then m
   else Block_map.put m "block/created-at" now

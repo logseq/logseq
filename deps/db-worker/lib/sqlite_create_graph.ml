@@ -514,7 +514,8 @@ let kv (k : string) (v : value) : BM.t =
 let import_tx (db : db) (import_type : value) : tx_op list =
   [ entity_tx db (kv "logseq.kv/import-type" import_type)
   ; entity_tx db
-      (kv "logseq.kv/imported-at" (Instant (Date_time_util.time_ms ())))
+      (kv "logseq.kv/imported-at"
+         (Common_util.value_of_ms (Date_time_util.time_ms ())))
   ]
   @ List.map
       (fun ident -> RetractEntity (Ident ident))
@@ -526,6 +527,7 @@ let import_tx (db : db) (import_type : value) : tx_op list =
 
 (* ---------- create-graph/build-initial-files ---------- *)
 
+(* cljs writes file timestamps as (js/Date.) — true instants, not ms *)
 let build_initial_files (config_content : string) : BM.t list =
   let now = Instant (Date_time_util.time_ms ()) in
   let file (name : string) (content : string) : BM.t =
@@ -564,7 +566,7 @@ let initial_tx_data
     ; kv "logseq.kv/schema-version" db_schema_version
     ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
     ; kv "logseq.kv/graph-created-at"
-        (Instant (Date_time_util.time_ms ()))
+        (Common_util.value_of_ms (Date_time_util.time_ms ()))
     ; (* Empty property value used by db.type/ref properties *)
       [ "db/ident", Keyword "logseq.property/empty-placeholder"
       ; "block/uuid"

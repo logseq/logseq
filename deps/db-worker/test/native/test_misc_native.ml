@@ -1523,6 +1523,50 @@ let test_repeated_task_with_deadline_and_missing_temporal_property () =
      | Some (Keyword "logseq.property/status.todo") -> true
      | _ -> false)
 
+(* a datetime scheduled value stored in cljs' plain epoch-ms number rep
+   must still produce a reschedule tx — the consumer can't match only Int *)
+let test_repeated_task_reschedules_numeric_scheduled_value () =
+  let conn = Sqlite_export.create_conn () in
+  let scheduled = civil_ms 2030 1 10 9 0 in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:block/uuid #uuid \"eeee0000-0000-4000-8000-000000000001\"
+             :block/title \"Recurring Sandbox\"
+             :block/name \"recurring sandbox\"}
+            {:block/uuid #uuid \"eeee0000-0000-4000-8000-000000000002\"
+             :block/title \"Numeric scheduled item\"
+             :block/parent [:block/uuid #uuid \"eeee0000-0000-4000-8000-000000000001\"]
+             :block/page [:block/uuid #uuid \"eeee0000-0000-4000-8000-000000000001\"]
+             :logseq.property.repeat/repeated? true
+             :logseq.property.repeat/recur-frequency 1
+             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.hour
+             :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.double-plus
+             :logseq.property/status :logseq.property/status.todo}]"));
+  let db = db_of conn in
+  let block =
+    Option.get
+      (Db_test_util.find_block_by_content db "Numeric scheduled item")
+  in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add (Entity_id block.id, "logseq.property/scheduled",
+              Common_util.value_of_ms scheduled) ]);
+  let report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf
+         "[[:db/add %d :logseq.property/status :logseq.property/status.done]]"
+         block.id)
+  in
+  let commands_tx = Commands.run_commands report.db_after report.tx_data in
+  check "repeated-task: reschedule tx emitted for numeric scheduled"
+    (tx_add_value commands_tx block.id "logseq.property/scheduled"
+     <> None);
+  check "repeated-task: rescheduled value is a number"
+    (match tx_add_value commands_tx block.id "logseq.property/scheduled" with
+     | Some (Int _) | Some (Float _) -> true
+     | _ -> false)
+
 let test_resolve_recur_frequency () =
   (* cljs with-redefs a mock db; port uses a real seeded conn — the
      recur-frequency built-in property exists there. *)
@@ -1583,6 +1627,9 @@ let commands_cases : unit Alcotest.test_case list =
   ; Alcotest.test_case
       "repeated-task-with-deadline-and-missing-temporal-property-test"
       `Quick test_repeated_task_with_deadline_and_missing_temporal_property
+  ; Alcotest.test_case
+      "repeated-task-reschedules-numeric-scheduled-value-test" `Quick
+      test_repeated_task_reschedules_numeric_scheduled_value
   ; Alcotest.test_case "resolve-recur-frequency-test" `Quick
       test_resolve_recur_frequency ]
 

@@ -177,7 +177,7 @@ let built_in_sync_repair_tx_id = "00000000-0000-4000-8000-652665286528"
 
 (* cljs db-core/built-in-sync-repair-timestamp — fixed so duplicate
    repair txs from multiple clients converge on the same datoms. *)
-let built_in_sync_repair_timestamp = 0
+let built_in_sync_repair_timestamp = 0L
 
 let built_in_sync_repair_properties =
   [ "logseq.property.repeat/repeat-type"; "logseq.property.comments/blocks" ]
@@ -192,8 +192,8 @@ let stable_built_in_sync_repair_item order (m : Block_map.t) : Block_map.t =
   if Block_map.mem m "block/uuid" then
     let m =
       Block_map.put
-        (Block_map.put m "block/created-at" (Datascript.Instant 0L))
-        "block/updated-at" (Datascript.Instant 0L)
+        (Block_map.put m "block/created-at" (Datascript.Int 0))
+        "block/updated-at" (Datascript.Int 0)
     in
     (match Block_map.attr_value m "db/ident" with
      | Some (Datascript.Keyword ident)
@@ -710,7 +710,7 @@ let () =
                     [ ( Wire.Keyword "db/ident"
                       , Wire.Keyword "logseq.kv/graph-last-gc-at" )
                     ; ( Wire.Keyword "kv/value"
-                      , Wire.Int (int_of_float (Clock.now_ms ())) ) ] ]
+                      , Wire.Int64 (Date_time_util.time_ms ()) ) ] ]
                 [ "skip-validate-db?", Datascript.Bool true
                 ; "persist-op?", Datascript.Bool false ]);
            Db_worker_effect.pure Wire.nil

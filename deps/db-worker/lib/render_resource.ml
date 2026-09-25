@@ -676,11 +676,12 @@ let render_block_comment_summary db key _runtime =
     fail "Renderer resource entity is not a comment thread"
       [ (kw "thread-uuid", Wire.Uuid thread_uuid) ];
   let comments = direct_child_entities db thread_uuid in
-  (* created-at is an int64-range instant; on JS it reads back as
-     Instant because int only holds 32 bits. *)
+  (* epoch-ms reads back as the platform's numeric rep (Int/Float);
+     Instant only for legacy ~t-decoded data *)
   let created_at_ms (e : entity) : int64 option =
     match Ldb.value e "block/created-at" with
     | Some (Int n) -> Some (Int64.of_int n)
+    | Some (Float f) -> Some (Int64.of_float f)
     | Some (Instant ms) -> Some ms
     | None -> None
     | Some v ->

@@ -152,9 +152,10 @@ let direct_op_entry (outliner_op : string) (args : value list) : value option =
 
 (* ---------- block-with-timestamps / block-with-updated-at ---------- *)
 
-(* common-util/block-with-timestamps *)
+(* common-util/block-with-timestamps — cljs writes (common-util/time-ms),
+   a plain number *)
 let block_with_timestamps (block : Block_map.t) : Block_map.t =
-  let updated_at = Instant (Date_time_util.time_ms ()) in
+  let updated_at = Common_util.value_of_ms (Date_time_util.time_ms ()) in
   let block = Block_map.put block "block/updated-at" updated_at in
   if not (Block_map.mem block "block/created-at") then
     Block_map.put block "block/created-at" updated_at
@@ -162,7 +163,7 @@ let block_with_timestamps (block : Block_map.t) : Block_map.t =
 
 let block_with_updated_at (block : Block_map.t) : Block_map.t =
   Block_map.put block "block/updated-at"
-    (Instant (Date_time_util.time_ms ()))
+    (Common_util.value_of_ms (Date_time_util.time_ms ()))
 
 (* ---------- filter-top-level-blocks ---------- *)
 
@@ -242,12 +243,11 @@ let update_page_when_save_block (txs_state : txs_state) (block_entity : entity) 
   match Ldb.ref_ent block_entity "block/page" with
   | Some e ->
       (* cljs: {:db/id eid :block/updated-at now :block/created-at? now} *)
-      let attrs =
-        [ ("block/updated-at", One_value (Instant (Date_time_util.time_ms ()))) ]
-      in
+      let now = Common_util.value_of_ms (Date_time_util.time_ms ()) in
+      let attrs = [ ("block/updated-at", One_value now) ] in
       let attrs =
         if not (Option.is_some (Ldb.value e "block/created-at")) then
-          attrs @ [ ("block/created-at", One_value (Instant (Date_time_util.time_ms ()))) ]
+          attrs @ [ ("block/created-at", One_value now) ]
         else attrs
       in
       txs_push txs_state [ Entity { db_id = Some (Entity_id e.id); attrs } ]

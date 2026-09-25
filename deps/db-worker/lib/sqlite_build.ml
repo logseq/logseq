@@ -211,7 +211,7 @@ let page_prop_value (v : value) : bool =
   | _ -> false
 
 let block_with_timestamps (m : BM.t) : BM.t =
-  let now = Instant (Date_time_util.time_ms ()) in
+  let now = Common_util.value_of_ms (Date_time_util.time_ms ()) in
   let m =
     if BM.mem m "block/updated-at" then m
     else BM.put m "block/updated-at" now
@@ -617,7 +617,7 @@ and block_tx (m : node) (page_uuids : (string * string) list)
   let final_block =
     BM.merge
       (if build_existing' then
-         [ "block/updated-at", Instant (Date_time_util.time_ms ()) ]
+         [ "block/updated-at", Common_util.value_of_ms (Date_time_util.time_ms ()) ]
        else block_with_timestamps block)
       (BM.merge
          (BM.dissoc m.bm
@@ -1158,7 +1158,7 @@ let build_page_tx (page : BM.t) (all_idents : (pkey * string) list)
   let m =
     BM.merge
       (if build_existing then
-         [ "block/updated-at", Instant (Date_time_util.time_ms ()) ]
+         [ "block/updated-at", Common_util.value_of_ms (Date_time_util.time_ms ()) ]
        else
          select_keys (block_with_timestamps page')
            [ "block/created-at"; "block/updated-at" ])

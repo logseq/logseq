@@ -953,8 +953,8 @@ let get_date_scheduled_or_deadlines db (start_time : int64) (end_time : int64)
        [(not= ?status-ident :logseq.property/status.done)] \
        [(not= ?status-ident :logseq.property/status.canceled)]]"
       ~inputs:
-        [ Arg_scalar (Result_value (Instant start_time))
-        ; Arg_scalar (Result_value (Instant end_time)) ]
+        [ Arg_scalar (Result_value (Common_util.value_of_ms start_time))
+        ; Arg_scalar (Result_value (Common_util.value_of_ms end_time)) ]
   in
   let blocks =
     List.filter_map

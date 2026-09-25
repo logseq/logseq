@@ -191,8 +191,8 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
          | _ -> []
        else [])
     @ (if opts.with_timestamp && (opts.skip_existing_page_check || page_e = None) then
-         let now = int_of_float (Clock.now_ms ()) in
-         [ "block/created-at", Int now; "block/updated-at", Int now ]
+         let now = Common_util.value_of_ms (Date_time_util.time_ms ()) in
+         [ "block/created-at", now; "block/updated-at", now ]
        else [])
     @ (match journal_day with
        | Some day ->
@@ -1321,23 +1321,24 @@ let construct_block (ast_block : value) (properties : extract_properties_result)
         block
     | _ -> block @ [ "refs", List properties.block_refs ]
   in
-  let created_at =
-    match List.assoc_opt "created-at" properties.properties with
-    | Some (Int n) -> Some n
+  let ms_prop k =
+    (* epoch-ms reads back numeric (Int/Float); Instant only for
+       legacy ~t-decoded data *)
+    match List.assoc_opt k properties.properties with
+    | Some (Int n) -> Some (Common_util.value_of_ms (Int64.of_int n))
+    | Some (Float f) -> Some (Common_util.value_of_ms_float f)
+    | Some (Instant ms) -> Some (Common_util.value_of_ms ms)
     | _ -> None
   in
-  let updated_at =
-    match List.assoc_opt "updated-at" properties.properties with
-    | Some (Int n) -> Some n
-    | _ -> None
-  in
+  let created_at = ms_prop "created-at" in
+  let updated_at = ms_prop "updated-at" in
   let block =
     (match created_at with
-     | Some n -> ("block/created-at", Int n) :: block
+     | Some v -> ("block/created-at", v) :: block
      | None -> block)
     |> fun b ->
     (match updated_at with
-     | Some n -> ("block/updated-at", Int n) :: b
+     | Some v -> ("block/updated-at", v) :: b
      | None -> b)
   in
   (* (dissoc block :title :body :anchor) *)

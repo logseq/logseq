@@ -2565,7 +2565,7 @@ let broadcast_sync_conflicts repo conflicts : unit =
                                  , match c.remote_t with
                                    | Some t -> Wire.Int t
                                    | None -> Wire.Nil )
-                               ; kw "created-at", Wire.Int c.created_at ])
+                               ; kw "created-at", Wire.Int64 c.created_at ])
                           cs)) ]] )))
     uuids
 
@@ -2857,7 +2857,7 @@ and persist_local_tx repo (tx_report : tx_report) normalized reversed
     in
     let result =
       Sync_client_op.upsert_local_tx_entry repo ~tx_id
-        ~created_at:(int_of_float (Clock.now_ms ())) ~pending:true
+        ~created_at:(Int64.of_float (Clock.now_ms ())) ~pending:true
         ~failed:false
         ~outliner_op:
           (match outliner_op with

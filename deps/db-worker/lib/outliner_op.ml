@@ -129,7 +129,7 @@ let toggle_reaction (conn : conn) (target_uuid : string) (emoji_id : string)
            let now = Date_time_util.time_ms () in
            let attrs =
              [ ("block/uuid", One_value (Uuid (Common_uuid.new_block_id ())))
-             ; ("block/created-at", One_value (Instant now))
+             ; ("block/created-at", One_value (Common_util.value_of_ms now))
              ; ("logseq.property.reaction/emoji-id", One_value (String emoji_id))
              ; ("logseq.property.reaction/target", One_entity { db_id = Some (Entity_id target.id); attrs = [] }) ]
            in

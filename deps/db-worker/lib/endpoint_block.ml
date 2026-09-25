@@ -441,7 +441,7 @@ let conflict_wire (c : Sync_client_op.sync_conflict) : Wire.t =
     ; (kw "value", Wire.String c.value)
     ; ( kw "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; (kw "created-at", Wire.Int c.created_at) ]
+    ; (kw "created-at", Wire.Int64 c.created_at) ]
 
 let remove_nils (kvs : (Wire.t * Wire.t) list) =
   List.filter (fun (_, v) -> v <> Wire.Nil) kvs
