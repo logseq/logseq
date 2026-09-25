@@ -2246,6 +2246,145 @@ let clear_pending_txs repo : int =
 
 (* ---- flush-pending! ---- *)
 
+(* cljs <upload-aes-key *)
+let upload_aes_key repo (tx_entries : Wire.t list) : Wire.t Db_worker_effect.t
+    =
+  let e2ee =
+    tx_entries <> []
+    &&
+    match Worker_state.datascript_conn repo with
+    | Some c ->
+        Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee (Conn.db c)
+    | None -> false
+  in
+  if e2ee then
+    Sync_deps.require "ensure_graph_aes_key" Sync_deps.ensure_graph_aes_key
+      repo
+    >>= fun aes_key ->
+    if aes_key = Wire.Nil then
+      Sync_util.fail_fast "db-sync/missing-field"
+        (Wire.Map
+           [ kw "repo", Wire.String repo; kw "field", kw "aes-key" ]);
+    Db_worker_effect.pure aes_key
+  else Db_worker_effect.pure Wire.Nil
+
+(* cljs <encrypt-tx-entry *)
+let encrypt_tx_entry repo (client : Sync_state.client) aes_key
+    (entry : Wire.t) : Wire.t Db_worker_effect.t =
+  let graph_id = Option.value client.graph_id ~default:"" in
+  let tx_data =
+    Option.value (Wire.get "tx-data" entry) ~default:(Wire.Array [])
+    |> tx_items_of
+  in
+  offload_large_titles repo graph_id tx_data aes_key
+  >>= fun tx_data' ->
+  (match aes_key with
+   | Wire.Nil -> Db_worker_effect.pure tx_data'
+   | _ ->
+       Sync_deps.require "encrypt_tx_data" Sync_deps.encrypt_tx_data
+         (match aes_key with
+          | Wire.Binary b -> b
+          | Wire.String s -> s
+          | _ -> invalid_arg "encrypt_tx_data: aes-key is not binary")
+         tx_data')
+  >>= fun tx_data'' ->
+  Db_worker_effect.pure
+    (Wire.Map
+       (List.map
+          (fun (k, v) ->
+             if k = kw "tx-data" then (k, Wire.Array tx_data'') else (k, v))
+          (Wire.as_map entry)))
+
+(* cljs tx-entry->upload-message *)
+let tx_entry_to_upload_message (entry : Wire.t) : Wire.t =
+  let tx_str =
+    Transit_codec.to_string
+      (Option.value (Wire.get "tx-data" entry) ~default:(Wire.Array []))
+  in
+  let base : (Wire.t * Wire.t) list = [ kw "tx", Wire.String tx_str ] in
+  let with_id =
+    match Wire.get "tx-id" entry with
+    | Some (Wire.String id) -> base @ [ kw "tx-id", Wire.String id ]
+    | _ -> base
+  in
+  Wire.Map
+    (match Wire.get "outliner-op" entry with
+     | Some ((Wire.Keyword _ | Wire.String _) as op) ->
+         with_id @ [ kw "outliner-op", op ]
+     | _ -> with_id)
+
+(* cljs send-tx-batch! *)
+let send_tx_batch (client : Sync_state.client)
+    (ws : Sync_state.ws_endpoint) (local_tx : int option)
+    (tx_entries : Wire.t list) (tx_entries' : Wire.t list)
+    : unit Db_worker_effect.t =
+  let payload = List.map tx_entry_to_upload_message tx_entries' in
+  let tx_ids =
+    List.filter_map
+      (fun e ->
+         match Wire.get "tx-id" e with
+         | Some (Wire.String s) -> Some s
+         | _ -> None)
+      tx_entries
+  in
+  client.inflight := tx_ids;
+  let outliner_ops =
+    List.filter_map
+      (fun e ->
+         match Wire.get "outliner-op" e with
+         | Some (Wire.Keyword s) -> Some s
+         | _ -> None)
+      tx_entries
+    |> List.sort_uniq compare
+  in
+  send ws
+    (Wire.Map
+       [ kw "type", Wire.String "tx/batch"
+       ; kw "client-revision", Wire.String (Sync_util.build_revision ())
+       ; ( kw "t-before"
+         , match local_tx with Some t -> Wire.Int t | None -> Wire.Nil )
+       ; kw "txs", Wire.Array payload ])
+  >>= fun () ->
+  start_upload_response_timeout client
+    { Sync_state.tx_ids
+    ; outliner_ops
+    ; large_upload_progress = large_upload_progress tx_entries'
+    ; t_before = local_tx
+    ; sent_at = Clock.now_ms ()
+    ; timer = None };
+  Db_worker_effect.pure ()
+
+(* cljs <upload-pending-batch! *)
+let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
+    (local_tx : int option) : unit Db_worker_effect.t =
+  match pending_txs repo ~limit:50 () with
+  | [] -> Db_worker_effect.pure ()
+  | batch ->
+      let tx_entries, drop_tx_ids, drop_txs =
+        !prepare_upload_tx_entries_fn ~repo (Some conn) batch
+      in
+      if drop_tx_ids <> [] then begin
+        Worker_log.info "db-sync/drop-tx-ids"
+          [ "tx-ids", String.concat "," drop_tx_ids
+          ; "drops", Transit_codec.to_string (Wire.Array drop_txs) ];
+        ignore (mark_pending_txs_false repo drop_tx_ids)
+      end;
+      Db_worker_effect.catch
+        (upload_aes_key repo tx_entries >>= fun aes_key ->
+         Db_worker_effect.all
+           (List.map (encrypt_tx_entry repo client aes_key) tx_entries)
+         >>= fun tx_entries' ->
+         match tx_entries with
+         | [] -> Db_worker_effect.pure ()
+         | _ ->
+             send_tx_batch client (Option.get client.ws) local_tx tx_entries
+               tx_entries')
+        (fun error ->
+           Sync_util.set_last_sync_error client error;
+           Worker_log.error "db-sync/flush-pending-failed"
+             [ "repo", repo; "error", Printexc.to_string error ];
+           Db_worker_effect.pure ())
+
 let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
   let inflight = !(client.inflight) in
   let local_tx = Sync_client_op.get_local_tx repo in
@@ -2279,151 +2418,9 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
       ; "upload-stopped?", string_of_bool upload_stopped_state ];
   if not ready then Db_worker_effect.pure ()
   else
-    let batch = pending_txs repo ~limit:50 () in
-    match batch with
-    | [] -> Db_worker_effect.pure ()
-    | _ ->
-        let conn = Option.get conn in
-        let ws = Option.get ws in
-        let tx_entries, drop_tx_ids, drop_txs =
-          !prepare_upload_tx_entries_fn ~repo (Some conn) batch
-        in
-        if drop_tx_ids <> [] then begin
-          Worker_log.info "db-sync/drop-tx-ids"
-            [ "tx-ids", String.concat "," drop_tx_ids
-            ; "drops"
-            , Transit_codec.to_string (Wire.Array drop_txs) ];
-          ignore (mark_pending_txs_false repo drop_tx_ids)
-        end;
-        let e2ee =
-          tx_entries <> []
-          &&
-          match Worker_state.datascript_conn repo with
-          | Some c ->
-              Sync_deps.require "graph_e2ee" Sync_deps.graph_e2ee
-                (Conn.db c)
-          | None -> false
-        in
-        Db_worker_effect.catch
-          ((if e2ee then
-              Sync_deps.require "ensure_graph_aes_key"
-                Sync_deps.ensure_graph_aes_key repo
-            else Db_worker_effect.pure Wire.Nil)
-           >>= fun aes_key ->
-           (* cljs: (when (and (seq tx-entries) (graph-e2ee? repo)
-                               (nil? aes-key)) (fail-fast ...)) *)
-           (if e2ee && aes_key = Wire.Nil then
-              Sync_util.fail_fast "db-sync/missing-field"
-                (Wire.Map
-                   [ kw "repo", Wire.String repo
-                   ; kw "field", kw "aes-key" ]);
-            Db_worker_effect.pure ())
-           >>= fun () ->
-           let graph_id = Option.value client.graph_id ~default:"" in
-           Db_worker_effect.all
-             (List.map
-                (fun entry ->
-                   let tx_data =
-                     Option.value (Wire.get "tx-data" entry)
-                       ~default:(Wire.Array [])
-                     |> tx_items_of
-                   in
-                   offload_large_titles repo graph_id tx_data aes_key
-                   >>= fun tx_data' ->
-                   (match aes_key with
-                    | Wire.Nil -> Db_worker_effect.pure tx_data'
-                    | _ ->
-                        Sync_deps.require "encrypt_tx_data"
-                          Sync_deps.encrypt_tx_data
-                          (match aes_key with
-                           | Wire.Binary b -> b
-                           | Wire.String s -> s
-                           | _ ->
-                               invalid_arg
-                                 "encrypt_tx_data: aes-key is not binary")
-                          tx_data')
-                   >>= fun tx_data'' ->
-                   Db_worker_effect.pure
-                     (Wire.Map
-                        (List.map
-                           (fun (k, v) ->
-                              if k = kw "tx-data" then
-                                (k, Wire.Array tx_data'')
-                              else (k, v))
-                           (Wire.as_map entry))))
-                tx_entries)
-           >>= fun tx_entries' ->
-           let payload =
-             List.map
-               (fun entry ->
-                  let tx_str =
-                    Transit_codec.to_string
-                      (Option.value
-                         (Wire.get "tx-data" entry)
-                         ~default:(Wire.Array []))
-                  in
-                  let base : (Wire.t * Wire.t) list =
-                    [ ( kw "tx"
-                      , Wire.String tx_str ) ]
-                  in
-                  let with_id =
-                    match Wire.get "tx-id" entry with
-                    | Some (Wire.String id) ->
-                        base @ [ kw "tx-id", Wire.String id ]
-                    | _ -> base
-                  in
-                  Wire.Map
-                    (match Wire.get "outliner-op" entry with
-                     | Some ((Wire.Keyword _ | Wire.String _) as op) ->
-                         with_id @ [ kw "outliner-op", op ]
-                     | _ -> with_id))
-               tx_entries'
-           in
-           let tx_ids =
-             List.filter_map
-               (fun e ->
-                  match Wire.get "tx-id" e with
-                  | Some (Wire.String s) -> Some s
-                  | _ -> None)
-               tx_entries
-           in
-           match tx_entries' with
-           | [] -> Db_worker_effect.pure ()
-           | _ ->
-               client.inflight := tx_ids;
-               let outliner_ops =
-                 List.filter_map
-                   (fun e ->
-                      match Wire.get "outliner-op" e with
-                      | Some (Wire.Keyword s) -> Some s
-                      | _ -> None)
-                   tx_entries
-                 |> List.sort_uniq compare
-               in
-               send ws
-                 (Wire.Map
-                    [ kw "type", Wire.String "tx/batch"
-                    ; kw "client-revision"
-                    , Wire.String (Sync_util.build_revision ())
-                    ; ( kw "t-before"
-                      , match local_tx with
-                        | Some t -> Wire.Int t
-                        | None -> Wire.Nil )
-                    ; kw "txs", Wire.Array payload ])
-               >>= fun () ->
-               start_upload_response_timeout client
-                 { Sync_state.tx_ids
-                 ; outliner_ops
-                 ; large_upload_progress = large_upload_progress tx_entries'
-                 ; t_before = local_tx
-                 ; sent_at = Clock.now_ms ()
-                 ; timer = None };
-               Db_worker_effect.pure ())
-          (fun error ->
-             Sync_util.set_last_sync_error client error;
-             Worker_log.error "db-sync/flush-pending-failed"
-               [ "repo", repo; "error", Printexc.to_string error ];
-             Db_worker_effect.pure ())
+    match conn with
+    | None -> Db_worker_effect.pure ()
+    | Some conn -> upload_pending_batch repo client conn local_tx
 
 (* test hook — cljs tests rebind flush-pending! to a no-op to isolate
    message handlers (hello/pull-ok) from the upload path. *)
