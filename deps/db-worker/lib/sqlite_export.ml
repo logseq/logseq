@@ -3588,13 +3588,32 @@ type validate_result =
   ; valid_tx_data : value list
   ; error : string option }
 
+(* cljs :validate-scope — Graph validates every entity in db-after;
+   Tx only the entities touched by the import tx *)
+type validate_scope = Graph | Tx
+
+(* cljs tx-touched-entity-ids *)
+let tx_touched_entity_ids (r : tx_report) : entity_id list =
+  List.sort_uniq Int.compare (List.map (fun (d : datom) -> d.e) r.tx_data)
+
 (* cljs validate-import-tx-data *)
-let validate_import_tx_data (txs : import_txs) (db : db) (edn_label : string) :
-    validate_result =
+let validate_import_tx_data (txs : import_txs) (db : db) (edn_label : string)
+    (scope : validate_scope) : validate_result =
   let rec loop (tx_data : value list) =
     let ops = Sqlite_build.tx_ops_of_values db tx_data in
-    let db_after = Datascript.db_with ops db in
-    let errors = Db_validate.validate_local_db db_after in
+    (* cljs d/with — dry-run transact; "skip-store?" keeps the
+       speculative tx out of storage *)
+    let tx_report =
+      Datascript.with_tx ~tx_meta:[ "skip-store?", Bool true ] db ops
+    in
+    let db_after = tx_report.db_after in
+    let errors =
+      match scope with
+      | Tx ->
+          Db_validate.validate_local_db
+            ~entity_ids:(tx_touched_entity_ids tx_report) db_after
+      | Graph -> Db_validate.validate_local_db db_after
+    in
     if errors <> [] then begin
       let eid_attrs = disallowed_key_attrs errors in
       let tx_data' = remove_disallowed_key_datoms tx_data eid_attrs in
@@ -3615,14 +3634,19 @@ let validate_import_tx_data (txs : import_txs) (db : db) (edn_label : string) :
   in
   loop (import_tx_data txs)
 
-(* cljs validate-import-txs *)
-let validate_import_txs ?(edn_label : string option) (txs_r : (import_txs, string) Result.t)
+(* cljs validate-import-txs — :validate-scope :graph (default) validates
+   every entity in db-after; :tx validates only entities touched by the
+   import tx. Use :tx for incremental API/MCP writes; keep :graph for
+   file and graph imports. *)
+let validate_import_txs ?(edn_label : string option)
+    ?(validate_scope : validate_scope = Graph)
+    (txs_r : (import_txs, string) Result.t)
     (db : db) : validate_result =
   let edn_label = Option.value ~default:"Imported EDN" edn_label in
   match txs_r with
   | Error e -> { valid_db = None; valid_tx_data = []; error = Some e }
   | Ok txs ->
-      (try validate_import_tx_data txs db edn_label
+      (try validate_import_tx_data txs db edn_label validate_scope
        with e ->
          { valid_db = None
          ; valid_tx_data = []

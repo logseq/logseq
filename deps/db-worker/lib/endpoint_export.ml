@@ -328,7 +328,16 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
   with
   | Error e -> error_result e
   | Ok _ as txs_r -> (
-      let validation = Sqlite_export.validate_import_txs txs_r db in
+      let validate_scope =
+        match Sqlite_build.bm_get import_options_m "validate-scope" with
+        | Keyword "tx" -> Some Sqlite_export.Tx
+        | Keyword "graph" -> Some Sqlite_export.Graph
+        | Nil -> None
+        | _ -> invalid_arg "Invalid validate-scope (expected :graph or :tx)"
+      in
+      let validation =
+        Sqlite_export.validate_import_txs ?validate_scope txs_r db
+      in
       match validation.error with
       | Some e -> error_result e
       | None -> (

@@ -272,10 +272,19 @@ let graph_counts (db : db) (entities : ent_map list) (datom_count : int)
            entities)
   ; datoms = datom_count }
 
+(* cljs entity-datoms *)
+let entity_datoms (db : db) (entity_ids : entity_id list) : datom list =
+  List.concat_map (fun id -> List.of_seq (datoms db Eavt ~e:id ())) entity_ids
+
 (* validate-local-db! — returns errors grouped by entity with humanized
-   maps (each {attr -> msgs}) *)
-let validate_local_db ?(open_schema = false) (db : db) : grouped_error list =
-  let datoms_list = List.of_seq (datoms db Eavt ()) in
+   maps (each {attr -> msgs}). When [entity_ids] is provided, only those
+   entities are validated. *)
+let validate_local_db ?(open_schema = false) ?(entity_ids : entity_id list option) (db : db) : grouped_error list =
+  let datoms_list =
+    match entity_ids with
+    | Some ids -> entity_datoms db ids
+    | None -> List.of_seq (datoms db Eavt ())
+  in
   let ent_maps_star = datoms_to_entities datoms_list in
   let ent_maps =
     update_properties_in_ents db
