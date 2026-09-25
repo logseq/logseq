@@ -193,9 +193,16 @@
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
                           (if (contains? refs (:block/name tag))
-                            (let [matched-ref (first (filter (fn [r] (= (:block/name tag)
-                                                              (:block/name r)))
-                                                   (:block/refs m)))]
+                            ;; class titles are case-sensitive, so prefer a title match
+                            (let [matched-ref (or (first (filter (fn [r] (and (= (:block/name tag)
+                                                                                (:block/name r))
+                                                                             (:block/title tag)
+                                                                             (= (:block/title tag)
+                                                                                (:block/title r))))
+                                                                 (:block/refs m)))
+                                                  (first (filter (fn [r] (= (:block/name tag)
+                                                                            (:block/name r)))
+                                                                 (:block/refs m))))]
                               (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
                                 (:db/ident matched-ref)
                                 (assoc :db/ident (:db/ident matched-ref))))
@@ -293,12 +300,21 @@
            refs)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
-          tag-refs (into {} (keep (fn [ref]
-                                    (when (:db/ident ref)
-                                      [(:block/name ref) ref])))
-                         refs')
+          tag-refs (reduce (fn [m ref]
+                             (if (:db/ident ref)
+                               (update m (:block/name ref) (fnil conj []) ref)
+                               m))
+                           {}
+                           refs')
           tags' (mapv (fn [tag]
-                        (if-let [ref (get tag-refs (:block/name tag))]
+                        (if-let [ref (when-let [candidates (get tag-refs (:block/name tag))]
+                                       ;; Class titles are case-sensitive, so prefer the
+                                       ;; ref whose title matches the tag's title exactly.
+                                       (or (some #(when (and (:block/title tag)
+                                                             (= (:block/title %) (:block/title tag)))
+                                                    %)
+                                                 candidates)
+                                           (first candidates)))]
                           (merge (dissoc tag :block/type)
                                  (select-keys ref [:block/uuid :db/ident]))
                           tag))

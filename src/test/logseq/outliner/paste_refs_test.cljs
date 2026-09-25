@@ -84,7 +84,10 @@
                     (class-ref "movie")]
        :block/refs [(class-ref "Movie")
                     (class-ref "movie")]}])
-    (is (= 2 (page-count @conn "movie")))))
+    (is (= 2 (page-count @conn "movie")))
+    (let [block (db-test/find-block-by-content @conn "#Movie and #movie")
+          tag-uuids (into #{} (map :block/uuid) (:block/tags block))]
+      (is (= 2 (count tag-uuids))))))
 
 (deftest all-pages-classifies-paste-created-pages-as-pages
   (let [conn (conn-with-target)]
