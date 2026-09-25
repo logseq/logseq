@@ -237,6 +237,48 @@ let remove_orphaned_page_refs (db : db) (db_id : entity_id) (txs_state : txs_sta
       (List.map (fun (p : entity) -> RetractEntity (Entity_id p.id)) orphaned)
   end
 
+(* cljs page-updated-at-tx — stamp :block/updated-at on a page eid *)
+let page_updated_at_tx (page_eid : entity_id option) : tx_op option =
+  match page_eid with
+  | Some eid ->
+      Some
+        (Entity
+           { db_id = Some (Entity_id eid)
+           ; attrs =
+               [ ( "block/updated-at"
+                 , One_value (Instant (Date_time_util.time_ms ())) ) ] })
+  | None -> None
+
+(* cljs container-page-eid — page-like entities (pages, tags, properties)
+   are contained via :block/parent; ordinary blocks via :block/page. *)
+let container_page_eid (block : entity) : entity_id option =
+  if Ldb.is_page block then
+    match Ldb.ref_ent block "block/parent" with
+    | Some parent when Ldb.is_page parent -> Some parent.id
+    | _ -> None
+  else
+    match Ldb.ref_ent block "block/page" with
+    | Some p -> Some p.id
+    | None -> None
+
+(* cljs live-insert-source-page-eids — identity-preserving inserts can
+   reparent a live block; stamp the pages that lose those blocks,
+   excluding the destination page. *)
+let live_insert_source_page_eids (db : db) (blocks : Block_map.t list)
+    (dest_page_eid : entity_id option) : entity_id list =
+  blocks
+  |> List.filter_map (fun b ->
+      match mget_uuid b "block/uuid" with
+      | Some u -> (
+          match entity db (Lookup_ref ("block/uuid", Uuid u)) with
+          | Some live -> container_page_eid live
+          | None -> None)
+      | None -> None)
+  |> List.filter (fun id -> Some id <> dest_page_eid)
+  |> List.fold_left
+       (fun acc id -> if List.mem id acc then acc else acc @ [ id ])
+       []
+
 (* ---------- update-page-when-save-block ---------- *)
 
 let update_page_when_save_block (txs_state : txs_state) (block_entity : entity) : unit =
@@ -2302,10 +2344,18 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
                      | _ -> [])
                 | None -> []
               in
+              let dest_page_eid = get_target_block_page target_block sibling in
+              let page_updated_txs =
+                List.filter_map page_updated_at_tx
+                  (dest_page_eid
+                   :: List.map Option.some
+                        (live_insert_source_page_eids db blocks' dest_page_eid))
+              in
               let full_tx =
                 List.concat page_txs @ uuids_tx
                 @ List.map (fun m -> Entity (Block_map.to_tx_entity db m)) tx
                 @ property_values_tx
+                @ page_updated_txs
               in
               let full_tx' =
                 List.map (rewrite_tx_op id_to_new_uuid) full_tx
@@ -2518,7 +2568,25 @@ let delete_blocks (db : db) (blocks : Block_map.t list) : tx_result =
              match Ldb.uuid_value b "block/uuid" with
              | Some u -> del_in_txs db txs_state u
              | None -> ())
-           top_level);
+           top_level;
+       (* cljs: stamp each deleted entity's container page, excluding ids
+          that are being retracted (stamping a retracted entity would
+          resurrect it). *)
+       let deleted_ids =
+         deleted_ids
+         @ List.map (fun (e : entity) -> e.id) orphaned_comments
+       in
+       let container_eids =
+         List.filter_map container_page_eid top_level
+         |> List.filter (fun id -> not (List.mem id deleted_ids))
+         |> List.fold_left
+              (fun acc id -> if List.mem id acc then acc else acc @ [ id ])
+              []
+       in
+       txs_push txs_state
+         (List.filter_map
+            (fun id -> page_updated_at_tx (Some id))
+            container_eids));
   { tx_data = txs_state.txs; tx_meta = [] }
 
 (* ---------- move-blocks ---------- *)
@@ -2685,7 +2753,14 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
       move_block_property_tx block target_block sibling
         block_from_property restore_from_property
     in
-    tx_data @ children_page_tx @ property_tx
+    let page_updated_txs =
+      [ container_page_eid block; target_page ]
+      |> List.fold_left
+           (fun acc eid -> if List.mem eid acc then acc else acc @ [ eid ])
+           []
+      |> List.filter_map page_updated_at_tx
+    in
+    tx_data @ children_page_tx @ property_tx @ page_updated_txs
 
 (* ldb/transact! alias for worker path *)
 let ldb_transact (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta) : unit =
