@@ -72,6 +72,7 @@ let recompute_checksum_diagnostics args =
            (match Sync_state.client_ops_conn_opt repo with
             | Some _client_ops_conn ->
                 Sync_client_op.update_local_checksum repo checksum
+                  (Datascript.db conn).max_tx
             | None -> ())
        | _ -> ());
       let result =

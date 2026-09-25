@@ -3029,9 +3029,11 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
             (fun repo -> Sync_client_op.update_local_tx repo 0)
             [ repo_a; repo_b ];
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
+            (db_of_conn conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
+            (db_of_conn conn_b).max_tx;
           (* Seed stable anchors (non-empty titles) that A won't touch. *)
           let anchor_uuids =
             List.init 10 (fun i ->
@@ -3226,9 +3228,11 @@ let test_two_clients_rebase_keeps_local_title_after_reverse_tx () =
           Sync_client_op.update_local_tx repo_a 0;
           Sync_client_op.update_local_tx repo_b 0;
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
+            (db_of_conn conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
+            (db_of_conn conn_b).max_tx;
           ensure_base_page_bang conn_a base_uuid;
           (match ent_at_uuid (db_of_conn conn_a) base_uuid with
            | Some base ->
@@ -3628,9 +3632,11 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
             ; { repo = repo_b; conn = conn_b; client = client_b
               ; online = true; gen_uuid = None } ];
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
+            (db_of_conn conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
+            (db_of_conn conn_b).max_tx;
           run_offline_seq repo_a conn_a "a";
           run_offline_seq repo_b conn_b "b";
           let rounds =
@@ -3696,9 +3702,11 @@ let test_two_clients_empty_child_undo_redo_reconnect_checksum () =
                  ; online = true; gen_uuid = None } ]
                128);
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
+            (db_of_conn conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b));
+            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
+            (db_of_conn conn_b).max_tx;
           (* A stays online and adds an empty child under block 1. *)
           (match ent_at_uuid (db_of_conn conn_a) root_uuid with
            | Some root_a ->
@@ -4569,7 +4577,8 @@ let test_three_clients_single_repo_sim () =
           List.iter
             (fun (repo, conn) ->
               Sync_client_op.update_local_checksum repo
-                (Db_sync_checksum.recompute_checksum (db_of_conn conn)))
+                (Db_sync_checksum.recompute_checksum (db_of_conn conn))
+                (db_of_conn conn).max_tx)
             [ repo_a, conn_a; repo_b, conn_b; repo_c, conn_c ];
           let clients =
             [ { repo = repo_a; conn = conn_a; client = client_a
