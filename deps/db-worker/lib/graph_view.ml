@@ -1256,9 +1256,9 @@ let build_all_pages_graph (db : db) (opts : Wire.t) : Wire.t =
   let excluded_pages = opts_bool opts "excluded-pages?" ~default:false in
   let created_at_filter =
     match Wire.get "created-at-filter" opts with
-    | Some (Wire.Int n) -> Some n
-    | Some (Wire.Int64 n) -> Some (Int64.to_int n)
-    | Some (Wire.Float f) -> Some (int_of_float f)
+    | Some (Wire.Int n) -> Some (Int64.of_int n)
+    | Some (Wire.Int64 n) -> Some n
+    | Some (Wire.Float f) -> Some (Int64.of_float f)
     | _ -> None
   in
   let all_name_datoms = List.of_seq (datoms db Avet ~a:"block/name" ()) in
@@ -1377,22 +1377,23 @@ imadd m k n
         IntMap.empty str_links
     in
     let links = build_links links0 in
+    (* epoch-ms exceeds melange's 31-bit int — keep int64 (cljs numbers
+       are doubles); Instant covers legacy ~t-decoded data *)
     let created_ats =
       IntMap.fold
         (fun _ v acc ->
-          match v with
-          | Int n | Ref n -> n :: acc
-          | Float f -> int_of_float f :: acc
-          | _ -> acc)
+          match Common_util.timestamp_ms v with
+          | Some ms -> ms :: acc
+          | None -> acc)
         created_at_by_id []
     in
     let created_at_min =
-      match created_ats with [] -> 0 | xs -> List.fold_left min max_int xs
+      match created_ats with [] -> 0L | xs -> List.fold_left Int64.min Int64.max_int xs
     and created_at_max =
-      match created_ats with [] -> 0 | xs -> List.fold_left max min_int xs
+      match created_ats with [] -> 0L | xs -> List.fold_left Int64.max Int64.min_int xs
     in
     let created_at_cutoff =
-      Option.map (fun f -> created_at_min + f) created_at_filter
+      Option.map (fun f -> Int64.add created_at_min f) created_at_filter
     in
     let nodes =
       List.filter_map
@@ -1400,19 +1401,18 @@ imadd m k n
           let page_id = d.e in
           let page_name = match d.v with String s -> s | _ -> "" in
           let created_at_v = IntMap.find_opt page_id created_at_by_id in
-          let created_at_int =
+          let created_at_ms =
             match created_at_v with
-            | Some (Int n | Ref n) -> Some n
-            | Some (Float f) -> Some (int_of_float f)
-            | _ -> None
+            | Some v -> Common_util.timestamp_ms v
+            | None -> None
           in
           let tag_idents =
             Option.value (IntMap.find_opt page_id page_id_tag_idents)
               ~default:[]
           in
           let too_new =
-            match created_at_cutoff, created_at_int with
-            | Some cutoff, Some c -> c > cutoff
+            match created_at_cutoff, created_at_ms with
+            | Some cutoff, Some c -> Int64.compare c cutoff > 0
             | _ -> false
           in
           if too_new
@@ -1431,8 +1431,10 @@ imadd m k n
           (kvs
            @ [ ( kw "all-pages"
                , Wire.Map
-                   [ (kw "created-at-min", Wire.Int created_at_min)
-                   ; (kw "created-at-max", Wire.Int created_at_max) ] ) ])
+                   [ ( kw "created-at-min"
+                     , Ds_wire.transit_of_value (Common_util.value_of_ms created_at_min) )
+                   ; ( kw "created-at-max"
+                     , Ds_wire.transit_of_value (Common_util.value_of_ms created_at_max) ) ] ) ])
     | w -> w
   end
 

@@ -47,7 +47,7 @@
  (description
   "Replacement for the frontend.worker.* ClojureScript worker. Exposes the\nsame Comlink + transit remoteInvoke protocol backed by datascript-ocaml.")
  (depends
-  ocaml
+  (ocaml (>= 5.5))
   melange
   mldoc
   datascript_ocaml
