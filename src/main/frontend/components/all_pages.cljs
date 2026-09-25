@@ -4,18 +4,12 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.hooks :as db-hooks]
             [logseq.common.config :as common-config]
-            [io.factorhouse.hsx.core :as hsx]
-            [reitit.frontend.easy :as rfe]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- page-title-cell
-  [row]
-  (let [title (some-> (:block/title row) str)
-        page-name (or (:block/uuid row) (:block/name row) title)]
-    [:div.flex.h-full.min-w-0.items-center
-     [:a.page-ref.truncate
-      {:href (rfe/href :page {:name page-name})
-       :title title}
-      title]]))
+  [row style]
+  (views/block-title row {:property-ident :block/title
+                          :width (:width style)}))
 
 (hsx/defc page-refs-count-cell
   "Backlinks count cell. Rows whose count exceeded the worker's bounded scan
@@ -32,8 +26,10 @@
   []
   (->> [{:id :block/title
          :name (t :page/name)
-         :cell (fn [_table row _column] (page-title-cell row))
-         :type :string}
+         :cell (fn [_table row _column style]
+                 (page-title-cell row style))
+         :type :string
+         :disable-hide? true}
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column]

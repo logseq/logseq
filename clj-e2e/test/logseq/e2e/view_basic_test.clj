@@ -265,6 +265,55 @@
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
 
+(defn- table-row-open-buttons
+  [row]
+  (.locator row "button[title='Open']"))
+
+(defn- table-row-sidebar-buttons
+  [row]
+  (.locator row "button[title='Open in sidebar']"))
+
+(deftest all-pages-name-column-shows-row-actions-once-test
+  (let [page-name (page/get-page-name)]
+    (util/search-and-click "Go to all pages")
+    (assert/assert-is-visible ".ls-all-pages")
+    (let [row (loc/filter ".ls-view-body .ls-table-row" :has-text page-name)]
+      (assert/assert-is-visible row)
+      (assert/assert-have-count (table-row-open-buttons row) 1)
+      (assert/assert-have-count (table-row-sidebar-buttons row) 1)
+      (.hover (.first (.locator row ".table-block-title")))
+      (assert/assert-is-visible (.first (table-row-open-buttons row)))
+      (assert/assert-is-visible (.first (table-row-sidebar-buttons row))))))
+
+(deftest tag-table-row-actions-only-on-name-column-test
+  (let [tag-name "row-actions-description"
+        container-page (page/get-page-name)
+        object-title "Alpha tagged object"
+        description "Custom tag description text"]
+    (ls-api-call! :editor.createTag
+                  tag-name
+                  {:tagProperties [{:name "Description"}]})
+    (ls-api-call! :editor.insertBlock
+                  container-page
+                  (str object-title " #" tag-name)
+                  {:properties {"Description" description}})
+    (page/goto-page tag-name)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text object-title))
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text description))
+    (let [row (loc/filter ".ls-view-body .ls-table-row" :has-text object-title)
+          desc-cell (loc/filter (.locator row ".ls-table-cell") :has-text description)]
+      (assert/assert-have-count (table-row-open-buttons row) 1)
+      (assert/assert-have-count (table-row-sidebar-buttons row) 1)
+      (assert/assert-have-count (table-row-open-buttons desc-cell) 0)
+      (assert/assert-have-count (table-row-sidebar-buttons desc-cell) 0)
+      (.hover (.first (.locator desc-cell ".table-block-title")))
+      (assert/assert-have-count (table-row-open-buttons desc-cell) 0)
+      (.hover (.first (.locator row ".table-block-title")))
+      (assert/assert-is-visible (.first (table-row-open-buttons row)))
+      (assert/assert-is-visible (.first (table-row-sidebar-buttons row))))))
+
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
   (sort-table-column! "Name" "Sort ascending")

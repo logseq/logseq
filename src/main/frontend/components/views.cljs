@@ -500,9 +500,16 @@
    {:style {:min-height 24}}
    [:div.block-content (first-window-title-text block)]])
 
+(defn- table-title-row-actions?
+  "Hover Open / Open-in-sidebar actions belong on the object-name column only.
+   Text property cells reuse block-title for inline editing, but must not
+   duplicate those row-level actions (logseq/db-test#1266)."
+  [{:keys [property-ident]}]
+  (= :block/title property-ident))
+
 (hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
-  [block* {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property] :as opts}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
@@ -580,7 +587,8 @@
        [:div])
 
      (when (and (not (util/mobile?))
-                (not (first-window-title-preview? block)))
+                (not (first-window-title-preview? block))
+                (table-title-row-actions? opts))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
           [:div.flex.flex-row.items-center
@@ -601,7 +609,8 @@
                          (add-to-sidebar!))}
             (ui/icon "layout-sidebar-right"))]]))]))
 
-(defn- block-title
+(defn block-title
+  "Table object-name and text-property cell renderer."
   [block* opts]
   (let [block (if (db-property/many? (:property opts))
                 (first block*)
