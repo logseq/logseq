@@ -3092,7 +3092,7 @@
         (contains? #{"ArrowLeft" "ArrowRight"} key)
         (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
+        (and (util/native-event-is-composing? e) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3289,7 +3289,7 @@
                (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
-          (= value "``````") ; turn this block into a code block
+          (contains? #{"```" "``````"} value) ; turn this block into a code block
           (do
             (state/set-edit-content! (.-id input) "")
             (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
