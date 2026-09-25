@@ -749,7 +749,7 @@
 (hsx/defc ui-position-sub-pane
   [property {:keys [id set-sub-open! _ui-position]}]
   (let [handle-select! (fn [^js e]
-                         (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
+                         (when-let [v (some-> (.-currentTarget e) (.-dataset) (.-value))]
                            (db-property-handler/set-block-property!
                             (:block/uuid property)
                             :logseq.property/ui-position
