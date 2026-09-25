@@ -1307,3 +1307,19 @@
       (is (map? (worker-undo-redo/undo test-repo)))
       (is (= outline-1-start (outline "outline 1")))
       (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-delete-after-undoing-move-of-block-left-behind-test
+  (testing "undoing a delete, after undoing a move of the block that stayed, puts the deleted blocks back above that block"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:delete-blocks [[(uuid-of "a") (uuid-of "b")] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "c")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" ["c" "d"]] (outline "outline 2")))
+      (is (= 2 (count (undo-all!))))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
