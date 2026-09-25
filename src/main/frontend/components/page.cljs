@@ -771,7 +771,7 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (t :page.delete/batch-confirm-title)]]]
 
-     [:ol.p-2.pt-4
+     [:ol.p-2.pt-4.max-h-80.overflow-y-auto
       (for [page-item pages]
         [:li
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}
