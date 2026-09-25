@@ -9,15 +9,15 @@ let recycled (e : entity) : bool =
   Option.is_some (Ldb.value e "logseq.property/deleted-at")
 
 let build_recycle_page_tx (db_id : string) : tx_entity =
-  let now = int_of_float (Clock.now_ms ()) in
+  let now = Common_util.value_of_ms_float (Clock.now_ms ()) in
   { db_id = Some (Temp_id db_id)
   ; attrs =
       [ "block/uuid", One_value (Uuid (Common_uuid.gen_uuid "builtin-block-uuid" recycle_page_title))
       ; "block/name", One_value (String (Ldb.page_name_sanity_lc recycle_page_title))
       ; "block/title", One_value (String recycle_page_title)
       ; "block/tags", Many_values [ Keyword "logseq.class/Page" ]
-      ; "block/created-at", One_value (Int now)
-      ; "block/updated-at", One_value (Int now)
+      ; "block/created-at", One_value now
+      ; "block/updated-at", One_value now
       ; "logseq.property/hide?", One_value (Bool true)
       ; "logseq.property/built-in?", One_value (Bool true)
       ] }
@@ -146,7 +146,8 @@ let recycle_blocks_tx_data db (blocks : entity list)
     ?(deleted_by_uuid : string option) ?(now_ms : float option) () : tx_op list =
   let { page; page_id; tx_data } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
-  let now_ms = Option.value now_ms ~default:(Clock.now_ms ()) |> int_of_float in
+  (* cljs writes (common-util/time-ms) — keep full ms as a numeric value *)
+  let now_ms = Common_util.value_of_ms_float (Option.value now_ms ~default:(Clock.now_ms ())) in
   let prev_order =
     match page with
     | Some p ->
@@ -165,7 +166,7 @@ let recycle_blocks_tx_data db (blocks : entity list)
           [ "block/parent", One_value (Ref_to page_id)
           ; "block/page", One_value (Ref_to page_id)
           ; "block/order", One_value (String order)
-          ; "logseq.property/deleted-at", One_value (Int now_ms) ]
+          ; "logseq.property/deleted-at", One_value now_ms ]
           |> maybe_assoc_ref ("logseq.property/deleted-by-ref") deleted_by_ent
           |> maybe_assoc_ref ("logseq.property.recycle/original-parent")
                (Ldb.ref_ent block "block/parent")
@@ -193,7 +194,7 @@ let recycle_page_tx_data db (page : entity)
     ?(deleted_by_uuid : string option) ?(now_ms : float option) () : tx_op list =
   let { page = existing; page_id; tx_data = init_tx } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
-  let now_ms = Option.value now_ms ~default:(Clock.now_ms ()) |> int_of_float in
+  let now_ms = Common_util.value_of_ms_float (Option.value now_ms ~default:(Clock.now_ms ())) in
   let order =
     match existing with
     | Some p -> next_child_order p
@@ -202,7 +203,7 @@ let recycle_page_tx_data db (page : entity)
   let attrs =
     [ "block/parent", One_value (Ref_to page_id)
     ; "block/order", One_value (String order)
-    ; "logseq.property/deleted-at", One_value (Int now_ms) ]
+    ; "logseq.property/deleted-at", One_value now_ms ]
     |> maybe_assoc_ref ("logseq.property/deleted-by-ref") deleted_by_ent
     |> maybe_assoc_ref ("logseq.property.recycle/original-parent")
          (Ldb.ref_ent page "block/parent")
@@ -348,10 +349,12 @@ let permanently_delete (conn : conn) (root_uuid : string) : bool =
 
 let gc_tx_data db ?(now_ms : float option) () : tx_op list =
   let now_ms = Option.value now_ms ~default:(Clock.now_ms ()) in
-  let cutoff = int_of_float (now_ms -. retention_ms) in
+  (* deleted-at is epoch-ms — keep the cutoff numeric at full precision
+     (cljs passes a plain number into the query) *)
+  let cutoff = Common_util.value_of_ms_float (now_ms -. retention_ms) in
   let ids =
     Datascript.q_string
-      ~inputs:[ Arg_scalar (Result_value (Int cutoff)) ]
+      ~inputs:[ Arg_scalar (Result_value cutoff) ]
       db
       "[:find [?e ...] :in $ ?cutoff :where [?e :logseq.property/deleted-at ?d] [(<= ?d ?cutoff)]]"
     |> List.concat_map

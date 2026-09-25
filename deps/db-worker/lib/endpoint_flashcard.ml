@@ -23,7 +23,7 @@ let cards_entity db (w : Wire.t) : entity option =
   | _ -> (try entity db (Ds_wire.entity_ref_of_transit w) with _ -> None)
 
 let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
-  let now_inst_ms = Instant (Date_time_util.time_ms ()) in
+  let now_inst_ms = Common_util.value_of_ms (Date_time_util.time_ms ()) in
   let query_text =
     match cards_entity db cards_id with
     | None -> None

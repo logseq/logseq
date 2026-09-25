@@ -55,16 +55,29 @@ let iso_of_ms ms =
 
 let edn_date ms = "#inst \"" ^ iso_of_ms ms ^ "\""
 
+(* EDN number literal that reparses to Float (the ".0" keeps int64-range
+   magnitudes out of the int atom path, which can't hold them on 32-bit) *)
+let edn_float f =
+  let s = Printf.sprintf "%.17g" f in
+  if String.exists (fun c -> c = '.' || c = 'e' || c = 'E' || c = 'n' || c = 'i') s
+  then s
+  else s ^ ".0"
+
+let edn_num64 n =
+  let s = Int64.to_string n in
+  if Int64.abs n <= Int64.of_int max_int then s else s ^ ".0"
+
 let rec edn_of_transit (t : Wire.t) =
   match t with
   | Wire.Nil -> "nil"
   | Wire.Bool b -> if b then "true" else "false"
   | Wire.String s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Int n -> string_of_int n
-  (* int64 has no int-width EDN literal; #inst is the only literal the
-     reader widens to int64, and Instant is the int64 value rep *)
-  | Wire.Int64 n -> edn_date n
-  | Wire.Float f -> Printf.sprintf "%.17g" f
+  (* numeric literals: digits that fit `int`, a trailing ".0" forces the
+     EDN reader to Float for wider values — matching value_of_transit's
+     numeric rep instead of fabricating an #inst *)
+  | Wire.Int64 n -> edn_num64 n
+  | Wire.Float f -> edn_float f
   | Wire.Binary s -> Printf.sprintf "\"%s\"" (escape_string s)
   | Wire.Keyword s -> ":" ^ s
   | Wire.Symbol s -> s
@@ -125,9 +138,10 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
   | Wire.Int n -> Int n
-  | Wire.Int64 n ->
-      if Int64.abs n <= Int64.of_int max_int then Int (Int64.to_int n)
-      else Instant n
+  (* epoch-ms and other int64-range numbers stay numeric — cljs writes
+     plain numbers, so Int when they fit `int` (native behavior), Float
+     otherwise. Instant is only for real ~t / db.type/instant values *)
+  | Wire.Int64 n -> Common_util.value_of_ms n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s

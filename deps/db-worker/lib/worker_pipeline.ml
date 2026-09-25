@@ -240,11 +240,11 @@ let insert_tag_templates (tx_report : tx_report) : tx_op list =
           |> List.sort_uniq (fun (a, _) (b, _) -> compare a.id b.id)
           |> List.sort
                (fun (a, _) (b, _) ->
-                 compare
-                   (Option.value ~default:0
-                      (Ldb.int_value a "block/created-at"))
-                   (Option.value ~default:0
-                      (Ldb.int_value b "block/created-at")))
+                 Int64.compare
+                   (Option.value ~default:0L
+                      (Ldb.int64_value a "block/created-at"))
+                   (Option.value ~default:0L
+                      (Ldb.int64_value b "block/created-at")))
         in
         List.map
           (fun (template, journal) ->
@@ -859,8 +859,8 @@ let gen_created_by_block (claims : Worker_util.jwt_claims) : Block_map.t =
   ; "block/title",
     String (Option.value ~default:"" claims.username)
   ; "block/tags", Keyword "logseq.class/Page"
-  ; "block/created-at", Instant now
-  ; "block/updated-at", Instant now
+  ; "block/created-at", Common_util.value_of_ms now
+  ; "block/updated-at", Common_util.value_of_ms now
   ; "logseq.property.user/name",
     String (Option.value ~default:"" claims.username)
   ; "logseq.property.user/email",

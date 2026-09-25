@@ -70,13 +70,13 @@ let block_missing_uuid (e : entity) : bool =
   && Ldb.ref_ent e "block/page" <> None
   && Ldb.ref_ent e "block/parent" <> None
   && Ldb.string_value e "block/order" <> None
-  && Ldb.int_value e "block/created-at" <> None
-  && Ldb.int_value e "block/updated-at" <> None
+  && Ldb.int64_value e "block/created-at" <> None
+  && Ldb.int64_value e "block/updated-at" <> None
 
 let normal_page_missing_updated_at (e : entity) (dispatch_key : string) : bool =
   dispatch_key = "normal-page"
-  && Ldb.int_value e "block/updated-at" = None
-  && Ldb.int_value e "block/created-at" <> None
+  && Ldb.int64_value e "block/updated-at" = None
+  && Ldb.int64_value e "block/created-at" <> None
 
 let is_num_prefixed (s : string) : bool =
   String.length s > 0 && s.[0] >= '0' && s.[0] <= '9'
@@ -141,7 +141,8 @@ let fix_invalid_blocks (conn : conn)
                        id "logseq.property.embedding/hnsw-label-updated-at" ]
                  else if normal_page_missing_updated_at e dispatch_key then
                    [ add id "block/updated-at"
-                       (Int (Option.get (Ldb.int_value e "block/created-at"))) ]
+                       (Common_util.value_of_ms
+                          (Option.get (Ldb.int64_value e "block/created-at"))) ]
                  else if
                    Ldb.string_value e "block/title" = Some "External URL"
                    && Ldb.ref_ents e "block/tags" = []

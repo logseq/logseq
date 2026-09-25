@@ -108,7 +108,7 @@ let date_pred db v =
   | None -> false
 
 let value_is_string = function String _ -> true | _ -> false
-let value_is_number = function Int _ | Float _ | Instant _ -> true | _ -> false
+let value_is_number = function Int _ | Float _ -> true | _ -> false
 let value_is_bool = function Bool _ -> true | _ -> false
 let value_is_keyword = function Keyword _ -> true | _ -> false
 let value_is_map = function Map _ -> true | _ -> false
@@ -2313,7 +2313,7 @@ let upsert_closed_value conn (property_id : string)
                                 (Wire.Map [ (kw "db/id", Wire.Int de.id) ])
                                 [ "block/title", Wire.String desc
                                 ; "block/updated-at",
-                                  Wire.Date_ms
+                                  Wire.Int64
                                     (Int64.of_float (Clock.now_ms ())) ] ]
                             []
                           |> ignore

@@ -15,9 +15,7 @@ let rec value_of_edn (Edn_parser.Any v) : value =
   | Edn_parser.Char u -> String (let b = Buffer.create 4 in Buffer.add_utf_8_uchar b u; Buffer.contents b)
   | Edn_parser.Symbol s -> Symbol s
   | Edn_parser.Keyword k -> Keyword (Edn_parser.keyword_to_string k)
-  | Edn_parser.Int n ->
-      if Int64.abs n <= Int64.of_int max_int then Int (Int64.to_int n)
-      else Instant n
+  | Edn_parser.Int n -> Common_util.value_of_ms n
   | Edn_parser.Bigint s -> Int (int_of_string_opt s |> Option.value ~default:0)
   | Edn_parser.Float f -> Float f
   | Edn_parser.Decimal s -> Float (float_of_string_opt s |> Option.value ~default:0.0)
@@ -89,9 +87,9 @@ let rec pr_str_to buf (v : value) : unit =
   | Nil -> Buffer.add_string buf "nil"
   | Bool b -> Buffer.add_string buf (if b then "true" else "false")
   | Int n -> Buffer.add_string buf (string_of_int n)
-  | Float f ->
-    let s = Printf.sprintf "%g" f in
-    Buffer.add_string buf s
+  (* cljs pr-str prints a double via JS Number::toString — integral
+     floats come out as plain digits ("1790000000000"), not "1.79e+12" *)
+  | Float f -> Buffer.add_string buf (Common_util.js_string_of_float f)
   | String s -> buffer_add_edn_escaped buf s
   | Symbol s -> Buffer.add_string buf s
   | Keyword s -> Buffer.add_string buf (":" ^ s)

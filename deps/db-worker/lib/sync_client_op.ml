@@ -88,6 +88,18 @@ let col_text_opt r i =
   | Sqlite.Text s | Sqlite.Blob s -> Some s
   | _ -> None
 
+let col_int64 r i =
+  match col r i with
+  | Sqlite.Integer n -> n
+  | Sqlite.Float f -> Int64.of_float f
+  | _ -> 0L
+
+let col_int64_opt r i =
+  match col r i with
+  | Sqlite.Integer n -> Some n
+  | Sqlite.Float f -> Some (Int64.of_float f)
+  | _ -> None
+
 let col_int r i =
   match col r i with
   | Sqlite.Integer n -> Int64.to_int n
@@ -258,7 +270,7 @@ let row_to_pending_local_tx (r : Sqlite.row) : local_tx_entry option =
 let pending_tx_select =
   "select tx_id, outliner_op, undo_redo, forward_outliner_ops, inverse_outliner_ops, inferred_outliner_ops, normalized_tx_data, reversed_tx_data from client_ops where kind = 'tx'"
 
-type upsert_result = { created_at : int; should_inc_pending : bool }
+type upsert_result = { created_at : int64; should_inc_pending : bool }
 
 let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
     ?(failed = false) ~outliner_op ~undo_redo ~forward_outliner_ops
@@ -277,11 +289,11 @@ let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
   in
   let created_at' =
     match existing with
-    | Some r -> col_int r 1
+    | Some r -> col_int64 r 1
     | None ->
         (match created_at with
          | Some c -> c
-         | None -> int_of_float (Clock.now_ms ()))
+         | None -> Int64.of_float (Clock.now_ms ()))
   in
   let b i = Sqlite.Integer (Int64.of_int (if i then 1 else 0)) in
   run st
@@ -294,7 +306,7 @@ let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
      ^ "forward_outliner_ops = excluded.forward_outliner_ops, inverse_outliner_ops = excluded.inverse_outliner_ops, "
      ^ "inferred_outliner_ops = excluded.inferred_outliner_ops, normalized_tx_data = excluded.normalized_tx_data, "
      ^ "reversed_tx_data = excluded.reversed_tx_data")
-    [ int created_at'
+    [ Sqlite.Integer created_at'
     ; text tx_id
     ; b pending
     ; b failed
@@ -337,12 +349,12 @@ type sync_conflict =
   ; attr : string
   ; value : string
   ; remote_t : int option
-  ; created_at : int
+  ; created_at : int64
   }
 
 let add_sync_conflicts repo (conflicts : (string * string * string * int) list) =
   let st = store repo in
-  let now = int_of_float (Clock.now_ms ()) in
+  let now = Int64.of_float (Clock.now_ms ()) in
   List.iter
     (fun (block_uuid, attr, value, remote_t) ->
        if Sync_state.uuid_string block_uuid then begin
@@ -353,7 +365,7 @@ let add_sync_conflicts repo (conflicts : (string * string * string * int) list) 
              ("insert into sync_conflicts (block_uuid, attr, value, remote_t, created_at) "
               ^ "values (?, ?, ?, ?, ?) on conflict(block_uuid, attr, value) do update set "
               ^ "remote_t = excluded.remote_t, created_at = excluded.created_at")
-             [ text block_uuid; text attr; text value; int remote_t; int now ]
+             [ text block_uuid; text attr; text value; int remote_t; Sqlite.Integer now ]
        end)
     conflicts
 
@@ -363,7 +375,7 @@ let conflict_row r =
   ; attr = col_text r 2
   ; value = col_text r 3
   ; remote_t = col_int_opt r 4
-  ; created_at = col_int r 5
+  ; created_at = col_int64 r 5
   }
 
 let get_all_sync_conflicts repo : sync_conflict list =
@@ -478,7 +490,7 @@ let upsert_asset_op st (op_type : string) (t : int) (value : Wire.t) =
         [ text block_uuid ];
       run st
         "insert into client_ops (kind, created_at, asset_uuid, asset_op, asset_t, asset_value) values ('asset', ?, ?, ?, ?, ?)"
-        [ int (int_of_float (Clock.now_ms ()))
+        [ Sqlite.Integer (Int64.of_float (Clock.now_ms ()))
         ; text block_uuid
         ; text op_type
         ; int t

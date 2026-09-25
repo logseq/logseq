@@ -43,7 +43,7 @@ let property_types_with_db =
 (* ---------- value shape predicates (cljs predicates) ---------- *)
 
 let string_v = function String _ -> true | _ -> false
-let number_v = function Int _ | Float _ | Instant _ -> true | _ -> false
+let number_v = function Int _ | Float _ -> true | _ -> false
 let boolean_v = function Bool _ -> true | _ -> false
 let keyword_v = function Keyword _ -> true | _ -> false
 let map_v = function Map _ -> true | _ -> false

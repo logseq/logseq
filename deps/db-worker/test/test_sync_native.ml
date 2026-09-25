@@ -262,9 +262,9 @@ let () =
   in
   with_client_ops_db repo (fun db ->
       Sync_client_op.update_local_tx repo 99;
-      upsert ~tx_id:keep_tx_id ~created_at:1 ~pending:false;
-      upsert ~tx_id:remove_tx_id ~created_at:2 ~pending:false;
-      upsert ~tx_id:pending_tx_id ~created_at:3 ~pending:true;
+      upsert ~tx_id:keep_tx_id ~created_at:1L ~pending:false;
+      upsert ~tx_id:remove_tx_id ~created_at:2L ~pending:false;
+      upsert ~tx_id:pending_tx_id ~created_at:3L ~pending:true;
       check "cleanup removes one finished tx"
         (Sync_client_op.cleanup_finished_history_ops repo [ keep_tx_id ] = 1);
       let count_tx tx_id =

@@ -314,7 +314,7 @@ let seed_initial_data () : Block_map.t list =
   ; kv "logseq.kv/schema-version" db_schema_version
   ; kv "logseq.kv/graph-initial-schema-version" db_schema_version
   ; kv "logseq.kv/graph-created-at"
-      (Instant (Date_time_util.time_ms ()))
+      (Common_util.value_of_ms (Date_time_util.time_ms ()))
   ; [ "db/ident", Keyword "logseq.property/empty-placeholder"
     ; ( "block/uuid"
       , Uuid

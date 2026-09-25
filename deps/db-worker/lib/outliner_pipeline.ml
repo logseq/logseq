@@ -61,6 +61,7 @@ let get_journal_day_from_long (db : db) (v : value) : entity_id option =
   let ms =
     match v with
     | Int n -> Some (Int64.of_int n)
+    | Float f -> Some (Int64.of_float f)
     | Instant f -> Some f
     | _ -> None
   in

@@ -1350,7 +1350,7 @@ let delete_conn (conn : conn) (page_uuid : string) (opts : Wire.t) : Wire.t =
                             | None -> None)
                          ; (match now_ms with
                             | Some ms ->
-                                Some (Keyword "now-ms", Instant ms)
+                                Some (Keyword "now-ms", Common_util.value_of_ms ms)
                             | None -> None) ]) ]))
         in
         if rename then

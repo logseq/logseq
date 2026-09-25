@@ -1309,6 +1309,21 @@ let local_hhmm (ms : int64) : int * int =
   let tm = Unix.localtime (Int64.to_float ms /. 1000.) in
   (tm.Unix.tm_hour, tm.Unix.tm_min)
 
+(* cljs stores datetime values as plain epoch-ms numbers: they read back as
+   Int/Float depending on the platform's numeric rep, Instant only for legacy
+   ~t-decoded data *)
+let ms_of_value (v : value) : int64 option =
+  match v with
+  | Int n -> Some (Int64.of_int n)
+  | Float f -> Some (Int64.of_float f)
+  | Instant ms -> Some ms
+  | _ -> None
+
+let journal_day_of_value (v : value) : int =
+  match ms_of_value v with
+  | Some ms -> Date_time_util.ms_to_journal_day ms
+  | None -> -1
+
 let test_import_block_with_journal_ref_and_time_property_value () =
   let file =
     write_temp_graph_file "journals/2023_06_21.md"
@@ -1384,8 +1399,8 @@ let test_import_repeated_deadline_and_scheduled () =
   let get k m = List.assoc_opt k m in
   let scheduled_ms =
     match get "logseq.property/scheduled" birthday_props with
-    | Some (Instant ms) -> ms
-    | _ -> 0L
+    | Some v -> Option.value ~default:0L (ms_of_value v)
+    | None -> 0L
   in
   check "Repeated scheduled timestamp keeps its scheduled date"
     (Date_time_util.ms_to_journal_day scheduled_ms = 20251101) "";
@@ -1422,10 +1437,10 @@ let test_import_repeated_deadline_and_scheduled () =
       (fun (a, v) ->
         if a = k then
           ( a,
-            match v with
-            | Instant ms ->
+            match ms_of_value v with
+            | Some ms ->
                 (Int (Date_time_util.ms_to_journal_day ms) : value)
-            | _ -> v )
+            | None -> v )
         else (a, v))
       m
   in
@@ -1938,14 +1953,10 @@ let instant_ms (iso : string) : int64 =
   | None -> failwith ("bad ISO instant: " ^ iso)
 
 let block_created_at (e : entity) : int64 option =
-  match getv' e "block/created-at" with
-  | Some (Instant ms) -> Some ms
-  | _ -> None
+  Ldb.int64_value e "block/created-at"
 
 let block_updated_at (e : entity) : int64 option =
-  match getv' e "block/updated-at" with
-  | Some (Instant ms) -> Some ms
-  | _ -> None
+  Ldb.int64_value e "block/updated-at"
 
 let test_export_doc_files_preserves_filesystem_timestamps () =
   let created_at = instant_ms "2020-01-02T03:04:05.000Z" in
@@ -3155,7 +3166,7 @@ let test_export_basic_graph_with_convert_all_tags () =
   eq "deadline block has correct journal as property value" 20221126
     (match prop_get (find_block_exn db "only deadline")
              "logseq.property/deadline" with
-     | Some (Instant ms) -> Date_time_util.ms_to_journal_day ms
+     | Some v -> journal_day_of_value v
      | _ -> -1) "";
   let sched_dl =
     props_select
@@ -3167,10 +3178,10 @@ let test_export_basic_graph_with_convert_all_tags () =
              List.map
                (fun ((k : value), (v : value)) ->
                  ( k,
-                   match v with
-                   | Instant ms ->
+                   match ms_of_value v with
+                   | Some ms ->
                        (Int (Date_time_util.ms_to_journal_day ms) : value)
-                   | _ -> v ))
+                   | None -> v ))
                kvs
          | _ -> [])
   in
@@ -3825,12 +3836,12 @@ let test_export_basic_graph_with_convert_all_tags () =
     "";
   (* testing "journal timestamps" *)
   check_v "journal pages are created on their journal day"
-    (Instant (Date_time_util.int_to_local_ms 20240207))
+    (Common_util.value_of_ms (Date_time_util.int_to_local_ms 20240207))
     (Option.value ~default:Nil
        (getv' (find_page_exn db "Feb 7th, 2024") "block/created-at"))
     "";
   check_v "journal blocks are created on their page's journal day"
-    (Instant (Date_time_util.int_to_local_ms 20240207))
+    (Common_util.value_of_ms (Date_time_util.int_to_local_ms 20240207))
     (Option.value ~default:Nil
        (getv' (find_block_re_exn db "Inception") "block/created-at"))
     "";
@@ -3950,7 +3961,7 @@ let test_export_basic_graph_with_convert_all_tags () =
     "";
   eq "multiline block has correct journal as property value" 20221126
     (match prop_get mb_prop_deadline "logseq.property/deadline" with
-     | Some (Instant ms) -> Date_time_util.ms_to_journal_day ms
+     | Some v -> journal_day_of_value v
      | _ -> -1)
     "";
   check_v "multiline block has correct background color as property value"
@@ -3971,14 +3982,14 @@ let test_export_basic_graph_with_convert_all_tags () =
     "multiline block with deadline and scheduled has correct deadline journal as property value"
     20221126
     (match prop_get mb_deadline_scheduled "logseq.property/deadline" with
-     | Some (Instant ms) -> Date_time_util.ms_to_journal_day ms
+     | Some v -> journal_day_of_value v
      | _ -> -1)
     "";
   eq
     "multiline block with deadline and scheduled has correct scheduled journal as property value"
     20221126
     (match prop_get mb_deadline_scheduled "logseq.property/scheduled" with
-     | Some (Instant ms) -> Date_time_util.ms_to_journal_day ms
+     | Some v -> journal_day_of_value v
      | _ -> -1)
     "";
   eq "logbook block keeps title" "logbook block"

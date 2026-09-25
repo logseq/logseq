@@ -419,7 +419,7 @@ let () = Dispatcher.register "thread-api/query-dsl-custom-query" query_dsl_custo
 
 type history_item =
   { history_id : entity_id
-  ; created_at : int
+  ; created_at : int64
   ; status_ident : string option
   ; status_uuid : value option
   ; status_title : value option
@@ -447,7 +447,15 @@ let block_status_history (db : db) (block_id : int) : history_item list =
                | Result_value (Ref n) -> Some n
                | _ -> None
              in
-             (match (int_of history_id, int_of created_at, int_of status_id) with
+             (* cljs untyped get: epoch-ms reads back numeric (Int/Float);
+                Instant only for legacy ~t-decoded data *)
+             let ms_of = function
+               | Result_value (Int n) -> Some (Int64.of_int n)
+               | Result_value (Float f) -> Some (Int64.of_float f)
+               | Result_value (Instant ms) -> Some ms
+               | _ -> None
+             in
+             (match (int_of history_id, ms_of created_at, int_of status_id) with
               | Some hid, Some cat, Some sid ->
                   let status = entity db (Entity_id sid) in
                   Some
@@ -465,7 +473,7 @@ let block_status_history (db : db) (block_id : int) : history_item list =
                     }
               | _ -> None)
          | _ -> None)
-  |> List.stable_sort (fun a b -> compare a.created_at b.created_at)
+  |> List.stable_sort (fun a b -> Int64.compare a.created_at b.created_at)
 
 (* task-spent-time — [status-history time-in-seconds] *)
 let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
@@ -483,7 +491,7 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
         match items with
         | last_item :: item :: others ->
             if item.status_ident = Some doing && others = [] then
-              int_of_float ((time +. (now_ms -. Float.of_int item.created_at)) /. 1000.)
+              int_of_float ((time +. (now_ms -. Int64.to_float item.created_at)) /. 1000.)
             else
               let time' =
                 if
@@ -492,7 +500,7 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
                       | Some s -> not (List.mem s terminal)
                       | None -> true)
                      && item.status_ident = Some done_
-                then time +. Float.of_int (item.created_at - last_item.created_at)
+                then time +. Int64.to_float (Int64.sub item.created_at last_item.created_at)
                 else time
               in
               loop (item :: others) time'
@@ -502,7 +510,7 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
       let item_wire (it : history_item) =
         Wire.Map
           [ (kw "db/id", Wire.Int it.history_id)
-          ; (kw "block/created-at", Wire.Int it.created_at)
+          ; (kw "block/created-at", Wire.Int64 it.created_at)
           ; ( kw "logseq.property.history/property-ident",
               kw "logseq.property/status" )
           ; ( kw "logseq.property.history/ref-value-ident",

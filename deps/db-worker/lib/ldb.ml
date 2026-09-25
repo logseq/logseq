@@ -81,11 +81,17 @@ let ref_ents (e : entity) (a : attr) : entity list =
 let string_value (e : entity) (a : attr) : string option =
   match value e a with Some (String s) -> Some s | _ -> None
 
-let int_value (e : entity) (a : attr) : int option =
+(* cljs untyped get: epoch-ms values read back as the platform's numeric
+   rep (Int/Float); Instant only for legacy ~t-decoded data *)
+let int64_value (e : entity) (a : attr) : int64 option =
   match value e a with
-  | Some (Int n) -> Some n
-  | Some (Instant ms) -> Some (Int64.to_int ms)
+  | Some (Int n) -> Some (Int64.of_int n)
+  | Some (Float f) -> Some (Int64.of_float f)
+  | Some (Instant ms) -> Some ms
   | _ -> None
+
+let int_value (e : entity) (a : attr) : int option =
+  Option.map Int64.to_int (int64_value e a)
 
 let ident_of (e : entity) : string option =
   match value e "db/ident" with Some (Keyword s) -> Some s | _ -> None
@@ -715,10 +721,11 @@ let get_bidirectional_properties db (target_id : entity_id)
         [] class_entities
     in
     let created_at (e : entity) =
-      (* int64-range instants read back as Instant on JS, where int
-         only holds 32 bits. *)
+      (* epoch-ms reads back numeric (Int/Float); Instant only for
+         legacy ~t-decoded data *)
       match value e "block/created-at" with
       | Some (Int n) -> Some (Int64.of_int n)
+      | Some (Float f) -> Some (Int64.of_float f)
       | Some (Instant ms) -> Some ms
       | _ -> None
     in

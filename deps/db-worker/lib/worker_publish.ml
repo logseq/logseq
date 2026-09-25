@@ -106,7 +106,7 @@ let publish_refs_from_blocks (db : db) (blocks : entity list)
                   ; Keyword "source_block_content", String block_content
                   ; Keyword "source_block_format", String block_format
                   ; ( Keyword "updated_at"
-                    , Instant (Date_time_util.time_ms ()) ) ])
+                    , Common_util.value_of_ms (Date_time_util.time_ms ()) ) ])
               targets
       | _ -> [])
     blocks
