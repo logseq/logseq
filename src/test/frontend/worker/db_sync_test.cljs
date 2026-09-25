@@ -468,23 +468,43 @@
     (sync-apply/mark-pending-txs-false! test-repo (into drop-tx-ids (map :tx-id tx-entries)))
     (is (empty? (sync-apply/pending-txs test-repo)))))
 
+(defn- mentions-tempid?
+  [tempids item]
+  (cond
+    (map? item) (contains? tempids (:db/id item))
+    (vector? item) (boolean (some #(and (string? %) (contains? tempids %)) item))
+    :else false))
+
 (deftest outliner-upload-chunks-preserve-entities-and-acknowledgment-test
   (doseq [delete? [false true]]
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           _ (when delete? (outliner-page/delete! conn (:block/uuid parent)))
-          server-conn (d/conn-from-db @conn)]
+          server-conn (d/conn-from-db @conn)
+          new-block-uuids (vec (repeatedly 6 random-uuid))
+          ;; The inserted blocks are created under string tempids equal to
+          ;; their uuids, and their datoms refer to one another through them.
+          new-block-tempids (set (map str new-block-uuids))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
                       (if delete?
                         [[:recycle-delete-permanently [(:block/uuid parent)]]]
-                        [[:insert-blocks [(mapv (fn [n] {:block/uuid (random-uuid)
-                                                        :block/title (str "Chunk block " n)})
-                                               (range 6))
+                        [[:insert-blocks [(mapv (fn [n block-uuid]
+                                                  {:block/uuid block-uuid
+                                                   :block/title (str "Chunk block " n)})
+                                                (range 6)
+                                                new-block-uuids)
                                           (:db/id parent) {:sibling? false :keep-uuid? true}]]])
                       local-tx-meta)
           (with-redefs [sync-apply/max-upload-request-datoms (if delete? 2 15)]
-            (loop [requests 0]
+            ;; tempid-requests counts the requests that carry any datom of the
+            ;; inserted blocks. How many requests the whole upload takes is
+            ;; not asserted: the insert also replaces the page's
+            ;; :block/updated-at, whose datoms carry no tempid, and their
+            ;; position in the tx varies between runs; when they fall outside
+            ;; the tempid group they travel in a request of their own.
+            (loop [requests 0
+                   tempid-requests 0]
               (let [pending (sync-apply/pending-txs test-repo)
                     {:keys [tx-entries]} (sync-apply/prepare-upload-tx-entries test-repo conn pending)]
                 (if (seq tx-entries)
@@ -501,11 +521,15 @@
                           (#'sync-handler/apply-tx-entry! server-conn entry)))
                       (#'sync-apply/commit-large-upload-progress! test-repo tx-entries)
                       (sync-apply/mark-pending-txs-false! test-repo (keep :tx-id tx-entries))
-                      (recur (inc requests))))
+                      (recur (inc requests)
+                             (cond-> tempid-requests
+                               (some #(mentions-tempid? new-block-tempids %)
+                                     (mapcat :tx-data tx-entries))
+                               inc))))
                   (do
                     (if delete?
                       (is (> requests 1) "Permanent deletion must span requests")
-                      (is (= 1 requests) "Interleaved tempid dependencies must stay in one atomic request"))
+                      (is (= 1 tempid-requests) "Interleaved tempid dependencies must stay in one atomic request"))
                     (is (empty? (sync-apply/pending-txs test-repo)))
                     (is (= (sync-checksum/recompute-checksum @conn)
                            (sync-checksum/recompute-checksum @server-conn)))))))))))))
@@ -1274,6 +1298,53 @@
                        (p/catch (fn [error]
                                   (is nil (str error)))))))
                (p/finally done)))))
+
+(deftest large-upload-chunks-keep-value-replacement-in-one-request-test
+  ;; The server validates each request as a whole transaction. A retract of a
+  ;; required attribute's old value that arrives without the add of its new
+  ;; value leaves the entity invalid, and the server rejects the request.
+  (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+        server-conn (d/conn-from-db @conn)
+        page (:block/page parent)
+        page-ref [:block/uuid (:block/uuid page)]
+        child-ref [:block/uuid (:block/uuid child1)]
+        old-updated-at (:block/updated-at page)
+        new-updated-at (inc old-updated-at)
+        ;; The page's timestamp replacement straddles an unrelated datom, so a
+        ;; 1-datom cap would put its retract and its add in different requests.
+        tx-data [[:db/retract page-ref :block/updated-at old-updated-at]
+                 [:db/add child-ref :block/title "child 1 renamed"]
+                 [:db/add page-ref :block/updated-at new-updated-at]]]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (seed-client-op-txs! test-repo
+                             [{:db-sync/tx-id (random-uuid)
+                               :db-sync/pending? true
+                               :db-sync/created-at 1
+                               :db-sync/outliner-op :save-block
+                               :db-sync/normalized-tx-data tx-data}])
+        (with-redefs [sync-apply/max-upload-request-datoms 1]
+          (loop [requests 0]
+            (let [pending (sync-apply/pending-txs test-repo)
+                  {:keys [tx-entries]} (sync-apply/prepare-upload-tx-entries test-repo conn pending)]
+              (if (and (seq tx-entries) (< requests 10))
+                (do
+                  (doseq [{:keys [tx-data outliner-op]} tx-entries]
+                    (try
+                      (#'sync-handler/apply-tx-entry! server-conn
+                                                      {:tx (sqlite-util/write-transit-str tx-data)
+                                                       :outliner-op outliner-op})
+                      (catch :default e
+                        (is false (str "The server rejects request " requests ": " (ex-message e))))))
+                  (#'sync-apply/commit-large-upload-progress! test-repo tx-entries)
+                  (sync-apply/mark-pending-txs-false! test-repo (keep :tx-id tx-entries))
+                  (recur (inc requests)))
+                (do
+                  (is (empty? (sync-apply/pending-txs test-repo)))
+                  (is (= new-updated-at
+                         (:block/updated-at (d/entity @server-conn (:db/id page)))))
+                  (is (= "child 1 renamed"
+                         (:block/title (d/entity @server-conn (:db/id child1))))))))))))))
 
 (deftest flush-pending-keeps-oversized-tempid-group-in-one-request-test
   (async done
