@@ -717,6 +717,61 @@ let () =
     !raised;
   Worker_state.drop_datascript_conn repo
 
+(* cljs request-asset-download-failure-does-not-block-later-downloads-test —
+   a 404 on one asset must not stop later queued downloads. Goes through
+   Sync_client.request_asset_download so the real db-sync-client and the
+   shared Sync_assets.enqueue_asset_task queue are exercised. *)
+let () =
+  let repo = "asset-download-repo" in
+  let graph_id = "graph-1" in
+  let missing_uuid = fresh_uuid () in
+  let ok_uuid = fresh_uuid () in
+  let conn = asset_conn missing_uuid in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:block/uuid #uuid \"%s\"
+             :logseq.property.asset/type \"png\"
+             :logseq.property.asset/remote-metadata {:type \"png\"}}]"
+          ok_uuid));
+  Worker_state.set_datascript_conn repo conn;
+  let client = Sync_state.new_client repo in
+  client.graph_id <- Some graph_id;
+  let download_calls = ref [] in
+  let prev_download = !Sync_assets.download_remote_asset_fn in
+  Sync_assets.download_remote_asset_fn :=
+    (fun _repo _graph_id asset_uuid _asset_type ->
+       download_calls := asset_uuid :: !download_calls;
+       if asset_uuid = missing_uuid then
+         Db_worker_effect.error
+           (Sync_util.ex_info "download asset failed"
+              [ kw "type", kw "rtc.exception/download-asset-failed"
+              ; kw "data", Wire.Map [ kw "status", Wire.Int 404 ] ])
+       else Db_worker_effect.pure ());
+  Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ());
+  Fun.protect
+    (fun () ->
+       with_client_ops_db repo (fun _db ->
+          Sync_state.db_sync_client := Some client;
+          Sync_client.request_asset_download repo missing_uuid;
+          let first_result = await_error !(client.Sync_state.asset_queue) in
+          (match first_result with
+           | Dispatcher.Exn_info (_msg, kvs) ->
+               check "first download rejects with 404"
+                 (match Wire.get "data" (Wire.Map kvs) with
+                  | Some data ->
+                      Wire.get "status" data = Some (Wire.Int 404)
+                  | None -> false)
+           | _ -> check "first download rejects with 404" false);
+          Sync_client.request_asset_download repo ok_uuid;
+          ignore (await !(client.Sync_state.asset_queue));
+          check "a 404 on one asset must not stop later queued downloads"
+            (List.rev !download_calls = [ missing_uuid; ok_uuid ])))
+    ~finally:(fun () ->
+      Sync_state.db_sync_client := None;
+      Sync_assets.download_remote_asset_fn := prev_download;
+      Worker_state.drop_datascript_conn repo)
+
 (* ---- assets_test.cljs (remaining deftests) ----
 
    download-remote-assets-if-missing-bounds-download-concurrency-test is
