@@ -3043,6 +3043,37 @@ let test_date_ms_transit_decodes_to_instant () =
   check "a real ~t still decodes to Instant"
     (Ds_wire.value_of_transit (Wire.Date_ms ms) = Instant ms)
 
+(* worker-db-fix/heal-instant-values — cljs writes inst values only on
+   file/created-at|last-modified-at; a ~m anywhere else is a corrupt
+   epoch-ms number and gets rewritten numeric on open *)
+let test_heal_instant_values () =
+  let conn = create_conn () in
+  let ms = 1783612800123L in
+  ignore
+    (Datascript.transact_conn conn
+       [ Add (Temp_id "b", "block/created-at", Instant ms)
+       ; Add (Temp_id "f", "file/created-at", Instant ms) ]);
+  Worker_db_fix.heal_instant_values conn;
+  let db = Datascript.db conn in
+  check "block/created-at healed to a number"
+    (Seq.exists
+       (fun (d : datom) ->
+          match d.v with
+          | Int n -> Int64.of_int n = ms
+          | Float f -> Int64.of_float f = ms
+          | _ -> false)
+       (datoms db Avet ~a:"block/created-at" ()));
+  check "no Instant left on block/created-at"
+    (not
+       (Seq.exists
+          (fun (d : datom) -> match d.v with Instant _ -> true | _ -> false)
+          (datoms db Avet ~a:"block/created-at" ())));
+  (* file/* attrs aren't in Avet — scan Eavt *)
+  check "file/created-at stays Instant"
+    (Seq.exists
+       (fun (d : datom) -> d.a = "file/created-at" && d.v = Instant ms)
+       (datoms db Eavt ()))
+
 (* (deftest build-upsert-nodes-edn-rejects-invalid-operations ...) — page-id
    part: a block page-id that is a page name fails fast instead of being
    silently dropped (src/test/logseq/api/db_based/tools_test.cljs) *)
@@ -3324,6 +3355,8 @@ let cases =
       test_epoch_ms_value_of_transit_stays_numeric
   ; Alcotest.test_case "date-ms-transit-decodes-to-instant-test" `Quick
       test_date_ms_transit_decodes_to_instant
+  ; Alcotest.test_case "heal-instant-values-test" `Quick
+      test_heal_instant_values
   ; Alcotest.test_case
       "build-upsert-nodes-edn-rejects-name-page-id-test" `Quick
       test_build_upsert_nodes_edn_rejects_name_page_id
