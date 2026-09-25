@@ -1730,10 +1730,27 @@ let normalize_query_row db (cells : Wire.t list) : Wire.t =
   | [ x ] -> x
   | _ -> Wire.Array tuple
 
-let query_error_value (msg : string) : Wire.t =
+(* cljs query-error-value: {:rows [] :error {:message msg :data ex-data}}.
+   Exn_info payloads are already Wire.t (transit-safe by construction), so
+   the cljs transit-safe-value pass is a no-op here. *)
+let query_error_value ?data (msg : string) : Wire.t =
+  let error_kvs =
+    match data with
+    | Some d ->
+        [ (kw "message", Wire.String msg); (kw "data", d) ]
+    | None -> [ (kw "message", Wire.String msg) ]
+  in
   Wire.Map
     [ (kw "rows", Wire.Array [])
-    ; (kw "error", Wire.Map [ (kw "message", Wire.String msg) ]) ]
+    ; (kw "error", Wire.Map error_kvs) ]
+
+(* cljs (or (ex-message error) (str error)) and (ex-data error) *)
+let query_exn_message_data = function
+  | Dispatcher.Exn_info (msg, kvs) -> (msg, Some (Wire.Map kvs))
+  | Invalid_argument msg | Failure msg -> (msg, None)
+  | Edn_eval.Eval_error msg -> (msg, None)
+  | Edn_eval.Throw_value v -> (Edn_util.pr_str v, None)
+  | e -> (Printexc.to_string e, None)
 
 (* execute-query-spec — returns typed rows *)
 let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
@@ -1853,17 +1870,34 @@ let render_query db key runtime =
     | Some (Wire.String s) -> Some s
     | _ -> None
   in
-  let watch =
-    query_watch_keys db spec_kvs kind_str query_forms rules_forms query_string
-  in
+  (match kind_str, query_string with
+   | "dsl", Some qs -> (
+       match quoted_query_text qs, runtime.repo with
+       | Some _, None ->
+           fail "Full-text query resource requires repository" []
+       | _ -> ())
+   | _ -> ());
   try
+    let watch =
+      query_watch_keys db spec_kvs kind_str query_forms rules_forms
+        query_string
+    in
     let rows =
       execute_query_spec db spec_kvs kind_str query_forms rules_forms
         query_string runtime
     in
-    (watch, Wire.Map [ (kw "rows", Wire.Array (query_result_rows db rows spec_kvs)) ])
-  with
-  | Invalid_argument msg | Failure msg -> (watch, query_error_value msg)
+    ( watch
+    , Wire.Map
+        [ (kw "rows", Wire.Array (query_result_rows db rows spec_kvs)) ] )
+  with e -> (
+    (* A user-supplied query can fail in many ways: reader errors on
+       incomplete syntax while editing, invalid regex, malformed datalog,
+       a bad result-transform. Isolating the failure keeps sibling snapshot
+       resources alive; watch-all re-evaluates once the query is fixed. *)
+    let msg, data = query_exn_message_data e in
+    Worker_log.error "renderer-query-failed"
+      [ ("kind", kind_str); ("error", msg) ];
+    (Watch_all, query_error_value ?data msg))
 
 (* ==================== view.cljs ==================== *)
 
