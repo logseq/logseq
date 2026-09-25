@@ -91,7 +91,7 @@ let init () =
     ignore Endpoint_transaction.transact;
     ignore Endpoint_transaction.apply_outliner_ops;
     ignore Endpoint_comment.ensure_comments_area;
-    ignore Endpoint_flashcard.get_fsrs_due_card_block_ids;
+    ignore Endpoint_flashcard.get_fsrs_card_block_ids;
     ignore Render_snapshot.canonical_blocks;
     (* force-link so its let () registers the sci-equivalent result transform *)
     ignore Edn_eval.apply_edn;
