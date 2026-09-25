@@ -1556,7 +1556,11 @@
           page-uuid (:uuid opts)
           existing-page (or (when (uuid? page-uuid)
                               (d/entity @conn [:block/uuid page-uuid]))
-                            (ldb/get-page @conn title))]
+                            ;; A page and a tag can share a title; only a
+                            ;; page of the kind being created is this page.
+                            (let [page (ldb/get-page @conn title)]
+                              (when (= (boolean (:class? opts)) (boolean (ldb/class? page)))
+                                page)))]
       (if (and existing-page
                (not (ldb/recycled? existing-page)))
         [(:block/title existing-page) (:block/uuid existing-page)]
