@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.block-test
   (:require [cljs.test :refer [deftest are testing is]]
             [datascript.core :as d]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
@@ -172,6 +173,28 @@
                 :block/title "2026-07-27"
                 :block/name "2026-07-27"
                 :block/journal-day 20260727}
+               (select-keys reference
+                            [:block/uuid :block/title :block/name :block/journal-day]))))))
+
+  (testing "default-name journals keep stored identity when title-format is E, dd.MM.yyyy"
+    (let [journal-day 20260925
+          title-format "E, dd.MM.yyyy"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:build/journal journal-day}}]})
+          journal (db-test/find-journal-by-journal-day @conn journal-day)
+          stored-title (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))
+          stored-name (:block/name journal)
+          custom-title (date-time-util/int->journal-title journal-day title-format)]
+      (d/transact! conn [[:db/add :logseq.class/Journal
+                          :logseq.property.journal/title-format title-format]])
+      (is (= "sep 25th, 2026" stored-name))
+      (is (= "Sep 25th, 2026" stored-title))
+      (is (= "Fri, 25.09.2026" custom-title))
+      (let [reference (gp-block/page-name->map custom-title @conn false title-format)]
+        (is (= {:block/uuid (:block/uuid journal)
+                :block/title stored-title
+                :block/name stored-name
+                :block/journal-day journal-day}
                (select-keys reference
                             [:block/uuid :block/title :block/name :block/journal-day])))))))
 
