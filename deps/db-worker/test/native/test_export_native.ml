@@ -3208,6 +3208,54 @@ let test_validate_import_txs_tx_scope_rejects_invalid_tx () =
      | Some e -> string_contains e "validation error"
      | None -> false)
 
+(* Bug 19: epoch-ms attrs stored as Instant (the melange kvs-store int64
+   scalar rep) must export as plain numbers, not #inst — cljs import
+   validation fails int?/number? once per entity otherwise. file/* attrs
+   hold real js/Date values and keep #inst (cljs inst? schema). *)
+let test_graph_datoms_export_emits_epoch_ms_as_number () =
+  let tname = "graph-datoms-export-epoch-ms-as-number" in
+  let conn = Sqlite_export.create_conn () in
+  let db = db_of conn in
+  let task_e =
+    match entity db (Ident "logseq.class/Task") with
+    | Some e -> e
+    | None -> failwith "no logseq.class/Task"
+  in
+  let ms = 1790334428076L in
+  (* simulate old-build kvs-restored datoms: epoch-ms stored as Instant *)
+  ignore
+    (Datascript.transact_conn conn
+       [ Add (Entity_id task_e.id, "block/created-at", Instant ms)
+       ; Add (Entity_id task_e.id, "block/updated-at", Instant ms) ]);
+  let db = db_of conn in
+  check (tname ^ ": injected Instant datom")
+    (List.exists
+       (fun (d : datom) ->
+         d.a = "block/created-at"
+         && (match d.v with Instant _ -> true | _ -> false))
+       (List.of_seq (datoms db Eavt ~e:task_e.id ())));
+  let export_edn = build_export db [ "export-type", kw "graph" ] in
+  let inst_attrs =
+    coll_items' (map_get_or_nil "datoms" export_edn)
+    |> List.filter_map (fun d ->
+           match d with
+           | Vector [ _; Keyword a; Instant _ ] -> Some a
+           | _ -> None)
+    |> List.sort_uniq compare
+  in
+  check
+    (tname ^ ": Instant survives only on file/* attrs")
+    (inst_attrs <> []
+     && List.for_all
+          (fun a -> List.mem a [ "file/created-at"; "file/last-modified-at" ])
+          inst_attrs);
+  let valid_result = Sqlite_export.validate_export export_edn in
+  check (tname ^ ": validate_export passes")
+    (valid_result.Sqlite_export.error = None);
+  (match valid_result.Sqlite_export.valid_db with
+   | Some vdb -> validate_db tname vdb
+   | None -> ())
+
 (* ---------- runner ---------- *)
 
 let () = run "merge-export-maps" test_merge_export_maps
@@ -3254,6 +3302,7 @@ let () = run "build-export-omits-empty-build-properties" test_build_export_omits
 let () = run "import-graph-with-assets" test_import_graph_with_assets
 let () = run "validate-import-txs-tx-scope-validates-only-touched-entities" test_validate_import_txs_tx_scope_validates_only_touched_entities
 let () = run "validate-import-txs-tx-scope-rejects-invalid-tx" test_validate_import_txs_tx_scope_rejects_invalid_tx
+let () = run "graph-datoms-export-epoch-ms-as-number" test_graph_datoms_export_emits_epoch_ms_as_number
 
 let () =
   if !failures > 0 then begin
