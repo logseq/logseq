@@ -325,6 +325,22 @@ let () =
   let errors = Db_validate.validate_local_db (Datascript.db conn) in
   check "property-types: :url graph has no validation errors" (errors = [])
 
+(* ---------- build-db-initial-data with :import-type ----------
+   The import tx retracts four rtc kv idents; on a fresh graph they were
+   never seeded, and upstream datascript silently no-ops retract ops whose
+   entity fails entid resolution — the tx must not raise. *)
+let () =
+  let conn = Datascript.create_conn ~schema:(schema ()) () in
+  ignore
+    (Datascript.transact_conn conn
+       (Sqlite_create_graph.initial_tx_data ~db:(Datascript.db conn)
+          ~config_content:"" ~import_type:(Keyword "sqlite-db") ())
+       ~tx_meta:[ "initial-db?", Bool true ]);
+  let db = Datascript.db conn in
+  check "initial-data-with-import-type: import kv entities created"
+    (entid db "db/ident" (Keyword "logseq.kv/import-type") <> None
+     && entid db "db/ident" (Keyword "logseq.kv/imported-at") <> None)
+
 (* ---------- (deftest build-db-initial-data-test — idempotent) ---------- *)
 
 let () =
