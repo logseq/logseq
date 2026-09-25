@@ -713,7 +713,20 @@ let ref_attr (db : db) (attr : attr) : bool =
   Schema.schema_attr_is_ref (Datascript.schema db) attr
   || Db_normalize.entity_value_type_ref db attr
 
-let upload_tx_item_tempids (db : db) (item : Wire.t) : Wire.t list =
+(* [a v] lookup-refs such as [:block/uuid u]: when the same ref appears in a
+   ref-attr value position elsewhere in the tx, datoms whose entity position
+   is that ref are dependency-linked to the datoms pointing at it and must
+   stay in the same request — otherwise an early chunk can carry e.g. a lone
+   retract ahead of its add and leave the server holding a mid-state. Refs
+   that appear only in entity position (nothing references them) do not
+   group. *)
+let lookup_ref_wire (v : Wire.t) : bool =
+  match v with
+  | Wire.Array [ Wire.Keyword _; _ ] | Wire.List [ Wire.Keyword _; _ ] -> true
+  | _ -> false
+
+let upload_tx_item_tempids (db : db) (linked : Wire.t list) (item : Wire.t) :
+    Wire.t list =
   match item with
   | Wire.Map _ -> (
       match Wire.get "db/id" item with
@@ -726,7 +739,16 @@ let upload_tx_item_tempids (db : db) (item : Wire.t) : Wire.t list =
                [ kw "db/add"; kw "db/retract"; kw "db/cas"; kw "db.fn/cas" ]
              && List.length l >= 4 ->
           let acc = ref [] in
-          if upload_tempid entity then acc := entity :: !acc;
+          let is_ref =
+            match attr with
+            | Wire.Keyword a -> ref_attr db a
+            | _ -> false
+          in
+          (* a plain non-ref add on a linked entity is leaf data and may
+             split; a retract/cas or a ref edge on it is a dependency *)
+          if upload_tempid entity
+             || (List.mem entity linked && (op <> kw "db/add" || is_ref))
+          then acc := entity :: !acc;
           (match attr with
            | Wire.Keyword a when ref_attr db a ->
                if upload_tempid value then acc := value :: !acc
@@ -734,7 +756,7 @@ let upload_tx_item_tempids (db : db) (item : Wire.t) : Wire.t list =
           !acc
       | [ op; e ]
         when (op = kw "db/retractEntity" || op = kw "db.fn/retractEntity")
-             && upload_tempid e ->
+             && (upload_tempid e || List.mem e linked) ->
           [ e ]
       | _ -> [])
   | _ -> []
@@ -754,6 +776,16 @@ let merge_upload_tx_ranges (ranges : (int * int) list) : (int * int) list =
 
 let upload_tempid_range_by_start (db : db) (tx_data : Wire.t list)
     : (int, int) Hashtbl.t =
+  let linked =
+    List.concat_map
+      (fun item ->
+         match item with
+         | Wire.Array (_ :: _ :: Wire.Keyword a :: v :: _)
+         | Wire.List (_ :: _ :: Wire.Keyword a :: v :: _)
+           when ref_attr db a && lookup_ref_wire v -> [ v ]
+         | _ -> [])
+      tx_data
+  in
   let by_tempid : (string, int * int) Hashtbl.t = Hashtbl.create 17 in
   List.iteri
     (fun idx item ->
@@ -764,7 +796,7 @@ let upload_tempid_range_by_start (db : db) (tx_data : Wire.t list)
             | Some (s, e) ->
                 Hashtbl.replace by_tempid k (min s idx, max e idx)
             | None -> Hashtbl.replace by_tempid k (idx, idx))
-         (upload_tx_item_tempids db item))
+         (upload_tx_item_tempids db linked item))
     tx_data;
   let ranges =
     Hashtbl.fold (fun _ r acc -> r :: acc) by_tempid []
