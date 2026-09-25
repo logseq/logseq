@@ -1278,3 +1278,32 @@
       (is (= ["outline 1" ["a" "c" ["b" ["b1" "b2"]]]] (outline "outline 1")))
       (is (map? (worker-undo-redo/undo test-repo)))
       (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-of-block-and-its-grandchild-restores-both-test
+  (testing "undoing a move of a block and its grandchild (Ctrl+click selection) puts the grandchild back too"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "b")] (uuid-of "a") {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "a") (uuid-of "b2")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["a" [["b" ["b1"]]]] "b2" "d"]] (outline "outline 2")))
+      (is (= 2 (count (undo-all!))))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-move-of-blocks-selected-bottom-up-restores-both-test
+  (testing "undoing a move of 2 blocks selected bottom first (Ctrl+click order) puts both back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "b2") (uuid-of "b1")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" ["b1" "b2" "d"]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
