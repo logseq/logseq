@@ -253,6 +253,60 @@ let test_repairs_set_wrapped_single_property_values () =
        true
      with _ -> false)
 
+(* cljs wiring for db-validate/validate-tx-report (worker_core.ml) *)
+let with_validate_tx_report (f : unit -> 'a) : 'a =
+  let before = !Db_tx.validate_tx_report_fn in
+  Db_tx.validate_tx_report_fn
+  := Some
+       (fun (r : tx_report) ->
+         let ok, errs =
+           Db_validate.validate_tx_report ~closed_schema:false r.db_after
+             r.tx_data
+         in
+         ( ok
+         , List.map
+             (fun (_ : Db_validate.tx_entity_error) -> "invalid entity")
+             errs ));
+  Fun.protect
+    ~finally:(fun () -> Db_tx.validate_tx_report_fn := before)
+    f
+
+(* Instant doubles as the int64 scalar rep: epoch-ms values
+   (block/created-at, updated-at, tx-id) exceed int32 on melange and
+   decode from kvs storage/transit as Instant (datascript-ocaml
+   datascript_melange_storage.ml). A tx touching a restored entity must
+   not fail validate-tx-report on its :int attrs. *)
+let test_instant_scalar_attrs_validate_as_int () =
+  let open Db_test_util in
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page 1" };
+            blocks = [ { default_block with b_title = Some "b1" } ] } ]
+      ()
+  in
+  let block = Option.get (find_block_by_content (db_of conn) "b1") in
+  with_validate_tx_report (fun () ->
+      (* the rep timestamps carry after a kvs persist/restore *)
+      ignore
+        (Db_tx.transact conn
+           [ Add
+               (Entity_id block.id, "block/created-at",
+                Instant 1790330703454L)
+           ; Add
+               (Entity_id block.id, "block/updated-at",
+                Instant 1790330703454L) ]);
+      (* a later tx touching the entity pulls the stored Instant datoms
+         into the validated entity-map (the reported failure shape) *)
+      ignore
+        (Db_tx.transact conn
+           [ Add (Entity_id block.id, "block/title", String "b1'") ]));
+  let e = ent_of_ref_exn (db_of conn) (Entity_id block.id) in
+  check "instant created-at stored"
+    (Ldb.value e "block/created-at" = Some (Instant 1790330703454L));
+  check "title updated"
+    (Ldb.string_value e "block/title" = Some "b1'")
+
 let () =
   Alcotest.run "db-validate-test"
     [ ( "db_validate_test",
@@ -266,4 +320,6 @@ let () =
             `Quick test_repairs_invalid_pages_properties_and_classes
         ; Alcotest.test_case
             "validate-db-repairs-set-wrapped-single-property-values"
-            `Quick test_repairs_set_wrapped_single_property_values ] ) ]
+            `Quick test_repairs_set_wrapped_single_property_values
+        ; Alcotest.test_case "instant-scalar-attrs-validate-as-int"
+            `Quick test_instant_scalar_attrs_validate_as_int ] ) ]

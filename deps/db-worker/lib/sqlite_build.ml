@@ -1452,7 +1452,7 @@ let infer_property_schema (pair_values : value list) : BM.t =
            | _ -> "node")
         else
           (match pv with
-           | Int _ | Float _ -> "number"
+           | Int _ | Float _ | Instant _ -> "number"
            | String s when Ns_util.url_parses s -> "url"
            | Bool _ -> "checkbox"
            | _ -> "default")

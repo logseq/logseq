@@ -882,7 +882,9 @@ let all_ref_property_types =
   ; "class"; "page"; "property" ]
 
 let valid_type_for_sort (v : value) : bool =
-  match v with Int _ | Float _ | String _ | Bool _ -> true | _ -> false
+  match v with
+  | Int _ | Float _ | Instant _ | String _ | Bool _ -> true
+  | _ -> false
 
 let prop_type_kw (property : entity option) : string option =
   Option.bind property (fun p ->
@@ -910,7 +912,11 @@ let js_number_opt (v : value) : float option =
   | _ -> None
 
 let strict_number_opt (v : value) : float option =
-  match v with Int i -> Some (float_of_int i) | Float f -> Some f | _ -> None
+  match v with
+  | Int i -> Some (float_of_int i)
+  | Float f -> Some f
+  | Instant i -> Some (Int64.to_float i)
+  | _ -> None
 
 (* JS relational comparison result, None = unordered (NaN operand). Both
    strings compare lexicographically; otherwise ToNumber both. *)

@@ -144,6 +144,10 @@ let datetime_value_to_string (v : value) (ctx : context) : string option =
       let y, m, d, h, mi = Clock.localtime_ms (float_of_int n) in
       let day = (y * 10000) + (m * 100) + d in
       Some (Printf.sprintf "%s %02d:%02d" (journal_day_title day ctx) h mi)
+  | Instant n when n >= 100000000000L ->
+      let y, m, d, h, mi = Clock.localtime_ms (Int64.to_float n) in
+      let day = (y * 10000) + (m * 100) + d in
+      Some (Printf.sprintf "%s %02d:%02d" (journal_day_title day ctx) h mi)
   | _ -> None
 
 (* cljs entity-content: :block/title or :logseq.property/value. *)
@@ -185,7 +189,7 @@ let rec property_value_to_string db (property : entity) (v : value) (ctx : conte
             | None -> Some (node_ref ""))
        | None -> Some "")
   | Keyword k -> Some k
-  | Int _ | Float _ ->
+  | Int _ | Float _ | Instant _ ->
       if property_type property = Some "datetime" then
         (match datetime_value_to_string v ctx with
          | Some s -> Some s
