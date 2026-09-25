@@ -2260,16 +2260,17 @@ let seed_favorites_page conn =
          ; "block/title", Str favorites_page
          ; "block/name", Str favorites_page ] ])
 
+(* cljs uses a bare (d/create-conn schema), not db-test/create-conn: no
+   logseq.kv/db-type, so transact-sync skips pipeline validation *)
 let test_set_page_favorite () =
-  let conn = create_conn () in
+  let conn = create_conn_bare () in
   let page_uuid = "77777777-7777-7777-7777-777777777777" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid page_uuid
          ; "block/title", Str "fav page"
-         ; "block/name", Str "fav page"
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
+         ; "block/name", Str "fav page" ] ]);
   register_conn conn;
   let page = Option.get (entity_at_uuid (db_of conn) page_uuid) in
   ignore
@@ -2295,15 +2296,14 @@ let test_set_page_favorite () =
 
 (* (deftest set-page-favorite-is-idempotent ...) *)
 let test_set_page_favorite_repeated_false () =
-  let conn = create_conn () in
+  let conn = create_conn_bare () in
   let page_uuid = "77777777-8888-7777-7777-777777777777" in
   seed_favorites_page conn;
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid page_uuid
          ; "block/title", Str "fav page 2"
-         ; "block/name", Str "fav page 2"
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
+         ; "block/name", Str "fav page 2" ] ]);
   register_conn conn;
   ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.String page_uuid; Wire.Bool true ]);
   ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.String page_uuid; Wire.Bool false ]);
