@@ -236,6 +236,35 @@ let render_page_identity db key _runtime =
     | Some p -> Wire.Uuid (uuid_of p)
     | None -> Wire.Nil )
 
+(* entity-title — cljs qualified-keyword? on the lookup ident *)
+let wire_qualified_keyword = function
+  | Wire.Keyword s -> (
+      match String.rindex_opt s '/' with
+      | Some i when i > 0 -> true
+      | _ -> false)
+  | _ -> false
+
+let render_entity_title db key _runtime =
+  let ident = List.nth key 1 in
+  if not (wire_qualified_keyword ident) then
+    fail "Invalid entity title lookup" [ (kw "ident", ident) ];
+  let entity =
+    match ident with
+    | Wire.Keyword s -> Ldb.ent_of_ref db (Ident s)
+    | _ -> None
+  in
+  let watch =
+    match Option.bind entity (fun e -> Ldb.value e "block/uuid") with
+    | Some (Uuid u) -> [ wk1 "attr" (kw "db/ident"); watch_entity u ]
+    | _ -> [ wk1 "attr" (kw "db/ident") ]
+  in
+  let value =
+    match Option.bind entity (fun e -> Ldb.value e "block/title") with
+    | Some v -> Ds_wire.transit_of_value v
+    | None -> Wire.Nil
+  in
+  (Watch_keys watch, value)
+
 let render_page_preview_source db key _runtime =
   let page_uuid = require_uuid "page-uuid" (List.nth key 1) in
   let page = entity_by_uuid db "page-uuid" page_uuid in
@@ -2559,6 +2588,7 @@ let resource_renderers : (string * renderer) list =
   ; ( "favorite-status", rr (Some 2) (fun db k r -> let w, v = render_favorite_status db k r in no_slots w v) )
   ; ( "recent-pages", rr (Some 2) (fun db k r -> let w, v = render_recent_pages db k r in no_slots w v) )
   ; ( "page-identity", rr (Some 2) (fun db k r -> let w, v = render_page_identity db k r in no_slots w v) )
+  ; ( "entity-title", rr (Some 2) (fun db k r -> let w, v = render_entity_title db k r in no_slots w v) )
   ; ( "page-preview-source", rr (Some 2) (fun db k r -> let w, v = render_page_preview_source db k r in no_slots w v) )
   ; ( "block-breadcrumb", rr (Some 3) (fun db k r -> let w, v = render_block_breadcrumb db k r in no_slots w v) )
   ; ( "journals", rr (Some 1) (fun db k r -> let w, v = render_journals db k r in no_slots w v) )
