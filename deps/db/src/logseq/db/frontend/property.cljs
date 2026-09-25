@@ -840,6 +840,21 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
+(defn order-list-type
+  "Returns a block's :logseq.property/order-list-type as a lower-case string.
+  The stored value may be a string, keyword, or ref entity/map depending on how
+  the block was fetched."
+  [block]
+  (let [v (:logseq.property/order-list-type block)
+        label (cond
+                (string? v) v
+                (keyword? v) (name v)
+                :else (or (:block/title v)
+                          (:logseq.property/value v)
+                          (:block/name v)
+                          (some-> (:db/ident v) name)))]
+    (some-> label str string/lower-case)))
+
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"

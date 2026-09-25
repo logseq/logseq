@@ -98,7 +98,146 @@
                :logseq.property/order-list-type {:block/title "number"}})))
   (is (false? (editor/own-order-number-list?
               {:db/id 2
-               :logseq.property/order-list-type {:block/title "roman"}}))))
+               :logseq.property/order-list-type {:block/title "roman"}})))
+  (is (true? (editor/own-order-number-list?
+              {:db/id 3
+               :logseq.property/order-list-type "number"}))
+      "Worker/canonical blocks store list type as a plain string")
+  (is (false? (editor/own-order-number-list?
+               {:db/id 4
+                :logseq.property/order-list-type "roman"}))))
+
+(deftest slash-number-list-toggles-edit-block-and-list-siblings-test
+  (async done
+    (let [parent-uuid #uuid "33333333-3333-3333-3333-333333333333"
+          block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          sibling-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          parent {:db/id 10
+                  :block/uuid parent-uuid}
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "item 1"
+                 :block/parent parent}
+          sibling {:db/id 2
+                   :block/uuid sibling-uuid
+                   :block/title "item 2"
+                   :block/parent parent}
+          events (atom [])]
+      (-> (p/with-redefs [state/get-edit-block (constantly block)
+                          state/get-current-repo (constantly "test")
+                          db-async/<get-block-parent (fn [_repo _uuid]
+                                                       (p/resolved parent))
+                          db-async/<get-block-immediate-children (fn [_repo uuid]
+                                                                   (is (= parent-uuid uuid))
+                                                                   (p/resolved [block sibling]))
+                          state/pub-event! (fn [event]
+                                             (swap! events conj event)
+                                             (p/resolved nil))]
+            (p/do!
+             (commands/handle-step [:editor/toggle-own-number-list])
+             (is (= [[:editor/toggle-own-number-list [block sibling]]]
+                    @events)
+                 "Number list should toggle the current block's list siblings")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest contiguous-same-list-type-siblings-stops-at-mixed-siblings-test
+  (let [bullet-a-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        bullet-b-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        numbered-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        plain-uuid #uuid "44444444-4444-4444-4444-444444444444"
+        bullet-a {:db/id 1
+                  :block/uuid bullet-a-uuid
+                  :block/title "bullet a"}
+        bullet-b {:db/id 2
+                  :block/uuid bullet-b-uuid
+                  :block/title "bullet b"}
+        numbered {:db/id 3
+                  :block/uuid numbered-uuid
+                  :block/title "numbered"
+                  :logseq.property/order-list-type "number"}
+        plain {:db/id 4
+               :block/uuid plain-uuid
+               :block/title "plain"}
+        siblings [bullet-a bullet-b numbered plain]]
+    (is (= [bullet-a bullet-b]
+           (commands/contiguous-same-list-type-siblings siblings bullet-a))
+        "A bullet run includes only the contiguous default siblings")
+    (is (= [numbered]
+           (commands/contiguous-same-list-type-siblings siblings numbered))
+        "A numbered run does not include adjacent bullet or plain siblings")
+    (is (= [plain]
+           (commands/contiguous-same-list-type-siblings siblings plain))
+        "A later default sibling after a numbered break is its own run")))
+
+(deftest toggle-own-number-list-numbers-a-single-edit-block-map-test
+  (async done
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "item"
+                 :block/parent {:db/id 2}
+                 :block/page {:db/id 3}
+                 :block/order "a0"}
+          set-calls (atom [])
+          batch-calls (atom [])]
+      (-> (p/with-redefs [property-handler/set-block-property!
+                          (fn [& args]
+                            (swap! set-calls conj (vec args)))
+                          property-handler/batch-set-block-property!
+                          (fn [uuids prop value]
+                            (swap! batch-calls conj [uuids prop value]))]
+            (p/do!
+             (editor/toggle-own-number-list! block)
+             (is (= [[block-uuid :logseq.property/order-list-type "number"]]
+                    @set-calls)
+                 "A slash-style edit-block map must toggle that block, not its map entries")
+             (is (empty? @batch-calls)
+                 "A single edit block is not a batch of attribute entries")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest toggle-children-number-list-removes-numbering-from-numbered-children-test
+  (async done
+    (let [parent-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          child-a-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          child-b-uuid #uuid "33333333-3333-3333-3333-333333333333"
+          parent {:db/id 1
+                  :block/uuid parent-uuid
+                  :block/title "parent"}
+          children [{:db/id 2
+                     :block/uuid child-a-uuid
+                     :block/title "child a"
+                     :logseq.property/order-list-type "number"}
+                    {:db/id 3
+                     :block/uuid child-b-uuid
+                     :block/title "child b"
+                     :logseq.property/order-list-type {:block/title "number"}}]
+          remove-calls (atom [])
+          set-calls (atom [])]
+      (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                          db-async/<get-block-immediate-children
+                          (fn [_repo uuid]
+                            (is (= parent-uuid uuid))
+                            (p/resolved children))
+                          property-handler/batch-remove-block-property!
+                          (fn [uuids prop]
+                            (swap! remove-calls conj [uuids prop]))
+                          property-handler/batch-set-block-property!
+                          (fn [uuids prop value]
+                            (swap! set-calls conj [uuids prop value]))]
+            (p/do!
+             (editor/toggle-children-number-list! parent)
+             (is (= [[[child-a-uuid child-b-uuid] :logseq.property/order-list-type]]
+                    @remove-calls)
+                 "Number children should turn numbered children back into bullets")
+             (is (empty? @set-calls)
+                 "Numbered children must not be numbered again")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
 
 (deftest selected-delete-restores-the-mounted-previous-block-test
   (let [block-id (random-uuid)
