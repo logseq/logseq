@@ -7,7 +7,7 @@
   (reset! @#'subs-loader/*flushing? false)
   (subs-loader/set-still-wanted-fn! (constantly true)))
 
-(deftest request-groups-flushes-resources-before-block-trees-test
+(deftest request-groups-flushes-block-trees-before-resources-test
   (let [view-uuid (random-uuid)
         block-uuid (random-uuid)
         parent-uuid (random-uuid)
@@ -27,11 +27,12 @@
     (is (= 4 (count groups)))
     (is (= #{:view-data :views} (resource-kinds (nth groups 0)))
         "Tags/All Pages view-data must leave before leftover resources.")
-    (is (= #{:block-ref-count} (resource-kinds (nth groups 1)))
-        "block-ref-count must not share the first table window request.")
-    (is (= [[:block block-uuid]] (mapv :slot-key (nth groups 2))))
-    (is (= [[:children parent-uuid]] (mapv :slot-key (nth groups 3)))
-        "Children open-block-tree stays last.")))
+    (is (= [[:block block-uuid]] (mapv :slot-key (nth groups 1)))
+        "An open page's blocks must not wait behind title decorations.")
+    (is (= [[:children parent-uuid]] (mapv :slot-key (nth groups 2)))
+        "An open page's children must not wait behind title decorations.")
+    (is (= #{:block-ref-count} (resource-kinds (nth groups 3)))
+        "block-ref-count must not share the first table window request.")))
 
 (deftest loader-takes-one-request-group-at-a-time-test
   (reset-loader!)
