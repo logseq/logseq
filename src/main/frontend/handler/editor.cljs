@@ -4065,13 +4065,18 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  ;; `save-current-block!` resolves after the worker persists the block; during
+  ;; that window the user may already be editing another block, so only clear
+  ;; the edit session this escape was issued for.
+  (let [editing-block-id (:block/uuid (state/get-edit-block))]
+    (p/do!
+     (when save-block? (save-current-block!))
+     (when (= editing-block-id (:block/uuid (state/get-edit-block)))
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!)))))))
 
 (defn copy-current-ref
   [block-id]
