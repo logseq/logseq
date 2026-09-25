@@ -723,7 +723,11 @@
                  {:block/uuid block-uuid}))))
 
 (defn- selected-block-roots
-  [db-before ids]
+  "The selected blocks without a selected ancestor. With `direct-parent?`, the
+  selected blocks without a selected parent: the blocks
+  outliner.core/filter-top-level-blocks keeps, so a moved block under a
+  selected grandparent gets its own restore."
+  [db-before ids & {:keys [direct-parent?]}]
   (let [resolved-entities (mapv #(block-entity db-before %) ids)
         unresolved-id? (some nil? resolved-entities)
         entities (reduce (fn [acc ent]
@@ -736,9 +740,10 @@
         has-selected-ancestor? (fn [ent]
                                  (loop [parent (:block/parent ent)]
                                    (if-let [parent-id (some-> parent :db/id)]
-                                     (if (contains? selected-ids parent-id)
-                                       true
-                                       (recur (:block/parent parent)))
+                                     (cond
+                                       (contains? selected-ids parent-id) true
+                                       direct-parent? false
+                                       :else (recur (:block/parent parent)))
                                      false)))]
     {:roots (->> entities
                  (remove has-selected-ancestor?)
@@ -817,9 +822,37 @@
           created-from-property
           (assoc :created-from-property created-from-property))]])))
 
+(defn- document-order-path
+  "The id of the page, then the :block/order of each block from the page down
+  to `block`."
+  [block]
+  (loop [block block
+         path ()]
+    (if-let [parent (:block/parent block)]
+      (recur parent (conj path (:block/order block)))
+      (conj path (:db/id block)))))
+
+(defn- compare-document-order
+  "Compares 2 document-order-path values: blocks sort as they appear on their
+  pages, a parent before its children."
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
+
 (defn- build-inverse-move-blocks
   [db-before ids]
-  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
+  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids :direct-parent? true)
+        ;; Restore in page order: a block's restore target, its left sibling
+        ;; or parent, may be another moved block, which must be back first.
+        roots (sort-by document-order-path compare-document-order roots)
         restore-ops (mapv #(move-root->restore-op db-before %) roots)]
     (when (and (not incomplete?)
                (seq roots)
