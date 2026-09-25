@@ -357,8 +357,13 @@ let test_replacing_graph_keeps_colliding_mirror_paths_distinct_test () =
 
 (* (deftest repo-mirror-dir-is-under-mirror-markdown-test ...) *)
 let test_repo_mirror_dir_is_under_mirror_markdown_test () =
-  check "repo-mirror-dir is under mirror/markdown"
-    (MM.repo_mirror_dir repo = "graph-xxx/mirror/markdown")
+  let prev = Sys.getenv_opt "LOGSEQ_WORKER_DB_DIR" in
+  Unix.putenv "LOGSEQ_WORKER_DB_DIR" "/data/graphs";
+  check "repo-mirror-dir is under <data-dir>/mirror/markdown"
+    (MM.repo_mirror_dir repo = "/data/graphs/graph-xxx/mirror/markdown");
+  (match prev with
+   | Some v -> Unix.putenv "LOGSEQ_WORKER_DB_DIR" v
+   | None -> Unix.putenv "LOGSEQ_WORKER_DB_DIR" ".")
 
 (* (deftest normalize-file-name-is-cross-platform-and-deterministic-test ...) *)
 let test_normalize_file_name_is_cross_platform_and_deterministic_test () =
