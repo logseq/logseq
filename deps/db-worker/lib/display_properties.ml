@@ -254,20 +254,37 @@ let display_properties db (block : entity) ~(gallery_view : bool)
         && not (List.mem id classes_properties_set))
       properties
   in
+  (* common-view/empty-value? + db-property/property-value-content —
+     a value is empty when it is missing, or when its resolved entity
+     has blank content ((or :block/title :logseq.property/value)).
+     cljs nil? checks on `properties` only cover the missing case;
+     a ref to a blank-title value block is empty by upstream content
+     semantics. A ref that does not resolve is left non-empty, matching
+     the non-nil `{:db/id _}` summary upstream keeps visible. *)
+  let empty_property_value (v : Wire.t) : bool =
+    match v with
+    | Wire.Nil -> true
+    | Wire.Keyword "logseq.property/empty-placeholder" -> true
+    | Wire.String s -> String.trim s = ""
+    | Wire.Set [] | Wire.Array [] | Wire.List [] -> true
+    | _ when entity_ref_value v -> (
+        match entity_of_ref_wire db v with
+        | Some e -> (
+            match Ldb.property_value_content e with
+            | Some s -> String.trim s = ""
+            | None -> true)
+        | None -> false)
+    | _ -> false
+  in
   let hide_with_property_id property_id =
     match entity db (Ident property_id) with
     | None -> false
     | Some property ->
         if show_empty_and_hidden_properties then false
         else if state_hide_empty_properties then
-          match Plain_value.map_get property_id properties with
-          | None | Some Wire.Nil -> true
-          | Some _ -> false
+          empty_property_value (get_prop property_id)
         else if Ldb.truthy (Ldb.value property "logseq.property/hide-empty-value")
-        then
-          match Plain_value.map_get property_id properties with
-          | None | Some Wire.Nil -> true
-          | Some _ -> false
+        then empty_property_value (get_prop property_id)
         else Ldb.truthy (Ldb.value property "logseq.property/hide?")
   in
   let property_hide_f ((property_id, property_value) : string * Wire.t) =
@@ -279,8 +296,7 @@ let display_properties db (block : entity) ~(gallery_view : bool)
       match entity db (Ident property_id) with
       | Some p when Ldb.truthy (Ldb.value p "logseq.property/hide?") ->
           hide_with_property_id property_id
-      | _ -> (
-          match property_value with Wire.Nil -> true | _ -> false))
+      | _ -> empty_property_value property_value)
     else hide_with_property_id property_id
   in
   let block_hidden_properties, block_own_properties' =

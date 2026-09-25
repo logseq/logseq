@@ -2375,6 +2375,58 @@ let test_display_properties_hides_hide_by_default () =
     (List.mem "user.property/author" full_ids
      && not (List.mem "user.property/author" hidden_ids))
 
+(* bug 45: a property whose value is a blank-title value block counts as
+   empty for :logseq.property/hide-empty-value — the row hides under
+   "Show hidden properties" like upstream. *)
+let test_display_properties_hide_empty_value_blank_title_block () =
+  let conn =
+    create_conn_with_blocks
+      ~properties:
+        [ ( "notes"
+          , Db_test_util.
+              { default_property with
+                p_extra =
+                  [ "logseq.property/hide-empty-value", Db_test_util.Bool true ] } )
+        ; "author", Db_test_util.default_property ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.
+                { default_page with
+                  pg_title = Some "Work"
+                ; pg_properties =
+                    [ ( "notes"
+                      , Db_test_util.build_property_value ~title:"" () )
+                    ; ( "author"
+                      , Db_test_util.build_property_value ~title:"Ada" () ) ] }
+          ; Db_test_util.blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  let page =
+    match Db_test_util.find_page_by_title db "Work" with
+    | Some p -> p
+    | None -> failwith "Work page missing"
+  in
+  let result =
+    Display_properties.display_properties db page ~gallery_view:false
+      ~page_title:true ~sidebar_properties:false ~tag_dialog:false
+      ~publishing:false ~state_hide_empty_properties:false
+      ~show_empty_and_hidden_properties:false
+  in
+  let ids_of key =
+    List.filter_map wkw
+      (List.map (fun row -> wg row "property-id")
+         (wseq (Option.value (wg result key) ~default:(Wire.Array []))))
+  in
+  let full_ids = ids_of "full-properties" in
+  let hidden_ids = ids_of "hidden-properties" in
+  check "blank-title value block counts as empty"
+    (List.mem "user.property/notes" hidden_ids
+     && not (List.mem "user.property/notes" full_ids));
+  check "non-empty value stays visible"
+    (List.mem "user.property/author" full_ids
+     && not (List.mem "user.property/author" hidden_ids))
+
 (* (deftest display-property-map-reflects-default-value-entity-updates ...) *)
 let test_display_property_map_reflects_default_value_updates () =
   let conn = create_conn () in
@@ -2773,6 +2825,9 @@ let property_cases =
   ; Alcotest.test_case
       "display-properties-hides-hide-by-default-properties-on-nodes" `Quick
       test_display_properties_hides_hide_by_default
+  ; Alcotest.test_case
+      "display-properties-hide-empty-value-treats-blank-title-value-block-as-empty"
+      `Quick test_display_properties_hide_empty_value_blank_title_block
   ; Alcotest.test_case
       "display-property-map-reflects-default-value-entity-updates" `Quick
       test_display_property_map_reflects_default_value_updates
