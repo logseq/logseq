@@ -5177,3 +5177,213 @@ let test_delete_inverse_includes_property_value_children () =
 let cut_paste_undo_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "undo-delete-restores-all-property-types" `Quick test_undo_delete_restores_all_property_types;
     Alcotest.test_case "delete-inverse-includes-property-value-children" `Quick test_delete_inverse_includes_property_value_children ]
+
+(* ========== src/test/logseq/outliner/page_updated_at_test.cljs ==========
+   (same deftests also appear in core_test.cljs; ported once) *)
+
+(* cljs test-helper page-updated-at *)
+let page_updated_at conn (page : entity) : int =
+  match Datascript.entity (db_of conn) (Entity_id page.id) with
+  | Some e -> (match Ldb.int_value e "block/updated-at" with
+      | Some v -> v
+      | None -> 0)
+  | None -> 0
+
+(* cljs test-helper reset-page-updated-at! *)
+let reset_page_updated_at conn (page : entity) : int =
+  transact_maps conn
+    [ [ "db/id", Int page.id; "block/updated-at", Inst 1L ] ];
+  page_updated_at conn page
+
+(* (deftest page-updated-at-bumps-on-child-insert-reorder-and-move ...) *)
+let test_page_updated_at_child_insert_reorder_and_move () =
+  (* (testing "inserting a child block bumps the page updated-at") *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "parent" } ] } ]
+      ()
+  in
+  let page = Option.get (find_page conn "page1") in
+  let parent = find_block conn "parent" in
+  let before = reset_page_updated_at conn page in
+  insert_blocks_bang conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "inserted-child" ] ]
+    (Block_map.of_entity parent)
+    ~opts:{ Outliner_core.default_insert_opts with
+            sibling = false; keep_uuid = true }
+    ();
+  check "inserted-child created"
+    (find_block_by_content (db_of conn) "inserted-child" <> None);
+  check "Adding a child block must bump the page :block/updated-at"
+    (page_updated_at conn page > before);
+  (* (testing "reordering sibling blocks bumps the page updated-at") *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "first" }
+                     ; { default_block with b_title = Some "second" } ] } ]
+      ()
+  in
+  let page = Option.get (find_page conn "page1") in
+  let second_block = find_block conn "second" in
+  let before = reset_page_updated_at conn page in
+  Outliner_core.move_blocks_up_down_conn conn [ second_block ] true;
+  let first_child =
+    List.hd
+      (Ldb.sort_by_order
+         (Ldb.ref_ents
+            (Option.get (Datascript.entity (db_of conn) (Entity_id page.id)))
+            "block/_parent"))
+  in
+  check "second is first child" (ent_title first_child = Some "second");
+  check "Changing block order must bump the page :block/updated-at"
+    (page_updated_at conn page > before);
+  (* (testing "move-blocks bumps source and destination page updated-at") *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "moved" } ] }
+        ; { page = { default_page with pg_title = Some "page2" };
+            blocks = [ { default_block with b_title = Some "dest" } ] } ]
+      ()
+  in
+  let page1 = Option.get (find_page conn "page1") in
+  let page2 = Option.get (find_page conn "page2") in
+  let moved = find_block conn "moved" in
+  let dest = find_block conn "dest" in
+  let before_src = reset_page_updated_at conn page1 in
+  let before_dest = reset_page_updated_at conn page2 in
+  move_blocks_bang conn [ moved ] dest ();
+  check "moved reparented under dest"
+    (match Ldb.ref_ent (find_block conn "moved") "block/parent" with
+     | Some p -> p.id = dest.id
+     | None -> false);
+  check "Removing a block must bump the source page :block/updated-at"
+    (page_updated_at conn page1 > before_src);
+  check "Adding a block must bump the destination page :block/updated-at"
+    (page_updated_at conn page2 > before_dest);
+  (* (testing "apply-ops move-blocks bumps page updated-at") *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "first" }
+                     ; { default_block with b_title = Some "second" } ] } ]
+      ()
+  in
+  let page = Option.get (find_page conn "page1") in
+  let first_block = find_block conn "first" in
+  let second_block = find_block conn "second" in
+  let before = reset_page_updated_at conn page in
+  apply_ops conn
+    [ Wire.List
+        [ Wire.Keyword "move-blocks"
+        ; Wire.List
+            [ Wire.List [ Wire.Uuid (uuid_of second_block) ]
+            ; Wire.Uuid (uuid_of first_block)
+            ; Wire.Map [ Wire.Keyword "sibling?", Wire.Bool false ] ] ] ];
+  check "second reparented under first"
+    (match Ldb.ref_ent (find_block conn "second") "block/parent" with
+     | Some p -> p.id = first_block.id
+     | None -> false);
+  check "move-blocks via apply-ops must bump the page :block/updated-at"
+    (page_updated_at conn page > before);
+  (* (testing "moving a page between parent pages bumps both parents") *)
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "Projects" };
+            blocks = [] }
+        ; { page = { default_page with pg_title = Some "Alpha" };
+            blocks = [] }
+        ; { page = { default_page with pg_title = Some "Archive" };
+            blocks = [] } ]
+      ()
+  in
+  let projects = Option.get (find_page conn "Projects") in
+  let alpha = Option.get (find_page conn "Alpha") in
+  let archive = Option.get (find_page conn "Archive") in
+  let alpha' () =
+    Option.get (Datascript.entity (db_of conn) (Entity_id alpha.id))
+  in
+  move_blocks_bang conn [ alpha ] projects ();
+  check "alpha under projects"
+    (match Ldb.ref_ent (alpha' ()) "block/parent" with
+     | Some p -> p.id = projects.id
+     | None -> false);
+  let before_src = reset_page_updated_at conn projects in
+  let before_dest = reset_page_updated_at conn archive in
+  let before_moved = reset_page_updated_at conn alpha in
+  move_blocks_bang conn [ alpha ] archive ();
+  check "alpha under archive"
+    (match Ldb.ref_ent (alpha' ()) "block/parent" with
+     | Some p -> p.id = archive.id
+     | None -> false);
+  check "Removing a nested page must bump the former parent page :block/updated-at"
+    (page_updated_at conn projects > before_src);
+  check "Adding a nested page must bump the destination page :block/updated-at"
+    (page_updated_at conn archive > before_dest);
+  check "Relocating a page does not rewrite that page's own :block/updated-at"
+    (page_updated_at conn alpha = before_moved)
+
+(* (deftest page-updated-at-bumps-source-page-on-keep-uuid-reparent ...) *)
+let test_page_updated_at_source_page_on_keep_uuid_reparent () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "source" };
+            blocks = [ { default_block with b_title = Some "moved" } ] }
+        ; { page = { default_page with pg_title = Some "dest" };
+            blocks = [ { default_block with b_title = Some "anchor" } ] } ]
+      ()
+  in
+  let source = Option.get (find_page conn "source") in
+  let dest = Option.get (find_page conn "dest") in
+  let moved = find_block conn "moved" in
+  let dest_anchor = find_block conn "anchor" in
+  let before_src = reset_page_updated_at conn source in
+  let before_dest = reset_page_updated_at conn dest in
+  insert_blocks_bang conn
+    [ Block_map.of_entity moved ]
+    (Block_map.of_entity dest_anchor)
+    ~opts:{ Outliner_core.default_insert_opts with
+            sibling = true; keep_uuid = true }
+    ();
+  check "moved under dest page"
+    (match Ldb.ref_ent
+             (Option.get (Datascript.entity (db_of conn) (Entity_id moved.id)))
+             "block/page" with
+     | Some p -> p.id = dest.id
+     | None -> false);
+  check "Reparenting a live block must bump the source page :block/updated-at"
+    (page_updated_at conn source > before_src);
+  check "Reparenting a live block must bump the destination page :block/updated-at"
+    (page_updated_at conn dest > before_dest)
+
+(* (deftest page-updated-at-bumps-on-child-delete ...) *)
+let test_page_updated_at_bumps_on_child_delete () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" };
+            blocks = [ { default_block with b_title = Some "doomed" } ] } ]
+      ()
+  in
+  let page = Option.get (find_page conn "page1") in
+  let doomed = find_block conn "doomed" in
+  let before = reset_page_updated_at conn page in
+  delete_blocks_bang conn [ doomed ] ();
+  check "doomed deleted"
+    (find_block_by_content (db_of conn) "doomed" = None);
+  check "Deleting a child block must bump the page :block/updated-at"
+    (page_updated_at conn page > before)
+
+let page_updated_at_cases : unit Alcotest.test_case list =
+  [ Alcotest.test_case "page-updated-at-bumps-on-child-insert-reorder-and-move" `Quick test_page_updated_at_child_insert_reorder_and_move;
+    Alcotest.test_case "page-updated-at-bumps-source-page-on-keep-uuid-reparent" `Quick test_page_updated_at_source_page_on_keep_uuid_reparent;
+    Alcotest.test_case "page-updated-at-bumps-on-child-delete" `Quick test_page_updated_at_bumps_on_child_delete ]
