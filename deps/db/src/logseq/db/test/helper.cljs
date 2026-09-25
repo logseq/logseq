@@ -2,6 +2,7 @@
   "Main ns for providing test fns for DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.export :as sqlite-export]))
@@ -71,7 +72,19 @@
                   v)]))
        (into {})))
 
-(def create-conn sqlite-export/create-conn)
+(defonce ^:private *initial-db (atom nil))
+
+(defn create-conn
+  "Create a conn for a DB graph seeded with initial data, as
+  sqlite-export/create-conn does. The seeded DB is built once and each conn
+  starts from that immutable value: building it recomputes datascript's
+  reverse schema for every built-in property, most of the time of a small
+  test."
+  []
+  (let [db (or @*initial-db
+               (reset! *initial-db @(sqlite-export/create-conn)))]
+    (entity-plus/reset-immutable-entities-cache!)
+    (d/conn-from-db db)))
 
 (defn create-conn-with-blocks
   "Create a conn with create-conn and then create blocks using sqlite-build"
