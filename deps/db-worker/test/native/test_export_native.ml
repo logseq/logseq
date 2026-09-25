@@ -3102,6 +3102,112 @@ let test_import_graph_with_assets () =
           | None -> false)
      | None -> false)
 
+(* cljs validate-import-txs-tx-scope-validates-only-touched-entities.
+   The cljs test spies on validate-local-db! to capture :entity-ids;
+   here the same entity-id set is recomputed directly from the tx
+   report (with_tx + skip-store? = cljs d/with). *)
+let test_validate_import_txs_tx_scope_validates_only_touched_entities () =
+  let tname = "validate-import-txs-tx-scope-validates-only-touched-entities" in
+  let conn =
+    create_conn_with_blocks
+      (mmap
+         [ ( "pages-and-blocks",
+             Vector
+               [ mmap
+                   [ "page", mmap [ "block/title", String "existing-page" ]
+                   ; ( "blocks",
+                       Vector [ mmap [ "block/title", String "existing-block" ] ] ) ] ] ) ])
+  in
+  let existing_page =
+    match Db_test_util.find_page_by_title (db_of conn) "existing-page" with
+    | Some e -> e
+    | None -> failwith "existing page missing"
+  in
+  ignore
+    (transact_vals conn
+       [ mmap [ "db/id", Int existing_page.id; "not-a-real-attr", Bool true ] ]);
+  let export_map =
+    mmap
+      [ ( "pages-and-blocks",
+          Vector
+            [ mmap
+                [ "page", mmap [ "block/title", String "imported-page" ]
+                ; ( "blocks",
+                    Vector [ mmap [ "block/title", String "imported-block" ] ] ) ] ] ) ]
+  in
+  let txs = Sqlite_export.build_import export_map (db_of conn) None in
+  (* tx scope ignores untouched invalid entities *)
+  let tx_result =
+    Sqlite_export.validate_import_txs ~validate_scope:Sqlite_export.Tx
+      ~edn_label:"tx-scope EDN" txs (db_of conn)
+  in
+  check (tname ^ ": tx scope passes") (tx_result.Sqlite_export.error = None);
+  (* graph scope still validates the whole db *)
+  let graph_result =
+    Sqlite_export.validate_import_txs ~edn_label:"graph-scope EDN" txs (db_of conn)
+  in
+  check (tname ^ ": graph scope errors") (graph_result.Sqlite_export.error <> None);
+  check
+    (tname ^ ": graph error mentions validation")
+    (match graph_result.Sqlite_export.error with
+     | Some e -> string_contains e "validation error"
+     | None -> false);
+  (* the tx-touched entity-ids exclude untouched entities *)
+  (match txs with
+   | Ok txs ->
+       let ops =
+         Sqlite_build.tx_ops_of_values (db_of conn)
+           (Sqlite_export.import_tx_data txs)
+       in
+       let report =
+         Datascript.with_tx ~tx_meta:[ "skip-store?", Bool true ]
+           (db_of conn) ops
+       in
+       let entity_ids = Sqlite_export.tx_touched_entity_ids report in
+       let graph_eids =
+         List.sort_uniq Int.compare
+           (List.map
+              (fun (d : datom) -> d.e)
+              (List.of_seq (datoms (db_of conn) Eavt ())))
+       in
+       check (tname ^ ": entity-ids non-empty") (entity_ids <> []);
+       check
+         (tname ^ ": existing-page not in entity-ids")
+         (not (List.mem existing_page.id entity_ids));
+       check
+         (tname ^ ": entity-ids smaller than graph eids")
+         (List.length entity_ids < List.length graph_eids)
+   | Error _ -> check (tname ^ ": txs built") false)
+
+(* cljs validate-import-txs-tx-scope-rejects-invalid-tx *)
+let test_validate_import_txs_tx_scope_rejects_invalid_tx () =
+  let tname = "validate-import-txs-tx-scope-rejects-invalid-tx" in
+  let conn = Sqlite_export.create_conn () in
+  let txs : (Sqlite_export.import_txs, string) Result.t =
+    Ok
+      { Sqlite_export.init_tx =
+          [ mmap
+              [ "db/id", Int (-1)
+              ; "block/uuid", Uuid (Db_test_util.gen_uuid ())
+              ; "block/title", Int 123
+              ; "block/name", String "invalid-imported-page"
+              ; "block/created-at", Int 1
+              ; "block/updated-at", Int 1
+              ; "block/tags", kw "logseq.class/Page" ] ]
+      ; block_props_tx = []
+      ; misc_tx = [] }
+  in
+  let result =
+    Sqlite_export.validate_import_txs ~validate_scope:Sqlite_export.Tx
+      ~edn_label:"invalid tx EDN" txs (db_of conn)
+  in
+  check (tname ^ ": error returned") (result.Sqlite_export.error <> None);
+  check
+    (tname ^ ": error mentions validation")
+    (match result.Sqlite_export.error with
+     | Some e -> string_contains e "validation error"
+     | None -> false)
+
 (* ---------- runner ---------- *)
 
 let () = run "merge-export-maps" test_merge_export_maps
@@ -3146,6 +3252,8 @@ let () = run "import-graph-with-different-property-value-cases" test_import_grap
 let () = run "build-import-can-import-existing-page-with-different-uuid" test_build_import_can_import_existing_page_with_different_uuid
 let () = run "build-export-omits-empty-build-properties" test_build_export_omits_empty_build_properties
 let () = run "import-graph-with-assets" test_import_graph_with_assets
+let () = run "validate-import-txs-tx-scope-validates-only-touched-entities" test_validate_import_txs_tx_scope_validates_only_touched_entities
+let () = run "validate-import-txs-tx-scope-rejects-invalid-tx" test_validate_import_txs_tx_scope_rejects_invalid_tx
 
 let () =
   if !failures > 0 then begin
