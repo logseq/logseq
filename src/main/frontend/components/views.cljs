@@ -2802,6 +2802,11 @@
                             (request-scrolled-offset!)))}
        (:disable-virtualized? option)))))
 
+(def ^:private table-rows-overflow-class
+  "overflow-x:auto alone computes overflow-y to auto, which hides the
+  horizontal scrollbar on auto-height tables until a later reflow."
+  "ls-table-rows content overflow-x-auto overflow-y-hidden force-visible-scrollbar")
+
 (hsx/defc table-view
   [table option _row-selection *scroller-ref]
   (let [empty-rows? (empty-table-ready-on-mount? (:rows table))
@@ -2813,7 +2818,7 @@
                       :set-mount-unpinned-cells! set-mount-unpinned-cells!)]
     (shui/table
      (let [rows (:rows table)]
-       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+       [:div {:class table-rows-overflow-class}
         [:div.relative
          (table-header table option)
 
