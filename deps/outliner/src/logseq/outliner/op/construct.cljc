@@ -826,6 +826,18 @@
                (every? some? restore-ops))
       (seq restore-ops))))
 
+(defn- consecutive-siblings?
+  "Whether the top-level blocks among `ids` are adjacent siblings in order,
+  the only selection that moving the other way puts back where it was."
+  [db ids]
+  (let [blocks (mapv #(block-entity db %) ids)
+        selected-ids (set (keep :db/id blocks))
+        top-level-blocks (remove #(contains? selected-ids (:db/id (:block/parent %))) blocks)]
+    (and (every? some? blocks)
+         (every? (fn [[left right]]
+                   (= (:db/id left) (:db/id (ldb/get-left-sibling right))))
+                 (partition 2 1 top-level-blocks)))))
+
 (defn- page-top-level-blocks
   [page]
   (let [page-id (:db/id page)]
@@ -959,9 +971,14 @@
 
                           :move-blocks-up-down
                           (let [[ids up?] args]
-                            [:move-blocks-up-down
-                             [(stable-id-coll db-before ids)
-                              (not up?)]])
+                            ;; Moving blocks that aren't adjacent siblings
+                            ;; gathers them next to each other, so moving
+                            ;; them back the other way can't restore them.
+                            (if (consecutive-siblings? db-before ids)
+                              [:move-blocks-up-down
+                               [(stable-id-coll db-before ids)
+                                (not up?)]]
+                              (build-inverse-move-blocks db-before ids)))
 
                           :delete-blocks
                           (let [[ids _opts] args]
