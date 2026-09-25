@@ -82,7 +82,8 @@ let string_value (e : entity) (a : attr) : string option =
   match value e a with Some (String s) -> Some s | _ -> None
 
 (* cljs untyped get: epoch-ms values read back as the platform's numeric
-   rep (Int/Float); Instant only for legacy ~t-decoded data *)
+   rep (Int/Float) or as Instant — Instant doubles as the int64 scalar
+   rep for values exceeding int32 *)
 let int64_value (e : entity) (a : attr) : int64 option =
   match value e a with
   | Some (Int n) -> Some (Int64.of_int n)
