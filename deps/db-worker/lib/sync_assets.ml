@@ -404,6 +404,13 @@ let process_asset_ops repo (client : Sync_state.client)
       Db_worker_effect.pure ()
   | _ -> Db_worker_effect.pure ()
 
+(* cljs enqueue-asset-task! — the single shared implementation;
+   Sync_state.enqueue catches the previous tail so one failed task
+   doesn't stall later enqueues. *)
+let enqueue_asset_task (client : Sync_state.client)
+    (task : unit -> unit Db_worker_effect.t) : unit =
+  Sync_state.enqueue client.Sync_state.asset_queue task
+
 let enqueue_asset_sync_impl repo (client : Sync_state.client) ~enqueue_asset_task
     ~current_client ~broadcast_rtc_state =
   enqueue_asset_task client (fun () ->
