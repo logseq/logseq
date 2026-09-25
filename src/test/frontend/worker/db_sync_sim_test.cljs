@@ -455,17 +455,21 @@
       @progress?)))
 
 (defn- active-block-uuids
+  "Uuids of the non-built-in, non-deleted pages (ldb/page?) and blocks. Read
+  from datoms: through entities, the lookups of absent property keys (they
+  also look for default values) made this most of a sync-loop! check."
   [db]
-  (->> (d/datoms db :avet :block/uuid)
-       (keep (fn [datom]
-               (let [ent (d/entity db (:e datom))]
-                 (when (and ent
-                            (not (ldb/built-in? ent))
-                            (nil? (:logseq.property/deleted-at ent))
-                            (or (ldb/page? ent)
-                                (:block/page ent)))
-                   (:v datom)))))
-       set))
+  (let [page-tag-eids (set (keep #(d/entid db %) [:logseq.class/Page :logseq.class/Journal
+                                                  :logseq.class/Tag :logseq.class/Property]))
+        has? (fn [e attr] (some? (first (d/datoms db :eavt e attr))))]
+    (->> (d/datoms db :avet :block/uuid)
+         (keep (fn [{:keys [e v]}]
+                 (when (and (not (:v (first (d/datoms db :eavt e :logseq.property/built-in?))))
+                            (not (has? e :logseq.property/deleted-at))
+                            (or (some #(contains? page-tag-eids (:v %)) (d/datoms db :eavt e :block/tags))
+                                (has? e :block/page)))
+                   v)))
+         set)))
 
 (defn- sync-loop! [server clients]
   (loop [i 0]
