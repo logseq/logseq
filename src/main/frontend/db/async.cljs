@@ -191,7 +191,10 @@
   (when-let [repo (state/get-current-repo)]
     (state/<invoke-db-worker :thread-api/get-view-filter-data repo
                              (assoc opts
-                                    :property property
+                                    ;; column property maps can carry UI fns
+                                    ;; (:header/:cell/:get-value) which Transit
+                                    ;; cannot marshal — drop them
+                                    :property (into {} (remove (comp fn? val)) property)
                                     :property-ident (:db/ident property)))))
 
 (defn <get-display-properties
