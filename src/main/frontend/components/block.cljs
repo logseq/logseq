@@ -2179,13 +2179,26 @@
           child-uuids))
 
 (defn- near-block-viewport?
+  "Synchronous check, run before paint: the subtree reaches into the viewport
+   or lies within the margin above it. Subtrees below the fold are left to the
+   observer, so a page's first frame renders only the rows on screen."
   [^js el]
   (when el
     (let [rect (.getBoundingClientRect el)
           viewport-height (or (.-innerHeight js/window)
                               (some-> js/document .-documentElement .-clientHeight))]
-      (and (< (.-top rect) (+ viewport-height lazy-children-margin))
+      (and (< (.-top rect) viewport-height)
            (> (.-bottom rect) (- lazy-children-margin))))))
+
+(defn- lazy-children-observer-root
+  "The scroll container holding `el`, as the IntersectionObserver root. With
+   the implicit root the margin only grows the window's box, while the scroll
+   container still clips rows below its fold, so they would mount only once
+   visible."
+  [^js el]
+  (when-let [^js root (util/app-scroll-container-node el)]
+    (when (and (not (identical? root el)) (.contains root el))
+      root)))
 
 (hsx/defc lazy-block-children
   "Mounts a block's children rows only once the subtree approaches the viewport.
@@ -2219,7 +2232,8 @@
                            (fn [^js entries]
                              (when (some #(.-isIntersecting %) (array-seq entries))
                                (set-near! true)))
-                           #js {:rootMargin (str lazy-children-margin "px 0px")})]
+                           #js {:root (lazy-children-observer-root el)
+                                :rootMargin (str lazy-children-margin "px 0px")})]
              (.observe observer el)
              #(.disconnect observer))
 
