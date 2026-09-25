@@ -219,15 +219,56 @@ let build_add_block (op : Wire.t) (idents : op_idents) : Wire.t =
         @ [ ( kw "build/tags"
             , Wire.Array (List.map (get_ident_w idents.class_idents) tags) ) ] )
 
+let ops_new_page_ids (operations : Wire.t list) : (string, unit) Hashtbl.t =
+  (* Local :id's of pages added in the same call *)
+  let ids = Hashtbl.create 8 in
+  List.iter
+    (fun op ->
+      if entity_type op = "page" && operation op = "add" then
+        match field_str op "id" with
+        | Some id -> Hashtbl.replace ids id ()
+        | None -> ())
+    operations;
+  ids
+
+let assert_add_block_page_ids (db : db) (operations : Wire.t list) : unit =
+  (* page-id must be the :id of a page added in the same call or the uuid of
+     an existing page. A page name is not resolved and would otherwise be
+     silently dropped. *)
+  let new_page_ids = ops_new_page_ids operations in
+  List.iter
+    (fun op ->
+      if entity_type op = "block" && operation op = "add" then
+        match data_str op "page-id" with
+        | Some page_id ->
+            if not (Hashtbl.mem new_page_ids page_id) then (
+              if not (uuid_string page_id) then
+                fail_api
+                  (Printf.sprintf
+                     "Block page-id %S must be a page uuid or the id of a page added in the same call"
+                     page_id)
+                  [ (kw "page-id", Wire.String page_id) ];
+              match entity db (Lookup_ref ("block/uuid", Uuid page_id)) with
+              | Some ent when Entity_util.page ent -> ()
+              | _ ->
+                  fail_api
+                    (Printf.sprintf "Block page-id %S is not an existing page"
+                       page_id)
+                    [ (kw "page-id", Wire.String page_id) ])
+        | None -> ())
+    operations
+
 let ops_existing_pages_and_blocks (db : db) (operations : Wire.t list)
     (idents : op_idents) : Wire.t list =
+  let new_page_ids = ops_new_page_ids operations in
   (* (page-uuid-str, op) pairs for blocks on existing pages *)
   let pairs =
     List.filter_map
       (fun op ->
         if entity_type op = "block" && operation op = "add" then
           match data_str op "page-id" with
-          | Some pid when uuid_string pid -> Some (pid, op)
+          | Some pid when (not (Hashtbl.mem new_page_ids pid)) && uuid_string pid
+            -> Some (pid, op)
           | _ -> None
         else if entity_type op = "block" && operation op = "edit" then
           match field_str op "id" with
@@ -514,6 +555,7 @@ let build_upsert_nodes_edn (db : db) (operations : Wire.t list) : Wire.t =
       operations
   in
   List.iter validate_operation operations;
+  assert_add_block_page_ids db operations;
   let idents = operations_idents db operations in
   let pages_and_blocks = ops_pages_and_blocks db operations idents in
   let classes = ops_classes operations idents in
