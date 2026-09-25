@@ -5,6 +5,7 @@
    [frontend.db.async :as db-async]
    [frontend.handler.db-based.recent :as db-recent-handler]
    [frontend.handler.editor.format :as editor-format]
+   [frontend.search :as search]
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.object :as gobj]
@@ -85,6 +86,36 @@
                "A late empty-state fetch must not reset nodes from a typed search.")
            (done))
          40)))))
+
+(deftest load-results-codes-unwraps-worker-result-map-test
+  (async done
+    (let [block {:block/uuid #uuid "00000000-0000-0000-0000-0000000000aa"
+                 :block/title "code block"}
+          results (atom {:codes {:status :idle}})
+          state {::cmdk/input (atom "println")
+                 ::cmdk/results results}
+          seen (atom [])]
+      (p/with-redefs [state/get-current-repo (constantly "repo-a")
+                      state/get-current-page (constantly nil)
+                      search/block-search
+                      (fn [_repo _q _opts]
+                        (p/resolved {:items [block] :matched-count 1}))
+                      cmdk/block-item
+                      (fn [_repo block _page-uuid _input]
+                        (swap! seen conj block)
+                        {:source-block block})]
+        (-> (cmdk/load-results :codes state)
+            (p/then
+             (fn []
+               (is (= [block] @seen)
+                   "code results must map over :items, not the {:items :matched-count} map")
+               (is (= [block] (mapv :source-block (get-in @results [:codes :items]))))
+               (is (= :success (get-in @results [:codes :status])))
+               (done)))
+            (p/catch
+             (fn [error]
+               (is false (str error))
+               (done))))))))
 
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
