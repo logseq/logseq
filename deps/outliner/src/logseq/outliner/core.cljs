@@ -267,7 +267,24 @@
   [db block]
   (if-let [refs (seq (:block/refs block))]
     (let [tag-names (into #{} (keep :block/name) (:block/tags block))
-          resolved-refs (mapv #(resolve-page-ref db % tag-names) refs)
+          ;; Track pages created during this pass: db doesn't see them yet, so a
+          ;; repeated [[same name]] ref would otherwise create a duplicate page.
+          [resolved-refs _]
+          (reduce
+           (fn [[resolved seen] ref]
+             (if-let [seen-ref (and (new-page-ref? ref)
+                                    (get seen (:block/name ref)))]
+               [(conj resolved [(merge seen-ref
+                                       (select-keys ref [:block.temp/original-page-name]))
+                                 nil])
+                seen]
+               (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+                 [(conj resolved resolved-ref)
+                  (if (and (new-page-ref? ref) (seq tx-data))
+                    (assoc seen (:block/name ref) ref')
+                    seen)])))
+           [[] {}]
+           refs)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
           tag-refs (into {} (keep (fn [ref]
