@@ -358,12 +358,20 @@ let db_query_dsl_rules =
         {|
 [(task ?b ?statuses)
  (ref-property-with-default ?b :logseq.property/status ?val)
- [(contains? ?statuses ?val)]]|} );
+ [(str ?val) ?val-str]
+ [(clojure.string/lower-case ?val-str) ?val-lower]
+ (or
+  [(contains? ?statuses ?val)]
+  [(contains? ?statuses ?val-lower)])]|} );
       ( "priority",
         {|
 [(priority ?b ?priorities)
- (ref-property-with-default ?b :logseq.property/status ?priority)
- [(contains? ?priorities ?priority)]]|} );
+ (ref-property-with-default ?b :logseq.property/priority ?priority)
+ [(str ?priority) ?priority-str]
+ [(clojure.string/lower-case ?priority-str) ?priority-lower]
+ (or
+  [(contains? ?priorities ?priority)]
+  [(contains? ?priorities ?priority-lower)])]|} );
     ]
 
 let rules_dependencies =
@@ -1233,7 +1241,7 @@ let build_task (e : query_form) : built option =
        | _ ->
            let marker_set =
              markers
-             |> List.map (fun m -> Date_time_util.capitalize_all (name_of_form m))
+             |> List.map (fun m -> Unicode.lowercase (name_of_form m))
              |> List.sort_uniq compare
              |> List.map str
            in
@@ -1255,13 +1263,7 @@ let build_priority (e : query_form) : built option =
        | _ ->
            let prios =
              priorities
-             |> List.map (fun p ->
-                    let n = name_of_form p in
-                    (* string/capitalize — first char up, rest down *)
-                    if n = "" then n
-                    else
-                      Unicode.uppercase (String.sub n 0 1)
-                      ^ Unicode.lowercase (String.sub n 1 (String.length n - 1)))
+             |> List.map (fun p -> Unicode.lowercase (name_of_form p))
              |> List.sort_uniq compare
              |> List.map str
            in

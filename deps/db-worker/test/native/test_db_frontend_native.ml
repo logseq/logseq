@@ -895,6 +895,115 @@ let test_tags () =
              "[:find (pull ?b [:block/title]) :where (tags ?b #{\"Person\"})]"))
      = expected)
 
+(* cljs `db` fixture shared by task-and-priority-rules and the two
+   query_dsl task/priority deftests *)
+let task_priority_db () =
+  db_of
+    (create_conn_with_blocks
+       ~pages_and_blocks:
+         [ { page = { default_page with pg_title = Some "page1" };
+             blocks =
+               [ { default_block with
+                   b_title = Some "doing task";
+                   b_properties =
+                     [ "logseq.property/status",
+                       Kw "logseq.property/status.doing" ] };
+                 { default_block with
+                   b_title = Some "review task";
+                   b_properties =
+                     [ "logseq.property/status",
+                       Kw "logseq.property/status.in-review" ] };
+                 { default_block with
+                   b_title = Some "waiting task";
+                   b_properties =
+                     [ "logseq.property/status",
+                       build_page_ref ~title:"QA Ready" () ] };
+                 { default_block with
+                   b_title = Some "urgent task";
+                   b_properties =
+                     [ "logseq.property/priority",
+                       build_page_ref ~title:"Very High" () ] } ] } ]
+       ())
+
+(* (deftest task-and-priority-rules ...) *)
+let test_task_and_priority_rules () =
+  let db = task_priority_db () in
+  let run q = titles_of_rows (q_with_rules db q) in
+  check "(task ?b #{'Doing'}) matches case-insensitively"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"Doing\"})]")
+     = [ "doing task" ]);
+  check "(task ?b #{'doing'}) matches exact stored value"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"doing\"})]")
+     = [ "doing task" ]);
+  check "(task ?b #{'doing' 'in review'}) matches multiple lowercase"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"doing\" \"in review\"})]")
+     = [ "doing task"; "review task" ]);
+  check "(task ?b #{'In Review'}) matches built-in custom status"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"In Review\"})]")
+     = [ "review task" ]);
+  check "(task ?b #{'Doing' 'QA Ready'}) matches custom status page"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"Doing\" \"QA Ready\"})]")
+     = [ "doing task"; "waiting task" ]);
+  check "(task ?b #{'qa ready'}) matches custom status lowercase"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (task ?b #{\"qa ready\"})]")
+     = [ "waiting task" ]);
+  check "(priority ?b #{'very high'}) matches custom priority lowercase"
+    (sort_uniq
+       (run
+          "[:find (pull ?b [:block/title]) :where (priority ?b #{\"very high\"})]")
+     = [ "urgent task" ])
+
+let default_exec_opts : Db_query_dsl.exec_opts =
+  { opt_cards = false
+  ; opt_block_attrs = None
+  ; opt_current_page_title = None
+  ; opt_today_day = None }
+
+let dsl_titles db q =
+  match Db_query_dsl.execute_query db q default_exec_opts with
+  | Some rows -> sort_uniq (titles_of_rows rows)
+  | None -> []
+
+(* (deftest task-queries-with-multi-word-and-custom-statuses ...) *)
+let test_task_queries_with_multi_word_and_custom_statuses () =
+  let db = task_priority_db () in
+  check "(task doing) finds tasks with Doing status"
+    (dsl_titles db "(task doing)" = [ "doing task" ]);
+  check "(task \"in review\") finds tasks with multi-word status"
+    (dsl_titles db "(task \"in review\")" = [ "review task" ]);
+  check "(task \"In Review\") is case insensitive"
+    (dsl_titles db "(task \"In Review\")" = [ "review task" ]);
+  check "(task \"QA Ready\") finds tasks with custom page status"
+    (dsl_titles db "(task \"QA Ready\")" = [ "waiting task" ]);
+  check "(task \"qa ready\") finds custom status case-insensitively"
+    (dsl_titles db "(task \"qa ready\")" = [ "waiting task" ]);
+  check "(or (task doing) (task \"in review\")) finds both"
+    (dsl_titles db "(or (task doing) (task \"in review\"))"
+     = [ "doing task"; "review task" ]);
+  check "(task [doing \"in review\"]) finds both with vec syntax"
+    (dsl_titles db "(task [doing \"in review\"])"
+     = [ "doing task"; "review task" ])
+
+(* (deftest priority-queries-with-multi-word-and-custom-values ...) *)
+let test_priority_queries_with_multi_word_and_custom_values () =
+  let db = task_priority_db () in
+  check "(priority \"Very High\") finds custom priority"
+    (dsl_titles db "(priority \"Very High\")" = [ "urgent task" ]);
+  check "(priority \"very high\") is case insensitive"
+    (dsl_titles db "(priority \"very high\")" = [ "urgent task" ])
+
 (* ---------- inputs_test.cljs ---------- *)
 
 let empty_ctx : Db_inputs.context =
@@ -1119,4 +1228,11 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "resolve-input-for-page-and-block-inputs" `Quick test_resolve_input_for_page_and_block_inputs;
     Alcotest.test_case "resolve-input-for-journal-date-inputs" `Quick test_resolve_input_for_journal_date_inputs;
     Alcotest.test_case "resolve-input-for-query-page" `Quick test_resolve_input_for_query_page;
-    Alcotest.test_case "resolve-input-for-relative-date-queries" `Quick test_resolve_input_for_relative_date_queries ]
+    Alcotest.test_case "resolve-input-for-relative-date-queries" `Quick test_resolve_input_for_relative_date_queries;
+    Alcotest.test_case "task-and-priority-rules" `Quick test_task_and_priority_rules;
+    Alcotest.test_case "task-queries-with-multi-word-and-custom-statuses" `Quick
+      test_task_queries_with_multi_word_and_custom_statuses;
+    Alcotest.test_case "priority-queries-with-multi-word-and-custom-values" `Quick
+      test_priority_queries_with_multi_word_and_custom_values ]
+
+let () = Alcotest.run "db-frontend" [ ("db-frontend", cases) ]
