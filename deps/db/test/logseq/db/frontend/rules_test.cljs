@@ -14,7 +14,7 @@
   (let [property-value-deps #{:ref->val :class-extends :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
         property-deps (conj property-value-deps :ref-property-with-default)
         task-deps (conj property-deps :task :class-instance)
-        priority-deps (conj property-deps :priority :class-instance)
+        priority-deps (conj property-deps :priority)
         task-priority-deps (into priority-deps task-deps)]
     (are [x y] (= y (#'rules/get-full-deps x rules/rules-dependencies))
       [:ref-property-value-with-default] property-value-deps
@@ -279,7 +279,6 @@
                            :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}
                           {:block/title "urgent task"
-                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}]})
         titles (fn [q] (->> (q-with-rules q @conn)
                             (map (comp :block/title first))))]
@@ -321,18 +320,14 @@
                           {:block/title "projekt explicit todo"
                            :build/tags [:Projekt]
                            :build/properties {:logseq.property/status :logseq.property/status.todo}}
-                          {:block/title "projekt high priority"
-                           :build/tags [:Projekt]
-                           :build/properties {:logseq.property/priority :logseq.property/priority.high}}
-                          {:block/title "task high priority"
-                           :build/tags [:logseq.class/Task]
+                          {:block/title "priority only"
                            :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]})
         titles (fn [q] (->> (q-with-rules q @conn)
                             (map (comp :block/title first))
                             set))]
-    (is (= #{"explicit todo task" "implicit todo task" "work subclass task" "task high priority"}
+    (is (= #{"explicit todo task" "implicit todo task" "work subclass task"}
            (titles '[:find (pull ?b [:block/title]) :where (task ?b #{"Todo"})]))
         "task rule matches Task and Task subclasses, not a non-Task class that declares Status default Todo")
-    (is (= #{"task high priority"}
+    (is (= #{"priority only"}
            (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"High"})]))
-        "priority rule matches Task instances only")))
+        "priority still matches Priority-only blocks that are not tagged Task")))
