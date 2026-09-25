@@ -501,15 +501,15 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          expanded? (::expanded? state)
-          opts (cmdk-state/cmdk-block-search-options
-                {:filter-group :current-page
-                 :dev? config/dev?
-                 :expanded? expanded?})]
+          expanded? (::expanded? state)]
       (swap! !results assoc-in [group :status] :loading)
       (swap! !results assoc-in [:current-page :status] :loading)
       (p/let [current-page-uuid (<page-uuid repo current-page)
-              opts (assoc opts :page-uuid current-page-uuid)
+              opts (cmdk-state/cmdk-block-search-options
+                    {:filter-group :current-page
+                     :dev? config/dev?
+                     :page-uuid current-page-uuid
+                     :expanded? expanded?})
               search-result (search/block-search repo @!input opts)
               {:keys [blocks matched-count]} (block-search-result->items search-result)
               blocks (remove nil? blocks)

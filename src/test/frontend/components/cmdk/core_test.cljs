@@ -117,6 +117,30 @@
                (is false (str error))
                (done))))))))
 
+(deftest load-results-current-page-passes-page-opt-test
+  (async done
+    (let [page-uuid #uuid "00000000-0000-0000-0000-0000000000bb"
+          captured (atom nil)
+          results (atom {:current-page {:status :idle}})
+          state {::cmdk/input (atom "shared term")
+                 ::cmdk/results results}]
+      (p/with-redefs [state/get-current-repo (constantly "repo-a")
+                      state/get-current-page (constantly page-uuid)
+                      search/block-search
+                      (fn [_repo _q opts]
+                        (reset! captured opts)
+                        (p/resolved {:items [] :matched-count 0}))]
+        (-> (cmdk/load-results :current-page state)
+            (p/then
+             (fn []
+               (is (= (str page-uuid) (:page @captured))
+                   "Search only current page must send :page to the worker search options")
+               (done)))
+            (p/catch
+             (fn [error]
+               (is false (str error))
+               (done))))))))
+
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
     (is (= 300 cmdk/search-debounce-ms)
