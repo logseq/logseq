@@ -2942,6 +2942,62 @@ let test_move_blocks_protects_comment_blocks () =
     (parent_id_of (Option.get (Ldb.ent_of_id (db_of conn) ordinary.id))
      = Some page.id)
 
+(* Bug repro: ⌘⇧M Move blocks to a page whose last :block/_parent child is
+   a blank property-value block. cljs (:block/_parent e) filters
+   created-from-property children via entity-plus; the port must use the
+   filtered Ldb.get_children so the moved block lands as a top-level
+   content block — never as the property's value. *)
+let test_move_blocks_bottom_skips_blank_property_value () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:[ "text", { default_property with p_type = "default" } ]
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "pageA" };
+            blocks = [ { default_block with b_title = Some "a-content" } ] }
+        ; { page = { default_page with pg_title = Some "pageB" };
+            blocks = [ { default_block with b_title = Some "moving-block" } ] } ]
+      ()
+  in
+  let page_a = Option.get (find_page conn "pageA") in
+  let moving = Option.get (find_block_by_content (db_of conn) "moving-block") in
+  let value_uuid = gen_uuid () in
+  (* add an empty text property to pageA — the blank value block orders
+     AFTER a-content, so raw :block/_parent last-child picks it *)
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/uuid #uuid \"%s\" :block/title \"\"
+             :block/parent %d :block/page %d
+             :logseq.property/created-from-property :user.property/text
+             :block/order \"%s\"}
+            [:db/add %d :user.property/text -1]]"
+          value_uuid page_a.id page_a.id (gen_order_key ()) page_a.id));
+  let page_a' = Option.get (Ldb.ent_of_id (db_of conn) page_a.id) in
+  let raw_children = Ldb.ref_ents page_a' "block/_parent" in
+  check "value block is last raw child (bug precondition)"
+    (match List.rev (Ldb.sort_by_order raw_children) with
+     | last :: _ -> Ldb.uuid_value last "block/uuid" = Some value_uuid
+     | [] -> false);
+  move_blocks_bang conn [ moving ] page_a
+    ~opts:{ Outliner_core.default_insert_opts with bottom = true } ();
+  let db = db_of conn in
+  let moved = Option.get (Ldb.ent_of_id db moving.id) in
+  check "moved block lands at page top level"
+    (Option.map (fun (p : entity) -> p.id)
+       (Ldb.ref_ent moved "block/parent")
+     = Some page_a.id);
+  check "moved block is not a property value"
+    (Ldb.value moved "logseq.property/created-from-property" = None);
+  let page_a' = Option.get (Ldb.ent_of_id db page_a.id) in
+  let prop_value = Ldb.ref_ent page_a' "user.property/text" in
+  check "empty property row keeps its original value block"
+    (Option.bind prop_value (fun v -> Ldb.uuid_value v "block/uuid")
+     = Some value_uuid);
+  let titles =
+    List.filter_map ent_title (Ldb.get_children page_a')
+  in
+  check "page content order" (titles = [ "a-content"; "moving-block" ])
+
 (* core_test.cljs — the ported deftests *)
 let core_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "insert-blocks-does-not-trust-stale-right-order" `Quick test_insert_blocks_does_not_trust_stale_right_order;
@@ -2959,7 +3015,8 @@ let core_cases : unit Alcotest.test_case list =
     Alcotest.test_case "delete-blocks-rejects-built-in-entities" `Quick test_delete_blocks_rejects_built_in_entities;
     Alcotest.test_case "save-block-rejects-built-in-entity" `Quick test_save_block_rejects_built_in_entity;
     Alcotest.test_case "move-blocks-rejects-built-in-entity" `Quick test_move_blocks_rejects_built_in_entity;
-    Alcotest.test_case "move-blocks-protects-comment-blocks" `Quick test_move_blocks_protects_comment_blocks ]
+    Alcotest.test_case "move-blocks-protects-comment-blocks" `Quick test_move_blocks_protects_comment_blocks;
+    Alcotest.test_case "move-blocks-bottom-skips-blank-property-value" `Quick test_move_blocks_bottom_skips_blank_property_value ]
 
 (* ========== deps/outliner/test/logseq/outliner/copy_paste_nested_test.cljs ==========
    1:1 translations of all 6 deftests — they exercise insert-blocks! /

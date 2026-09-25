@@ -233,7 +233,7 @@ let apply_template_op conn result_ref (template_id : Wire.t)
              match Option.bind (Cljs_map.get opts "sibling?") bool_of_wire with
              | Some s -> s
              | None ->
-                 (match Ldb.ref_ents target "block/_parent" with
+                 (match Ldb.parent_children target with
                   | _ :: _ -> false
                   | [] -> true)
            in
