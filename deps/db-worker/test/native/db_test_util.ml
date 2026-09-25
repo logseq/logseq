@@ -690,6 +690,16 @@ let initial_data_edn =
      :block/parent [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/order \"b0cv06\"
      }
+    {:db/ident :logseq.property/priority
+     :block/uuid #uuid \"00000003-0000-4000-8000-000000000352\"
+     :block/name \"priority\" :block/title \"Priority\"
+     :block/created-at 0 :block/updated-at 0
+:block/tags #{:logseq.class/Property}
+     :logseq.property/built-in? true
+     :logseq.property/type :default
+:db/valueType :db.type/ref :db/cardinality :db.cardinality/one :db/index true
+     :logseq.property/public? true
+     }
     {:db/ident :logseq.property/classes
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000313\"
      :block/name \"classes\" :block/title \"Classes\"
