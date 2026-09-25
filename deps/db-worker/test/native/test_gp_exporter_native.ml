@@ -69,6 +69,7 @@ open Db_test_util
 module Eff = Db_worker_effect
 module BM = Block_map
 module Gp = Gp_exporter
+module Gp_finalize = Gp_exporter_finalize
 
 (* ---------- generic helpers ---------- *)
 
@@ -2889,7 +2890,7 @@ let test_finalize_imported_graph_avoids_unchanged_ref_writes () =
   ignore
     (Datascript.listen conn "finalize-test"
        (fun (r : tx_report) -> reports := r :: !reports));
-  ignore (Gp.finalize_imported_graph conn (Gp.default_options ()));
+  ignore (Gp_finalize.finalize_imported_graph conn);
   let db = Datascript.db conn in
   let block_ent = entity_exn db (Entity_id block_id) in
   check "block gets stamped with tx-id"
@@ -2918,7 +2919,7 @@ let test_finalize_imported_graph_avoids_unchanged_ref_writes () =
      = [])
     "";
   eq "one report" 1 (List.length !reports) "";
-  ignore (Gp.finalize_imported_graph conn (Gp.default_options ()));
+  ignore (Gp_finalize.finalize_imported_graph conn);
   eq "Repeated finalization is a no-op" 1 (List.length !reports) ""
 
 
