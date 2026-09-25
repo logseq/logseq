@@ -1347,3 +1347,29 @@
         (is (ldb/class? tag))
         (is (= "undo tag topic" (:block/title tag)))
         (is (= tag-ident (:db/ident tag)))))))
+
+(deftest undo-delete-of-property-valued-on-itself-restores-property-test
+  (testing "undoing a delete of a property set on its own page, then the set, brings the property back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (apply-ops! conn
+                        [[:upsert-property [:user.property/undo-self-rating
+                                            {:logseq.property/type :number}
+                                            {:property-name "undo-self-rating"}]]]
+                        (local-tx-meta {:client-id "test-client"}))
+          property-uuid (:block/uuid (d/entity @conn :user.property/undo-self-rating))]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:set-block-property [property-uuid :user.property/undo-self-rating 1]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:delete-page [property-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn :user.property/undo-self-rating)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [property (d/entity @conn :user.property/undo-self-rating)]
+        (is (= property-uuid (:block/uuid property)))
+        (is (= 1 (:logseq.property/value (:user.property/undo-self-rating property)))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [property (d/entity @conn :user.property/undo-self-rating)]
+        (is (= property-uuid (:block/uuid property)))
+        (is (nil? (:user.property/undo-self-rating property)))))))
