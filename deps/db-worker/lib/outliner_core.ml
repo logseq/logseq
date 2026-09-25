@@ -253,7 +253,15 @@ let page_updated_at_tx (db : db) (page_eid : entity_id option) : tx_op option =
                    , One_value (Instant (Date_time_util.time_ms ())) ) ]
                else [])
           in
-          Some (Entity { db_id = Some (Entity_id eid); attrs })
+          (* an explicit :db/id reserves that eid for the whole tx up front,
+             so a page allocated later in the same tx gets a different eid —
+             ref by block/uuid instead (every page carries one) *)
+          let db_id =
+            match Ldb.value page "block/uuid" with
+            | Some (Uuid _ as u) -> Some (Lookup_ref ("block/uuid", u))
+            | _ -> Some (Entity_id eid)
+          in
+          Some (Entity { db_id; attrs })
       | None -> None)
   | None -> None
 
