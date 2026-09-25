@@ -413,7 +413,7 @@ let test_db_core_registers_all_db_core_thread_apis () =
     ; "thread-api/markdown-mirror-flush"; "thread-api/markdown-mirror-regenerate"; "thread-api/export-get-debug-datoms"
     ; "thread-api/export-get-all-page->content"; "thread-api/validate-db"; "thread-api/recompute-checksum-diagnostics"
     ; "thread-api/export-edn"; "thread-api/import-edn"; "thread-api/get-fsrs-due-card-block-ids"
-    ; "thread-api/get-view-data"; "thread-api/get-class-objects"; "thread-api/validate-block-tag"
+    ; "thread-api/get-fsrs-card-block-ids"; "thread-api/get-view-data"; "thread-api/get-class-objects"; "thread-api/validate-block-tag"
     ; "thread-api/convert-tag-to-page"; "thread-api/convert-page-to-tag"; "thread-api/set-page-favorite"
     ; "thread-api/reorder-favorites"; "thread-api/get-page-route-info"; "thread-api/get-block-by-page-name-and-block-route-name"
     ; "thread-api/query-custom"; "thread-api/query-dsl-query"; "thread-api/query-dsl-custom-query"

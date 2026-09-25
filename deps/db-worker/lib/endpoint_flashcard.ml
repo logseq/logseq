@@ -1,4 +1,5 @@
-(* frontend.worker.handler.flashcard — :thread-api/get-fsrs-due-card-block-ids *)
+(* frontend.worker.handler.flashcard — :thread-api/get-fsrs-due-card-block-ids,
+   :thread-api/get-fsrs-card-block-ids *)
 
 open Datascript
 
@@ -22,7 +23,10 @@ let cards_entity db (w : Wire.t) : entity option =
   | Wire.Keyword "global" | Wire.String "global" | Wire.Nil -> None
   | _ -> (try entity db (Ds_wire.entity_ref_of_transit w) with _ -> None)
 
-let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
+(* fsrs-card-block-ids — block uuids of cards in the scope of `cards-id`.
+   When `due_only`, restricts to cards due now or without a scheduled due
+   date. *)
+let fsrs_card_block_ids db (cards_id : Wire.t) ~(due_only : bool) : Wire.t =
   let now_inst_ms = Common_util.value_of_ms (Date_time_util.time_ms ()) in
   let query_text =
     match cards_entity db cards_id with
@@ -59,13 +63,14 @@ let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
     | _ -> ""
   in
   let q =
-    "[:find [?b ...] :in $ [?t ...] ?now-inst-ms % :where \
-     [?b :block/tags ?t] \
-     (or-join [?b ?now-inst-ms] \
-     (and [?b :logseq.property.fsrs/due ?due] \
-     [(>= ?now-inst-ms ?due)]) \
-     [(missing? $ ?b :logseq.property.fsrs/due)]) \
-     [?b :block/uuid]" ^ extra_edn ^ "]"
+    "[:find [?b ...] :in $ [?t ...] ?now-inst-ms % :where [?b :block/tags ?t] "
+    ^ (if due_only then
+         "(or-join [?b ?now-inst-ms] \
+          (and [?b :logseq.property.fsrs/due ?due] \
+          [(>= ?now-inst-ms ?due)]) \
+          [(missing? $ ?b :logseq.property.fsrs/due)]) "
+       else "")
+    ^ "[?b :block/uuid]" ^ extra_edn ^ "]"
   in
   let rules =
     match parsed with
@@ -87,12 +92,14 @@ let fsrs_due_card_block_ids db (cards_id : Wire.t) : Wire.t =
          | _ -> None)
        rows)
 
-let get_fsrs_due_card_block_ids args =
+let get_fsrs_card_block_ids ~due_only args =
   with_conn args (fun db ->
       Db_worker_effect.pure
-        (fsrs_due_card_block_ids db
+        (fsrs_card_block_ids db ~due_only
            (Option.value (arg args 1) ~default:Wire.Nil)))
 
 let () =
   Dispatcher.register "thread-api/get-fsrs-due-card-block-ids"
-    get_fsrs_due_card_block_ids
+    (get_fsrs_card_block_ids ~due_only:true);
+  Dispatcher.register "thread-api/get-fsrs-card-block-ids"
+    (get_fsrs_card_block_ids ~due_only:false)
