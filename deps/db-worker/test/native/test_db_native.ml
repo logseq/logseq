@@ -3222,6 +3222,7 @@ let () =
     ; "outliner-copy-paste", Test_outliner_native.copy_paste_cases
     ; "outliner-cut-paste-prop", Test_outliner_native.cut_paste_cases
     ; "outliner-cut-paste-undo", Test_outliner_native.cut_paste_undo_cases
+    ; "outliner-page-updated-at", Test_outliner_native.page_updated_at_cases
     ; "outliner-op-construct", Test_outliner_native.op_construct_cases
     ; "outliner-move-undo", Test_outliner_native.move_undo_cases
     ; "outliner-pipeline", Test_outliner_native.pipeline_cases
