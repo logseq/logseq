@@ -1340,6 +1340,11 @@ let parse_clause (v : value) : filter_clause =
   match v with
   | Vector [ Keyword k; Keyword o; m ] | List [ Keyword k; Keyword o; m ] ->
       { f_ident = k; f_op = o; f_match = m }
+  (* cljs destructures [property-ident operator match] — a clause the
+     frontend persisted without a match keeps ident/operator and a nil
+     match, which eid-clause-match? treats as match-all. *)
+  | Vector [ Keyword k; Keyword o ] | List [ Keyword k; Keyword o ] ->
+      { f_ident = k; f_op = o; f_match = Nil }
   | _ -> { f_ident = ""; f_op = ""; f_match = Nil }
 
 let parse_filters (v : value) : view_filters =

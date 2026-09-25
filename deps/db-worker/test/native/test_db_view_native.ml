@@ -629,6 +629,70 @@ let test_all_pages_filter_count_matches_rows () =
     (view_count filtered = 2 && List.length (data_ids filtered) = 2);
   str_list_eq' "filtered titles" (result_titles db filtered) [ "alpha"; "alpine" ]
 
+(* bug 39: switching a created-at filter to :before while it holds a date
+   drops the match, so the frontend persists [:block/created-at :before].
+   cljs compile-filter-clause destructures that clause to match=nil —
+   eid-clause-match? returns true, i.e. the clause is a no-op, not an error. *)
+let test_all_pages_matchless_filter_clause_is_noop () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        (List.map
+           (fun (t, ts) ->
+              { page =
+                  { default_page with
+                    pg_title = Some t
+                  ; pg_extra = [ "block/created-at", Int ts ] }
+              ; blocks = [] })
+           [ ("alpha", 100); ("beta", 200); ("gamma", 300) ])
+      ()
+  in
+  let view_id = create_view_id conn "all-pages" in
+  transact_maps conn
+    [ [ ("db/id", Int view_id)
+      ; ( "logseq.property.table/filters"
+        , Map
+            [ "or?", Bool false
+            ; "filters", Vec [ Vec [ Kw "block/created-at"; Kw "before" ] ] ] ) ] ];
+  let db = db_of conn in
+  let r =
+    Db_view.get_view_data db (Some view_id)
+      (opts [ "view-feature-type", kw "all-pages" ])
+  in
+  check "matchless before clause keeps all rows" (view_count r = 3)
+
+(* bug 39: the same clause with the picked date kept filters by instant
+   epoch-ms (a date before every page yields an empty list). *)
+let test_all_pages_before_filter_with_instant () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        (List.map
+           (fun (t, ts) ->
+              { page =
+                  { default_page with
+                    pg_title = Some t
+                  ; pg_extra = [ "block/created-at", Int ts ] }
+              ; blocks = [] })
+           [ ("alpha", 100); ("beta", 200); ("gamma", 300) ])
+      ()
+  in
+  let view_id = create_view_id conn "all-pages" in
+  transact_maps conn
+    [ [ ("db/id", Int view_id)
+      ; ( "logseq.property.table/filters"
+        , Map
+            [ "or?", Bool false
+            ; "filters"
+            , Vec [ Vec [ Kw "block/created-at"; Kw "before"; Inst 50L ] ] ] ) ] ];
+  let db = db_of conn in
+  let r =
+    Db_view.get_view_data db (Some view_id)
+      (opts [ "view-feature-type", kw "all-pages" ])
+  in
+  check "before a date earlier than every page gives an empty list"
+    (view_count r = 0)
+
 let test_all_pages_first_window_instant () =
   let pages =
     List.init 200
@@ -1829,6 +1893,12 @@ let () =
         ; Alcotest.test_case
             "get-view-data-all-pages-filter-count-matches-rows-test" `Quick
             test_all_pages_filter_count_matches_rows
+        ; Alcotest.test_case
+            "get-view-data-all-pages-matchless-filter-clause-is-noop-test"
+            `Quick test_all_pages_matchless_filter_clause_is_noop
+        ; Alcotest.test_case
+            "get-view-data-all-pages-before-filter-with-instant-test" `Quick
+            test_all_pages_before_filter_with_instant
         ; Alcotest.test_case
             "get-view-data-all-pages-first-window-is-instant-test" `Quick
             test_all_pages_first_window_instant

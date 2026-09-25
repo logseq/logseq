@@ -2006,7 +2006,8 @@ let valid_filters (v : Wire.t) : bool =
               List.for_all
                 (fun c ->
                   match c with
-                  | Wire.Array (Wire.Keyword _ :: _ :: _ :: []) -> true
+                  | Wire.Array (Wire.Keyword _ :: _ :: _ :: [])
+                  | Wire.Array (Wire.Keyword _ :: _ :: []) -> true
                   | _ -> false)
                 clauses
           | Some _ -> false

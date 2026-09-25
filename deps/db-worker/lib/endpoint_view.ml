@@ -88,7 +88,10 @@ let value_after_operator_change (operator : string) (value : Wire.t) : Wire.t =
          when xs <> [] && List.for_all is_number xs -> value
        | _ -> Wire.Nil)
   | "date-before" | "date-after" | "before" | "after" ->
-      (match value with v when is_number v -> v | _ -> Wire.Nil)
+      (match value with
+       | v when is_number v -> v
+       | Wire.Date_ms _ -> value
+       | _ -> Wire.Nil)
   | _ -> Wire.Nil
 
 (* normalize-view-filter-value — map :value → its :block/uuid *)
