@@ -367,9 +367,15 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
       | _ ->
           let existing' =
             match existing_v with
-            | Set xs -> List (List.filter (fun x -> x <> Nil) xs)
-            | Vector xs -> List (List.filter (fun x -> x <> Nil) xs)
-            | List xs -> List (List.filter (fun x -> x <> Nil) xs)
+            | Set xs | Vector xs | List xs -> (
+                (* cljs (remove nil? existing-value) keeps a seq of the
+                   collection's non-nil values; a single non-nil element
+                   unwraps to the scalar so this also repairs set-wrapped
+                   values stored on cardinality-one attrs (e.g. #{true}) *)
+                match List.filter (fun x -> x <> Nil) xs with
+                | [] -> Nil
+                | [ x ] -> x
+                | xs' -> List xs')
             | _ -> existing_v
           in
           if k = "block/title" || k = "block/name" then
