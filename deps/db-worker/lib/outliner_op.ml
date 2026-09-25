@@ -513,7 +513,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
         v
         ?entity_id_opt:(Option.bind (Cljs_map.get
                           (match _opts with Wire.Map _ -> _opts | _ -> Cljs_map.empty_map)
-                          "entity-id-opt?") bool_of_wire)
+                          "entity-id?") bool_of_wire)
         ?preserve_task_tag:(Option.bind (Cljs_map.get
                               (match _opts with Wire.Map _ -> _opts | _ -> Cljs_map.empty_map)
                               "preserve-task-tag?") bool_of_wire)
