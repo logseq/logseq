@@ -294,10 +294,21 @@
 
        [(missing? $ ?b :block/link)]]]
 
+    :class-instance
+    '[(class-instance ?class ?b)
+      [?b :block/tags ?tc]
+      (or
+       [(= ?class ?tc)]
+       (class-extends ?class ?tc))]
+
     ;; Matches a stored title exactly (direct callers pass capitalized values)
-    ;; or by its lowercase form (the DSL lowercases filter args)
+    ;; or by its lowercase form (the DSL lowercases filter args).
+    ;; Only Task and Task subclasses match; a non-Task class that reuses
+    ;; Status (including its default Todo) must not.
     :task
     '[(task ?b ?statuses)
+      [?task-class :db/ident :logseq.class/Task]
+      (class-instance ?task-class ?b)
       (ref-property-with-default ?b :logseq.property/status ?val)
       [(str ?val) ?val-str]
       [(clojure.string/lower-case ?val-str) ?val-lower]
@@ -307,6 +318,8 @@
 
     :priority
     '[(priority ?b ?priorities)
+      [?task-class :db/ident :logseq.class/Task]
+      (class-instance ?task-class ?b)
       (ref-property-with-default ?b :logseq.property/priority ?priority)
       [(str ?priority) ?priority-str]
       [(clojure.string/lower-case ?priority-str) ?priority-lower]
@@ -322,8 +335,9 @@
    :page-ref #{:has-ref}
 
    ;; simple query helpers
-   :task #{:ref-property-with-default}
-   :priority #{:ref-property-with-default}
+   :class-instance #{:class-extends}
+   :task #{:ref-property-with-default :class-instance}
+   :priority #{:ref-property-with-default :class-instance}
    :tags #{:class-extends}
 
    :has-property-or-object-property #{:object-has-class-property}

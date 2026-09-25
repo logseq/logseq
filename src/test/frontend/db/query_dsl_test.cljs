@@ -478,8 +478,10 @@
   (load-test-files
    [{:page {:block/title "page1"}
      :blocks [{:block/title "review task"
+               :build/tags [:logseq.class/Task]
                :build/properties {:logseq.property/status :logseq.property/status.in-review}}
               {:block/title "waiting task"
+               :build/tags [:logseq.class/Task]
                :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}]}])
 
   (testing "multi-word statuses match case-insensitively"
@@ -493,6 +495,30 @@
            (map testable-content (dsl-query "(task \"QA Ready\")"))))
     (is (= ["waiting task"]
            (map testable-content (dsl-query "(task \"qa ready\")"))))))
+
+(deftest task-query-requires-task-class
+  (load-test-files
+   {:classes {:Projekt {:build/class-properties [:logseq.property/status]}
+              :Work {:build/class-extends [:logseq.class/Task]}}
+    :pages-and-blocks
+    [{:page {:block/title "Projekt page" :build/tags [:Projekt]}}
+     {:page {:block/title "page1"}
+      :blocks [{:block/title "explicit todo task"
+                :build/tags [:logseq.class/Task]
+                :build/properties {:logseq.property/status :logseq.property/status.todo}}
+               {:block/title "implicit todo task"
+                :build/tags [:logseq.class/Task]}
+               {:block/title "work subclass task"
+                :build/tags [:Work]}
+               {:block/title "projekt default status"
+                :build/tags [:Projekt]}
+               {:block/title "projekt explicit todo"
+                :build/tags [:Projekt]
+                :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
+
+  (is (= #{"explicit todo task" "implicit todo task" "work subclass task"}
+         (set (map :block/title (dsl-query "(task \"Todo\")"))))
+      "Only Task and Task subclasses match; a non-Task class that declares Status default Todo does not"))
 
 ;; Ensure some filters work when no data with relevant properties exist
 (deftest queries-with-no-data
@@ -515,10 +541,13 @@
 (deftest priority-queries
   (load-test-files [{:page {:block/title "page1"}
                      :blocks [{:block/title "[#A] b1"
+                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.high}}
                               {:block/title "[#B] b2"
+                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.medium}}
                               {:block/title "[#A] b3"
+                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}])
 
   (testing "one arg queries"
@@ -547,6 +576,7 @@
   (load-test-files
    [{:page {:block/title "page1"}
      :blocks [{:block/title "urgent b"
+               :build/tags [:logseq.class/Task]
                :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}])
   (is (= ["urgent b"]
          (map :block/title (dsl-query "(priority \"Very High\")"))))
