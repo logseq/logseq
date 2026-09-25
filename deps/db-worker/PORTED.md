@@ -12,6 +12,11 @@ dependency cone):
     f6fc6f78ac  fix: preserve outliner insert identities during sync replay (#13316)
     062343d463  fix: only allow normal pages to be moved into the Library page (#13384)
     4608885d40  fix: drag and paste of page-embed nodes (#13359)
+    43a540f350  fix: register namespace root in Library when moving a page under a page (#13397)
+    94bb8b1e32  fix: backfill created-at when stamping page updated-at (#13416)
+    1e07062b83  fix: bump page updated-at on insert, move, and delete (#13402)
+    fdde4679b7  fix: drop stale journal refs when clearing datetime values (#13417)
+    8e321ad70f  refactor: split sync tx upload into named pipeline stages (#13365)
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,
