@@ -590,7 +590,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [;; Numeric closed choices store the number in :logseq.property/value
         ;; instead of :block/title; index them by the value so they're searchable
         block (let [v (:logseq.property/value block)]
-                (if (and (nil? (:block/title block))
+                (if (and (ldb/closed-value? block)
+                         (nil? (:block/title block))
                          (or (string? v) (number? v)))
                   (assoc block :block/title (str v))
                   block))
@@ -1125,7 +1126,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                  (boolean (some-> (d/entity db-after id) hidden-entity?)))))
                  set))]
     (when (seq datoms)
-      (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
+      (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias
+                                  :logseq.property/value}
             direct-visibility-affecting-attrs #{:block/parent :block/page :block/order}
             page-hierarchy-affecting-attrs #{:block/parent :block/page}
             ref-eids (->> datoms
@@ -1184,7 +1186,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                 (fn [datom]
                   ;; Capture direct changes on searchable content and outline structure
                   (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias
-                               :block/parent :block/page :block/order :logseq.property/deleted-at}
+                               :block/parent :block/page :block/order :logseq.property/value
+                               :logseq.property/deleted-at}
                              (:a datom)))
                 data)]
     (when (seq datoms)
