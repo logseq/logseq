@@ -237,16 +237,24 @@ let remove_orphaned_page_refs (db : db) (db_id : entity_id) (txs_state : txs_sta
       (List.map (fun (p : entity) -> RetractEntity (Entity_id p.id)) orphaned)
   end
 
-(* cljs page-updated-at-tx — stamp :block/updated-at on a page eid *)
-let page_updated_at_tx (page_eid : entity_id option) : tx_op option =
+(* cljs page-updated-at-tx — stamp :block/updated-at on a page eid,
+   backfilling :block/created-at when the page lacks one *)
+let page_updated_at_tx (db : db) (page_eid : entity_id option) : tx_op option =
   match page_eid with
-  | Some eid ->
-      Some
-        (Entity
-           { db_id = Some (Entity_id eid)
-           ; attrs =
-               [ ( "block/updated-at"
-                 , One_value (Instant (Date_time_util.time_ms ())) ) ] })
+  | Some eid -> (
+      match entity db (Entity_id eid) with
+      | Some page ->
+          let attrs =
+            ( "block/updated-at"
+            , One_value (Instant (Date_time_util.time_ms ())) )
+            :: (if Option.is_none (Ldb.int_value page "block/created-at")
+               then
+                 [ ( "block/created-at"
+                   , One_value (Instant (Date_time_util.time_ms ())) ) ]
+               else [])
+          in
+          Some (Entity { db_id = Some (Entity_id eid); attrs })
+      | None -> None)
   | None -> None
 
 (* cljs container-page-eid — page-like entities (pages, tags, properties)
@@ -281,18 +289,13 @@ let live_insert_source_page_eids (db : db) (blocks : Block_map.t list)
 
 (* ---------- update-page-when-save-block ---------- *)
 
-let update_page_when_save_block (txs_state : txs_state) (block_entity : entity) : unit =
+let update_page_when_save_block (db : db) (txs_state : txs_state)
+    (block_entity : entity) : unit =
   match Ldb.ref_ent block_entity "block/page" with
-  | Some e ->
-      (* cljs: {:db/id eid :block/updated-at now :block/created-at? now} *)
-      let now = Common_util.value_of_ms (Date_time_util.time_ms ()) in
-      let attrs = [ ("block/updated-at", One_value now) ] in
-      let attrs =
-        if not (Option.is_some (Ldb.value e "block/created-at")) then
-          attrs @ [ ("block/created-at", One_value now) ]
-        else attrs
-      in
-      txs_push txs_state [ Entity { db_id = Some (Entity_id e.id); attrs } ]
+  | Some e -> (
+      match page_updated_at_tx db (Some e.id) with
+      | Some tx -> txs_push txs_state [ tx ]
+      | None -> ())
   | None -> ()
 
 (* ---------- remove-orphaned-refs-when-save ---------- *)
@@ -1105,7 +1108,7 @@ let save_in_txs (db : db) (txs_state : txs_state) (data : Block_map.t)
        (match block_entity with
         | Some e ->
             if not collapse_or_expand then
-              update_page_when_save_block txs_state e;
+              update_page_when_save_block db txs_state e;
             (match mget_str m "block/title" with
              | Some t when Ldb.string_value e "block/title" <> Some t ->
                  remove_orphaned_refs_when_save db txs_state e m
@@ -2346,7 +2349,8 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
               in
               let dest_page_eid = get_target_block_page target_block sibling in
               let page_updated_txs =
-                List.filter_map page_updated_at_tx
+                List.filter_map
+                  (page_updated_at_tx db)
                   (dest_page_eid
                    :: List.map Option.some
                         (live_insert_source_page_eids db blocks' dest_page_eid))
@@ -2585,7 +2589,7 @@ let delete_blocks (db : db) (blocks : Block_map.t list) : tx_result =
        in
        txs_push txs_state
          (List.filter_map
-            (fun id -> page_updated_at_tx (Some id))
+            (fun id -> page_updated_at_tx db (Some id))
             container_eids));
   { tx_data = txs_state.txs; tx_meta = [] }
 
@@ -2758,7 +2762,7 @@ let move_block (db : db) (block : entity) (target_block : entity) (sibling : boo
       |> List.fold_left
            (fun acc eid -> if List.mem eid acc then acc else acc @ [ eid ])
            []
-      |> List.filter_map page_updated_at_tx
+      |> List.filter_map (page_updated_at_tx db)
     in
     tx_data @ children_page_tx @ property_tx @ page_updated_txs
 
