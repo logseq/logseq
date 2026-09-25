@@ -2809,6 +2809,27 @@ let test_render_snapshots_keeps_query_error_data_transit_safe () =
          response
      with _ -> false)
 
+(* :entity-title resource (cljs 8e11118390 has no dedicated worker test;
+   covered here so the resource does not regress). *)
+let test_entity_title_resource_resolves_property_title () =
+  let conn, u = render_resource_fixture () in
+  let db = db_of conn in
+  let resource_key = wkey [ kw "entity-title"; kw "user.property/display" ] in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "attr"; kw "db/ident" ]
+    ; wkey [ kw "entity"; wu (u "display-property") ] ]
+    (Wire.String "Display")
+    (call_resource db resource_key)
+
+let test_entity_title_resource_watches_ident_for_missing_lookup () =
+  let conn, _ = render_resource_fixture () in
+  let db = db_of conn in
+  let resource_key = wkey [ kw "entity-title"; kw "user.property/missing" ] in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "attr"; kw "db/ident" ] ]
+    Wire.Nil
+    (call_resource db resource_key)
+
 (* query-resource-injects-built-in-rules-and-merges-user-rules-test *)
 let test_query_resource_injects_builtin_rules () =
   let conn, u = render_resource_fixture () in
@@ -3351,6 +3372,10 @@ let cases : unit Alcotest.test_case list =
       test_render_snapshots_isolates_incomplete_dsl_query_resources
   ; Alcotest.test_case "render-snapshots-keeps-query-error-data-transit-safe-test" `Quick
       test_render_snapshots_keeps_query_error_data_transit_safe
+  ; Alcotest.test_case "entity-title-resource-resolves-property-title-test" `Quick
+      test_entity_title_resource_resolves_property_title
+  ; Alcotest.test_case "entity-title-resource-watches-ident-for-missing-lookup-test" `Quick
+      test_entity_title_resource_watches_ident_for_missing_lookup
   ; Alcotest.test_case "query-resource-injects-built-in-rules-and-merges-user-rules-test" `Quick
       test_query_resource_injects_builtin_rules
   ; Alcotest.test_case "query-resource-preserves-scalar-tuples-test" `Quick
