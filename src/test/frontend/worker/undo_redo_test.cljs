@@ -1323,3 +1323,27 @@
       (is (= 2 (count (undo-all!))))
       (is (= outline-1-start (outline "outline 1")))
       (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-delete-of-tag-renamed-to-page-title-restores-tag-test
+  (testing "undoing a delete of a tag renamed to an existing page's title, then the rename, brings the tag back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          [_ tag-uuid] (apply-ops! conn
+                                   [[:create-page ["undo tag topic" {:class? true
+                                                                     :redirect? false
+                                                                     :split-namespace? true
+                                                                     :tags ()}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          tag-ident (:db/ident (d/entity @conn [:block/uuid tag-uuid]))]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:rename-page [tag-uuid "page 1"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:delete-page [tag-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid tag-uuid])))
+      (is (= 2 (count (undo-all!))))
+      (let [tag (d/entity @conn [:block/uuid tag-uuid])]
+        (is (ldb/class? tag))
+        (is (= "undo tag topic" (:block/title tag)))
+        (is (= tag-ident (:db/ident tag)))))))
