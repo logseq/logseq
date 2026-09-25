@@ -9,6 +9,7 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]))
 
@@ -1209,3 +1210,71 @@
       (is (= ::worker-undo-redo/empty-redo-stack
              (worker-undo-redo/redo test-repo)))
       (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(def ^:private outline-1-start ["outline 1" ["a" ["b" ["b1" "b2"]] "c"]])
+
+(defn- seed-outline!
+  "Adds page \"outline 1\" with blocks a, b (children b1, b2), c and page
+  \"outline 2\" with block d, clears history, and returns a fn from a block
+  title to its uuid."
+  []
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (sqlite-build/create-blocks
+     conn
+     [{:page {:block/title "outline 1"}
+       :blocks [{:block/title "a"}
+                {:block/title "b"
+                 :build/children [{:block/title "b1"}
+                                  {:block/title "b2"}]}
+                {:block/title "c"}]}
+      {:page {:block/title "outline 2"}
+       :blocks [{:block/title "d"}]}])
+    (worker-undo-redo/clear-history! test-repo)
+    (fn [title]
+      (:block/uuid (db-test/find-block-by-content @conn title)))))
+
+(defn- outline
+  "The page titled page-title and its live blocks, as nested titles."
+  [page-title]
+  (let [db @(worker-state/get-datascript-conn test-repo)
+        node (fn node [e]
+               (let [children (->> (:block/_parent e)
+                                   (remove ldb/recycled?)
+                                   ldb/sort-by-order)]
+                 (if (seq children)
+                   [(:block/title e) (mapv node children)]
+                   (:block/title e))))]
+    (node (db-test/find-page-by-title db page-title))))
+
+(deftest undo-move-down-of-blocks-at-different-levels-test
+  (testing "undoing a move down of a top-level block and a nested block (Ctrl+click selection) puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "b1")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" [["b" ["b2" "a" "b1"]] "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-blocks-at-different-levels-test
+  (testing "undoing a move up of a top-level block and a nested block (Ctrl+click selection) puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "b1")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "b1" ["b" ["b2"]] "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-siblings-that-are-not-adjacent-test
+  (testing "undoing a move up of 2 siblings with a block between them puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "c")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "c" ["b" ["b1" "b2"]]]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
