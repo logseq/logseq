@@ -3043,6 +3043,104 @@ let test_date_ms_transit_decodes_to_instant () =
   check "a real ~t still decodes to Instant"
     (Ds_wire.value_of_transit (Wire.Date_ms ms) = Instant ms)
 
+(* (deftest build-upsert-nodes-edn-rejects-invalid-operations ...) — page-id
+   part: a block page-id that is a page name fails fast instead of being
+   silently dropped (src/test/logseq/api/db_based/tools_test.cljs) *)
+let contains_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i = i + m <= n && (String.sub s i m = sub || go (i + 1)) in
+  go 0
+
+let test_build_upsert_nodes_edn_rejects_name_page_id () =
+  let conn = create_conn () in
+  let ops =
+    [ Wire.Map
+        [ kw "operation", Wire.String "add"
+        ; kw "entityType", Wire.String "block"
+        ; ( kw "data"
+          , Wire.Map
+              [ kw "title", Wire.String "orphan"
+              ; kw "page-id", Wire.String "Some Page Name" ] ) ] ]
+  in
+  let msg, _ =
+    expect_exn_info "build-upsert-nodes-edn name page-id" (fun () ->
+        Api_tools.build_upsert_nodes_edn (db_of conn) ops)
+  in
+  check "rejects name page-id"
+    (contains_sub msg "must be a page uuid or the id of a page added")
+
+(* (deftest build-upsert-nodes-edn-resolves-uuid-page-ids ...) — page-id
+   resolves the :id of a page added in the same call first, then an existing
+   page's uuid; a block uuid or an unknown uuid is not an existing page *)
+let test_build_upsert_nodes_edn_resolves_uuid_page_ids () =
+  let conn = create_conn () in
+  let page_uuid = "dddddddd-0000-0000-0000-000000000010" in
+  let block_uuid = "dddddddd-0000-0000-0000-000000000011" in
+  ignore
+    (transact_maps conn
+       [ [ "block/uuid", Uuid page_uuid
+         ; "block/title", Str "Existing Tools Page"
+         ; "block/name", Str "existing tools page"
+         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
+       ; [ "block/uuid", Uuid block_uuid
+         ; "block/title", Str "existing block"
+         ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ] ] ]);
+  let local_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" in
+  let ops =
+    [ Wire.Map
+        [ kw "operation", Wire.String "add"
+        ; kw "entityType", Wire.String "page"
+        ; kw "id", Wire.String local_id
+        ; (kw "data", Wire.Map [ kw "title", Wire.String "Local Uuid Page" ]) ]
+    ; Wire.Map
+        [ kw "operation", Wire.String "add"
+        ; kw "entityType", Wire.String "block"
+        ; ( kw "data"
+          , Wire.Map
+              [ kw "title", Wire.String "local block"
+              ; kw "page-id", Wire.String local_id ] ) ]
+    ; Wire.Map
+        [ kw "operation", Wire.String "add"
+        ; kw "entityType", Wire.String "block"
+        ; ( kw "data"
+          , Wire.Map
+              [ kw "title", Wire.String "existing page block"
+              ; kw "page-id", Wire.String page_uuid ] ) ] ]
+  in
+  let edn = Api_tools.build_upsert_nodes_edn (db_of conn) ops in
+  let entries =
+    match wire_field "pages-and-blocks" edn with
+    | Some (Wire.Array xs) -> xs
+    | _ -> Alcotest.fail "pages-and-blocks missing"
+  in
+  check "two page entries" (List.length entries = 2);
+  (match entries with
+   | [ local; existing ] ->
+       check "local page resolves to title"
+         (wire_str "block/title"
+            (Option.value (wire_field "page" local) ~default:(Wire.Map []))
+          = Some "Local Uuid Page");
+       check "existing page resolves to block/uuid"
+         (wire_str "block/uuid"
+            (Option.value (wire_field "page" existing) ~default:(Wire.Map []))
+          = Some page_uuid)
+   | _ -> Alcotest.fail "expected two page entries");
+  (* a block uuid is not an existing page *)
+  let bad_ops =
+    [ Wire.Map
+        [ kw "operation", Wire.String "add"
+        ; kw "entityType", Wire.String "block"
+        ; ( kw "data"
+          , Wire.Map
+              [ kw "title", Wire.String "bad parent"
+              ; kw "page-id", Wire.String block_uuid ] ) ] ]
+  in
+  let msg, _ =
+    expect_exn_info "build-upsert-nodes-edn block page-id" (fun () ->
+        Api_tools.build_upsert_nodes_edn (db_of conn) bad_ops)
+  in
+  check "rejects block uuid as page-id" (contains_sub msg "is not an existing page")
+
 (* ---------- cases ---------- *)
 
 let cases =
@@ -3226,4 +3324,10 @@ let cases =
       test_epoch_ms_value_of_transit_stays_numeric
   ; Alcotest.test_case "date-ms-transit-decodes-to-instant-test" `Quick
       test_date_ms_transit_decodes_to_instant
+  ; Alcotest.test_case
+      "build-upsert-nodes-edn-rejects-name-page-id-test" `Quick
+      test_build_upsert_nodes_edn_rejects_name_page_id
+  ; Alcotest.test_case
+      "build-upsert-nodes-edn-resolves-uuid-page-ids-test" `Quick
+      test_build_upsert_nodes_edn_resolves_uuid_page_ids
   ]
