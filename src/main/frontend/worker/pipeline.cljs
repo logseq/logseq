@@ -572,20 +572,25 @@
 (def ^:private journal-protected-update-attrs
   #{:block/title :block/name})
 
+(defn- stored-attr-value
+  [db eid attr]
+  (:v (first (d/datoms db :eavt eid attr))))
+
 (defn- ensure-journal-page-protected-attrs-not-updated!
   [{:keys [db-before tx-data]}]
   (when-let [violation
              (some (fn [{:keys [e a v added]}]
                      (when (and added
                                 (contains? journal-protected-update-attrs a))
-                       (let [before-ent (d/entity db-before e)]
+                       (let [before-ent (d/entity db-before e)
+                             before-v (stored-attr-value db-before e a)]
                          (when (and before-ent
                                     (ldb/journal? before-ent)
-                                    (not= (get before-ent a) v))
+                                    (not= before-v v))
                            {:type :journal-page-protected-attr-updated
                             :entity-id e
                             :attr a
-                            :before (get before-ent a)
+                            :before before-v
                             :after v
                             :journal-day (:block/journal-day before-ent)}))))
                    tx-data)]
