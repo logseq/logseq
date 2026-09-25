@@ -77,6 +77,30 @@ let maps_equal (a : (attr * value) list) (b : (attr * value) list) : bool =
   List.length a = List.length b
   && List.for_all (fun (k, v) -> List.assoc_opt k b = Some v) a
 
+(* cljs writes inst values only for :file/created-at and
+   :file/last-modified-at (malli inst? schema); a ~m value on any other
+   attr is a corrupt epoch-ms number — rewrite it as the numeric rep
+   cljs would have stored. Runs before the db listener is installed on
+   open, same as check-and-fix-schema, so it never enters local-tx. *)
+let instant_attrs = [ "file/created-at"; "file/last-modified-at" ]
+
+let heal_instant_values (conn : conn) =
+  let db = Datascript.db conn in
+  let ops =
+    List.of_seq (datoms db Eavt ())
+    |> List.concat_map (fun (d : datom) ->
+         match d.v with
+         | Instant ms when not (List.mem d.a instant_attrs) ->
+             [ Retract (Entity_id d.e, d.a, Some d.v)
+             ; Add (Entity_id d.e, d.a, Common_util.value_of_ms ms) ]
+         | _ -> [])
+  in
+  if ops <> [] then begin
+    Worker_log.info "worker-db-fix/heal-instant-values"
+      [ ("datoms", string_of_int (List.length ops / 2)) ];
+    ignore (Datascript.transact_bang conn ops)
+  end
+
 let check_and_fix_schema (conn : conn) =
   let conn_schema = Datascript.schema (Datascript.db conn) in
   let canonical = Lazy.force canonical_entries in

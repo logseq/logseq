@@ -380,6 +380,7 @@ let create_or_open_db args =
              (* cljs db-fix/check-and-fix-schema! right after
                 get-storage-conn, before datoms/initial-data *)
              Worker_db_fix.check_and_fix_schema conn;
+             Worker_db_fix.heal_instant_values conn;
              (* cljs bootstrap-transact! on the :datoms/:debug-transit-raw
                 open-opts (CLI/node import path). *)
              let datoms =
