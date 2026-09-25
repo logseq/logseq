@@ -541,13 +541,10 @@
 (deftest priority-queries
   (load-test-files [{:page {:block/title "page1"}
                      :blocks [{:block/title "[#A] b1"
-                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.high}}
                               {:block/title "[#B] b2"
-                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.medium}}
                               {:block/title "[#A] b3"
-                               :build/tags [:logseq.class/Task]
                                :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}])
 
   (testing "one arg queries"
@@ -576,7 +573,6 @@
   (load-test-files
    [{:page {:block/title "page1"}
      :blocks [{:block/title "urgent b"
-               :build/tags [:logseq.class/Task]
                :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}])
   (is (= ["urgent b"]
          (map :block/title (dsl-query "(priority \"Very High\")"))))
