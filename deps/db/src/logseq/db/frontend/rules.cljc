@@ -316,10 +316,10 @@
        [(contains? ?statuses ?val)]
        [(contains? ?statuses ?val-lower)])]
 
+    ;; Priority is not Task-gated: file import and property-set leave
+    ;; Priority-only blocks without #Task, unlike Status.
     :priority
     '[(priority ?b ?priorities)
-      [?task-class :db/ident :logseq.class/Task]
-      (class-instance ?task-class ?b)
       (ref-property-with-default ?b :logseq.property/priority ?priority)
       [(str ?priority) ?priority-str]
       [(clojure.string/lower-case ?priority-str) ?priority-lower]
@@ -337,7 +337,7 @@
    ;; simple query helpers
    :class-instance #{:class-extends}
    :task #{:ref-property-with-default :class-instance}
-   :priority #{:ref-property-with-default :class-instance}
+   :priority #{:ref-property-with-default}
    :tags #{:class-extends}
 
    :has-property-or-object-property #{:object-has-class-property}
