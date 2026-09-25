@@ -51,6 +51,9 @@ external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
 
 external resolve_path : string -> string = "resolve" [@@mel.module "path"]
 
+external realpath_sync : string -> string = "realpathSync"
+  [@@mel.module "fs"]
+
 external process_stdout_write : string -> unit = "write"
   [@@mel.scope "process.stdout"]
 
@@ -1360,8 +1363,9 @@ let () =
       Fest.expect |> Fest.equal (json_string health "host") d.host;
       Fest.expect |> Fest.equal (json_get_in health [ "port" ] <> None) true;
       Fest.expect |> Fest.equal (json_get_in health [ "pid" ] <> None) true;
+      (* daemon root-dir is canonicalized via fs.realpathSync *)
       Fest.expect
-      |> Fest.equal (json_string health "root-dir") (resolve_path data_dir);
+      |> Fest.equal (json_string health "root-dir") (realpath_sync data_dir);
       Fest.expect
       |> Fest.equal (json_get_in health [ "owner-source" ] <> None) true;
       Fest.expect
