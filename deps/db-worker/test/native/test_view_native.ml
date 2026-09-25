@@ -105,7 +105,24 @@ let test_view_filter_data () =
   check "many?" (wire_get "many?" kvs = Some (Wire.Bool false));
   check "values" (wire_get "values" kvs = Some Wire.Nil);
   check "value-after-operator-change"
-    (wire_get "value-after-operator-change" kvs = Some (Wire.Int 123))
+    (wire_get "value-after-operator-change" kvs = Some (Wire.Int 123));
+  (* bug 39: switching to :before/:after while holding a picked date must
+     keep the instant — dropping it writes a matchless clause that
+     crashes view-resource context validation. *)
+  let option =
+    Wire.Map
+      [ ( kw "property"
+        , Wire.Map
+            [ kw "db/ident", kw "block/created-at"
+            ; kw "logseq.property/type", kw "datetime" ] )
+      ; kw "property-ident", kw "block/created-at"
+      ; kw "operator", kw "before"
+      ; kw "value", Wire.Date_ms 123L ]
+  in
+  let data = Endpoint_view.view_filter_data db option in
+  let kvs = kvs_of data in
+  check "value-after-operator-change keeps instant"
+    (wire_get "value-after-operator-change" kvs = Some (Wire.Date_ms 123L))
 
 let () =
   Alcotest.run "view-test"

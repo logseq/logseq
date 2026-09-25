@@ -2263,6 +2263,34 @@ let test_view_data_returns_empty_rows_after_view_deleted () =
      | Some v -> wire_eq v empty_value
      | None -> false)
 
+(* bug 39: switching a created-at filter to :before while it holds a
+   date drops the match, so the frontend persists and re-sends
+   [:block/created-at :before]. The clause is a no-op — the view
+   resource renders instead of raising "Invalid view resource context"
+   (the crash persisted because the condition lives in view state). *)
+let test_view_data_tolerates_matchless_filter_clause () =
+  let conn, _ = render_resource_fixture () in
+  let view_uuid = add_view conn "all-pages" in
+  let db = db_of conn in
+  let resource_key =
+    wkey [ kw "view-data"; wu view_uuid
+         ; Wire.Map
+             [ kw "feature-type", kw "all-pages"
+             ; kw "filters"
+             , Wire.Map
+                 [ kw "or?", Wire.Bool false
+                 ; kw "filters"
+                 , Wire.Array
+                     [ Wire.Array [ kw "block/created-at"; kw "before" ] ] ] ] ]
+  in
+  let r = call_resource_raw db resource_key in
+  check "rows slot rendered"
+    (match slot_get (kw "rows") r.value with
+     | Some (Wire.Array _) -> true
+     | _ -> false);
+  check "clause watch key kept"
+    (wkey_has r.watch_keys (wkey [ kw "attr"; kw "block/created-at" ]))
+
 (* all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test *)
 let test_all_pages_view_data_returns_first_window_ids () =
   let conn, _ = render_resource_fixture () in
@@ -3349,6 +3377,8 @@ let cases : unit Alcotest.test_case list =
       test_query_view_data_keeps_projected_columns
   ; Alcotest.test_case "view-data-resource-returns-empty-rows-after-the-view-is-deleted-test" `Quick
       test_view_data_returns_empty_rows_after_view_deleted
+  ; Alcotest.test_case "view-data-resource-tolerates-a-matchless-filter-clause-test" `Quick
+      test_view_data_tolerates_matchless_filter_clause
   ; Alcotest.test_case "all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test" `Quick
       test_all_pages_view_data_returns_first_window_ids
   ; Alcotest.test_case "class-objects-view-data-returns-the-first-window-ids-without-row-snapshots-test" `Quick
