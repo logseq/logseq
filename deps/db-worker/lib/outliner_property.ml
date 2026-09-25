@@ -310,6 +310,59 @@ let get_block_classes_properties db (eid : entity_id) : block_classes_properties
   in
   { classes; all_classes; classes_properties }
 
+(* entity-plus/entity-class-ids — the entity's tag ids plus all ancestor
+   class ids via :logseq.property.class/extends *)
+let entity_class_ids (block : entity) : entity_id list =
+  let tags = Ldb.ref_ents block "block/tags" in
+  List.map (fun (t : entity) -> t.id) (tags @ get_classes_parents tags)
+
+(* entity-plus/property-default-applies? — a default on a class-declared
+   property applies only to members of those classes; a property declared
+   by no class keeps its global default *)
+let property_default_applies (block : entity) (property : entity) : bool =
+  let declaring_class_ids =
+    List.of_seq
+      (datoms property.db Avet ~a:"logseq.property.class/properties"
+         ~v:(Ref property.id) ())
+    |> List.map (fun (d : datom) -> d.e)
+  in
+  match declaring_class_ids with
+  | [] -> true
+  | _ ->
+      let member_ids = entity_class_ids block in
+      List.exists (fun id -> List.mem id member_ids) declaring_class_ids
+
+(* entity-plus/lookup-kv-with-default-value — entity attr, else the
+   property's class-scoped default (checkbox reads scalar-default-value) *)
+let lookup_kv_with_default_value (e : entity) (a : attr) : value option =
+  match Ldb.value e a with
+  | Some _ as v -> v
+  | None ->
+      let qualified =
+        match String.index_opt a '/' with Some i -> i > 0 | None -> false
+      in
+      if qualified then
+        match entity e.db (Ident a) with
+        | Some property -> (
+            let property_default =
+              match Ldb.value property "logseq.property/type" with
+              | Some (Keyword "checkbox" | String "checkbox") ->
+                  Ldb.value property "logseq.property/scalar-default-value"
+              | _ -> Ldb.value property "logseq.property/default-value"
+            in
+            match property_default with
+            | Some _ as d when property_default_applies e property -> d
+            | _ -> None)
+        | None -> None
+      else None
+
+(* worker-property/block-class-property-idents — idents of properties
+   provided by the block's classes (including ancestors) *)
+let block_class_property_idents db (eid : entity_id) : string list =
+  (get_block_classes_properties db eid).classes_properties
+  |> List.filter_map Ldb.ident_of
+  |> List.sort_uniq String.compare
+
 (* ---------- write path (outliner/property.cljs) ---------- *)
 
 let kw s = Wire.Keyword s

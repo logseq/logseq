@@ -437,22 +437,30 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
             (kw "block.temp/has-children?")
             (Wire.Bool (block_has_children db entity_id))
             (assoc
-               (kw "block.temp/positioned-properties")
-               (Wire.Map
-                  (List.map
-                     (fun (position, idents) ->
-                       ( kw position
-                       , Wire.Array
-                           (List.filter_map
-                              (fun ident ->
-                                match entity db (Ident ident) with
-                                | Some p ->
-                                    Some
-                                      (Property_maps.display_property_map db p)
-                                | None -> None)
-                              idents) ))
-                     (block_positioned_property_idents_by_position db entity_id)))
-               attrs)))
+               (kw "block.temp/class-property-idents")
+               (Wire.Set
+                  (List.map kw
+                     (Outliner_property.block_class_property_idents db
+                        entity_id)))
+               (assoc
+                  (kw "block.temp/positioned-properties")
+                  (Wire.Map
+                     (List.map
+                        (fun (position, idents) ->
+                          ( kw position
+                          , Wire.Array
+                              (List.filter_map
+                                 (fun ident ->
+                                   match entity db (Ident ident) with
+                                   | Some p ->
+                                       Some
+                                         (Property_maps.display_property_map
+                                            db p)
+                                   | None -> None)
+                                 idents) ))
+                        (block_positioned_property_idents_by_position db
+                           entity_id)))
+                  attrs))))
   in
   (* view-for + no sort-groups-desc? -> default true *)
   let block' =

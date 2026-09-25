@@ -500,7 +500,8 @@ let canonical_tag_keys = [ "db/id"; "db/ident"; "block/uuid" ]
 
 let canonical_block_temp_keys =
   [ "block.temp/positioned-properties"; "block.temp/refs-count"
-  ; "block.temp/order-list-index"; "block.temp/has-children?" ]
+  ; "block.temp/order-list-index"; "block.temp/has-children?"
+  ; "block.temp/class-property-idents" ]
 
 let assert_canonical_block (block : Wire.t) : unit =
   match block with
@@ -3394,5 +3395,3 @@ let cases : unit Alcotest.test_case list =
       test_block_sync_conflicts_resource_owned_by_sync_state_provider
   ; Alcotest.test_case "render-resource-dispatch-rejects-unknown-and-malformed-keys-test" `Quick
       test_render_resource_dispatch_rejects_unknown_and_malformed_keys ]
-
-let () = Alcotest.run "render-resource" [ ("render-resource", cases) ]

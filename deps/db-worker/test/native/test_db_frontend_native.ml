@@ -1234,5 +1234,3 @@ let cases : unit Alcotest.test_case list =
       test_task_queries_with_multi_word_and_custom_statuses;
     Alcotest.test_case "priority-queries-with-multi-word-and-custom-values" `Quick
       test_priority_queries_with_multi_word_and_custom_values ]
-
-let () = Alcotest.run "db-frontend" [ ("db-frontend", cases) ]
