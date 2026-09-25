@@ -2,6 +2,7 @@
   "Pasting blocks whose :block/refs repeat the same new-page ref (e.g. an
   OG-exported page that links [[internet]] many times) must create one page."
   (:require [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.util.entity :as entity]
             [frontend.worker.plain-value :as worker-plain]
@@ -65,6 +66,25 @@
        :block/title "again [[internet]]"
        :block/refs [(page-ref-map "internet")]}])
     (is (= 1 (page-count @conn "internet")))))
+
+(deftest insert-case-distinct-class-refs-creates-both
+  ;; Classes are case-sensitive: #Movie and #movie must create two classes
+  ;; even though both refs share :block/name "movie".
+  (let [conn (conn-with-target)
+        class-ref (fn [title]
+                    {:block/uuid (random-uuid)
+                     :block/title title
+                     :block/name (string/lower-case title)
+                     :block/type "page"})]
+    (paste-blocks!
+     conn
+     [{:block/uuid (random-uuid)
+       :block/title "#Movie and #movie"
+       :block/tags [(class-ref "Movie")
+                    (class-ref "movie")]
+       :block/refs [(class-ref "Movie")
+                    (class-ref "movie")]}])
+    (is (= 2 (page-count @conn "movie")))))
 
 (deftest all-pages-classifies-paste-created-pages-as-pages
   (let [conn (conn-with-target)]
