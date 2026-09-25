@@ -175,6 +175,9 @@
        (route-handler/redirect-to-home!)
        (ui-handler/re-render-root!))
      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
+     (p/do!
+      (graph-handler/<upsert-current-graph-registry!)
+      (graph-handler/remember-current-graph-id-in-tab!))
      (prn "New db created: " full-graph-name)
      full-graph-name)
    (p/catch (fn [error]
