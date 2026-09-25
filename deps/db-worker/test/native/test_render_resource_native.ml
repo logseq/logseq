@@ -2711,6 +2711,104 @@ let test_render_snapshots_isolates_failing_query_resources () =
          response
      with _ -> false)
 
+(* render-snapshots-isolates-incomplete-dsl-query-resources-test *)
+let test_render_snapshots_isolates_incomplete_dsl_query_resources () =
+  let conn, _ = render_resource_fixture () in
+  let db = db_of conn in
+  let journals_key = wkey [ kw "journals" ] in
+  (* Incomplete syntax while editing a /query block. *)
+  let failing_query =
+    wkey [ kw "query"
+         ; Wire.Map
+             [ kw "kind", kw "dsl"; kw "query", Wire.String "((and)" ] ]
+  in
+  let response =
+    Render_resource.render_snapshots db
+      (Wire.Map
+         [ kw "blocks", Wire.Array []
+         ; kw "children", Wire.Array []
+         ; kw "resources", Wire.Array [ failing_query; journals_key ] ])
+      default_runtime
+  in
+  check "sibling no error"
+    (get_in response [ kw "slots"; wkey [ kw "resource"; journals_key ]; kw "error" ]
+     = None);
+  check "sibling value vector"
+    (match get_in response [ kw "slots"; wkey [ kw "resource"; journals_key ]; kw "value" ] with
+     | Some (Wire.Array _) -> true
+     | _ -> false);
+  check "failing query error message"
+    (match
+       get_in response
+         [ kw "slots"; wkey [ kw "resource"; failing_query ]; kw "value"
+         ; kw "error"; kw "message" ]
+     with
+     | Some (Wire.String _) -> true
+     | _ -> false);
+  check "failing query rows empty"
+    (match
+       get_in response
+         [ kw "slots"; wkey [ kw "resource"; failing_query ]; kw "value"; kw "rows" ]
+     with
+     | Some (Wire.Array []) -> true
+     | _ -> false);
+  check "isolation transit"
+    (try
+       wire_eq
+         (Transit_codec.of_string (Transit_codec.to_string response))
+         response
+     with _ -> false)
+
+(* render-snapshots-keeps-query-error-data-transit-safe-test *)
+let test_render_snapshots_keeps_query_error_data_transit_safe () =
+  let conn, _ = render_resource_fixture () in
+  let db = db_of conn in
+  let journals_key = wkey [ kw "journals" ] in
+  (* A readable but invalid DSL query: the datascript parser reports
+     unknown vars. cljs ex-data carries deftyped AST nodes transit cannot
+     encode; the OCaml engine reports a message-only error. *)
+  let failing_query =
+    wkey [ kw "query"
+         ; Wire.Map
+             [ kw "kind", kw "dsl"; kw "query", Wire.String "((and))" ] ]
+  in
+  let response =
+    Render_resource.render_snapshots db
+      (Wire.Map
+         [ kw "blocks", Wire.Array []
+         ; kw "children", Wire.Array []
+         ; kw "resources", Wire.Array [ failing_query; journals_key ] ])
+      default_runtime
+  in
+  check "sibling no error"
+    (get_in response [ kw "slots"; wkey [ kw "resource"; journals_key ]; kw "error" ]
+     = None);
+  check "sibling value vector"
+    (match get_in response [ kw "slots"; wkey [ kw "resource"; journals_key ]; kw "value" ] with
+     | Some (Wire.Array _) -> true
+     | _ -> false);
+  check "failing query error message"
+    (match
+       get_in response
+         [ kw "slots"; wkey [ kw "resource"; failing_query ]; kw "value"
+         ; kw "error"; kw "message" ]
+     with
+     | Some (Wire.String _) -> true
+     | _ -> false);
+  check "failing query rows empty"
+    (match
+       get_in response
+         [ kw "slots"; wkey [ kw "resource"; failing_query ]; kw "value"; kw "rows" ]
+     with
+     | Some (Wire.Array []) -> true
+     | _ -> false);
+  check "query error payloads transit"
+    (try
+       wire_eq
+         (Transit_codec.of_string (Transit_codec.to_string response))
+         response
+     with _ -> false)
+
 (* query-resource-injects-built-in-rules-and-merges-user-rules-test *)
 let test_query_resource_injects_builtin_rules () =
   let conn, u = render_resource_fixture () in
@@ -3249,6 +3347,10 @@ let cases : unit Alcotest.test_case list =
       test_query_resource_keeps_escaped_paren_regex_inputs
   ; Alcotest.test_case "render-snapshots-isolates-failing-query-resources-test" `Quick
       test_render_snapshots_isolates_failing_query_resources
+  ; Alcotest.test_case "render-snapshots-isolates-incomplete-dsl-query-resources-test" `Quick
+      test_render_snapshots_isolates_incomplete_dsl_query_resources
+  ; Alcotest.test_case "render-snapshots-keeps-query-error-data-transit-safe-test" `Quick
+      test_render_snapshots_keeps_query_error_data_transit_safe
   ; Alcotest.test_case "query-resource-injects-built-in-rules-and-merges-user-rules-test" `Quick
       test_query_resource_injects_builtin_rules
   ; Alcotest.test_case "query-resource-preserves-scalar-tuples-test" `Quick
@@ -3267,3 +3369,5 @@ let cases : unit Alcotest.test_case list =
       test_block_sync_conflicts_resource_owned_by_sync_state_provider
   ; Alcotest.test_case "render-resource-dispatch-rejects-unknown-and-malformed-keys-test" `Quick
       test_render_resource_dispatch_rejects_unknown_and_malformed_keys ]
+
+let () = Alcotest.run "render-resource" [ ("render-resource", cases) ]
