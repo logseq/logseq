@@ -924,7 +924,12 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                     in
                     proxy_cell := Some proxy;
                     E.bind (init_worker proxy) (fun _ ->
-                        E.bind (!db_exists_fn ~repo)
+                        E.bind
+                          (if owner_source = "cli" then
+                             (* The CLI never sends create-or-open-db, so a
+                                cli-owned worker must open the graph itself. *)
+                             E.pure true
+                           else !db_exists_fn ~repo)
                           (fun db_exists ->
                              (* A not-yet-created graph is initialized by
                                 the first create-or-open-db call's opts

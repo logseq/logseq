@@ -1089,6 +1089,29 @@ let () =
                     true;
                stop_daemon_opt daemon)));
 
+  (* ---- db-worker-node-start-daemon-opens-new-graph-for-cli-owner ---- *)
+  Fest.Promise.test
+    "db-worker-node-start-daemon-opens-new-graph-for-cli-owner" (fun () ->
+       let daemon = ref None in
+       let data_dir = create_tmp_dir "db-worker-cli-eager-open" in
+       let repo = "logseq_db_cli_eager_open_" ^ random_suffix () in
+       let invoke_calls = ref [] in
+       with_remote_invoke (record_invokes invoke_calls) (fun () ->
+           with_db_exists false (fun () ->
+               let* d =
+                 start_daemon ~root_dir:data_dir ~repo ~owner_source:"cli"
+                   ~log_level:"error" ()
+               in
+               daemon := Some d;
+               Fest.expect
+               |> Fest.equal
+                    (!invoke_calls
+                     = [ ("thread-api/init", Wire.Array [])
+                       ; ( "thread-api/create-or-open-db"
+                         , Wire.Array [ str repo; Wire.Map [] ] ) ])
+                    true;
+               stop_daemon_opt daemon)));
+
   (* ---- db-worker-node-stop-closes-bound-repo ---- *)
   Fest.Promise.test "db-worker-node-stop-closes-bound-repo" (fun () ->
       let data_dir = create_tmp_dir "db-worker-stop-close-db" in
