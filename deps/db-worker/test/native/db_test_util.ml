@@ -2619,7 +2619,11 @@ let initial_data_ops : tx_op list =
           [ "logseq.property.journal/title-format",
             One_value (String "MMM do, yyyy") ]
         "logseq.class/Journal"
-    ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Task"
+    ; class_ident ~extends:[ "logseq.class/Root" ]
+        ~extra:
+          [ "logseq.property.class/properties",
+            One_value (Ref_to (Temp_id "prop-logseq.property/status")) ]
+        "logseq.class/Task"
     ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Comments"
     ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Comment"
     ; class_ident ~extends:[ "logseq.class/Root" ] "logseq.class/Query"
@@ -2709,7 +2713,9 @@ let initial_data_ops : tx_op list =
         ~extra:[ "logseq.property/public?", One_value (Bool false) ]
     ; property_ident ~typ:"default" ~ref_:true ~card:"db.cardinality/one"
         ~extra:
-          [ "logseq.property/enable-history?", One_value (Bool true) ]
+          [ "logseq.property/enable-history?", One_value (Bool true)
+          ; "logseq.property/default-value",
+            One_value (Ref_to (Temp_id "cv-logseq.property/status.todo")) ]
         "logseq.property/status"
     ; property_ident ~typ:"datetime" "logseq.property/scheduled"
     ; property_ident ~typ:"number" ~ref_:true ~card:"db.cardinality/one"

@@ -82,9 +82,18 @@ let display_property_map db (property : entity) : Wire.t =
       wire_assoc "property/closed-values" (Wire.Array cvs) m
   | _ -> m
 
-(* handler property-plain-map: entity-forward-map + closed-values *)
+(* handler property-plain-map: entity-forward-map + class-declared? +
+   closed-values *)
 let property_plain_map db (property : entity) : Wire.t =
-  let m = Plain_value.entity_forward_map db property in
+  let m =
+    wire_assoc "block.temp/class-declared?"
+      (Wire.Bool
+         (Seq.uncons
+            (datoms db Avet ~a:"logseq.property.class/properties"
+               ~v:(Ref property.id) ())
+          |> Option.is_some))
+      (Plain_value.entity_forward_map db property)
+  in
   match property_closed_values db property with
   | Wire.Array (_ :: _ as cvs) ->
       wire_assoc "property/closed-values" (Wire.Array cvs) m

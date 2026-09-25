@@ -6066,6 +6066,7 @@ let test_apply_history_action_redo_replays_status_property () =
               ; blocks =
                   [ { Db_test_util.default_block with
                       b_title = Some "task"
+                    ; b_tags = [ "logseq.class/Task" ]
                     ; b_properties = [ "status", Str "Todo" ] } ] } ]
           ()
       in

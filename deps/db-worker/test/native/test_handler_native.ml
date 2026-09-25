@@ -533,8 +533,37 @@ let test_canonical_block_keeps_own_attributes () =
                     [ "block.temp/positioned-properties"
                     ; "block.temp/order-list-index"
                     ; "block.temp/refs-count"
-                    ; "block.temp/has-children?" ])))
+                    ; "block.temp/has-children?"
+                    ; "block.temp/class-property-idents" ])))
        (wkeys block))
+
+(* (deftest canonical-block-marks-class-provided-property-idents-test ...) *)
+let test_canonical_block_marks_class_provided_property_idents () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.
+                  { default_block with
+                    b_title = Some "task only"
+                  ; b_tags = [ "logseq.class/Task" ] }
+              ; Db_test_util.{ default_block with b_title = Some "plain" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let task_row = canonical_block db (block_by_content db "task only") in
+  let plain_row = canonical_block db (block_by_content db "plain") in
+  let has_status_ident (row : Wire.t) : bool =
+    match wg row "block.temp/class-property-idents" with
+    | Some s -> List.mem (Wire.Keyword "logseq.property/status") (wseq s)
+    | None -> false
+  in
+  check "task member row advertises class-provided status ident"
+    (has_status_ident task_row);
+  check "untagged row does not advertise status ident"
+    (not (has_status_ident plain_row))
 
 (* (deftest canonical-block-numbers-ref-typed-list-siblings-test ...) *)
 let test_canonical_block_numbers_ref_typed_list_siblings () =
@@ -1910,6 +1939,9 @@ let block_cases =
       "canonical-block-keeps-own-attributes-and-only-shallow-references-test"
       `Quick test_canonical_block_keeps_own_attributes
   ; Alcotest.test_case
+      "canonical-block-marks-class-provided-property-idents-test" `Quick
+      test_canonical_block_marks_class_provided_property_idents
+  ; Alcotest.test_case
       "canonical-block-numbers-ref-typed-list-siblings-test" `Quick
       test_canonical_block_numbers_ref_typed_list_siblings
   ; Alcotest.test_case
@@ -2460,6 +2492,74 @@ let test_task_tag_only_positions_default_status () =
        (List.mem "logseq.property/status"
           (positioned_idents (db_of conn) task_only.id "block-left")))
 
+(* (deftest class-declared-property-defaults-apply-only-to-members ...) *)
+let test_class_declared_property_defaults_apply_only_to_members () =
+  let conn =
+    create_conn_with_blocks
+      ~classes:
+        [ ( "SubTask"
+          , Db_test_util.
+              { default_class with c_extends = [ "logseq.class/Task" ] } ) ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.
+                  { default_block with
+                    b_title = Some "task only"
+                  ; b_tags = [ "logseq.class/Task" ] }
+              ; Db_test_util.
+                  { default_block with
+                    b_title = Some "sub task"
+                  ; b_tags = [ "SubTask" ] }
+              ; Db_test_util.{ default_block with b_title = Some "plain" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let task_block = block_by_content db "task only" in
+  let sub_task_block = block_by_content db "sub task" in
+  let plain_block = block_by_content db "plain" in
+  let status_ident_of (b : entity) : string option =
+    (* cljs entity-plus/lookup-kv-then-entity resolves ref defaults to
+       entities, then :db/ident *)
+    match Outliner_property.lookup_kv_with_default_value b "logseq.property/status" with
+    | Some (Ref id) -> (
+        match Ldb.ent_of_id db id with
+        | Some e -> (match Ldb.value e "db/ident" with Some (Keyword k) -> Some k | _ -> None)
+        | None -> None)
+    | Some (Keyword k) -> Some k
+    | _ -> None
+  in
+  check "task member gets status.todo class default"
+    (status_ident_of task_block = Some "logseq.property/status.todo");
+  check "subclass member gets status.todo class default"
+    (status_ident_of sub_task_block = Some "logseq.property/status.todo");
+  check "non-member gets no status default"
+    (status_ident_of plain_block = None);
+  check "task member advertises status ident"
+    (List.mem "logseq.property/status"
+       (Outliner_property.block_class_property_idents db task_block.id));
+  check "subclass member advertises status ident"
+    (List.mem "logseq.property/status"
+       (Outliner_property.block_class_property_idents db sub_task_block.id));
+  check "non-member does not advertise status ident"
+    (not
+       (List.mem "logseq.property/status"
+          (Outliner_property.block_class_property_idents db plain_block.id)));
+  let plain_map_flag (ident : string) : bool option =
+    match Datascript.entity db (Ident ident) with
+    | Some property ->
+        (match wg (Property_maps.property_plain_map db property)
+                 "block.temp/class-declared?" with
+         | Some (Wire.Bool b) -> Some b
+         | _ -> None)
+    | None -> None
+  in
+  check "status flagged class-declared"
+    (plain_map_flag "logseq.property/status" = Some true);
+  check "undeclared property not flagged"
+    (plain_map_flag "logseq.property.repeat/recur-unit" = Some false)
+
 (* endpoint body's wire shape: get-class-properties *)
 let get_class_properties_wire (db : db) (class_ : entity) : Wire.t list =
   List.map
@@ -2678,6 +2778,9 @@ let property_cases =
       test_display_property_map_reflects_default_value_updates
   ; Alcotest.test_case "task-tag-only-positions-default-status" `Quick
       test_task_tag_only_positions_default_status
+  ; Alcotest.test_case
+      "class-declared-property-defaults-apply-only-to-members" `Quick
+      test_class_declared_property_defaults_apply_only_to_members
   ; Alcotest.test_case "get-class-properties-keeps-closed-values-for-icons"
       `Quick test_get_class_properties_keeps_closed_values_for_icons
   ; Alcotest.test_case "property-closed-values-include-every-status-choice"
