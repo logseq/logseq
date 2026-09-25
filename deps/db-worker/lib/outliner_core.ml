@@ -1186,7 +1186,7 @@ let save_block (db : db) (block : Block_map.t) (opts : save_opts)
 let get_right_siblings (node : entity) : entity list =
   match Ldb.ref_ent node "block/parent" with
   | Some parent -> (
-      let children = Ldb.sort_by_order (Ldb.ref_ents parent "block/_parent") in
+      let children = Ldb.get_children parent in
       let rec drop_until l =
         match l with
         | x :: rest ->
@@ -1477,7 +1477,10 @@ let get_target_block (db : db) (blocks : Block_map.t list)
   then begin
     if opts.top then Some (target_block, false)
     else if opts.bottom && not opts.replace_empty_target then
-      match List.rev (Ldb.sort_by_order (Ldb.ref_ents target_block "block/_parent")) with
+      (* cljs (:block/_parent block) — entity-plus filters property-created
+         and closed-value children, so the last child is a content block,
+         never a blank property-value block. *)
+      match List.rev (Ldb.get_children target_block) with
       | last_child :: _ -> Some (last_child, true)
       | [] -> Some (target_block, false)
     else Some (target_block, (if library_ then false else opts.sibling))
