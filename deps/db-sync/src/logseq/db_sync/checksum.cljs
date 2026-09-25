@@ -131,14 +131,27 @@
             {}
             datoms)))
 
+(defn- page-tag-eids
+  "Entity ids of the tags ldb/page? looks for."
+  [db]
+  (set (keep #(d/entid db %)
+             [:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property])))
+
 (defn- checksum-eligible-entity?
-  [db eid]
-  (when-let [ent (d/entity db eid)]
-    (and (uuid? (:block/uuid ent))
-         (not (ldb/built-in? ent))
-         (or (ldb/page? ent)
-             (some? (:block/page ent))
-             (some? (:block/name ent))))))
+  "A non-built-in entity with a uuid that is a page (ldb/page?) or has
+  :block/page or :block/name. Read from datoms rather than through an
+  entity: an entity lookup of an absent property key such as
+  :logseq.property/built-in? also looks up the property's default value,
+  which made this check most of the time of a full recompute."
+  ([db eid]
+   (checksum-eligible-entity? db (page-tag-eids db) eid))
+  ([db tag-eids eid]
+   (and (uuid? (:v (first (d/datoms db :eavt eid :block/uuid))))
+        (not (:v (first (d/datoms db :eavt eid :logseq.property/built-in?))))
+        (or (boolean (some #(contains? tag-eids (:v %))
+                           (d/datoms db :eavt eid :block/tags)))
+            (some? (first (d/datoms db :eavt eid :block/page)))
+            (some? (first (d/datoms db :eavt eid :block/name)))))))
 
 (defn- entity-checksum-tuples
   [db eid e2ee?]
@@ -173,10 +186,11 @@
 
 (defn- db-checksum-tuples
   [db e2ee?]
-  (->> (d/datoms db :avet :block/uuid)
-       (mapcat (fn [{:keys [e]}]
-                 (when (checksum-eligible-entity? db e)
-                   (entity-checksum-tuples db e e2ee?))))))
+  (let [tag-eids (page-tag-eids db)]
+    (->> (d/datoms db :avet :block/uuid)
+         (mapcat (fn [{:keys [e]}]
+                   (when (checksum-eligible-entity? db tag-eids e)
+                     (entity-checksum-tuples db e e2ee?)))))))
 
 (defn- tx-item-eids
   [db-before db-after tx-item]
