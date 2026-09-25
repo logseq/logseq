@@ -2712,6 +2712,36 @@ let graph_datom_export_excluded_eids (db : db) : int list =
       | None -> None)
     graph_datom_export_excluded_kvs
 
+(* cljs exports epoch-ms attrs as plain numbers; on melange, int64 scalars
+   restored from the kvs store carry Instant (which emits #inst and fails
+   cljs int?/number? import checks), so emit them back as numbers.
+   file/* attrs hold real js/Date values and keep #inst (cljs inst? schema). *)
+let instant_export_attrs = [ "file/created-at"; "file/last-modified-at" ]
+
+let rec normalize_instant_values (v : value) : value =
+  match v with
+  | Instant n -> Common_util.value_of_ms n
+  | Map kvs ->
+      Map
+        (List.map
+           (fun (k, x) ->
+             ( k
+             , match k with
+               | Keyword a when List.mem a instant_export_attrs -> x
+               | _ -> normalize_instant_values x ))
+           kvs)
+  | Vector [ e; Keyword a; x ] ->
+      (* datom triple [e a v] *)
+      Vector
+        [ e; Keyword a
+        ; (if List.mem a instant_export_attrs then x
+           else normalize_instant_values x) ]
+  | Vector xs -> Vector (List.map normalize_instant_values xs)
+  | List xs -> List (List.map normalize_instant_values xs)
+  | Set xs -> Set (List.map normalize_instant_values xs)
+  | Tuple xs -> Tuple (List.map (Option.map normalize_instant_values) xs)
+  | _ -> v
+
 (* cljs export-datom *)
 let export_datom (db : db) (d : datom) : value =
   let v =
@@ -3145,6 +3175,7 @@ let build_export (db : db) (options_v : value) : value =
     | t -> fail (t ^ " is an invalid export-type")
   in
   let export_map = patch_invalid_keywords export_map in
+  let export_map = normalize_instant_values export_map in
   let graph_options =
     match bm_get_opt options_m "graph-options" with
     | Some g -> export_options_of_value db g
