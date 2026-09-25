@@ -2,7 +2,8 @@
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.page :as page]
             [frontend.db.hooks :as db-hooks]
-            [frontend.routes :as routes]))
+            [frontend.routes :as routes]
+            [logseq.shui.hooks :as hooks]))
 
 (def ^:private tag-page
   {:block/title "Tag"
@@ -13,14 +14,52 @@
    :block/tags [{:db/ident :logseq.class/Page}]})
 
 (deftest class-pages-paint-the-objects-table-before-children-test
-  (is (>= @#'page/class-page-below-fold-delay-ms 400)
-      "Linked refs must wait so they cannot steal the first table snapshot batch.")
   (is (true? (#'page/defer-class-page-below-fold? tag-page {}))
       "Tags and Movies must paint class-objects before children and linked refs.")
   (is (false? (#'page/defer-class-page-below-fold? tag-page {:sidebar? true})))
   (is (false? (#'page/defer-class-page-below-fold? tag-page {:tag-dialog? true})))
   (is (false? (#'page/defer-class-page-below-fold? plain-page {}))
       "Ordinary pages still load their block tree on first paint."))
+
+(defn- below-fold
+  "Runs `use-below-fold-ready` with a stubbed state cell. Returns what the
+   hook returned, the effect's cleanup (a timer is armed when it is a fn),
+   the values the hook set and the deps of its memoized callback."
+  [defer? released?]
+  (let [cleanup (atom nil)
+        set-values (atom [])
+        callback-deps (atom ::none)]
+    (with-redefs [hooks/use-state (fn [_initial]
+                                    [released? #(swap! set-values conj %)])
+                  hooks/use-callback (fn [f deps] (reset! callback-deps deps) f)
+                  hooks/use-effect! (fn [f _deps] (reset! cleanup (f)))]
+      (let [[ready? release!] (#'page/use-below-fold-ready defer?)]
+        (when (fn? @cleanup) (@cleanup))
+        {:ready? ready?
+         :release! release!
+         :timer? (fn? @cleanup)
+         :set-values set-values
+         :callback-deps @callback-deps}))))
+
+(deftest class-page-body-waits-for-the-first-table-window-test
+  (let [{:keys [ready? timer?]} (below-fold false false)]
+    (is (true? ready?) "Ordinary pages never hold their body.")
+    (is (false? timer?)))
+  (let [{:keys [ready? timer? release! set-values callback-deps]} (below-fold true false)]
+    (is (false? ready?)
+        "Children and linked refs wait until the objects table reports its first window.")
+    (is (true? timer?)
+        "A table that never reports still releases the body after the cap.")
+    (is (= [] callback-deps)
+        "The release callback keeps its identity, so the memoized tabs skip the release render.")
+    (release!)
+    (is (= [true] @set-values)
+        "The table's first-window report releases the body."))
+  (let [{:keys [ready? timer?]} (below-fold true true)]
+    (is (true? ready?))
+    (is (false? timer?) "The cap is cleared once the body is released."))
+  (is (>= @#'page/class-page-below-fold-delay-ms 400)
+      "The cap stays long enough for a table whose first window is slow."))
 
 (def ^:private page-uuid #uuid "11111111-1111-1111-1111-111111111111")
 (def ^:private parent-uuid #uuid "22222222-2222-2222-2222-222222222222")
