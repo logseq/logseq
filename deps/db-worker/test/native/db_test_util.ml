@@ -2717,6 +2717,7 @@ let initial_data_ops : tx_op list =
           ; "logseq.property/default-value",
             One_value (Ref_to (Temp_id "cv-logseq.property/status.todo")) ]
         "logseq.property/status"
+    ; property_ident ~typ:"datetime" "logseq.property/deadline"
     ; property_ident ~typ:"datetime" "logseq.property/scheduled"
     ; property_ident ~typ:"number" ~ref_:true ~card:"db.cardinality/one"
         ~extra:[ "logseq.property/public?", One_value (Bool false) ]
@@ -2764,6 +2765,17 @@ let initial_data_ops : tx_op list =
                ; "logseq.property/hide?", One_value (Bool true)
                ; "logseq.property/public?", One_value (Bool false) ]
         "block/title"
+    ; (* cljs initial data — the empty-placeholder value entity; clearing a
+         ref property stores this ident as the value *)
+      Datascript.Entity
+        { db_id = None
+        ; attrs =
+            [ "db/ident",
+              One_value (Keyword "logseq.property/empty-placeholder")
+            ; "block/uuid",
+              One_value (Uuid "00000004-1267-0549-0045-000000000000")
+            ]
+        }
     ; (* cljs build-initial-files — file entities are part of
          build-db-initial-data; :file/path is unique-identity, so the
          importer's default-save-file upserts onto config.edn, which must

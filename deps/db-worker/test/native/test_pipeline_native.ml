@@ -2722,6 +2722,197 @@ let test_move_page_under_page_registers_namespace_in_library_test () =
         (Entity_view.page_in_library (db_of conn)
            (Entity_view.of_entity leaf')))
 
+
+(* ---------- fdde4679b7 additions ----------
+   pipeline_test.cljs clearing-past-deadline-removes-journal-linked-ref-test
+   and date_property_test.cljs clearing-past-deadline-drops-journal-ref-from-rebuild. *)
+
+(* cljs test-helper block-ref-ids *)
+let block_ref_ids (b : entity) : int list = Ldb.ref_ids b "block/refs"
+
+(* cljs test-helper linked-ref-ids *)
+let linked_ref_ids (db : db) (page : entity) : int list =
+  List.map
+    (fun (e : entity) -> e.id)
+    (Db_reference.get_linked_references db page.id).ref_blocks
+
+let entity_by_uuid_exn conn (uuid : string) : entity =
+  Option.get
+    (Datascript.entity (db_of conn) (Lookup_ref ("block/uuid", Uuid uuid)))
+
+(* (deftest clearing-past-deadline-removes-journal-linked-ref-test ...) *)
+let test_clearing_past_deadline_removes_journal_linked_ref () =
+  let past_day = 20260923 and today_day = 20260924 in
+  let past_ms = Date_time_util.int_to_local_ms past_day in
+  let today_ms = Date_time_util.int_to_local_ms today_day in
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some past_day };
+            blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_journal = Some today_day };
+            blocks =
+              [ { default_block with
+                    b_title = Some "task"; b_tags = [ "logseq.class/Task" ] } ] } ]
+      ()
+  in
+  let task = Option.get (Db_test_util.find_block_by_content (db_of conn) "task") in
+  let past_journal =
+    Option.get (Db_test_util.find_journal_by_journal_day (db_of conn) past_day)
+  in
+  let today_journal =
+    Option.get (Db_test_util.find_journal_by_journal_day (db_of conn) today_day)
+  in
+  let task' () = entity_by_uuid_exn conn (uuid_of task) in
+  with_transact_pipeline (fun () ->
+      (* (testing "Clearing a past Deadline to empty-placeholder drops the journal ref") *)
+      Outliner_property.batch_set_property conn
+        [ Wire.Uuid (uuid_of task) ] "logseq.property/deadline"
+        (Wire.Int64 past_ms) ();
+      check "Setting a past Deadline adds the journal to :block/refs"
+        (List.mem past_journal.id (block_ref_ids (task' ())));
+      check "The past journal lists the task as a linked reference"
+        (List.mem task.id (linked_ref_ids (db_of conn) past_journal));
+      Outliner_property.batch_set_property conn
+        [ Wire.Uuid (uuid_of task) ] "logseq.property/deadline"
+        (Wire.Keyword "logseq.property/empty-placeholder") ();
+      check "UI clear keeps Deadline on the node"
+        (Ldb.value (task' ()) "logseq.property/deadline"
+         = Some (Keyword "logseq.property/empty-placeholder"));
+      check "Clearing a past Deadline retracts the journal from :block/refs"
+        (not (List.mem past_journal.id (block_ref_ids (task' ()))));
+      check "The past journal no longer lists the task as a linked reference"
+        (not (List.mem task.id (linked_ref_ids (db_of conn) past_journal)));
+      (* (testing "Clearing today's Deadline also drops the journal ref") *)
+      Outliner_property.batch_set_property conn
+        [ Wire.Uuid (uuid_of task) ] "logseq.property/deadline"
+        (Wire.Int64 today_ms) ();
+      check "today's Deadline adds today's journal to :block/refs"
+        (List.mem today_journal.id (block_ref_ids (task' ())));
+      Outliner_property.batch_set_property conn
+        [ Wire.Uuid (uuid_of task) ] "logseq.property/deadline"
+        (Wire.Keyword "logseq.property/empty-placeholder") ();
+      check "Clearing today's Deadline retracts today's journal from :block/refs"
+        (not (List.mem today_journal.id (block_ref_ids (task' ()))));
+      (* (testing "Removing the property still clears the journal ref") *)
+      Outliner_property.batch_set_property conn
+        [ Wire.Uuid (uuid_of task) ] "logseq.property/deadline"
+        (Wire.Int64 past_ms) ();
+      check "re-setting past Deadline re-adds the journal ref"
+        (List.mem past_journal.id (block_ref_ids (task' ())));
+      Outliner_property.remove_block_property conn
+        (Wire.Uuid (uuid_of task)) "logseq.property/deadline";
+      check "deadline removed"
+        (Ldb.value (task' ()) "logseq.property/deadline" = None);
+      check "Fully removing Deadline retracts the past journal from :block/refs"
+        (not (List.mem past_journal.id (block_ref_ids (task' ())))))
+
+(* cljs keyword name segment (cljs.core/name) *)
+let kw_name (k : string) : string =
+  match String.rindex_opt k '/' with
+  | Some i -> String.sub k (i + 1) (String.length k - i - 1)
+  | None -> k
+
+(* (deftest clearing-past-deadline-drops-journal-ref-from-rebuild ...) *)
+let test_clearing_past_deadline_drops_journal_ref_from_rebuild () =
+  (* (testing "Set a past Deadline, then clear it the same way the UI does") *)
+  let past_day = 20260923 in
+  let timestamp = Date_time_util.int_to_local_ms past_day in
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some past_day };
+            blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "today" };
+            blocks =
+              [ { default_block with
+                    b_title = Some "task"
+                  ; b_tags = [ "logseq.class/Task" ]
+                  ; b_properties =
+                      [ "logseq.property/deadline", Int (Int64.to_int timestamp) ] } ] } ]
+      ()
+  in
+  let block = Option.get (Db_test_util.find_block_by_content (db_of conn) "task") in
+  let journal_id =
+    (Option.get
+       (Db_test_util.find_journal_by_journal_day (db_of conn) past_day)).id
+  in
+  check "A past Deadline creates a journal ref"
+    (List.mem journal_id
+       (Outliner_pipeline.db_rebuild_block_refs (db_of conn) block ()));
+  check "Bulk rebuild also creates the past Deadline journal ref"
+    (List.mem journal_id
+       ((Outliner_pipeline.db_rebuild_block_refs_fn (db_of conn)) block));
+  Outliner_property.set_block_property conn
+    (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid (uuid_of block) ])
+    "logseq.property/deadline"
+    (Wire.Keyword "logseq.property/empty-placeholder");
+  let cleared = entity_by_uuid_exn conn (uuid_of block) in
+  let rebuilt = Outliner_pipeline.db_rebuild_block_refs (db_of conn) cleared () in
+  let rebuilt_bulk =
+    (Outliner_pipeline.db_rebuild_block_refs_fn (db_of conn)) cleared
+  in
+  check "cleared deadline keeps empty-placeholder on the node"
+    (Ldb.value cleared "logseq.property/deadline"
+     = Some (Keyword "logseq.property/empty-placeholder"));
+  check "empty-placeholder must not resolve to any journal page"
+    (Outliner_pipeline.get_journal_day_from_long (db_of conn)
+       (Keyword "logseq.property/empty-placeholder")
+     = None);
+  check "Clearing a past Deadline to empty-placeholder drops the journal ref"
+    (not (List.mem journal_id rebuilt));
+  check "Bulk rebuild also drops the past Deadline journal ref"
+    (not (List.mem journal_id rebuilt_bulk));
+  (* (testing "Clearing a date property to empty-placeholder also drops the journal ref") *)
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~properties:
+        [ "due", { Db_test_util.default_property with p_type = "date" } ]
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some past_day };
+            blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "today" };
+            blocks =
+              [ { default_block with
+                    b_title = Some "dated"
+                  ; b_properties =
+                      [ ( "due"
+                        , Vec
+                            [ Kw "build/page"
+                            ; Map [ "build/journal", Int past_day ] ] ) ] } ] } ]
+      ()
+  in
+  let block = Option.get (Db_test_util.find_block_by_content (db_of conn) "dated") in
+  let journal_id =
+    (Option.get
+       (Db_test_util.find_journal_by_journal_day (db_of conn) past_day)).id
+  in
+  let due_ident =
+    Outliner_pipeline.properties_of block
+    |> List.find_map (fun (k, _) -> if kw_name k = "due" then Some k else None)
+  in
+  check "due-ident exists" (Option.is_some due_ident);
+  check "date property creates a journal ref"
+    (List.mem journal_id
+       (Outliner_pipeline.db_rebuild_block_refs (db_of conn) block ()));
+  Outliner_property.set_block_property conn
+    (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid (uuid_of block) ])
+    (Option.get due_ident)
+    (Wire.Keyword "logseq.property/empty-placeholder");
+  check "Clearing a date property to empty-placeholder drops the journal ref"
+    (not
+       (List.mem journal_id
+          (Outliner_pipeline.db_rebuild_block_refs (db_of conn)
+             (entity_by_uuid_exn conn (uuid_of block))
+             ())))
+
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "nested-insert-keeps-parent-revision-test" `Quick test_nested_insert_keeps_parent_revision_test;
     Alcotest.test_case "sibling-reorder-keeps-parent-revision-test" `Quick test_sibling_reorder_keeps_parent_revision_test;
@@ -2763,4 +2954,6 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "empty-tag-template-on-asset-allows-asset-create-test" `Quick test_empty_tag_template_on_asset_allows_asset_create_test;
     Alcotest.test_case "journal-tag-template-applied-on-repeating-task-reschedule-test" `Quick test_journal_tag_template_applied_on_repeating_task_reschedule_test;
     Alcotest.test_case "interleaved-graphs-reuse-their-own-reference-attrs-test" `Quick test_interleaved_graphs_reuse_their_own_reference_attrs_test;
-    Alcotest.test_case "ordinary-transactions-reuse-cached-reference-attrs-test" `Quick test_ordinary_transactions_reuse_cached_reference_attrs_test ]
+    Alcotest.test_case "ordinary-transactions-reuse-cached-reference-attrs-test" `Quick test_ordinary_transactions_reuse_cached_reference_attrs_test;
+    Alcotest.test_case "clearing-past-deadline-removes-journal-linked-ref-test" `Quick test_clearing_past_deadline_removes_journal_linked_ref;
+    Alcotest.test_case "clearing-past-deadline-drops-journal-ref-from-rebuild" `Quick test_clearing_past_deadline_drops_journal_ref_from_rebuild ]
