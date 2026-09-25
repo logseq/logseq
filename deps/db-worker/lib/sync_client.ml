@@ -188,10 +188,6 @@ let update_presence (editing_block_uuid : Wire.t) : unit =
       | None -> ())
   | None -> ()
 
-let enqueue_asset_task (client : Sync_state.client)
-    (task : unit -> unit Db_worker_effect.t) : unit =
-  Sync_state.enqueue client.asset_queue task
-
 let ensure_client_state repo : Sync_state.client = Sync_state.new_client repo
 
 (* with-redefs seam for cljs platform/websocket-connect — the default is
@@ -354,7 +350,8 @@ and connect repo (client : Sync_state.client) (url : string)
                     >>= fun () ->
                     Db_worker_effect.pure
                       (Sync_assets.enqueue_asset_sync repo updated
-                         ~enqueue_asset_task ~current_client
+                         ~enqueue_asset_task:Sync_assets.enqueue_asset_task
+                         ~current_client
                          ~broadcast_rtc_state:broadcast_rtc_state_client))
            | Web_socket.Message data ->
                touch_last_ws_message updated;
@@ -502,8 +499,9 @@ let download_missing_assets repo graph_id =
 let retry_asset_upload repo : unit Db_worker_effect.t =
   (match current_client repo with
    | Some client ->
-       Sync_assets.enqueue_asset_sync repo client ~enqueue_asset_task
-         ~current_client ~broadcast_rtc_state:broadcast_rtc_state_client
+       Sync_assets.enqueue_asset_sync repo client
+         ~enqueue_asset_task:Sync_assets.enqueue_asset_task ~current_client
+         ~broadcast_rtc_state:broadcast_rtc_state_client
    | None -> ());
   Db_worker_effect.pure ()
 

@@ -41,9 +41,6 @@ let send (ws : Sync_state.ws_endpoint) (message : Wire.t) : unit =
 
 let ws_open = Sync_transport.ws_open
 
-let enqueue_asset_task (client : Sync_state.client)
-    (task : unit -> unit Db_worker_effect.t) : unit =
-  Sync_state.enqueue client.asset_queue task
 
 let enqueue_send_task (client : Sync_state.client)
     (task : unit -> unit Db_worker_effect.t) : unit =
@@ -306,7 +303,8 @@ let handle_hello repo (client : Sync_state.client) local_tx remote_tx
    | Some l when remote_tx_n > l -> request_pull client l
    | _ -> ());
   Sync_assets.enqueue_asset_sync repo client
-    ~enqueue_asset_task ~current_client ~broadcast_rtc_state;
+    ~enqueue_asset_task:Sync_assets.enqueue_asset_task ~current_client
+    ~broadcast_rtc_state;
   Worker_log.info "db-sync/handle-hello"
     [ ("empty-inflight?", string_of_bool (!(client.inflight) = []))
     ; ("online?", string_of_bool (Sync_state.online ()))

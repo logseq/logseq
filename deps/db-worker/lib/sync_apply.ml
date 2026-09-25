@@ -299,9 +299,7 @@ let rehydrate_large_titles_from_db repo graph_id : unit Db_worker_effect.t =
 
 let request_asset_download repo asset_uuid : unit =
   Sync_assets.request_asset_download repo asset_uuid
-    ~current_client
-    ~enqueue_asset_task:(fun client task ->
-       Sync_state.enqueue client.Sync_state.asset_queue task)
+    ~current_client ~enqueue_asset_task:Sync_assets.enqueue_asset_task
     ~broadcast_rtc_state:(fun client -> broadcast_rtc_state (Some client))
 
 (* ---- history op helpers ---- *)
@@ -2933,8 +2931,7 @@ let handle_local_tx_impl repo (tx_report : tx_report) : unit =
         in
         if graph_remote then
           Sync_assets.enqueue_asset_sync repo client
-            ~enqueue_asset_task:(fun c task ->
-               Sync_state.enqueue c.Sync_state.asset_queue task)
+            ~enqueue_asset_task:Sync_assets.enqueue_asset_task
             ~current_client
             ~broadcast_rtc_state:(fun c -> broadcast_rtc_state (Some c)))
     | _ -> ()
