@@ -14,6 +14,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.editor.format :as editor-format]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
@@ -988,6 +989,17 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest keyup-handler-converts-backticks-to-code-block-test
+  (doseq [value ["```" "``````"]]
+    (let [events (atom [])]
+      (with-redefs [state/set-edit-content! (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/pub-event! (fn [event] (swap! events conj event))]
+        (keyup-handler {:value value}))
+      (is (= [[:editor/upsert-type-block :code]]
+             (map (fn [[event-name {:keys [type]}]] [event-name type]) @events))
+          value))))
+
 (defn- create-tag-with-alias!
   []
   (let [{:keys [init-tx block-props-tx]}
@@ -1314,6 +1326,29 @@
           :cursor-pos 9}
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
+
+(defn- keydown-backtick-autopaired?
+  [event]
+  (let [autopaired? (atom false)
+        input #js {:id "edit-block-test"
+                   :value ""}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 0)
+                  editor-autopair/autopair (fn [& _] (reset! autopaired? true))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      @autopaired?)))
+
+(deftest keydown-not-matched-handler-skips-autopair-during-composition
+  (is (keydown-backtick-autopaired? #js {:key "`"
+                                         :isComposing false}))
+  (is (not (keydown-backtick-autopaired? #js {:key "`"
+                                              :isComposing true
+                                              :keyCode 229}))))
 
 (defn- delete-block-at-zero-pos-result
   [block & {:keys [left-sibling]}]
