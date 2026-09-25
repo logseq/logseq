@@ -758,6 +758,33 @@ let test_search_blocks_fuzzy_prioritizes_page_candidates () =
       check "page row first" (br_uuid first "block/uuid" = Some page_uuid)
   | [] -> check "page row first" false
 
+(* cmdk "Search only current page" filter: :page opt scopes all hits to the
+   page's blocks. Regression coverage for the :page wire option. *)
+let test_search_blocks_page_filter () =
+  let conn =
+    T.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ T.{ page = { default_page with pg_title = Some "Alpha" }
+            ; blocks = [ { T.default_block with b_title = Some "shared term one" } ] }
+        ; T.{ page = { default_page with pg_title = Some "Beta" }
+            ; blocks = [ { T.default_block with b_title = Some "shared term two" } ] } ]
+      ()
+  in
+  let sdb = open_search_db () in
+  let _ = index_conn_blocks conn sdb in
+  let db = Datascript.db conn in
+  let alpha_uuid =
+    match T.find_page_by_title db "Alpha" with
+    | Some p -> block_uuid p
+    | None -> check "Alpha page exists" false; ""
+  in
+  let res =
+    run_search conn sdb "shared term"
+      ~opts:(opts ~limit:10 ~enable_snippet:false ~page:alpha_uuid ()) ()
+  in
+  check_list "page filter keeps only Alpha blocks" [ "shared term one" ]
+    (result_titles (outcome_rows res)) Fun.id
+
 let test_search_blocks_skips_fuzzy_for_multi_term_keyword_hits () =
   let conn, sdb = graph_with_blocks [ "Page-10000" ] in
   let res =
@@ -2030,6 +2057,7 @@ let () =
   test_search_blocks_fuzzy_matches_from_search_db ();
   test_search_blocks_fuzzy_matches_sanitized_umlaut ();
   test_search_blocks_fuzzy_prioritizes_page_candidates ();
+  test_search_blocks_page_filter ();
   test_search_blocks_skips_fuzzy_for_multi_term_keyword_hits ();
   test_search_blocks_skips_fts_for_enough_exact_title_hits ();
   test_search_blocks_normalizes_tag_title_query ();
