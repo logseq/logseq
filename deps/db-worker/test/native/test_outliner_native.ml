@@ -5192,7 +5192,7 @@ let page_updated_at conn (page : entity) : int =
 (* cljs test-helper reset-page-updated-at! *)
 let reset_page_updated_at conn (page : entity) : int =
   transact_maps conn
-    [ [ "db/id", Int page.id; "block/updated-at", Inst 1L ] ];
+    [ [ "db/id", Int page.id; "block/updated-at", Int 1 ] ];
   page_updated_at conn page
 
 (* (deftest page-updated-at-bumps-on-child-insert-reorder-and-move ...) *)

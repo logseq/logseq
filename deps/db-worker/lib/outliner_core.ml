@@ -246,11 +246,11 @@ let page_updated_at_tx (db : db) (page_eid : entity_id option) : tx_op option =
       | Some page ->
           let attrs =
             ( "block/updated-at"
-            , One_value (Instant (Date_time_util.time_ms ())) )
-            :: (if Option.is_none (Ldb.int_value page "block/created-at")
+            , One_value (Common_util.value_of_ms (Date_time_util.time_ms ())) )
+            :: (if Option.is_none (Ldb.value page "block/created-at")
                then
                  [ ( "block/created-at"
-                   , One_value (Instant (Date_time_util.time_ms ())) ) ]
+                   , One_value (Common_util.value_of_ms (Date_time_util.time_ms ()))) ]
                else [])
           in
           (* an explicit :db/id reserves that eid for the whole tx up front,
