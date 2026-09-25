@@ -873,6 +873,28 @@
         (is (= "Hybrid retrieval" (:title indexed)))
         (is (not (contains? indexed :vector-title)))))))
 
+(deftest block-index-uses-property-value-for-numeric-closed-choices
+  (testing "numeric closed choices index by :logseq.property/value so [[ can find them"
+    (let [choice-id #uuid "00000000-0000-0000-0000-000000000249"
+          property {:db/id 2
+                    :db/ident :nationality-version
+                    :block/uuid #uuid "00000000-0000-0000-0000-00000000024a"}
+          choice {:db/id 1
+                  :block/uuid choice-id
+                  :block/parent property
+                  :block/page property
+                  :block/closed-value-property :nationality-version
+                  :logseq.property/value 42}]
+      (with-redefs [ldb/page? (constantly false)
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly true)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index choice)]
+          (is (= (str choice-id) (:id indexed)))
+          (is (= "42" (:title indexed))))))))
+
 (deftest build-blocks-indice-uses-block-index
   (testing "large pages do not sort siblings for vector title context"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000250"

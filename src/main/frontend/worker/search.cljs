@@ -585,25 +585,33 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Convert a block to the index for searching."
   ([block]
    (block->index block {:include-vector-title? false}))
-  ([{:block/keys [uuid page title] :as block} {:keys [include-vector-title?]
-                                               :or {include-vector-title? false}}]
-  (when-not (or
-             (and (string? title) (> (count title) 10000))
-             (string/blank? title))        ; empty page or block
-    (try
-      (let [title (block-search-title block)]
-        (when uuid
-          (cond-> {:id (str uuid)
-                   :page (str (or (:block/uuid page) uuid))
-                   ;; Keyword index must match accent-stripped queries.
-                   ;; SQLite LIKE/NOCASE only folds ASCII, so page/object titles
-                   ;; cannot keep umlauts while queries are search-normalized.
-                   :title (sanitize title)}
-            include-vector-title?
-            (assoc :vector-title title))))
-      (catch :default e
-        (prn "Error: failed to run block->index on block " (:db/id block))
-        (js/console.error e))))))
+  ([block {:keys [include-vector-title?]
+           :or {include-vector-title? false}}]
+  (let [;; Numeric closed choices store the number in :logseq.property/value
+        ;; instead of :block/title; index them by the value so they're searchable
+        block (let [v (:logseq.property/value block)]
+                (if (and (nil? (:block/title block))
+                         (or (string? v) (number? v)))
+                  (assoc block :block/title (str v))
+                  block))
+        {:block/keys [uuid page title]} block]
+    (when-not (or
+               (and (string? title) (> (count title) 10000))
+               (string/blank? title))      ; empty page or block
+      (try
+        (let [title (block-search-title block)]
+          (when uuid
+            (cond-> {:id (str uuid)
+                     :page (str (or (:block/uuid page) uuid))
+                     ;; Keyword index must match accent-stripped queries.
+                     ;; SQLite LIKE/NOCASE only folds ASCII, so page/object titles
+                     ;; cannot keep umlauts while queries are search-normalized.
+                     :title (sanitize title)}
+              include-vector-title?
+              (assoc :vector-title title))))
+        (catch :default e
+          (prn "Error: failed to run block->index on block " (:db/id block))
+          (js/console.error e)))))))
 
 (def ^:private search-result-block-key ::block)
 
