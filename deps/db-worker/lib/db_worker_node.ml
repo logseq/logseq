@@ -267,6 +267,10 @@ let remote_invoke_fn : (string -> string -> string E.t) ref =
 let assert_ownership_fn : (Graph_lifecycle.runtime -> unit) ref =
   ref Graph_lifecycle.assert_ownership
 
+(* with-redefs seam for platform storage :db-exists? — tests substitute
+   a stub so they don't need a real db.sqlite on disk. *)
+let db_exists_fn : (repo:string -> bool E.t) ref = ref Sqlite.db_exists
+
 let init_worker (proxy : proxy) : string E.t =
   invoke_args ~proxy ~method_str:"thread-api/init"
     ~method_label:"thread-api/init" ~args:[]
@@ -920,19 +924,27 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                     in
                     proxy_cell := Some proxy;
                     E.bind (init_worker proxy) (fun _ ->
-                        E.bind
-                          (invoke_args ~proxy
-                             ~method_str:"thread-api/create-or-open-db"
-                             ~method_label:"thread-api/create-or-open-db"
-                             ~args:
-                               [ Wire.String repo
-                               ; startup_db_opts
-                                   ~create_empty_db:
-                                     opts.opt_create_empty_db ])
-                          (fun _ ->
-                             start_http_server ~proxy ~repo ~host ~port
-                               ~owner_source ~root_dir
-                               ~on_stopped:opts.opt_on_stopped)))
+                        E.bind (!db_exists_fn ~repo)
+                          (fun db_exists ->
+                             (* A not-yet-created graph is initialized by
+                                the first create-or-open-db call's opts
+                                (e.g. import datoms), so only eagerly open
+                                a graph that already exists on disk. *)
+                             E.bind
+                               (if db_exists || opts.opt_create_empty_db then
+                                  invoke_args ~proxy
+                                    ~method_str:"thread-api/create-or-open-db"
+                                    ~method_label:"thread-api/create-or-open-db"
+                                    ~args:
+                                      [ Wire.String repo
+                                      ; startup_db_opts
+                                          ~create_empty_db:
+                                            opts.opt_create_empty_db ]
+                                else E.pure "")
+                               (fun _ ->
+                                  start_http_server ~proxy ~repo ~host ~port
+                                    ~owner_source ~root_dir
+                                    ~on_stopped:opts.opt_on_stopped))))
              in
              let abort_startup (error : exn) : daemon E.t =
                E.bind

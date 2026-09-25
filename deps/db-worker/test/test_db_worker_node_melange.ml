@@ -547,6 +547,18 @@ let with_remote_invoke f thunk =
        Js.Promise.reject (exn_of_rejection e))
     (Js.Promise.then_ (fun v -> restore (); Js.Promise.resolve v) (thunk ()))
 
+(* cljs tests stub platform storage :db-exists? — same with-redefs shape
+   as with_remote_invoke. *)
+let with_db_exists v thunk =
+  let saved = !Db_worker_node.db_exists_fn in
+  Db_worker_node.db_exists_fn := (fun ~repo:_ -> Db_worker_effect.pure v);
+  let restore () = Db_worker_node.db_exists_fn := saved in
+  Js.Promise.catch
+    (fun e ->
+       restore ();
+       Js.Promise.reject (exn_of_rejection e))
+    (Js.Promise.then_ (fun v -> restore (); Js.Promise.resolve v) (thunk ()))
+
 (* ============================== tests ============================== *)
 
 let () =
@@ -1007,29 +1019,30 @@ let () =
        let repo = "logseq_db_create_empty_start_" ^ random_suffix () in
        let invoke_calls = ref [] in
        with_remote_invoke (record_invokes invoke_calls) (fun () ->
-           let run =
-             let* d =
-               start_daemon ~root_dir:data_dir ~repo ~create_empty_db:true
-                 ~log_level:"error" ()
+           with_db_exists false (fun () ->
+               let run =
+                 let* d =
+                   start_daemon ~root_dir:data_dir ~repo ~create_empty_db:true
+                     ~log_level:"error" ()
              in
              daemon := Some d;
              Fest.expect
              |> Fest.equal
                   (List.hd !invoke_calls = ("thread-api/init", Wire.Array []))
                   true;
-             Fest.expect
-             |> Fest.equal
-                  (List.nth !invoke_calls 1
-                   = ( "thread-api/create-or-open-db"
-                     , Wire.Array
-                         [ str repo
-                         ; kvs
-                             [ "datoms", Wire.Array []
-                             ; "sync-download-graph?", Wire.Bool true ] ] ))
-                  true;
-             stop_daemon_opt daemon
-           in
-           run));
+                 Fest.expect
+                 |> Fest.equal
+                      (List.nth !invoke_calls 1
+                       = ( "thread-api/create-or-open-db"
+                         , Wire.Array
+                             [ str repo
+                             ; kvs
+                                 [ "datoms", Wire.Array []
+                                 ; "sync-download-graph?", Wire.Bool true ] ] ))
+                      true;
+                 stop_daemon_opt daemon
+               in
+               run)));
 
   (* ---- db-worker-node-start-daemon-uses-default-startup-opts-without-create-empty ---- *)
   Fest.Promise.test
@@ -1040,21 +1053,41 @@ let () =
        let repo = "logseq_db_default_start_" ^ random_suffix () in
        let invoke_calls = ref [] in
        with_remote_invoke (record_invokes invoke_calls) (fun () ->
-           let* d =
-             start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
-           in
-           daemon := Some d;
-           Fest.expect
-           |> Fest.equal
-                (List.hd !invoke_calls = ("thread-api/init", Wire.Array []))
-                true;
-           Fest.expect
-           |> Fest.equal
-                (List.nth !invoke_calls 1
-                 = ( "thread-api/create-or-open-db"
-                   , Wire.Array [ str repo; Wire.Map [] ] ))
-                true;
-           stop_daemon_opt daemon));
+           with_db_exists true (fun () ->
+               let* d =
+                 start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
+               in
+               daemon := Some d;
+               Fest.expect
+               |> Fest.equal
+                    (List.hd !invoke_calls = ("thread-api/init", Wire.Array []))
+                    true;
+               Fest.expect
+               |> Fest.equal
+                    (List.nth !invoke_calls 1
+                     = ( "thread-api/create-or-open-db"
+                       , Wire.Array [ str repo; Wire.Map [] ] ))
+                    true;
+               stop_daemon_opt daemon)));
+
+  (* ---- db-worker-node-start-daemon-defers-open-for-new-graph ---- *)
+  Fest.Promise.test "db-worker-node-start-daemon-defers-open-for-new-graph"
+    (fun () ->
+       let daemon = ref None in
+       let data_dir = create_tmp_dir "db-worker-defer-open" in
+       let repo = "logseq_db_defer_open_" ^ random_suffix () in
+       let invoke_calls = ref [] in
+       with_remote_invoke (record_invokes invoke_calls) (fun () ->
+           with_db_exists false (fun () ->
+               let* d =
+                 start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
+               in
+               daemon := Some d;
+               Fest.expect
+               |> Fest.equal
+                    (!invoke_calls = [ ("thread-api/init", Wire.Array []) ])
+                    true;
+               stop_daemon_opt daemon)));
 
   (* ---- db-worker-node-stop-closes-bound-repo ---- *)
   Fest.Promise.test "db-worker-node-stop-closes-bound-repo" (fun () ->
@@ -1062,10 +1095,11 @@ let () =
       let repo = "logseq_db_stop_close_" ^ random_suffix () in
       let invoke_calls = ref [] in
       with_remote_invoke (record_invokes invoke_calls) (fun () ->
-          let* d =
-            start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
-          in
-          let* () = stop_daemon d in
+          with_db_exists true (fun () ->
+              let* d =
+                start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
+              in
+              let* () = stop_daemon d in
           Fest.expect
           |> Fest.equal
                (List.hd !invoke_calls = ("thread-api/init", Wire.Array []))
@@ -1076,12 +1110,12 @@ let () =
                 = ( "thread-api/create-or-open-db"
                   , Wire.Array [ str repo; Wire.Map [] ] ))
                true;
-          Fest.expect
-          |> Fest.equal
-               (List.nth !invoke_calls (List.length !invoke_calls - 1)
-                = ("thread-api/close-db", Wire.Array [ str repo ]))
-               true;
-          Js.Promise.resolve ()));
+              Fest.expect
+              |> Fest.equal
+                   (List.nth !invoke_calls (List.length !invoke_calls - 1)
+                    = ("thread-api/close-db", Wire.Array [ str repo ]))
+                   true;
+              Js.Promise.resolve ())));
 
   (* ---- db-worker-node-stop-retains-publication-until-process-exit ---- *)
   Fest.Promise.test
@@ -1090,29 +1124,30 @@ let () =
       let repo = "logseq_db_server_list_" ^ random_suffix () in
       let server_list_file = Server_list.path data_dir in
       with_remote_invoke nil_invokes (fun () ->
-          let* d =
-            start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
-          in
-          let after_start = read_file_utf8 server_list_file in
+          with_db_exists true (fun () ->
+              let* d =
+                start_daemon ~root_dir:data_dir ~repo ~log_level:"error" ()
+              in
+              let after_start = read_file_utf8 server_list_file in
           Fest.expect
           |> Fest.equal
                (contains after_start
                   (string_of_int (Node_process.pid ())
                    ^ " " ^ string_of_int d.Db_worker_node.port))
                true;
-          let* () = stop_daemon d in
-          let after_stop =
-            if exists_sync server_list_file
-            then read_file_utf8 server_list_file
-            else ""
-          in
-          Fest.expect
-          |> Fest.equal
-               (contains after_stop
-                  (string_of_int (Node_process.pid ())
-                   ^ " " ^ string_of_int d.Db_worker_node.port))
-               true;
-          Js.Promise.resolve ()));
+              let* () = stop_daemon d in
+              let after_stop =
+                if exists_sync server_list_file
+                then read_file_utf8 server_list_file
+                else ""
+              in
+              Fest.expect
+              |> Fest.equal
+                   (contains after_stop
+                      (string_of_int (Node_process.pid ())
+                       ^ " " ^ string_of_int d.Db_worker_node.port))
+                   true;
+              Js.Promise.resolve ())));
 
   (* ---- db-worker-node-repo-error-handles-keyword-methods ---- *)
   Fest.test "db-worker-node-repo-error-handles-keyword-methods" (fun () ->
@@ -1989,6 +2024,10 @@ let () =
       in
       let* d = start_daemon ~root_dir:data_dir ~repo () in
       daemon := Some d;
+      let* _ =
+        invoke d.host d.port "thread-api/create-or-open-db"
+          [ str repo; Wire.Map [] ]
+      in
       let* binary =
         invoke d.host d.port "thread-api/export-db-binary" [ str repo ]
       in
@@ -2025,6 +2064,10 @@ let () =
        let restore () = Db_worker_node.assert_ownership_fn := saved in
        (let* d = start_daemon ~root_dir:data_dir ~repo () in
         daemon := Some d;
+        let* _ =
+          invoke d.host d.port "thread-api/create-or-open-db"
+            [ str repo; Wire.Map [] ]
+        in
         let* binary =
           invoke d.host d.port "thread-api/export-db-binary" [ str repo ]
         in
@@ -2120,6 +2163,10 @@ let () =
       let repo = "logseq_db_validation_" ^ random_suffix () in
       let* d = start_daemon ~root_dir:data_dir ~repo () in
       daemon := Some d;
+      let* _ =
+        invoke d.host d.port "thread-api/create-or-open-db"
+          [ str repo; Wire.Map [] ]
+      in
       let* journal =
         invoke d.host d.port "thread-api/pull"
           [ str repo; Wire.Array [ kw "db/id" ]
@@ -2205,6 +2252,10 @@ let () =
        let data_dir = create_tmp_dir "db-worker-no-startup-maintenance" in
        let repo = "logseq_db_no_startup_maintenance_" ^ random_suffix () in
        let* d1 = start_daemon ~root_dir:data_dir ~repo () in
+       let* _ =
+         invoke d1.host d1.port "thread-api/create-or-open-db"
+           [ str repo; Wire.Map [] ]
+       in
        let* _ =
          invoke d1.host d1.port "thread-api/transact"
            (transact_args repo
