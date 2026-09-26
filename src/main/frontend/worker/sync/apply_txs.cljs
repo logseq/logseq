@@ -551,8 +551,34 @@
   (or (and (integer? value) (neg? value))
       (string? value)))
 
-(defn- upload-tx-item-tempids
-  [db item]
+(defn- cardinality-many-attr?
+  [db attr]
+  (= :db.cardinality/many
+     (or (get-in (d/schema db) [attr :db/cardinality])
+         (:db/cardinality (d/entity db attr)))))
+
+(defn- upload-replaced-values
+  "The [entity attr] pairs whose cardinality-one value the tx retracts on an
+  existing entity. The server validates each request as a whole
+  transaction, so such a retract sent ahead of the add of the new value
+  can leave the entity without a required attribute and be rejected."
+  [db tx-data]
+  (into #{}
+        (keep (fn [item]
+                (when (and (vector? item)
+                           (= :db/retract (first item))
+                           (<= 4 (count item)))
+                  (let [[_op entity attr] item]
+                    (when (and (not (upload-tempid? entity))
+                               (not (and db (cardinality-many-attr? db attr))))
+                      [entity attr])))))
+        tx-data))
+
+(defn- upload-tx-item-group-keys
+  "Keys of the groups an upload tx item belongs to. Items sharing a key are
+  sent in one request: those of a tempid, which the server resolves within a
+  request, and the retract and adds of a value in `replaced`."
+  [db replaced item]
   (cond
     (and (map? item) (upload-tempid? (:db/id item)))
     #{(:db/id item)}
@@ -560,14 +586,17 @@
     (and (vector? item)
          (contains? #{:db/add :db/retract :db/cas :db.fn/cas} (first item))
          (<= 4 (count item)))
-    (let [[_op entity attr value] item]
+    (let [[op entity attr value] item]
       (cond-> #{}
         (upload-tempid? entity)
         (conj entity)
         (and db
              (ref-attr? db attr)
              (upload-tempid? value))
-        (conj value)))
+        (conj value)
+        (and (contains? #{:db/add :db/retract} op)
+             (contains? replaced [entity attr]))
+        (conj [::value-replacement entity attr])))
 
     (and (vector? item)
          (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))
@@ -592,22 +621,23 @@
         (recur (next remaining) [[start end]]))
       merged)))
 
-(defn- upload-tempid-range-by-start
+(defn- upload-group-range-by-start
   [db tx-data]
-  (let [ranges-by-tempid
+  (let [replaced (upload-replaced-values db tx-data)
+        ranges-by-key
         (reduce-kv
          (fn [acc idx item]
-           (reduce (fn [acc* tempid]
-                     (update acc* tempid
+           (reduce (fn [acc* group-key]
+                     (update acc* group-key
                              (fn [[start end]]
                                [(if (some? start) (min start idx) idx)
                                 (if (some? end) (max end idx) idx)])))
                    acc
-                   (upload-tx-item-tempids db item)))
+                   (upload-tx-item-group-keys db replaced item)))
          {}
          tx-data)]
     (into {} (map (fn [[start end]] [start end])
-                  (merge-upload-tx-ranges (vals ranges-by-tempid))))))
+                  (merge-upload-tx-ranges (vals ranges-by-key))))))
 
 (defn- next-upload-tx-group
   [tx-data range-by-start idx]
@@ -617,7 +647,7 @@
 
 (defn- next-large-upload-request-chunk
   [db tx-data start]
-  (let [range-by-start (upload-tempid-range-by-start db tx-data)
+  (let [range-by-start (upload-group-range-by-start db tx-data)
         total (count tx-data)]
     (loop [idx start
            chunk []]
@@ -1526,7 +1556,13 @@
           page-uuid (:uuid opts)
           existing-page (or (when (uuid? page-uuid)
                               (d/entity @conn [:block/uuid page-uuid]))
-                            (ldb/get-page @conn title))]
+                            ;; A page, a tag or a property can share a title;
+                            ;; only an entity of the kind being created is
+                            ;; this page.
+                            (let [page (ldb/get-page @conn title)]
+                              (when (and (not (ldb/property? page))
+                                         (= (boolean (:class? opts)) (boolean (ldb/class? page))))
+                                page)))]
       (cond
         (and existing-page
              (not (ldb/recycled? existing-page)))

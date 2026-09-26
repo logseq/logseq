@@ -620,16 +620,34 @@
 
 (defn- get-block-orders
   [blocks target-block sibling? keep-block-order?]
-  (if (and keep-block-order? (every? :block/order blocks))
-    (map :block/order blocks)
-    (let [target-order (:block/order target-block)
-          start-order (when sibling? target-order)
-          end-order (if sibling?
-                      (:block/order (ldb/get-right-sibling target-block))
-                      (let [first-child (ldb/get-down target-block)]
-                        (:block/order first-child)))
-          orders (db-order/gen-n-keys (count blocks) start-order end-order)]
-      orders)))
+  (let [target-order (:block/order target-block)
+        start-order (when sibling? target-order)
+        end-order (if sibling?
+                    (:block/order (ldb/get-right-sibling target-block))
+                    (let [first-child (ldb/get-down target-block)]
+                      (:block/order first-child)))
+        top-level? #(= 1 (:block/level %))
+        at-target? (fn [order]
+                     (and (or (nil? start-order) (pos? (compare order start-order)))
+                          (or (nil? end-order) (neg? (compare order end-order)))))]
+    (if (and keep-block-order? (every? :block/order blocks))
+      (let [top-level-blocks (filter top-level? blocks)]
+        (if (every? at-target? (map :block/order top-level-blocks))
+          (map :block/order blocks)
+          ;; The kept orders of the top-level blocks no longer fall next to the
+          ;; target, e.g. undo restoring deleted blocks after a sibling moved
+          ;; away and back got a new order: order them at the target and keep
+          ;; the orders of their children.
+          (let [top-level-orders (db-order/gen-n-keys (count top-level-blocks)
+                                                      start-order end-order)]
+            (first
+             (reduce (fn [[orders top-level-orders] block]
+                       (if (top-level? block)
+                         [(conj orders (first top-level-orders)) (rest top-level-orders)]
+                         [(conj orders (:block/order block)) top-level-orders]))
+                     [[] top-level-orders]
+                     blocks)))))
+      (db-order/gen-n-keys (count blocks) start-order end-order))))
 
 (defn- update-property-ref-when-paste
   [block uuids]
@@ -946,6 +964,8 @@
                     copied trees cannot move existing blocks.
                     Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
+                           A top-level block keeps its order only while that
+                           order falls at `target-block`.
       `outliner-op`: what's the current outliner operation.
       `created-from-property`: property ident/ref used to restore a deleted property
                                value as a property value instead of a child block.

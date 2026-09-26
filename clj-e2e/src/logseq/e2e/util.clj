@@ -170,6 +170,20 @@
   (when-let [editor (get-editor)]
     (.inputValue editor)))
 
+(defn wait-edit-content
+  "Waits until the editing textarea's content equals `expected`. Deleting or
+   concatting blocks remounts the editor after an async worker roundtrip, so a
+   one-shot read can observe a stale or transiently missing editor."
+  [expected]
+  (wait-editor-visible)
+  (let [deadline (+ (System/currentTimeMillis) 10000)]
+    (loop []
+      (let [content (get-edit-content)]
+        (cond
+          (= expected content) true
+          (< deadline (System/currentTimeMillis)) (is (= expected content))
+          :else (do (wait-timeout 100) (recur)))))))
+
 (defn bounding-xy
   [locator]
   (let [box (.boundingBox locator)]
