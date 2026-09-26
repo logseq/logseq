@@ -933,6 +933,51 @@
                           :block.temp/property-keys))
           "Row snapshots skip property-keys. Table cells read values from the row map."))))
 
+(deftest canonical-block-keeps-custom-status-icon-without-ident-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Tasks"}
+                  :blocks [{:block/title "custom status task"
+                            :build/tags [:logseq.class/Task]}
+                           {:block/title "doing task"
+                            :build/tags [:logseq.class/Task]
+                            :build/properties {:logseq.property/status :logseq.property/status.doing}}]}])
+          status (d/entity @conn :logseq.property/status)
+          icon {:type :emoji :id "🚀" :name "rocket"}
+          custom-uuid (random-uuid)
+          task (db-test/find-block-by-content @conn "custom status task")
+          doing (db-test/find-block-by-content @conn "doing task")]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid custom-uuid
+                     :block/title "Waiting"
+                     :block/name "waiting"
+                     :block/closed-value-property (:db/id status)
+                     :block/parent (:db/id status)
+                     :block/page (:db/id status)
+                     :logseq.property/created-from-property (:db/id status)
+                     :logseq.property/icon icon}
+                    {:db/id (:db/id task)
+                     :block/tx-id 1
+                     :logseq.property/status -1}
+                    {:db/id (:db/id doing)
+                     :block/tx-id 1}])
+      (let [custom-row (canonical-block @conn (d/entity @conn (:db/id task)))
+            doing-row (canonical-block @conn (d/entity @conn (:db/id doing)))
+            custom-status (:logseq.property/status custom-row)
+            doing-status (:logseq.property/status doing-row)]
+        (is (nil? (:db/ident custom-status))
+            "Custom Status choices are closed values without :db/ident.")
+        (is (= "waiting" (:block/name custom-status)))
+        (is (some? (:block/closed-value-property
+                    (d/entity @conn [:block/uuid custom-uuid]))))
+        (is (= icon (:logseq.property/icon custom-status))
+            "Custom closed values keep their icon in query/table shallow refs.")
+        (is (some? (:logseq.property/icon doing-status))
+            "Built-in status icons still survive shallow refs.")
+        (assert-shallow-identity-ref custom-status)
+        (assert-shallow-identity-ref doing-status)))))
+
 (deftest canonical-block-positions-default-task-status-test
   (when-let [canonical-block (canonical-block-api)]
     (let [conn (db-test/create-conn-with-blocks

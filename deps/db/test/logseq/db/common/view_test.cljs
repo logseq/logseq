@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.order :as db-order]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]))
@@ -665,6 +666,37 @@
                                                      :sorting [{:id :user.property/score :asc? false}]})]
     (is (= ["With score" "Without score"] (result-titles conn result)))))
 
+(defn- add-custom-status!
+  [conn {:keys [title icon order block-name]}]
+  (let [status (d/entity @conn :logseq.property/status)
+        tx (cond-> {:db/id -1
+                    :block/uuid (random-uuid)
+                    :block/title title
+                    :block/closed-value-property (:db/id status)
+                    :block/parent (:db/id status)
+                    :block/page (:db/id status)
+                    :logseq.property/created-from-property (:db/id status)
+                    :block/order order}
+             icon (assoc :logseq.property/icon icon)
+             block-name (assoc :block/name block-name))
+        tempids (:tempids (d/transact! conn [tx]))]
+    (d/entity @conn (get tempids -1))))
+
+(defn- custom-status-between-todo-and-doing!
+  [conn]
+  (let [todo (d/entity @conn :logseq.property/status.todo)
+        doing (d/entity @conn :logseq.property/status.doing)]
+    (is (string? (:block/order todo)))
+    (is (string? (:block/order doing)))
+    (is (neg? (compare (:block/order todo) (:block/order doing))))
+    (add-custom-status!
+     conn
+     {:title "Waiting"
+      :block-name "waiting"
+      :icon {:type :emoji :id "⏳" :name "hourglass"}
+      :order (db-order/gen-key (:block/order todo) (:block/order doing)
+                               :max-key-atom (atom nil))})))
+
 (deftest get-view-data-class-objects-status-closed-value-sort-test
   (let [conn (topic-conn
               [{:page {:block/title "Doing" :build/tags [:Topic]
@@ -685,6 +717,77 @@
     (is (= (sort orders) orders)
         "Closed-value sort must follow :block/order, not title.")
     (is (= (set (result-titles conn result)) #{"Doing" "Todo" "Done"}))))
+
+(defn- topic-page
+  [conn title class-id]
+  (d/entity @conn
+            (d/q '[:find ?e .
+                   :in $ ?title ?class
+                   :where
+                   [?e :block/title ?title]
+                   [?e :block/tags ?class]]
+                 @conn title class-id)))
+
+(deftest get-view-data-custom-status-without-ident-sort-and-group-test
+  (let [conn (topic-conn
+              [{:page {:block/title "Row Doing" :build/tags [:Topic]
+                       :build/properties {:logseq.property/status :logseq.property/status.doing}}}
+               {:page {:block/title "Row Todo" :build/tags [:Topic]
+                       :build/properties {:logseq.property/status :logseq.property/status.todo}}}
+               {:page {:block/title "Row Waiting" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        custom (custom-status-between-todo-and-doing! conn)
+        waiting (topic-page conn "Row Waiting" class-id)
+        _ (d/transact! conn [{:db/id (:db/id waiting)
+                              :logseq.property/status (:db/id custom)}])
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        query-ids (mapv :db/id [waiting
+                                (topic-page conn "Row Todo" class-id)
+                                (topic-page conn "Row Doing" class-id)])
+        sort-option {:view-feature-type :class-objects
+                     :view-for-id class-id
+                     :sorting [{:id :logseq.property/status :asc? true}]}
+        class-sorted (db-view/get-view-data @conn view-id sort-option)
+        query-sorted (db-view/get-view-data
+                      @conn view-id
+                      {:view-feature-type :query-result
+                       :query-entity-ids query-ids
+                       :sorting [{:id :logseq.property/status :asc? true}]})
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :logseq.property/status]
+                             [:db/add view-id :logseq.property.view/sort-groups-desc? false]])
+        class-grouped (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                           :view-for-id class-id})
+        query-grouped (db-view/get-view-data
+                       @conn view-id
+                       {:view-feature-type :query-result
+                        :query-entity-ids query-ids})
+        group-titles (fn [result]
+                       (mapv (fn [[group _rows]]
+                               (or (:block/title group) group))
+                             (:data result)))
+        group-icons (fn [result]
+                      (mapv (fn [[group _rows]]
+                              (:logseq.property/icon group))
+                            (:data result)))]
+    (is (nil? (:db/ident custom))
+        "Regression covers a custom Status choice that has no :db/ident.")
+    (is (some? (:block/closed-value-property custom)))
+    (is (= ["Row Todo" "Row Waiting" "Row Doing"] (result-titles conn class-sorted))
+        "Flat Status sort must follow :block/order for a custom closed value.")
+    (is (= ["Row Todo" "Row Waiting" "Row Doing"] (result-titles conn query-sorted))
+        "Standard Query sort must follow :block/order for a custom closed value.")
+    (is (= ["Todo" "Waiting" "Doing"] (group-titles class-grouped))
+        "Group-by Status must keep the custom closed value as an entity and sort by :block/order.")
+    (is (= ["Todo" "Waiting" "Doing"] (group-titles query-grouped))
+        "Standard Query group-by Status must respect the configured closed-value order.")
+    (is (= {:type :emoji :id "⏳" :name "hourglass"}
+           (some (fn [[group _rows]]
+                   (when (= "Waiting" (:block/title group))
+                     (:logseq.property/icon group)))
+                 (:data query-grouped)))
+        "Grouped custom Status still carries its icon.")
+    (is (some some? (group-icons class-grouped))
+        "Built-in Status groups still include icons.")))
 
 (deftest get-view-data-all-pages-title-filter-and-sort-test
   (let [conn (db-test/create-conn-with-blocks

@@ -18,6 +18,16 @@
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
+(defn- property-closed-values
+  "Closed values from the reverse ref, not the entity-plus :property/closed-values
+   alias. nbb tests and raw Datascript entities do not run that lookup."
+  [property]
+  (when (de/entity? property)
+    (some->> (:block/_closed-value-property property)
+             (remove entity-util/recycled?)
+             (sort-by :block/order)
+             seq)))
+
 (defn get-property-value-for-search
   [block property]
   (let [v (get block (:db/ident property))]
@@ -41,7 +51,7 @@
 (defn- get-value-for-sort
   [property]
   (let [db-ident (or (:db/ident property) (:id property))
-        closed-values (seq (:property/closed-values property))
+        closed-values (property-closed-values property)
         closed-value->sort-number (when closed-values
                                     (->> (zipmap (map :db/id closed-values)
                                                  (if (every? :block/order closed-values)
@@ -155,11 +165,13 @@
 
 (defn- match-property-value-as-entity?
   "Determines if the property value entity should be treated as an entity. For some property types
-   like :default, we want match on the entity's content as that is what the user sees and interacts with"
+   like :default, we want match on the entity's content as that is what the user sees and interacts with.
+   Closed values (built-in or custom) stay entities so group-by/sort can use :block/order."
   [property-value-entity property-entity]
-  ;; Allow pvalue entities with :db/ident e.g. closed values like status OR for any type
-  ;; that aren't text types
+  ;; Built-in closed values have :db/ident. Custom Status choices usually do not,
+  ;; but they still have :block/closed-value-property and must not collapse to title strings.
   (or (:db/ident property-value-entity)
+      (ldb/closed-value? property-value-entity)
       (not (contains? db-property-type/closed-value-property-types (:logseq.property/type property-entity)))))
 
 (defn- empty-value?
@@ -775,6 +787,7 @@
      :treat-as-entity? (and ref?
                             (integer? first-raw)
                             (or (indexed-attr-value db first-raw :db/ident)
+                                (indexed-attr-value db first-raw :block/closed-value-property)
                                 (not (contains? db-property-type/closed-value-property-types prop-type))))
      :empty-values? (empty-attr-values? raw empty-id)}))
 
@@ -1215,7 +1228,7 @@
                                  (when group-by-property-ident
                                    (d/entity db group-by-property-ident)))
            list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-           group-by-closed-values? (some? (:property/closed-values group-by-property))
+           group-by-closed-values? (some? (property-closed-values group-by-property))
            ref-property? (= (:db/valueType group-by-property) :db.type/ref)
            filters (or (:logseq.property.table/filters view) filters)
            feat-type (or view-feature-type (:logseq.property.view/feature-type view))
