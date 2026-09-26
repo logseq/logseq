@@ -217,8 +217,13 @@
   (let [block-uuid (second resource-key)
         block (common/entity-by-uuid! db :block-uuid block-uuid)]
     [#{[:refs block-uuid]}
-     (if (or (ldb/property? block)
-             (ldb/class? block))
+     ;; Property pages keep Linked References hidden: the objects table
+     ;; already lists every node that uses the property. Class/tag pages
+     ;; still need this count so [[tag]] page-link refs can mount Linked
+     ;; References. Tagged #tag instances are already excluded by
+     ;; get-block-refs-count / get-linked-references, so they stay in the
+     ;; objects table instead of double-listing here.
+     (if (ldb/property? block)
        0
        (ldb/get-block-refs-count db (:db/id block)))]))
 

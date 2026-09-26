@@ -14,6 +14,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.common.view :as db-view]
             [logseq.db.test.helper :as db-test]))
 
@@ -1332,13 +1333,65 @@
                                 0
                                 response))))
 
-(deftest block-ref-count-resource-skips-class-incoming-refs-test
+(deftest block-ref-count-resource-counts-class-page-link-refs-test
+  ;; db-test#1292: a tag page with [[tag]] page-link refs must expose a
+  ;; positive :block-ref-count so Linked References can mount. #tag instances
+  ;; stay in the objects table and must not inflate that count.
   (when-let [api (render-resource-api)]
-    (let [{:keys [conn class-page class-visible-child]} (render-resource-fixture)
+    (let [{:keys [conn page class-page resource-block]}
+          (render-resource-fixture)
           class-id (entity-id @conn class-page)
-          child-id (entity-id @conn class-visible-child)
+          page-id (entity-id @conn page)
+          page-link-id (entity-id @conn resource-block)
+          tagged-uuid (random-uuid)
           resource-key [:block-ref-count class-page]
-          _ (d/transact! conn [[:db/add child-id :block/refs class-id]])
+          _ (d/transact! conn
+                         [{:block/uuid tagged-uuid
+                           :block/tx-id 20
+                           :block/title "Rumba #dance"
+                           :block/page page-id
+                           :block/parent page-id
+                           :block/order "z0"
+                           :block/tags class-id
+                           :block/refs class-id}
+                          [:db/add page-link-id :block/refs class-id]])
+          linked-view (add-view! conn :linked-references class-page)
+          response (call-resource api conn resource-key)
+          view-response (call-resource api conn
+                                       [:view-data linked-view
+                                        {:feature-type :linked-references
+                                         :sorting [{:id :block/title :asc? true}]}])
+          linked (db-reference/get-linked-references @conn class-id)
+          linked-titles (set (map :block/title (:ref-blocks linked)))]
+      (assert-resource-envelope @conn
+                                resource-key
+                                #{[:refs class-page]}
+                                1
+                                response)
+      (is (pos? (:value response))
+          "Class/tag pages with a [[tag]] page-link ref must report a positive count.")
+      (is (contains? (set (get-in view-response [:value :rows])) resource-block)
+          "Linked References view-data must include the page-link ref.")
+      (is (not (contains? (set (get-in view-response [:value :rows])) tagged-uuid))
+          "Tagged #tag instances belong in the objects table, not Linked References.")
+      (is (contains? linked-titles "Resource block"))
+      (is (not (contains? linked-titles "Rumba #dance"))))))
+
+(deftest block-ref-count-resource-excludes-class-tagged-instances-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn page class-page]} (render-resource-fixture)
+          class-id (entity-id @conn class-page)
+          page-id (entity-id @conn page)
+          resource-key [:block-ref-count class-page]
+          _ (d/transact! conn
+                         [{:block/uuid (random-uuid)
+                           :block/tx-id 20
+                           :block/title "Rumba #dance"
+                           :block/page page-id
+                           :block/parent page-id
+                           :block/order "z0"
+                           :block/tags class-id
+                           :block/refs class-id}])
           response (call-resource api conn resource-key)]
       (assert-resource-envelope @conn
                                 resource-key
@@ -1348,11 +1401,11 @@
 
 (deftest block-ref-count-resource-skips-property-incoming-refs-test
   (when-let [api (render-resource-api)]
-    (let [{:keys [conn property-page property-visible-child]} (render-resource-fixture)
+    (let [{:keys [conn property-page resource-block]} (render-resource-fixture)
           property-id (entity-id @conn property-page)
-          child-id (entity-id @conn property-visible-child)
+          page-link-id (entity-id @conn resource-block)
           resource-key [:block-ref-count property-page]
-          _ (d/transact! conn [[:db/add child-id :block/refs property-id]])
+          _ (d/transact! conn [[:db/add page-link-id :block/refs property-id]])
           response (call-resource api conn resource-key)]
       (assert-resource-envelope @conn
                                 resource-key
