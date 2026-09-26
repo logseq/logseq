@@ -79,6 +79,16 @@ async function assertFreshRuntime({ from, generatedFrom, refreshCommand }) {
   }
 }
 
+async function copyDir(src, dest) {
+  await fs.mkdir(dest, { recursive: true });
+  for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) await copyDir(from, to);
+    else await fs.copyFile(from, to);
+  }
+}
+
 async function main() {
   await fs.mkdir(staticJsDir, { recursive: true });
 
@@ -86,6 +96,13 @@ async function main() {
     await assertFreshRuntime(pair);
     await copyOne(pair);
   }
+
+  // The OCaml electron main loads i18n dictionaries from static/dicts/
+  // at runtime (cljs used to inline them at compile time).
+  await copyDir(
+    path.join(repoRoot, "src", "resources", "dicts"),
+    path.join(staticDir, "dicts"),
+  );
 
   // Keep root staged runtime files available for local CLI E2E and npm packaging.
 }
