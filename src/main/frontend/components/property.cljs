@@ -930,6 +930,31 @@
   [{:keys [page-title? sidebar-properties? tag-dialog?]}]
   (boolean (or page-title? sidebar-properties? tag-dialog?)))
 
+(defn- show-hidden-properties-toggle?
+  "Show hidden properties must remain available on page-title surfaces and the
+  current page/zoom-in root whenever hidden properties exist."
+  [block opts {:keys [hidden-properties current-route-page? root-block?]}]
+  (boolean
+   (and (seq hidden-properties)
+        (or current-route-page?
+            root-block?
+            (page-title-property-surface? opts))
+        (not (block-below-pill-owns-hidden-toggle? block opts)))))
+
+(defn- properties-area-hidden-only-early-nil?
+  "Nested blocks with only hidden properties stay collapsed. Do not early-return
+  nil when a Show hidden properties control would be shown."
+  [{:keys [full-properties hidden-properties root-block? sidebar-properties?
+           class? show-hidden-properties? show-hidden-properties-toggle-button?]}]
+  (boolean
+   (and (empty? full-properties)
+        (seq hidden-properties)
+        (not root-block?)
+        (not sidebar-properties?)
+        (not class?)
+        (not show-hidden-properties?)
+        (not show-hidden-properties-toggle-button?))))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
@@ -948,15 +973,22 @@
                 class-properties-property-uuid]}
         (use-display-properties block opts true show-empty-and-hidden?)
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
-        show-hidden-properties-toggle-button? (and (seq hidden-properties)
-                                                   (or current-route-page?
-                                                       root-block?)
-                                                   (not (block-below-pill-owns-hidden-toggle? target-block opts)))]
+        show-hidden-properties-toggle-button? (show-hidden-properties-toggle?
+                                               target-block
+                                               opts
+                                               {:hidden-properties hidden-properties
+                                                :current-route-page? current-route-page?
+                                                :root-block? root-block?})]
     [:<>
      (cond
-       (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
-            (not class?)
-            (not show-hidden-properties?))
+       (properties-area-hidden-only-early-nil?
+        {:full-properties full-properties
+         :hidden-properties hidden-properties
+         :root-block? root-block?
+         :sidebar-properties? sidebar-properties?
+         :class? class?
+         :show-hidden-properties? show-hidden-properties?
+         :show-hidden-properties-toggle-button? show-hidden-properties-toggle-button?})
          nil
 
        (and (empty? full-properties) (empty? hidden-properties) (not class?))

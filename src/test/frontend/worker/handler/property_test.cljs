@@ -66,6 +66,24 @@
       (is (contains? full-ids :user.property/author))
       (is (not (contains? hidden-ids :user.property/author))))))
 
+(deftest display-properties-puts-empty-hide-empty-class-properties-in-hidden
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:secret {:logseq.property/type :default
+                                     :build/properties {:logseq.property/hide-empty-value true}}}
+               :classes {:HiddenTag {:build/class-properties [:secret]}}
+               :pages-and-blocks
+               [{:page {:block/title "Tagged page"
+                        :build/tags [:HiddenTag]}}]})
+        page (db-test/find-page-by-title @conn "Tagged page")
+        result (worker-property/display-properties @conn page {:page-title? true} false)
+        full-ids (set (map :property-id (:full-properties result)))
+        hidden-ids (set (map :property-id (:hidden-properties result)))]
+    (testing "empty hide-empty tag properties are hidden, not dropped"
+      (is (contains? hidden-ids :user.property/secret)
+          "The tagged page still has a hidden property row so Show hidden properties can reveal it")
+      (is (not (contains? full-ids :user.property/secret))
+          "The empty hide-empty property is not shown in the default properties panel"))))
+
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))

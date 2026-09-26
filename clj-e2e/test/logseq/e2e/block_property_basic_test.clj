@@ -375,6 +375,42 @@
       (assert/assert-is-visible
        (loc/filter ".property-pair" :has-text "sample default")))))
 
+(deftest tagged-page-show-hidden-when-all-tag-props-hide-empty-test
+  (testing "a tagged page still offers Show hidden properties when every tag property is hide-empty and empty"
+    (let [property-name "hide-empty-tag-prop"
+          tag-name "Hide Empty Tag"
+          page-name (current-page-name)
+          property (ls-api-call! :editor.upsertProperty
+                                 property-name
+                                 {:type "default"})]
+      (ls-api-call! :editor.upsertBlockProperty
+                    (get property "uuid")
+                    "logseq.property/hide-empty-value"
+                    true)
+      (let [tag (ls-api-call! :editor.createTag
+                              tag-name
+                              {:tagProperties [{:name property-name}]})
+            page (ls-api-call! :editor.getPage page-name)]
+        (ls-api-call! :editor.upsertBlockProperty
+                      (get page "uuid")
+                      "block/tags"
+                      (get tag "id"))
+        (page/goto-page page-name)
+        (util/exit-edit)
+        (assert/assert-have-count
+         (loc/filter ".ls-page-properties .property-pair" :has-text property-name)
+         0)
+        (assert/assert-is-visible
+         (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
+        (is (w/visible? (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
+            "Show hidden properties is visible on a tagged page whose tag properties are all hide-empty")
+        (w/click
+         (loc/filter ".hidden-properties-toggle-key" :has-text "Show hidden properties"))
+        (assert/assert-is-visible
+         (loc/filter ".ls-page-properties .property-pair" :has-text property-name))
+        (is (w/visible? (loc/filter ".ls-page-properties .property-pair" :has-text property-name))
+            "Clicking the toggle reveals the empty hide-empty tag property")))))
+
 (deftest property-delete-and-bidirectional-refresh-test
   (testing "bidirectional values refresh both sides and deleting the definition removes usages"
     (let [property-name "sample bidirectional"
