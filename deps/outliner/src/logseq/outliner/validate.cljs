@@ -82,14 +82,15 @@
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (when (seq tags)
-    (when-let [another-id (first
-                           (d/q (find-other-ids-with-title-and-tags entity)
-                                db
-                                (:db/id entity)
-                                new-title
-                                (map :db/id tags)))]
-      (let [another (d/entity db another-id)
-            this-tags (set (map :db/ident tags))
+    (when-let [another (some (fn [id]
+                               (let [e (d/entity db id)]
+                                 (when-not (entity-util/recycled? e) e)))
+                             (d/q (find-other-ids-with-title-and-tags entity)
+                                  db
+                                  (:db/id entity)
+                                  new-title
+                                  (map :db/id tags)))]
+      (let [this-tags (set (map :db/ident tags))
             another-tags (set (map :db/ident (:block/tags another)))
             common-tag-ids (set/intersection this-tags another-tags)]
         (when-not (and (= common-tag-ids #{:logseq.class/Page})

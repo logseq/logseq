@@ -1527,9 +1527,18 @@
           existing-page (or (when (uuid? page-uuid)
                               (d/entity @conn [:block/uuid page-uuid]))
                             (ldb/get-page @conn title))]
-      (if (and existing-page
-               (not (ldb/recycled? existing-page)))
+      (cond
+        (and existing-page
+             (not (ldb/recycled? existing-page)))
         [(:block/title existing-page) (:block/uuid existing-page)]
+
+        (and (uuid? page-uuid)
+             (ldb/recycled? existing-page))
+        (ldb/transact! conn
+                       (outliner-recycle/restore-tx-data @conn existing-page)
+                       {:outliner-op :create-page})
+
+        :else
         (outliner-page/create! conn title opts)))
 
     :delete-page

@@ -264,51 +264,69 @@
        distinct
        vec))
 
+(defn- created-page-title-match?
+  "Whether `page` is the page that `title` names. A namespaced title like
+  'ns/child' creates the leaf page titled 'child' under 'ns', so match each
+  title part against the page and its :block/parent chain."
+  [page title]
+  (let [parts (->> (string/split title #"/")
+                   (map string/trim)
+                   (remove string/blank?)
+                   reverse)]
+    (loop [page page
+           part (first parts)
+           more-parts (rest parts)]
+      (cond
+        (or (nil? page) (nil? part) (not= part (:block/title page)))
+        false
+
+        (empty? more-parts)
+        true
+
+        :else
+        (recur (:block/parent page)
+               (first more-parts)
+               (rest more-parts))))))
+
 (defn- created-page-uuid-from-tx-data
-  [tx-data title]
-  (or
-   (some (fn [item]
-           (when (and (map? item)
-                      (= title (:block/title item))
-                      (:block/uuid item))
-             (:block/uuid item)))
-         tx-data)
-   (let [grouped (group-by :e tx-data)]
-     (some (fn [[_ datoms]]
-             (let [title' (some (fn [datom]
-                                  (when (and (= :block/title (:a datom))
-                                             (true? (:added datom)))
-                                    (:v datom)))
-                                datoms)
-                   uuid' (some (fn [datom]
-                                 (when (and (= :block/uuid (:a datom))
-                                            (true? (:added datom)))
-                                   (:v datom)))
-                               datoms)]
-               (when (and (= title title') (uuid? uuid'))
-                 uuid')))
-           grouped))))
+  [db tx-data title]
+  (some (fn [item]
+          (when-let [uuid' (cond
+                             ;; tx-data datom (Datom record or datom map)
+                             (and (= :block/uuid (:a item))
+                                  (true? (:added item)))
+                             (:v item)
+
+                             ;; db/add vector
+                             (and (vector? item)
+                                  (= :db/add (first item))
+                                  (>= (count item) 4)
+                                  (= :block/uuid (nth item 2)))
+                             (nth item 3)
+
+                             ;; input tx map
+                             (and (map? item)
+                                  (nil? (:a item))
+                                  (:block/uuid item))
+                             (:block/uuid item)
+
+                             :else nil)]
+            (when (uuid? uuid')
+              (let [page (d/entity db [:block/uuid uuid'])]
+                (when (and page
+                           (ldb/page? page)
+                           (created-page-title-match? page title))
+                  uuid')))))
+        tx-data))
 
 (defn- created-db-ident-from-tx-data
   [tx-data]
   (or
    (some (fn [item]
-           (when (and (map? item)
-                      (qualified-keyword? (:db/ident item)))
-             (:db/ident item)))
-         tx-data)
-   (some (fn [item]
-           (when (and (map? item)
-                      (= :db/ident (:a item))
+           (when (and (= :db/ident (:a item))
+                      (true? (:added item))
                       (qualified-keyword? (:v item)))
              (:v item)))
-         tx-data)
-   (some (fn [item]
-           (when (and (vector? item)
-                      (keyword? (nth item 1 nil))
-                      (= :db/ident (nth item 1 nil))
-                      (qualified-keyword? (nth item 2 nil)))
-             (nth item 2)))
          tx-data)
    (some (fn [item]
            (when (and (vector? item)
@@ -317,6 +335,12 @@
                       (= :db/ident (nth item 2))
                       (qualified-keyword? (nth item 3)))
              (nth item 3)))
+         tx-data)
+   (some (fn [item]
+           (when (and (map? item)
+                      (nil? (:a item))
+                      (qualified-keyword? (:db/ident item)))
+             (:db/ident item)))
          tx-data)))
 
 (defn- property-ident-by-title
@@ -623,7 +647,7 @@
 
     :create-page
     (let [[title opts] args
-          page-uuid (created-page-uuid-from-tx-data tx-data title)]
+          page-uuid (created-page-uuid-from-tx-data db tx-data title)]
       [:create-page [title
                      (cond-> (or opts {})
                        page-uuid
@@ -650,8 +674,8 @@
     :upsert-property
     (let [[property-id schema opts] args
           property-id' (or (stable-entity-ref db property-id)
-                           (property-ident-by-title db (:property-name opts))
-                           (created-db-ident-from-tx-data tx-data))]
+                           (created-db-ident-from-tx-data tx-data)
+                           (property-ident-by-title db (:property-name opts)))]
       [:upsert-property [property-id' schema opts]])
 
     [op args]))
@@ -970,7 +994,18 @@
                           :create-page
                           (let [[_title opts] args]
                             (when-let [page-uuid (:uuid opts)]
-                              [:delete-page [page-uuid {}]]))
+                              (let [created-tag-uuids
+                                    (->> (d/entity db-after [:block/uuid page-uuid])
+                                         :block/tags
+                                         (filter (fn [tag]
+                                                   (and (ldb/class? tag)
+                                                        (not (ldb/built-in? tag))
+                                                        (nil? (d/entity db-before (:db/id tag))))))
+                                         (map :block/uuid)
+                                         (distinct))]
+                                (into (mapv (fn [uuid'] [:delete-page [uuid' {}]])
+                                            created-tag-uuids)
+                                      [[:delete-page [page-uuid {}]]]))))
 
                           :delete-page
                           (let [[page-uuid _opts] args]

@@ -22,8 +22,11 @@
 
 (deftest derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse-test
   (testing "create-page forward op keeps created uuid and reverse op deletes that page"
-    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
-          page-uuid (random-uuid)
+    (let [page-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Created Page"
+                                            :block/uuid page-uuid}
+                                     :blocks []}]})
           tx-data [{:e 1 :a :block/title :v "Created Page" :added true}
                    {:e 1 :a :block/uuid :v page-uuid :added true}]
           tx-meta {:outliner-op :create-page
@@ -444,12 +447,16 @@
 
     (testing ":create-page"
       (let [page-uuid (random-uuid)
+            conn2 (db-test/create-conn-with-blocks
+                   {:pages-and-blocks [{:page {:block/title "P2"
+                                               :block/uuid page-uuid}
+                                        :blocks []}]})
             tx-data [{:e 1 :a :block/title :v "P2" :added true}
                      {:e 1 :a :block/uuid :v page-uuid :added true}]
             {:keys [inverse-outliner-ops]}
             (op-construct/derive-history-outliner-ops
-             @conn @conn tx-data {:outliner-op :create-page
-                                  :outliner-ops [[:create-page ["P2" {:redirect? false}]]]})]
+             @conn2 @conn2 tx-data {:outliner-op :create-page
+                                    :outliner-ops [[:create-page ["P2" {:redirect? false}]]]})]
         (is (= [[:delete-page [page-uuid {}]]]
                inverse-outliner-ops))))
 
@@ -530,3 +537,25 @@
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
              inverse-outliner-ops)))))
+
+(deftest get-top-level-blocks-compares-document-position-test
+  (testing "selection order detection compares document position, not raw :block/order across parents"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "b"
+                             :build/children [{:block/title "b1"}
+                                              {:block/title "b2"}]}
+                            {:block/title "c"}]}]})
+          b (db-test/find-block-by-content @conn "b")
+          b2 (db-test/find-block-by-content @conn "b2")
+          c (db-test/find-block-by-content @conn "c")
+          ;; b precedes c on the page even though b2's own order is after c's
+          _ (d/transact! conn [{:db/id (:db/id b) :block/order "a"}
+                               {:db/id (:db/id b2) :block/order "z"}
+                               {:db/id (:db/id c) :block/order "m"}])
+          result (#'outliner-core/get-top-level-blocks
+                  [(d/entity @conn (:db/id b2))
+                   (d/entity @conn (:db/id c))]
+                  false)]
+      (is (= ["b2" "c"] (mapv :block/title result))))))
