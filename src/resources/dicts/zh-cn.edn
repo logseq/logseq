@@ -976,6 +976,7 @@
  :import.reason/alias-conflict "与另一个别名冲突"
  :import.reason/asset-links-not-updated "部分资源链接未更新为块引用"
  :import.reason/export-failed "文件转换失败"
+ :import.reason/hidden "已被 config.edn 中的 :hidden 排除"
  :import.reason/missing-asset-data "该资源路径未找到资源数据"
  :import.reason/skipped-by-file-picker "已被文件选择器跳过（类型不支持或为内部文件）"
  :import.reason/unsupported-file-format "不支持的文件格式"

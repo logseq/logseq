@@ -976,6 +976,7 @@
  :import.reason/alias-conflict "Alias conflicts with another alias"
  :import.reason/asset-links-not-updated "Some asset links were not updated to block references"
  :import.reason/export-failed "Failed to convert file"
+ :import.reason/hidden "Excluded by :hidden in config.edn"
  :import.reason/missing-asset-data "No asset data found for this asset path"
  :import.reason/skipped-by-file-picker "Skipped by the file picker (unsupported type or internal file)"
  :import.reason/unsupported-file-format "Unsupported file format"

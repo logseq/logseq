@@ -296,6 +296,7 @@
       "unsupported-file-format" (t :import.reason/unsupported-file-format)
       "whiteboard-not-supported" (t :import.reason/whiteboard-not-supported)
       "skipped-by-file-picker" (t :import.reason/skipped-by-file-picker)
+      "hidden" (t :import.reason/hidden)
       "alias/self" (t :import.reason/alias-conflict)
       "alias/source-is-alias" (t :import.reason/alias-conflict)
       "alias/duplicate-owner" (t :import.reason/alias-conflict)
@@ -488,7 +489,7 @@
   (shui/dialog-close! :import-scan))
 
 (hsx/defc import-scan-preview-dialog
-  [scan-result on-import]
+  [scan-result on-import on-cancel]
   (let [{:keys [page-count journal-count block-count org-file-count
                 ignored-files-detail ignored-assets-detail ignored-properties-detail
                 validation-errors-detail notifications]} (or scan-result {})]
@@ -526,7 +527,7 @@
       (ui/button (t :import/title)
                  {:on-click on-import})
       (ui/button (t :ui/cancel)
-                 {:on-click #(shui/dialog-close!)})]]))
+                 {:on-click on-cancel})]]))
 
 (defn- <confirm-import-scan!
   "Opens the scan preview dialog. Resolves true when the user picks Import and
@@ -538,6 +539,11 @@
       #(import-scan-preview-dialog scan-result
                                    (fn []
                                      (resolve true)
+                                     (shui/dialog-close! :import-scan-preview))
+                                   ;; dialog-close! suppresses :on-close, so Cancel
+                                   ;; must resolve the promise itself
+                                   (fn []
+                                     (resolve false)
                                      (shui/dialog-close! :import-scan-preview)))
       {:id :import-scan-preview
        :on-close (fn [_] (resolve false))

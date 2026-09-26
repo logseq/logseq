@@ -1586,10 +1586,14 @@ abc
           "Correct number of user classes")
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
-      (is (= 2 (count @(:ignored-files import-state)))
-          "Unsupported .edn and whiteboard files are reported as ignored")
-      (is (= #{:unsupported-file-format :whiteboard-not-supported}
+      (is (= 4 (count @(:ignored-files import-state)))
+          "Unsupported .edn, whiteboard and :hidden-excluded files are reported as ignored")
+      (is (= #{:unsupported-file-format :whiteboard-not-supported :hidden}
              (set (map :reason @(:ignored-files import-state)))))
+      (is (= #{"ignored/about.org" "ignored/icon-page.md"}
+             (set (map :path (filter #(= :hidden (:reason %))
+                                     @(:ignored-files import-state)))))
+          "Files excluded by :hidden are reported with their paths")
       ;; 2 zotero pdf are external files so not counted here
       (is (= 7 (count @assets))))
 

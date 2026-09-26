@@ -3446,6 +3446,10 @@
                        (remove #(or (logseq-file? %) (asset-file? %)))
                        (filter doc-file?))]
     {:files files
+     ;; Removed by the :hidden config so they can be reported instead of
+     ;; silently dropped
+     :hidden-files (when (seq (:hidden config))
+                     (remove (set files) *files))
      :logseq-files (filter logseq-file? files)
      :asset-files (filter asset-file? files)
      :doc-files doc-files
@@ -3523,6 +3527,9 @@
           (doseq [skipped-file (:skipped-files partitioned)]
             (swap! (get-in doc-options [:import-state :ignored-files]) conj
                    {:path (get skipped-file rpath-key) :reason :unsupported-file-format}))
+          (doseq [hidden-file (:hidden-files partitioned)]
+            (swap! (get-in doc-options [:import-state :ignored-files]) conj
+                   {:path (get hidden-file rpath-key) :reason :hidden}))
           (<export-file-graph-steps repo-or-conn conn config partitioned
                                     <read-file <read-and-copy-asset doc-options options log-fn))
         (import-profile/with-import-watchdog watchdog)
