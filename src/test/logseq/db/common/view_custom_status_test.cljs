@@ -25,11 +25,8 @@
 (defn- add-custom-status-between-todo-and-doing!
   [conn]
   (let [status (d/entity @conn :logseq.property/status)
-        by-ident (into {}
-                       (map (juxt :db/ident identity))
-                       (:property/closed-values status))
-        todo (by-ident :logseq.property/status.todo)
-        doing (by-ident :logseq.property/status.doing)
+        todo (d/entity @conn :logseq.property/status.todo)
+        doing (d/entity @conn :logseq.property/status.doing)
         tx {:db/id -1
             :block/uuid (random-uuid)
             :block/title "Waiting"
@@ -39,7 +36,8 @@
             :block/page (:db/id status)
             :logseq.property/created-from-property (:db/id status)
             :logseq.property/icon {:type :emoji :id "⏳" :name "hourglass"}
-            :block/order (db-order/gen-key (:block/order todo) (:block/order doing))}
+            :block/order (db-order/gen-key (:block/order todo) (:block/order doing)
+                                           :max-key-atom (atom nil))}
         tempids (:tempids (d/transact! conn [tx]))]
     (is (string? (:block/order todo)))
     (is (string? (:block/order doing)))

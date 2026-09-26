@@ -18,6 +18,16 @@
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
+(defn- property-closed-values
+  "Closed values from the reverse ref, not the entity-plus :property/closed-values
+   alias. nbb tests and raw Datascript entities do not run that lookup."
+  [property]
+  (when (de/entity? property)
+    (some->> (:block/_closed-value-property property)
+             (remove entity-util/recycled?)
+             (sort-by :block/order)
+             seq)))
+
 (defn get-property-value-for-search
   [block property]
   (let [v (get block (:db/ident property))]
@@ -41,7 +51,7 @@
 (defn- get-value-for-sort
   [property]
   (let [db-ident (or (:db/ident property) (:id property))
-        closed-values (seq (:property/closed-values property))
+        closed-values (property-closed-values property)
         closed-value->sort-number (when closed-values
                                     (->> (zipmap (map :db/id closed-values)
                                                  (if (every? :block/order closed-values)
@@ -1218,7 +1228,7 @@
                                  (when group-by-property-ident
                                    (d/entity db group-by-property-ident)))
            list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-           group-by-closed-values? (some? (:property/closed-values group-by-property))
+           group-by-closed-values? (some? (property-closed-values group-by-property))
            ref-property? (= (:db/valueType group-by-property) :db.type/ref)
            filters (or (:logseq.property.table/filters view) filters)
            feat-type (or view-feature-type (:logseq.property.view/feature-type view))

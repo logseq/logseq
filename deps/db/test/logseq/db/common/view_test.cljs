@@ -666,14 +666,8 @@
                                                      :sorting [{:id :user.property/score :asc? false}]})]
     (is (= ["With score" "Without score"] (result-titles conn result)))))
 
-(defn- status-by-ident
-  [conn]
-  (into {}
-        (map (juxt :db/ident identity))
-        (:property/closed-values (d/entity @conn :logseq.property/status))))
-
 (defn- add-custom-status!
-  [conn {:keys [title icon order name]}]
+  [conn {:keys [title icon order block-name]}]
   (let [status (d/entity @conn :logseq.property/status)
         tx (cond-> {:db/id -1
                     :block/uuid (random-uuid)
@@ -684,24 +678,24 @@
                     :logseq.property/created-from-property (:db/id status)
                     :block/order order}
              icon (assoc :logseq.property/icon icon)
-             name (assoc :block/name name))
+             block-name (assoc :block/name block-name))
         tempids (:tempids (d/transact! conn [tx]))]
     (d/entity @conn (get tempids -1))))
 
 (defn- custom-status-between-todo-and-doing!
   [conn]
-  (let [by-ident (status-by-ident conn)
-        todo (by-ident :logseq.property/status.todo)
-        doing (by-ident :logseq.property/status.doing)]
+  (let [todo (d/entity @conn :logseq.property/status.todo)
+        doing (d/entity @conn :logseq.property/status.doing)]
     (is (string? (:block/order todo)))
     (is (string? (:block/order doing)))
     (is (neg? (compare (:block/order todo) (:block/order doing))))
     (add-custom-status!
      conn
      {:title "Waiting"
-      :name "waiting"
+      :block-name "waiting"
       :icon {:type :emoji :id "⏳" :name "hourglass"}
-      :order (db-order/gen-key (:block/order todo) (:block/order doing))})))
+      :order (db-order/gen-key (:block/order todo) (:block/order doing)
+                               :max-key-atom (atom nil))})))
 
 (deftest get-view-data-class-objects-status-closed-value-sort-test
   (let [conn (topic-conn
