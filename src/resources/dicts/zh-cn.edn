@@ -954,6 +954,11 @@
  :import/report-title "导入报告"
  :import/report-truncated (fn [shown total] (str "仅显示前 " shown " / " total " 条。下载报告可查看完整列表。"))
  :import/report-validation-errors "无效块"
+ :import/scan-empty "没有发现需要跳过的内容，可以全部导入。"
+ :import/scan-org-notice (fn [count] (str count " 个 Org 文件将按 Markdown 导入"))
+ :import/scan-summary (fn [pages blocks journals] (str "将导入 " pages " 个页面、" blocks " 个块、" journals " 条日志"))
+ :import/scan-title "导入预览"
+ :import/scanning "正在分析文件夹"
  :import/select-edn-or-json "请选择一个 EDN 或 JSON 文件。"
  :import/specific-tags "导入指定标签"
  :import/sqlite-and-assets-desc "导入包含 db.sqlite 和 assets 文件夹的 zip 文件"

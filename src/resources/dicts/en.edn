@@ -954,6 +954,11 @@
  :import/report-title "Import report"
  :import/report-truncated (fn [shown total] (str "Showing the first " shown " of " total ". Download the report for the full list."))
  :import/report-validation-errors "Invalid blocks"
+ :import/scan-empty "Nothing needs attention — the folder looks fully importable."
+ :import/scan-org-notice (fn [count] (str count " Org file(s) will be imported as Markdown"))
+ :import/scan-summary (fn [pages blocks journals] (str "Found " pages " pages, " blocks " blocks and " journals " journals"))
+ :import/scan-title "Import preview"
+ :import/scanning "Analyzing folder"
  :import/select-edn-or-json "Please choose an EDN or a JSON file."
  :import/specific-tags "Import specific tags"
  :import/sqlite-and-assets-desc "Import a zip containing db.sqlite and an assets folder"

@@ -210,7 +210,9 @@
       (import-file-graph (or files default-file-graph-files)
                          options
                          (or config-file default-file-graph-config)
-                         nil))))
+                         nil
+                         ;; Auto-confirm the scan preview in tests
+                         {:<confirm-scan (fn [_] (p/resolved true))}))))
 
 (defn- assert-file-graph-happy-path
   [calls ui expected-repo]

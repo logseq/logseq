@@ -378,6 +378,33 @@
        [:p.text-xs.text-muted-foreground.mt-1
         (t :import/report-truncated import-report-render-limit (count items))])]))
 
+(defn- ignored-file-item-view
+  [{:keys [path reason]}]
+  [:span
+   [:code path]
+   (when reason (str " — " (import-reason-text reason)))])
+
+(defn- ignored-property-item-view
+  [{:keys [property location reason schema]}]
+  [:span
+   [:code (name property)]
+   (when-let [location' (import-location-text location)]
+     (str " — " location'))
+   (when reason (str " (" (import-reason-text reason) ")"))
+   (when schema (str " " schema))])
+
+(defn- validation-error-item-view
+  [{:keys [title page dispatch-key errors]}]
+  [:span
+   [:code title]
+   (when page (str " @" page))
+   (when dispatch-key (str " [" (name dispatch-key) "]"))
+   (str " — " errors)])
+
+(defn- notification-item-view
+  [{:keys [msg]}]
+  [:span msg])
+
 (hsx/defc import-report-dialog
   [import-result]
   (let [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
@@ -390,36 +417,19 @@
      [:div.max-h-96.overflow-y-auto.pr-1
       (import-report-section (t :import/report-ignored-files)
                              ignored-files-detail
-                             (fn [{:keys [path reason]}]
-                               [:span
-                                [:code path]
-                                (when reason (str " — " (import-reason-text reason)))]))
+                             ignored-file-item-view)
       (import-report-section (t :import/report-ignored-assets)
                              ignored-assets-detail
-                             (fn [{:keys [path reason]}]
-                               [:span
-                                [:code path]
-                                (when reason (str " — " (import-reason-text reason)))]))
+                             ignored-file-item-view)
       (import-report-section (t :import/report-ignored-properties)
                              ignored-properties-detail
-                             (fn [{:keys [property location reason schema]}]
-                               [:span
-                                [:code (name property)]
-                                (when-let [location' (import-location-text location)]
-                                  (str " — " location'))
-                                (when reason (str " (" (import-reason-text reason) ")"))
-                                (when schema (str " " schema))]))
+                             ignored-property-item-view)
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
-                             (fn [{:keys [title page dispatch-key errors]}]
-                               [:span
-                                [:code title]
-                                (when page (str " @" page))
-                                (when dispatch-key (str " [" (name dispatch-key) "]"))
-                                (str " — " errors)]))
+                             validation-error-item-view)
       (import-report-section (t :import/report-errors)
                              notifications
-                             (fn [{:keys [msg]}] [:span msg]))]
+                             notification-item-view)]
      [:div.mt-5.sm:mt-4.flex.gap-2
       (ui/button (t :import/report-download)
                  {:on-click #(download-text-file! "logseq-import-report.md"
@@ -443,6 +453,95 @@
    #(import-report-dialog import-result)
    {:id :import-report
     :content-props {:class "w-auto md:max-w-2xl max-h-[80vh] overflow-y-auto"}}))
+
+;;; dry-run scan
+
+(hsx/defc scanning-dialog
+  []
+  (let [{:keys [total current-idx current-page]} (rfx/use-sub [:graph/importing-state])
+        width (when (and total current-idx (pos? total))
+                (js/Math.round (* (.toFixed (/ current-idx total) 2) 100)))
+        process (when (and total current-idx)
+                  (str current-idx "/" total))]
+    [:div.p-5
+     (ui/progress-bar-with-label (or width 0)
+                                 [:div.flex.flex-row.font-bold
+                                  (t :import/scanning)
+                                  (when (seq current-page)
+                                    [:div.hidden.md:flex.flex-row
+                                     [:span.mr-1 ": "]
+                                     [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                                      current-page]])]
+                                 process)]))
+
+(defn- open-scan-dialog!
+  []
+  (shui/dialog-open! scanning-dialog
+                     {:id :import-scan
+                      :content-props
+                      {:onPointerDownOutside #(.preventDefault %)
+                       :onOpenAutoFocus #(.preventDefault %)}}))
+
+(defn- close-scan-dialog!
+  []
+  (state/set-state! :graph/importing-state nil)
+  (shui/dialog-close! :import-scan))
+
+(hsx/defc import-scan-preview-dialog
+  [scan-result on-import]
+  (let [{:keys [page-count journal-count block-count org-file-count
+                ignored-files-detail ignored-assets-detail ignored-properties-detail
+                validation-errors-detail notifications]} (or scan-result {})]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium.pb-2
+        (t :import/scan-title)]]]
+     [:div.max-h-96.overflow-y-auto.pr-1
+      (when (or page-count block-count)
+        [:p.text-sm.mb-2
+         (t :import/scan-summary (or page-count 0) (or block-count 0) (or journal-count 0))])
+      (when (pos? (or org-file-count 0))
+        [:p.text-sm.mb-2 (t :import/scan-org-notice org-file-count)])
+      (when (and (empty? ignored-files-detail) (empty? ignored-assets-detail)
+                 (empty? ignored-properties-detail) (empty? validation-errors-detail)
+                 (empty? notifications))
+        [:p.text-sm.text-muted-foreground (t :import/scan-empty)])
+      (import-report-section (t :import/report-ignored-files)
+                             ignored-files-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-assets)
+                             ignored-assets-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-properties)
+                             ignored-properties-detail
+                             ignored-property-item-view)
+      (import-report-section (t :import/report-validation-errors)
+                             validation-errors-detail
+                             validation-error-item-view)
+      (import-report-section (t :import/report-errors)
+                             notifications
+                             notification-item-view)]
+     [:div.mt-5.sm:mt-4.flex.gap-2
+      (ui/button (t :import/title)
+                 {:on-click on-import})
+      (ui/button (t :ui/cancel)
+                 {:on-click #(shui/dialog-close!)})]]))
+
+(defn- <confirm-import-scan!
+  "Opens the scan preview dialog. Resolves true when the user picks Import and
+  false on any other close."
+  [scan-result]
+  (p/create
+   (fn [resolve _reject]
+     (shui/dialog-open!
+      #(import-scan-preview-dialog scan-result
+                                   (fn []
+                                     (resolve true)
+                                     (shui/dialog-close! :import-scan-preview)))
+      {:id :import-scan-preview
+       :on-close (fn [_] (resolve false))
+       :content-props {:class "w-auto md:max-w-2xl max-h-[80vh] overflow-y-auto"}}))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
@@ -533,6 +632,8 @@
   []
   (state/set-state! :graph/importing nil)
   (state/set-state! :graph/importing-state nil)
+  (shui/dialog-close! :import-scan)
+  (shui/dialog-close! :import-scan-preview)
   (shui/dialog-close! :import-indicator))
 
 (defn- start-imported-graph-search-index!
@@ -599,45 +700,61 @@
                               :error)
           (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
         (when (and (not created-new-graph?)
-                   (= :file-graph-import/graph-not-created (:code (ex-data error))))
+                   (contains? #{:file-graph-import/graph-not-created :import-scan/failed}
+                              (:code (ex-data error))))
           (notification/show! (t :import/unexpected-error
                                  (or (.-message error) (str error)))
                               :error))
         nil))))
 
 (defn- import-file-graph
-  [*files
-   {:keys [graph-name] :as user-options}
-   config-file
-   client-ignored-files]
-  (let [previous-repo (state/get-current-repo)
+  ([*files user-options config-file client-ignored-files]
+   (import-file-graph *files user-options config-file client-ignored-files nil))
+  ([*files
+    {:keys [graph-name] :as user-options}
+    config-file
+    client-ignored-files
+    {:keys [<confirm-scan]}]
+   (let [previous-repo (state/get-current-repo)
         expected-repo (str config/db-version-prefix graph-name)]
-    (state/set-state! :graph/importing :file-graph)
-    (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
     (start-file-graph-import-session! *files)
-    (open-import-indicator!)
-    (-> (p/let [start-time (t/now)
-                created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
-                repo (or created-repo (state/get-current-repo))]
-          (when-not (= repo expected-repo)
-            (throw (ex-info "File-graph import did not create a new graph"
-                            {:code :file-graph-import/graph-not-created
-                             :expected expected-repo
-                             :repo repo})))
-          (p/let [file-metas (mapv import-file-descriptor *files)
-                  serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
-                  options (build-file-graph-worker-options user-options config/config-default-content)
-                  import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
-                  ;; Import txs do not broadcast renderer deltas. Restore after
-                  ;; import so this client sees pages and refs. Keep importing
-                  ;; set so :graph/restored does not start a second search build.
-                  _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
-            (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-            (finish-file-graph-import! repo import-result client-ignored-files)))
+    (-> (p/let [file-metas (mapv import-file-descriptor *files)
+                serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
+                options (build-file-graph-worker-options user-options config/config-default-content)
+                ;; Dry-run the export on a throwaway in-memory conn so the user
+                ;; can see what will be created/skipped before importing
+                _ (open-scan-dialog!)
+                scan-result (-> (state/<invoke-db-worker :thread-api/scan-file-graph
+                                                         serialized-config-file file-metas options)
+                                (p/catch (fn [error]
+                                           (throw (ex-info "Scanning the folder failed"
+                                                           {:code :import-scan/failed}
+                                                           error)))))
+                _ (close-scan-dialog!)
+                proceed? ((or <confirm-scan <confirm-import-scan!) scan-result)]
+          (when proceed?
+            (state/set-state! :graph/importing :file-graph)
+            (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
+            (open-import-indicator!)
+            (p/let [start-time (t/now)
+                    created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                    repo (or created-repo (state/get-current-repo))]
+              (when-not (= repo expected-repo)
+                (throw (ex-info "File-graph import did not create a new graph"
+                                {:code :file-graph-import/graph-not-created
+                                 :expected expected-repo
+                                 :repo repo})))
+              (p/let [import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
+                      ;; Import txs do not broadcast renderer deltas. Restore after
+                      ;; import so this client sees pages and refs. Keep importing
+                      ;; set so :graph/restored does not start a second search build.
+                      _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
+                (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+                (finish-file-graph-import! repo import-result client-ignored-files)))))
         (p/catch (fn [error]
                    (abort-file-graph-import! error previous-repo)))
         (p/finally (fn []
-                     (file-graph-import/clear-file-graph-import-session!))))))
+                     (file-graph-import/clear-file-graph-import-session!)))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"

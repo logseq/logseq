@@ -54,6 +54,7 @@
    [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+   [logseq.db.sqlite.export :as sqlite-export]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.graph-parser.exporter :as gp-exporter]
    [promesa.core :as p]
@@ -408,7 +409,7 @@
         (p/resolved nil)))))
 
 (defn- <read-and-copy-import-asset
-  [repo file assets buffer-handler]
+  [repo file assets buffer-handler dry-run?]
   (p/let [payload (<read-import-asset-payload file)]
     (when payload
       (let [buffer (.-buffer payload)
@@ -425,7 +426,7 @@
                               :checksum checksum
                               :asset-id asset-id})]
           (swap! assets assoc asset-name asset-data)
-          (when-not pdf-annotation?
+          (when-not (or dry-run? pdf-annotation?)
             (platform/asset-write-bytes! (platform/current)
                                          repo
                                          (str asset-id "." asset-type)
@@ -453,13 +454,34 @@
                              :<read-file <read-import-file-content
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-copy-import-asset repo file assets buffer-handler))))]
+                                                     (<read-and-copy-import-asset repo file assets buffer-handler false))))]
       (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
               _ (set-import-ui-state! [:graph/importing-state :step] :validating)
               _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
               _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
               validation (worker-db-validate/validate-db conn :fix false)]
         (terminal-import-result run-id (compact-import-result result @notifications validation))))))
+
+(defn- <scan-file-graph!
+  "Runs the file-graph export into a throwaway in-memory conn so the renderer
+  can preview what an import would create and skip. Nothing is persisted."
+  [config-file files opts]
+  (let [conn (sqlite-export/create-conn)
+        notifications (atom [])
+        options (-> opts
+                    (assoc :notify-user #(swap! notifications conj %)
+                           :set-ui-state set-import-ui-state!
+                           :<read-file <read-import-file-content
+                           :<get-file-stat <import-file-stat
+                           :<read-and-copy-asset (fn [file assets buffer-handler]
+                                                   (<read-and-copy-import-asset nil file assets buffer-handler true))))]
+    (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+            validation (worker-db-validate/validate-db conn :fix false :silent? true)
+            db @conn]
+      (assoc (compact-import-result result @notifications validation)
+             :page-count (d/q '[:find (count ?p) . :where [?p :block/name _]] db)
+             :journal-count (d/q '[:find (count ?p) . :where [?p :block/journal-day _]] db)
+             :block-count (d/q '[:find (count ?b) . :where [?b :block/page _]] db)))))
 
 
 (defn upsert-addr-content!
@@ -1033,6 +1055,10 @@
 (def-thread-api :thread-api/import-file-graph
   [repo config-file files opts]
   (<import-file-graph! repo config-file files opts))
+
+(def-thread-api :thread-api/scan-file-graph
+  [config-file files opts]
+  (<scan-file-graph! config-file files opts))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
