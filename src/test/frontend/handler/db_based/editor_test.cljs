@@ -126,32 +126,74 @@
 
 (deftest save-file-transacts-through-worker-test
   (async done
-    (let [calls (atom [])]
-      (p/with-redefs [state/get-current-repo (constantly "test")
-                      state/<invoke-db-worker
-                      (fn [& args]
-                        (swap! calls conj (vec args))
-                        (p/resolved nil))
-                      db/transact!
+    (let [calls (atom [])
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker]
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [method-k & args]
+                (when (contains? #{:thread-api/pull :thread-api/transact} method-k)
+                  (swap! calls conj (into [method-k] args)))
+                (p/resolved nil)))
+      (p/with-redefs [db/transact!
                       (fn [& _]
                         (throw (js/Error. "renderer DB transact should not be used")))]
         (-> (db-editor-handler/save-file! "pages/a.md" "content")
             (p/then
              (fn []
-               (let [[api repo tx-data tx-meta context] (first @calls)
+               (let [[pull-call transact-call] @calls
+                     [pull-api pull-repo _pull-attrs pull-lookup] pull-call
+                     [api repo tx-data tx-meta context] transact-call
                      file-tx (first tx-data)]
+                 (is (= :thread-api/pull pull-api))
+                 (is (= "test" pull-repo))
+                 (is (= [:file/path "pages/a.md"] pull-lookup))
                  (is (= :thread-api/transact api))
                  (is (= "test" repo))
                  (is (= "pages/a.md" (:file/path file-tx)))
                  (is (= "content" (:file/content file-tx)))
                  (is (instance? js/Date (:file/created-at file-tx)))
                  (is (instance? js/Date (:file/last-modified-at file-tx)))
+                 ;; new file entity must have a :block/uuid to be valid
+                 (is (uuid? (:block/uuid file-tx)))
                  (is (nil? tx-meta))
                  (is (nil? context)))))
             (p/catch
              (fn [error]
                (is false (str error))))
-            (p/finally done))))))
+            (p/finally
+             (fn []
+               (reset! state/*db-worker previous-worker)
+               (state/replace-state! previous-state)
+               (done))))))))
+
+(deftest save-file-omits-uuid-for-existing-file-entity-test
+  (async done
+    (let [calls (atom [])
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker]
+      (state/swap-state! assoc :git/current-repo "test")
+      (reset! state/*db-worker
+              (fn [method-k & args]
+                (when (contains? #{:thread-api/pull :thread-api/transact} method-k)
+                  (swap! calls conj (into [method-k] args)))
+                (p/resolved (when (= method-k :thread-api/pull)
+                              {:db/id 1}))))
+      (-> (db-editor-handler/save-file! "pages/a.md" "content")
+          (p/then
+           (fn []
+             (let [file-tx (first (nth (second @calls) 2))]
+               (is (= :thread-api/pull (ffirst @calls)))
+               (is (= :thread-api/transact (first (second @calls))))
+               (is (not (contains? file-tx :block/uuid))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (reset! state/*db-worker previous-worker)
+             (state/replace-state! previous-state)
+             (done)))))))
 
 (deftest batch-set-heading-loads-blocks-through-worker-test
   (async done

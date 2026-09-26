@@ -4,6 +4,8 @@
   logseq/config.edn. In the future it may manage more files. This component
   depends on a repo."
   (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -40,7 +42,11 @@
    (p/let [content (get-repo-config-content repo-url)]
      (restore-repo-config! repo-url content)))
   ([repo-url config-content]
-   (set-repo-config-state! repo-url config-content)))
+   ;; Missing config.edn (e.g. graphs without a :file/path entity) is treated
+   ;; as the default config so `[:config repo]` state is always populated
+   (set-repo-config-state! repo-url (if (string/blank? config-content)
+                                      config/config-default-content
+                                      config-content))))
 
 (defn start
   "This component only has one responsibility on start, to manage db and ui state
