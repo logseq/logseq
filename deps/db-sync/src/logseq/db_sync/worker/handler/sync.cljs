@@ -349,8 +349,34 @@
   [db attr]
   (= :db.type/ref (:db/valueType (d/entity db attr))))
 
-(defn- tx-item-tempids
-  [db item]
+(defn- cardinality-many-attr?
+  [db attr]
+  (= :db.cardinality/many
+     (or (get-in (d/schema db) [attr :db/cardinality])
+         (:db/cardinality (d/entity db attr)))))
+
+(defn- replaced-value-attrs
+  "The [entity attr] pairs whose cardinality-one value the tx retracts on an
+  existing entity. Each chunk is applied as its own transaction, so such a
+  retract sent ahead of the add of the new value can leave the entity without
+  a required attribute and be rejected."
+  [db tx-data]
+  (into #{}
+        (keep (fn [item]
+                (when (and (vector? item)
+                           (= :db/retract (first item))
+                           (<= 4 (count item)))
+                  (let [[_op entity attr] item]
+                    (when (and (not (tempid? entity))
+                               (not (cardinality-many-attr? db attr)))
+                      [entity attr])))))
+        tx-data))
+
+(defn- tx-item-group-keys
+  "Keys of the groups a tx item belongs to. Items sharing a key stay in one
+  chunk: those of a tempid, which resolves within a transaction, and the
+  retract and adds of a value in `replaced`."
+  [db replaced item]
   (cond
     (and (map? item) (tempid? (:db/id item)))
     #{(:db/id item)}
@@ -358,13 +384,16 @@
     (and (vector? item)
          (contains? #{:db/add :db/retract :db/cas :db.fn/cas} (first item))
          (<= 4 (count item)))
-    (let [[_op entity attr value] item]
+    (let [[op entity attr value] item]
       (cond-> #{}
         (tempid? entity)
         (conj entity)
         (and (ref-attr? db attr)
              (tempid? value))
-        (conj value)))
+        (conj value)
+        (and (contains? #{:db/add :db/retract} op)
+             (contains? replaced [entity attr]))
+        (conj [::value-replacement entity attr])))
 
     (and (vector? item)
          (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))
@@ -389,27 +418,23 @@
         (recur (next remaining) [[start end]]))
       merged)))
 
-(defn- tempid-ranges
+(defn- group-range-by-start
   [db tx-data]
-  (let [ranges-by-tempid
+  (let [replaced (replaced-value-attrs db tx-data)
+        ranges-by-key
         (reduce-kv
          (fn [acc idx item]
-           (reduce (fn [acc* tempid]
-                     (update acc* tempid
+           (reduce (fn [acc* group-key]
+                     (update acc* group-key
                              (fn [[start end]]
                                [(if (some? start) (min start idx) idx)
                                 (if (some? end) (max end idx) idx)])))
                    acc
-                   (tx-item-tempids db item)))
+                   (tx-item-group-keys db replaced item)))
          {}
          tx-data)]
-    (merge-ranges (vals ranges-by-tempid))))
-
-(defn- tempid-range-by-start
-  [db tx-data]
-  (let [ranges (tempid-ranges db tx-data)
-        range-by-start (into {} (map (fn [[start end]] [start end]) ranges))]
-    range-by-start))
+    (into {} (map (fn [[start end]] [start end])
+                  (merge-ranges (vals ranges-by-key))))))
 
 (defn- next-ordered-tx-group
   [tx-data range-by-start idx]
@@ -425,7 +450,7 @@
   [db f init tx-data]
   (let [tx-data (vec tx-data)
         item-count (count tx-data)
-        range-by-start (tempid-range-by-start db tx-data)]
+        range-by-start (group-range-by-start db tx-data)]
     (loop [idx 0
            chunk []
            acc init]
