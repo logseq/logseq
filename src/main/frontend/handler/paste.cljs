@@ -217,7 +217,9 @@
       (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
-               keep-uuid? (= :cut (or op (state/get-block-op-type)))
+               ;; The clipboard payload's :op is authoritative; it travels with
+               ;; the payload so it can't diverge from the copied blocks.
+               keep-uuid? (= :cut op)
                blocks (map (fn [b] (dissoc b :block/properties)) blocks)]
            (if embed-block?
              (when-let [block-id (:block/uuid (first blocks))]
@@ -237,8 +239,11 @@
                                                                      :replace-empty-target? true
                                                                      :other-attrs {:block/link (:db/id linked-block)}})]
                        (state/clear-edit!))))))
-             (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
-                                                  :keep-uuid? keep-uuid?})))
+             (p/let [result (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                                                 :keep-uuid? keep-uuid?})]
+               (when-let [uuid->new-uuid (not-empty (:uuid->new-uuid result))]
+                 (editor-assets/copy-pasted-asset-files! repo blocks uuid->new-uuid))
+               result)))
          (paste-copied-text input text html)))
      (p/catch (fn [error]
                 (log/error :msg "Paste failed" :exception error)
