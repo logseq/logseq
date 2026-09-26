@@ -216,3 +216,90 @@ external browser_window_from_web_contents :
 external browser_window_set_visible_on_all_workspaces :
   Browser_window.t -> bool -> unit = "setVisibleOnAllWorkspaces"
   [@@mel.send]
+
+(* Appended externals — window / context-menu / spell-check /
+   find-in-page port. *)
+
+external event_prevent_default : 'a -> unit = "preventDefault"
+  [@@mel.send]
+
+external app_get_app_path : unit -> string = "getAppPath"
+  [@@mel.module "electron"] [@@mel.scope "app"]
+
+external browser_window_off :
+  Browser_window.t -> string -> ('a -> unit [@u]) -> unit = "off"
+  [@@mel.send]
+
+external web_contents_get_zoom_level : Web_contents.t -> float
+  = "getZoomLevel" [@@mel.send]
+
+external web_contents_on2 :
+  Web_contents.t -> string -> ('a -> 'b -> unit [@u]) -> unit = "on"
+  [@@mel.send]
+
+external web_contents_off2 :
+  Web_contents.t -> string -> ('a -> 'b -> unit [@u]) -> unit = "off"
+  [@@mel.send]
+
+external web_contents_set_window_open_handler :
+  Web_contents.t -> ('a -> Js.Json.t [@u]) -> unit
+  = "setWindowOpenHandler" [@@mel.send]
+
+external web_contents_find_in_page :
+  Web_contents.t -> string -> 'a -> int = "findInPage" [@@mel.send]
+
+external web_contents_stop_find_in_page :
+  Web_contents.t -> string -> unit = "stopFindInPage" [@@mel.send]
+
+external web_contents_replace_misspelling :
+  Web_contents.t -> string -> unit = "replaceMisspelling" [@@mel.send]
+
+external web_contents_show_definition_for_selection :
+  Web_contents.t -> unit = "showDefinitionForSelection" [@@mel.send]
+
+external session_default_session : Session.t = "defaultSession"
+  [@@mel.module "electron"] [@@mel.scope "session"]
+
+external session_set_spell_checker_enabled :
+  Session.t -> bool -> unit = "setSpellCheckerEnabled" [@@mel.send]
+
+external session_add_word_to_spell_checker_dictionary :
+  Session.t -> string -> unit = "addWordToSpellCheckerDictionary"
+  [@@mel.send]
+
+external web_request_on_before_send_headers :
+  Web_request.t ->
+  'a ->
+  ('b -> (Js.Json.t -> unit [@u]) -> unit [@u]) ->
+  unit = "onBeforeSendHeaders" [@@mel.send]
+
+module Menu_item = struct
+  type t
+
+  external make : 'a -> t = "MenuItem" [@@mel.new] [@@mel.module "electron"]
+end
+
+external menu_make : unit -> Menu_.t = "Menu" [@@mel.new]
+  [@@mel.module "electron"]
+
+external menu_append : Menu_.t -> Menu_item.t -> unit = "append"
+  [@@mel.send]
+
+external menu_items : Menu_.t -> Menu_item.t array = "items" [@@mel.get]
+
+external menu_popup : Menu_.t -> unit = "popup" [@@mel.send]
+
+module Native_image = struct
+  type t
+
+  external create_from_path : string -> t = "createFromPath"
+    [@@mel.module "electron"] [@@mel.scope "nativeImage"]
+end
+
+module Clipboard = struct
+  external write_image : Native_image.t -> unit = "writeImage"
+    [@@mel.module "electron"] [@@mel.scope "clipboard"]
+end
+
+external dialog_show_message_box_sync : 'a -> int = "showMessageBoxSync"
+  [@@mel.module "electron"] [@@mel.scope "dialog"]
