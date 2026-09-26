@@ -64,7 +64,10 @@ let write_text_atomic path contents =
       close_out oc;
       Unix.rename tmp path)
 
-type file_stat = { mtime_ms : float option; birthtime_ms : float option }
+type file_stat = {
+  mtime_ms : Time.epoch_ms option;
+  birthtime_ms : Time.epoch_ms option;
+}
 
 let stat _path = Db_worker_effect.pure None
 

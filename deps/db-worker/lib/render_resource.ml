@@ -762,7 +762,7 @@ let render_block_comment_summary db key _runtime =
 let render_block_task_time db key _runtime =
   let block_uuid = require_uuid "block-uuid" (List.nth key 1) in
   let block = entity_by_uuid db "block-uuid" block_uuid in
-  let now_ms = Time.epoch_ms_to_float (Time.now ()) in
+  let now_ms = Time.now () in
   let history_items, seconds =
     match Endpoint_query.task_spent_time_impl db block.id now_ms with
     | Wire.Array [ Wire.Array items; Wire.Int s ] -> (items, s)
@@ -1240,7 +1240,10 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
     | _ -> None
   in
   let today_day =
-    match get "today-day" with Some (Wire.Int n) -> Some n | _ -> None
+    match get "today-day" with
+    | Some (Wire.Int n) ->
+        Time.local_date_of_journal_day (Time.local_tz ()) n
+    | _ -> None
   in
   let require_today_day =
     match get "require-today-day?" with
@@ -1266,7 +1269,8 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
               , [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
-  | Keyword "today", Some day -> Int64 (Int64.of_int day)
+  | Keyword "today", Some day ->
+      Int64 (Int64.of_int (Time.journal_day_of_local_date day))
   | _ ->
       Db_inputs.resolve_input db resolved_input
         { Db_inputs.current_block_uuid = current_block_uuid
@@ -1419,7 +1423,8 @@ let query_result_watch_attrs =
 let attr_watch_safe_rules = [ "between"; "block-content"; "page" ]
 
 let dsl_query_watch_dependencies db (query_string : string)
-    (current_page_title : string option) (today_day : int option) =
+    (current_page_title : string option)
+    (today_day : Time.local_date option) =
   if
     Unicode.trim query_string = ""
     || Db_query_dsl.wrapped_by_quotes query_string
@@ -1486,7 +1491,8 @@ let query_watch_keys db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
         | _ -> None
       and day =
         match List.assoc_opt (kw "today-day") spec_kvs with
-        | Some (Wire.Int n) -> Some n
+        | Some (Wire.Int n) ->
+            Time.local_date_of_journal_day (Time.local_tz ()) n
         | _ -> None
       in
       let attrs, task_attrs, tasks, opaque =
@@ -1819,7 +1825,8 @@ let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
                    | _ -> None)
               ; opt_today_day =
                   (match get "today-day" with
-                   | Some (Wire.Int n) -> Some n
+                   | Some (Wire.Int n) ->
+                     Time.local_date_of_journal_day (Time.local_tz ()) n
                    | _ -> None)
               }
             in

@@ -10,7 +10,10 @@ val remove : string -> unit Db_worker_effect.t
 (* write-then-rename, matching cljs storage/write-text-atomic!. *)
 val write_text_atomic : string -> string -> unit Db_worker_effect.t
 
-type file_stat = { mtime_ms : float option; birthtime_ms : float option }
+type file_stat = {
+  mtime_ms : Time.epoch_ms option;
+  birthtime_ms : Time.epoch_ms option;
+}
 
 (* node fs.statSync; None when unavailable (browser) or on error. *)
 val stat : string -> file_stat option Db_worker_effect.t

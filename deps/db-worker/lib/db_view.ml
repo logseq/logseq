@@ -857,9 +857,9 @@ let get_property_values db property_ident ~view_id ~query_entity_ids =
 
 (* common-util/get-timestamp — relative-name strings shift from now;
    numbers/instants pass through (cljs tc/to-long). *)
-let get_timestamp (v : value) : float option =
+let get_timestamp (v : value) : Time.epoch_ms option =
   let now = Date_time_util.time_ms () in
-  let shift p n = Int64.to_float (Date_time_util.minus p n now) in
+  let shift p n = Time.epoch_ms (Date_time_util.minus p n now) in
   match v with
   | String s ->
       (match s with
@@ -870,9 +870,9 @@ let get_timestamp (v : value) : float option =
        | "3 months ago" -> Some (shift Months 3)
        | "1 year ago" -> Some (shift Years 1)
        | _ -> None)
-  | Int64 i -> Some (Int64.to_float i)
-  | Float f -> Some f
-  | Instant i -> Some (Int64.to_float i)
+  | Int64 i -> Some (Time.epoch_ms i)
+  | Float f -> Some (Time.epoch_ms_of_float f)
+  | Instant i -> Some (Time.epoch_ms i)
   | _ -> None
 
 (* db-property-type sets *)
@@ -1638,7 +1638,7 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
                (match get_timestamp c.f_match with
                 | None -> true
                 | Some ts ->
-                    (match js_cmp v (Float ts) with
+                    (match js_cmp v (Float (Time.epoch_ms_to_float ts)) with
                      | Some o when c.f_op = "before" -> o <= 0
                      | Some o -> o >= 0
                      | None -> false)))
@@ -2015,7 +2015,7 @@ type compiled_clause =
   ; c_match_eids : entity_id list
   ; c_match_contents : value list
   ; c_journal_day : value option
-  ; c_timestamp : float option }
+  ; c_timestamp : Time.epoch_ms option }
 
 let compile_filter_clause db (c : filter_clause) : compiled_clause =
   let items =
@@ -2193,7 +2193,7 @@ let match_text_or_number_clause (row : clause_row) (op : string) (m : value) : b
 
 (* view/match-temporal-clause *)
 let match_temporal_clause db (row : clause_row) (op : string) (m : value)
-    (journal_day : value option) (timestamp : float option) : bool =
+    (journal_day : value option) (timestamp : Time.epoch_ms option) : bool =
   match op with
   | "date-before" | "date-after" ->
       (match row.r_raw with
@@ -2222,18 +2222,19 @@ let match_temporal_clause db (row : clause_row) (op : string) (m : value)
            (match timestamp with
             | None -> true
             | Some ts ->
+                let tsf = Time.epoch_ms_to_float ts in
                 let vs = if row.r_ref then row.r_contents else row.r_raw in
                 List.exists
                   (fun v ->
                      match strict_number_opt v with
-                     | Some n -> if op = "before" then n <= ts else n >= ts
+                     | Some n -> if op = "before" then n <= tsf else n >= tsf
                      | None -> false)
                   vs))
   | _ -> true
 
 (* view/match-compare-clause *)
 let match_compare_clause db (row : clause_row) (op : string) (m : value)
-    (journal_day : value option) (timestamp : float option) : bool =
+    (journal_day : value option) (timestamp : Time.epoch_ms option) : bool =
   match match_text_or_number_clause row op m with
   | Some r -> r
   | None -> match_temporal_clause db row op m journal_day timestamp

@@ -19,46 +19,52 @@ let token_ttl_ms = 60. *. 60. *. 1000.
 type jwks_cache =
   { jwks_url : string option
   ; jwks_keys : Wire.t list option
-  ; jwks_fetched_at : float
+  ; jwks_fetched_at : Time.epoch_ms
   }
 
-let jwks_cache = ref { jwks_url = None; jwks_keys = None; jwks_fetched_at = 0. }
+let jwks_cache =
+  ref { jwks_url = None; jwks_keys = None; jwks_fetched_at = Time.epoch_ms 0L }
 
 (* cljs *token-cache-state {:tokens {token {:payload :exp :cached-at}}
    :expiry-queue PersistentQueue} — queue entries are (token, cached-at)
    pairs, FIFO. *)
 type cached_token =
   { token_payload : Wire.t
-  ; token_exp : float
-  ; token_cached_at : float
+  ; (* JWT exp claim is in seconds — normalized to epoch_ms at parse so
+       this record is single-unit *)
+    token_exp : Time.epoch_ms
+  ; token_cached_at : Time.epoch_ms
   }
 
 type token_cache_state =
   { tokens : (string * cached_token) list
-  ; expiry_queue : (string * float) list
+  ; expiry_queue : (string * Time.epoch_ms) list
   }
 
 let token_cache_state = ref { tokens = []; expiry_queue = [] }
 
-let get_now_ms () = Time.epoch_ms_to_float (Time.now ())
+let elapsed_ms (a : Time.epoch_ms) (b : Time.epoch_ms) : float =
+  Time.epoch_ms_to_float a -. Time.epoch_ms_to_float b
 
-let cached_token token now_s now_ms =
+let cached_token token now =
   match List.assoc_opt token (!token_cache_state).tokens with
   | Some { token_payload; token_exp; token_cached_at }
-    when token_exp > now_s && now_ms -. token_cached_at < token_ttl_ms ->
+    when Time.compare_epoch_ms token_exp now > 0
+         && elapsed_ms now token_cached_at < token_ttl_ms ->
       Some token_payload
   | _ -> None
 
-let rec remove_expired_tokens state now_ms =
+let rec remove_expired_tokens state now =
   match state.expiry_queue with
-  | (token, cached_at) :: rest when now_ms -. cached_at >= token_ttl_ms ->
+  | (token, cached_at) :: rest when elapsed_ms now cached_at >= token_ttl_ms ->
       let tokens =
         match List.assoc_opt token state.tokens with
-        | Some entry when entry.token_cached_at = cached_at ->
+        | Some entry
+          when Time.compare_epoch_ms entry.token_cached_at cached_at = 0 ->
             List.remove_assoc token state.tokens
         | _ -> state.tokens
       in
-      remove_expired_tokens { tokens; expiry_queue = rest } now_ms
+      remove_expired_tokens { tokens; expiry_queue = rest } now
   | _ -> state
 
 let number_field name (w : Wire.t) : float option =
@@ -76,12 +82,14 @@ let string_field name (w : Wire.t) : string option =
 let cache_token token payload =
   match number_field "exp" payload with
   | Some exp ->
-      let cached_at = get_now_ms () in
+      let cached_at = Time.now () in
       let state = remove_expired_tokens !token_cache_state cached_at in
       token_cache_state :=
         { tokens =
             ( token
-            , { token_payload = payload; token_exp = exp; token_cached_at = cached_at } )
+            , { token_payload = payload
+              ; token_exp = Time.epoch_ms_of_float (exp *. 1000.)
+              ; token_cached_at = cached_at } )
             :: List.remove_assoc token state.tokens
         ; expiry_queue = state.expiry_queue @ [ (token, cached_at) ]
         }
@@ -90,10 +98,10 @@ let cache_token token payload =
 (* cljs get-jwks-keys — {:keys [...]} fetch with 6h per-url cache; a
    forced refetch bypasses the cache entirely. *)
 let get_jwks_keys ?(force = false) url =
-  let now = get_now_ms () in
+  let now = Time.now () in
   let cache = !jwks_cache in
   match (not force && cache.jwks_url = Some url, cache.jwks_keys) with
-  | true, Some keys when now -. cache.jwks_fetched_at < jwks_ttl_ms ->
+  | true, Some keys when elapsed_ms now cache.jwks_fetched_at < jwks_ttl_ms ->
       Db_worker_effect.pure keys
   | _ ->
       Http.send { url; method_ = "GET"; headers = []; body = None }
@@ -148,9 +156,8 @@ let truthy = function
 let verify_jwt token env =
   match String.split_on_char '.' token with
   | [ header_part; payload_part; signature_part ] ->
-      let now_ms = get_now_ms () in
-      let now_s = Float.floor (now_ms /. 1000.) in
-      (match cached_token token now_s now_ms with
+      let now = Time.now () in
+      (match cached_token token now with
        | Some payload -> Db_worker_effect.pure (Some payload)
        | None ->
            (try
@@ -171,7 +178,13 @@ let verify_jwt token env =
               if not (client_id_allowed env client_id) then
                 raise (Sync_util.ex_info "aud not found" []);
               (match number_field "exp" payload with
-               | Some exp when exp < now_s -> raise (Sync_util.ex_info "exp" [])
+               | Some exp
+                 (* exp is JWT seconds; compare in ms like cljs *)
+                 when Time.compare_epoch_ms
+                        (Time.epoch_ms_of_float (exp *. 1000.))
+                        now
+                      < 0 ->
+                 raise (Sync_util.ex_info "exp" [])
                | _ -> ());
               let signature =
                 match Sync_util.decode_b64url signature_part with

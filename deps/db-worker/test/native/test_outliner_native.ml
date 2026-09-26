@@ -454,9 +454,9 @@ let test_gc_recycled_converted_page_removes_property_value_blocks () =
     Option.get (Datascript.entity (db_of conn) (Entity_id target_id))
   in
   ldb_transact conn ~outliner_op:"delete-page"
-    (Outliner_recycle.recycle_page_tx_data (db_of conn) page ?now_ms:(Some 0.) ());
+    (Outliner_recycle.recycle_page_tx_data (db_of conn) page ?now_ms:(Some (Time.epoch_ms 0L)) ());
   check "gc-recycled-converted-page-removes-property-value-blocks gc"
-    (Outliner_recycle.gc conn ?now_ms:(Some (31. *. 24. *. 3600. *. 1000.)) ());
+    (Outliner_recycle.gc conn ?now_ms:(Some (Time.epoch_ms_of_float (31. *. 24. *. 3600. *. 1000.))) ());
   check "gc-recycled-converted-page-removes-property-value-blocks target"
     (Datascript.entity (db_of conn) (Entity_id target_id) = None);
   check "gc-recycled-converted-page-removes-property-value-blocks value"
@@ -482,7 +482,7 @@ let test_recycle_stores_full_deleted_at_ms () =
   let page_uuid = uuid_of page in
   ldb_transact conn ~outliner_op:"delete-page"
     (Outliner_recycle.recycle_page_tx_data (db_of conn) page
-       ~now_ms:1783612800123. ());
+       ~now_ms:(Time.epoch_ms 1783612800123L) ());
   let page' = entity_by_uuid_exn conn page_uuid in
   check "deleted-at stores full epoch-ms"
     (Ldb.int64_value page' "logseq.property/deleted-at"
@@ -528,10 +528,10 @@ let test_gc_keeps_unexpired_recycled_page () =
   let page = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
   let page_id = page.id in
   ldb_transact conn ~outliner_op:"delete-page"
-    (Outliner_recycle.recycle_page_tx_data (db_of conn) page ?now_ms:(Some 0.) ());
+    (Outliner_recycle.recycle_page_tx_data (db_of conn) page ?now_ms:(Some (Time.epoch_ms 0L)) ());
   check "gc-keeps-unexpired-recycled-page no-op"
     (not
-       (Outliner_recycle.gc conn ?now_ms:(Some (29. *. 24. *. 3600. *. 1000.)) ()));
+       (Outliner_recycle.gc conn ?now_ms:(Some (Time.epoch_ms_of_float (29. *. 24. *. 3600. *. 1000.))) ()));
   check "gc-keeps-unexpired-recycled-page kept"
     (Option.is_some (Datascript.entity (db_of conn) (Entity_id page_id)))
 

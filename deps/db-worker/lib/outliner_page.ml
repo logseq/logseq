@@ -1376,7 +1376,7 @@ let delete_conn (conn : conn) (page_uuid : string) (opts : Wire.t) : Wire.t =
         let tx_data =
           db_refs_to_page page
           @ Outliner_recycle.recycle_page_tx_data db page ?deleted_by_uuid
-              ?now_ms:(Option.map Int64.to_float now_ms) ()
+              ?now_ms:(Option.map Time.epoch_ms now_ms) ()
         in
         let tx_meta' =
           if ref_rewrite_save_ops <> [] then
