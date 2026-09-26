@@ -243,24 +243,32 @@
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
 (defn- journal-identity-ref
-  "Existing journals keep a stable stored :block/name. Never copy inbound or
+  "Journals keep a stable stored :block/name. Never copy inbound or
   entity-computed title/name onto that page."
   [page ref]
   (merge (select-keys page [:db/id :block/uuid :db/ident])
          (select-keys ref [:block.temp/original-page-name])))
 
+(defn- live-journal?
+  [e]
+  (and (ldb/journal? e)
+       ;; Recycled journals still carry :block/journal-day and their tags;
+       ;; refs to them go through outliner-page/create so they get restored.
+       (not (ldb/recycled? e))))
+
 (defn- existing-journal-page
   [db ref]
   (when (map? ref)
     (or (when-let [day (:block/journal-day ref)]
-          (ldb/get-journal-page-by-day db day))
+          (when-let [e (ldb/get-journal-page-by-day db day)]
+            (when (live-journal? e) e)))
         (when-let [e (or (some->> (:db/id ref) (d/entity db))
                          (when-let [id (:block/uuid ref)]
                            (d/entity db [:block/uuid id])))]
-          (when (ldb/journal? e) e))
+          (when (live-journal? e) e))
         (when-let [page-name (:block/name ref)]
           (when-let [e (ldb/get-page db page-name)]
-            (when (ldb/journal? e) e))))))
+            (when (live-journal? e) e))))))
 
 (defn- journal-page-tx?
   [page-uuid tx]
@@ -279,9 +287,7 @@
   (let [existing (d/entity db [:block/uuid page-uuid])]
     (if (or (ldb/journal? existing)
             (some #(journal-page-tx? page-uuid %) tx-data))
-      [(merge {:block/uuid page-uuid}
-              (select-keys existing [:db/id :db/ident])
-              (select-keys ref [:block.temp/original-page-name]))
+      [(journal-identity-ref (or existing {:block/uuid page-uuid}) ref)
        tx-data]
       [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
                       :block/uuid page-uuid)

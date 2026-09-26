@@ -245,6 +245,34 @@
         (is (= stored-title
                (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))))))))
 
+(deftest resolve-page-refs-restores-recycled-journal
+  (testing "A ref to a recycled journal goes through create so the page gets restored"
+    (let [journal-day 20260925
+          title-format "E, dd.MM.yyyy"
+          conn (db-test/create-conn-with-blocks
+                [{:page {:build/journal journal-day}}])
+          journal (db-test/find-journal-by-journal-day @conn journal-day)
+          parsed-uuid (random-uuid)]
+      (d/transact! conn [[:db/add :logseq.class/Journal
+                          :logseq.property.journal/title-format title-format]
+                       [:db/add (:db/id journal)
+                        :logseq.property/deleted-at (common-util/time-ms)]])
+      (is (true? (ldb/recycled? (d/entity @conn (:db/id journal)))))
+      (let [custom-title (date-time-util/int->journal-title journal-day title-format)
+            {:keys [block page-txs]}
+            (#'outliner-core/resolve-page-refs
+             @conn
+             {:block/title (str "[[" parsed-uuid "]]")
+              :block/refs [{:block/uuid parsed-uuid
+                            :block/title custom-title
+                            :block/name (common-util/page-name-sanity-lc custom-title)
+                            :block/journal-day journal-day
+                            :block/tags [:logseq.class/Journal]}]})
+            resolved (first (:block/refs block))]
+        (is (= (:block/uuid journal) (:block/uuid resolved)))
+        (is (seq page-txs)
+            "restoring tx-data is returned so the journal leaves the recycle page")))))
+
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
     (let [conn (db-test/create-conn-with-blocks
