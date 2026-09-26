@@ -2040,12 +2040,19 @@
                           editor/get-selected-blocks
                           (fn []
                             (swap! calls conj :selection-captured)
-                            nil)
+                            [#js {:className "ls-block"
+                                  :classList #js {:contains (fn [_] false)}
+                                  :getAttribute (fn [attr]
+                                                  (case attr
+                                                    "blockid" "11111111-1111-1111-1111-111111111111"
+                                                    nil))
+                                  :querySelector (fn [_] nil)}])
                           state/get-selection-block-ids
                           (constantly selected-ids)
-                          state/set-block-op-type!
-                          (fn [_]
-                            (swap! calls conj :cut))]
+                          db-async/<get-blocks
+                          (fn [& _]
+                            (swap! calls conj :delete-started)
+                            (p/resolved []))]
             (let [cut-request (editor/cut-selection-blocks true)]
               (p/let [_ (p/delay 0)
                       _ (is (= [:selection-captured
@@ -2058,7 +2065,7 @@
                 (is (= [:selection-captured
                         [:copy-started
                          [true :selected-ids selected-ids :op :cut]]
-                        :cut]
+                        :delete-started]
                        @calls)))))
           (p/finally done)))))
 
@@ -2118,7 +2125,6 @@
                           (fn [& _] (p/resolved nil))
                           editor/get-selected-blocks (constantly [wrapper])
                           state/get-selection-block-ids (constantly [value-uuid])
-                          state/set-block-op-type! (fn [_])
                           db-async/<get-blocks
                           (fn [_repo ids _opts]
                             (reset! requested-ids ids)
@@ -2841,7 +2847,6 @@
           test-db (conn/get-db test-helper/test-db)
           recycle-page (ldb/get-page test-db "Recycle")]
       (outliner-core/delete-blocks! (conn/get-db test-helper/test-db false) [source] {})
-      (state/set-block-op-type! :cut)
       (-> (p/with-redefs [db-transact/apply-outliner-ops
                           (fn [_db ops opts]
                             (outliner-op/apply-ops!
@@ -2874,8 +2879,6 @@
           inserted (atom nil)]
       (p/with-redefs [state/get-edit-block (constantly target)
                       state/get-edit-content (constantly (:block/title target))
-                      state/get-block-op-type (constantly nil)
-                      state/set-block-op-type! (constantly nil)
                       state/get-current-page (constantly "Paste target")
                       state/get-date-formatter (constantly "yyyy-MM-dd")
                       db-async/<get-today-journal-title (fn [_repo]
@@ -2919,8 +2922,6 @@
           inserted (atom nil)]
       (p/with-redefs [state/get-edit-block (constantly target)
                       state/get-edit-content (constantly (:block/title target))
-                      state/get-block-op-type (constantly nil)
-                      state/set-block-op-type! (constantly nil)
                       state/get-current-page (constantly "Paste target")
                       state/get-date-formatter (constantly "MMM do, yyyy")
                       db-async/<get-today-journal-title (fn [_repo]

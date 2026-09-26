@@ -7,7 +7,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.op.construct :as op-construct]))
+            [logseq.outliner.op.construct :as op-construct]
+            [logseq.outliner.page :as outliner-page]))
 
 (defn- run-direct-outdent
   [conn block]
@@ -36,6 +37,69 @@
       (is (= :create-page (ffirst forward-outliner-ops)))
       (is (= page-uuid (get-in forward-outliner-ops [0 1 1 :uuid])))
       (is (= [[:delete-page [page-uuid {}]]]
+             inverse-outliner-ops)))))
+
+(deftest derive-history-outliner-ops-canonicalizes-namespaced-create-page-test
+  (testing "namespaced create-page records leaf + ancestor uuids, and the inverse removes every entity the tx created (db-test#1298)"
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          {:keys [tx-data tx-meta]} (outliner-page/create @conn "ns/child"
+                                                          {:split-namespace? true})
+          tx-report (d/with @conn tx-data {})
+          db-after (:db-after tx-report)
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn db-after (:tx-data tx-report) tx-meta)
+          child-uuid (get-in forward-outliner-ops [0 1 1 :uuid])
+          ns-uuid (:block/uuid (db-test/find-page-by-title db-after "ns"))]
+      (is (= :create-page (ffirst forward-outliner-ops)))
+      (is (= (:block/uuid (db-test/find-page-by-title db-after "child")) child-uuid))
+      (is (= [ns-uuid] (get-in forward-outliner-ops [0 1 1 :parent-uuids])))
+      (is (= [[:delete-page [child-uuid {}]]
+              [:recycle-delete-permanently [child-uuid]]
+              [:delete-page [ns-uuid {}]]
+              [:recycle-delete-permanently [ns-uuid]]]
+             inverse-outliner-ops)))))
+
+(deftest derive-history-outliner-ops-create-page-with-new-tag-inverse-test
+  (testing "create-page that also creates a tag removes the tag on undo (db-test#1300)"
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          {:keys [tx-data tx-meta]} (outliner-page/create @conn "alpha"
+                                                          {:tags [{:block/title "Movie"}]})
+          tx-report (d/with @conn tx-data {})
+          db-after (:db-after tx-report)
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn db-after (:tx-data tx-report) tx-meta)
+          alpha-uuid (:block/uuid (db-test/find-page-by-title db-after "alpha"))
+          movie-uuid (:block/uuid (db-test/find-page-by-title db-after "Movie"))]
+      (is (some? movie-uuid) "the tx created the Movie tag")
+      (is (= [[:delete-page [alpha-uuid {}]]
+              [:recycle-delete-permanently [alpha-uuid]]
+              [:delete-page [movie-uuid {}]]
+              [:recycle-delete-permanently [movie-uuid]]]
+             inverse-outliner-ops)))))
+
+(deftest derive-history-outliner-ops-upsert-property-prefers-created-ident-test
+  (testing "upsert-property resolves the property entity created in the same tx, not a same-titled existing one (db-test#1299)"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:rating {:logseq.property/type :default}}
+                 :pages-and-blocks []})
+          property-ident :user.property/rating-1
+          property-uuid (common-uuid/gen-uuid :db-ident-block-uuid property-ident)
+          property-tag-id (:db/id (d/entity @conn :logseq.class/Property))
+          tx-data [{:e 100000 :a :db/ident :v property-ident :added true}
+                   {:e 100000 :a :block/uuid :v property-uuid :added true}
+                   {:e 100000 :a :block/title :v "rating" :added true}
+                   {:e 100000 :a :block/tags :v property-tag-id :added true}]
+          tx-meta {:outliner-op :upsert-property
+                   :outliner-ops [[:upsert-property [nil
+                                                     {:logseq.property/type :number}
+                                                     {:property-name "rating"}]]]}
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn tx-data tx-meta)]
+      (is (= [[:upsert-property [property-ident
+                                 {:logseq.property/type :number}
+                                 {:property-name "rating"}]]]
+             forward-outliner-ops))
+      (is (= [[:delete-page [property-uuid {}]]]
              inverse-outliner-ops)))))
 
 (deftest derive-history-outliner-ops-handles-replace-empty-target-insert-inverse-test

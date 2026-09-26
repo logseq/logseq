@@ -176,13 +176,12 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
-(deftest-async editor-on-paste-copy-clipboard-does-not-keep-uuid-when-editor-op-is-cut
+(deftest-async editor-on-paste-copy-clipboard-does-not-keep-uuid-test
   (let [pasted (atom nil)
         expected-blocks [{:block/title "Copied parent"}]]
     (p/with-redefs
      [util/stop (constantly nil)
       state/get-current-repo (constantly "test")
-      state/get-block-op-type (constantly :cut)
       utils/getCopiedBlocksFromMemory (constantly nil)
       paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
                                                                :op :copy
@@ -193,7 +192,7 @@
                  #js {:clipboardData #js {:getData (constantly "copied")}})]
         (is (= expected-blocks (:blocks @pasted)))
         (is (false? (get-in @pasted [:opts :keep-uuid?]))
-            "Clipboard copy payload must duplicate, even if this window last cut.")))))
+            "Clipboard copy payload must duplicate.")))))
 
 (deftest-async editor-on-paste-cut-clipboard-keeps-uuid
   (let [pasted (atom nil)
@@ -201,7 +200,6 @@
     (p/with-redefs
      [util/stop (constantly nil)
       state/get-current-repo (constantly "test")
-      state/get-block-op-type (constantly :copy)
       utils/getCopiedBlocksFromMemory (constantly nil)
       paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
                                                                :op :cut
@@ -212,7 +210,7 @@
                  #js {:clipboardData #js {:getData (constantly "cut")}})]
         (is (= expected-blocks (:blocks @pasted)))
         (is (true? (get-in @pasted [:opts :keep-uuid?]))
-            "Clipboard cut payload must keep uuids even if this window last copied.")))))
+            "Clipboard cut payload must keep uuids.")))))
 
 (deftest-async editor-on-paste-embed-block-uses-worker-loaded-link
   (let [linked-block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -228,7 +226,6 @@
                                                                :blocks [{:block/uuid linked-block-id
                                                                          :block/properties {:ignored true}}]}))
       utils/getCopiedBlocksFromMemory (constantly nil)
-      state/get-block-op-type (constantly nil)
       state/get-edit-block (constantly {:block/uuid current-block-id})
       db-async/<get-block-parents (fn [repo db-id depth]
                                     (is (= "test" repo))
