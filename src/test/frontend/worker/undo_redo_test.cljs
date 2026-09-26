@@ -1405,6 +1405,28 @@
         (is (= "undo tag topic" (:block/title tag)))
         (is (= tag-ident (:db/ident tag)))))))
 
+(deftest replay-create-page-titled-like-property-creates-page-test
+  (testing "replaying a page create whose title an older property has creates the page and leaves the property"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (apply-ops! conn
+                        [[:upsert-property [:user.property/undo-replay-rating
+                                            {:logseq.property/type :number}
+                                            {:property-name "undo replay rating"}]]]
+                        (local-tx-meta {:client-id "test-client"}))
+          page-uuid (random-uuid)
+          [_ result-uuid] (#'sync-apply/replay-canonical-outliner-op!
+                           conn
+                           [:create-page ["undo replay rating" {:uuid page-uuid
+                                                                :redirect? false
+                                                                :split-namespace? true
+                                                                :tags ()}]]
+                           nil)
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= page-uuid result-uuid))
+      (is (= "undo replay rating" (:block/title page)))
+      (is (not (ldb/property? page)))
+      (is (ldb/property? (d/entity @conn :user.property/undo-replay-rating))))))
+
 (deftest undo-delete-of-property-valued-on-itself-restores-property-test
   (testing "undoing a delete of a property set on its own page, then the set, brings the property back"
     (let [conn (worker-state/get-datascript-conn test-repo)
