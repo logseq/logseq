@@ -139,11 +139,17 @@
             {}
             datoms)))
 
+(defonce ^:private page-tag-eids-cache (js/WeakMap.))
+
 (defn- page-tag-eids
-  "Entity ids of the tags ldb/page? looks for."
+  "Entity ids of the tags ldb/page? looks for, computed once per db value:
+  callers of the 2-arity checksum-eligible-entity? ask for every entity."
   [db]
-  (set (keep #(d/entid db %)
-             [:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property])))
+  (or (.get page-tag-eids-cache db)
+      (let [eids (set (keep #(d/entid db %)
+                            [:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property]))]
+        (.set page-tag-eids-cache db eids)
+        eids)))
 
 (defn- checksum-eligible-entity?
   "A non-built-in entity with a uuid that is a page (ldb/page?) or has
