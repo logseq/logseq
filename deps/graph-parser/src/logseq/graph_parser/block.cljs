@@ -357,8 +357,7 @@
                                 (stored-block-attr db (:db/id page-entity) :block/title)
                                 original-page-name')
         page-name' (if (and journal-day page-entity)
-                     (or (stored-block-attr db (:db/id page-entity) :block/name)
-                         (:block/name page-entity))
+                     (stored-block-attr db (:db/id page-entity) :block/name)
                      page-name)
         page (merge
               {:block/name page-name'
