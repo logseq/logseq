@@ -1,0 +1,15 @@
+(library
+ (name logseq_db_worker_desktop)
+ (wrapped false)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_platform_melange
+  melange.js
+  melange.node
+  melange-fetch
+  melange-transit-melange
+  melange-edn-melange
+  rrbvec))
