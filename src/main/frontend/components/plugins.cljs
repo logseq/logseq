@@ -73,7 +73,7 @@
                               (when-not (false? (on-click' e))
                                 (shui/popup-hide! id)))))
          (or item
-             [:span.flex.items-center.gap-1.w-full
+             [:span.flex.items-center.gap-1.w-full.leading-4
               icon [:div title]]))))))
 
 (hsx/defc installed-themes
@@ -178,14 +178,14 @@
 
   [:div.secondary-tabs.categories.flex
    (ui/button
-    [:span.flex.items-center
+    [:span.flex.items-center.leading-4
      (ui/icon "puzzle")
      (t :nav/plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "link"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
-    [:span.flex.items-center
+    [:span.flex.items-center.leading-4
      (ui/icon "palette")
      (t :nav/themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "link"
@@ -234,13 +234,13 @@
   [:div.ctl
    [:ul.l.flex.items-center
     ;; stars
-    [:li.flex.text-sm.items-center.pr-3
+    [:li.flex.text-sm.items-center.leading-4.pr-3
      (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
 
     ;; downloads
     (when-let [downloads (and stat (:total_downloads stat))]
       (when (and downloads (> downloads 0))
-        [:li.flex.text-sm.items-center.pr-3
+        [:li.flex.text-sm.items-center.leading-4.pr-3
          (svg/cloud-down 16) [:span.pl-1 (format-number downloads)]]))]
 
    [:div.r.flex.items-center
@@ -933,27 +933,27 @@
 
       ;; more - updater
       (let [items (concat (if market?
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                            [{:title [:span.flex.items-center.gap-1.leading-4 (ui/icon) "rotate-clockwise") (t :plugin/refresh-lists)]
                               :options {:on-click #(reload-market-fn)}}]
                              (concat
-                              [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                              [{:title [:span.flex.items-center.gap-1.leading-4 (ui/icon) "rotate-clockwise") (t :plugin/check-all-updates)]
                                 :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}]
                               (when (contains? #{:plugins :themes} category)
-                                [{:title [:span.flex.items-center.gap-1 (ui/icon "trash") (t :plugin/bulk-remove-disabled)]
+                                [{:title [:span.flex.items-center.gap-1.leading-4 (ui/icon) "trash") (t :plugin/bulk-remove-disabled)]
                                   :options {:on-click #(open-bulk-remove-disabled-plugins-dialog! category)}}])))
 
                           (when (util/electron?)
-                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings.advanced/network-proxy)]
+                            [{:title   [:span.flex.items-center.gap-1.leading-4 (ui/icon) "world") (t :settings.advanced/network-proxy)]
                               :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
-                             {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                             {:title   [:span.flex.items-center.gap-1.leading-4 (ui/icon) "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
                               :options {:on-click plugin-config-handler/open-replace-plugins-modal}}])
 
                           [{:hr true}]
 
                           (when (state/developer-mode?)
                             (if (util/electron?)
-                              [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                              [{:title [:span.flex.items-center.gap-1.leading-4 (ui/icon) "file-code") (t :plugin/open-preferences)]
                                 :options {:on-click
                                           #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                              (js/apis.openPath (str root "/preferences.json")))}}
@@ -967,7 +967,7 @@
                                 :options {:on-click
                                           #(shui/dialog-open! load-from-web-url-container)}}]))
 
-                          [{:title [:span.flex.items-center.gap-1 (ui/icon "alert-triangle") (t :plugin/report-security)]
+                          [{:title [:span.flex.items-center.gap-1.leading-4 (ui/icon) "alert-triangle") (t :plugin/report-security)]
                             :options {:on-click #(plugin-handler/open-report-modal!)}}]
 
                           [{:hr true :key "dropdown-more"}
@@ -1764,7 +1764,7 @@
             (for [{:keys [id name title icon]} plugins]
               [:li
                {:key id :class (util/classnames [{:active (= id focused)}])}
-               [:a.flex.items-center.settings-plugin-item
+               [:a.flex.items-center.leading-4.settings-plugin-item
                 {:data-id  id
                  :on-click #(do (state/set-state! :plugin/focused-settings id))}
                 (if (and icon (not (string/blank? icon)))

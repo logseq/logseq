@@ -19,7 +19,7 @@
           @apply w-full mb-2;
 
           > strong {
-            @apply text-sm font-normal pl-1 opacity-90;
+            @apply text-sm font-normal pl-1 opacity-90 leading-4;
           }
         }
 
@@ -78,7 +78,12 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none text-gray-12 text-left justify-start;
+      /* Match the 16px menu icon: text-sm's 20px line-box sits 2px higher than the icon. */
+      @apply px-2 py-1.5 select-none text-gray-12 text-left justify-start leading-4;
+
+      > .ui__icon {
+        @apply inline-flex items-center h-4 shrink-0 leading-none;
+      }
     }
 
 
