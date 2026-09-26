@@ -58,6 +58,15 @@
     (db-worker-dev-script-path)
     (db-worker-release-script-path)))
 
+(defn- db-worker-binary-path
+  "Native OCaml db-worker-node executable. Dev builds run the dune
+  output; packaged builds run the extraResources copy (binaries cannot
+  execute from inside app.asar)."
+  []
+  (if goog.DEBUG
+    (node-path/join js/__dirname "../deps/db-worker/_build/default/bin/main.exe")
+    (node-path/join js/process.resourcesPath "db-worker-bin" "main.exe")))
+
 (defn db-worker-runtime-script-path
   []
   (db-worker-script-path))
@@ -185,11 +194,23 @@
 
 (defn- ensure-server-started-once!
   [config repo]
-  (p/let [server (lifecycle/startGraph
+  (p/let [owner (requester-owner-source config)
+          ;; electron runs the native OCaml daemon binary; cli and
+          ;; Windows keep spawning the node db-worker-node.js bundle.
+          binary (when (and (= :electron owner)
+                            (not= "win32" js/process.platform))
+                   (db-worker-binary-path))
+          ;; The daemon reports the requester build revision; the JS
+          ;; bundle has no compile-time define, so it is passed via env.
+          daemon-env {"LOGSEQ_BUILD_REVISION" (version/revision)
+                      "LOGSEQ_BUILD_TIME" (version/build-time)}
+          server (lifecycle/startGraph
                  (clj->js {:storage (resolve-storage config)
                            :repo repo
                            :script (db-worker-script-path)
-                           :owner (name (requester-owner-source config))
+                           :binary binary
+                           :env daemon-env
+                           :owner (name owner)
                            :generation (:generation config)
                            :createEmpty (boolean (:create-empty-db? config))
                            :extraArgs (cond-> []

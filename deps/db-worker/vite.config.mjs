@@ -1,22 +1,26 @@
 // Bundles the Melange-emitted CommonJS tree into the files the
 // app loads:
-//   --mode node    -> static/db-worker-ocaml.cjs (the daemon/library
-//                     bundle) + static/db-worker-node.js (thin
-//                     entrypoint that invokes the bundle's main())
+//   --mode node    -> static/db-worker-node.js (the standalone daemon
+//                     entry spawned by graph-lifecycle; calls
+//                     Db_worker_node.main on load — see js_api/entry_node.ml)
 //   --mode browser -> static/js/db-worker.js (the worker script the
 //                     UI thread spawns; installs the Comlink surface
 //                     on load — see js_api/entry_worker.ml)
 // Build order: `dune build js_api` (deps/db-worker — plain `dune build`
 // does not run the melange emit) then `vite build --mode ...`.
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-const entry = resolve(
+const browserEntry = resolve(
   import.meta.dirname,
   "_build/default/js_api/js_api/js_api/entry_worker.js",
+);
+
+const nodeEntry = resolve(
+  import.meta.dirname,
+  "_build/default/js_api/js_api/js_api/entry_node.js",
 );
 
 const nodeBuiltins = [
@@ -58,25 +62,11 @@ export default defineConfig(({ mode }) => {
   if (mode === "node") {
     const outDir = resolve(import.meta.dirname, "../../static");
     return {
-      plugins: [
-        {
-          name: "emit-db-worker-node-entry",
-          // The CLI and Electron spawn `node db-worker-node.js`; the
-          // artifact is a thin CommonJS entry that runs the OCaml
-          // bundle's main() export.
-          closeBundle() {
-            writeFileSync(
-              resolve(outDir, "db-worker-node.js"),
-              '"use strict";\nrequire("./db-worker-ocaml.cjs").main();\n',
-            );
-          },
-        },
-      ],
       build: {
         lib: {
-          entry,
+          entry: nodeEntry,
           formats: ["cjs"],
-          fileName: () => "db-worker-ocaml.cjs",
+          fileName: () => "db-worker-node.js",
         },
         outDir,
         emptyOutDir: false,
@@ -105,7 +95,7 @@ export default defineConfig(({ mode }) => {
     base: "./",
     build: {
       lib: {
-        entry,
+        entry: browserEntry,
         formats: ["iife"],
         name: "LogseqDbWorker",
         fileName: () => "db-worker.js",

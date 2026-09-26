@@ -32,6 +32,7 @@ files:
   - "!**/node_modules/**/*.{md,markdown}"
   - "!**/node_modules/**/{test,tests,__tests__,powered-test,example,examples,benchmark,benchmarks}/**"
   - "!**/node_modules/**/{tsconfig.json,eslint.config.js,.editorconfig}"
+  - "!db-worker-bin/**"
 
 toolsets:
   appimage: "1.0.2"
@@ -51,6 +52,11 @@ extraResources:
     to: .agents/skills/logseq-cli/SKILL.md
   - from: ../sidecar
     to: sidecar
+  # Native OCaml db-worker-node daemon, staged into static/db-worker-bin
+  # by the per-OS build job (binaries cannot execute from inside
+  # app.asar).
+  - from: db-worker-bin
+    to: db-worker-bin
 
 mac:
   artifactName: ${productName}-darwin-${arch}-${version}.${ext}
