@@ -94,6 +94,7 @@
  :asset/maximize "最大化显示图片"
  :asset/missing-file "找不到文件 {1}。"
  :asset/open-in-browser "在浏览器打开"
+ :asset/paste-file-copy-failed "为粘贴的附件复制文件 {1} 失败。"
  :asset/physical-delete "同时删除本地文件（目前不可撤销）"
  :asset/picker-empty "未找到附件"
  :asset/picker-empty-hint "添加附件后即可在这里选择。"

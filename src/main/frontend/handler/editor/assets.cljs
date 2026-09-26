@@ -71,8 +71,12 @@
                                nil))]
          (if (some? data)
            (fs/write-asset-file! repo (str new-uuid "." ext) data)
-           (log/error :msg "Pasted asset has no backing file"
-                      :asset-file source-name)))))))
+           (do
+             (log/error :msg "Pasted asset has no backing file"
+                        :asset-file source-name)
+             (notification/show! (t :asset/paste-file-copy-failed source-name)
+                                 :error
+                                 false))))))))
 
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]
