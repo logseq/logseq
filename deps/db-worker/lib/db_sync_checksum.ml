@@ -74,7 +74,7 @@ let parse_uuid_string (v : value) : value option =
 let lookup_ref (db : db) (v : value) : entity_id option =
   try
     match v with
-    | Int n -> Some n
+    | Int64 n -> Datascript.Util.int64_to_int n
     | Ref id -> Some id
     | Keyword s -> entid_ref db (Ident s)
     | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
@@ -96,7 +96,7 @@ let entids db_before db_after (v : value) : entity_id list =
     | Some eid when not (List.mem eid !out) -> out := eid :: !out
     | _ -> ()
   in
-  (match v with Int n -> add (Some n) | _ -> ());
+  (match v with Int64 n -> add (Datascript.Util.int64_to_int n) | _ -> ());
   add (lookup_ref db_before v);
   add (lookup_ref db_after v);
   (match uuid_value with
@@ -171,7 +171,7 @@ let entity_checksum_tuples db eid e2ee : Tuple_set.t =
 
 let value_str = function
   | String s | Keyword s | Symbol s | Uuid s -> Some s
-  | Int n -> Some (string_of_int n)
+  | Int64 n -> Some (Int64.to_string n)
   | Float f -> Some (Common_util.js_string_of_float f)
   | Bool b -> Some (string_of_bool b)
   | Nil -> None

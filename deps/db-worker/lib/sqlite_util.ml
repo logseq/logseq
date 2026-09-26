@@ -6,7 +6,7 @@ open Datascript
 
 (* common-util/block-with-timestamps *)
 let block_with_timestamps (block : Wire.t) : Wire.t =
-  let updated_at = Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ())) in
+  let updated_at = Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ())) in
   let block = Cljs_map.assoc block "block/updated-at" updated_at in
   match Cljs_map.get block "block/created-at" with
   | None | Some Wire.Nil -> Cljs_map.assoc block "block/created-at" updated_at

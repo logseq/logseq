@@ -28,14 +28,17 @@ let mget_int m a = Block_map.int_attr m a
 let id_of_value (v : value) : entity_id option =
   match v with
   | Ref id -> Some id
-  | Int id -> Some id
+  | Int64 id -> Datascript.Util.int64_to_int id
   | Ref_to (Entity_id id) -> Some id
   | Map kvs ->
       List.find_map
         (fun (k, x) ->
           match k with
           | Keyword "db/id" | String "db/id" -> (
-              match x with Ref id | Int id -> Some id | _ -> None)
+              match x with
+              | Ref id -> Some id
+              | Int64 id -> Datascript.Util.int64_to_int id
+              | _ -> None)
           | _ -> None)
         kvs
   | _ -> None
@@ -184,7 +187,11 @@ let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list 
   in
   let self_key m =
     match mget m "db/id" with
-    | Some (Int id) | Some (Ref id) -> Pid id
+    | Some (Ref id) -> Pid id
+    | Some (Int64 id) -> (
+        match Datascript.Util.int64_to_int id with
+        | Some id -> Pid id
+        | None -> Pnil)
     | Some Nil | None -> Pnil
     | Some _ -> Pother
   in
@@ -196,7 +203,8 @@ let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list 
   |> List.filter (fun m -> not (List.mem (parent_key m) top_parent_ids))
   |> List.filter_map (fun m ->
       match mget m "db/id" with
-      | Some (Int id) | Some (Ref id) -> Ldb.ent_of_id db id
+      | Some (Ref id) -> Ldb.ent_of_id db id
+      | Some (Int64 id) -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
       | _ -> None)
 
 (* ---------- remove-orphaned-page-refs! ---------- *)
@@ -922,11 +930,11 @@ let remove_disallowed_inline_classes (db : db) (block : Block_map.t) : Block_map
       match mget block "block/tags" with
       | Some v -> (
           match v with
-          | Int _ | Ref _ | Keyword _ -> (
+          | Int64 _ | Ref _ | Keyword _ -> (
               (* scalar tag -> resolve to entity *)
               match v with
-              | Int id -> (
-                  match Ldb.ent_of_id db id with
+              | Int64 id -> (
+                  match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
                   | Some e -> [ entity_map_value e ]
                   | None -> [])
               | Ref id -> (
@@ -1073,9 +1081,10 @@ let save_in_txs (db : db) (txs_state : txs_state) (data : Block_map.t)
       let e = Option.get block_entity in
       let page_name =
         match Ldb.value e "block/journal-day" with
-        | Some (Int day) ->
+        | Some (Int64 day) ->
             Ldb.page_name_sanity_lc
-              (Ldb.journal_title_of_day day
+              (Ldb.journal_title_of_day
+                 (Datascript.Util.int64_to_int_exn "journal-day" day)
                  Date_time_util.default_journal_title_formatter)
         | _ -> (
             match block_title with
@@ -1395,7 +1404,7 @@ let tree_vec_flatten ?(children_key = "children") (tree_vec : Block_map.t list)
           block_maps_of_children_value (Block_map.attr_value b children_key)
         in
         let children' = assoc_level_aux (level + 1) children in
-        let b = Block_map.put b "block/level" (Int level) in
+        let b = Block_map.put b "block/level" (Int64 (Int64.of_int level)) in
         match children' with
         | [] -> b
         | _ ->
@@ -1496,7 +1505,7 @@ let blocks_with_level (blocks : Block_map.t list) : Block_map.t list =
   match blocks with
   | [] -> []
   | first :: rest ->
-      let root = Block_map.put first "block/level" (Int 1) in
+      let root = Block_map.put first "block/level" (Int64 1L) in
       let id_to_level = Hashtbl.create 16 in
       let uuid_to_level = Hashtbl.create 16 in
       (match Option.bind (mget root "db/id") id_of_value with
@@ -1524,15 +1533,18 @@ let blocks_with_level (blocks : Block_map.t list) : Block_map.t list =
               | Some (List [ _; Uuid u ]) ->
                   Hashtbl.find_opt uuid_to_level u
               | Some (Ref id)
-              | Some (Int id)
               | Some (Ref_to (Entity_id id)) ->
                   Hashtbl.find_opt id_to_level id
+              | Some (Int64 id) -> (
+                  match Datascript.Util.int64_to_int id with
+                  | Some id -> Hashtbl.find_opt id_to_level id
+                  | None -> None)
               | Some (Ref_to (Lookup_ref ("block/uuid", Uuid u))) ->
                   Hashtbl.find_opt uuid_to_level u
               | _ -> None
             in
             let level = match parent_level with Some l -> l + 1 | None -> 1 in
-            let b' = Block_map.put b "block/level" (Int level) in
+            let b' = Block_map.put b "block/level" (Int64 (Int64.of_int level)) in
             (match Option.bind (mget b' "db/id") id_of_value with
              | Some id -> Hashtbl.replace id_to_level id level
              | None -> ());
@@ -1620,7 +1632,7 @@ let assign_temp_id (blocks : Block_map.t list) (target_block : entity)
         let db_id =
           match db_id with Some id -> id | None -> -(idx + 1)
         in
-        Block_map.put block "db/id" (Int db_id))
+        Block_map.put block "db/id" (Int64 (Int64.of_int db_id)))
     blocks
 
 (* entity-util/has-tag? on a block map's :block/tags values, then page?.
@@ -1766,7 +1778,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
         match List.assoc_opt id id_to_new_uuid with
         | Some u -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
         | None -> None)
-    | Int id -> Some (Int id)
+    | Int64 id -> Some (Int64 id)
     | _ ->
         failwith
           (Printf.sprintf "[insert-blocks] illegal lookup")
@@ -1907,9 +1919,12 @@ let rec rewrite_value (id_to_new_uuid : (entity_id * string) list) (v : value)
       match List.assoc_opt id id_to_new_uuid with
       | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
       | None -> v)
-  | Int id -> (
-      match List.assoc_opt id id_to_new_uuid with
-      | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
+  | Int64 id -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> (
+          match List.assoc_opt id id_to_new_uuid with
+          | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
+          | None -> v)
       | None -> v)
   | Ref_to _ -> v
   | Map kvs ->
@@ -2048,11 +2063,13 @@ let insert_history_blocks (db : db) (blocks : Block_map.t list)
     | Ref id | Ref_to (Entity_id id) -> (
         match List.assoc_opt id id_to_new_uuid with
         | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
-        | None -> Int id)
-    | Int id when Ldb.ref_attr db a -> (
-        match List.assoc_opt id id_to_new_uuid with
+        | None -> Int64 (Int64.of_int id))
+    | Int64 id when Ldb.ref_attr db a -> (
+        match Option.bind (Datascript.Util.int64_to_int id)
+                (fun id -> List.assoc_opt id id_to_new_uuid) with
         | Some u -> Ref_to (Lookup_ref ("block/uuid", Uuid u))
         | None -> v)
+    | Int64 _ -> v
     (* serialized refs arrive as [:block/uuid u] lookup values pointing at
        the source entity — map to the inserted copy's uuid like cljs
        (de/entity? -> id->new-uuid) does for entity values *)
@@ -2168,7 +2185,7 @@ let insert_blocks (db : db) (blocks : Block_map.t list) (target_block : Block_ma
                      checks must not treat merged blocks as entities *)
                   Block_map.of_entity e
                   |> fun m ->
-                  Block_map.put m "db/id" (Int e.id)
+                  Block_map.put m "db/id" (Int64 (Int64.of_int e.id))
                   |> fun m ->
                   (match Ldb.string_value e "block/raw-title" with
                    | Some rt -> Block_map.put m "block/title" (String rt)

@@ -140,7 +140,7 @@ let mstr m k =
 
 let mint m k =
   match mgeto m k with
-  | Some (Int n) -> Some n
+  | Some (Int64 n) -> Datascript.Util.int64_to_int n
   | Some (Float f) -> Some (int_of_float f)
   | _ -> None
 
@@ -193,7 +193,7 @@ let zero_pad (v : value) : string =
   let s =
     match v with
     | String s -> s
-    | Int n -> string_of_int n
+    | Int64 n -> Int64.to_string n
     | Float f -> Common_util.js_string_of_float f
     | _ -> ""
   in
@@ -219,7 +219,7 @@ let repetition_to_string (repetition : value) : string =
       in
       let ns =
         match n with
-        | Int i -> string_of_int i
+        | Int64 i -> Int64.to_string i
         | String s -> s
         | _ -> ""
       in
@@ -389,7 +389,7 @@ let update_level_in_block_ast_coll (block_asts : block_ast list)
           | None -> origin_level - 1
         in
         { block_ast with
-          node = mk_node "Heading" (assoc_v c "level" (Int level)) }
+          node = mk_node "Heading" (assoc_v c "level" (Int64 (Int64.of_int level))) }
       else block_ast)
     block_asts
 

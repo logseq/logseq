@@ -28,7 +28,7 @@ let db_id = function
 let pulled_stub id =
   { pulled_id = id
   ; pulled_attrs =
-      [ (Keyword "db/id", Pulled_scalar (Int id)) ]
+      [ (Keyword "db/id", Pulled_scalar (Int64 (Int64.of_int id))) ]
   }
 
 let pulled_values (p : pulled_entity) (a : attr) : pulled_value option =
@@ -81,7 +81,7 @@ let ref_nodes (n : node) (a : attr) : node list =
                 | _ -> None)
              vs
        | Some (Pulled_scalar (Ref id)) -> [ P (pulled_stub id) ]
-       | Some (Pulled_scalar (Int id)) -> [ P (pulled_stub id) ]
+       | Some (Pulled_scalar (Int64 id)) -> [ P (pulled_stub (Datascript.Util.int64_to_int_exn "entity id" id)) ]
        | Some (Pulled_scalar _) -> [])
 
 let ref_node (n : node) (a : attr) : node option =
@@ -91,7 +91,7 @@ let string_value (n : node) (a : attr) : string option =
   match value n a with Some (String s) -> Some s | _ -> None
 
 let int_value (n : node) (a : attr) : int option =
-  match value n a with Some (Int i) -> Some i | _ -> None
+  match value n a with Some (Int64 i) -> Datascript.Util.int64_to_int i | _ -> None
 
 let keyword_value (n : node) (a : attr) : string option =
   match value n a with Some (Keyword s) -> Some s | _ -> None

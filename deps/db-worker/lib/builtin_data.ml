@@ -880,7 +880,7 @@ let built_in_properties : builtin_property list =
     ; closed_values = []
     ; rtc_ignore = false
     ; properties = [ "logseq.property/hide-empty-value", Bool true
-      ; "logseq.property/default-value", Int 1 ]
+      ; "logseq.property/default-value", Int64 1L ]
     }
   ;
     { ident = "logseq.property.repeat/recur-unit"

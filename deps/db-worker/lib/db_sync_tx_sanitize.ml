@@ -43,14 +43,14 @@ let map_get (k : string) = function
   | _ -> None
 
 let entity_ref_of_value = function
-  | Int n -> Some (Entity_id n)
+  | Int64 n -> Option.map (fun n -> Entity_id n) (Datascript.Util.int64_to_int n)
   | Keyword s -> Some (Ident s)
   | Vector [ Keyword a; v ] | List [ Keyword a; v ] -> Some (Lookup_ref (a, v))
   | _ -> None
 
 let entity_ref_to_eid (db : db) (r : value) : entity_id option =
   match r with
-  | Int n when n < 0 -> None
+  | Int64 n when Int64.compare n 0L < 0 -> None
   | v ->
       (match entity_ref_of_value v with
        | Some r ->

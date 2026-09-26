@@ -528,7 +528,7 @@ let test_code_block_predicate () =
 
 let test_hidden_entity_recycled () =
   let recycled_root =
-    pulled_scalar_attrs 1 [ "logseq.property/deleted-at", Int 1 ]
+    pulled_scalar_attrs 1 [ "logseq.property/deleted-at", Int64 1L ]
   in
   check "recycled roots are hidden" (Search_index.hidden_entity recycled_root);
   let on_recycled_page =
@@ -538,7 +538,7 @@ let test_hidden_entity_recycled () =
           Pulled_entity
             { pulled_id = 9
             ; pulled_attrs =
-                [ pscalar "logseq.property/deleted-at" (Int 1) ] } ) ]
+                [ pscalar "logseq.property/deleted-at" (Int64 1L) ] } ) ]
   in
   check "entities on recycled pages are hidden"
     (Search_index.hidden_entity on_recycled_page)

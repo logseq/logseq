@@ -8,7 +8,7 @@ open Datascript
 (* outliner-core/block-with-updated-at *)
 let block_with_updated_at (block : Wire.t) : Wire.t =
   Cljs_map.assoc block "block/updated-at"
-    (Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ())))
+    (Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ())))
 
 (* initial-data/get-block-full-children-ids — nested children incl.
    collapsed and property-value children, via the :parent rule
@@ -201,7 +201,7 @@ let orphaned_range_comments_areas db (deleted_block_ids : entity_id list)
       (fun area ->
          let targets =
            List.filter_map
-             (fun v -> match v with Ref id -> Some id | Int id -> Some id | _ -> None)
+             (fun v -> match v with Ref id -> Some id | Int64 id -> Datascript.Util.int64_to_int id | _ -> None)
              (Ldb.values area comments_blocks_property)
          in
          targets <> [] && List.for_all (fun t -> List.mem t deleted_block_ids) targets)

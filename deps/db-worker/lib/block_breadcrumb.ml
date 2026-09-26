@@ -35,7 +35,8 @@ let resolve_ref_id (db : db) (r : Ev.node) : entity_id option =
 
 let resolve_ref_id_of_value (db : db) (v : value) : entity_id option =
   match v with
-  | Int id | Ref id -> Some id
+  | Ref id -> Some id
+  | Int64 id -> Datascript.Util.int64_to_int id
   | Uuid u ->
       (match entity db (Lookup_ref ("block/uuid", Uuid u)) with
        | Some e -> Some e.id
@@ -47,7 +48,7 @@ let resolve_ref_id_of_value (db : db) (v : value) : entity_id option =
   | _ -> None
 
 let tag_summary db (tag_id : entity_id) : (attr * value) list =
-  [ ("db/id", Int tag_id) ]
+  [ ("db/id", Int64 (Int64.of_int tag_id)) ]
   @ (match eavt_scalar db tag_id "block/uuid" with
      | Some (Uuid _ as u) -> [ ("block/uuid", u) ]
      | _ -> [])
@@ -73,7 +74,7 @@ let scalar_identity_attrs =
 (* scan-ref-attrs — one eavt range per ref. *)
 let scan_ref_attrs db (ref_id : entity_id) : (attr, value list) Hashtbl.t =
   let collected = Hashtbl.create 17 in
-  Hashtbl.replace collected "db/id" [ Int ref_id ];
+  Hashtbl.replace collected "db/id" [ Int64 (Int64.of_int ref_id) ];
   Seq.iter
     (fun (d : datom) ->
        if List.mem d.a many_identity_attrs then
@@ -112,7 +113,10 @@ let property_or_asset_extras db collected : (attr * value) list =
     collected_many collected "logseq.property/choice-exclusions"
     |> List.filter_map (fun v ->
            match v with
-           | Ref id | Int id -> Some (choice_summary db id)
+           | Ref id -> Some (choice_summary db id)
+           | Int64 id ->
+               Option.map (fun id -> choice_summary db id)
+                 (Datascript.Util.int64_to_int id)
            | _ -> None)
   in
   let closed_value = collected_scalar collected "block/closed-value-property" <> None in
@@ -175,7 +179,10 @@ let compute_shallow_ref_identity db (ref_id : entity_id option) : (attr * value)
   in
   let tag_ids =
     collected_many collected "block/tags"
-    |> List.filter_map (function Ref id | Int id -> Some id | _ -> None)
+    |> List.filter_map (function
+         | Ref id -> Some id
+         | Int64 id -> Datascript.Util.int64_to_int id
+         | _ -> None)
   in
   (match ref_uuid with
    | Some v -> (match v with Uuid _ -> () | _ -> fail "Invalid canonical block reference UUID" "")
@@ -184,7 +191,7 @@ let compute_shallow_ref_identity db (ref_id : entity_id option) : (attr * value)
    | Some v -> (match v with Keyword _ -> () | _ -> fail "Invalid canonical block reference ident" "")
    | None -> ());
   let base =
-    [ ("db/id", Int ref_id) ]
+    [ ("db/id", Int64 (Int64.of_int ref_id)) ]
     @ (match ref_uuid with Some u -> [ ("block/uuid", u) ] | None -> [])
     @ (match ref_ident with Some k -> [ ("db/ident", k) ] | None -> [])
     @ (match ref_title with Some t -> [ ("block/title", t) ] | None -> [])

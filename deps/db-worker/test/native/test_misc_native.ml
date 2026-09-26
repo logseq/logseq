@@ -92,7 +92,7 @@ let entities_with (db : db) (a : attr) : entity_id list =
       List.filter_map
         (function
           | Result_entity id -> Some id
-          | Result_value (Int id) -> Some id
+          | Result_value (Int64 id) -> Datascript.Util.int64_to_int id
           | _ -> None)
         row
   | _ -> []
@@ -107,7 +107,10 @@ let tag_idents (e : entity) : string list =
 let ref_id_set (e : entity) (a : attr) : int list =
   List.sort_uniq compare
     (List.filter_map
-       (function Ref id -> Some id | Int id -> Some id | _ -> None)
+       (function
+        | Ref id -> Some id
+        | Int64 id -> Datascript.Util.int64_to_int id
+        | _ -> None)
        (Ldb.values e a))
 
 let ident_of_ref (e : entity) (a : attr) : string option =
@@ -122,7 +125,8 @@ let kv_version (db : db) (ident : string) : (int * int) option =
           let get k =
             List.find_map
               (function
-                | Keyword k', Int n when k' = k -> Some n | _ -> None)
+                | Keyword k', Int64 n when k' = k -> Datascript.Util.int64_to_int n
+                | _ -> None)
               kvs
           in
           (match get "major", get "minor" with
@@ -261,8 +265,8 @@ let test_ensure_built_in_data_exists () =
       check "ensure-built-in-data-exists!: fixture is 64.8"
         (match initial_version with
          | Some (Map kvs) ->
-             List.mem (Keyword "major", Int 64) kvs
-             && List.mem (Keyword "minor", Int 8) kvs
+             List.mem (Keyword "major", Int64 64L) kvs
+             && List.mem (Keyword "minor", Int64 8L) kvs
          | _ -> false);
       check "ensure-built-in-data-exists!: graph-created-at present"
         (Option.is_some graph_created_at);
@@ -295,7 +299,7 @@ let test_ensure_built_in_data_live_repair_assigns_canonical_revision () =
          check "live-repair: icon property recreated" true;
          check "live-repair: canonical revision assigned"
            (match Ldb.value icon "block/tx-id" with
-            | Some (Int n) -> n >= 0
+            | Some (Int64 n) -> Int64.compare n 0L >= 0
             | _ -> false)
      | None -> check "live-repair: icon property recreated" false
    with e ->
@@ -650,10 +654,15 @@ let test_migrate_65_32_adds_root_extends_to_comment_classes () =
     | Some e ->
         Ldb.values e "logseq.property.class/extends"
         |> List.filter_map (function
-             | Ref id | Int id ->
-                 (match Ldb.ent_of_id db id with
-                  | Some parent -> Ldb.ident_of parent
-                  | None -> None)
+             | Ref id -> (
+                 match Ldb.ent_of_id db id with
+                 | Some parent -> Ldb.ident_of parent
+                 | None -> None)
+             | Int64 id -> (
+                 match Option.bind (Datascript.Util.int64_to_int id)
+                         (Ldb.ent_of_id db) with
+                 | Some parent -> Ldb.ident_of parent
+                 | None -> None)
              | _ -> None)
     | None -> []
   in
@@ -1000,7 +1009,7 @@ let test_get_block_display_properties_use_resolved_node_values () =
   in
   (* cljs (block-handler/get-block-and-children db id {:children? false}) *)
   let result =
-    Endpoint_block.get_block_and_children db (Int host.id)
+    Endpoint_block.get_block_and_children db (Int64 (Int64.of_int host.id))
       { gb_all = false
       ; gb_children = false
       ; gb_properties = []
@@ -1517,7 +1526,7 @@ let test_repeated_task_with_deadline_and_missing_temporal_property () =
   let commands_tx = Commands.run_commands report.db_after report.tx_data in
   check "repeated-task: next deadline"
     (tx_add_value commands_tx block.id "logseq.property/deadline"
-     = Some (Int (Int64.to_int expected_next_deadline)));
+     = Some (Int64 (Int64.of_int (Int64.to_int expected_next_deadline))));
   check "repeated-task: status reset to todo"
     (match tx_add_value commands_tx block.id "logseq.property/status" with
      | Some (Keyword "logseq.property/status.todo") -> true
@@ -1564,7 +1573,7 @@ let test_repeated_task_reschedules_numeric_scheduled_value () =
      <> None);
   check "repeated-task: rescheduled value is a number"
     (match tx_add_value commands_tx block.id "logseq.property/scheduled" with
-     | Some (Int _) | Some (Float _) -> true
+     | Some (Int64 _) | Some (Float _) -> true
      | _ -> false)
 
 let test_resolve_recur_frequency () =

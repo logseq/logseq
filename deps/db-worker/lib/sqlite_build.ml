@@ -225,7 +225,7 @@ let current_db_id = ref 0
 
 let new_db_id () : value =
   decr current_db_id;
-  Int !current_db_id
+  Int64 (Int64.of_int !current_db_id)
 
 (* translate-property-value *)
 let translate_property_value (v : value) (page_uuids : (string * string) list)
@@ -235,8 +235,10 @@ let translate_property_value (v : value) (page_uuids : (string * string) list)
       let sm = bm_of_value second in
       let page_name =
         match BM.attr_value sm "build/journal" with
-        | Some (Int day) ->
-            Date_time_util.int_to_journal_title day "MMM do, yyyy"
+        | Some (Int64 day) ->
+            Date_time_util.int_to_journal_title
+              (Datascript.Util.int64_to_int_exn "journal-day" day)
+              "MMM do, yyyy"
         | _ ->
             (match BM.string_attr sm "block/title" with
              | Some t -> t
@@ -1397,22 +1399,24 @@ let pre_build_pages_and_blocks (pabs : pab list)
   in
   let expand_journal (p : pab) : pab =
     match BM.attr_value p.page.bm "build/journal" with
-    | Some (Int date_int) ->
+    | Some (Int64 date_int) ->
         let page_name =
-          Date_time_util.int_to_journal_title date_int "MMM do, yyyy"
+          Date_time_util.int_to_journal_title
+            (Datascript.Util.int64_to_int_exn "journal-day" date_int)
+            "MMM do, yyyy"
         in
         let bm =
           BM.dissoc p.page.bm [ "build/journal" ]
           |> fun m ->
              BM.merge m
-               [ "block/journal-day", Int date_int
+               [ "block/journal-day", Int64 date_int
                ; "block/title", String page_name
                ; ( "block/uuid"
                  , match BM.attr_value m "block/uuid" with
                    | Some u -> u
                    | None ->
                        Uuid
-                         (Common_uuid.gen_journal_page_uuid date_int) )
+                         (Common_uuid.gen_journal_page_uuid (Datascript.Util.int64_to_int_exn "journal-day" date_int)) )
                ; "block/tags", Keyword "logseq.class/Journal" ]
         in
         { p with
@@ -1452,7 +1456,7 @@ let infer_property_schema (pair_values : value list) : BM.t =
            | _ -> "node")
         else
           (match pv with
-           | Int _ | Float _ | Instant _ -> "number"
+           | Int64 _ | Float _ -> "number"
            | String s when Ns_util.url_parses s -> "url"
            | Bool _ -> "checkbox"
            | _ -> "default")
@@ -1522,8 +1526,11 @@ let rec scrape_uuids (v : value) (acc : string list ref) : unit =
        (match
           (BM.attr_value m "build/journal", BM.attr_value m "block/uuid")
         with
-        | Some (Int d), None ->
-            acc := Common_uuid.gen_journal_page_uuid d :: !acc
+        | Some (Int64 d), None ->
+            acc :=
+              Common_uuid.gen_journal_page_uuid
+                (Datascript.Util.int64_to_int_exn "journal-day" d)
+              :: !acc
         | _ -> ());
        List.iter (fun (k, v') -> scrape_uuids k acc; scrape_uuids v' acc) kvs
    | Vector vs | List vs | Set vs -> List.iter (fun v' -> scrape_uuids v' acc) vs
@@ -1720,8 +1727,8 @@ let build_blocks_tx ?page_id_fn (options_v : value) : value list * value list =
    dispatch (see datascript-ocaml data_readers.tx_op_of_edn_form). *)
 let entity_ref_of_value (v : value) : entity_ref =
   match v with
-  | Int n when n < 0 -> Temp_id (string_of_int n)
-  | Int n -> Entity_id n
+  | Int64 n when Int64.compare n 0L < 0 -> Temp_id (Int64.to_string n)
+  | Int64 n -> Entity_id (Datascript.Util.int64_to_int_exn "entity id" n)
   | String s -> Temp_id s
   | Keyword "db/current-tx" | Symbol "db/current-tx" -> CurrentTx
   | Symbol ("datomic.tx" | "datascript.tx" as s) -> Temp_id s
@@ -1748,12 +1755,15 @@ let raw_datom_of_values (e : value) (a : value) (v : value) (tx : value)
     (added : bool) : tx_op =
   let eid =
     match e with
-    | Int n -> n
-    | _ -> fail "explicit transaction datoms require entity ids"
+    | Int64 n -> Datascript.Util.int64_to_int_exn "entity id" n
+    | _ ->
+        fail
+          ("explicit transaction datoms require entity ids, got "
+           ^ Db_property_build.str_of_value e)
   in
   let txid =
     match tx with
-    | Int n -> n
+    | Int64 n -> Datascript.Util.int64_to_int_exn "tx id" n
     | _ -> fail "explicit transaction tx must be an integer"
   in
   Raw_datom (Datascript.datom ~tx:txid ~added ~e:eid ~a:(tx_attr_of_value a) ~v ())

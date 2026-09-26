@@ -76,7 +76,7 @@ let q_result_ids (rows : query_result list list) : entity_id list =
   List.filter_map
     (function
       | [ Result_entity id ] -> Some id
-      | [ Result_value (Int id) ] -> Some id
+      | [ Result_value (Int64 id) ] -> Datascript.Util.int64_to_int id
       | [ Result_value (Ref id) ] -> Some id
       | _ -> None)
     rows
@@ -106,11 +106,23 @@ let add_single_block_comment_targets (db : db) : Wire.t list =
             [?comments-area-id :block/tags :logseq.class/Comments]
             [?comments-area-id :block/parent ?parent-id]]"
       |> List.filter_map (fun (row : query_result list) ->
-             match row with
-             | [ Result_value (Int ca); Result_value (Int parent) ]
-             | [ Result_entity ca; Result_entity parent ]
-             | [ Result_value (Ref ca); Result_value (Ref parent) ] ->
-                 (match Ldb.ent_of_id db ca with
+             let ids =
+               match row with
+               | [ Result_value (Int64 ca); Result_value (Int64 parent) ] -> (
+                   match
+                     ( Datascript.Util.int64_to_int ca
+                     , Datascript.Util.int64_to_int parent )
+                   with
+                   | Some ca, Some parent -> Some (ca, parent)
+                   | _ -> None)
+               | [ Result_entity ca; Result_entity parent ]
+               | [ Result_value (Ref ca); Result_value (Ref parent) ] ->
+                   Some (ca, parent)
+               | _ -> None
+             in
+             match ids with
+             | Some (ca, parent) -> (
+                 match Ldb.ent_of_id db ca with
                   | Some area ->
                       (match Ldb.values area "logseq.property.comments/blocks" with
                        | [] ->
@@ -171,7 +183,7 @@ let add_missing_page_name (db : db) : Wire.t list =
               | Some title when Unicode.trim title <> "" ->
                   Some
                     (wire_map
-                       [ "db/id", Int d.e
+                       [ "db/id", Int64 (Int64.of_int d.e)
                        ; "block/name",
                          String (Ldb.page_name_sanity_lc title) ])
               | _ -> None)
@@ -403,7 +415,7 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
                (match Ldb.ent_of_ref db (Lookup_ref ("file/path", String path)) with
                 | Some block ->
                     let existing_data =
-                      ("db/id", Int block.id) :: ent_to_map block
+                      ("db/id", Int64 (Int64.of_int block.id)) :: ent_to_map block
                     in
                     Some (Block_map.merge data existing_data)
                 | None -> Some data)
@@ -423,7 +435,7 @@ let ensure_built_in_data_exists (conn : conn) : tx_report option =
                             | Some u' -> Hashtbl.replace uuids u u'
                             | None -> ());
                            let existing_data =
-                             ("db/id", Int block.id) :: ent_to_map block
+                             ("db/id", Int64 (Int64.of_int block.id)) :: ent_to_map block
                            in
                            Some
                              (List.fold_left
@@ -560,10 +572,10 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
             [ Keyword "db/ident"; Keyword "logseq.kv/schema-version" ]
         ; Keyword "kv/value"
         ; Map
-            [ Keyword "major", Int version_map.sv_major
+            [ Keyword "major", Int64 (Int64.of_int version_map.sv_major)
             ; Keyword "minor",
               (match version_map.sv_minor with
-               | Some n -> Int n
+               | Some n -> Int64 (Int64.of_int n)
                | None -> Nil) ] ] ]
   in
   let tx_data =
@@ -597,7 +609,7 @@ let migrate ?(target_version = Db_schema.version) (conn : conn) :
   in
   let version_in_db =
     Db_schema.parse_schema_version
-      (match kv_v with Some v -> v | None -> Int 0)
+      (match kv_v with Some v -> v | None -> Int64 0L)
   in
   let compare_result =
     Db_schema.compare_schema_version target_version version_in_db

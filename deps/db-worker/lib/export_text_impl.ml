@@ -419,7 +419,7 @@ and inline_cookie (ast_content : value) : simple_ast list =
 and str_of (v : value) : string =
   match v with
   | String s -> s
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Float f -> Common_util.js_string_of_float f
   | _ -> ""
 
@@ -553,7 +553,7 @@ and block_ast_to_simple_ast ~(st : state) (block : block_ast)
          @ [ Some (newline_star 1) ]
      | "Paragraph_line" ->
          invalid_arg "Paragraph_line is mldoc internal ast"
-     | "Paragraph_Sep" -> [ Some (newline_star (match c with Int n -> n | _ -> 0)) ]
+     | "Paragraph_Sep" -> [ Some (newline_star (match c with Int64 n -> Option.value (Datascript.Util.int64_to_int n) ~default:0 | _ -> 0)) ]
      | "Heading" -> List.map Option.some (block_heading ~st c)
      | "List" -> List.map Option.some (block_list ~st ~in_list:false (CV.coll_items c))
      | "Directive" | "Results" | "Export" | "CommentBlock" | "Custom" -> []

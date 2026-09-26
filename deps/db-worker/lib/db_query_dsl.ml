@@ -21,7 +21,7 @@ open Datascript
 let kw s = QueryFormKeyword s
 let sym s = QueryFormSymbol s
 let str s = QueryFormString s
-let int n = QueryFormInt n
+let int n = QueryFormInt (Int64.of_int n)
 let list_ xs = QueryFormList xs
 let vec_ xs = QueryFormVector xs
 
@@ -926,7 +926,7 @@ let to_timestamp (input : query_form) : int64 option =
 
 (* cljs str of a number: integral doubles print without decimal point *)
 let str_of_number = function
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Float f -> Common_util.js_string_of_float f
   | _ -> assert false
 
@@ -997,7 +997,7 @@ let build_journal_between_two_arg (e : query_form) : built option =
   match coll_elems e with
   | [ _; a; b ] ->
       let start = to_journal_day_int a and stop = to_journal_day_int b in
-      let to_form = function Some n -> int n | None -> QueryFormNil in
+      let to_form = function Some n -> QueryFormInt (Int64.of_int n) | None -> QueryFormNil in
       let s, e' = (to_form start, to_form stop) in
       let s, e' =
         match (s, e') with
@@ -1127,7 +1127,7 @@ let db_property_value (db : db) (k : string) (v : query_form) : query_form =
       in
       if is_node then
         match v'' with
-        | QueryFormInt n -> str (string_of_int n)
+        | QueryFormInt n -> str (Int64.to_string n)
         | QueryFormFloat f -> str (str_of_number (Float f))
         | _ -> assert false
       else v''
@@ -1153,7 +1153,7 @@ let db_keyword_property (db : db) (property_name : query_form) : string =
 
 let value_of_form (f : query_form) : value option =
   match f with
-  | QueryFormInt n -> Some (Int n)
+  | QueryFormInt n -> Some (Int64 n)
   | QueryFormFloat x -> Some (Float x)
   | QueryFormString s -> Some (String s)
   | QueryFormBool b -> Some (Bool b)
@@ -1319,7 +1319,7 @@ let build_tags (db : db) (e : query_form) : built option =
 let build_sample (e : query_form) (env : env) : built option =
   match coll_elems e with
   | [ _; QueryFormInt n ] ->
-      env.sample <- Some n;
+      env.sample <- Some (Datascript.Util.int64_to_int_exn "sample" n);
       (* blank b/c this post-process filter doesn't affect query *)
       Some { bquery = QueryFormNil; brules = [] } (* filtered out later *)
   | _ -> None

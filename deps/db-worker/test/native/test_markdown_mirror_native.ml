@@ -812,15 +812,15 @@ let test_page_mirror_exports_property_values_test () =
                       pg_title = Some "Issue"
                     ; pg_properties =
                         [ "user.property/reproducible-steps", Str "Open settings"
-                        ; "logseq.property/heading", Int 1 ] }
+                        ; "logseq.property/heading", Int64 1 ] }
                 ; blocks =
                     [ blk "TODO body"
                         ~properties:
                           [ "logseq.property/status",
                             Kw "logseq.property/status.todo"
                           ; "user.property/reproducible-steps", Str "Click mirror"
-                          ; "user.property/rating", Int 5
-                          ; "logseq.property/heading", Int 2 ]
+                          ; "user.property/rating", Int64 5
+                          ; "logseq.property/heading", Int64 2 ]
                         () ] } ]
           ~pre_txs:(status_ontology_pre_txs
                     @ hidden_built_in_property_pre_txs)
@@ -872,7 +872,7 @@ let test_page_mirror_preserves_markdown_semantic_block_formatting_test () =
             [ pb "Formats"
                 ~children:
                   [ blk "Heading block"
-                      ~properties:[ "logseq.property/heading", Int 2 ] ()
+                      ~properties:[ "logseq.property/heading", Int64 2 ] ()
                   ; blk "quote line 1\nquote line 2"
                       ~tags:[ "logseq.class/Quote-block" ]
                       ~properties:
@@ -1176,7 +1176,7 @@ let test_page_mirror_exports_page_property_values_test () =
                       pg_title = Some "Page Props"
                     ; pg_properties =
                         [ "user.property/p1", Str "hello"
-                        ; "user.property/p2", Int 1
+                        ; "user.property/p2", Int64 1
                         ; "user.property/p3", Str "Author 1" ] }
                 ; blocks = [ blk "body" () ] } ]
           ~pre_txs:hidden_built_in_property_pre_txs ()
@@ -1241,7 +1241,7 @@ let test_journal_mirror_exports_page_and_block_property_values_test () =
                     ; pg_properties =
                         [ "user.property/p1", Str "hey" ]
                     ; pg_extra =
-                        [ "block/journal-day", Int 20260505
+                        [ "block/journal-day", Int64 20260505
                         ; "block/tags", Kw "logseq.class/Journal" ] }
                 ; blocks =
                     [ blk "TODO hello great test"
@@ -1249,7 +1249,7 @@ let test_journal_mirror_exports_page_and_block_property_values_test () =
                           [ "logseq.property/status",
                             Kw "logseq.property/status.todo"
                           ; "user.property/p1", Str "hello"
-                          ; "user.property/p2", Int 1
+                          ; "user.property/p2", Int64 1
                           ; "user.property/p3", Str "Author 1" ]
                         () ] } ]
           ~pre_txs:(status_ontology_pre_txs
@@ -1282,7 +1282,7 @@ let test_full_regeneration_writes_existing_non_built_in_non_property_pages_test
                     { default_page with
                       pg_title = Some "Journal"
                     ; pg_extra =
-                        [ "block/journal-day", Int 20240508
+                        [ "block/journal-day", Int64 20240508
                         ; "block/tags", Kw "logseq.class/Journal" ] }
                 ; blocks = [ blk "journal" () ] }
             ; Db_test_util.
@@ -1652,7 +1652,7 @@ let test_windows_reserved_journal_filename_fails_with_diagnostic_test () =
                       pg_title = Some "CON"
                     ; pg_name = Some "con"
                     ; pg_extra =
-                        [ "block/journal-day", Int 20240507
+                        [ "block/journal-day", Int64 20240507
                         ; "block/tags", Kw "logseq.class/Journal" ] }
                 ; blocks = [ blk "journal" () ] } ]
           ()
@@ -1685,7 +1685,7 @@ let test_duplicate_journal_day_fails_without_overwrite_test () =
                       pg_title = Some "May 7th, 2024"
                     ; pg_name = Some "may 7th, 2024"
                     ; pg_extra =
-                        [ "block/journal-day", Int 20240507
+                        [ "block/journal-day", Int64 20240507
                         ; "block/tags", Kw "logseq.class/Journal" ] }
                 ; blocks = [ blk "first" () ] }
             ; Db_test_util.
@@ -1695,7 +1695,7 @@ let test_duplicate_journal_day_fails_without_overwrite_test () =
                     ; pg_name = Some "may 07, 2024"
                     ; pg_uuid = Some "12121212-1212-4212-8212-121212121212"
                     ; pg_extra =
-                        [ "block/journal-day", Int 20240507
+                        [ "block/journal-day", Int64 20240507
                         ; "block/tags", Kw "logseq.class/Journal" ] }
                 ; blocks = [ blk "second" () ] } ]
           ()

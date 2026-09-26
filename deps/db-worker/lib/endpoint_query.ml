@@ -31,17 +31,17 @@ let rec form_of_wire (t : Wire.t) : query_form =
   match t with
   | Wire.Nil -> QueryFormNil
   | Wire.Bool b -> QueryFormBool b
-  | Wire.Int n -> QueryFormInt n
+  | Wire.Int n -> QueryFormInt (Int64.of_int n)
   | Wire.Float f -> QueryFormFloat f
   | Wire.String s -> QueryFormString s
   | Wire.Binary s -> QueryFormString s
   | Wire.Keyword s -> QueryFormKeyword s
   | Wire.Symbol s -> QueryFormSymbol s
   | Wire.Big_int s ->
-      (try QueryFormInt (int_of_string s)
+      (try QueryFormInt (Int64.of_string s)
        with _ -> QueryFormFloat (float_of_string s))
   | Wire.Big_decimal s -> QueryFormFloat (float_of_string s)
-  | Wire.Int64 n -> QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms n))
+  | Wire.Int64 n -> QueryFormInt n
   | Wire.Date_ms ms ->
       QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms ms))
   | Wire.Uuid s -> QueryFormTagged ("uuid", QueryFormString s)
@@ -57,7 +57,7 @@ let rec value_of_form (f : query_form) : value =
   match f with
   | QueryFormNil -> Nil
   | QueryFormBool b -> Bool b
-  | QueryFormInt n -> Int n
+  | QueryFormInt n -> Int64 n
   | QueryFormFloat x -> Float x
   | QueryFormString s -> String s
   | QueryFormKeyword k -> Keyword k
@@ -80,7 +80,7 @@ let rec value_of_form (f : query_form) : value =
 let result_arg (v : value) : query_arg =
   match v with
   | Keyword s -> Arg_scalar (Result_attr s)
-  | Int n -> Arg_scalar (Result_entity n)
+  | Int64 n -> Arg_scalar (Result_entity (Datascript.Util.int64_to_int_exn "entity id" n))
   | v -> Arg_scalar (Result_value v)
 
 (* ---------- handler.cljs helpers ---------- *)
@@ -223,7 +223,7 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
                 [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
-  | Keyword "today", Some day -> Int day
+  | Keyword "today", Some day -> Int64 (Int64.of_int day)
   | _ ->
       Db_inputs.resolve_input db resolved_input
         { Db_inputs.current_block_uuid = current_block_uuid
@@ -443,14 +443,15 @@ let block_status_history (db : db) (block_id : int) : history_item list =
          match row with
          | [ history_id; created_at; status_id ] ->
              let int_of = function
-               | Result_entity n | Result_value (Int n) -> Some n
+               | Result_entity n -> Some n
+               | Result_value (Int64 n) -> Datascript.Util.int64_to_int n
                | Result_value (Ref n) -> Some n
                | _ -> None
              in
              (* cljs untyped get: epoch-ms reads back numeric (Int/Float);
                 Instant only for legacy ~t-decoded data *)
              let ms_of = function
-               | Result_value (Int n) -> Some (Int64.of_int n)
+               | Result_value (Int64 n) -> Some n
                | Result_value (Float f) -> Some (Int64.of_float f)
                | Result_value (Instant ms) -> Some ms
                | _ -> None
@@ -510,7 +511,7 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
       let item_wire (it : history_item) =
         Wire.Map
           [ (kw "db/id", Wire.Int it.history_id)
-          ; (kw "block/created-at", Wire.Int64 it.created_at)
+          ; (kw "block/created-at", Ds_wire.wire_int64 it.created_at)
           ; ( kw "logseq.property.history/property-ident",
               kw "logseq.property/status" )
           ; ( kw "logseq.property.history/ref-value-ident",

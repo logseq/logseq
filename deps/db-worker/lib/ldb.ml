@@ -86,7 +86,7 @@ let string_value (e : entity) (a : attr) : string option =
    rep for values exceeding int32 *)
 let int64_value (e : entity) (a : attr) : int64 option =
   match value e a with
-  | Some (Int n) -> Some (Int64.of_int n)
+  | Some (Int64 n) -> Some n
   | Some (Float f) -> Some (Int64.of_float f)
   | Some (Instant ms) -> Some ms
   | _ -> None
@@ -266,7 +266,7 @@ let raw_title db (e : entity) : value option =
 (* ldb/get-page — eid | uuid | page name (case-insensitive). *)
 let get_page db (ref_v : value) : entity option =
   match ref_v with
-  | Int id -> ent_of_id db id
+  | Int64 id -> ent_of_id db (Datascript.Util.int64_to_int_exn "entity id" id)
   | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s ->
       if is_uuid_string s then
@@ -293,7 +293,7 @@ let get_case_page db (ref_v : value) : entity option =
 (* ldb/get-journal-page-by-day *)
 let get_journal_page_by_day db (journal_day : int) : entity option =
   match
-    Seq.uncons (datoms db Avet ~a:"block/journal-day" ~v:(Int journal_day) ())
+    Seq.uncons (datoms db Avet ~a:"block/journal-day" ~v:(Int64 (Int64.of_int journal_day)) ())
   with
   | Some (d, _) -> ent_of_id db d.e
   | None -> None
@@ -427,7 +427,7 @@ let get_down (block : entity) : entity option =
   | [] -> None
 
 let ref_v_to_ref = function
-  | Int id -> Entity_id id
+  | Int64 id -> Entity_id (Datascript.Util.int64_to_int_exn "entity id" id)
   | Ref id -> Entity_id id
   | Keyword s -> Ident s
   | Uuid u -> Lookup_ref ("block/uuid", Uuid u)
@@ -522,7 +522,9 @@ let page_exists db (page_name : string) (tag_idents : string list) : bool =
    descending, LAZILY like cljs: callers `Seq.take n` to bound the work
    to the requested page size. *)
 let get_latest_journals db : entity Seq.t =
-  let today = Date_time_util.date_to_int (Date_time_util.time_ms ()) in
+  let today =
+    Int64.of_int (Date_time_util.date_to_int (Date_time_util.time_ms ()))
+  in
   let seen = Hashtbl.create 31 in
   (* cljs take-while over the rseek seq, counting each pulled datom *)
   let rec take_while_journals (s : datom Seq.t) : datom Seq.t = fun () ->
@@ -532,11 +534,11 @@ let get_latest_journals db : entity Seq.t =
         Seq.Cons (d, take_while_journals rest)
     | _ -> Seq.Nil
   in
-  rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int today) ()
+  rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int64 today) ()
   |> take_while_journals
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
-         | Int day when day <= today -> (
+         | Int64 day when day <= today -> (
              match ent_of_id db d.e with
              | Some e
                when is_journal e && not (recycled e)
@@ -725,7 +727,7 @@ let get_bidirectional_properties db (target_id : entity_id)
       (* epoch-ms reads back numeric (Int/Float); Instant only for
          legacy ~t-decoded data *)
       match value e "block/created-at" with
-      | Some (Int n) -> Some (Int64.of_int n)
+      | Some (Int64 n) -> Some n
       | Some (Float f) -> Some (Int64.of_float f)
       | Some (Instant ms) -> Some ms
       | _ -> None

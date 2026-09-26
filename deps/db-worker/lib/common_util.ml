@@ -55,13 +55,10 @@ let str_replace_all (s : string) (old_value : string) (new_value : string) : str
 
 let time_ms () = Date_time_util.time_ms ()
 
-(* cljs stores epoch-ms as plain numbers; the numeric rep keeps them
-   intact on both targets: Int when the ms fit `int`, Float otherwise
-   (exact below 2^53 — JS numbers are doubles). Instant stays reserved
-   for real ~t / db.type/instant values. *)
-let value_of_ms (ms : int64) : value =
-  if Int64.abs ms <= Int64.of_int max_int then Int (Int64.to_int ms)
-  else Float (Int64.to_float ms)
+(* cljs stores epoch-ms as plain numbers; Int64 keeps the full range on
+   every target. Instant stays reserved for real ~t / db.type/instant
+   values. *)
+let value_of_ms (ms : int64) : value = Int64 ms
 
 let value_of_ms_float (ms : float) : value = value_of_ms (Int64.of_float ms)
 
@@ -70,7 +67,7 @@ let timestamp_ms (v : value) : int64 option =
   let ms =
     match v with
     | Float f -> Some (Int64.of_float f)
-    | Int n -> Some (Int64.of_int n)
+    | Int64 n -> Some n
     | Instant n -> Some n
   | _ -> None
   in
@@ -503,14 +500,14 @@ let rec value_of_wire (w : Wire.t) : value =
   | Wire.Nil -> Nil
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
-  | Wire.Int n -> Int n
-  | Wire.Int64 n -> value_of_ms n
+  | Wire.Int n -> Int64 (Int64.of_int n)
+  | Wire.Int64 n -> Int64 n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
   | Wire.Symbol s -> Symbol s
   | Wire.Big_decimal s -> Float (float_of_string s)
-  | Wire.Big_int s -> Int (int_of_string s)
+  | Wire.Big_int s -> Int64 (Int64.of_string s)
   | Wire.Date_ms n -> Instant n
   | Wire.Uuid s -> Uuid s
   | Wire.Uri s -> String s

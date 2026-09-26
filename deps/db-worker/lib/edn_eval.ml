@@ -102,7 +102,7 @@ let rt_equal a b =
 (* cljs compare — numbers compare numerically across int/float/instant. *)
 let rt_compare a b =
   let as_float = function
-    | Int n -> Some (float_of_int n)
+    | Int64 n -> Some (Int64.to_float n)
     | Float f -> Some f
     | Instant n -> Some (Int64.to_float n)
     | _ -> None
@@ -117,7 +117,7 @@ let rt_compare a b =
   | _ -> Util.compare_value (value_of_rt a) (value_of_rt b)
 
 let num_of = function
-  | V (Int n) -> float_of_int n
+  | V (Int64 n) -> Int64.to_float n
   | V (Float f) -> f
   | V (Instant n) -> Int64.to_float n
   | _ -> eval_error "expected number"
@@ -166,8 +166,10 @@ let rt_get m k ~default =
       | None -> default)
   | Ent e, V (Keyword a) -> V ((ctx ()).entity_attr e a)
   | Ent e, V (String a) -> V ((ctx ()).entity_attr e a)
-  | V (Vector xs), V (Int i) when i >= 0 && i < List.length xs ->
-      V (List.nth xs i)
+  | V (Vector xs), V (Int64 i) -> (
+      match Datascript.Util.int64_to_int i with
+      | Some i when i >= 0 && i < List.length xs -> V (List.nth xs i)
+      | _ -> V Nil)
   | V (Set xs), V kv ->
       if List.exists (fun x -> Util.value_equal x kv) xs then V kv else default
   | V Nil, _ -> default
@@ -183,8 +185,11 @@ let rt_assoc m k v =
         | kv' :: rest -> go (kv' :: acc) rest
       in
       V (Map (go [] kvs))
-  | V (Vector xs), V (Int i) when i >= 0 && i < List.length xs ->
-      V (Vector (List.mapi (fun j x -> if j = i then value_of_rt v else x) xs))
+  | V (Vector xs), V (Int64 i) -> (
+      match Datascript.Util.int64_to_int i with
+      | Some i when i >= 0 && i < List.length xs ->
+          V (Vector (List.mapi (fun j x -> if j = i then value_of_rt v else x) xs))
+      | _ -> V Nil)
   | Ent e, _ -> eval_error "assoc on entity %d is not supported" e
   | _ -> eval_error "assoc on non-associative value"
 
@@ -608,7 +613,10 @@ and apply_rt f args =
       | [] -> V Nil)
   | V (Vector xs) -> (
       match args with
-      | V (Int i) :: _ when i >= 0 && i < List.length xs -> V (List.nth xs i)
+      | V (Int64 i) :: _ -> (
+          match Datascript.Util.int64_to_int i with
+          | Some i when i >= 0 && i < List.length xs -> V (List.nth xs i)
+          | _ -> V Nil)
       | _ -> V Nil)
   | V (Set xs) -> (
       match args with
@@ -699,7 +707,7 @@ and build_core_fns () =
     ];
   reg "compare" (fun args ->
       match args with
-      | [ a; b ] -> V (Int (rt_compare a b))
+      | [ a; b ] -> V (Int64 (Int64.of_int (rt_compare a b)))
       | _ -> eval_error "compare wants 2 args");
   reg "not" (fun args -> V (Bool (not (truthy (one args)))));
   reg "boolean" (fun args -> V (Bool (truthy (one args))));
@@ -717,20 +725,19 @@ and build_core_fns () =
       match args with
       | [ (Fn _ | V (Keyword _ | Map _ | Vector _ | Set _)) ] -> V (Bool true)
       | _ -> V (Bool false));
-  (* cljs number?/float? are all "is a JS number"; Instant doubles as
-     the int64 scalar rep for epoch-ms values, so it counts *)
+  (* cljs number?/integer?/float? on a Date are all false *)
   reg "number?" (fun args ->
       match args with
-      | [ V (Int _ | Float _ | Instant _) ] -> V (Bool true)
+      | [ V (Int64 _ | Float _) ] -> V (Bool true)
       | _ -> V (Bool false));
   reg "integer?" (fun args ->
       match args with
-      | [ V (Int _ | Instant _) ] -> V (Bool true)
+      | [ V (Int64 _) ] -> V (Bool true)
       | [ V (Float f) ] -> V (Bool (Malli.integer_float f))
       | _ -> V (Bool false));
   reg "float?" (fun args ->
       match args with
-      | [ V (Int _ | Float _ | Instant _) ] -> V (Bool true)
+      | [ V (Int64 _ | Float _) ] -> V (Bool true)
       | _ -> V (Bool false));
   reg "string?" (fun args ->
       match args with [ V (String _) ] -> V (Bool true) | _ -> V (Bool false));
@@ -766,15 +773,15 @@ and build_core_fns () =
     let xs = List.map num_of args in
     let r = f xs in
     if
-      List.for_all (function V (Int _) | V (Instant _) -> true | _ -> false) args
+      List.for_all (function V (Int64 _) -> true | _ -> false) args
       && Float.equal r (Float.of_int (int_of_float r))
-    then V (Int (int_of_float r))
+    then V (Int64 (Int64.of_int (int_of_float r)))
     else V (Float r)
   in
   reg "+" (fun args -> num_val args (List.fold_left ( +. ) 0.0));
   reg "-" (fun args ->
       match args with
-      | [ V (Int n) ] -> V (Int (-n))
+      | [ V (Int64 n) ] -> V (Int64 (Int64.neg n))
       | [ x ] -> V (Float (Float.neg (num_of x)))
       | x :: rest -> V (Float (List.fold_left (fun a b -> a -. b) (num_of x) (List.map num_of rest)))
       | [] -> eval_error "- wants args");
@@ -787,13 +794,13 @@ and build_core_fns () =
       | [] -> eval_error "/ wants args");
   reg "inc" (fun args ->
       match args with
-      | [ V (Int n) ] -> V (Int (n + 1))
+      | [ V (Int64 n) ] -> V (Int64 (Int64.add n 1L))
       | [ V (Instant n) ] -> V (Instant (Int64.add n 1L))
       | [ x ] -> V (Float (num_of x +. 1.0))
       | _ -> eval_error "inc");
   reg "dec" (fun args ->
       match args with
-      | [ V (Int n) ] -> V (Int (n - 1))
+      | [ V (Int64 n) ] -> V (Int64 (Int64.sub n 1L))
       | [ V (Instant n) ] -> V (Instant (Int64.sub n 1L))
       | [ x ] -> V (Float (num_of x -. 1.0))
       | _ -> eval_error "dec");
@@ -807,7 +814,7 @@ and build_core_fns () =
       | x :: rest -> V (Float (List.fold_left Float.max x rest)));
   reg "mod" (fun args ->
       match args with
-      | [ V (Int a); V (Int b) ] -> V (Int (a mod b))
+      | [ V (Int64 a); V (Int64 b) ] -> V (Int64 (Int64.rem a b))
       | [ a; b ] -> V (Float (Float.rem (num_of a) (num_of b)))
       | _ -> eval_error "mod");
   reg "rem" (fun args ->
@@ -816,7 +823,7 @@ and build_core_fns () =
       | _ -> eval_error "rem");
   reg "quot" (fun args ->
       match args with
-      | [ a; b ] -> V (Int (int_of_float (num_of a) / int_of_float (num_of b)))
+      | [ a; b ] -> V (Int64 (Int64.of_int (int_of_float (num_of a) / int_of_float (num_of b))))
       | _ -> eval_error "quot");
   reg "abs" (fun args -> V (Float (Float.abs (num_of (one args)))));
 
@@ -837,8 +844,11 @@ and build_core_fns () =
       | _ -> V Nil);
   reg "nth" (fun args ->
       match args with
-      | coll :: V (Int i) :: default -> (
-          match List.nth_opt (elems_of_rt coll) i with
+      | coll :: V (Int64 i) :: default -> (
+          match
+            Option.bind (Datascript.Util.int64_to_int i)
+              (List.nth_opt (elems_of_rt coll))
+          with
           | Some x -> x
           | None -> (
               match default with
@@ -848,8 +858,8 @@ and build_core_fns () =
   reg "seq" (fun args -> seq_coll (elems_of_rt (one args)));
   reg "count" (fun args ->
       match args with
-      | [ V (String s) ] -> V (Int (String.length s))
-      | [ x ] -> V (Int (List.length (elems_of_rt x)))
+      | [ V (String s) ] -> V (Int64 (Int64.of_int (String.length s)))
+      | [ x ] -> V (Int64 (Int64.of_int (List.length (elems_of_rt x))))
       | _ -> eval_error "count");
   reg "empty" (fun args ->
       match args with
@@ -942,35 +952,53 @@ and build_core_fns () =
            (List.map
               (fun f ->
                 if Float.equal f (Float.of_int (int_of_float f)) then
-                  Int (int_of_float f)
+                  Int64 (Int64.of_int (int_of_float f))
                 else Float f)
               (go [] lo))));
   reg "repeat" (fun args ->
       match args with
-      | [ V (Int n); x ] -> Seq (List.init n (fun _ -> x))
+      | [ V (Int64 n); x ] -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n -> Seq (List.init n (fun _ -> x))
+          | None -> eval_error "repeat")
       | _ -> eval_error "repeat");
   reg "repeatedly" (fun args ->
       match args with
-      | [ V (Int n); f ] -> Seq (List.init n (fun _ -> apply_rt f []))
+      | [ V (Int64 n); f ] -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n -> Seq (List.init n (fun _ -> apply_rt f []))
+          | None -> eval_error "repeatedly")
       | _ -> eval_error "repeatedly wants (repeatedly n f)");
   reg "take" (fun args ->
       match args with
-      | [ V (Int n); coll ] -> Seq (take_elems n (elems_of_rt coll))
+      | [ V (Int64 n); coll ] -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n -> Seq (take_elems n (elems_of_rt coll))
+          | None -> eval_error "take")
       | _ -> eval_error "take");
   reg "drop" (fun args ->
       match args with
-      | [ V (Int n); coll ] -> Seq (drop_elems n (elems_of_rt coll))
+      | [ V (Int64 n); coll ] -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n -> Seq (drop_elems n (elems_of_rt coll))
+          | None -> eval_error "drop")
       | _ -> eval_error "drop");
   reg "take-last" (fun args ->
       match args with
-      | [ V (Int n); coll ] ->
+      | [ V (Int64 n); coll ] ->
           let xs = elems_of_rt coll in
-          Seq (drop_elems (max 0 (List.length xs - n)) xs)
+          (match Datascript.Util.int64_to_int n with
+           | Some n -> Seq (drop_elems (max 0 (List.length xs - n)) xs)
+           | None -> eval_error "take-last")
       | _ -> eval_error "take-last");
   reg "drop-last" (fun args ->
       match args with
       | coll :: rest ->
-          let n = match rest with [ V (Int n) ] -> n | _ -> 1 in
+          let n =
+            match rest with
+            | [ V (Int64 n) ] -> Option.value (Datascript.Util.int64_to_int n) ~default:1
+            | _ -> 1
+          in
           let xs = elems_of_rt coll in
           Seq (take_elems (max 0 (List.length xs - n)) xs)
       | _ -> eval_error "drop-last");
@@ -1000,12 +1028,15 @@ and build_core_fns () =
       | _ -> eval_error "drop-while");
   reg "take-nth" (fun args ->
       match args with
-      | [ V (Int n); coll ] ->
+      | [ V (Int64 n); coll ] ->
           let kept =
-            elems_of_rt coll
-            |> List.mapi (fun i x -> i, x)
-            |> List.filter (fun (i, _) -> i mod n = 0)
+            (match Datascript.Util.int64_to_int n with
+             | Some n ->
+                 elems_of_rt coll
+                 |> List.mapi (fun i x -> i, x)
+                 |> List.filter (fun (i, _) -> i mod n = 0)
             |> List.map snd
+            | None -> [])
           in
           Seq kept
       | _ -> eval_error "take-nth");
@@ -1031,11 +1062,16 @@ and build_core_fns () =
       | _ -> eval_error "interpose");
   reg "partition" (fun args ->
       match args with
-      | V (Int n) :: rest ->
+      | V (Int64 n) :: rest -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n ->
           let step, coll =
             match rest with
             | [ coll ] -> (n, coll)
-            | [ V (Int s); coll ] -> (s, coll)
+            | [ V (Int64 s); coll ] -> (
+                match Datascript.Util.int64_to_int s with
+                | Some s -> (s, coll)
+                | None -> eval_error "partition")
             | _ -> eval_error "partition wants n [step] coll"
           in
           let rec go acc xs =
@@ -1044,16 +1080,20 @@ and build_core_fns () =
             else List.rev acc
           in
           Seq (go [] (elems_of_rt coll))
+          | None -> eval_error "partition")
       | _ -> eval_error "partition");
   reg "split-at" (fun args ->
       match args with
-      | [ V (Int n); coll ] ->
-          let xs = elems_of_rt coll in
-          V
-            (Vector
-               [ List (List.map value_of_rt (take_elems n xs))
-               ; List (List.map value_of_rt (drop_elems n xs))
-               ])
+      | [ V (Int64 n); coll ] -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n ->
+              let xs = elems_of_rt coll in
+              V
+                (Vector
+                   [ List (List.map value_of_rt (take_elems n xs))
+                   ; List (List.map value_of_rt (drop_elems n xs))
+                   ])
+          | None -> eval_error "split-at")
       | _ -> eval_error "split-at");
   reg "split-with" (fun args ->
       match args with
@@ -1097,7 +1137,7 @@ and build_core_fns () =
       | [ f; coll ] ->
           Seq
             (List.mapi
-               (fun i x -> apply_rt f [ V (Int i); x ])
+               (fun i x -> apply_rt f [ V (Int64 (Int64.of_int i)); x ])
                (elems_of_rt coll))
       | _ -> eval_error "map-indexed");
   reg "filter" (fun args ->
@@ -1139,7 +1179,7 @@ and build_core_fns () =
             elems_of_rt coll
             |> List.mapi (fun i x -> i, x)
             |> List.filter_map (fun (i, x) ->
-                   match apply_rt f [ V (Int i); x ] with
+                   match apply_rt f [ V (Int64 (Int64.of_int i)); x ] with
                    | V Nil -> None
                    | r -> Some r)
           in
@@ -1218,7 +1258,7 @@ and build_core_fns () =
             List.stable_sort
               (fun a b ->
                 match apply_rt cmp [ apply_rt f [ a ]; apply_rt f [ b ] ] with
-                | V (Int n) -> n
+                | V (Int64 n) -> Int64.to_int n
                 | V (Float x) -> int_of_float x
                 | r -> if truthy r then -1 else 0)
               (elems_of_rt coll)
@@ -1255,7 +1295,7 @@ and build_core_fns () =
           | Some c -> incr c
           | None -> order := (v, ref 1) :: !order)
         (elems_of_rt (one args));
-      V (Map (List.rev_map (fun (k, c) -> (k, Int !c)) !order)));
+      V (Map (List.rev_map (fun (k, c) -> (k, Int64 (Int64.of_int !c))) !order)));
   reg "zipmap" (fun args ->
       match args with
       | [ ks; vs ] ->
@@ -1448,7 +1488,10 @@ and build_core_fns () =
               V (Bool (List.exists (fun (mk, _) -> Util.value_equal mk kv) kvs))
           | V (Vector xs) -> (
               match k with
-              | V (Int i) -> V (Bool (i >= 0 && i < List.length xs))
+              | V (Int64 i) -> (
+                  match Datascript.Util.int64_to_int i with
+                  | Some i -> V (Bool (i >= 0 && i < List.length xs))
+                  | None -> V (Bool false))
               | _ -> V (Bool false))
           | V (Set xs) ->
               let kv = value_of_rt k in
@@ -1539,14 +1582,25 @@ and build_core_fns () =
       match args with [ V (String s) ] -> V (Uuid s) | _ -> eval_error "uuid");
   reg "subs" (fun args ->
       match args with
-      | [ V (String s); V (Int i) ] -> V (String (String.sub s i (String.length s - i)))
-      | [ V (String s); V (Int i); V (Int j) ] -> V (String (String.sub s i (j - i)))
+      | [ V (String s); V (Int64 i); V (Int64 j) ] -> (
+          match Datascript.Util.int64_to_int i, Datascript.Util.int64_to_int j with
+          | Some i, Some j -> V (String (String.sub s i (j - i)))
+          | _ -> eval_error "subs")
+      | [ V (String s); V (Int64 i) ] -> (
+          match Datascript.Util.int64_to_int i with
+          | Some i -> V (String (String.sub s i (String.length s - i)))
+          | None -> eval_error "subs")
       | _ -> eval_error "subs");
   reg "subvec" (fun args ->
       match args with
-      | [ V (Vector xs); V (Int i) ] -> V (Vector (drop_elems i xs))
-      | [ V (Vector xs); V (Int i); V (Int j) ] ->
-          V (Vector (take_elems (j - i) (drop_elems i xs)))
+      | [ V (Vector xs); V (Int64 i); V (Int64 j) ] -> (
+          match Datascript.Util.int64_to_int i, Datascript.Util.int64_to_int j with
+          | Some i, Some j -> V (Vector (take_elems (j - i) (drop_elems i xs)))
+          | _ -> eval_error "subvec")
+      | [ V (Vector xs); V (Int64 i) ] -> (
+          match Datascript.Util.int64_to_int i with
+          | Some i -> V (Vector (drop_elems i xs))
+          | None -> eval_error "subvec")
       | _ -> eval_error "subvec");
   List.iter
     (fun (names, f) -> List.iter (fun n -> reg n f) names)

@@ -145,7 +145,7 @@ let attribute_value_to_plain db (a : attr) (v : value) : Wire.t =
     if Ldb.ref_attr db a then
       match v with
       | Ref id -> Some id
-      | Int id -> Some id
+      | Int64 id -> Datascript.Util.int64_to_int id
       | Float f -> Some (int_of_float f)
       | _ -> None
     else None

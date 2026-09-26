@@ -43,7 +43,7 @@ let property_types_with_db =
 (* ---------- value shape predicates (cljs predicates) ---------- *)
 
 let string_v = function String _ -> true | _ -> false
-let number_v = function Int _ | Float _ | Instant _ -> true | _ -> false
+let number_v = function Int64 _ | Float _ -> true | _ -> false
 let boolean_v = function Bool _ -> true | _ -> false
 let keyword_v = function Keyword _ -> true | _ -> false
 let map_v = function Map _ -> true | _ -> false
@@ -63,11 +63,11 @@ let macro_url (v : value) : bool =
 
 (* ---------- entity predicates ---------- *)
 
-(* property values for ref types arrive as Ref eid (or Int eid in some
+(* property values for ref types arrive as Ref eid (or Int64 eid in some
    paths); resolve to an entity_ref for d/entity. *)
 let entity_ref_of_value = function
   | Ref id -> Some (Entity_id id)
-  | Int id -> Some (Entity_id id)
+  | Int64 id -> Option.map (fun id -> Entity_id id) (Datascript.Util.int64_to_int id)
   | Keyword s -> Some (Ident s)
   | _ -> None
 
@@ -202,7 +202,7 @@ let error_message_of_type (type_ : string) : string option =
 (* db-property-type/infer-property-type-from-value *)
 let infer_property_type_from_value (v : value) : string =
   match v with
-  | Int _ | Float _ | Instant _ -> "number"
+  | Int64 _ | Float _ -> "number"
   | String s when url (String s) -> "url"
   | Bool _ -> "checkbox"
   | _ -> "default"

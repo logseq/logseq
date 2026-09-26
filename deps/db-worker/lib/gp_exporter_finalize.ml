@@ -198,7 +198,7 @@ let finalize_imported_graph (conn : conn) : tx_report option =
             let missing_in a b =
               List.filter (fun x -> not (List.mem x b)) a
             in
-            Add (Entity_id id, "block/tx-id", Int tx_id)
+            Add (Entity_id id, "block/tx-id", Int64 (Int64.of_int tx_id))
             :: List.map
                  (fun r ->
                    Retract (Entity_id id, "block/refs", Some (Ref r)))
@@ -236,12 +236,12 @@ let journal_uuid_normalizations (db : db) : journal_normalization list =
   List.filter_map
     (fun (d : datom) ->
       match d.v with
-      | Int day ->
+      | Int64 day ->
         (match Ldb.ent_of_id db d.e with
          | Some e ->
            (match Ldb.value e "block/uuid" with
             | Some (Uuid old_uuid) | Some (String old_uuid) ->
-              let new_uuid = Common_uuid.gen_journal_page_uuid day in
+              let new_uuid = Common_uuid.gen_journal_page_uuid (Datascript.Util.int64_to_int_exn "journal-day" day) in
               if old_uuid = new_uuid then None
               else (
                 (match

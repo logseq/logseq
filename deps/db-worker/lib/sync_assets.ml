@@ -286,7 +286,7 @@ let process_asset_op repo graph_id (asset_op : Wire.t)
         in
         let size =
           match get "logseq.property.asset/size" with
-          | Some (Int n) -> n
+          | Some (Int64 n) -> Datascript.Util.int64_to_int_exn "asset size" n
           | Some (Float f) -> int_of_float f
           | _ -> 0
         in
@@ -572,11 +572,16 @@ let remote_asset_download_candidates_q =
 let remote_asset_download_candidates db : (string * string) list =
   q_string db remote_asset_download_candidates_q
   |> List.filter_map (fun row ->
-         match row with
-         | [ Result_entity eid; Result_value (Uuid asset_uuid)
-           ; Result_value (String asset_type) ]
-         | [ Result_value (Int eid); Result_value (Uuid asset_uuid)
-           ; Result_value (String asset_type) ] ->
+         let eid =
+           match List.hd row with
+           | Result_entity eid -> Some eid
+           | Result_value (Int64 eid) -> Datascript.Util.int64_to_int eid
+           | _ -> None
+         in
+         match row, eid with
+         | ( [ _; Result_value (Uuid asset_uuid)
+             ; Result_value (String asset_type) ]
+           , Some eid ) ->
              (match entity db (Entity_id eid) with
               | Some ent ->
                   let external_url =

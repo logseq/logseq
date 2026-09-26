@@ -38,7 +38,9 @@ let string_attr (m : t) (a : attr) : string option =
   match attr_value m a with Some (String s) -> Some s | _ -> None
 
 let int_attr (m : t) (a : attr) : int option =
-  match attr_value m a with Some (Int n) -> Some n | _ -> None
+  match attr_value m a with
+  | Some (Int64 n) -> Datascript.Util.int64_to_int n
+  | _ -> None
 
 let bool_attr (m : t) (a : attr) : bool option =
   match attr_value m a with Some (Bool b) -> Some b | _ -> None
@@ -61,7 +63,7 @@ let id_ref_of (n : entity_id) : entity_ref =
 let rec entity_ref_of_value (v : value) : entity_ref option =
   match v with
   | Ref n -> Some (id_ref_of n)
-  | Int n -> Some (id_ref_of n)
+  | Int64 n -> Option.map id_ref_of (Datascript.Util.int64_to_int n)
   | Ref_to r -> Some r
   | Keyword s -> Some (Ident s)
   | String s -> Some (Temp_id s)
@@ -121,7 +123,7 @@ let rec normalize_value (v : value) : value =
     else Map (List.map (fun (k, x) -> (k, normalize_value x)) kvs)
   | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
     (match x with
-     | Uuid _ | String _ | Int _ | Keyword _
+     | Uuid _ | String _ | Int64 _ | Keyword _
        when Db_schema.is_unique_identity_attr a ->
        (* lookup-ref like [:block/uuid u]; a non-unique head makes the
           pair an ordinary collection value (datascript
@@ -240,7 +242,10 @@ let rec value_to_tx_value
   | Ref n -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
   | Ref_to r -> Some (One_entity (tx_entity_of_ref r))
   | Keyword s when ref_ok -> Some (One_entity (tx_entity_of_ref (Ident s)))
-  | Int n when ref_ok -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
+  | Int64 n when ref_ok -> (
+      match Datascript.Util.int64_to_int n with
+      | Some n -> Some (One_entity (tx_entity_of_ref (id_ref_of n)))
+      | None -> None)
   (* datascript maybe-wrap-multival: a 2-element collection in ref position
      is a lookup-ref only when its first element is a :db.unique/identity
      attr — it must reach the engine as Lookup_ref so unresolved ones throw

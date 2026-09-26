@@ -1301,7 +1301,7 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
         let tags =
           Ev.ref_nodes block "block/tags"
           |> List.map (fun t ->
-                 [ Some ("db/id", Int (Option.value (Ev.db_id t) ~default:0))
+                 [ Some ("db/id", Int64 (Int64.of_int (Option.value (Ev.db_id t) ~default:0)))
                  ; (match Ev.ident t with
                     | Some i -> Some ("db/ident", Keyword i)
                     | None -> None)
@@ -1324,7 +1324,7 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
             (Some db) block
         in
         let base =
-          [ ("db/id", Int (Option.value (Ev.db_id block) ~default:0))
+          [ ("db/id", Int64 (Int64.of_int (Option.value (Ev.db_id block) ~default:0)))
           ; ("block/uuid",
              (match Ev.uuid block with Some u -> Uuid u | None -> String ""))
           ; ("block/title",
@@ -1346,7 +1346,7 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
                      (Bb.block_breadcrumb db block))) ]
            else [])
         @ (match block_page with Some p -> [ ("block/page", Uuid p) ] | None -> [])
-        @ (match parent_id with Some i -> [ ("block/parent", Int i) ] | None -> [])
+        @ (match parent_id with Some i -> [ ("block/parent", Int64 (Int64.of_int i)) ] | None -> [])
         @ (match tags with [] -> [] | ts -> [ ("block/tags", List ts) ])
         @ (match icon with Some v -> [ ("logseq.property/icon", v) ] | None -> [])
         @ (match alias with
@@ -1538,7 +1538,11 @@ let get_affected_blocks (r : tx_report) : (entity list * entity list) option =
         (fun (d : datom) ->
            if List.mem d.a ref_affecting then
              d.e :: (match d.v, d.a = "block/alias" with
-                     | (Ref v | Int v), true -> [ v ]
+                     | Ref v, true -> [ v ]
+                     | Int64 v, true -> (
+                         match Datascript.Util.int64_to_int v with
+                         | Some v -> [ v ]
+                         | None -> [])
                      | _ -> [])
            else [])
         datoms'
