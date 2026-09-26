@@ -232,10 +232,6 @@
   {:msg msg
    :level level})
 
-(def ^:private import-details-limit
-  "Max entries per detail list that leave the worker"
-  200)
-
 (defn- truncate-import-text
   [s limit]
   (let [s (str s)]
@@ -292,10 +288,10 @@
      :ignored-assets-count (count ignored-assets)
      :ignored-properties-count (count ignored-props)
      :validation-error-count (count (:errors validation))
-     :ignored-files-detail (mapv compact-ignored-item (take import-details-limit ignored-files))
-     :ignored-assets-detail (mapv compact-ignored-item (take import-details-limit ignored-assets))
-     :ignored-properties-detail (mapv compact-ignored-item (take import-details-limit ignored-props))
-     :validation-errors-detail (mapv compact-validation-error (take import-details-limit (:errors validation)))
+     :ignored-files-detail (mapv compact-ignored-item ignored-files)
+     :ignored-assets-detail (mapv compact-ignored-item ignored-assets)
+     :ignored-properties-detail (mapv compact-ignored-item ignored-props)
+     :validation-errors-detail (mapv compact-validation-error (:errors validation))
      :notifications (mapv compact-error-notification error-notifications)}))
 
 (defn- import-issue-count

@@ -3213,6 +3213,13 @@
     (and (string? default-config) (not (string/blank? default-config))) (edn/read-string default-config)
     :else {}))
 
+(defn- transact-journal-title-format
+  [repo-or-conn config]
+  (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
+    (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
+                                  :logseq.property.journal/title-format title-format}]
+                   {::imported-data? true})))
+
 (defn export-config-file
   "Exports logseq/config.edn by saving to database and setting any properties related to config.
    When config-file is nil (e.g. a plain Markdown folder), the default config is used instead."
@@ -3223,7 +3230,9 @@
     (let [config (default-config->map default-config)]
       (-> (<save-file repo-or-conn "logseq/config.edn"
                       (if (string? default-config) default-config (pr-str config)))
-          (p/then (fn [_] config))))
+          (p/then (fn [_]
+                    (transact-journal-title-format repo-or-conn config)
+                    config))))
     (-> (<read-file config-file)
       (p/then #(p/do!
                 (<save-file repo-or-conn
@@ -3232,10 +3241,7 @@
                             ;; manually dissoc deprecated keys for config to be valid
                             (pretty-print-dissoc % (keys common-config/file-only-config)))
                 (let [config (resolve-zotero-config-path (edn/read-string %) config-file)]
-                  (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
-                    (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
-                                                  :logseq.property.journal/title-format title-format}]
-                                   {::imported-data? true}))
+                  (transact-journal-title-format repo-or-conn config)
                   ;; Return original config as import process depends on original config e.g. :hidden
                   config)))
       (p/catch (fn [err]

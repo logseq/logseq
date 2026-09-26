@@ -361,7 +361,11 @@
     (.click anchor)
     (js/URL.revokeObjectURL url)))
 
+(def ^:private import-report-render-limit 200)
+
 (defn- import-report-section
+  "Renders up to `import-report-render-limit` items; the full list is in the
+  downloaded report."
   [title items render-item]
   (when (seq items)
     [:section.mb-4
@@ -369,18 +373,14 @@
      [:ul.list-disc.pl-5.text-sm.flex.flex-col.gap-1
       (map-indexed (fn [idx item]
                      [:li {:key idx} (render-item item)])
-                   items)]]))
-
-(defn- truncated-note
-  [count items]
-  (when (> (or count 0) (count items))
-    [:p.text-xs.text-muted-foreground.mt-1
-     (t :import/report-truncated (count items) count)]))
+                   (take import-report-render-limit items))]
+     (when (> (count items) import-report-render-limit)
+       [:p.text-xs.text-muted-foreground.mt-1
+        (t :import/report-truncated import-report-render-limit (count items))])]))
 
 (hsx/defc import-report-dialog
   [import-result]
-  (let [{:keys [ignored-files-count ignored-assets-count ignored-properties-count validation-error-count
-                ignored-files-detail ignored-assets-detail ignored-properties-detail
+  (let [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
                 validation-errors-detail notifications]} import-result]
     [:div.container
      [:div.sm:flex.sm:items-start
@@ -394,14 +394,12 @@
                                [:span
                                 [:code path]
                                 (when reason (str " — " (import-reason-text reason)))]))
-      (truncated-note ignored-files-count ignored-files-detail)
       (import-report-section (t :import/report-ignored-assets)
                              ignored-assets-detail
                              (fn [{:keys [path reason]}]
                                [:span
                                 [:code path]
                                 (when reason (str " — " (import-reason-text reason)))]))
-      (truncated-note ignored-assets-count ignored-assets-detail)
       (import-report-section (t :import/report-ignored-properties)
                              ignored-properties-detail
                              (fn [{:keys [property location reason schema]}]
@@ -411,7 +409,6 @@
                                   (str " — " location'))
                                 (when reason (str " (" (import-reason-text reason) ")"))
                                 (when schema (str " " schema))]))
-      (truncated-note ignored-properties-count ignored-properties-detail)
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
                              (fn [{:keys [title page dispatch-key errors]}]
@@ -420,7 +417,6 @@
                                 (when page (str " @" page))
                                 (when dispatch-key (str " [" (name dispatch-key) "]"))
                                 (str " — " errors)]))
-      (truncated-note validation-error-count validation-errors-detail)
       (import-report-section (t :import/report-errors)
                              notifications
                              (fn [{:keys [msg]}] [:span msg]))]
@@ -557,9 +553,9 @@
     (when (seq import-result)
       (doseq [notification (:notifications import-result)]
         (show-notification notification))
-      (if (import-report-needed? import-result)
-        (open-import-report! import-result)
-        (validate-imported-data import-result))))
+      (validate-imported-data import-result)
+      (when (import-report-needed? import-result)
+        (open-import-report! import-result))))
   (notification/show! (t :import/file-finished) :success)
   (state/pub-event! [:graph/sync-context])
   (state/pub-event! [:graph/ready repo])
