@@ -1,0 +1,8 @@
+{PUBLIC_URL} {
+	reverse_proxy sync:8080
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+}

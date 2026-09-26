@@ -160,9 +160,16 @@
                      (.destroy socket)))
                  (.destroy socket)))))
       (p/let [_ (js/Promise.
-                 (fn [resolve]
-                   (.listen server (:port cfg)
-                            (fn [] (resolve nil)))))
+                 (fn [resolve reject]
+                   (let [on-listen-error (fn [error]
+                                           (when-let [close (.-close index-db)]
+                                             (close))
+                                           (reject error))]
+                     (.once server "error" on-listen-error)
+                     (.listen server (:port cfg) (:host cfg)
+                              (fn []
+                                (.off server "error" on-listen-error)
+                                (resolve nil))))))
               address (.address server)
               port (if (number? address) address (.-port address))
               base-url (or (:base-url cfg) (str "http://localhost:" port))]
