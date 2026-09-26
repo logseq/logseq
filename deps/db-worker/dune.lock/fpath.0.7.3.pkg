@@ -1,0 +1,20 @@
+(version 0.7.3)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     ocaml
+     pkg/pkg.ml
+     build
+     (when (catch_undefined_var %{pkg-self:dev} false) --dev-pkg=true))))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg astring)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/fpath/releases/fpath-0.7.3.tbz)
+  (checksum
+   sha256=12b08ff192d037d9b6d69e9ca19d1d385184f20b3237c27231e437ac81ace70f)))

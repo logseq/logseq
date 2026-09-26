@@ -1,0 +1,31 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   ppx_compare
+   ppx_enumerate
+   ppx_expect
+   ppx_fields_conv
+   ppx_here
+   ppx_let
+   ppx_sexp_conv
+   ppx_sexp_message
+   ppx_sexp_value
+   ppx_string
+   ppx_variants_conv
+   sexplib
+   stdio
+   dune
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_log/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=2208f047b699d0661e94415868e8e9e4a6e5287a8eceaf7318f572ccd622859a)))

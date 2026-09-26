@@ -1,0 +1,15 @@
+(version 20250919)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://gitlab.inria.fr/fpottier/fix/-/archive/20250919/archive.tar.gz)
+  (checksum
+   sha512=147bde60a96191f5f0090842df37a12509d78cf6e9dda482fbd000f61215c3d12115854fc331ae39009f26948d6d527187adade160e7ab27a6c4f0d8b324490a)))

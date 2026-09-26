@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/variantslib/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=9874b69aec9cfe6331970eb2271f7c24e5433ba696c1a9ea5a429862b62338ab)))

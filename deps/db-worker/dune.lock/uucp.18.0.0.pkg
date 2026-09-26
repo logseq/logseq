@@ -1,0 +1,25 @@
+(version 18.0.0)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     ocaml
+     pkg/pkg.ml
+     build
+     --dev-pkg
+     %{pkg-self:dev}
+     --with-uunf
+     %{pkg:uunf:installed}
+     --with-cmdliner
+     %{pkg:cmdliner:installed})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg uunf cmdliner)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/uucp/releases/uucp-18.0.0.tbz)
+  (checksum
+   sha512=89047b5586244c6636e8ebef64c911cb830bfe4e3cb62a344a1938a934ef51fdde75418785dc46da6e9a8d0eec1bdd22d508b6c4a4b29f6a48a220c8f718ad9f)))

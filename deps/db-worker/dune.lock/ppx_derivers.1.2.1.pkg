@@ -1,0 +1,14 @@
+(version 1.2.1)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url https://github.com/ocaml-ppx/ppx_derivers/archive/1.2.1.tar.gz)
+  (checksum
+   sha256=b6595ee187dea792b31fc54a0e1524ab1e48bc6068d3066c45215a138cc73b95)))

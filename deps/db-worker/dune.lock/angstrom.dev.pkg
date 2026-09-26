@@ -1,0 +1,19 @@
+(version dev)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:pinned} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune bigstringaf ocaml-syntax-shims)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/angstrom#3be9b966dc2bc9ccf9948d17a7b0df1cb526de15)))
+
+(dev)

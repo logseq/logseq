@@ -1,0 +1,23 @@
+(version 1.0.4)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     ocaml
+     pkg/pkg.ml
+     build
+     --dev-pkg
+     %{pkg-self:dev}
+     --with-cmdliner
+     %{pkg:cmdliner:installed})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg cmdliner)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/uutf/releases/uutf-1.0.4.tbz)
+  (checksum
+   sha512=e35f408bc971cd8da3077e6c3321e0d8f4eb569898e0e219fde62dae78fbd0a0095cb7f036287656f6a1b346584f7b9f0c6dec0a5a092180da36e43247027598)))
