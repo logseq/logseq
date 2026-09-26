@@ -1211,6 +1211,22 @@
              (worker-undo-redo/redo test-repo)))
       (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
 
+(deftest full-undo-stack-keeps-newest-entries-test
+  (testing "a full undo stack drops its oldest entries, so undo still steps back one change at a time"
+    (worker-undo-redo/clear-history! test-repo)
+    (with-redefs [worker-undo-redo/max-stack-length 10]
+      (let [conn (worker-state/get-datascript-conn test-repo)
+            {:keys [child-uuid]} (seed-page-parent-child!)
+            title #(:block/title (d/entity @conn [:block/uuid child-uuid]))]
+        (doseq [i (range 1 13)]
+          (save-block-title! conn child-uuid (str "v" i)))
+        (is (= 7 (count (get @worker-undo-redo/*undo-ops test-repo))))
+        (is (= ["v11" "v10" "v9" "v8" "v7" "v6" "v5"]
+               (vec (for [_ (range 7)]
+                      (do (worker-undo-redo/undo test-repo) (title))))))
+        (is (= ::worker-undo-redo/empty-undo-stack
+               (worker-undo-redo/undo test-repo)))))))
+
 (def ^:private outline-1-start ["outline 1" ["a" ["b" ["b1" "b2"]] "c"]])
 
 (defn- seed-outline!
