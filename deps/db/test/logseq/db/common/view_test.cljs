@@ -724,22 +724,32 @@
         "Closed-value sort must follow :block/order, not title.")
     (is (= (set (result-titles conn result)) #{"Doing" "Todo" "Done"}))))
 
+(defn- topic-page
+  [conn title class-id]
+  (d/entity @conn
+            (d/q '[:find ?e .
+                   :in $ ?title ?class
+                   :where
+                   [?e :block/title ?title]
+                   [?e :block/tags ?class]]
+                 @conn title class-id)))
+
 (deftest get-view-data-custom-status-without-ident-sort-and-group-test
   (let [conn (topic-conn
-              [{:page {:block/title "Doing" :build/tags [:Topic]
+              [{:page {:block/title "Row Doing" :build/tags [:Topic]
                        :build/properties {:logseq.property/status :logseq.property/status.doing}}}
-               {:page {:block/title "Todo" :build/tags [:Topic]
+               {:page {:block/title "Row Todo" :build/tags [:Topic]
                        :build/properties {:logseq.property/status :logseq.property/status.todo}}}
-               {:page {:block/title "Waiting" :build/tags [:Topic]}}])
+               {:page {:block/title "Row Waiting" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
         custom (custom-status-between-todo-and-doing! conn)
-        waiting (db-test/find-page-by-title @conn "Waiting")
+        waiting (topic-page conn "Row Waiting" class-id)
         _ (d/transact! conn [{:db/id (:db/id waiting)
                               :logseq.property/status (:db/id custom)}])
-        class-id (:db/id (d/entity @conn :user.class/Topic))
         view-id (create-view-id conn :class-objects :view-for-id class-id)
         query-ids (mapv :db/id [waiting
-                                (db-test/find-page-by-title @conn "Todo")
-                                (db-test/find-page-by-title @conn "Doing")])
+                                (topic-page conn "Row Todo" class-id)
+                                (topic-page conn "Row Doing" class-id)])
         sort-option {:view-feature-type :class-objects
                      :view-for-id class-id
                      :sorting [{:id :logseq.property/status :asc? true}]}
@@ -768,9 +778,9 @@
     (is (nil? (:db/ident custom))
         "Regression covers a custom Status choice that has no :db/ident.")
     (is (some? (:block/closed-value-property custom)))
-    (is (= ["Todo" "Waiting" "Doing"] (result-titles conn class-sorted))
+    (is (= ["Row Todo" "Row Waiting" "Row Doing"] (result-titles conn class-sorted))
         "Flat Status sort must follow :block/order for a custom closed value.")
-    (is (= ["Todo" "Waiting" "Doing"] (result-titles conn query-sorted))
+    (is (= ["Row Todo" "Row Waiting" "Row Doing"] (result-titles conn query-sorted))
         "Standard Query sort must follow :block/order for a custom closed value.")
     (is (= ["Todo" "Waiting" "Doing"] (group-titles class-grouped))
         "Group-by Status must keep the custom closed value as an entity and sort by :block/order.")
