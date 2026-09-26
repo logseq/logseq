@@ -960,9 +960,10 @@
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
-                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:block/uuid property)
-                                                                                                                            :logseq.property/hide?
-                                                                                                                            %)}))
+                                                        :on-toggle-checked-change (fn []
+                                                                                    (db-property-handler/set-block-property! (:block/uuid property)
+                                                                                                                             :logseq.property/hide?
+                                                                                                                             (not (boolean (:logseq.property/hide? property)))))}))
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem
                               {:icon :eye-off :title (t :property/hide-empty-value)

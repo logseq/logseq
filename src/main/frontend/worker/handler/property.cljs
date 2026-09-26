@@ -700,24 +700,19 @@
                                    (cond
                                      show-empty-and-hidden-properties?
                                      false
+                                     (:logseq.property/hide? property)
+                                     true
                                      state-hide-empty-properties?
                                      (nil? (get properties property-id))
                                      (and (:logseq.property/hide-empty-value property)
                                           (nil? (get properties property-id)))
                                      true
                                      :else
-                                     (boolean (:logseq.property/hide? property))))))
-        property-hide-f (cond
-                          publishing?
+                                     false))))
+        property-hide-f (if publishing?
                           (fn [[property-id property-value]]
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
-                          state-hide-empty-properties?
-                          (fn [[property-id property-value]]
-                            (if (:logseq.property/hide? (d/entity db property-id))
-                              (hide-with-property-id property-id)
-                              (nil? property-value)))
-                          :else
                           (comp hide-with-property-id first))
         {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
