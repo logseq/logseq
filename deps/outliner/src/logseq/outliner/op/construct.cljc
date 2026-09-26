@@ -265,29 +265,31 @@
        vec))
 
 (defn- created-page-title-match?
-  "Whether `page` is the page that `title` names. A namespaced title like
-  'ns/child' creates the leaf page titled 'child' under 'ns'; pages link to
-  their parents through :block/parent and class pages through
+  "Whether `page` is the page that `title` names. A page can keep a slash in
+  its title verbatim (e.g. a journal '2026/09/26'), while a namespaced title
+  like 'ns/child' creates the leaf page titled 'child' under 'ns'; pages link
+  to their parents through :block/parent and class pages through
   :logseq.property.class/extends, so match each title part against the page
   and its ancestor chain."
   [page title]
-  (let [parts (->> (string/split title #"/")
-                   (map string/trim)
-                   (remove string/blank?)
-                   reverse)]
-    (letfn [(ancestor-match? [page parts]
-              (cond
-                (nil? page) false
-                (empty? parts) true
-                (not= (first parts) (:block/title page)) false
-                :else (let [rest-parts (rest parts)]
-                        (or (empty? rest-parts)
-                            (boolean
-                             (some #(ancestor-match? % rest-parts)
-                                   (->> (cons (:block/parent page)
-                                              (seq (:logseq.property.class/extends page)))
-                                        (remove nil?))))))))]
-      (ancestor-match? page parts))))
+  (or (= title (:block/title page))
+      (let [parts (->> (string/split title #"/")
+                       (map string/trim)
+                       (remove string/blank?)
+                       reverse)]
+        (letfn [(ancestor-match? [page parts]
+                  (cond
+                    (nil? page) false
+                    (empty? parts) true
+                    (not= (first parts) (:block/title page)) false
+                    :else (let [rest-parts (rest parts)]
+                            (or (empty? rest-parts)
+                                (boolean
+                                 (some #(ancestor-match? % rest-parts)
+                                       (->> (cons (:block/parent page)
+                                                  (seq (:logseq.property.class/extends page)))
+                                            (remove nil?))))))))]
+          (ancestor-match? page parts)))))
 
 (defn- created-page-uuid-from-tx-data
   [db tx-data title]
@@ -1010,6 +1012,25 @@
         (recur remaining (next sizes) (conj groups group)))
       (mapcat identity (reverse groups)))))
 
+(defn- dedupe-inverse-delete-pages
+  "Keeps only the last [:delete-page uuid] op for a uuid. Several
+  :create-page inverses can delete the same namespace ancestor or tag created
+  in the same transaction; a second delete would re-recycle it and overwrite
+  its recorded original-parent. Keeping the last occurrence also orders the
+  shared parent after every new page that records it as its parent."
+  [ops]
+  (->> (reduce (fn [[seen acc] op]
+                 (let [uuid' (when (and (= :delete-page (first op))
+                                        (sequential? (second op)))
+                               (first (second op)))]
+                   (if (and uuid' (contains? seen uuid'))
+                     [seen acc]
+                     [(cond-> seen uuid' (conj uuid'))
+                      (conj acc op)])))
+               [#{} '()]
+               (reverse ops))
+       second))
+
 (defn- ^:large-vars/cleanup-todo build-strict-inverse-outliner-ops
   [db-before db-after tx-data forward-ops forward-op-group-sizes]
   (when (seq forward-ops)
@@ -1117,6 +1138,7 @@
                                    (sequential? (first %)))
                             %
                             [%]))
+                 dedupe-inverse-delete-pages
                  vec
                  seq)))))
 

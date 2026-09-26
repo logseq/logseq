@@ -1546,3 +1546,52 @@
       (let [property (d/entity @conn :user.property/undo-self-rating)]
         (is (= property-uuid (:block/uuid property)))
         (is (nil? (:user.property/undo-self-rating property)))))))
+
+(deftest redo-create-slash-title-page-restores-uuid-test
+  (testing "redoing the create of a page whose title contains a slash restores its uuid"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["2026/09/26" {:redirect? false
+                                                :split-namespace? false
+                                                :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [created (db-test/find-page-by-title @conn "2026/09/26")
+            page-uuid (:block/uuid created)]
+        (is (some? created))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "2026/09/26"))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [restored (db-test/find-page-by-title @conn "2026/09/26")]
+          (is (some? restored))
+          (is (= page-uuid (:block/uuid restored)))
+          (is (false? (ldb/recycled? restored))))))))
+
+(deftest undo-create-pages-sharing-namespace-restores-parent-test
+  (testing "undoing creates of a/b and a/c in one tx deletes their shared ancestor once"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["a/b" {:redirect? false
+                                         :split-namespace? true
+                                         :tags ()}]]
+                   [:create-page ["a/c" {:redirect? false
+                                         :split-namespace? true
+                                         :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"
+                                  :outliner-op :create-page}))
+      (let [a-parent-id (:db/id (:block/parent (db-test/find-page-by-title @conn "a")))]
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "a"))))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "b"))))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "c"))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [a (db-test/find-page-by-title @conn "a")
+              b (db-test/find-page-by-title @conn "b")
+              c (db-test/find-page-by-title @conn "c")]
+          (is (false? (ldb/recycled? a)))
+          (is (false? (ldb/recycled? b)))
+          (is (false? (ldb/recycled? c)))
+          (is (= a-parent-id (:db/id (:block/parent a))))
+          (is (= (:db/id a) (:db/id (:block/parent b))))
+          (is (= (:db/id a) (:db/id (:block/parent c)))))))))
