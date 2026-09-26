@@ -683,6 +683,9 @@
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
   (let [derive-extra-data? (not (or (:sync-download-graph? tx-meta)
                                     (:reverse? tx-meta)
+                                    ;; undo/redo of recorded datoms, which
+                                    ;; already hold what was derived
+                                    (:undo-redo/replay-tx-datoms? tx-meta)
                                     (:transact-remote? tx-meta)
                                     (imported-data? tx-meta)))
         _ (when (and derive-extra-data?
