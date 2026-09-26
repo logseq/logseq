@@ -1279,6 +1279,63 @@
       (is (map? (worker-undo-redo/undo test-repo)))
       (is (= outline-1-start (outline "outline 1"))))))
 
+(deftest undo-move-down-of-last-children-into-next-block-test
+  (testing "undoing a move down of a block's last children, which puts them into the next block, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "b" ["c" ["b1" "b2"]]]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-first-children-into-previous-block-test
+  (testing "undoing a move up of a block's first children, which puts them into the previous block, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" [["a" ["b1" "b2"]] "b" "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(defn- embed-block!
+  "Makes the block titled `title` an embed of the block titled `linked-title`,
+  as pasting a block copied as an embed does, and clears history."
+  [uuid-of title linked-title]
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (d/transact! conn [[:db/add [:block/uuid (uuid-of title)]
+                        :block/link [:block/uuid (uuid-of linked-title)]]])
+    (worker-undo-redo/clear-history! test-repo)))
+
+(deftest undo-move-down-of-last-children-into-next-embed-test
+  (testing "undoing a move down of a block's last children into the next block, an embed, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (embed-block! uuid-of "c" "d")
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["d" ["b1" "b2"]]]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-move-up-of-first-children-into-previous-embed-test
+  (testing "undoing a move up of a block's first children into the previous block, an embed, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (embed-block! uuid-of "a" "d")
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["d" ["b1" "b2"]]]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
 (deftest undo-move-of-block-and-its-grandchild-restores-both-test
   (testing "undoing a move of a block and its grandchild (Ctrl+click selection) puts the grandchild back too"
     (let [conn (worker-state/get-datascript-conn test-repo)
