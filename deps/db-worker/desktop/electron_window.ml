@@ -149,7 +149,7 @@ let destroy_window (win : Browser_window.t) : unit =
 
 let close_handler (win : Browser_window.t) (e : 'a) : unit =
   event_prevent_default e;
-  Electron_db_worker.release_window (Browser_window.id win);
+  let (_ : bool Js.Promise.t) = Electron_db_worker.release_window (Browser_window.id win) in
   Electron_state.close_window win;
   let web_contents = Browser_window.web_contents win in
   Web_contents.send_v web_contents "persist-zoom-level"
