@@ -123,7 +123,7 @@ let run_backend_case (backend : backend) (benchmark_case : Wire.t)
       (wire_int (Wire.get "expected-in-top-k" benchmark_case))
       ~default:5
   in
-  let start = Clock.now_ms () in
+  let start = Time.monotonic_now () in
   backend.search benchmark_case
   >>= fun results ->
   pure
@@ -131,7 +131,7 @@ let run_backend_case (backend : backend) (benchmark_case : Wire.t)
     ; case_id = Wire.get "id" benchmark_case
     ; backend_id = Some backend.id
     ; query = Wire.get "query" benchmark_case
-    ; latency_ms = Clock.now_ms () -. start
+    ; latency_ms = Time.diff_monotonic_ms start (Time.monotonic_now ())
     ; result_ids = List.map result_id results
     }
 

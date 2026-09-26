@@ -9,8 +9,12 @@ let template_re = Regexp.compile "<%([^%].*?)%>"
 (* cljs (.toLocaleTimeString d locale #js{:hour "2-digit" :minute
    "2-digit" :hourCycle "h23"}) — zero-padded 24h HH:MM. *)
 let current_time () : string =
-  let c = Date_time.of_epoch_ms (Date_time_util.time_ms ()) in
-  Printf.sprintf "%02d:%02d" c.Date_time.hour c.Date_time.minute
+  let _, _, _, hour, minute, _, _ =
+    Time.civil_fields
+      (Time.civil_of_epoch_ms (Time.local_tz ())
+         (Time.epoch_ms (Date_time_util.time_ms ())))
+  in
+  Printf.sprintf "%02d:%02d" hour minute
 
 (* cljs (.setHours d 0 0 0 0) + (.setDate (+ (.getDate d) offset)) —
    local midnight of today shifted by offset days. *)

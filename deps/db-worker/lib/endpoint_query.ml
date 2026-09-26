@@ -540,7 +540,8 @@ let task_spent_time args =
        Db_worker_effect.pure
          (match block_id with
           | Some id ->
-              task_spent_time_impl (Datascript.db conn) id (Clock.now_ms ())
+              task_spent_time_impl (Datascript.db conn) id
+                (Time.epoch_ms_to_float (Time.now ()))
           | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/task-spent-time" task_spent_time

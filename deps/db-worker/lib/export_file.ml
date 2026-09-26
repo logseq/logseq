@@ -141,11 +141,18 @@ let datetime_value_to_string (v : value) (ctx : context) : string option =
   match v with
   | Int n when n >= 10000101 && n <= 99991231 -> Some (journal_day_title n ctx)
   | Int n when n >= 100000000000 ->
-      let y, m, d, h, mi = Clock.localtime_ms (float_of_int n) in
+      let y, m, d, h, mi, _, _ =
+        Time.civil_fields
+          (Time.civil_of_epoch_ms (Time.local_tz ())
+             (Time.epoch_ms (Int64.of_int n)))
+      in
       let day = (y * 10000) + (m * 100) + d in
       Some (Printf.sprintf "%s %02d:%02d" (journal_day_title day ctx) h mi)
   | Instant n when n >= 100000000000L ->
-      let y, m, d, h, mi = Clock.localtime_ms (Int64.to_float n) in
+      let y, m, d, h, mi, _, _ =
+        Time.civil_fields
+          (Time.civil_of_epoch_ms (Time.local_tz ()) (Time.epoch_ms n))
+      in
       let day = (y * 10000) + (m * 100) + d in
       Some (Printf.sprintf "%s %02d:%02d" (journal_day_title day ctx) h mi)
   | _ -> None

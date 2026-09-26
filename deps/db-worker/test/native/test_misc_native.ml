@@ -1094,7 +1094,7 @@ let get_next_time4 (current : int64) (unit : entity) (freq : int)
     (repeat_type : string) =
   Commands.get_next_time current unit freq repeat_type
 
-let now_ms () : int64 = Int64.of_float (Clock.now_ms ())
+let now_ms () : int64 = Time.epoch_ms_to_int64 (Time.now ())
 
 let minus_ms (t : int64) (ms : int64) : int64 = Int64.sub t ms
 let plus_ms (t : int64) (ms : int64) : int64 = Int64.add t ms

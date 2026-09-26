@@ -220,13 +220,16 @@ let sse_handler (req : Http_server.req) (res : Http_server.res) : unit =
    invoke settles. [method_label] is the cljs method-kw for logs. *)
 let invoke_transit ~(proxy : proxy) ~(method_str : string)
     ~(method_label : string) ~(args_transit : string) : string E.t =
-  let started_at = Clock.now_ms () in
+  let started_at = Time.monotonic_now () in
   let timeout_id =
     Timers.set_timeout invoke_warn_ms (fun () ->
         Worker_log.warn "db-worker-node-invoke-timeout"
           [ "method", method_label
           ; "elapsed-ms",
-            string_of_int (int_of_float (Clock.now_ms () -. started_at)) ])
+            string_of_int
+              (int_of_float
+                 (Time.diff_monotonic_ms started_at (Time.monotonic_now ())))
+          ])
   in
   (* remoteInvoke may raise synchronously (cljs remote-function rethrow
      semantics) — surface it as a rejected task so the finally cleanup
@@ -245,13 +248,16 @@ let invoke_args ~(proxy : proxy) ~(method_str : string)
 let invoke_binary ~(proxy : proxy) ~(method_str : string)
     ~(method_label : string) ~(repo : string) ~(payload : string) :
     Wire.t E.t =
-  let started_at = Clock.now_ms () in
+  let started_at = Time.monotonic_now () in
   let timeout_id =
     Timers.set_timeout invoke_warn_ms (fun () ->
         Worker_log.warn "db-worker-node-invoke-timeout"
           [ "method", method_label
           ; "elapsed-ms",
-            string_of_int (int_of_float (Clock.now_ms () -. started_at)) ])
+            string_of_int
+              (int_of_float
+                 (Time.diff_monotonic_ms started_at (Time.monotonic_now ())))
+          ])
   in
   let task =
     try proxy.remote_invoke_binary method_str repo payload

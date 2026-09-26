@@ -31,7 +31,7 @@ open Db_test_util
 
 (* ---------- helpers ---------- *)
 
-let now () = Clock.now_ms ()
+let now () = Time.epoch_ms_to_float (Time.now ())
 
 let entity_by_uuid conn uuid =
   Datascript.entity (db_of conn) (Lookup_ref ("block/uuid", Uuid uuid))
@@ -4624,7 +4624,7 @@ let test_derive_apply_template_captures_template_blocks () =
 (* (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test) *)
 let test_derive_delete_page_inverse_for_class_property_today () =
   let today =
-    Date_time_util.ms_to_journal_day (Int64.of_float (Clock.now_ms ()))
+    Date_time_util.ms_to_journal_day (Time.epoch_ms_to_int64 (Time.now ()))
   in
   let conn =
     create_conn_with_blocks

@@ -92,9 +92,7 @@ let revision (db : db) (e : entity) : value option =
   | None -> None
 
 (* cljs date-time-util/ms->journal-day *)
-let ms_to_journal_day (ms : int64) : int =
-  let c = Date_time.of_epoch_ms ms in
-  c.year * 10000 + c.month * 100 + c.day
+let ms_to_journal_day (ms : int64) : int = Date_time_util.ms_to_journal_day ms
 
 let ent_title (e : entity) = Db_content.block_title e
 
@@ -918,7 +916,7 @@ let test_permanent_delete_recycled_page_removes_blocks_parented_by_page_test () 
   let page1 = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
   let page2 = Option.get (Ldb.get_page (db_of conn) (String "page2")) in
   let block_uuid = Common_uuid.new_block_id () in
-  let now = int_of_float (Clock.now_ms ()) in
+  let now = Int64.to_int (Time.epoch_ms_to_int64 (Time.now ())) in
   ignore
     (Datascript.transact_conn conn
        [ Entity
@@ -1007,7 +1005,7 @@ let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
       ()
   in
   let page = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
-  let now = int_of_float (Clock.now_ms ()) in
+  let now = Int64.to_int (Time.epoch_ms_to_int64 (Time.now ())) in
   let code_block_uuid = Common_uuid.new_block_id () in
   let code_block_without_lang_uuid = Common_uuid.new_block_id () in
   Db_tx.transact_pipeline_fn := Some (fun r -> Worker_pipeline.transact_pipeline r);
@@ -1443,7 +1441,7 @@ let test_built_in_tag_must_not_convert_page_child_block_to_class_test () =
       ()
   in
   let page1 = Option.get (Ldb.get_page (db_of conn) (String "page1")) in
-  let now = int_of_float (Clock.now_ms ()) in
+  let now = Int64.to_int (Time.epoch_ms_to_int64 (Time.now ())) in
   let bad_block_uuid = Common_uuid.new_block_id () in
   let new_tag_uuid = Common_uuid.new_block_id () in
   Db_tx.transact_pipeline_fn := Some (fun r -> Worker_pipeline.transact_pipeline r);

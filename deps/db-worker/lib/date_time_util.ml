@@ -3,7 +3,7 @@
    query-dsl rely on.
 
    All instants are epoch-milliseconds int64. Civil <-> epoch
-   conversion goes through the Date_time platform module, which is
+   conversion goes through the Time platform module, which is
    local-timezone aware — matching cljs-time's goog.date DateTime
    arithmetic (JS Date getters/setters). *)
 
@@ -23,12 +23,18 @@ let days_in_month year month =
       if (year mod 4 = 0 && year mod 100 <> 0) || year mod 400 = 0 then 29 else 28
   | _ -> invalid_arg "month out of range"
 
-let time_ms () = Int64.of_float (Clock.now_ms ())
+let time_ms () = Time.epoch_ms_to_int64 (Time.now ())
+
+let civil_of_ms (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms (Time.local_tz ()) (Time.epoch_ms ms)
+
+let ms_of_civil (c : Time.civil) : int64 =
+  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil (Time.local_tz ()) c)
 
 (* t/today — local midnight of today. *)
 let today_ms () =
-  let c = Date_time.of_epoch_ms (time_ms ()) in
-  Date_time.to_epoch_ms { c with Date_time.hour = 0; minute = 0; second = 0; ms = 0 }
+  let year, month, day, _, _, _, _ = Time.civil_fields (civil_of_ms (time_ms ())) in
+  ms_of_civil (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~ms:0)
 
 (* t/plus / t/minus. Day/week/hour/minute offsets shift the matching
    civil field and let Date normalization roll over (same as
@@ -36,20 +42,36 @@ let today_ms () =
    and years go through month arithmetic with joda-style clamping of
    the day to the target month's length. *)
 let shift (p : period) (n : int) (ms : int64) : int64 =
-  let c = Date_time.of_epoch_ms ms in
+  let year, month, day, hour, minute, second, c_ms =
+    Time.civil_fields (civil_of_ms ms)
+  in
   match p with
-  | Days -> Date_time.to_epoch_ms { c with day = c.day + n }
-  | Weeks -> Date_time.to_epoch_ms { c with day = c.day + (7 * n) }
-  | Hours -> Date_time.to_epoch_ms { c with hour = c.hour + n }
-  | Minutes -> Date_time.to_epoch_ms { c with minute = c.minute + n }
+  | Days ->
+      ms_of_civil
+        (Time.civil ~year ~month ~day:(day + n) ~hour ~minute ~second
+           ~ms:c_ms)
+  | Weeks ->
+      ms_of_civil
+        (Time.civil ~year ~month ~day:(day + (7 * n)) ~hour ~minute
+           ~second ~ms:c_ms)
+  | Hours ->
+      ms_of_civil
+        (Time.civil ~year ~month ~day ~hour:(hour + n) ~minute ~second
+           ~ms:c_ms)
+  | Minutes ->
+      ms_of_civil
+        (Time.civil ~year ~month ~day ~hour ~minute:(minute + n) ~second
+           ~ms:c_ms)
   | Months | Years ->
       let delta = match p with Months -> n | Years -> n * 12 | _ -> 0 in
-      let total = (c.year * 12) + (c.month - 1) + delta in
-      let year = total / 12 and m0 = total mod 12 in
-      let year, m0 = if m0 < 0 then (year - 1, m0 + 12) else (year, m0) in
-      let month = m0 + 1 in
-      let day = min c.day (days_in_month year month) in
-      Date_time.to_epoch_ms { c with year; month; day }
+      let total = (year * 12) + (month - 1) + delta in
+      let year' = total / 12 and m0 = total mod 12 in
+      let year', m0 = if m0 < 0 then (year' - 1, m0 + 12) else (year', m0) in
+      let month' = m0 + 1 in
+      let day' = min day (days_in_month year' month') in
+      ms_of_civil
+        (Time.civil ~year:year' ~month:month' ~day:day' ~hour ~minute
+           ~second ~ms:c_ms)
 
 let plus p n ms = shift p n ms
 let minus p n ms = shift p (-n) ms
@@ -58,26 +80,21 @@ let minus p n ms = shift p (-n) ms
    (.setHours (js/Date. date) hours mins secs millisecs) — returns epoch
    ms of the same local date with the given time fields. *)
 let date_at_local_ms (date : int64) hours mins secs millisecs : int64 =
-  let c = Date_time.of_epoch_ms date in
-  Date_time.to_epoch_ms
-    { c with hour = hours; minute = mins; second = secs; ms = millisecs }
+  let year, month, day, _, _, _, _ = Time.civil_fields (civil_of_ms date) in
+  ms_of_civil
+    (Time.civil ~year ~month ~day ~hour:hours ~minute:mins ~second:secs
+       ~ms:millisecs)
 
 (* date-time-util/date->int — yyyymmdd int of a date. *)
 let date_to_int (ms : int64) : int =
-  let c = Date_time.of_epoch_ms ms in
-  (c.year * 10000) + (c.month * 100) + c.day
+  let year, month, day, _, _, _, _ = Time.civil_fields (civil_of_ms ms) in
+  (year * 10000) + (month * 100) + day
 
 (* int->local-date / journal-day->ms — local midnight of a yyyymmdd int. *)
 let int_to_local_ms (day : int) : int64 =
-  Date_time.to_epoch_ms
-    { Date_time.year = day / 10000
-    ; month = (day / 100) mod 100
-    ; day = day mod 100
-    ; hour = 0
-    ; minute = 0
-    ; second = 0
-    ; ms = 0
-    }
+  ms_of_civil
+    (Time.civil ~year:(day / 10000) ~month:((day / 100) mod 100)
+       ~day:(day mod 100) ~hour:0 ~minute:0 ~second:0 ~ms:0)
 
 (* ---------- journal title parsing ----------
 
@@ -273,8 +290,9 @@ let parse_journal_title ?(formatters = built_in_journal_title_formatters)
         match date_of_formatter fmt title' with
         | Some (year, month, day) ->
             Some
-              (Date_time.to_epoch_ms
-                 { Date_time.year; month; day; hour = 0; minute = 0; second = 0; ms = 0 })
+              (ms_of_civil
+                 (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0
+                    ~ms:0))
         | None -> None)
       formatters
 
@@ -592,14 +610,14 @@ let js_date_parse (s0 : string) : int64 option =
            (* everything else without an offset is local time *)
            let ms = Option.value time_ms ~default:0L in
            Some
-             (Date_time.to_epoch_ms
-                { Date_time.year = y; month = mo; day = d
-                ; hour = Int64.to_int (Int64.div ms 3600000L)
-                ; minute =
-                    Int64.to_int (Int64.div (Int64.rem ms 3600000L) 60000L)
-                ; second =
-                    Int64.to_int (Int64.div (Int64.rem ms 60000L) 1000L)
-                ; ms = Int64.to_int (Int64.rem ms 1000L) }))
+             (ms_of_civil
+                (Time.civil ~year:y ~month:mo ~day:d
+                   ~hour:(Int64.to_int (Int64.div ms 3600000L))
+                   ~minute:
+                     (Int64.to_int (Int64.div (Int64.rem ms 3600000L) 60000L))
+                   ~second:
+                     (Int64.to_int (Int64.div (Int64.rem ms 60000L) 1000L))
+                   ~ms:(Int64.to_int (Int64.rem ms 1000L)))))
   | _ -> None
 
 (* date-time-util/default-journal-title-formatter *)
@@ -625,9 +643,7 @@ let valid_journal_title_with_slash (title : string) : bool =
     built_in_journal_title_formatters
 
 (* date-time-util/ms->journal-day — local date as yyyymmdd int. *)
-let ms_to_journal_day (ms : int64) : int =
-  let c = Date_time.of_epoch_ms ms in
-  (c.year * 10000) + (c.month * 100) + c.day
+let ms_to_journal_day (ms : int64) : int = date_to_int ms
 
 (* ---------- journal title formatting ---------- *)
 

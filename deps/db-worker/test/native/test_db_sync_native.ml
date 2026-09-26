@@ -1550,7 +1550,7 @@ let test_flush_pending_reports_upload_response_timeout () =
                 ; outliner_ops = [ "save-block" ]
                 ; large_upload_progress = []
                 ; t_before = Some 0
-                ; sent_at = 0.0
+                ; sent_at = Time.monotonic_now ()
                 ; timer = None };
               (Option.get !timeout_cb) ();
               check "no events when ws closed" (!events = []));
@@ -7133,7 +7133,7 @@ let test_rebase_local_insert_then_save_keeps_cardinality_one_values () =
       let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
       let block_uuid = wire_uuid_str (entity_block_uuid child1) in
       let parent_uuid = wire_uuid_str (entity_block_uuid parent) in
-      let now = int_of_float (Clock.now_ms ()) in
+      let now = Int64.to_int (Time.epoch_ms_to_int64 (Time.now ())) in
       raw_transact_string conn
         [ db_add (Wire.Int child1.id) "block/title"
             (Wire.String "local saved") ];

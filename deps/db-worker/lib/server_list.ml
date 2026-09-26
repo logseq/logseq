@@ -208,12 +208,12 @@ let unlink_if_exists (file_path : string) : unit E.t =
 let acquire_write_lock (file_path : string) : lock E.t =
   E.bind (File_sys.mkdir_p (Filename.dirname file_path)) (fun () ->
       let lock_file = lock_path file_path in
-      let deadline = Clock.now_ms () +. write_lock_timeout_ms in
+      let start = Time.monotonic_now () in
       let rec try_lock () =
         let metadata =
           { lock_pid = Node_process.pid ()
           ; lock_id = Uuid_gen.uuid ()
-          ; created_at = Clock.iso_string_ms (Clock.now_ms ()) }
+          ; created_at = Time.iso_string_of_epoch_ms (Time.now ()) }
         in
         E.catch
           (E.map
@@ -229,7 +229,10 @@ let acquire_write_lock (file_path : string) : lock E.t =
                    else retry_or_timeout lock_info ())
              else E.error e)
       and retry_or_timeout lock_info () =
-        if Clock.now_ms () >= deadline then
+        if
+          Time.diff_monotonic_ms start (Time.monotonic_now ())
+          >= write_lock_timeout_ms
+        then
           E.error (lock_timeout_exn file_path lock_file lock_info)
         else begin
           Node_process.sleep_sync_ms write_lock_poll_interval_ms;

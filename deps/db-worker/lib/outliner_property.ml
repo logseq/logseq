@@ -654,7 +654,7 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
           Wire.Map
             [ (kw "db/id", Wire.Int block.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ]
+               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m property_id tx_value in
         let m =
@@ -798,7 +798,7 @@ let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list
            (match ident with Some i -> Wire.Keyword i | None -> Wire.Nil))
         ; (kw "db/cardinality", kw cardinality)
         ; (kw "block/updated-at",
-           Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ]
+           Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
     in
     if ref_type then Cljs_map.assoc m "db/valueType" (kw "db.type/ref") else m
   in
@@ -868,7 +868,7 @@ let update_property conn (db_ident : string) (property : entity)
              (Wire.Map
                 [ (kw "db/ident", kw db_ident)
                 ; (kw "block/updated-at",
-                   Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ])
+                   Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ])
              (Wire.Map
                 (List.map (fun (k, v) -> (Wire.Keyword k, v)) attrs)) ])
     @
@@ -2179,7 +2179,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
             [ (kw "block/uuid", Wire.Uuid block_id)
             ; (kw "block/closed-value-property", Wire.Int property.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ]
+               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m value_key resolved_value in
         let m =
@@ -2235,7 +2235,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
         ; Wire.Map
             [ (kw "db/id", Wire.Int property.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ] ]
+               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
   in
   let tx_data' =
     match block with
@@ -2369,7 +2369,7 @@ let upsert_closed_value conn (property_id : string)
                                 [ "block/title", Wire.String desc
                                 ; "block/updated-at",
                                   Wire.Int64
-                                    (Int64.of_float (Clock.now_ms ())) ] ]
+                                    (Time.epoch_ms_to_int64 (Time.now ())) ] ]
                             []
                           |> ignore
                       | None ->
@@ -2423,7 +2423,7 @@ let add_existing_values_to_closed_values conn (property_id : string)
                Wire.Map
                  [ (kw "db/id", Wire.Int property_db_id)
                  ; (kw "block/updated-at",
-                    Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ]
+                    Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
              in
              Db_transact.transact conn (property_tx :: value_tx)
                [ ("outliner-op",
@@ -2463,7 +2463,7 @@ let delete_closed_value conn (property_id : string) (value_block_id : string)
           @ [ Wire.Map
                 [ (kw "db/id", Wire.Int property.id)
                 ; (kw "block/updated-at",
-                   Wire.Int64 (Int64.of_float (Clock.now_ms ()))) ] ]
+                   Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
         in
         Db_transact.transact conn tx_data
           [ ("outliner-op", Keyword "delete-closed-value") ]

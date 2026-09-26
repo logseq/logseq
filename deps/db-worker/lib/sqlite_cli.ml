@@ -31,10 +31,10 @@ let new_sqlite_storage (db : Sqlite.db) : storage =
       { base with
         storage_store =
           (fun addr_payloads ->
-             let start = Clock.now_ms () in
+             let start = Time.monotonic_now () in
              let n = List.length addr_payloads in
              base.storage_store addr_payloads;
-             let ms = Clock.now_ms () -. start in
+             let ms = Time.diff_monotonic_ms start (Time.monotonic_now ()) in
              match !store_profile_state with
              | None -> ()
              | Some s ->

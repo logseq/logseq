@@ -187,9 +187,10 @@ let search_index_input_idle repo : bool =
               let fresh =
                 match Wire.get "ts" entry with
                 | Some (Wire.Float ts) ->
-                    Clock.now_ms () -. ts <= search_index_build_idle_status_ttl_ms
+                    Time.epoch_ms_to_float (Time.now ()) -. ts
+                    <= search_index_build_idle_status_ttl_ms
                 | Some (Wire.Int ts) ->
-                    Clock.now_ms () -. float_of_int ts
+                    Time.epoch_ms_to_float (Time.now ()) -. float_of_int ts
                     <= search_index_build_idle_status_ttl_ms
                 | _ -> false
               in
@@ -212,13 +213,17 @@ let rec wait_for_search_index_idle repo build_id : unit E.t =
 
 let take_search_index_batch (items : 'a list) batch_size time_budget_ms :
     'a list * 'a list =
-  let deadline = Clock.now_ms () +. float_of_int time_budget_ms in
+  let start = Time.monotonic_now () in
   let rec loop batch remaining n =
     match remaining with
     | [] -> (List.rev batch, [])
     | x :: rest ->
-        if n >= batch_size || (n > 0 && Clock.now_ms () >= deadline) then
-          (List.rev batch, x :: rest)
+        if
+          n >= batch_size
+          || (n > 0
+              && Time.diff_monotonic_ms start (Time.monotonic_now ())
+                 >= float_of_int time_budget_ms)
+        then (List.rev batch, x :: rest)
         else loop (x :: batch) rest (n + 1)
   in
   loop [] items 0

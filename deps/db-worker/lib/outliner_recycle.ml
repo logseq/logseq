@@ -9,7 +9,7 @@ let recycled (e : entity) : bool =
   Option.is_some (Ldb.value e "logseq.property/deleted-at")
 
 let build_recycle_page_tx (db_id : string) : tx_entity =
-  let now = Common_util.value_of_ms_float (Clock.now_ms ()) in
+  let now = Common_util.value_of_ms (Time.epoch_ms_to_int64 (Time.now ())) in
   { db_id = Some (Temp_id db_id)
   ; attrs =
       [ "block/uuid", One_value (Uuid (Common_uuid.gen_uuid "builtin-block-uuid" recycle_page_title))
@@ -147,7 +147,10 @@ let recycle_blocks_tx_data db (blocks : entity list)
   let { page; page_id; tx_data } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
   (* cljs writes (common-util/time-ms) — keep full ms as a numeric value *)
-  let now_ms = Common_util.value_of_ms_float (Option.value now_ms ~default:(Clock.now_ms ())) in
+  let now_ms =
+    Common_util.value_of_ms_float
+      (Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ())))
+  in
   let prev_order =
     match page with
     | Some p ->
@@ -194,7 +197,10 @@ let recycle_page_tx_data db (page : entity)
     ?(deleted_by_uuid : string option) ?(now_ms : float option) () : tx_op list =
   let { page = existing; page_id; tx_data = init_tx } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
-  let now_ms = Common_util.value_of_ms_float (Option.value now_ms ~default:(Clock.now_ms ())) in
+  let now_ms =
+    Common_util.value_of_ms_float
+      (Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ())))
+  in
   let order =
     match existing with
     | Some p -> next_child_order p
@@ -348,7 +354,9 @@ let permanently_delete (conn : conn) (root_uuid : string) : bool =
        true)
 
 let gc_tx_data db ?(now_ms : float option) () : tx_op list =
-  let now_ms = Option.value now_ms ~default:(Clock.now_ms ()) in
+  let now_ms =
+    Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ()))
+  in
   (* deleted-at is epoch-ms — keep the cutoff numeric at full precision
      (cljs passes a plain number into the query) *)
   let cutoff = Common_util.value_of_ms_float (now_ms -. retention_ms) in

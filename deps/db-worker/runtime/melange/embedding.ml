@@ -47,13 +47,16 @@ let json_string s =
 (* cljs <fetch-embedding-response — retry on fetch rejection until
    the deadline; an HTTP response (even an error status) does not
    retry. *)
-let rec fetch_embedding_response endpoint model request deadline () =
+let rec fetch_embedding_response endpoint model request start () =
   Db_worker_effect.catch
     (Http.send request)
     (fun exn ->
-       if Clock.now_ms () < deadline then
+       if
+         Time.diff_monotonic_ms start (Time.monotonic_now ())
+         < embedding_fetch_timeout_ms
+       then
          Db_worker_effect.bind (Db_worker_effect.sleep embedding_fetch_retry_ms)
-           (fetch_embedding_response endpoint model request deadline)
+           (fetch_embedding_response endpoint model request start)
        else
          Db_worker_effect.error
            (Failure
@@ -124,8 +127,8 @@ let embed_texts texts =
           ; body = Some body
           }
         in
-        let deadline = Clock.now_ms () +. embedding_fetch_timeout_ms in
-        fetch_embedding_response url model request deadline () >>= fun resp ->
+        let start = Time.monotonic_now () in
+        fetch_embedding_response url model request start () >>= fun resp ->
         if resp.Http.status < 200 || resp.Http.status >= 300 then
           Db_worker_effect.error
             (Failure
