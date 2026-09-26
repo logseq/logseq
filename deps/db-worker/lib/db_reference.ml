@@ -11,7 +11,7 @@ module IdSet = Set.Make (Int)
 (* entid: normalize a datom value into an entity id. *)
 let entid = function
   | Ref id -> Some id
-  | Int id -> Some id
+  | Int64 id -> Datascript.Util.int64_to_int id
   | _ -> None
 
 let has_datom db e a v =

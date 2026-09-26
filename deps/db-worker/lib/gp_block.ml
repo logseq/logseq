@@ -196,7 +196,7 @@ let page_name_string_to_map (original_page_name : string) db (date_formatter : s
        else [])
     @ (match journal_day with
        | Some day ->
-         [ "block/journal-day", Int day ]
+         [ "block/journal-day", Int64 (Int64.of_int day) ]
          @ (if db_based then [ "block/tags", Vector [ Keyword "logseq.class/Journal" ] ]
             else [ "block/type", String "journal" ])
        | None -> [])
@@ -648,12 +648,12 @@ let timestamp_to_scheduled_or_deadline_value (ts : value) : value =
   let repetition = Clj_value.map_get ts "repetition" in
   if Clj_value.truthy time_v || Clj_value.truthy repetition then
     Map
-      ([ Some ("date-int", Int day)
+      ([ Some ("date-int", Int64 (Int64.of_int day))
        ; (match time_v with Nil -> None | _ -> Some ("time", time_v))
        ; (match repetition with Nil -> None | _ -> Some ("repetition", repetition)) ]
        |> List.filter_map Fun.id
        |> List.map (fun (a, v) -> (Keyword a, v)))
-  else Int day
+  else Int64 (Int64.of_int day)
 
 (* gp-block/timestamps->scheduled-and-deadline *)
 let timestamps_to_scheduled_and_deadline (timestamps : (string * value) list)
@@ -967,7 +967,7 @@ let get_block_content (utf8_content : string) (block : Block_map.t)
   in
   let level =
     match Block_map.attr_value block "level" with
-    | Some (Int n) -> n
+    | Some (Int64 n) -> Option.value (Datascript.Util.int64_to_int n) ~default:1
     | _ -> 1
   in
   let content =
@@ -1089,7 +1089,7 @@ let with_pre_block_if_exists (blocks : Block_map.t list) (body : value list)
       let b : Block_map.t =
         [ "block/uuid", Uuid id
         ; "block/title", String content
-        ; "block/level", Int 1
+        ; "block/level", Int64 1L
         ; "block/properties",
           Map (List.map (fun (k, v) -> (Keyword k, v)) pre_block_properties.properties)
         ; "block/properties-order",
@@ -1196,7 +1196,7 @@ let construct_block (ast_block : value) (properties : extract_properties_result)
     let base =
       if markdown_heading then
         let level =
-          if unordered then Clj_value.map_get block_data "level" else Int 1
+          if unordered then Clj_value.map_get block_data "level" else Int64 1L
         in
         ("level", level) :: List.remove_assoc "level" base
       else base
@@ -1322,10 +1322,10 @@ let construct_block (ast_block : value) (properties : extract_properties_result)
     | _ -> block @ [ "refs", List properties.block_refs ]
   in
   let ms_prop k =
-    (* epoch-ms reads back numeric (Int/Float); Instant only for
-       legacy ~t-decoded data *)
+    (* epoch-ms reads back numeric; Instant only for legacy
+       ~t-decoded data *)
     match List.assoc_opt k properties.properties with
-    | Some (Int n) -> Some (Common_util.value_of_ms (Int64.of_int n))
+    | Some (Int64 n) -> Some (Common_util.value_of_ms n)
     | Some (Float f) -> Some (Common_util.value_of_ms_float f)
     | Some (Instant ms) -> Some (Common_util.value_of_ms ms)
     | _ -> None
@@ -1577,7 +1577,7 @@ let with_parent_and_order (page_id : value) (blocks : Block_map.t list)
       | block :: others ->
         let input_level =
           match Block_map.attr_value block "block/level" with
-          | Some (Int n) -> n
+          | Some (Int64 n) -> Option.value (Datascript.Util.int64_to_int n) ~default:1
           | _ -> 1
         in
         (* pop frames while input-level < top.indent *)
@@ -1597,7 +1597,7 @@ let with_parent_and_order (page_id : value) (blocks : Block_map.t list)
             (* sibling *)
             let b =
               match top_frame.f_parent with
-              | Some p -> Block_map.put (Block_map.put block "block/parent" p) "block/level" (Int top_frame.f_level)
+              | Some p -> Block_map.put (Block_map.put block "block/parent" p) "block/level" (Int64 (Int64.of_int top_frame.f_level))
               | None -> block
             in
             (b, (match ancestor_frames with _ :: tl -> tl | [] -> []), input_level)
@@ -1606,7 +1606,7 @@ let with_parent_and_order (page_id : value) (blocks : Block_map.t list)
             let b = Block_map.put block "block/parent" top_frame.f_ref in
             let b =
               if input_level - top_frame.f_indent >= 1 then
-                Block_map.put b "block/level" (Int (top_frame.f_level + 1))
+                Block_map.put b "block/level" (Int64 (Int64.of_int (top_frame.f_level + 1)))
               else b
             in
             (b, ancestor_frames, input_level)
@@ -1617,7 +1617,7 @@ let with_parent_and_order (page_id : value) (blocks : Block_map.t list)
               Block_map.put
                 (Block_map.put block "block/parent"
                    (match top_frame.f_ref with Nil -> page_id | r -> r))
-                "block/level" (Int lp.f_level)
+                "block/level" (Int64 (Int64.of_int lp.f_level))
             in
             (b, ancestor_frames, lp.f_indent)
         in
@@ -1629,7 +1629,7 @@ let with_parent_and_order (page_id : value) (blocks : Block_map.t list)
           ; f_parent = Block_map.attr_value resolved_block "block/parent"
           ; f_level =
               (match Block_map.attr_value resolved_block "block/level" with
-               | Some (Int n) -> n
+               | Some (Int64 n) -> Option.value (Datascript.Util.int64_to_int n) ~default:0
                | _ -> 0)
           ; f_indent = comparison_indent }
         in

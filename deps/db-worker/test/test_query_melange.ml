@@ -48,11 +48,11 @@ let () =
   Fest.test "query-input-value" (fun () ->
       let of_wire v = Endpoint_query.query_input_value (Wire.String v) in
       Fest.expect |> Fest.deep_equal (of_wire ":today") (Keyword "today");
-      Fest.expect |> Fest.deep_equal (of_wire "123") (Int 123);
+      Fest.expect |> Fest.deep_equal (of_wire "123") (Int64 123L);
       Fest.expect |> Fest.deep_equal (of_wire "+5d") (String "+5d");
       Fest.expect |> Fest.deep_equal (of_wire "[[foo]]") (String "[[foo]]");
       Fest.expect |> Fest.deep_equal (of_wire "\\a") (String "\\a");
-      Fest.expect |> Fest.deep_equal (of_wire "(1 2)") (List [ Int 1; Int 2 ]));
+      Fest.expect |> Fest.deep_equal (of_wire "(1 2)") (List [ Int64 1L; Int64 2L ]));
 
   Fest.test "resolve-page-ref-equality" (fun () ->
       let rewritten =

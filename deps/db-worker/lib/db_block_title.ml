@@ -13,7 +13,7 @@ let private_tags =
   ; "logseq.class/Pdf-annotation" ]
 
 (* needs-resolved-block? — title nil, class?, or numeric tag values.
-   Pulled bare refs surface as Int scalars (cljs number? on pulled
+   Pulled bare refs surface as Int64 scalars (cljs number? on pulled
    {:db/id} maps is false — only raw ids count). *)
 let needs_resolved_block (block : Ev.node) : bool =
   match block with
@@ -22,12 +22,12 @@ let needs_resolved_block (block : Ev.node) : bool =
       Ev.title block = None
       || Ev.is_class block
       || (match Ev.pulled_values p "block/tags" with
-          | Some (Pulled_scalar (Int _)) -> true
+          | Some (Pulled_scalar (Int64 _)) -> true
           | Some (Pulled_many vs) ->
               List.exists
                 (fun v ->
                    match v with
-                   | Pulled_scalar (Int _) -> true
+                   | Pulled_scalar (Int64 _) -> true
                    | _ -> false)
                 vs
           | _ -> false)

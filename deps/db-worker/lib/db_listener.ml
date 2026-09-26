@@ -166,12 +166,22 @@ let publish_render_delta (tx_meta : tx_meta) : bool =
 
 let datom_entity_uuid (db : db) (v : value) : string option =
   match v with
-  | Ref id | Int id -> (
+  | Ref id -> (
       match entity db (Entity_id id) with
       | Some e -> (
           match Ldb.value e "block/uuid" with
           | Some (Uuid u) -> Some u
           | _ -> None)
+      | None -> None)
+  | Int64 id -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> (
+          match entity db (Entity_id id) with
+          | Some e -> (
+              match Ldb.value e "block/uuid" with
+              | Some (Uuid u) -> Some u
+              | _ -> None)
+          | None -> None)
       | None -> None)
   | _ -> None
 

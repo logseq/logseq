@@ -207,27 +207,30 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
                  | None -> None)
             | None -> None)
        | "current-block" ->
-           Option.map (fun (e : entity) -> Int e.id) (current_block_ent db ctx)
+           Option.map (fun (e : entity) -> Int64 (Int64.of_int e.id)) (current_block_ent db ctx)
        | "parent-block" ->
            (match current_block_ent db ctx with
             | Some block ->
-                Option.map (fun (p : entity) -> Int p.id)
+                Option.map (fun (p : entity) -> Int64 (Int64.of_int p.id))
                   (Entity_refs.ref_ent block "block/parent")
             | None -> None)
        | "today" ->
            Some
-             (Int
-                (Date_time_util.date_to_int (Date_time_util.today_ms ())))
+             (Int64
+                (Int64.of_int
+                   (Date_time_util.date_to_int (Date_time_util.today_ms ()))))
        | "yesterday" ->
            Some
-             (Int
-                (Date_time_util.date_to_int
-                   (Date_time_util.minus Days 1 (Date_time_util.today_ms ()))))
+             (Int64
+                (Int64.of_int
+                   (Date_time_util.date_to_int
+                    (Date_time_util.minus Days 1 (Date_time_util.today_ms ())))))
        | "tomorrow" ->
            Some
-             (Int
-                (Date_time_util.date_to_int
-                   (Date_time_util.plus Days 1 (Date_time_util.today_ms ()))))
+             (Int64
+                (Int64.of_int
+                   (Date_time_util.date_to_int
+                    (Date_time_util.plus Days 1 (Date_time_util.today_ms ())))))
        | "right-now-ms" ->
            Some (Common_util.value_of_ms (Date_time_util.time_ms ()))
        | _ -> None)
@@ -248,7 +251,7 @@ let rec resolve_keyword_input (db : db) (k : string) (ctx : context) :
       (match split_offset name with
        | Some (direction, amount, unit, None) ->
            let offset_date = get_offset_date relative_to direction amount unit in
-           Some (Int (Date_time_util.date_to_int offset_date))
+           Some (Int64 (Int64.of_int (Date_time_util.date_to_int offset_date)))
        | _ -> invalid_arg ("invalid relative date input: " ^ k))
   | Relative_date_time ->
       let name = kw_name k in

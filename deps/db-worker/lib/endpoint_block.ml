@@ -18,7 +18,10 @@ let fail_render_read message data =
 let resolve_block_entity db (id_or_page_name : value) : entity option =
   match id_or_page_name with
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
-  | Int i -> entity db (Entity_id i)
+  | Int64 i -> (
+      match Datascript.Util.int64_to_int i with
+      | Some i -> entity db (Entity_id i)
+      | None -> None)
   | Keyword k -> entity db (Ident k)
   | String s ->
       if Ldb.is_uuid_string s then
@@ -441,7 +444,7 @@ let conflict_wire (c : Sync_client_op.sync_conflict) : Wire.t =
     ; (kw "value", Wire.String c.value)
     ; ( kw "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; (kw "created-at", Wire.Int64 c.created_at) ]
+    ; (kw "created-at", Ds_wire.wire_int64 c.created_at) ]
 
 let remove_nils (kvs : (Wire.t * Wire.t) list) =
   List.filter (fun (_, v) -> v <> Wire.Nil) kvs
@@ -709,7 +712,11 @@ let recycled_chain db (entity_id : entity_id) : bool =
       match
         Render_snapshot.eavt_scalar db eid "block/parent"
       with
-      | Some (Ref pid) | Some (Int pid) -> loop pid (eid :: seen)
+      | Some (Ref pid) -> loop pid (eid :: seen)
+      | Some (Int64 pid) -> (
+          match Datascript.Util.int64_to_int pid with
+          | Some pid -> loop pid (eid :: seen)
+          | None -> false)
       | _ -> false
   in
   loop entity_id []
@@ -777,7 +784,9 @@ let parent_membership db (parent_uuid : string) (parent_id : entity_id)
       [ (kw "parent-uuid", Wire.Uuid parent_uuid)
       ; (kw "block-tx-id", Ds_wire.transit_of_value parent_tx_id) ];
   let parent_tx_id =
-    match parent_tx_id with Int n -> n | _ -> assert false
+    match parent_tx_id with
+    | Int64 n -> Datascript.Util.int64_to_int_exn "block tx id" n
+    | _ -> assert false
   in
   ( parent_tx_id
   , List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())

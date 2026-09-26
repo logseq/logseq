@@ -172,8 +172,11 @@ let favorite_targets db : entity list =
   |> List.filter_map (fun (p : pulled_entity) ->
          match List.assoc_opt (Keyword "block/link") p.pulled_attrs with
          | Some (Pulled_entity t) -> Ldb.ent_of_id db t.pulled_id
-         | Some (Pulled_scalar (Ref id)) | Some (Pulled_scalar (Int id)) ->
-             Ldb.ent_of_id db id
+         | Some (Pulled_scalar (Ref id)) -> Ldb.ent_of_id db id
+         | Some (Pulled_scalar (Int64 id)) -> (
+             match Datascript.Util.int64_to_int id with
+             | Some id -> Ldb.ent_of_id db id
+             | None -> None)
          | _ -> None)
   |> List.filter (fun (e : entity) -> not (Ldb.recycled e))
 
@@ -387,12 +390,12 @@ let render_recycle_roots db _key _runtime =
     |> List.sort (fun (a : entity) (b : entity) ->
            let da =
              match Ldb.value a "logseq.property/deleted-at" with
-             | Some (Int n) -> n
-             | _ -> 0
+             | Some (Int64 n) -> n
+             | _ -> 0L
            and db_ =
              match Ldb.value b "logseq.property/deleted-at" with
-             | Some (Int n) -> n
-             | _ -> 0
+             | Some (Int64 n) -> n
+             | _ -> 0L
            in
            compare db_ da)
   in
@@ -705,11 +708,11 @@ let render_block_comment_summary db key _runtime =
     fail "Renderer resource entity is not a comment thread"
       [ (kw "thread-uuid", Wire.Uuid thread_uuid) ];
   let comments = direct_child_entities db thread_uuid in
-  (* epoch-ms reads back as the platform's numeric rep (Int/Float);
-     Instant only for legacy ~t-decoded data *)
+  (* epoch-ms reads back as Int64/Float; Instant only for legacy
+     ~t-decoded data *)
   let created_at_ms (e : entity) : int64 option =
     match Ldb.value e "block/created-at" with
-    | Some (Int n) -> Some (Int64.of_int n)
+    | Some (Int64 n) -> Some n
     | Some (Float f) -> Some (Int64.of_float f)
     | Some (Instant ms) -> Some ms
     | None -> None
@@ -895,8 +898,12 @@ let render_page_membership db key _runtime =
                    "logseq.property/created-by-ref"
                with
                | None -> Some (Wire.Uuid (uuid_of c))
-               | Some (Ref id) | Some (Int id) ->
+               | Some (Ref id) ->
                    if id = current_user.id then Some (Wire.Uuid (uuid_of c))
+                   else None
+               | Some (Int64 id) ->
+                   if Int64.equal id (Int64.of_int current_user.id)
+                   then Some (Wire.Uuid (uuid_of c))
                    else None
                | Some _ -> None)
              children) )
@@ -1107,15 +1114,15 @@ let rec form_of_wire (t : Wire.t) : query_form =
   match t with
   | Wire.Nil -> QueryFormNil
   | Wire.Bool b -> QueryFormBool b
-  | Wire.Int n -> QueryFormInt n
-  | Wire.Int64 n -> QueryFormTagged ("inst", QueryFormString (Ds_wire.iso_of_ms n))
+  | Wire.Int n -> QueryFormInt (Int64.of_int n)
+  | Wire.Int64 n -> QueryFormInt n
   | Wire.Float f -> QueryFormFloat f
   | Wire.String s -> QueryFormString s
   | Wire.Binary s -> QueryFormString s
   | Wire.Keyword s -> QueryFormKeyword s
   | Wire.Symbol s -> QueryFormSymbol s
   | Wire.Big_int s ->
-      (try QueryFormInt (int_of_string s)
+      (try QueryFormInt (Int64.of_string s)
        with _ -> QueryFormFloat (float_of_string s))
   | Wire.Big_decimal s -> QueryFormFloat (float_of_string s)
   | Wire.Date_ms ms ->
@@ -1133,7 +1140,7 @@ let rec value_of_form (f : query_form) : value =
   match f with
   | QueryFormNil -> Nil
   | QueryFormBool b -> Bool b
-  | QueryFormInt n -> Int n
+  | QueryFormInt n -> Int64 n
   | QueryFormFloat x -> Float x
   | QueryFormString s -> String s
   | QueryFormKeyword k -> Keyword k
@@ -1151,7 +1158,7 @@ let rec value_of_form (f : query_form) : value =
   | QueryFormTagged (_, f) -> value_of_form f
 
 (* cljs resolve-input passes values through unchanged — a keyword input is a
-   keyword value, an eid a number. The engine equates Int with Ref when
+   keyword value, an eid a number. The engine equates Int64 with Ref when
    matching datom values, and resolves QValue keywords to attrs in attribute
    position. Result_attr/Result_entity inputs must not be used here: the
    engine drops them when the bound var is substituted into value position. *)
@@ -1259,7 +1266,7 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
               , [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
-  | Keyword "today", Some day -> Int day
+  | Keyword "today", Some day -> Int64 (Int64.of_int day)
   | _ ->
       Db_inputs.resolve_input db resolved_input
         { Db_inputs.current_block_uuid = current_block_uuid
@@ -1685,9 +1692,9 @@ let query_result_cell_id (r : query_result) : int option =
   | Result_pull p -> Some p.pulled_id
   | Result_value (Map kvs) -> (
       match List.assoc_opt (Keyword "db/id") kvs with
-      | Some (Int n) -> Some n
+      | Some (Int64 n) -> Datascript.Util.int64_to_int n
       | _ -> None)
-  | Result_value (Int n) -> Some n
+  | Result_value (Int64 n) -> Datascript.Util.int64_to_int n
   | _ -> None
 
 (* block-query-result? — every tuple is a single entity/map with uuid *)
@@ -1959,7 +1966,7 @@ let render_views db key _runtime =
   let views_eids =
     q_string db
       ~inputs:
-        [ Arg_scalar (Result_value (Int owner.id))
+        [ Arg_scalar (Result_value (Int64 (Int64.of_int owner.id)))
         ; Arg_scalar (Result_value (Keyword feature_type)) ]
       "[:find [?view ...] \
         :in $ ?owner ?feature-type \
@@ -2091,8 +2098,10 @@ type view_config =
 let ident_of_value db (v : value option) : string option =
   match v with
   | Some (Keyword k) -> Some k
-  | Some (Ref id) | Some (Int id) ->
-      Option.bind (Ldb.ent_of_id db id) Ldb.ident_of
+  | Some (Ref id) -> Option.bind (Ldb.ent_of_id db id) Ldb.ident_of
+  | Some (Int64 id) ->
+      Option.bind (Option.bind (Datascript.Util.int64_to_int id)
+                     (Ldb.ent_of_id db)) Ldb.ident_of
   | _ -> None
 
 let effective_view_config db (view : entity) (ctx : (Wire.t * Wire.t) list) : view_config =

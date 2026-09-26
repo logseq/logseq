@@ -159,7 +159,7 @@ let () =
 let () =
   let of_wire v = Endpoint_query.query_input_value (Wire.String v) in
   check "query-input-value :today" (of_wire ":today" = Keyword "today");
-  check "query-input-value 123" (of_wire "123" = Int 123);
+  check "query-input-value 123" (of_wire "123" = Int64 123L);
   check "query-input-value +5d symbol stays string"
     (of_wire "+5d" = String "+5d");
   check "query-input-value page-ref stays string"
@@ -167,7 +167,7 @@ let () =
   check "query-input-value char literal stays string"
     (of_wire "\\a" = String "\\a");
   check "query-input-value list parses"
-    (of_wire "(1 2)" = List [ Int 1; Int 2 ])
+    (of_wire "(1 2)" = List [ Int64 1L; Int64 2L ])
 
 (* ---- resolve-page-ref-equality ---- *)
 
@@ -251,25 +251,27 @@ let () =
   check "resolve-input :current-block"
     (resolve (Keyword "current-block")
        { empty_ctx with current_block_uuid = Some uuid_b1 }
-     = Int b1_id);
+     = Int64 (Int64.of_int b1_id));
   (* :parent-block resolves to the parent block's :db/id *)
   check "resolve-input :parent-block"
     (resolve (Keyword "parent-block")
        { empty_ctx with
          current_block_uuid = Some "22222222-2222-2222-2222-222222222222" }
-     = Int b1_id);
+     = Int64 (Int64.of_int b1_id));
   (* :today resolves to a journal-day int *)
   check "resolve-input :today"
     (match Db_inputs.resolve_input db (Keyword "today") empty_ctx with
-     | Int d -> d = Date_time_util.date_to_int (Date_time_util.today_ms ())
+     | Int64 d -> Int64.equal d (Int64.of_int (Date_time_util.date_to_int (Date_time_util.today_ms ())))
      | _ -> false);
   (* :-7d relative date *)
   check "resolve-input :-7d"
     (match Db_inputs.resolve_input db (Keyword "-7d") empty_ctx with
-     | Int d ->
-         d = Date_time_util.date_to_int
-               (Date_time_util.minus Date_time_util.Days 7
-                  (Date_time_util.today_ms ()))
+     | Int64 d ->
+         Int64.equal d
+           (Int64.of_int
+              (Date_time_util.date_to_int
+                 (Date_time_util.minus Date_time_util.Days 7
+                    (Date_time_util.today_ms ()))))
      | _ -> false);
   (* [[page-ref]] string resolves to lower-cased page name *)
   check "resolve-input [[My Page]]"
@@ -407,7 +409,7 @@ let () =
         "[:find ?e :where [?e :block/title \"journal block\"]]"
     with
     | [ [ Result_entity id ] ] -> id
-    | [ [ Result_value (Int id) ] ] -> id
+    | [ [ Result_value (Int64 id) ] ] -> Datascript.Util.int64_to_int_exn "entity id" id
     | _ -> -999
   in
   check "query-custom between rule + :today"

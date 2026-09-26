@@ -38,7 +38,7 @@ let structured_datoms db : datom list =
             | Some e -> (
                 match Ldb.value e "logseq.property/description" with
                 | Some (Ref id) -> List.of_seq (datoms db Eavt ~e:id ())
-                | Some (Int id) -> List.of_seq (datoms db Eavt ~e:id ())
+                | Some (Int64 id) -> List.of_seq (datoms db Eavt ~e:(Datascript.Util.int64_to_int_exn "entity id" id) ())
                 | _ -> [])
             | None -> [])
         | _ -> []
@@ -111,7 +111,8 @@ let list_style_datoms db : datom list =
   |> List.sort_uniq Util.compare_value
   |> List.concat_map (fun v ->
          match v with
-         | Ref id | Int id -> List.of_seq (datoms db Eavt ~e:id ())
+         | Ref id -> List.of_seq (datoms db Eavt ~e:id ())
+         | Int64 id -> List.of_seq (datoms db Eavt ~e:(Datascript.Util.int64_to_int_exn "entity id" id) ())
          | _ -> [])
 
 (* get-all-files — eavt datoms of every :file/path entity. *)

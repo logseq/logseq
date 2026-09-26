@@ -145,7 +145,7 @@ let get_value (ent : entity) (property : string) (value : value) : value =
           List.find_map
             (fun (c : entity) ->
               match Ldb.value c "logseq.property/choice-checkbox-state" with
-              | Some (Bool s) when s = checked -> Some (Int c.id)
+              | Some (Bool s) when s = checked -> Some (Int64 (Int64.of_int c.id))
               | _ -> None)
             choices
     | None -> None
@@ -194,8 +194,12 @@ let satisfy_condition (db : db) (ent : entity)
               if ref_ then
                 (* cljs (d/entity db datom-value) — ref datoms carry Ref *)
                 (match dv with
-                 | Int id | Ref id ->
+                 | Ref id ->
                      (match Ldb.ent_of_id db id with
+                      | Some e -> `VEnt e
+                      | None -> `VRaw (Some dv))
+                 | Int64 id ->
+                     (match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
                       | Some e -> `VEnt e
                       | None -> `VRaw (Some dv))
                  | _ -> `VRaw (Some dv))
@@ -221,9 +225,9 @@ let satisfy_condition (db : db) (ent : entity)
                   | _ -> false)
                  || Db_property.property_value_content e = Some value'
                  || (match value' with
-                     | Int i -> e.id = i
+                     | Int64 i -> Int64.equal (Int64.of_int e.id) i
                      | _ -> false)
-             | `VRaw (Some (Int i)) when value' = Int i -> true
+             | `VRaw (Some (Int64 i)) when value' = Int64 i -> true
              | _ -> false)
         | None ->
             (match db_value with
@@ -341,7 +345,7 @@ let resolve_recur_frequency (db : db) (ent : entity)
     match Ldb.ref_ent ent "logseq.property.repeat/recur-frequency" with
     | Some v ->
         (match Db_property.property_value_content v with
-         | Some (Int n) -> Some n
+         | Some (Int64 n) -> Datascript.Util.int64_to_int n
          | Some (Float f) -> Some (int_of_float f)
          | _ -> None)
     | None -> None
@@ -357,7 +361,7 @@ let resolve_recur_frequency (db : db) (ent : entity)
       let default_value_block =
         Db_property_build.build_property_value_block
           (Block_map.of_entity property) (Block_map.of_entity property)
-          (Int 1)
+          (Int64 1L)
       in
       let dvb_uuid =
         match Block_map.uuid_attr default_value_block "block/uuid" with
@@ -400,14 +404,14 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
     with
     | true, Some v, _ when date_ ->
         (match Ldb.value v "block/journal-day" with
-         | Some (Int day) ->
+         | Some (Int64 day) ->
              (* date-time-util/journal-day->ms — ms of local midnight
                 of the journal day *)
-             Some (journal_day_to_ms day)
+             Some (journal_day_to_ms (Datascript.Util.int64_to_int_exn "journal-day" day))
          | _ -> None)
     (* cljs untyped get — epoch-ms reads back as the platform's numeric
-       rep (Int/Float); Instant only for legacy ~t-decoded data *)
-    | true, _, Some (Int ms) -> Some (Int64.of_int ms)
+       rep; Instant only for legacy ~t-decoded data *)
+    | true, _, Some (Int64 ms) -> Some ms
     | true, _, Some (Float f) -> Some (Int64.of_float f)
     | true, _, Some (Instant ms) -> Some ms
     | _ -> None
@@ -533,8 +537,8 @@ let handle_record_property_history (db : db) (ent : entity)
                (Db_property_build.block_with_timestamps
                   [ "block/uuid", Uuid (Common_uuid.new_block_id ())
                   ; (value_key), d.v
-                  ; "logseq.property.history/block", Int ent.id
-                  ; "logseq.property.history/property", Int property.id ]))
+                  ; "logseq.property.history/block", Int64 (Int64.of_int ent.id)
+                  ; "logseq.property.history/property", Int64 (Int64.of_int property.id) ]))
       | _ -> None)
     datoms
 

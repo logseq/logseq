@@ -1605,7 +1605,7 @@ let sort_pages_and_blocks (pages_and_blocks : value list) : value =
     | Some v -> Db_property_build.str_of_value v
     | None ->
         (match bm_get_opt page "build/journal" with
-         | Some (Int d) -> string_of_int d
+         | Some (Int64 d) -> Int64.to_string d
          | Some v -> Db_property_build.str_of_value v
          | None ->
              (match bm_get_opt page "block/uuid" with
@@ -2090,7 +2090,7 @@ let build_view_nodes_export ~epuuids (db : db) (rows_v : value)
       (fun v ->
         match v with
         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
-        | Int n -> Ldb.ent_of_id db n
+        | Int64 n -> Option.bind (Datascript.Util.int64_to_int n) (Ldb.ent_of_id db)
         | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
             entity db (Lookup_ref (a, x))
         | _ -> None)
@@ -2127,7 +2127,7 @@ let build_selected_nodes_export ~epuuids (db : db) (eids : value list) : value =
     List.filter_map
       (fun v ->
         match v with
-        | Int n -> Ldb.ent_of_id db n
+        | Int64 n -> Option.bind (Datascript.Util.int64_to_int n) (Ldb.ent_of_id db)
         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
         | Vector [ Keyword a; x ] | List [ Keyword a; x ] ->
             entity db (Lookup_ref (a, x))
@@ -2751,12 +2751,12 @@ let export_datom (db : db) (d : datom) : value =
         (match coll_items d.v with
          | [ Keyword a; x ] ->
              (match entity db (Lookup_ref (a, x)) with
-              | Some e -> Int e.id
+              | Some e -> Int64 (Int64.of_int e.id)
               | None -> d.v)
          | _ -> d.v)
     | _ -> d.v
   in
-  Vector [ Int d.e; Keyword d.a; v ]
+  Vector [ Int64 (Int64.of_int d.e); Keyword d.a; v ]
 
 (* cljs build-graph-datoms-export *)
 let build_graph_datoms_export (db : db) : value =
@@ -2769,7 +2769,7 @@ let build_graph_datoms_export (db : db) : value =
     |> List.map (export_datom db)
     |> List.stable_sort (fun a b ->
            match a, b with
-           | Vector (Int x :: _), Vector (Int y :: _) -> compare x y
+           | Vector (Int64 x :: _), Vector (Int64 y :: _) -> compare x y
            | _ -> 0)
   in
   Map
@@ -3142,7 +3142,7 @@ let build_export (db : db) (options_v : value) : value =
     match export_type with
     | "block" ->
         (match bm_get_opt options_m "block-id" with
-         | Some (Int eid) -> build_block_export ~epuuids:options.epuuids db eid
+         | Some (Int64 eid) -> build_block_export ~epuuids:options.epuuids db (Datascript.Util.int64_to_int_exn "entity id" eid)
          | Some (Vector [ Keyword a; x ]) | Some (List [ Keyword a; x ]) ->
              (match entity db (Lookup_ref (a, x)) with
               | Some e -> build_block_export ~epuuids:options.epuuids db e.id
@@ -3150,7 +3150,7 @@ let build_export (db : db) (options_v : value) : value =
          | _ -> fail "Missing :block-id")
     | "page" ->
         (match bm_get_opt options_m "page-id" with
-         | Some (Int eid) -> build_page_export ~epuuids:options.epuuids db eid
+         | Some (Int64 eid) -> build_page_export ~epuuids:options.epuuids db (Datascript.Util.int64_to_int_exn "entity id" eid)
          | Some (Vector [ Keyword a; x ]) | Some (List [ Keyword a; x ]) ->
              (match entity db (Lookup_ref (a, x)) with
               | Some e -> build_page_export ~epuuids:options.epuuids db e.id
@@ -3201,9 +3201,9 @@ let add_uuid_to_page_if_exists (db : db)
     (options : export_options) (m : BM.t) : BM.t =
   let ent =
     match bm_get_opt m "build/journal" with
-    | Some (Int day) ->
+    | Some (Int64 day) ->
         (match
-           List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int day) ())
+           List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int64 day) ())
          with
          | d :: _ -> Ldb.ent_of_id db d.e
          | [] -> None)
@@ -3407,7 +3407,7 @@ let current_db_retract_tx (db : db) : value list =
   List.of_seq (datoms db Eavt ())
   |> List.map (fun (d : datom) -> d.e)
   |> dedup_ints
-  |> List.map (fun e -> Vector [ Keyword "db/retractEntity"; Int e ])
+  |> List.map (fun e -> Vector [ Keyword "db/retractEntity"; Int64 (Int64.of_int e) ])
 
 let datom_schema_attrs =
   [ "db/ident"; "db/cardinality"; "db/valueType"; "db/unique"; "db/index" ]
@@ -3418,7 +3418,7 @@ let schema_datom_eids (datoms : value list) : int list =
     List.filter_map
       (fun v ->
         match coll_items v with
-        | [ Int e; Keyword a; _ ] when a = "db/ident" -> Some e
+        | [ Int64 e; Keyword a; _ ] when a = "db/ident" -> Datascript.Util.int64_to_int e
         | _ -> None)
       datoms
   in
@@ -3426,8 +3426,8 @@ let schema_datom_eids (datoms : value list) : int list =
     List.filter_map
       (fun v ->
         match coll_items v with
-        | [ Int e; Keyword a; _ ] when a <> "db/ident" && List.mem a datom_schema_attrs ->
-            Some e
+        | [ Int64 e; Keyword a; _ ] when a <> "db/ident" && List.mem a datom_schema_attrs ->
+            Datascript.Util.int64_to_int e
         | _ -> None)
       datoms
   in
@@ -3439,14 +3439,14 @@ let resolve_lookup_refs (datoms : value list) : value list =
     List.filter_map
       (fun v ->
         match coll_items v with
-        | [ Int e; Keyword a; vv ] -> Some ((a, vv), e)
+        | [ Int64 e; Keyword a; vv ] -> Some ((a, vv), e)
         | _ -> None)
       datoms
   in
   List.map
     (fun v ->
       match coll_items v with
-      | [ Int e; Keyword a; Vector [ Keyword la; lv ] ] ->
+      | [ Int64 e; Keyword a; Vector [ Keyword la; lv ] ] ->
           let resolved =
             match
               List.find_opt
@@ -3454,10 +3454,10 @@ let resolve_lookup_refs (datoms : value list) : value list =
                   ka = la && Util.value_equal kv lv)
                 lookup_eids
             with
-            | Some (_, e') -> Int e'
+            | Some (_, e') -> Int64 e'
             | None -> Vector [ Keyword la; lv ]
           in
-          Vector [ Int e; Keyword a; resolved ]
+          Vector [ Int64 e; Keyword a; resolved ]
       | _ -> v)
     datoms
 
@@ -3467,7 +3467,10 @@ let datoms_for_import (datoms : value list) : value list =
   let schema_eids = schema_datom_eids datoms in
   let is_schema v =
     match coll_items v with
-    | [ Int e; Keyword a; _ ] -> List.mem e schema_eids && List.mem a datom_schema_attrs
+    | [ Int64 e; Keyword a; _ ] -> (
+        match Datascript.Util.int64_to_int e with
+        | Some e -> List.mem e schema_eids && List.mem a datom_schema_attrs
+        | None -> false)
     | _ -> false
   in
   let schema_datoms = List.filter is_schema datoms in
@@ -3577,7 +3580,8 @@ let disallowed_key_attrs (errors : Db_validate.grouped_error list) :
         match ge.ge_entity with
         | Map kvs ->
             (match List.assoc_opt (Keyword "db/id") kvs with
-             | Some (Int n) | Some (Ref n) -> Some n
+             | Some (Ref n) -> Some n
+             | Some (Int64 n) -> Datascript.Util.int64_to_int n
              | _ -> None)
         | Ref n -> Some n
         | _ -> None
@@ -3603,7 +3607,10 @@ let remove_disallowed_key_datoms (tx_data : value list)
       match coll_items tx with
       | [ Keyword "db/add"; e; Keyword a; _v ] ->
           let eid =
-            match e with Int n | Ref n -> Some n | _ -> None
+            match e with
+            | Ref n -> Some n
+            | Int64 n -> Datascript.Util.int64_to_int n
+            | _ -> None
           in
           (match eid with
            | Some eid ->

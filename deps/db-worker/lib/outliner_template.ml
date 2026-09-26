@@ -33,7 +33,7 @@ let journal_title (db : db) (offset_days : int) : string =
   let journal_day = journal_day_of_offset offset_days in
   match
     Datascript.q_string db
-      ~inputs:[ Arg_scalar (Result_value (Int journal_day)) ]
+      ~inputs:[ Arg_scalar (Result_value (Int64 (Int64.of_int journal_day))) ]
       "[:find ?title . :in $ ?journal-day :where \
         [?p :block/journal-day ?journal-day] [?p :block/title ?title]]"
   with
@@ -45,12 +45,12 @@ let journal_page (db : db) (offset_days : int) : entity option =
   let journal_day = journal_day_of_offset offset_days in
   match
     Datascript.q_string db
-      ~inputs:[ Arg_scalar (Result_value (Int journal_day)) ]
+      ~inputs:[ Arg_scalar (Result_value (Int64 (Int64.of_int journal_day))) ]
       "[:find ?p . :in $ ?journal-day :where \
         [?p :block/journal-day ?journal-day]]"
   with
   | [ [ Result_entity id ] ] -> entity db (Entity_id id)
-  | [ [ Result_value (Int id) ] ] -> entity db (Entity_id id)
+  | [ [ Result_value (Int64 id) ] ] -> entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
   | _ -> None
 
 (* journal-page-or-title — either an entity or a title string *)
@@ -179,13 +179,13 @@ let resolve_block (block : Block_map.t) (rules : (string * string) list)
 
 (* template/normalize-block — cljs (into {} block) + keep :db/id.
    Converts entity-sourced maps to plain maps: (db/id, Ref id) becomes
-   (db/id, Int id) so insert-blocks' de/entity? check routes them through
+   (db/id, Int64 id) so insert-blocks' de/entity? check routes them through
    the cljs (merge block m) path that preserves all attrs. *)
 let normalize_block (block : Block_map.t) : Block_map.t =
   List.map
     (fun (k, v) ->
       if k = "db/id" then
-        match v with Ref id -> (k, Int id) | _ -> (k, v)
+        match v with Ref id -> (k, Int64 (Int64.of_int id)) | _ -> (k, v)
       else (k, v))
     block
 

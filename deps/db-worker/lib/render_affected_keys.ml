@@ -63,12 +63,13 @@ let entity_at (db : db) (entity_id : entity_id) : entity option =
 (* cljs (d/entity db v) over a raw datom value *)
 let entity_at_value (db : db) (v : value) : entity option =
   match v with
-  | Ref id | Int id -> entity db (Entity_id id)
+  | Ref id -> entity db (Entity_id id)
+  | Int64 id -> entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
   | Keyword s -> entity db (Ident s)
   | _ -> None
 
 let value_id (v : value) : entity_id option =
-  match v with Ref id -> Some id | Int id -> Some id | _ -> None
+  match v with Ref id -> Some id | Int64 id -> Datascript.Util.int64_to_int id | _ -> None
 
 let entity_uuid_at (db : db) (entity_id : entity_id) : string option =
   match entity_at db entity_id with

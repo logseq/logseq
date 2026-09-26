@@ -192,8 +192,8 @@ let stable_built_in_sync_repair_item order (m : Block_map.t) : Block_map.t =
   if Block_map.mem m "block/uuid" then
     let m =
       Block_map.put
-        (Block_map.put m "block/created-at" (Datascript.Int 0))
-        "block/updated-at" (Datascript.Int 0)
+        (Block_map.put m "block/created-at" (Datascript.Int64 0L))
+        "block/updated-at" (Datascript.Int64 0L)
     in
     (match Block_map.attr_value m "db/ident" with
      | Some (Datascript.Keyword ident)
@@ -711,7 +711,7 @@ let () =
                     [ ( Wire.Keyword "db/ident"
                       , Wire.Keyword "logseq.kv/graph-last-gc-at" )
                     ; ( Wire.Keyword "kv/value"
-                      , Wire.Int64 (Date_time_util.time_ms ()) ) ] ]
+                      , Ds_wire.wire_int64 (Date_time_util.time_ms ()) ) ] ]
                 [ "skip-validate-db?", Datascript.Bool true
                 ; "persist-op?", Datascript.Bool false ]);
            Db_worker_effect.pure Wire.nil

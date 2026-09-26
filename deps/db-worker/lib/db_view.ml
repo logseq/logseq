@@ -554,7 +554,7 @@ let get_property_value_content db (v : value) : value option =
 
 let str_of_value = function
   | String s -> s
-  | Int i -> string_of_int i
+  | Int64 i -> Int64.to_string i
   | Float f -> Common_util.js_string_of_float f
   | Bool b -> string_of_bool b
   | Keyword k -> ":" ^ k
@@ -870,7 +870,7 @@ let get_timestamp (v : value) : float option =
        | "3 months ago" -> Some (shift Months 3)
        | "1 year ago" -> Some (shift Years 1)
        | _ -> None)
-  | Int i -> Some (float_of_int i)
+  | Int64 i -> Some (Int64.to_float i)
   | Float f -> Some f
   | Instant i -> Some (Int64.to_float i)
   | _ -> None
@@ -883,7 +883,7 @@ let all_ref_property_types =
 
 let valid_type_for_sort (v : value) : bool =
   match v with
-  | Int _ | Float _ | Instant _ | String _ | Bool _ -> true
+  | Int64 _ | Float _ | Instant _ | String _ | Bool _ -> true
   | _ -> false
 
 let prop_type_kw (property : entity option) : string option =
@@ -896,7 +896,7 @@ let prop_type_kw (property : entity option) : string option =
    NaN), booleans/null to 0/1. Non-convertible → None (NaN). *)
 let js_number_opt (v : value) : float option =
   match v with
-  | Int i -> Some (float_of_int i)
+  | Int64 i -> Some (Int64.to_float i)
   | Float f -> Some f
   | Instant i -> Some (Int64.to_float i)
   | Bool b -> Some (if b then 1. else 0.)
@@ -913,7 +913,7 @@ let js_number_opt (v : value) : float option =
 
 let strict_number_opt (v : value) : float option =
   match v with
-  | Int i -> Some (float_of_int i)
+  | Int64 i -> Some (Int64.to_float i)
   | Float f -> Some f
   | Instant i -> Some (Int64.to_float i)
   | _ -> None
@@ -949,7 +949,7 @@ let js_num_str (f : float) : string =
 (* cljs (str v) for scalars. *)
 let js_str (v : value) : string =
   match v with
-  | Int i -> string_of_int i
+  | Int64 i -> Int64.to_string i
   | Float f -> js_num_str f
   | Instant i -> Int64.to_string i
   | String s -> s
@@ -973,7 +973,7 @@ let vmap_get (k : attr) (kvs : (value * value) list) : value option =
 let js_truthy (v : value) : bool =
   match v with
   | Nil | Bool false | String "" -> false
-  | Int 0 -> false
+  | Int64 0L -> false
   | Float f -> Float.equal f 0.0 |> not
   | _ -> true
 
@@ -1144,7 +1144,7 @@ let get_value_for_sort db (property : entity option) (db_ident : attr) :
                | None -> ())
             cvs
         else
-          List.iteri (fun i (cv : entity) -> Hashtbl.replace m cv.id (Int i)) cvs;
+          List.iteri (fun i (cv : entity) -> Hashtbl.replace m cv.id (Int64 (Int64.of_int i))) cvs;
         Some m
   in
   let get_property_value (e : entity) : value option =
@@ -1203,7 +1203,7 @@ let compare_opt_nil_first (a : value option) (b : value option) : int =
 
 let sort_key_fn db (s : sorting_item) : entity -> value option =
   if s.s_id = "block.temp/refs-count" then
-    fun e -> Some (Int (get_block_refs_count db e.id))
+    fun e -> Some (Int64 (Int64.of_int (get_block_refs_count db e.id)))
   else get_value_for_sort db (Ldb.ent_of_ref db (Ident s.s_id)) s.s_id
 
 let dedupe_entities (es : entity list) : entity list =
@@ -1376,13 +1376,13 @@ let parse_filters (v : value) : view_filters =
 let match_item_id db (v : value) : entity_id option =
   match v with
   | Nil -> None
-  | Int i -> Some i
+  | Int64 i -> Datascript.Util.int64_to_int i
   | Float f -> Some (int_of_float f)
   | Uuid u -> uuid_to_eid db u
   | Keyword k -> Db_class.ident_eid db k
   | Map kvs ->
       (match vmap_get "db/id" kvs with
-       | Some (Int id) -> Some id
+       | Some (Int64 id) -> Datascript.Util.int64_to_int id
        | _ -> None)
   | _ -> None
 
@@ -1392,8 +1392,11 @@ let match_item_content db (v : value) : value option =
   | Nil -> None
   | Uuid u -> Option.bind (uuid_to_eid db u) (ref_value_content db)
   | Keyword k -> Option.bind (Db_class.ident_eid db k) (ref_value_content db)
-  | Int i ->
-      (match indexed_attr_value db i "block/uuid" with
+  | Int64 i ->
+      (match Datascript.Util.int64_to_int i with
+       | None -> Some v
+       | Some i ->
+           match indexed_attr_value db i "block/uuid" with
        | Some _ -> ref_value_content db i
        | None -> Some v)
   | Map kvs -> dp_pvc_of_map kvs
@@ -1406,22 +1409,23 @@ let match_journal_day db (m : value) : value option =
   | Ref id -> indexed_attr_value db id "block/journal-day"
   | Uuid u ->
       Option.bind (uuid_to_eid db u) (fun eid -> indexed_attr_value db eid "block/journal-day")
-  | Int i ->
-      (match indexed_attr_value db i "block/journal-day" with
+  | Int64 i ->
+      (match Option.bind (Datascript.Util.int64_to_int i)
+               (fun i -> indexed_attr_value db i "block/journal-day") with
        | Some d -> Some d
-       | None -> Some (Int i))
+       | None -> Some (Int64 i))
   | _ -> None
 
 (* view/->filter-match-id *)
 let filter_match_id db (v : value) : entity_id option =
   match v with
   | Nil -> None
-  | Int i -> Some i
+  | Int64 i -> Datascript.Util.int64_to_int i
   | Float f -> Some (int_of_float f)
   | Uuid u -> uuid_to_eid db u
   | Map kvs ->
       (match vmap_get "db/id" kvs with
-       | Some (Int id) -> Some id
+       | Some (Int64 id) -> Datascript.Util.int64_to_int id
        | _ -> None)
   | _ -> None
 
@@ -1702,7 +1706,7 @@ let property_attr_schema db (property_ident : attr) : attr_schema =
                    (Option.value ~default:(String "") (indexed_attr_value db b "block/order")))
               closed_eids
           in
-          List.iteri (fun i eid -> Hashtbl.replace m eid (Int i)) sorted
+          List.iteri (fun i eid -> Hashtbl.replace m eid (Int64 (Int64.of_int i))) sorted
         end;
         Some m
   in
@@ -1717,7 +1721,7 @@ let property_attr_schema db (property_ident : attr) : attr_schema =
 (* view/eid-sort-value *)
 let eid_sort_value db (schema : attr_schema) (eid : entity_id) : value option =
   if schema.s_ident = "block.temp/refs-count" then
-    Some (Int (get_block_refs_count db eid))
+    Some (Int64 (Int64.of_int (get_block_refs_count db eid)))
   else
     match indexed_attr_values db eid schema.s_ident with
     | [] -> None
@@ -2067,13 +2071,16 @@ let clause_row db (eid : entity_id) (schema : attr_schema) (empty_id : entity_id
 let hits_values (vs : value list) (match_ : value list) : bool =
   List.exists (fun v -> value_mem v match_) vs
 
-(* raw Ref/Int datom values matched against eid lists *)
+(* raw Ref/Int64 datom values matched against eid lists *)
 let hits_eids (vs : value list) (eids : entity_id list) : bool =
   List.exists
     (fun v ->
        match v with
        | Ref id -> List.mem id eids
-       | Int i -> List.mem i eids
+       | Int64 i -> (
+           match Datascript.Util.int64_to_int i with
+           | Some i -> List.mem i eids
+           | None -> false)
        | _ -> false)
     vs
 
@@ -2130,7 +2137,10 @@ let number_compare_match (contents : value list) (m : value) (cmp : float -> flo
 (* view/journal-day-of — cljs integer? covers datom ref values *)
 let journal_day_of db (v : value) : value option =
   match v with
-  | Ref id | Int id -> indexed_attr_value db id "block/journal-day"
+  | Ref id -> indexed_attr_value db id "block/journal-day"
+  | Int64 id ->
+      Option.bind (Datascript.Util.int64_to_int id)
+        (fun id -> indexed_attr_value db id "block/journal-day")
   | _ -> Some v
 
 (* view/match-text-or-number-clause — None = unhandled *)
@@ -2200,7 +2210,7 @@ let match_temporal_clause db (row : clause_row) (op : string) (m : value)
                           match journal_day_of db v, jd with
                           | Some d, jd ->
                               (match d, jd with
-                               | Int d, Int jd ->
+                               | Int64 d, Int64 jd ->
                                    if op = "date-before" then d < jd else d > jd
                                | _ -> false)
                           | None, _ -> false)
@@ -2328,7 +2338,7 @@ let latest_journal_day_pairs db : (entity_id * value) list =
   let journal_tag_eid = Db_class.ident_eid db "logseq.class/Journal" in
   let seen = Hashtbl.create 31 in
   List.of_seq
-    (rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int today) ())
+    (rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int64 (Int64.of_int today)) ())
   |> List.take_while (fun (d : datom) -> d.a = "block/journal-day")
   |> List.filter (fun (d : datom) ->
          if Hashtbl.mem seen d.e then false
@@ -2366,15 +2376,16 @@ let comparable_ref_content db (v : value) : value option =
                       | None ->
                           (match Ldb.ident_of e with
                            | Some i -> Some (Keyword i)
-                           | None -> Some (Int id)))))
-       | None -> Some (Int id))
+                           | None -> Some (Int64 (Int64.of_int id))))))
+       | None -> Some (Int64 (Int64.of_int id)))
   | Map kvs ->
       (match vmap_get "db/id" kvs with
-       | Some (Int id) ->
+       | Some (Int64 id) ->
            (match vmap_get "logseq.property/value" kvs with
             | Some x -> Some x
             | None ->
-                (match ref_value_content db id with
+                (match Option.bind (Datascript.Util.int64_to_int id)
+                         (fun id -> ref_value_content db id) with
                  | Some x -> Some x
                  | None ->
                      (match vmap_get "block/title" kvs with
@@ -2382,7 +2393,7 @@ let comparable_ref_content db (v : value) : value option =
                       | None ->
                           (match vmap_get "db/ident" kvs with
                            | Some x -> Some x
-                           | None -> Some (Int id)))))
+                           | None -> Some (Int64 id)))))
        | _ ->
            (match vmap_get "logseq.property/value" kvs with
             | Some x -> Some x
@@ -2425,7 +2436,7 @@ type group_key =
   | GValue of value
 
 let group_key_norm (g : group_key) : int * value =
-  match g with GEntity e -> (0, Int e.id) | GValue v -> (1, v)
+  match g with GEntity e -> (0, Int64 (Int64.of_int e.id)) | GValue v -> (1, v)
 
 (* cljs reduce + update conj over {} — insertion-ordered groups *)
 let group_entities (entities : entity list) (group_values : entity -> group_key list)

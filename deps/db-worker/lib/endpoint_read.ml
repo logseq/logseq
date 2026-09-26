@@ -34,7 +34,7 @@ let page_summary db (page : entity) : Wire.t =
     | None -> []
   in
   Wire.Map
-    (field "db/id" (Some (Int page.id))
+    (field "db/id" (Some (Int64 (Int64.of_int page.id)))
      @ field "block/uuid" (Ldb.value page "block/uuid")
      @ field "block/title" (Ldb.value page "block/title")
      @ field "block/raw-title" (Ldb.raw_title db page)
@@ -160,7 +160,7 @@ let get_block_page_info args =
                     | None -> []
                   in
                   Wire.Map
-                    (f "db/id" (Some (Int page.id))
+                    (f "db/id" (Some (Int64 (Int64.of_int page.id)))
                      @ f "block/uuid" (Ldb.value page "block/uuid")
                      @ f "block/title" (Ldb.value page "block/title")
                      @ f "block/name" (Ldb.value page "block/name"))
@@ -752,7 +752,7 @@ let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
       in
       let block_of eid =
         match
-          Endpoint_block.get_block_and_children db (Int eid) block_opts
+          Endpoint_block.get_block_and_children db (Int64 (Int64.of_int eid)) block_opts
         with
         | Wire.Map _ as m -> Option.value (Cljs_map.get m "block") ~default:Wire.Nil
         | _ -> Wire.Nil

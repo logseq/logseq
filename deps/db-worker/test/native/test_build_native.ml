@@ -77,7 +77,10 @@ let find_block_by_content_re (db : db) (pat : string) : entity option =
       "[:find [?b ...] :in $ ?pattern :where [?b :block/title ?content] [?b :block/page] [(re-find ?pattern ?content)]]"
   with
   | (Result_entity id :: _) :: _ -> Ldb.ent_of_id db id
-  | (Result_value (Int id) :: _) :: _ -> Ldb.ent_of_id db id
+  | (Result_value (Int64 id) :: _) :: _ -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> Ldb.ent_of_id db id
+      | None -> None)
   | _ -> None
 
 (* ---------- db-test/readable-properties ----------
@@ -95,7 +98,7 @@ let scalar_string (v : value) : string =
   match v with
   | Keyword s -> s
   | String s -> s
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Float f -> string_of_float f
   | Bool b -> string_of_bool b
   | Uuid u -> u
@@ -106,7 +109,8 @@ let readable_properties (e : entity) : (string * readable_value) list =
   let db = e.db in
   let ent_of_value (v : value) : entity option =
     match v with
-    | Ref n | Int n -> Ldb.ent_of_id db n
+    | Ref n -> Ldb.ent_of_id db n
+    | Int64 n -> Option.bind (Datascript.Util.int64_to_int n) (Ldb.ent_of_id db)
     | Ref_to r -> Datascript.entity db r
     | _ -> None
   in
@@ -628,7 +632,7 @@ let test_build_class_and_property_pages () =
     let page_arg =
       (* cljs passes [:block/uuid u] as the input — resolve it to the eid *)
       match Datascript.entity db (Lookup_ref ("block/uuid", Uuid u)) with
-      | Some e -> Arg_scalar (Result_value (Int e.id))
+      | Some e -> Arg_scalar (Result_value (Int64 (Int64.of_int e.id)))
       | None -> Arg_scalar (Result_value Nil)
     in
     q_string
@@ -640,8 +644,9 @@ let test_build_class_and_property_pages () =
              (match Ldb.ent_of_id db id with
               | Some e -> ent_title e
               | None -> None)
-         | [ Result_value (Int id) ] ->
-             (match Ldb.ent_of_id db id with
+         | [ Result_value (Int64 id) ] ->
+             (match Option.bind (Datascript.Util.int64_to_int id)
+                      (Ldb.ent_of_id db) with
               | Some e -> ent_title e
               | None -> None)
          | _ -> None)

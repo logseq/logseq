@@ -28,7 +28,7 @@ let map_get_str (m : value) (a : attr) : string option =
 
 let map_get_int (m : value) (a : attr) : int option =
   match map_get m a with
-  | Int n -> Some n
+  | Int64 n -> Datascript.Util.int64_to_int n
   | Float f -> Some (int_of_float f)
   | Instant n -> Some (Int64.to_int n)
   | _ -> None

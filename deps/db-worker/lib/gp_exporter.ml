@@ -11,7 +11,7 @@ open Eff.Infix
 let kw (s : string) : value = Keyword s
 let strv (s : string) : value = String s
 let boolv (b : bool) : value = Bool b
-let intv (i : int) : value = Int i
+let intv (i : int) : value = Int64 (Int64.of_int i)
 let floatv (f : float) : value = Float f
 let uuidv (s : string) : value = Uuid s
 let vec (xs : value list) : value = Vector xs
@@ -58,7 +58,7 @@ let get_bool (m : BM.t) (a : attr) : bool option =
 
 let get_int (m : BM.t) (a : attr) : int option =
   match getv m a with
-  | Some (Int i) -> Some i
+  | Some (Int64 i) -> Datascript.Util.int64_to_int i
   | Some (Float f) -> Some (int_of_float f)
   | _ -> None
 
@@ -1044,7 +1044,7 @@ let custom_marker_status_ref (db : db) (marker : string)
   | None ->
     let status_ref =
       match find_status_choice_by_content db marker with
-      | Some (s : entity) -> Int s.id
+      | Some (s : entity) -> Int64 (Int64.of_int s.id)
       | None ->
         let u = squuid () in
         options.custom_status_tx :=
@@ -1204,7 +1204,7 @@ let deadline_scheduled_date_int (v : value option) : int option =
   match v with
   | Some (Map _ as m) ->
     get_int (bm_of_value (Some m)) "date-int"
-  | Some (Int i) -> Some i
+  | Some (Int64 i) -> Datascript.Util.int64_to_int i
   | _ -> None
 
 (* deadline-scheduled-time-ms — local-midnight ms + optional :time {:hour :min} *)
@@ -1449,7 +1449,7 @@ let find_or_create_deadline_scheduled_value (value : value option)
         BM.merge
           (BM.of_transit (Sqlite_util.build_new_page (Option.value ~default:"" title)))
           [ "block/uuid", uuidv (Common_uuid.gen_uuid "journal-page-uuid" (string_of_int date_int))
-          ; "block/journal-day", Int date_int ]
+          ; "block/journal-day", Int64 (Int64.of_int date_int) ]
     in
     let journal_page =
       BM.put journal_page "block/tags" (Set [ kw "logseq.class/Journal" ])
@@ -2459,7 +2459,7 @@ and extract_block_list_item (options : options) (item : value) : string list =
   in
   let number' =
     match Clj_value.map_get_opt item "number" with
-    | Some (Int i) -> string_of_int i ^ ". "
+    | Some (Int64 i) -> Int64.to_string i ^ ". "
     | Some (Float f) -> Common_util.js_string_of_float f ^ ". "
     | Some (String s) -> s ^ ". "
     | Some v when truthy v -> "* "
@@ -3203,7 +3203,7 @@ let build_annotation_block (m : value) (color_text_idents : (string * string) li
     BM.merge
       (BM.merge
          [ "logseq.property.pdf/hl-color", kw "logseq.property/color.yellow"
-         ; "logseq.property.pdf/hl-page", Int 1
+         ; "logseq.property.pdf/hl-page", Int64 1L
          ; "block/title", String "" ]
          (List.filter_map
             (fun (k, v) -> Option.map (fun v -> (k, v)) v)
@@ -5018,7 +5018,7 @@ let bm_of_pulled (p : pulled_entity) : BM.t =
 
 let pulled_eid (m : BM.t) : int option =
   match getv m "db/id" with
-  | Some (Int i) -> Some i
+  | Some (Int64 i) -> Datascript.Util.int64_to_int i
   | Some (Ref i) -> Some i
   | _ -> None
 
@@ -5498,10 +5498,10 @@ let build_journal_created_ats (pages : BM.t list) : (string, int64) Hashtbl.t =
   List.iter
     (fun p ->
       match getv p "block/journal-day" with
-      | Some (Int day) ->
+      | Some (Int64 day) ->
         (match get_string p "block/name" with
          | Some n ->
-           Hashtbl.replace tbl n (Date_time_util.int_to_local_ms day)
+           Hashtbl.replace tbl n (Date_time_util.int_to_local_ms (Datascript.Util.int64_to_int_exn "journal-day" day))
          | None -> ())
       | Some (Float f) ->
         (match get_string p "block/name" with
@@ -5600,7 +5600,7 @@ let clean_extra_invalid_tags (db : db) (pages_tx : BM.t list)
 
 let entity_ref_value (r : entity_ref) : value option =
   match r with
-  | Entity_id id -> Some (Int id)
+  | Entity_id id -> Some (Int64 (Int64.of_int id))
   | Temp_id s -> Some (String s)
   | CurrentTx -> None
   | Ident s -> Some (Keyword s)
@@ -5851,7 +5851,7 @@ let add_file_to_db_graph (conn : conn) (file : string) (content : string)
     walked_by_uuid
   |> Fun.flip Eff.bind (fun blocks_tx ->
      log_phase_ms options "blocks-tx" blocks_start
-       [ ("file", String file); ("blocks", Int (List.length blocks)) ];
+       [ ("file", String file); ("blocks", Int64 (Int64.of_int (List.length blocks))) ];
      track_placeholder_ref_uuids options.import_state blocks_tx;
      let split_start =
        if options.log_fn != noop_log_fn then Some (Import_profile.now_ms ())
@@ -5874,7 +5874,7 @@ let add_file_to_db_graph (conn : conn) (file : string) (content : string)
        (transact_imported_ops conn split.sp_property_pages_tx tx_meta options);
      log_phase_ms options "prop-tx" prop_tx_start
        [ ( "file", String file )
-       ; ("tx-count", Int (List.length split.sp_property_pages_tx)) ];
+       ; ("tx-count", Int64 (Int64.of_int (List.length split.sp_property_pages_tx))) ];
      let classes_tx = !(tx_options.classes_tx) in
      let clean_start =
        if options.log_fn != noop_log_fn then Some (Import_profile.now_ms ())
@@ -5900,7 +5900,7 @@ let add_file_to_db_graph (conn : conn) (file : string) (content : string)
          classes_tx classes_tx' custom_status_tx blocks_tx
      in
      log_phase_ms options "main-tx" main_tx_start
-       [ ("file", String file); ("tx-count", Int (List.length tx')) ];
+       [ ("file", String file); ("tx-count", Int64 (Int64.of_int (List.length tx'))) ];
      import_progress options
        [ ("phase", kw "transact"); ("file", String file) ];
      let transact_start =
@@ -5918,7 +5918,7 @@ let add_file_to_db_graph (conn : conn) (file : string) (content : string)
        end
      in
      log_phase_ms options "transact" transact_start
-       [ ("file", String file); ("tx-count", Int (List.length tx')) ];
+       [ ("file", String file); ("tx-count", Int64 (Int64.of_int (List.length tx'))) ];
      let save_start =
        if options.log_fn != noop_log_fn then Some (Import_profile.now_ms ())
        else None
@@ -5952,17 +5952,17 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
   let path = Option.value ~default:"" (get_string file "path") in
   let idx =
     match getv file "idx" with
-    | Some (Int i) -> i
+    | Some (Int64 i) -> Option.value (Datascript.Util.int64_to_int i) ~default:0
     | Some (Float f) -> int_of_float f
     | _ -> 0
   in
   import_progress options
     [ ("step", kw "doc-files"); ("phase", kw "read-file")
-    ; ("file", String path); ("file-idx", Int (idx + 1)) ];
+    ; ("file", String path); ("file-idx", Int64 (Int64.of_int (idx + 1))) ];
   let set = options.set_ui_state in
   set [ "graph/importing-state"; "step" ] (kw "pages");
   set [ "graph/importing-state"; "label" ] (kw "import/loading");
-  set [ "graph/importing-state"; "current-idx" ] (Int (idx + 1));
+  set [ "graph/importing-state"; "current-idx" ] (Int64 (Int64.of_int (idx + 1)));
   set [ "graph/importing-state"; "current-page" ] (String path);
   (options.read_file file
    >>= fun content ->
@@ -6051,17 +6051,17 @@ let export_doc_files (conn : conn) (raw_doc_files : BM.t list)
   let set = options.set_ui_state in
   set [ "graph/importing-state"; "step" ] (kw "pages");
   set [ "graph/importing-state"; "label" ] (kw "import/loading");
-  set [ "graph/importing-state"; "total" ] (Int (List.length raw_doc_files));
+  set [ "graph/importing-state"; "total" ] (Int64 (Int64.of_int (List.length raw_doc_files)));
   import_progress options
     [ ("step", kw "doc-files")
-    ; ("total-files", Int (List.length raw_doc_files)) ];
+    ; ("total-files", Int64 (Int64.of_int (List.length raw_doc_files))) ];
   let sort_key (f : BM.t) =
     let path = Option.value ~default:"" (get_string f "path") in
     (not (Common_util.str_starts_with (Gp_node_path.basename path) "hls__"), path)
   in
   let doc_files =
     List.map
-      (fun (i, f) -> BM.put f "idx" (Int i))
+      (fun (i, f) -> BM.put f "idx" (Int64 (Int64.of_int i)))
       (List.mapi (fun i f -> (i, f))
          (List.stable_sort (fun a b -> compare (sort_key a) (sort_key b))
             raw_doc_files))
@@ -6401,23 +6401,23 @@ let read_and_copy_asset_files (asset_files_in : BM.t list)
              (Option.value ~default:"" (get_string b "path")))
   in
   let asset_files =
-    List.mapi (fun i f -> BM.put f "idx" (Int i)) assets
+    List.mapi (fun i f -> BM.put f "idx" (Int64 (Int64.of_int i))) assets
   in
   let read_and_copy (file : BM.t) : unit Eff.t =
     let path = Option.value ~default:"" (get_string file "path") in
     let idx =
-      match getv file "idx" with Some (Int i) -> i | _ -> 0
+      match getv file "idx" with Some (Int64 i) -> Option.value (Datascript.Util.int64_to_int i) ~default:0 | _ -> 0
     in
     import_progress options
       [ ("step", kw "assets"); ("phase", kw "read-and-copy")
-      ; ("file", String path); ("file-idx", Int (idx + 1))
-      ; ("total-files", Int (List.length asset_files)) ];
+      ; ("file", String path); ("file-idx", Int64 (Int64.of_int (idx + 1)))
+      ; ("total-files", Int64 (Int64.of_int (List.length asset_files))) ];
     let set = options.set_ui_state in
     set [ "graph/importing-state"; "step" ] (kw "assets");
     set [ "graph/importing-state"; "label" ] (kw "import/copying-assets");
     set [ "graph/importing-state"; "total" ]
-      (Int (List.length asset_files));
-    set [ "graph/importing-state"; "current-idx" ] (Int (idx + 1));
+      (Int64 (Int64.of_int (List.length asset_files)));
+    set [ "graph/importing-state"; "current-idx" ] (Int64 (Int64.of_int (idx + 1)));
     set [ "graph/importing-state"; "current-page" ] (String path);
     let buffer_handler (content : string) : (BM.t -> BM.t) * bool =
       let is_edn = Common_path.file_ext path = "edn" in
@@ -6687,7 +6687,7 @@ let export_file_graph_steps (conn : conn) (config : (attr * value) list)
     (doc_options : options) : BM.t list Eff.t =
   if options.log_fn != noop_log_fn then
     options.log_fn
-      [ String "Importing"; Int (List.length partitioned.pf_doc_files)
+      [ String "Importing"; Int64 (Int64.of_int (List.length partitioned.pf_doc_files))
       ; String "files ..." ];
   import_progress doc_options [ ("step", kw "logseq-files") ];
   export_logseq_files conn partitioned.pf_logseq_files options
@@ -6706,7 +6706,7 @@ let export_file_graph_steps (conn : conn) (config : (attr * value) list)
   >>= fun () ->
   import_progress doc_options
     [ ("step", kw "doc-files")
-    ; ("total-files", Int (List.length partitioned.pf_doc_files)) ];
+    ; ("total-files", Int64 (Int64.of_int (List.length partitioned.pf_doc_files))) ];
   export_doc_files conn partitioned.pf_doc_files
     { doc_options with finalize_imported_graph = false }
   >>= fun _ ->

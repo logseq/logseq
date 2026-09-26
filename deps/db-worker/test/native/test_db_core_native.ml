@@ -1050,12 +1050,12 @@ let test_task_spent_time () =
   in
   ignore
     (transact_maps conn
-       [ [ "block/created-at", Int 1000
-         ; "logseq.property.history/block", Int block_id
+       [ [ "block/created-at", Int64 1000
+         ; "logseq.property.history/block", Int64 block_id
          ; "logseq.property.history/property", Kw "logseq.property/status"
          ; "logseq.property.history/ref-value", Kw "logseq.property/status.doing" ]
-       ; [ "block/created-at", Int 4000
-         ; "logseq.property.history/block", Int block_id
+       ; [ "block/created-at", Int64 4000
+         ; "logseq.property.history/block", Int64 block_id
          ; "logseq.property.history/property", Kw "logseq.property/status"
          ; "logseq.property.history/ref-value", Kw "logseq.property/status.done" ] ]);
   let result =
@@ -1294,8 +1294,8 @@ let test_get_blocks_includes_render_critical_property_data () =
   ignore
     (transact_maps conn
        [ [ "block/uuid", Uuid reaction_uuid
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1
+         ; "block/created-at", Int64 1
+         ; "block/updated-at", Int64 1
          ; "logseq.property.reaction/emoji-id", Str "+1"
          ; ( "logseq.property.reaction/target"
            , Vec [ Kw "block/uuid"; Uuid block_uuid ] ) ] ]);
@@ -1463,7 +1463,7 @@ let test_get_blocks_includes_projected_class_property () =
          ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
        ; [ "block/title", Str "Projected row"
          ; "block/uuid", Uuid block_uuid
-         ; "block/updated-at", Int 42
+         ; "block/updated-at", Int64 42
          ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/order", Str "a0" ] ]);
@@ -1642,7 +1642,7 @@ let test_get_all_properties () =
        ; [ "db/ident", Kw "user.property/recycled"
          ; "block/title", Str "Recycled"
          ; "block/tags", Vec [ Kw "logseq.class/Property" ]
-         ; "logseq.property/deleted-at", Int 1 ] ]);
+         ; "logseq.property/deleted-at", Int64 1 ] ]);
   register_conn conn;
   let public_result =
     api "get-all-properties" [ Wire.String test_repo; Wire.Map [] ]
@@ -1985,14 +1985,14 @@ let test_convert_tag_to_page () =
          ; "block/uuid", Uuid class_uuid
          ; "db/ident", Kw "user.class/tag"
          ; "block/tags", Vec [ Kw "logseq.class/Tag" ]
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1 ]
+         ; "block/created-at", Int64 1
+         ; "block/updated-at", Int64 1 ]
        ; [ "block/title", Str "Page"
          ; "block/name", Str "page"
          ; "block/uuid", Uuid page_uuid
          ; "block/tags", Vec [ Kw "logseq.class/Page" ]
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1 ] ]);
+         ; "block/created-at", Int64 1
+         ; "block/updated-at", Int64 1 ] ]);
   ignore
     (transact_maps conn
        [ [ "block/title", Str ("hello #[[" ^ class_uuid ^ "]]")
@@ -2001,8 +2001,8 @@ let test_convert_tag_to_page () =
          ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/order", Str "a0"
-         ; "block/created-at", Int 1
-         ; "block/updated-at", Int 1 ] ]);
+         ; "block/created-at", Int64 1
+         ; "block/updated-at", Int64 1 ] ]);
   register_conn conn;
   let class_id =
     match Datascript.entity (db_of conn) (Ident "user.class/tag") with
@@ -2058,7 +2058,7 @@ let test_validate_block_tag_invalidates_conversion () =
          ; "block/title", Str "Status Tag"
          ; "block/name", Str "status tag"
          ; "block/tags", Vec [ Kw "logseq.class/Tag" ]
-         ; "logseq.property/scheduled", Int 1000 ] ]);
+         ; "logseq.property/scheduled", Int64 1000 ] ]);
   register_conn conn;
   let tag = Option.get (entity_at_uuid (db_of conn) tag_uuid) in
   let result =
@@ -2077,7 +2077,7 @@ let test_convert_page_to_tag () =
        [ [ "block/title", Str "Page"
          ; "block/name", Str "page"
          ; "block/uuid", Uuid page_uuid
-         ; "block/created-at", Int 123
+         ; "block/created-at", Int64 123
          ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
   register_conn conn;
   let page = Option.get (entity_at_uuid (db_of conn) page_uuid) in
@@ -2386,7 +2386,7 @@ let test_get_block_by_page_and_route () =
          ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_uuid ]
          ; "block/order", Str "a"
-         ; "logseq.property/heading", Int 1 ]
+         ; "logseq.property/heading", Int64 1 ]
        ; [ "block/uuid", Uuid plain_uuid
          ; "block/title", Str "Plain block"
          ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
@@ -2594,12 +2594,12 @@ let test_import_edn_datom_format () =
     (transact_maps export_conn
        [ [ "db/id", Str "imported-page"; "block/uuid", Uuid page_uuid
          ; "block/name", Str "imported page"; "block/title", Str "Imported page"
-         ; "block/created-at", Int 1; "block/updated-at", Int 1
+         ; "block/created-at", Int64 1; "block/updated-at", Int64 1
          ; "block/tags", Vec [ Kw "logseq.class/Page" ] ]
        ; [ "block/uuid", Uuid u; "block/page", Str "imported-page"
          ; "block/parent", Str "imported-page"; "block/order", Str "a0"
          ; "block/title", Str "imported"
-         ; "block/created-at", Int 1; "block/updated-at", Int 1 ] ]);
+         ; "block/created-at", Int64 1; "block/updated-at", Int64 1 ] ]);
   let export_edn = graph_export_of export_conn in
   let result = api "import-edn" [ Wire.String repo; export_edn ] in
   (match result with
@@ -3027,10 +3027,10 @@ let test_epoch_ms_value_of_transit_stays_numeric () =
   let ms = 1783612800123L in
   let v = Ds_wire.value_of_transit (Wire.Int64 ms) in
   check "epoch-ms decodes to a number, not Instant"
-    (match v with Int _ | Float _ -> true | _ -> false);
+    (match v with Int64 _ | Float _ -> true | _ -> false);
   check "epoch-ms keeps its ms"
     (match v with
-     | Int n -> Int64.of_int n = ms
+     | Int64 n -> n = ms
      | Float f -> Int64.of_float f = ms
      | _ -> false);
   check "epoch-ms re-encodes as a transit number, not ~t"
@@ -3059,7 +3059,7 @@ let test_heal_instant_values () =
     (Seq.exists
        (fun (d : datom) ->
           match d.v with
-          | Int n -> Int64.of_int n = ms
+          | Int64 n -> n = ms
           | Float f -> Int64.of_float f = ms
           | _ -> false)
        (datoms db Avet ~a:"block/created-at" ()));

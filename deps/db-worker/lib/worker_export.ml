@@ -62,7 +62,7 @@ let tree_opts_of_value (v : value) : Export_file.tree_opts =
   { Export_file.default_tree_opts with
     init_level =
       (match Sqlite_build.bm_get_opt m "init-level" with
-       | Some (Int n) -> Some n
+       | Some (Int64 n) -> Datascript.Util.int64_to_int n
        | _ -> None)
   ; open_blocks_only =
       (match Sqlite_build.bm_get_opt m "open-blocks-only?" with

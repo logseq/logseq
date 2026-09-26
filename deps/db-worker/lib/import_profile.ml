@@ -53,8 +53,8 @@ let snapshot (w : watchdog) : (attr * value) list =
   ; "step", String (if s.step = "" then "unknown" else s.step)
   ; "phase", (match s.phase with Some p -> String p | None -> Nil)
   ; "file", (match s.file with Some f -> String f | None -> Nil)
-  ; "file-idx", (match s.file_idx with Some i -> Int i | None -> Nil)
-  ; "total-files", (match s.total_files with Some t -> Int t | None -> Nil) ]
+  ; "file-idx", (match s.file_idx with Some i -> Int64 (Int64.of_int (i)) | None -> Nil)
+  ; "total-files", (match s.total_files with Some t -> Int64 (Int64.of_int (t)) | None -> Nil) ]
 
 let update_watchdog (w : watchdog) (m : (string * value) list) : unit =
   List.iter
@@ -65,9 +65,9 @@ let update_watchdog (w : watchdog) (m : (string * value) list) : unit =
       | "phase", Nil -> w.state.phase <- None
       | "file", String s -> w.state.file <- Some s
       | "file", Nil -> w.state.file <- None
-      | "file-idx", Int i -> w.state.file_idx <- Some i
+      | "file-idx", Int64 i -> w.state.file_idx <- Some (Datascript.Util.int64_to_int_exn "file-idx" i)
       | "file-idx", Nil -> w.state.file_idx <- None
-      | "total-files", Int i -> w.state.total_files <- Some i
+      | "total-files", Int64 i -> w.state.total_files <- Some (Datascript.Util.int64_to_int_exn "total-files" i)
       | "total-files", Nil -> w.state.total_files <- None
       | _ -> ())
     m

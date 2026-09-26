@@ -137,8 +137,8 @@ let hello_count conn =
     Datascript.q_string (db_of conn)
       "[:find (count ?e) . :where [?e :block/title \"hello\"]]"
   with
-  | [ [ Result_value (Int n) ] ] -> n
-  | _ -> -1
+  | [ [ Result_value (Int64 n) ] ] -> n
+  | _ -> -1L
 
 (* ---- wire helpers ---- *)
 
@@ -180,7 +180,7 @@ let test_renderer_tx_meta () =
       , Vector [ Vector [ Keyword "save-block"; Vector [] ] ] )
     ; ( "db-sync/inverse-outliner-ops"
       , Vector [ Vector [ Keyword "save-block"; Vector [] ] ] )
-    ; "db-sync/tx-id", Int 42
+    ; "db-sync/tx-id", Int64 42L
     ; "local-tx?", Bool true
     ; "request-id", String "request"
     ; "ui/perf-id", Uuid (Uuid_gen.uuid ()) ]
@@ -275,7 +275,7 @@ let test_builds_one_delta () =
         transact conn
           ~tx_meta:
             [ "local-tx?", Bool true
-            ; "db-sync/tx-id", Int operation_id
+            ; "db-sync/tx-id", Int64 (Int64.of_int operation_id)
             ; "request-id", String "request-1"
             ; "client-id", String "client"
             ; "outliner-op", Keyword "save-block"
@@ -590,7 +590,7 @@ let test_post_commit_failures_dont_block () =
             check (Printf.sprintf "post-commit failure escaped: %s" failed_stage)
               (not raised);
             check (Printf.sprintf "datom committed (%s)" failed_stage)
-              (hello_count conn = 1);
+              (Int64.equal (hello_count conn) 1L);
             check
               (Printf.sprintf "one capture-error broadcast (%s)" failed_stage)
               (List.length (capture_error_broadcasts captured) = 1);

@@ -16,7 +16,8 @@ let datom_e (d : datom) = d.e
 
 let datom_v_id (d : datom) : entity_id option =
   match d.v with
-  | Ref id | Int id -> Some id
+  | Ref id -> Some id
+  | Int64 id -> Datascript.Util.int64_to_int id
   | _ -> None
 
 (* cljs datoms-for — guard by (d/entid db attr) *)
@@ -35,7 +36,7 @@ let datoms_for_v (db : db) (a : attr) (v : value) : datom list =
           match Datascript.entid_ref db (Ident k) with
           | Some id -> Ref id
           | None -> v)
-      | Int id -> Ref id
+      | Int64 id -> (match Datascript.Util.int64_to_int id with Some id -> Ref id | None -> v)
       | _ -> v
     in
     List.of_seq (datoms db Avet ~a ~v:v' ())
@@ -286,7 +287,11 @@ let visible_object_id_set (db : db) ~(class_ids : IntSet.t)
        not (invalid_id_or_parent invalid_ids parent_by_id id))
   |> IntSet.filter (fun id ->
        match IntMap.find_opt id page_by_id with
-       | Some (Ref pid | Int pid) -> not (IntSet.mem pid invalid_ids)
+       | Some (Ref pid) -> not (IntSet.mem pid invalid_ids)
+       | Some (Int64 pid) -> (
+           match Datascript.Util.int64_to_int pid with
+           | Some pid -> not (IntSet.mem pid invalid_ids)
+           | None -> true)
        | _ -> true)
 
 (* ---------- link maps ---------- *)

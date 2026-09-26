@@ -82,8 +82,8 @@ let test_delete_blocks_removes_reactions () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid reaction_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.reaction/emoji-id", One_value (String "+1")
                ; "logseq.property.reaction/target", One_value (ref_of block) ] } ]);
   let reaction_entity =
@@ -169,8 +169,8 @@ let test_delete_blocks_removes_history_with_ref_value () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of target)
                ; "logseq.property.history/property",
                  One_value (Ref (status_prop_eid db))
@@ -204,8 +204,8 @@ let test_property_history_block_updates_are_kept () =
                ; "block/page", One_value (Ref page.id)
                ; "block/parent", One_value (Ref page.id)
                ; "block/order", One_value (String "a0")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of target)
                ; "logseq.property.history/property",
                  One_value (Ref (status_prop_eid db))
@@ -249,8 +249,8 @@ let test_remote_delete_blocks_removes_history_when_owner_ref_retracted () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of target)
                ; "logseq.property.history/property",
                  One_value (Ref (status_prop_eid db))
@@ -282,8 +282,8 @@ let test_delete_blocks_removes_new_history_for_deleted_block () =
         { db_id = None
         ; attrs =
             [ "block/uuid", One_value (Uuid history_uuid)
-            ; "block/created-at", One_value (Int n)
-            ; "block/updated-at", One_value (Int n)
+            ; "block/created-at", One_value (Int64 (Int64.of_int n))
+            ; "block/updated-at", One_value (Int64 (Int64.of_int n))
             ; "logseq.property.history/block", One_value (ref_of target)
             ; "logseq.property.history/property",
               One_value (Ref (status_prop_eid db))
@@ -309,8 +309,8 @@ let test_remote_delete_blocks_removes_new_normalized_history () =
   let n = now () in
   let txs =
     [ Add (Entity_id history_eid, "block/uuid", Uuid history_uuid)
-    ; Add (Entity_id history_eid, "block/created-at", Int n)
-    ; Add (Entity_id history_eid, "block/updated-at", Int n)
+    ; Add (Entity_id history_eid, "block/created-at", Int64 (Int64.of_int n))
+    ; Add (Entity_id history_eid, "block/updated-at", Int64 (Int64.of_int n))
     ; Add (Entity_id history_eid, "logseq.property.history/block", Ref target.id)
     ; Add
         (Entity_id history_eid, "logseq.property.history/property",
@@ -351,8 +351,8 @@ let test_delete_page_removes_history_with_ref_value () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of block)
                ; "logseq.property.history/property",
                  One_value (Ref (status_prop_eid db))
@@ -388,8 +388,8 @@ let test_delete_property_removes_history_for_property () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of block)
                ; "logseq.property.history/property", One_value (ref_of prop)
                ; "logseq.property.history/scalar-value",
@@ -419,8 +419,8 @@ let test_delete_blocks_removes_history_for_corresponding_views () =
            ; attrs =
                [ "block/uuid", One_value (Uuid view_uuid)
                ; "block/title", One_value (String "Target view")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property/view-for", One_value (ref_of target)
                ; "logseq.property.view/type",
                  One_value (Keyword "logseq.property.view/type.table")
@@ -430,8 +430,8 @@ let test_delete_blocks_removes_history_for_corresponding_views () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid target_history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (ref_of target)
                ; "logseq.property.history/property",
                  One_value (Ref (status_prop_eid db))
@@ -441,8 +441,8 @@ let test_delete_blocks_removes_history_for_corresponding_views () =
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid view_history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block",
                  One_value (Ref_to (Lookup_ref ("block/uuid", Uuid view_uuid)))
                ; "logseq.property.history/property",
@@ -475,8 +475,8 @@ let test_delete_blocks_does_not_rewrite_title_for_deleted_view () =
                [ "block/uuid", One_value (Uuid view_uuid)
                ; "block/title", One_value (String "Unlinked references")
                ; "block/raw-title", One_value (String "Unlinked references")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "block/page", One_value (Ref page.id)
                ; "block/parent", One_value (Ref page.id)
                ; "block/order", One_value (String "cD66")
@@ -520,8 +520,8 @@ let test_delete_blocks_does_not_rewrite_title_for_deleted_history () =
                [ "block/uuid", One_value (Uuid history_uuid)
                ; "block/title", One_value (String "History entry")
                ; "block/raw-title", One_value (String "History entry")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "block/page", One_value (Ref page.id)
                ; "block/parent", One_value (Ref page.id)
                ; "block/order", One_value (String "a0")
@@ -567,7 +567,7 @@ let test_latest_journals_stays_within_journal_day_index () =
     Option.get
       (Seq.uncons
          (Datascript.datoms db Avet ~a:"block/journal-day"
-            ~v:(Int 29990101) ()))
+            ~v:(Int64 29990101L) ()))
     |> fst
   in
   let alias = Option.get (find_page_by_title db "Alias target") in
@@ -578,12 +578,12 @@ let test_latest_journals_stays_within_journal_day_index () =
     (List.map
        (fun (e : entity) -> Ldb.value e "block/journal-day")
        (List.of_seq (Ldb.get_latest_journals db))
-     = [ Some (Int 20240101) ]);
+     = [ Some (Int64 20240101L) ]);
   let j_e =
     Option.get
       (Seq.uncons
          (Datascript.datoms (db_of conn) Avet ~a:"block/journal-day"
-            ~v:(Int 20240101) ()))
+            ~v:(Int64 20240101L) ()))
     |> fst
   in
   ignore (Db_tx.transact conn [ retract_entity j_e.e ]);

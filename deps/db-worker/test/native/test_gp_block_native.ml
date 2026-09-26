@@ -75,7 +75,7 @@ let select_keys (b : Block_map.t) (ks : string list) : (attr * value) list =
 
 let test_with_parent_and_order_normalizes_irregular_outdent () =
   let mk id level =
-    [ ("block/uuid", Keyword id); ("block/level", Int level) ]
+    [ ("block/uuid", Keyword id); ("block/level", Int64 (Int64.of_int level)) ]
   in
   let blocks =
     [ mk "a" 1; mk "b" 3; mk "c" 5; mk "d" 2; mk "e" 3 ]
@@ -84,19 +84,19 @@ let test_with_parent_and_order_normalizes_irregular_outdent () =
   let expected =
     [ [ ("block/uuid", Keyword "a")
       ; ("block/parent", Keyword "page")
-      ; ("block/level", Int 1) ]
+      ; ("block/level", Int64 1L) ]
     ; [ ("block/uuid", Keyword "b")
       ; ("block/parent", Vector [ Keyword "block/uuid"; Keyword "a" ])
-      ; ("block/level", Int 2) ]
+      ; ("block/level", Int64 2L) ]
     ; [ ("block/uuid", Keyword "c")
       ; ("block/parent", Vector [ Keyword "block/uuid"; Keyword "b" ])
-      ; ("block/level", Int 3) ]
+      ; ("block/level", Int64 3L) ]
     ; [ ("block/uuid", Keyword "d")
       ; ("block/parent", Vector [ Keyword "block/uuid"; Keyword "a" ])
-      ; ("block/level", Int 2) ]
+      ; ("block/level", Int64 2L) ]
     ; [ ("block/uuid", Keyword "e")
       ; ("block/parent", Vector [ Keyword "block/uuid"; Keyword "a" ])
-      ; ("block/level", Int 2) ] ]
+      ; ("block/level", Int64 2L) ] ]
   in
   check "with-parent-and-order result"
     (List.length result = List.length expected
@@ -129,11 +129,11 @@ let test_fix_duplicate_id () =
        [ ("properties", Map [ Keyword "id", String uuid_s ])
        ; ("tags", Vector [])
        ; ("format", String "markdown")
-       ; ("meta", Map [ Keyword "start_pos", Int 51; Keyword "end_pos", Int 101 ])
+       ; ("meta", Map [ Keyword "start_pos", Int64 51L; Keyword "end_pos", Int64 101L ])
        ; ("macros", Vector [])
        ; ("title", String ("bar\nid:: " ^ uuid_s))
        ; ("properties-text-values", Map [ Keyword "id", String uuid_s ])
-       ; ("level", Int 1)
+       ; ("level", Int64 1L)
        ; ("uuid", Uuid uuid_s)
        ; ("properties-order", Vector [ Keyword "id" ]) ]
        (y "bar"));
@@ -142,11 +142,11 @@ let test_fix_duplicate_id () =
        [ ("properties", Map [ Keyword "id", String uuid_s ])
        ; ("tags", Vector [])
        ; ("format", String "org")
-       ; ("meta", Map [ Keyword "start_pos", Int 51; Keyword "end_pos", Int 101 ])
+       ; ("meta", Map [ Keyword "start_pos", Int64 51L; Keyword "end_pos", Int64 101L ])
        ; ("macros", Vector [])
        ; ("title", String ("bar\n:id: " ^ uuid_s))
        ; ("properties-text-values", Map [ Keyword "id", String uuid_s ])
-       ; ("level", Int 1)
+       ; ("level", Int64 1L)
        ; ("uuid", Uuid uuid_s)
        ; ("properties-order", Vector [ Keyword "id" ]) ]
        (y "bar"));
@@ -155,11 +155,11 @@ let test_fix_duplicate_id () =
        [ ("properties", Map [ Keyword "id", String uuid_s ])
        ; ("tags", Vector [])
        ; ("format", String "markdown")
-       ; ("meta", Map [ Keyword "start_pos", Int 51; Keyword "end_pos", Int 101 ])
+       ; ("meta", Map [ Keyword "start_pos", Int64 51L; Keyword "end_pos", Int64 101L ])
        ; ("macros", Vector [])
        ; ("title", String ("bar\n  \n  id:: " ^ uuid_s ^ "\nblock body"))
        ; ("properties-text-values", Map [ Keyword "id", String uuid_s ])
-       ; ("level", Int 1)
+       ; ("level", Int64 1L)
        ; ("uuid", Uuid uuid_s)
        ; ("properties-order", Vector [ Keyword "id" ]) ]
        (y "bar\nblock body"))
@@ -191,23 +191,23 @@ let test_extract_properties () =
     ; [ "tags", "bar" ], [ "tags", Set [ String "bar" ] ]
     ; [ "file-path", "file:///home/x, y.pdf" ]
       , [ "file-path", String "file:///home/x, y.pdf" ]
-    ; [ "year", "1000" ], [ "year", Int 1000 ]
+    ; [ "year", "1000" ], [ "year", Int64 1000L ]
     ; [ "year", "\"1000\"" ], [ "year", String "\"1000\"" ]
     ; [ "year", "1000"; "alias", "[[name/with space]]" ]
-      , [ "year", Int 1000; "alias", Set [ String "name/with space" ] ]
+      , [ "year", Int64 1000L; "alias", Set [ String "name/with space" ] ]
     ; [ "year", "1000"; "tags", "[[name/with space]]" ]
-      , [ "year", Int 1000; "tags", Set [ String "name/with space" ] ]
+      , [ "year", Int64 1000L; "tags", Set [ String "name/with space" ] ]
     ; [ "year", "1000"; "tags", "[[name/with space]], [[another]]" ]
-      , [ "year", Int 1000
+      , [ "year", Int64 1000L
         ; "tags", Set [ String "name/with space"; String "another" ] ]
     ; [ "year", "1000"; "alias", "[[name/with space]], [[another]]" ]
-      , [ "year", Int 1000
+      , [ "year", Int64 1000L
         ; "alias", Set [ String "name/with space"; String "another" ] ]
     ; [ "year", "1000"; "alias", "[[name/with space]], [[another [[nested]]]]" ]
-      , [ "year", Int 1000
+      , [ "year", Int64 1000L
         ; "alias", Set [ String "name/with space"; String "another [[nested]]" ] ]
     ; [ "year", "1000"; "alias", "[[name/with space]], [[[[nested]] another]]" ]
-      , [ "year", Int 1000
+      , [ "year", Int64 1000L
         ; "alias", Set [ String "name/with space"; String "[[nested]] another" ] ]
     ; [ "foo", "bar" ], [ "foo", String "bar" ]
     ; [ "foo", "[[bar]], [[baz]]" ], [ "foo", Set [ String "bar"; String "baz" ] ]
@@ -272,7 +272,7 @@ let test_page_name_map_namespace_for_slash_journals () =
   (match Gp_block.page_name_to_map "2026/05/18" db false (Some "yyyy/MM/dd") () with
    | Some journal ->
        check "journal-day"
-         (Block_map.attr_value journal "block/journal-day" = Some (Int 20260518));
+         (Block_map.attr_value journal "block/journal-day" = Some (Int64 20260518L));
        check "title"
          (Block_map.attr_value journal "block/title" = Some (String "2026/05/18"));
        check "name"
@@ -330,7 +330,7 @@ let test_existing_journal_reference_reuses_stored_identity () =
             [ "block/uuid", Uuid journal_uuid
             ; "block/title", String "2026-07-27"
             ; "block/name", String "2026-07-27"
-            ; "block/journal-day", Int 20260727 ])
+            ; "block/journal-day", Int64 20260727L ])
    | None -> Alcotest.fail "page-name->map returned none for 2026-07-27");
   (* testing "an existing journal is found by day after the configured
      format changes" *)
@@ -351,7 +351,7 @@ let test_existing_journal_reference_reuses_stored_identity () =
            [ "block/uuid", Uuid journal_uuid
            ; "block/title", String "2026-07-27"
            ; "block/name", String "2026-07-27"
-           ; "block/journal-day", Int 20260727 ])
+           ; "block/journal-day", Int64 20260727L ])
   | None -> Alcotest.fail "page-name->map returned none for 27/07/2026"
 
 (* cljs (->> (->edn content (default-config :markdown)) ffirst second :title

@@ -53,13 +53,13 @@ let filters ?(or_ = false) clauses =
 let create_view_id conn ?view_for_id feature_type =
   let uuid = gen_uuid () in
   let tx =
-    [ ("db/id", Int (-100))
+    [ ("db/id", Int64 (-100))
     ; ("block/title", Str "Test view")
     ; ("block/uuid", Uuid uuid)
     ; ("logseq.property.view/feature-type", Kw feature_type)
     ; ("logseq.property.view/type", Kw "logseq.property.view/type.table") ]
     @ (match view_for_id with
-       | Some id -> [ ("logseq.property/view-for", Int id) ]
+       | Some id -> [ ("logseq.property/view-for", Int64 id) ]
        | None -> [])
   in
   transact_maps conn [ tx ];
@@ -179,26 +179,26 @@ let test_all_pages_sorts_and_filters_hidden () =
         [ { page =
               { default_page with
                 pg_title = Some "Alpha"
-              ; pg_extra = [ "block/updated-at", Int 10 ] }
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Beta"
-              ; pg_extra = [ "block/updated-at", Int 20 ] }
+              ; pg_extra = [ "block/updated-at", Int64 20 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Hidden"
               ; pg_extra =
-                  [ "block/updated-at", Int 30
+                  [ "block/updated-at", Int64 30
                   ; "logseq.property/hide?", Bool true ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Deleted"
               ; pg_extra =
-                  [ "block/updated-at", Int 40
-                  ; "logseq.property/deleted-at", Int 1 ] }
+                  [ "block/updated-at", Int64 40
+                  ; "logseq.property/deleted-at", Int64 1 ] }
           ; blocks = [] } ]
       ()
   in
@@ -223,13 +223,13 @@ let test_journal_window_excludes_future_with_aliases () =
   let db = db_of conn in
   let future_id =
     match
-      List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int 29990101) ())
+      List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int64 29990101L) ())
     with
     | d :: _ -> d.e
     | [] -> failwith "no journal-day datom"
   in
   let alias_id = (Option.get (find_page_by_title db "Alias target")).id in
-  transact_maps conn [ op_db_add (Int future_id) "block/alias" (Int alias_id) ];
+  transact_maps conn [ op_db_add (Int64 future_id) "block/alias" (Int64 alias_id) ];
   List.iter
     (fun extra ->
        let result =
@@ -286,17 +286,17 @@ let test_all_pages_title_sort () =
         [ { page =
               { default_page with
                 pg_title = Some "gamma"
-              ; pg_extra = [ "block/updated-at", Int 1 ] }
+              ; pg_extra = [ "block/updated-at", Int64 1 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "alpha"
-              ; pg_extra = [ "block/updated-at", Int 2 ] }
+              ; pg_extra = [ "block/updated-at", Int64 2 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "beta"
-              ; pg_extra = [ "block/updated-at", Int 3 ] }
+              ; pg_extra = [ "block/updated-at", Int64 3 ] }
           ; blocks = [] } ]
       ()
   in
@@ -318,7 +318,7 @@ let test_all_pages_row_limit_keeps_full_count () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 1); ("beta", 2); ("gamma", 3) ])
       ()
@@ -345,7 +345,7 @@ let test_class_objects_row_limit_keeps_full_count () =
                   { default_page with
                     pg_title = Some t
                   ; pg_tags = [ "Topic" ]
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("A", 10); ("B", 20); ("C", 30) ])
       ()
@@ -372,7 +372,7 @@ let test_all_pages_row_offset_scrolled_window () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 1); ("beta", 2); ("gamma", 3); ("delta", 4) ])
       ()
@@ -403,7 +403,7 @@ let test_class_objects_row_offset_scrolled_window () =
                   { default_page with
                     pg_title = Some t
                   ; pg_tags = [ "Topic" ]
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("A", 10); ("B", 20); ("C", 30); ("D", 40) ])
       ()
@@ -441,7 +441,7 @@ let test_class_objects_id_path_bounded_many_rows () =
              { default_page with
                pg_title = Some (Printf.sprintf "Topic %d" idx)
              ; pg_tags = [ "Topic" ]
-             ; pg_extra = [ "block/updated-at", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ] }
          ; blocks = [] })
   in
   let conn =
@@ -481,7 +481,7 @@ let test_class_objects_first_window_instant () =
              { default_page with
                pg_title = Some (Printf.sprintf "Topic %d" idx)
              ; pg_tags = [ "Topic" ]
-             ; pg_extra = [ "block/updated-at", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ] }
          ; blocks = [] })
   in
   let conn =
@@ -514,26 +514,26 @@ let test_all_pages_first_window_count_hidden_filter () =
         [ { page =
               { default_page with
                 pg_title = Some "Alpha"
-              ; pg_extra = [ "block/updated-at", Int 10 ] }
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Beta"
-              ; pg_extra = [ "block/updated-at", Int 20 ] }
+              ; pg_extra = [ "block/updated-at", Int64 20 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Hidden"
               ; pg_extra =
-                  [ "block/updated-at", Int 30
+                  [ "block/updated-at", Int64 30
                   ; "logseq.property/hide?", Bool true ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Deleted"
               ; pg_extra =
-                  [ "block/updated-at", Int 40
-                  ; "logseq.property/deleted-at", Int 1 ] }
+                  [ "block/updated-at", Int64 40
+                  ; "logseq.property/deleted-at", Int64 1 ] }
           ; blocks = [] } ]
       ()
   in
@@ -562,7 +562,7 @@ let test_all_pages_count_drops_after_delete () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("Alpha", 10); ("Beta", 20); ("Gamma", 30) ])
       ()
@@ -579,7 +579,7 @@ let test_all_pages_count_drops_after_delete () =
   in
   let gamma = Option.get (find_page_by_title db "Gamma") in
   transact_maps conn
-    [ [ ("db/id", Int gamma.id); ("logseq.property/deleted-at", Int 1) ] ];
+    [ [ ("db/id", Int64 gamma.id); ("logseq.property/deleted-at", Int64 1) ] ];
   let db' = db_of conn in
   let after =
     Db_view.get_view_data db' (Some view_id)
@@ -602,7 +602,7 @@ let test_all_pages_filter_count_matches_rows () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 1); ("alpine", 2); ("beta", 3) ])
       ()
@@ -642,14 +642,14 @@ let test_all_pages_matchless_filter_clause_is_noop () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/created-at", Int ts ] }
+                  ; pg_extra = [ "block/created-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 100); ("beta", 200); ("gamma", 300) ])
       ()
   in
   let view_id = create_view_id conn "all-pages" in
   transact_maps conn
-    [ [ ("db/id", Int view_id)
+    [ [ ("db/id", Int64 view_id)
       ; ( "logseq.property.table/filters"
         , Map
             [ "or?", Bool false
@@ -672,14 +672,14 @@ let test_all_pages_before_filter_with_instant () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/created-at", Int ts ] }
+                  ; pg_extra = [ "block/created-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 100); ("beta", 200); ("gamma", 300) ])
       ()
   in
   let view_id = create_view_id conn "all-pages" in
   transact_maps conn
-    [ [ ("db/id", Int view_id)
+    [ [ ("db/id", Int64 view_id)
       ; ( "logseq.property.table/filters"
         , Map
             [ "or?", Bool false
@@ -700,7 +700,7 @@ let test_all_pages_first_window_instant () =
          { page =
              { default_page with
                pg_title = Some (Printf.sprintf "Page %d" idx)
-             ; pg_extra = [ "block/updated-at", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ] }
          ; blocks = [] })
   in
   let conn = create_conn_with_blocks ~pages_and_blocks:pages () in
@@ -728,7 +728,7 @@ let test_class_objects_small_set_sorts_eids () =
              { default_page with
                pg_title = Some (Printf.sprintf "Tag %d" idx)
              ; pg_tags = [ "Topic" ]
-             ; pg_extra = [ "block/updated-at", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ] }
          ; blocks = [] })
   in
   let conn =
@@ -763,7 +763,7 @@ let test_all_pages_first_window_no_full_sort () =
          { page =
              { default_page with
                pg_title = Some (Printf.sprintf "Page %d" idx)
-             ; pg_extra = [ "block/updated-at", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ] }
          ; blocks = [] })
   in
   let conn = create_conn_with_blocks ~pages_and_blocks:pages () in
@@ -800,22 +800,22 @@ let test_class_objects_first_window_filters_hidden () =
               { default_page with
                 pg_title = Some "Visible"
               ; pg_tags = [ "Child" ]
-              ; pg_extra = [ "block/updated-at", Int 10 ] }
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Deleted"
               ; pg_tags = [ "Child" ]
               ; pg_extra =
-                  [ "block/updated-at", Int 20
-                  ; "logseq.property/deleted-at", Int 1 ] }
+                  [ "block/updated-at", Int64 20
+                  ; "logseq.property/deleted-at", Int64 1 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Hidden"
               ; pg_tags = [ "Child" ]
               ; pg_extra =
-                  [ "block/updated-at", Int 30
+                  [ "block/updated-at", Int64 30
                   ; "logseq.property/hide?", Bool true ] }
           ; blocks = [] }
         ; { page =
@@ -826,13 +826,13 @@ let test_class_objects_first_window_filters_hidden () =
               [ { default_block with
                   b_title = Some "Nested hidden"
                 ; b_tags = [ "Child" ]
-                ; b_extra = [ "block/updated-at", Int 40 ] } ] }
+                ; b_extra = [ "block/updated-at", Int64 40 ] } ] }
         ; { page = { default_page with pg_title = Some "Visible parent" }
           ; blocks =
               [ { default_block with
                   b_title = Some "Nested visible"
                 ; b_tags = [ "Child" ]
-                ; b_extra = [ "block/updated-at", Int 50 ] } ] } ]
+                ; b_extra = [ "block/updated-at", Int64 50 ] } ] } ]
       ()
   in
   let db = db_of conn in
@@ -866,7 +866,7 @@ let test_class_objects_number_property_sort () =
                 { default_page with
                   pg_title = Some t
                 ; pg_tags = [ "Topic" ]
-                ; pg_properties = [ "user.property/score", Int s ] }
+                ; pg_properties = [ "user.property/score", Int64 s ] }
             ; blocks = [] })
          [ ("A", 2); ("B", 10); ("C", 1) ])
   in
@@ -906,8 +906,8 @@ let test_class_objects_number_sort_first_window_instant () =
              { default_page with
                pg_title = Some (Printf.sprintf "Topic %d" idx)
              ; pg_tags = [ "Topic" ]
-             ; pg_extra = [ "block/updated-at", Int idx ]
-             ; pg_properties = [ "user.property/score", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ]
+             ; pg_properties = [ "user.property/score", Int64 idx ] }
          ; blocks = [] })
   in
   let conn = topic_conn ~properties:number_prop pages in
@@ -1033,7 +1033,7 @@ let test_class_objects_number_filter_and_sort () =
                 { default_page with
                   pg_title = Some t
                 ; pg_tags = [ "Topic" ]
-                ; pg_properties = [ "user.property/score", Int s ] }
+                ; pg_properties = [ "user.property/score", Int64 s ] }
             ; blocks = [] })
          [ ("A", 2); ("B", 10); ("C", 1); ("D", 7) ])
   in
@@ -1083,7 +1083,7 @@ let test_class_objects_or_and_and_filters () =
                 { default_page with
                   pg_title = Some t
                 ; pg_tags = [ "Topic" ]
-                ; pg_properties = [ "user.property/score", Int s ] }
+                ; pg_properties = [ "user.property/score", Int64 s ] }
             ; blocks = [] })
          [ ("A", 1); ("B", 5); ("C", 9) ])
   in
@@ -1154,8 +1154,8 @@ let test_class_objects_combined_sort_filter_input () =
                          (if idx mod 2 = 0 then "Keep" else "Skip")
                          idx)
              ; pg_tags = [ "Topic" ]
-             ; pg_extra = [ "block/updated-at", Int idx ]
-             ; pg_properties = [ "user.property/score", Int idx ] }
+             ; pg_extra = [ "block/updated-at", Int64 idx ]
+             ; pg_properties = [ "user.property/score", Int64 idx ] }
          ; blocks = [] })
   in
   let conn = topic_conn ~properties:number_prop pages in
@@ -1188,7 +1188,7 @@ let test_class_objects_missing_sort_value_last () =
             { default_page with
               pg_title = Some "With score"
             ; pg_tags = [ "Topic" ]
-            ; pg_properties = [ "user.property/score", Int 3 ] }
+            ; pg_properties = [ "user.property/score", Int64 3 ] }
         ; blocks = [] }
       ; { page =
             { default_page with pg_title = Some "Without score"; pg_tags = [ "Topic" ] }
@@ -1259,7 +1259,7 @@ let test_all_pages_title_filter_and_sort () =
               { page =
                   { default_page with
                     pg_title = Some t
-                  ; pg_extra = [ "block/updated-at", Int ts ] }
+                  ; pg_extra = [ "block/updated-at", Int64 ts ] }
               ; blocks = [] })
            [ ("alpha", 1); ("alpine", 2); ("beta", 3) ])
       ()
@@ -1286,13 +1286,13 @@ let test_class_objects_sort_keeps_missing_sort_value () =
               { default_page with
                 pg_title = Some "With timestamp"
               ; pg_tags = [ "Topic" ]
-              ; pg_extra = [ "block/updated-at", Int 20 ] }
+              ; pg_extra = [ "block/updated-at", Int64 20 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Without timestamp"
               ; pg_tags = [ "Topic" ]
-              ; pg_extra = [ "block/updated-at", Int 10 ] }
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
           ; blocks = [] } ]
       ()
   in
@@ -1325,19 +1325,19 @@ let test_class_objects_row_offset_keeps_missing_sort_value () =
               { default_page with
                 pg_title = Some "With timestamp 1"
               ; pg_tags = [ "Topic" ]
-              ; pg_extra = [ "block/updated-at", Int 10 ] }
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "With timestamp 2"
               ; pg_tags = [ "Topic" ]
-              ; pg_extra = [ "block/updated-at", Int 20 ] }
+              ; pg_extra = [ "block/updated-at", Int64 20 ] }
           ; blocks = [] }
         ; { page =
               { default_page with
                 pg_title = Some "Without timestamp"
               ; pg_tags = [ "Topic" ]
-              ; pg_extra = [ "block/updated-at", Int 1 ] }
+              ; pg_extra = [ "block/updated-at", Int64 1 ] }
           ; blocks = [] } ]
       ()
   in
@@ -1412,7 +1412,7 @@ let test_class_objects_groups_by_title () =
   let class_id = ident_eid db "user.class/Topic" in
   let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/group-by-property"
+    [ op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
         (Kw "block/title") ];
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
@@ -1457,7 +1457,7 @@ let test_class_objects_groups_by_many_values () =
   let class_id = ident_eid db "user.class/Topic" in
   let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/group-by-property"
+    [ op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
         (Kw "block/tags") ];
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
@@ -1565,7 +1565,7 @@ let test_all_pages_groups_by_context_tags () =
   in
   str_list_eq' "desc default" (order_of result) [ "Topic"; "Project" ];
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/sort-groups-desc?"
+    [ op_db_add (Int64 view_id) "logseq.property.view/sort-groups-desc?"
         (Bool false) ];
   let result2 = Db_view.get_view_data (db_of conn) (Some view_id) option in
   str_list_eq' "asc order" (order_of result2) [ "Project"; "Topic" ]
@@ -1596,10 +1596,10 @@ let test_group_sort_ref_values_readable_keys () =
   let page_property = ident_eid db "block/page" in
   let tags_property = ident_eid db "block/tags" in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/group-by-property"
-        (Int page_property)
-    ; op_db_add (Int view_id) "logseq.property.view/sort-groups-by-property"
-        (Int tags_property) ];
+    [ op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
+        (Int64 page_property)
+    ; op_db_add (Int64 view_id) "logseq.property.view/sort-groups-by-property"
+        (Int64 tags_property) ];
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
       (opts [ "view-feature-type", kw "class-objects"
@@ -1637,9 +1637,9 @@ let test_list_view_one_row_shape () =
   let class_id = ident_eid db "user.class/Topic" in
   let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/group-by-property"
+    [ op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
         (Kw "block/page")
-    ; op_db_add (Int view_id) "logseq.property.view/type"
+    ; op_db_add (Int64 view_id) "logseq.property.view/type"
         (Kw "logseq.property.view/type.list") ];
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
@@ -1685,7 +1685,7 @@ let test_linked_references_no_crash_missing_ident () =
   let db = db_of conn in
   let foo_id = eid_of_title db "Foo" in
   let bar_id = eid_of_title db "Bar" in
-  transact_maps conn [ op_db_add (Int bar_id) "block/refs" (Int foo_id) ];
+  transact_maps conn [ op_db_add (Int64 bar_id) "block/refs" (Int64 foo_id) ];
   let view_id = create_view_id conn ~view_for_id:foo_id "linked-references" in
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
@@ -1710,10 +1710,10 @@ let test_groups_page_level_linked_references () =
   let referring_uuid = uuid_of referring in
   let view_id = create_view_id conn ~view_for_id:target_id "linked-references" in
   transact_maps conn
-    [ op_db_add (Int referring.id) "block/refs" (Int target_id)
-    ; op_db_add (Int view_id) "logseq.property.view/type"
+    [ op_db_add (Int64 referring.id) "block/refs" (Int64 target_id)
+    ; op_db_add (Int64 view_id) "logseq.property.view/type"
         (Kw "logseq.property.view/type.list")
-    ; op_db_add (Int view_id) "logseq.property.view/group-by-property"
+    ; op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
         (Kw "block/page") ];
   let result =
     Db_view.get_view_data (db_of conn) (Some view_id)
@@ -1804,7 +1804,7 @@ let test_class_objects_groups_by_number_sorts_numerically () =
                   { default_page with
                     pg_title = Some t
                   ; pg_tags = [ "Topic" ]
-                  ; pg_properties = [ "user.property/score", Int s ] }
+                  ; pg_properties = [ "user.property/score", Int64 s ] }
               ; blocks = [] })
            [ ("A", 2); ("B", 10); ("C", 1) ])
       ()
@@ -1813,7 +1813,7 @@ let test_class_objects_groups_by_number_sorts_numerically () =
   let class_id = ident_eid db "user.class/Topic" in
   let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/group-by-property"
+    [ op_db_add (Int64 view_id) "logseq.property.view/group-by-property"
         (Kw "user.property/score") ];
   let opt =
     opts [ "view-feature-type", kw "class-objects"
@@ -1839,7 +1839,7 @@ let test_class_objects_groups_by_number_sorts_numerically () =
   in
   let desc_groups = groups (Db_view.get_view_data (db_of conn) (Some view_id) opt) in
   transact_maps conn
-    [ op_db_add (Int view_id) "logseq.property.view/sort-groups-desc?"
+    [ op_db_add (Int64 view_id) "logseq.property.view/sort-groups-desc?"
         (Bool false) ];
   let asc_groups =
     groups (Db_view.get_view_data (db_of conn) (Some view_id) opt)

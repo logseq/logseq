@@ -88,7 +88,7 @@ let fsrs_card_block_ids db (cards_id : Wire.t) ~(due_only : bool) : Wire.t =
     (List.filter_map
        (function
          | [ Result_entity id ] -> Some (Wire.Int id)
-         | [ Result_value (Int id) ] -> Some (Wire.Int id)
+         | [ Result_value (Int64 id) ] -> Some (Ds_wire.wire_int64 id)
          | _ -> None)
        rows)
 

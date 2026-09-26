@@ -96,7 +96,8 @@ let fix_invalid_blocks (conn : conn)
   let db = Conn.db conn in
   let entity_id_of (ge : Db_validate.grouped_error) : entity_id option =
     match Malli.map_get "db/id" ge.ge_entity with
-    | Some (Int id) | Some (Ref id) -> Some id
+    | Some (Ref id) -> Some id
+    | Some (Int64 id) -> Datascript.Util.int64_to_int id
     | _ -> None
   in
   let fix_tx_data =
@@ -579,8 +580,12 @@ let validate_db_result (db : db) : db_result =
     List.fold_left
       (fun acc (ge : Db_validate.grouped_error) ->
         match Malli.map_get "db/id" ge.ge_entity with
-        | Some (Int id) | Some (Ref id) ->
+        | Some (Ref id) ->
             if List.mem id acc then acc else acc @ [ id ]
+        | Some (Int64 id) -> (
+            match Datascript.Util.int64_to_int id with
+            | Some id -> if List.mem id acc then acc else acc @ [ id ]
+            | None -> acc)
         | _ -> acc)
       [] r.errors
   in
@@ -594,7 +599,8 @@ let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
     (fun (ge : Db_validate.grouped_error) ->
       Printf.eprintf "validation error entity: %d errors: %d\n%!"
         (match Malli.map_get "db/id" ge.ge_entity with
-         | Some (Int i) | Some (Ref i) -> i
+         | Some (Ref i) -> i
+         | Some (Int64 i) -> Option.value (Datascript.Util.int64_to_int i) ~default:(-1)
          | _ -> -1)
         (List.length ge.ge_errors))
     errors

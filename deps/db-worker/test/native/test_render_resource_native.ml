@@ -66,8 +66,8 @@
      view-data-resource-returns-...-sibling-views).
    - view-data for a :query-result view does not emit :properties maps
      (query-view-data-resource-...-property-maps-test).
-   - result_arg wraps scalar Int query inputs as Result_entity — a
-     [:in $ ?x] Int input renders as {db/id n} instead of the scalar
+   - result_arg wraps scalar Int64 query inputs as Result_entity — a
+     [:in $ ?x] Int64 input renders as {db/id n} instead of the scalar
      (query-resource-preserves-scalar-inputs).
    - pull result maps include :db/id that cljs pull omits
      (query-resource-keeps-pull-map-...).
@@ -108,7 +108,7 @@ let rec wire_of_form (f : query_form) : Wire.t =
   match f with
   | QueryFormNil -> Wire.Nil
   | QueryFormBool b -> Wire.Bool b
-  | QueryFormInt n -> Wire.Int n
+  | QueryFormInt n -> Wire.Int64 n
   | QueryFormFloat x -> Wire.Float x
   | QueryFormString s -> Wire.String s
   | QueryFormKeyword s -> Wire.Keyword s

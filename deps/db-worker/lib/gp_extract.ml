@@ -339,7 +339,7 @@ let build_pages_aux db (page_map : Block_map.t) (ref_pages : value list)
       let bm = Clj_value.map_entries_named page in
       let page_id =
         match Block_map.attr_value bm "block/journal-day" with
-        | Some (Int day) -> Common_uuid.gen_journal_page_uuid day
+        | Some (Int64 day) -> Common_uuid.gen_journal_page_uuid (Datascript.Util.int64_to_int_exn "journal-day" day)
         | _ ->
           (match
              (match Block_map.attr_value bm "block/name" with
@@ -541,8 +541,11 @@ let with_block_uuid (pages : Block_map.t list) : Block_map.t list =
   |> List.map
        (fun page ->
          match Block_map.attr_value page "block/journal-day" with
-         | Some (Int day) ->
-           Block_map.put page "block/uuid" (Uuid (Common_uuid.gen_journal_page_uuid day))
+         | Some (Int64 day) ->
+           Block_map.put page "block/uuid"
+           (Uuid
+              (Common_uuid.gen_journal_page_uuid
+                 (Datascript.Util.int64_to_int_exn "journal-day" day)))
          | _ ->
            (match Block_map.attr_value page "block/uuid" with
             | Some _ -> page

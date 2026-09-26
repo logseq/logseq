@@ -65,7 +65,7 @@ let validate_tx_report ~(closed_schema : bool) (db_after : db)
       in
       let ent_maps_star =
         List.map
-          (fun (eid, m) -> m @ [ ("db/id", Int eid) ])
+          (fun (eid, m) -> m @ [ ("db/id", Int64 (Int64.of_int eid)) ])
           (datoms_to_entity_maps ~entity_fn tx_datoms)
       in
       let ent_maps = update_properties_in_ents db_after ent_maps_star in
@@ -134,7 +134,7 @@ let group_errors_by_entity (db : db) (ent_maps : ent_map list)
     (fun (e : Malli.error) ->
       let key =
         match e.e_in with
-        | Int i :: _ -> i
+        | Int64 i :: _ -> Option.value (Datascript.Util.int64_to_int i) ~default:(-1)
         | _ -> -1
       in
       if not (Hashtbl.mem groups key) then
@@ -150,7 +150,7 @@ let group_errors_by_entity (db : db) (ent_maps : ent_map list)
       in
       let ent' =
         match Db_malli_schema.mget "block/page" ent with
-        | Some (Ref pid | Int pid) ->
+        | Some (Ref pid) ->
             let page_ent = Ldb.ent_of_id db pid in
             let page_map =
               match page_ent with

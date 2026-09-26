@@ -44,7 +44,8 @@ let get_blocks_and_pages (r : tx_report) : entity list * entity list =
     List.filter_map
       (fun k ->
         match Db_tx.tx_meta_lookup r.tx_meta k with
-        | Some (Ref n) | Some (Int n) -> Some n
+        | Some (Ref n) -> Some n
+        | Some (Int64 n) -> Datascript.Util.int64_to_int n
         | _ -> None)
       [ "from-page"; "target-page" ]
   in

@@ -27,7 +27,7 @@ let add_rtc_log type' m =
              kvs
            @ [ Wire.Keyword "type", Wire.Keyword type'
              ; Wire.Keyword "created-at"
-             , Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ())) ])
+             , Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ())) ])
     | _ -> invalid_arg "rtc-log: m must be a map"
   in
   rtc_log := entry;

@@ -222,7 +222,7 @@ let test_repairs_set_wrapped_single_property_values () =
        ignore
          (with_transact_pipeline (fun () ->
               Db_tx.transact conn
-                [ Add (Entity_id comments.id, "block/tx-id", Int 7) ]));
+                [ Add (Entity_id comments.id, "block/tx-id", Int64 7L) ]));
        false
      with Db_tx.Invalid_tx _ -> true);
   ignore
@@ -249,7 +249,7 @@ let test_repairs_set_wrapped_single_property_values () =
        ignore
          (with_transact_pipeline (fun () ->
               Db_tx.transact conn
-                [ Add (Entity_id comments.id, "block/tx-id", Int 8) ]));
+                [ Add (Entity_id comments.id, "block/tx-id", Int64 8L) ]));
        true
      with _ -> false)
 
@@ -271,11 +271,12 @@ let with_validate_tx_report (f : unit -> 'a) : 'a =
     ~finally:(fun () -> Db_tx.validate_tx_report_fn := before)
     f
 
-(* Instant doubles as the int64 scalar rep: epoch-ms values
-   (block/created-at, updated-at, tx-id) exceed int32 on melange and
-   decode from kvs storage/transit as Instant (datascript-ocaml
-   datascript_melange_storage.ml). A tx touching a restored entity must
-   not fail validate-tx-report on its :int attrs. *)
+(* Legacy kvs data stored epoch-ms scalars (block/created-at,
+   updated-at) as Instant (~m). On open, worker-db-fix/heal-instant-values
+   rewrites them to Int64 (the numeric rep cljs stores); only real
+   instant attrs (file/created-at, file/last-modified-at) keep Instant.
+   After the heal a tx touching the entity must not fail
+   validate-tx-report on its scalar attrs. *)
 let test_instant_scalar_attrs_validate_as_int () =
   let open Db_test_util in
   let conn =
@@ -286,24 +287,28 @@ let test_instant_scalar_attrs_validate_as_int () =
       ()
   in
   let block = Option.get (find_block_by_content (db_of conn) "b1") in
+  let legacy_db = Datascript.db conn in
+  (* plant legacy-Instant scalars directly as raw datoms *)
+  ignore
+    (Datascript.transact_bang conn
+       [ Raw_datom
+           (Datascript.datom ~e:block.id ~a:"block/created-at"
+              ~v:(Instant 1790330703454L) ~tx:(legacy_db.max_tx + 1) ())
+       ; Raw_datom
+           (Datascript.datom ~e:block.id ~a:"block/updated-at"
+              ~v:(Instant 1790330703454L) ~tx:(legacy_db.max_tx + 1) ()) ]);
+  Worker_db_fix.heal_instant_values conn;
   with_validate_tx_report (fun () ->
-      (* the rep timestamps carry after a kvs persist/restore *)
-      ignore
-        (Db_tx.transact conn
-           [ Add
-               (Entity_id block.id, "block/created-at",
-                Instant 1790330703454L)
-           ; Add
-               (Entity_id block.id, "block/updated-at",
-                Instant 1790330703454L) ]);
-      (* a later tx touching the entity pulls the stored Instant datoms
-         into the validated entity-map (the reported failure shape) *)
+      (* a tx touching the entity pulls the healed Int64 datoms into
+         the validated entity-map (the reported failure shape) *)
       ignore
         (Db_tx.transact conn
            [ Add (Entity_id block.id, "block/title", String "b1'") ]));
   let e = ent_of_ref_exn (db_of conn) (Entity_id block.id) in
-  check "instant created-at stored"
-    (Ldb.value e "block/created-at" = Some (Instant 1790330703454L));
+  check "created-at healed to Int64"
+    (Ldb.value e "block/created-at" = Some (Int64 1790330703454L));
+  check "updated-at healed to Int64"
+    (Ldb.value e "block/updated-at" = Some (Int64 1790330703454L));
   check "title updated"
     (Ldb.string_value e "block/title" = Some "b1'")
 

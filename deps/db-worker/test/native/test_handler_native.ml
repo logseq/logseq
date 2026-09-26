@@ -1320,15 +1320,15 @@ let test_block_property_keys_include_own_and_class () =
   let plain = block_by_content db "plain" in
   let gb opts = Endpoint_block.opts_of_wire (kwm opts) in
   let own_map =
-    Endpoint_block.get_block_and_children db (Int with_own.id)
+    Endpoint_block.get_block_and_children db (Int64 (Int64.of_int with_own.id))
       (gb [ "children?", Wire.Bool false ])
   in
   let class_map =
-    Endpoint_block.get_block_and_children db (Int with_class.id)
+    Endpoint_block.get_block_and_children db (Int64 (Int64.of_int with_class.id))
       (gb [ "children?", Wire.Bool false ])
   in
   let plain_map =
-    Endpoint_block.get_block_and_children db (Int plain.id)
+    Endpoint_block.get_block_and_children db (Int64 (Int64.of_int plain.id))
       (gb [ "children?", Wire.Bool false ])
   in
   let property_keys (m : Wire.t) : string list =
@@ -1515,7 +1515,7 @@ let test_get_block_and_children_positions_default_task_status () =
   let task_only = block_by_content db "task only" in
   let plain = block_by_content db "plain" in
   let gb_result (e : entity) =
-    Endpoint_block.get_block_and_children db (Int e.id)
+    Endpoint_block.get_block_and_children db (Int64 (Int64.of_int e.id))
       (Endpoint_block.opts_of_wire
          (kwm
             [ "children?", Wire.Bool false; "render-data?", Wire.Bool true ]))

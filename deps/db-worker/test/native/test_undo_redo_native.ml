@@ -595,7 +595,7 @@ let find_inserted_a_id db template_root_uuid : entity_id option =
       ~inputs:[ Arg_scalar (Result_value (Uuid template_root_uuid)) ]
   with
   | [ [ Result_entity id ] ] -> Some id
-  | [ [ Result_value (Int id) ] ] -> Some id
+  | [ [ Result_value (Int64 id) ] ] -> Datascript.Util.int64_to_int id
   | _ -> None
 
 (* cljs apply-ops! with explicit tx-meta via wire opts *)
@@ -1003,7 +1003,7 @@ let test_undo_history_canonicalizes_insert_block_uuids () =
             ~inputs:[ Arg_scalar (Result_value (String "semantic insert")) ]
         with
         | [ [ Result_entity id ] ] -> id
-        | [ [ Result_value (Int id) ] ] -> id
+        | [ [ Result_value (Int64 id) ] ] -> Datascript.Util.int64_to_int_exn "entity id" id
         | _ -> failwith "inserted not found"
       in
       let inserted_uuid =

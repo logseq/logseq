@@ -164,7 +164,7 @@ let page_exists_ids db (page_name : string) (tag_idents : string list)
          attr)
     |> List.filter_map (function
          | [ Result_entity id ] -> Some id
-         | [ Result_value (Int id) ] -> Some id
+         | [ Result_value (Int64 id) ] -> Datascript.Util.int64_to_int id
          | _ -> None)
 
 (* ---------- gp-block page-name->map ---------- *)
@@ -281,7 +281,7 @@ let page_name_string_to_map (original_page_name : string) db
   in
   let base =
     if with_timestamp && Option.is_none page_entity then
-      let now = Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ())) in
+      let now = Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ())) in
       Cljs_map.assoc_list base
         [ "block/created-at", now; "block/updated-at", now ]
     else base
@@ -363,7 +363,7 @@ let existing_class_for_title db (title : string) : entity option =
   | [] -> None
 
 (* outliner-page/resolve-create-page-tag — tag is a Wire.t: Uuid, Keyword
-   (db ident), Int id, or Map. Returns db id (Int), Keyword ident, or a
+   (db ident), Int64 id, or Map. Returns db id (Int), Keyword ident, or a
    build-new-class map. *)
 let resolve_create_page_tag db (tag : Wire.t) : Wire.t =
   let entity_of_tag =
@@ -1320,13 +1320,13 @@ let delete_conn (conn : conn) (page_uuid : string) (opts : Wire.t) : Wire.t =
       let db = Datascript.db conn in
       let today_page =
         match Ldb.value page "block/journal-day" with
-        | Some (Int day) ->
+        | Some (Int64 day) ->
             let now =
               match now_ms with
               | Some ms -> ms
               | None -> Date_time_util.time_ms ()
             in
-            Date_time_util.ms_to_journal_day now = day
+            Int64.equal (Int64.of_int (Date_time_util.ms_to_journal_day now)) day
         | _ -> false
       in
       let deleted_title =

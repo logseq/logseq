@@ -121,7 +121,7 @@ let ent_of_value db (v : value) : entity option =
 
 let string_of_value (v : value) : string =
   match v with
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Float f -> Common_util.js_string_of_float f
   | String s -> s
   | Bool b -> string_of_bool b
@@ -139,12 +139,12 @@ let journal_day_title day (ctx : context) : string =
 
 let datetime_value_to_string (v : value) (ctx : context) : string option =
   match v with
-  | Int n when n >= 10000101 && n <= 99991231 -> Some (journal_day_title n ctx)
-  | Int n when n >= 100000000000 ->
+  | Int64 n when n >= 10000101L && n <= 99991231L ->
+      Some (journal_day_title (Int64.to_int n) ctx)
+  | Int64 n when n >= 100000000000L ->
       let y, m, d, h, mi, _, _ =
         Time.civil_fields
-          (Time.civil_of_epoch_ms (Time.local_tz ())
-             (Time.epoch_ms (Int64.of_int n)))
+          (Time.civil_of_epoch_ms (Time.local_tz ()) (Time.epoch_ms n))
       in
       let day = (y * 10000) + (m * 100) + d in
       Some (Printf.sprintf "%s %02d:%02d" (journal_day_title day ctx) h mi)
@@ -196,7 +196,7 @@ let rec property_value_to_string db (property : entity) (v : value) (ctx : conte
             | None -> Some (node_ref ""))
        | None -> Some "")
   | Keyword k -> Some k
-  | Int _ | Float _ | Instant _ ->
+  | Int64 _ | Float _ | Instant _ ->
       if property_type property = Some "datetime" then
         (match datetime_value_to_string v ctx with
          | Some s -> Some s
@@ -409,7 +409,7 @@ and indented_block_content content spaces =
 
 and bounded_heading_level (heading : value option) level =
   match heading with
-  | Some (Int n) -> Some (max 1 (min 6 n))
+  | Some (Int64 n) -> Datascript.Util.int64_to_int n |> Option.map (fun n -> max 1 (min 6 n))
   | Some (Bool true) -> Some (min (level + 1) 6)
   | _ -> None
 
@@ -487,7 +487,12 @@ and transform_content db (b : entity) level ~heading_to_list ~include_properties
   in
   let level =
     if heading_to_list then
-      match heading with Some (Int n) -> if n > 1 then n - 1 else n | _ -> level
+      match heading with
+      | Some (Int64 n) -> (
+          match Datascript.Util.int64_to_int n with
+          | Some n -> if n > 1 then n - 1 else n
+          | None -> level)
+      | _ -> level
     else level
   in
   let spaces =

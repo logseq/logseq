@@ -102,7 +102,7 @@ let get_aliases_for_page_ids (db : db) (page_ids : entity_id list) : IntSet.t =
   else
     q_string db
       ~inputs:
-        [ Arg_scalar (Result_value (Set (List.map (fun i -> Int i) page_ids)))
+        [ Arg_scalar (Result_value (Set (List.map (fun i -> Int64 (Int64.of_int i)) page_ids)))
         ; alias_rules () ]
       "[:find [?e ...]
         :in $ ?pages %
@@ -118,7 +118,7 @@ let cljs_str = function
   | String s -> s
   | Keyword s -> ":" ^ s
   | Uuid s -> s
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Bool b -> if b then "true" else "false"
   | _ -> "nil"
 
@@ -148,7 +148,7 @@ let add_missing_built_in_block_timestamps (db : db) : db =
          let created_at =
            match Ldb.value e "block/created-at" with
            | Some v -> v
-           | None -> Option.value ~default:(Int 0) (Ldb.value e "block/updated-at")
+           | None -> Option.value ~default:(Int64 0L) (Ldb.value e "block/updated-at")
          in
          let updated_at =
            match Ldb.value e "block/updated-at" with

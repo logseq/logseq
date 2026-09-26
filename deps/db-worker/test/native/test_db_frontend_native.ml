@@ -174,7 +174,7 @@ let test_get_class_objects_filters_hidden_objects () =
           { page =
               { default_page with
                 pg_title = Some "Deleted"; pg_tags = [ "Child" ];
-                pg_extra = [ "logseq.property/deleted-at", Int 1 ] };
+                pg_extra = [ "logseq.property/deleted-at", Int64 1 ] };
             blocks = [] };
           { page =
               { default_page with
@@ -220,7 +220,7 @@ let test_get_class_objects_includes_hide_by_default_properties () =
   let deleted = ident_ent_exn db "user.property/deleted-prop" in
   ignore
     (Datascript.transact_conn conn
-       [ Add (Entity_id deleted.id, "logseq.property/deleted-at", Int 1) ]);
+       [ Add (Entity_id deleted.id, "logseq.property/deleted-at", Int64 1L) ]);
   let db = db_of conn in
   let property_class_id = (ident_ent_exn db "logseq.class/Property").id in
   let titles =
@@ -486,7 +486,7 @@ let test_reaction_entity_valid () =
            ; attrs =
                [ "block/uuid", One_value (Uuid (gen_uuid ()))
                ; "block/created-at",
-                 One_value (Int (Int64.to_int (Time.epoch_ms_to_int64 (Time.now ()))))
+                 One_value (Int64 (Time.epoch_ms_to_int64 (Time.now ())))
                ; "logseq.property.reaction/emoji-id",
                  One_value (String "+1")
                ; "logseq.property.reaction/target",
@@ -595,11 +595,14 @@ let test_normalize_block_order_tx_data () =
         | Map pairs ->
             (match List.assoc_opt (Keyword "db/id") pairs,
                    List.assoc_opt (Keyword "block/order") pairs with
-             | Some (Int id), Some (String o) ->
-                 Some
-                   (Entity
-                      { db_id = Some (Entity_id id)
-                      ; attrs = [ "block/order", One_value (String o) ] })
+             | Some (Int64 id), Some (String o) -> (
+                 match Datascript.Util.int64_to_int id with
+                 | Some id ->
+                     Some
+                       (Entity
+                          { db_id = Some (Entity_id id)
+                          ; attrs = [ "block/order", One_value (String o) ] })
+                 | None -> None)
              | _ -> None)
         | _ -> None)
       tx_data
@@ -684,7 +687,7 @@ let rules_fixture () =
               pg_title = Some "Page1";
               pg_properties =
                 [ "foo", Str "bar";
-                  "number-many", Set_ [ Int 5; Int 10 ];
+                  "number-many", Set_ [ Int64 5; Int64 10 ];
                   "page-many",
                   Set_ [ Vec [ Kw "build/page"; Map [ "block/title", Str "Page A" ] ] ] ] };
           blocks = [] };
@@ -820,8 +823,8 @@ let property_rule_assertions ~rule_name (db : db) =
      = List.sort compare
          [ "block/tags", String "Page";
            "user.property/foo", String "bar";
-           "user.property/number-many", Int 5;
-           "user.property/number-many", Int 10;
+           "user.property/number-many", Int64 5L;
+           "user.property/number-many", Int64 10L;
            "user.property/page-many", String "Page A" ]);
   check (rule_name ^ " chains on property value")
     (sort_uniq
@@ -879,7 +882,7 @@ let test_tags () =
                       (List.map fst Db_query_dsl.db_query_dsl_rules));
                  (* cljs passes #{person-eid} — a set of eids bound to scalar
                     ?tag-ids; (number? ?spec) picks them up in tag-spec->tag *)
-                 Arg_scalar (Result_value (Set [ Int person_eid ])) ]
+                 Arg_scalar (Result_value (Set [ Int64 (Int64.of_int person_eid) ])) ]
              "[:find (pull ?b [:block/title]) :in $ % ?tag-ids :where (tags ?b ?tag-ids)]"))
      = expected);
   check "tags query with db/ident"

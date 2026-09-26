@@ -834,7 +834,10 @@ let () =
              List.filter_map
                (fun (br : Search_index.block_result) ->
                   match List.assoc_opt "db/id" br with
-                  | Some (Datascript.Int id) -> Ldb.ent_of_id db id
+                  | Some (Datascript.Int64 id) -> (
+                      match Datascript.Util.int64_to_int id with
+                      | Some id -> Ldb.ent_of_id db id
+                      | None -> None)
                   | _ -> None)
                rows
          | None -> [])

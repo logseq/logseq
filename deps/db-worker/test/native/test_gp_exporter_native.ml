@@ -305,8 +305,11 @@ let find_block_by_content' (db : db) (cm : content_match) : entity option =
         )
   in
   match Datascript.q_string ~inputs:[ Arg_scalar input ] db q with
-  | (Result_entity id :: _) :: _ | (Result_value (Int id) :: _) :: _ ->
-      Ldb.ent_of_id db id
+  | (Result_entity id :: _) :: _ -> Ldb.ent_of_id db id
+  | (Result_value (Int64 id) :: _) :: _ -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> Ldb.ent_of_id db id
+      | None -> None)
   | _ -> None
 
 (* string find — cljs (db-test/find-block-by-content db "x") *)
@@ -441,7 +444,7 @@ let q_eids (db : db) (q : string) : entity_id list =
   List.filter_map
     (function
       | [ Result_entity id ] -> Some id
-      | [ Result_value (Int id) ] -> Some id
+      | [ Result_value (Int64 id) ] -> Datascript.Util.int64_to_int id
       | _ -> None)
     (Datascript.q_string db q)
 
@@ -452,7 +455,7 @@ let q_eids_in (db : db) (q : string) (inputs : value list) : entity_id list =
   List.filter_map
     (function
       | [ Result_entity id ] -> Some id
-      | [ Result_value (Int id) ] -> Some id
+      | [ Result_value (Int64 id) ] -> Datascript.Util.int64_to_int id
       | _ -> None)
     (Datascript.q_string db
        ~inputs:(List.map (fun v -> Arg_scalar (Result_value v)) inputs)
@@ -466,7 +469,7 @@ let q_values (db : db) (q : string) : value list =
   List.filter_map
     (function
       | [ Result_value v ] -> Some v
-      | [ Result_entity id ] -> Some (Int id)
+      | [ Result_entity id ] -> Some (Int64 (Int64.of_int id))
       | [ Result_attr a ] -> Some (Keyword a)
       | _ -> None)
     (Datascript.q_string db q)
@@ -475,7 +478,7 @@ let q_values_in (db : db) (q : string) (inputs : value list) : value list =
   List.filter_map
     (function
       | [ Result_value v ] -> Some v
-      | [ Result_entity id ] -> Some (Int id)
+      | [ Result_entity id ] -> Some (Int64 (Int64.of_int id))
       | [ Result_attr a ] -> Some (Keyword a)
       | _ -> None)
     (Datascript.q_string db
@@ -490,7 +493,7 @@ let q_scalar_in (db : db) (q : string) (inputs : value list) : value option =
       q
   with
   | [ [ Result_value v ] ] -> Some v
-  | [ [ Result_entity id ] ] -> Some (Int id)
+  | [ [ Result_entity id ] ] -> Some (Int64 (Int64.of_int id))
   | [ [ Result_attr a ] ] -> Some (Keyword a)
   | [ [ Result_pull p ] ] -> Some (Tuple []) (* unused *)
   | _ -> None
@@ -547,7 +550,7 @@ let find_block_by_property (db : db) (property : string) : entity list =
   List.filter_map
     (function
       | [ Result_entity id ] -> Ldb.ent_of_id db id
-      | [ Result_value (Int id) ] -> Ldb.ent_of_id db id
+      | [ Result_value (Int64 id) ] -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
       | _ -> None)
     (Datascript.q_string db
        ~inputs:
@@ -569,7 +572,7 @@ let find_block_by_property_value (db : db) (property : string)
       List.find_map
         (function
           | [ Result_entity id ] -> Ldb.ent_of_id db id
-          | [ Result_value (Int id) ] -> Ldb.ent_of_id db id
+          | [ Result_value (Int64 id) ] -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
           | _ -> None)
         rows
 
@@ -750,7 +753,7 @@ let rec value_repr (v : value) : string =
   | Keyword s -> ":" ^ s
   | Symbol s -> "'" ^ s
   | Uuid s -> "#uuid \"" ^ s ^ "\""
-  | Int n -> string_of_int n
+  | Int64 n -> Int64.to_string n
   | Float f -> string_of_float f
   | Bool b -> string_of_bool b
   | Nil -> "nil"
@@ -855,7 +858,7 @@ let read_and_copy_asset ~(asset_ids : string list ref) (file : BM.t)
    | Some name ->
        Hashtbl.replace assets name
          (with_edn_content
-            [ ("size", Int (String.length buffer)); ("type", String asset_type)
+            [ ("size", Int64 (Int64.of_int (String.length buffer))); ("type", String asset_type)
             ; ("path", String path); ("checksum", String checksum)
             ; ("asset-id", Uuid asset_id) ])
    | None -> ());
@@ -1315,7 +1318,7 @@ let local_hhmm (ms : int64) : int * int =
    ~t-decoded data *)
 let ms_of_value (v : value) : int64 option =
   match v with
-  | Int n -> Some (Int64.of_int n)
+  | Int64 n -> Some n
   | Float f -> Some (Int64.of_float f)
   | Instant ms -> Some ms
   | _ -> None
@@ -1418,7 +1421,7 @@ let test_import_repeated_deadline_and_scheduled () =
            Keyword "logseq.property/scheduled" )
        ; ( Keyword "logseq.property.repeat/repeat-type",
            Keyword "logseq.property.repeat/repeat-type.dotted-plus" )
-       ; Keyword "logseq.property.repeat/recur-frequency", Int 1
+       ; Keyword "logseq.property.repeat/recur-frequency", Int64 1L
        ; ( Keyword "logseq.property.repeat/recur-unit",
            Keyword "logseq.property.repeat/recur-unit.year" ) ])
     (Map
@@ -1440,7 +1443,7 @@ let test_import_repeated_deadline_and_scheduled () =
           ( a,
             match ms_of_value v with
             | Some ms ->
-                (Int (Date_time_util.ms_to_journal_day ms) : value)
+                (Int64 (Int64.of_int (Date_time_util.ms_to_journal_day ms)) : value)
             | None -> v )
         else (a, v))
       m
@@ -1455,13 +1458,13 @@ let test_import_repeated_deadline_and_scheduled () =
   check_v
     "Repeated deadline timestamp keeps its repeat properties including the `+` cookie kind"
     (Map
-       [ Keyword "logseq.property/deadline", Int 20251107
+       [ Keyword "logseq.property/deadline", Int64 20251107L
        ; Keyword "logseq.property.repeat/repeated?", Bool true
        ; ( Keyword "logseq.property.repeat/temporal-property",
            Keyword "logseq.property/deadline" )
        ; ( Keyword "logseq.property.repeat/repeat-type",
            Keyword "logseq.property.repeat/repeat-type.plus" )
-       ; Keyword "logseq.property.repeat/recur-frequency", Int 2
+       ; Keyword "logseq.property.repeat/recur-frequency", Int64 2L
        ; ( Keyword "logseq.property.repeat/recur-unit",
            Keyword "logseq.property.repeat/recur-unit.week" ) ])
     (sel
@@ -1475,14 +1478,14 @@ let test_import_repeated_deadline_and_scheduled () =
   check_v
     "Mixed deadline and scheduled timestamps keep both dates and the repeated temporal property"
     (Map
-       [ Keyword "logseq.property/deadline", Int 20251108
-       ; Keyword "logseq.property/scheduled", Int 20251107
+       [ Keyword "logseq.property/deadline", Int64 20251108L
+       ; Keyword "logseq.property/scheduled", Int64 20251107L
        ; Keyword "logseq.property.repeat/repeated?", Bool true
        ; ( Keyword "logseq.property.repeat/temporal-property",
            Keyword "logseq.property/scheduled" )
        ; ( Keyword "logseq.property.repeat/repeat-type",
            Keyword "logseq.property.repeat/repeat-type.dotted-plus" )
-       ; Keyword "logseq.property.repeat/recur-frequency", Int 1
+       ; Keyword "logseq.property.repeat/recur-frequency", Int64 1L
        ; ( Keyword "logseq.property.repeat/recur-unit",
            Keyword "logseq.property.repeat/recur-unit.week" ) ])
     (sel
@@ -1760,7 +1763,7 @@ let test_import_converts_markdown_headings_to_db_heading_metadata () =
                    "#"))
              "";
            check_v (title ^ " heading level is " ^ string_of_int level)
-             (Int level)
+             (Int64 (Int64.of_int level))
              (Option.value ~default:Nil
                 (getv' b "logseq.property/heading"))
              ""
@@ -1797,7 +1800,7 @@ let test_import_converts_markdown_headings_to_db_heading_metadata () =
   eq "heading:: true keeps the title without markdown markers"
     "Auto heading"
     (Option.value ~default:"" (get_string' auto "block/title")) "";
-  check_v "heading:: 3 imports as heading level 3" (Int 3)
+  check_v "heading:: 3 imports as heading level 3" (Int64 3L)
     (Option.value ~default:Nil (getv' numbered "logseq.property/heading"))
     "";
   eq "heading:: 3 keeps the title without markdown markers"
@@ -1806,7 +1809,7 @@ let test_import_converts_markdown_headings_to_db_heading_metadata () =
   eq "Task heading titles are stored without markdown heading markers"
     "task heading"
     (Option.value ~default:"" (get_string' task "block/title")) "";
-  check_v "Task heading keeps heading level from markdown syntax" (Int 2)
+  check_v "Task heading keeps heading level from markdown syntax" (Int64 2L)
     (Option.value ~default:Nil (getv' task "logseq.property/heading")) "";
   check_v "Task heading still imports as a TODO task"
     (Keyword "logseq.property/status.todo")
@@ -1814,7 +1817,7 @@ let test_import_converts_markdown_headings_to_db_heading_metadata () =
   eq "Parent heading title is stored without markdown heading markers"
     "Parent heading"
     (Option.value ~default:"" (get_string' parent "block/title")) "";
-  check_v "Parent heading level is imported" (Int 2)
+  check_v "Parent heading level is imported" (Int64 2L)
     (Option.value ~default:Nil (getv' parent "logseq.property/heading")) "";
   check "Heading parent keeps its children"
     (List.filter_map
@@ -2551,7 +2554,7 @@ let test_import_linked_file_pdf_annotations () =
        [ ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] )
        ; Keyword "logseq.property/asset", String "Linked Paper"
-       ; Keyword "logseq.property.pdf/hl-page", Int 3 ])
+       ; Keyword "logseq.property.pdf/hl-page", Int64 3L ])
     (props_select
        [ "block/tags"; "logseq.property/asset"
        ; "logseq.property.pdf/hl-page" ]
@@ -2562,7 +2565,7 @@ let test_import_linked_file_pdf_annotations () =
        [ ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] )
        ; Keyword "logseq.property/asset", String "Linked Paper"
-       ; Keyword "logseq.property.pdf/hl-page", Int 4
+       ; Keyword "logseq.property.pdf/hl-page", Int64 4L
        ; Keyword "logseq.property.pdf/hl-image", String "pdf area highlight"
        ; Keyword "logseq.property.pdf/hl-type", Keyword "area" ])
     (props_select
@@ -2620,7 +2623,7 @@ let test_import_linked_file_pdf_annotations_with_uppercase_extension () =
        [ ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] )
        ; Keyword "logseq.property/asset", String "Linked Paper"
-       ; Keyword "logseq.property.pdf/hl-page", Int 3 ])
+       ; Keyword "logseq.property.pdf/hl-page", Int64 3L ])
     (props_select
        [ "block/tags"; "logseq.property/asset"
        ; "logseq.property.pdf/hl-page" ]
@@ -2669,7 +2672,7 @@ let test_import_linked_pdf_annotations_with_missing_attributes_without_log_fn ()
        [ ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] )
        ; Keyword "logseq.property/asset", String "Sparse Paper"
-       ; Keyword "logseq.property.pdf/hl-page", Int 1 ])
+       ; Keyword "logseq.property.pdf/hl-page", Int64 1L ])
     (props_select
        [ "block/tags"; "logseq.property/asset"
        ; "logseq.property.pdf/hl-page" ]
@@ -2717,7 +2720,7 @@ let test_import_external_pdf_annotations () =
            [ ( Keyword "block/tags",
                Vector [ Keyword "logseq.class/Pdf-annotation" ] )
            ; Keyword "logseq.property/asset", String "LocalDoc"
-           ; Keyword "logseq.property.pdf/hl-page", Int 2 ])
+           ; Keyword "logseq.property.pdf/hl-page", Int64 2L ])
         (props_select
            [ "block/tags"; "logseq.property/asset"
            ; "logseq.property.pdf/hl-page" ]
@@ -2894,7 +2897,7 @@ let test_finalize_imported_graph_avoids_unchanged_ref_writes () =
   let db = Datascript.db conn in
   let block_ent = entity_exn db (Entity_id block_id) in
   check "block gets stamped with tx-id"
-    (getv' block_ent "block/tx-id" = Some (Int tx_id)) "";
+    (getv' block_ent "block/tx-id" = Some (Int64 (Int64.of_int tx_id))) "";
   check "refs match target"
     (List.map (fun e -> e.id) (ref_ents' block_ent "block/refs")
      = [ (entity_exn db (Lookup_ref ("block/uuid", Uuid target_uuid))).id ])
@@ -2910,7 +2913,7 @@ let test_finalize_imported_graph_avoids_unchanged_ref_writes () =
     "";
   check "skipped block keeps its tx-id"
     ((entity_exn db (Lookup_ref ("block/uuid", Uuid skipped_uuid)))
-     |> fun e -> getv' e "block/tx-id" = Some (Int 42))
+     |> fun e -> getv' e "block/tx-id" = Some (Int64 42L))
     "";
   check "reaction target block has no refs written"
     (ref_ents'
@@ -3116,7 +3119,7 @@ let test_export_basic_graph_with_convert_all_tags () =
   check_v "Basic block has correct properties"
     (Map
        [ Keyword "user.property/prop-bool", Bool true
-       ; Keyword "user.property/prop-num", Int 5
+       ; Keyword "user.property/prop-num", Int64 5L
        ; Keyword "user.property/prop-string", String "woot" ])
     (props_map (find_block_exn db "b1")) "";
   check_v "Block with properties has correct refs"
@@ -3126,13 +3129,13 @@ let test_export_basic_graph_with_convert_all_tags () =
             (ref_titles (find_block_exn db "b1") "block/refs"))) "";
   check_v "New page has correct properties"
     (Map
-       [ (Keyword "user.property/prop-num2", Int 10);
+       [ (Keyword "user.property/prop-num2", Int64 10L);
          (Keyword "block/tags", Vector [ Keyword "logseq.class/Page" ]) ])
     (props_map (find_page_exn db "new page")) "";
   check_v "Existing page has correct properties"
     (Map
        [ (Keyword "user.property/prop-bool", Bool true);
-         (Keyword "user.property/prop-num", Int 5);
+         (Keyword "user.property/prop-num", Int64 5L);
          (Keyword "user.property/prop-string", String "yeehaw");
          ( Keyword "block/tags",
            Vector
@@ -3156,9 +3159,9 @@ let test_export_basic_graph_with_convert_all_tags () =
     "";
   (* testing "built-in properties" *)
   check_v "block with a block-ref has correct :block/refs"
-    (Vector [ Int (find_block_exn db "original block").id ])
+    (Vector [ Int64 (Int64.of_int (find_block_exn db "original block").id) ])
     (Vector
-       (List.map (fun e -> (Int e.id : value))
+       (List.map (fun e -> (Int64 (Int64.of_int e.id) : value))
           (ref_ents' (find_block_re_exn db "ref to") "block/refs"))) "";
   eq "block-ref ((uuid)) is converted to page-ref [[uuid]] in block title"
     "ref to [[65cbb772-fb79-462d-87c8-6f0dad751dee]]"
@@ -3181,15 +3184,15 @@ let test_export_basic_graph_with_convert_all_tags () =
                  ( k,
                    match ms_of_value v with
                    | Some ms ->
-                       (Int (Date_time_util.ms_to_journal_day ms) : value)
+                       (Int64 (Int64.of_int (Date_time_util.ms_to_journal_day ms)) : value)
                    | None -> v ))
                kvs
          | _ -> [])
   in
   check_v "scheduled block converted to correct deadline"
     (Map
-       [ (Keyword "logseq.property/scheduled", Int 20221125);
-         (Keyword "logseq.property/deadline", Int 20221125) ])
+       [ (Keyword "logseq.property/scheduled", Int64 20221125L);
+         (Keyword "logseq.property/deadline", Int64 20221125L) ])
     ((Map sched_dl : value)) "";
   eq "Only one journal page exists when deadline is on same day as journal"
     1
@@ -3439,10 +3442,10 @@ let test_export_basic_graph_with_convert_all_tags () =
          ( Keyword "logseq.property.asset/checksum",
            String
              "3d5e620cac62159d8196c118574bfea7a16e86fa86efd1c3fa15a00a0a08792d" );
-         (Keyword "logseq.property.asset/size", Int 753471);
+         (Keyword "logseq.property.asset/size", Int64 753471L);
          ( Keyword "logseq.property.asset/resize-metadata",
            Map
-             [ (Keyword "height", Int 288); (Keyword "width", Int 252) ] ) ])
+             [ (Keyword "height", Int64 288L); (Keyword "width", Int64 252L) ] ) ])
     (props_map
        (find_block_exn db "greg-popovich-thumbs-up_1704749687791_0")) "";
   check_v "Zotero linked pdf asset has correct external path info"
@@ -3492,7 +3495,7 @@ let test_export_basic_graph_with_convert_all_tags () =
     (Map
        [ ( Keyword "logseq.property.pdf/hl-color",
            Keyword "logseq.property/color.blue" );
-         (Keyword "logseq.property.pdf/hl-page", Int 8);
+         (Keyword "logseq.property.pdf/hl-page", Int64 8L);
          ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] );
          ( Keyword "logseq.property/asset",
@@ -3519,7 +3522,7 @@ let test_export_basic_graph_with_convert_all_tags () =
     (Map
        [ ( Keyword "logseq.property.pdf/hl-color",
            Keyword "logseq.property/color.yellow" );
-         (Keyword "logseq.property.pdf/hl-page", Int 1);
+         (Keyword "logseq.property.pdf/hl-page", Int64 1L);
          ( Keyword "block/tags",
            Vector [ Keyword "logseq.class/Pdf-annotation" ] );
          ( Keyword "logseq.property/asset",
@@ -3560,7 +3563,7 @@ let test_export_basic_graph_with_convert_all_tags () =
          (Keyword "logseq.property/asset", String "Understanding EXPLAIN");
          ( Keyword "logseq.property.pdf/hl-color",
            Keyword "logseq.property/color.yellow" );
-         (Keyword "logseq.property.pdf/hl-page", Int 6) ])
+         (Keyword "logseq.property.pdf/hl-page", Int64 6L) ])
     (props_select
        [ "block/tags"; "logseq.property/asset"
        ; "logseq.property.pdf/hl-color"; "logseq.property.pdf/hl-page" ]
@@ -3573,7 +3576,7 @@ let test_export_basic_graph_with_convert_all_tags () =
          (Keyword "logseq.property/asset", String "zlib");
          ( Keyword "logseq.property.pdf/hl-color",
            Keyword "logseq.property/color.red" );
-         (Keyword "logseq.property.pdf/hl-page", Int 1) ])
+         (Keyword "logseq.property.pdf/hl-page", Int64 1L) ])
     (props_select
        [ "block/tags"; "logseq.property/asset"
        ; "logseq.property.pdf/hl-color"; "logseq.property.pdf/hl-page" ]
@@ -3632,7 +3635,7 @@ let test_export_basic_graph_with_convert_all_tags () =
          ( Keyword "logseq.property.pdf/hl-image",
            String "pdf area highlight" );
          (Keyword "logseq.property.pdf/hl-type", Keyword "area");
-         (Keyword "logseq.property.pdf/hl-page", Int 8) ])
+         (Keyword "logseq.property.pdf/hl-page", Int64 8L) ])
     (area_hl_props "Understanding EXPLAIN") "";
   check_v "Zotero imported pdf area highlight links to correct asset"
     (Map
@@ -3644,7 +3647,7 @@ let test_export_basic_graph_with_convert_all_tags () =
          ( Keyword "logseq.property.pdf/hl-image",
            String "pdf area highlight" );
          (Keyword "logseq.property.pdf/hl-type", Keyword "area");
-         (Keyword "logseq.property.pdf/hl-page", Int 1) ])
+         (Keyword "logseq.property.pdf/hl-page", Int64 1L) ])
     (area_hl_props "zlib") "";
   (* Quotes *)
   check "Mixed #+BEGIN_QUOTE block: heading retained and quote prefixed '>'"
@@ -4102,7 +4105,7 @@ let test_import_journals_use_standard_uuids_and_keep_uuid_refs () =
     match
       q_eids_in db
         "[:find [?b ...] :in $ ?page ?ref-page :where [?b :block/page ?page] [?b :block/refs ?ref-page]]"
-        [ Int journal.id; Int ref_journal.id ]
+        [ Int64 (Int64.of_int journal.id); Int64 (Int64.of_int ref_journal.id) ]
     with
     | id :: _ -> Ldb.ent_of_id db id
     | [] -> None
@@ -4448,14 +4451,15 @@ let test_import_namespaced_pages_assign_block_order () =
       (match import_mode with
        | `File_graph ->
            check_v "Top-level hierarchy parents are moved under Library"
-             (Vector [ Int library.id; Int library.id ])
+             (Vector [ Int64 (Int64.of_int library.id); Int64 (Int64.of_int library.id) ])
              (Vector
                 (List.map
                    (fun p ->
-                     (Int
-                        (match parent_of p with
-                         | Some par -> par.id
-                         | None -> -1)
+                     (Int64
+                        (Int64.of_int
+                           (match parent_of p with
+                            | Some par -> par.id
+                            | None -> -1))
                       : value))
                    [ country; continent ]))
              ""
@@ -4628,9 +4632,9 @@ let test_export_files_with_property_classes_option () =
     (prop_get block "block/tags") "";
   check_v "tagged block can have another property that references the same class"
     (ref_ents' block "user.property/testtagclass"
-     |> List.map (fun e -> (Int e.id : value)) |> fun l -> Vector l)
+     |> List.map (fun e -> (Int64 (Int64.of_int e.id) : value)) |> fun l -> Vector l)
     (ref_ents' block "block/tags"
-     |> List.map (fun e -> (Int e.id : value)) |> fun l -> Vector l)
+     |> List.map (fun e -> (Int64 (Int64.of_int e.id) : value)) |> fun l -> Vector l)
     "";
   eq "configured tag page derived from :property-classes is a class"
     [ "logseq.class/Tag" ]
@@ -4680,8 +4684,11 @@ let test_export_files_with_remove_inline_tags () =
         match (Ldb.ent_of_id ndb b, Ldb.ent_of_id ndb t) with
         | Some b, Some t -> Some (b, t)
         | _ -> None)
-    | [ Result_value (Int b); Result_value (Int t) ] :: _ -> (
-        match (Ldb.ent_of_id ndb b, Ldb.ent_of_id ndb t) with
+    | [ Result_value (Int64 b); Result_value (Int64 t) ] :: _ -> (
+        match
+          ( Option.bind (Datascript.Util.int64_to_int b) (Ldb.ent_of_id ndb)
+          , Option.bind (Datascript.Util.int64_to_int t) (Ldb.ent_of_id ndb) )
+        with
         | Some b, Some t -> Some (b, t)
         | _ -> None)
     | _ -> None
@@ -4777,7 +4784,7 @@ let test_export_files_preserves_icon_skin_tone () =
           (Map
              [ (Keyword "type", Keyword "emoji")
              ; (Keyword "id", String "\xF0\x9F\x91\x8D\xF0\x9F\x8F\xBD")
-             ; (Keyword "skin", Int 4) ]))
+             ; (Keyword "skin", Int64 4L) ]))
        (icon_value page)) ""
 
 let test_export_files_with_unmappable_icon_properties () =
@@ -4992,13 +4999,13 @@ let top_blocks_of_journal (db : db) (day : int) : entity list =
   match
     q_eids_in db
       "[:find [?p ...] :in $ ?d :where [?p :block/journal-day ?d]]"
-      [ Int day ]
+      [ Int64 (Int64.of_int day) ]
   with
   | page_id :: _ ->
       Ldb.sort_by_order
         (q_entities_in db
            "[:find [?b ...] :in $ ?page :where [?b :block/page ?page] [?b :block/parent ?page]]"
-           [ Int page_id ])
+           [ Int64 (Int64.of_int page_id) ])
   | [] -> []
 
 let direct_children (e : entity) : entity list = children_of e

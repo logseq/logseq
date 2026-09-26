@@ -9,7 +9,7 @@ let pulled_parent_id (p : pulled_entity) : entity_id option =
   match List.assoc_opt (Keyword "block/parent") p.pulled_attrs with
   | Some (Pulled_entity par) -> Some par.pulled_id
   | Some (Pulled_scalar (Ref id)) -> Some id
-  | Some (Pulled_scalar (Int id)) -> Some id
+  | Some (Pulled_scalar (Int64 id)) -> Some (Datascript.Util.int64_to_int_exn "entity id" id)
   | _ -> None
 
 let pulled_order (p : pulled_entity) : string =

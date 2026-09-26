@@ -284,7 +284,10 @@ let find_block_by_content_re (db : db) (pattern : string) : entity option =
       "[:find [?b ...] :in $ ?pattern :where [?b :block/title ?content] [?b :block/page] [(re-find ?pattern ?content)]]"
   with
   | [ [ Result_entity id ] ] -> Ldb.ent_of_id db id
-  | [ [ Result_value (Int id) ] ] -> Ldb.ent_of_id db id
+  | [ [ Result_value (Int64 id) ] ] -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> Ldb.ent_of_id db id
+      | None -> None)
   | _ -> None
 
 let ent_uuid (e : entity) : string =
@@ -293,7 +296,7 @@ let ent_uuid (e : entity) : string =
   | _ -> failwith "entity has no :block/uuid"
 
 let ent_id_opt (e : entity option) : value =
-  match e with Some e -> Int e.id | None -> Nil
+  match e with Some e -> Int64 (Int64.of_int e.id) | None -> Nil
 
 let entity_int_opt (e : entity option) (a : attr) : int option =
   Option.bind e (fun e -> Ldb.int_value e a)
@@ -307,7 +310,7 @@ let ent_uuid_opt (e : entity option) : string option =
 
 let all_datom_triples (db : db) : value list =
   List.of_seq (Datascript.datoms db Eavt ())
-  |> List.map (fun (d : datom) -> Vector [ Int d.e; Keyword d.a; d.v ])
+  |> List.map (fun (d : datom) -> Vector [ Int64 (Int64.of_int d.e); Keyword d.a; d.v ])
 
 let has_datom (datoms : value list) (e : value) (a : value) (v : value) : bool =
   List.exists
@@ -560,10 +563,10 @@ let sort_pages_and_blocks (v : value) : value =
 
 (* common-util/block-with-timestamps *)
 let block_with_timestamps_v (m : value) : value =
-  let t = Int64.to_int (Date_time_util.time_ms ()) in
-  let m = map_put "block/updated-at" (Int t) m in
+  let t = Date_time_util.time_ms () in
+  let m = map_put "block/updated-at" (Int64 t) m in
   match map_get "block/created-at" m with
-  | None -> map_put "block/created-at" (Int t) m
+  | None -> map_put "block/created-at" (Int64 t) m
   | Some _ -> m
 
 (* ---------- deftests ---------- *)
@@ -607,24 +610,24 @@ let test_merge_export_maps () =
       [ ( "pages-and-blocks",
           Vector
             [ mmap
-                [ "page", mmap [ "build/journal", Int 20250220 ]
+                [ "page", mmap [ "build/journal", Int64 20250220L ]
                 ; "blocks", Vector [ mmap [ "block/title", String "b1" ] ] ]
-            ; mmap [ "page", mmap [ "build/journal", Int 20250221 ] ] ] ) ]
+            ; mmap [ "page", mmap [ "build/journal", Int64 20250221L ] ] ] ) ]
   in
   let m3 =
     mmap
       [ ( "pages-and-blocks",
           Vector
             [ mmap
-                [ "page", mmap [ "build/journal", Int 20250220 ]
+                [ "page", mmap [ "build/journal", Int64 20250220L ]
                 ; "blocks", Vector [ mmap [ "block/title", String "b1" ] ] ] ] ) ]
   in
   let m4 =
     mmap
       [ ( "pages-and-blocks",
           Vector
-            [ mmap [ "page", mmap [ "build/journal", Int 20250220 ] ]
-            ; mmap [ "page", mmap [ "build/journal", Int 20250221 ] ] ] ) ]
+            [ mmap [ "page", mmap [ "build/journal", Int64 20250220L ] ]
+            ; mmap [ "page", mmap [ "build/journal", Int64 20250221L ] ] ] ) ]
   in
   check
     (tname ^ ": In :pages-and-blocks, identical journals and their :blocks are merged")
@@ -711,7 +714,7 @@ let test_import_block_in_different_graph () =
                           [ "block/title", String "export"
                           ; ( "build/properties",
                               mmap
-                                [ "user.property/num-many", Set [ Int 3; Int 6; Int 9 ] ] )
+                                [ "user.property/num-many", Set [ Int64 3L; Int64 6L; Int64 9L ] ] )
                           ; "build/tags", Set [ kw "user.class/MyClass" ] ] ] ) ] ] ) ]
   in
   let conn = create_conn_with_blocks original_data in
@@ -856,7 +859,7 @@ let test_import_page_with_different_blocks () =
                                           [ mmap
                                               [ "block/title", String "b1aa"
                                               ; ( "build/properties",
-                                                  mmap [ "user.property/num", Int 2 ] ) ]
+                                                  mmap [ "user.property/num", Int64 2L ] ) ]
                                           ; mmap [ "block/title", String "b1ab" ] ] ) ]
                                 ; mmap [ "block/title", String "b1b" ] ] ) ]
                       ; mmap
@@ -997,7 +1000,7 @@ let test_import_page_with_different_ref_types () =
             ; mmap
                 [ ( "page",
                     mmap
-                      [ "build/journal", Int 20250207
+                      [ "build/journal", Int64 20250207L
                       ; "block/uuid", Uuid journal_uuid
                       ; "build/keep-uuid?", Bool true ] ) ]
             ; mmap
@@ -1160,7 +1163,7 @@ let test_import_journal_page () =
       [ ( "pages-and-blocks",
           Vector
             [ mmap
-                [ "page", mmap [ "build/journal", Int 20250210 ]
+                [ "page", mmap [ "build/journal", Int64 20250210L ]
                 ; ( "blocks",
                     Vector
                       [ mmap [ "block/title", String "b1" ]
@@ -1177,7 +1180,7 @@ let test_import_journal_page () =
     (v_eq
        (map_get_or_nil "pages-and-blocks" original_data)
        (map_get_or_nil "pages-and-blocks" imported_page));
-  import_second_time_assertions ~build_journal:(Int 20250210) tname conn conn2
+  import_second_time_assertions ~build_journal:(Int64 20250210L) tname conn conn2
     journal_title original_data
 
 let test_import_class_page () =
@@ -1255,7 +1258,7 @@ let test_import_page_with_different_property_types () =
                     Vector
                       [ mmap
                           [ "block/title", String "num block"
-                          ; "build/properties", mmap [ "user.property/num", Int 2 ] ]
+                          ; "build/properties", mmap [ "user.property/num", Int64 2L ] ]
                       ; mmap
                           [ "block/title", String "checkbox block"
                           ; ( "build/properties",
@@ -1266,7 +1269,7 @@ let test_import_page_with_different_property_types () =
                               mmap
                                 [ ( "user.property/date",
                                     build_page_ref
-                                      (mmap [ "build/journal", Int 20250203 ]) ) ] ) ]
+                                      (mmap [ "build/journal", Int64 20250203L ]) ) ] ) ]
                       ; mmap
                           [ "block/title", String "node block"
                           ; ( "build/properties",
@@ -1284,7 +1287,7 @@ let test_import_page_with_different_property_types () =
                           ; ( "build/properties",
                               mmap
                                 [ ( "user.property/map",
-                                    mmap [ "foo", kw "bar"; "num", Int 2 ] ) ] ) ] ] ) ]
+                                    mmap [ "foo", kw "bar"; "num", Int64 2L ] ) ] ) ] ] ) ]
             ; mmap
                 [ "page", mmap [ "block/title", String "Blocks" ]
                 ; ( "blocks",
@@ -1325,7 +1328,7 @@ let test_import_page_with_different_property_types () =
     (avet_count (db_of conn2) "block/title" (String "page object") = 1);
   check
     (tname ^ ": Journal property value is only created first time")
-    (avet_count (db_of conn2) "block/journal-day" (Int 20250203) = 1)
+    (avet_count (db_of conn2) "block/journal-day" (Int64 20250203L) = 1)
 
 let test_import_graph_ontology () =
   let tname = "import-graph-ontology" in
@@ -1448,7 +1451,7 @@ let test_export_graph_ontology_ignores_legacy_internal_class_properties () =
            ; "logseq.property/built-in?", Bool true
            ; "logseq.property/type", kw "number" ]
        ; mmap
-           [ "db/id", Int my_class_id
+           [ "db/id", Int64 (Int64.of_int my_class_id)
            ; "logseq.property.class/properties", Vector [ kw legacy_property ] ] ]);
   let export_edn =
     build_export (db_of conn) [ "export-type", kw "graph-ontology" ]
@@ -1484,7 +1487,7 @@ let test_graph_datom_import_drops_legacy_plugin_property_schema_attrs () =
   in
   ignore
     (transact_vals conn
-       [ mmap [ "db/id", Int plugin_property_id; "hide?", Bool true; "public?", Bool false ] ]);
+       [ mmap [ "db/id", Int64 (Int64.of_int plugin_property_id); "hide?", Bool true; "public?", Bool false ] ]);
   let export_edn = build_export (db_of conn) [ "export-type", kw "graph" ] in
   let import_conn = Sqlite_export.create_conn () in
   let validation =
@@ -1496,22 +1499,22 @@ let test_graph_datom_import_drops_legacy_plugin_property_schema_attrs () =
   let datoms = coll_items' (map_get_or_nil "datoms" export_edn) in
   check
     (tname ^ ": hide? datom exported")
-    (has_datom datoms (Int plugin_property_id) (kw "hide?") (Bool true));
+    (has_datom datoms (Int64 (Int64.of_int plugin_property_id)) (kw "hide?") (Bool true));
   check
     (tname ^ ": public? datom exported")
-    (has_datom datoms (Int plugin_property_id) (kw "public?") (Bool false));
+    (has_datom datoms (Int64 (Int64.of_int plugin_property_id)) (kw "public?") (Bool false));
   let tx_data = validation.Sqlite_export.valid_tx_data in
   check
     (tname ^ ": hide? disallowed attr dropped from tx-data")
     (not
        (List.exists
-          (fun tx -> v_eq tx (Vector [ kw "db/add"; Int plugin_property_id; kw "hide?"; Bool true ]))
+          (fun tx -> v_eq tx (Vector [ kw "db/add"; Int64 (Int64.of_int plugin_property_id); kw "hide?"; Bool true ]))
           tx_data));
   check
     (tname ^ ": public? disallowed attr dropped from tx-data")
     (not
        (List.exists
-          (fun tx -> v_eq tx (Vector [ kw "db/add"; Int plugin_property_id; kw "public?"; Bool false ]))
+          (fun tx -> v_eq tx (Vector [ kw "db/add"; Int64 (Int64.of_int plugin_property_id); kw "public?"; Bool false ]))
           tx_data))
 
 let test_graph_export_keeps_referenced_recycled_closed_value_config () =
@@ -1546,14 +1549,14 @@ let test_graph_export_keeps_referenced_recycled_closed_value_config () =
   in
   ignore
     (transact_vals conn
-       [ mmap [ "db/id", Int closed_value_id; "logseq.property/deleted-at", Int 1 ] ]);
+       [ mmap [ "db/id", Int64 (Int64.of_int closed_value_id); "logseq.property/deleted-at", Int64 1L ] ]);
   let export_edn = build_export (db_of conn) [ "export-type", kw "graph" ] in
   let validation = Sqlite_export.validate_export export_edn in
   check (tname ^ ": no error") (validation.Sqlite_export.error = None);
   let datoms = coll_items' (map_get_or_nil "datoms" export_edn) in
   check
     (tname ^ ": deleted-at datom kept")
-    (has_datom datoms (Int closed_value_id) (kw "logseq.property/deleted-at") (Int 1))
+    (has_datom datoms (Int64 (Int64.of_int closed_value_id)) (kw "logseq.property/deleted-at") (Int64 1L))
 
 let test_graph_export_ignores_scalar_values_when_finding_referenced_closed_values () =
   let tname = "graph-export-ignores-scalar-values-when-finding-referenced-closed-values" in
@@ -1572,7 +1575,7 @@ let test_graph_export_ignores_scalar_values_when_finding_referenced_closed_value
                          [ mmap
                              [ "block/title", String "b1"
                              ; ( "build/properties",
-                                 mmap [ property_id, Int 1779841453610 ] ) ] ] ) ] ] ) ])
+                                 mmap [ property_id, Int64 1779841453610L ] ) ] ] ) ] ] ) ])
   in
   let export_edn = build_export (db_of conn) [ "export-type", kw "graph" ] in
   let validation = Sqlite_export.validate_export export_edn in
@@ -1585,7 +1588,7 @@ let test_graph_export_ignores_scalar_values_when_finding_referenced_closed_value
   let datoms = coll_items' (map_get_or_nil "datoms" export_edn) in
   check
     (tname ^ ": property type datom exported")
-    (has_datom datoms (Int prop_id) (kw "logseq.property/type") (kw "datetime"))
+    (has_datom datoms (Int64 (Int64.of_int prop_id)) (kw "logseq.property/type") (kw "datetime"))
 
 let test_graph_export_uses_db_id_sorted_datoms () =
   let tname = "graph-export-uses-db-id-sorted-datoms" in
@@ -1624,7 +1627,7 @@ let test_graph_export_uses_db_id_sorted_datoms () =
     (map_get "pages-and-blocks" export_edn = None);
   let eids =
     List.filter_map
-      (fun d -> match coll_items' d with Int e :: _ -> Some e | _ -> None)
+      (fun d -> match coll_items' d with Int64 e :: _ -> Some e | _ -> None)
       datoms
   in
   check
@@ -1637,7 +1640,7 @@ let test_graph_export_uses_db_id_sorted_datoms () =
   in
   check
     (tname ^ ": b1 title datom present")
-    (has_datom datoms (Int b1_id) (kw "block/title") (String "b1"))
+    (has_datom datoms (Int64 (Int64.of_int b1_id)) (kw "block/title") (String "b1"))
 
 let test_graph_export_omits_local_metadata_datoms () =
   let tname = "graph-export-omits-local-metadata-datoms" in
@@ -1682,17 +1685,17 @@ let test_graph_export_omits_local_metadata_datoms () =
               ; "logseq.property.user/name", String "Alice"
               ; "logseq.property.user/avatar", String "avatar.png" ]
           ; mmap
-              [ "db/id", Int block_id
-              ; "block/tx-id", Int 7
+              [ "db/id", Int64 (Int64.of_int block_id)
+              ; "block/tx-id", Int64 7L
               ; "logseq.property.embedding/hnsw-label", String "label"
-              ; "logseq.property.embedding/hnsw-label-updated-at", Int 8
+              ; "logseq.property.embedding/hnsw-label-updated-at", Int64 8L
               ; "logseq.property/created-by-ref", uuid_ref user_uuid ] ]));
   let datoms =
     coll_items' (map_get_or_nil "datoms" (build_export (db_of conn) [ "export-type", kw "graph" ]))
   in
   check
     (tname ^ ": block title kept")
-    (has_datom datoms (Int block_id) (kw "block/title") (String "b1"));
+    (has_datom datoms (Int64 (Int64.of_int block_id)) (kw "block/title") (String "b1"));
   List.iter
     (fun ident ->
       let kv_eid =
@@ -1704,7 +1707,7 @@ let test_graph_export_omits_local_metadata_datoms () =
         (tname ^ ": " ^ ident ^ " entity datoms should not be exported")
         (not
            (List.exists
-              (fun d -> match coll_items' d with Int e :: _ -> e = kv_eid | _ -> false)
+              (fun d -> match coll_items' d with Int64 e :: _ -> Int64.equal e (Int64.of_int kv_eid) | _ -> false)
               datoms)))
     excluded_kvs;
   List.iter
@@ -1760,9 +1763,9 @@ let test_graph_datom_import_replaces_seeded_data () =
   let source_conn = Datascript.create_conn ~schema:(Db_schema.schema ()) () in
   ignore
     (transact_vals source_conn
-       [ mmap [ "db/id", Int 1; "block/uuid", Uuid (Db_test_util.gen_uuid ()) ] ]);
+       [ mmap [ "db/id", Int64 1L; "block/uuid", Uuid (Db_test_util.gen_uuid ()) ] ]);
   ignore
-    (transact_vals source_conn [ Vector [ kw "db/retractEntity"; Int 1 ] ]);
+    (transact_vals source_conn [ Vector [ kw "db/retractEntity"; Int64 1L ] ]);
   ignore
     (Datascript.transact_conn source_conn
        (Sqlite_create_graph.initial_tx_data
@@ -1789,10 +1792,10 @@ let test_graph_datom_import_applies_schema_datoms_before_values () =
       ; Sqlite_export.k_graph_format, kw "datoms"
       ; ( "datoms",
           Vector
-            [ Vector [ Int 1; kw "user.property/many"; String "a" ]
-            ; Vector [ Int 1; kw "user.property/many"; String "b" ]
-            ; Vector [ Int 2; kw "db/ident"; kw "user.property/many" ]
-            ; Vector [ Int 2; kw "db/cardinality"; kw "db.cardinality/many" ] ] ) ]
+            [ Vector [ Int64 1L; kw "user.property/many"; String "a" ]
+            ; Vector [ Int64 1L; kw "user.property/many"; String "b" ]
+            ; Vector [ Int64 2L; kw "db/ident"; kw "user.property/many" ]
+            ; Vector [ Int64 2L; kw "db/cardinality"; kw "db.cardinality/many" ] ] ) ]
   in
   (match Sqlite_export.build_import export_edn (db_of conn) None with
    | Ok txs -> ignore (transact_vals conn txs.init_tx)
@@ -1817,15 +1820,15 @@ let test_graph_datom_import_applies_lookup_ref_targets_before_values () =
       ; Sqlite_export.k_graph_format, kw "datoms"
       ; ( "datoms",
           Vector
-            [ Vector [ Int 1; kw "block/refs"; uuid_ref target_uuid ]
-            ; Vector [ Int 2; kw "block/uuid"; Uuid target_uuid ] ] ) ]
+            [ Vector [ Int64 1L; kw "block/refs"; uuid_ref target_uuid ]
+            ; Vector [ Int64 2L; kw "block/uuid"; Uuid target_uuid ] ] ) ]
   in
   (match Sqlite_export.build_import export_edn (db_of conn) None with
    | Ok txs -> ignore (transact_vals conn txs.init_tx)
    | Error e -> failwith e);
   check
     (tname ^ ": Datom import should apply lookup-ref targets before values that use them")
-    (has_datom (all_datom_triples (db_of conn)) (Int 1) (kw "block/refs") (Int 2))
+    (has_datom (all_datom_triples (db_of conn)) (Int64 1L) (kw "block/refs") (Int64 2L))
 
 let test_validate_export_rejects_invalid_graph_datoms () =
   let tname = "validate-export-rejects-invalid-graph-datoms" in
@@ -1836,17 +1839,17 @@ let test_validate_export_rejects_invalid_graph_datoms () =
          ; Sqlite_export.k_graph_format, kw "datoms"
          ; ( "datoms",
              Vector
-               [ Vector [ Int 1; kw "block/title"; String "Orphan Page" ]
-               ; Vector [ Int 1; kw "block/name"; String "orphan page" ]
+               [ Vector [ Int64 1L; kw "block/title"; String "Orphan Page" ]
+               ; Vector [ Int64 1L; kw "block/name"; String "orphan page" ]
                ; Vector
-                   [ Int 1; kw "block/uuid"
+                   [ Int64 1L; kw "block/uuid"
                    ; Uuid "33333333-3333-4333-8333-000000000001" ]
-               ; Vector [ Int 1; kw "block/tags"; Int 2 ]
-               ; Vector [ Int 2; kw "block/title"; String "Page" ]
-               ; Vector [ Int 2; kw "block/name"; String "page" ]
-               ; Vector [ Int 2; kw "db/ident"; kw "logseq.class/Page" ]
+               ; Vector [ Int64 1L; kw "block/tags"; Int64 2L ]
+               ; Vector [ Int64 2L; kw "block/title"; String "Page" ]
+               ; Vector [ Int64 2L; kw "block/name"; String "page" ]
+               ; Vector [ Int64 2L; kw "db/ident"; kw "logseq.class/Page" ]
                ; Vector
-                   [ Int 2; kw "block/uuid"
+                   [ Int64 2L; kw "block/uuid"
                    ; Uuid "33333333-3333-4333-8333-000000000002" ] ] ) ])
   in
   check
@@ -1867,16 +1870,16 @@ let test_graph_datom_export_resolves_lookup_ref_values () =
   let target_uuid = Db_test_util.gen_uuid () in
   ignore
     (transact_vals conn
-       [ Vector [ kw "db/add"; Int 1; kw "user.property/ref"; uuid_ref target_uuid ]
-       ; Vector [ kw "db/add"; Int 2; kw "block/uuid"; Uuid target_uuid ] ]);
+       [ Vector [ kw "db/add"; Int64 1L; kw "user.property/ref"; uuid_ref target_uuid ]
+       ; Vector [ kw "db/add"; Int64 2L; kw "block/uuid"; Uuid target_uuid ] ]);
   let export_edn = build_export (db_of conn) [ "export-type", kw "graph" ] in
   let datoms = coll_items' (map_get_or_nil "datoms" export_edn) in
   check
     (tname ^ ": Graph datom export should normalize lookup-ref values to entity ids")
-    (has_datom datoms (Int 1) (kw "user.property/ref") (Int 2));
+    (has_datom datoms (Int64 1L) (kw "user.property/ref") (Int64 2L));
   check
     (tname ^ ": Graph datom export should not keep lookup-ref values when the entity exists")
-    (not (has_datom datoms (Int 1) (kw "user.property/ref") (uuid_ref target_uuid)))
+    (not (has_datom datoms (Int64 1L) (kw "user.property/ref") (uuid_ref target_uuid)))
 
 let test_import_supports_legacy_structured_graph_edn () =
   let tname = "import-supports-legacy-structured-graph-edn" in
@@ -1941,7 +1944,7 @@ let test_import_view_blocks () =
       ; ( "pages-and-blocks",
           Vector
             [ mmap [ "page", mmap [ "block/title", String "page1" ] ]
-            ; mmap [ "page", mmap [ "build/journal", Int 20250226 ] ]
+            ; mmap [ "page", mmap [ "build/journal", Int64 20250226L ] ]
             ; mmap
                 [ "page", mmap [ "block/title", String "page2" ]
                 ; ( "blocks",
@@ -2172,7 +2175,7 @@ let build_original_graph_data ?(exclude_namespaces = false)
                       else
                         mmap
                           [ "user.property/node", Set [ uuid_ref property_pvalue_uuid ]
-                          ; "logseq.property/default-value", Int 42 ] ) ] )
+                          ; "logseq.property/default-value", Int64 42L ] ) ] )
             ; ( "user.property/default-closed",
                 mmap
                   [ "logseq.property/type", kw "default"
@@ -2233,7 +2236,7 @@ let build_original_graph_data ?(exclude_namespaces = false)
                           [ "block/title", String "b1"
                           ; ( "build/properties",
                               mmap
-                                [ "user.property/num", Int 1
+                                [ "user.property/num", Int64 1L
                                 ; "user.property/default-closed", Set [ uuid_ref closed_value_uuid ]
                                 ; "user.property/date", uuid_ref journal_uuid ] ) ]
                       ; mmap
@@ -2334,14 +2337,14 @@ let build_original_graph_data ?(exclude_namespaces = false)
             ; mmap
                 [ ( "page",
                     mmap
-                      [ "build/journal", Int 20250228
+                      [ "build/journal", Int64 20250228L
                       ; "block/alias", Set [ uuid_ref page_alias_uuid ]
-                      ; "build/properties", mmap [ "user.property/num", Int 1 ] ] )
+                      ; "build/properties", mmap [ "user.property/num", Int64 1L ] ] )
                 ; "blocks", Vector [ mmap [ "block/title", String "journal block" ] ] ]
             ; mmap
                 [ ( "page",
                     mmap
-                      [ "build/journal", Int 19650201
+                      [ "build/journal", Int64 19650201L
                       ; "block/uuid", Uuid journal_uuid
                       ; "build/keep-uuid?", Bool true ] )
                 ; "blocks", Vector [] ]
@@ -2454,7 +2457,7 @@ let test_import_graph () =
        [ mmap
            [ "db/ident", kw "logseq.kv/schema-version"
            ; ( "kv/value",
-               mmap [ "major", Int 1; "minor", Int 0 ] ) ] ]);
+               mmap [ "major", Int64 1L; "minor", Int64 0L ] ) ] ]);
   let export_map =
     build_export (db_of conn) [ "export-type", kw graph_export_type ]
   in
@@ -2640,7 +2643,7 @@ let test_import_graph_preserves_property_history () =
                     Vector
                       [ mmap
                           [ "block/title", String "num block"
-                          ; "build/properties", mmap [ "user.property/num", Int 44 ] ]
+                          ; "build/properties", mmap [ "user.property/num", Int64 44L ] ]
                       ; mmap
                           [ "block/title", String "status block"
                           ; ( "build/properties",
@@ -2663,37 +2666,37 @@ let test_import_graph_preserves_property_history () =
   let original_property_history =
     [ mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int now
+        ; "block/created-at", Int64 (Int64.of_int now)
         ; "logseq.property.history/block", uuid_ref num_block_uuid
         ; "logseq.property.history/property", kw "user.property/num"
-        ; "logseq.property.history/scalar-value", Int 42 ]
+        ; "logseq.property.history/scalar-value", Int64 42L ]
     ; mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int (now + 1000)
+        ; "block/created-at", Int64 (Int64.of_int (now + 1000))
         ; "logseq.property.history/block", uuid_ref num_block_uuid
         ; "logseq.property.history/property", kw "user.property/num"
-        ; "logseq.property.history/scalar-value", Int 44 ]
+        ; "logseq.property.history/scalar-value", Int64 44L ]
     ; mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int now
+        ; "block/created-at", Int64 (Int64.of_int now)
         ; "logseq.property.history/block", uuid_ref node_block_uuid
         ; "logseq.property.history/property", kw "user.property/node"
         ; "logseq.property.history/ref-value", uuid_ref object1_uuid ]
     ; mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int (now + 1000)
+        ; "block/created-at", Int64 (Int64.of_int (now + 1000))
         ; "logseq.property.history/block", uuid_ref node_block_uuid
         ; "logseq.property.history/property", kw "user.property/node"
         ; "logseq.property.history/ref-value", uuid_ref object2_uuid ]
     ; mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int now
+        ; "block/created-at", Int64 (Int64.of_int now)
         ; "logseq.property.history/block", uuid_ref status_block_uuid
         ; "logseq.property.history/property", kw "logseq.property/status"
         ; "logseq.property.history/ref-value", kw "logseq.property/status.todo" ]
     ; mmap
         [ "block/uuid", Uuid (Db_test_util.gen_uuid ())
-        ; "block/created-at", Int (now + 1000)
+        ; "block/created-at", Int64 (Int64.of_int (now + 1000))
         ; "logseq.property.history/block", uuid_ref status_block_uuid
         ; "logseq.property.history/property", kw "logseq.property/status"
         ; "logseq.property.history/ref-value", kw "logseq.property/status.doing" ] ]
@@ -3001,7 +3004,7 @@ let test_build_export_omits_empty_build_properties () =
     | None -> failwith "page1 missing"
   in
   let export_edn =
-    build_export (db_of conn) [ "export-type", kw "page"; "page-id", Int page.id ]
+    build_export (db_of conn) [ "export-type", kw "page"; "page-id", Int64 (Int64.of_int page.id) ]
   in
   let empty_build_properties = ref [] in
   ignore
@@ -3041,7 +3044,7 @@ let test_import_graph_with_assets () =
                               mmap
                                 [ "logseq.property.asset/type", String "pdf"
                                 ; "logseq.property.asset/checksum", String "abc"
-                                ; "logseq.property.asset/size", Int 42 ] ) ]
+                                ; "logseq.property.asset/size", Int64 42L ] ) ]
                       ; mmap
                           [ "block/title", String "annotation block"
                           ; "build/tags", Set [ kw "logseq.class/Pdf-annotation" ]
@@ -3060,9 +3063,9 @@ let test_import_graph_with_assets () =
                               mmap
                                 [ "logseq.property.asset/type", String "png"
                                 ; "logseq.property.asset/checksum", String "img-checksum"
-                                ; "logseq.property.asset/width", Int 100
-                                ; "logseq.property.asset/height", Int 200
-                                ; "logseq.property.asset/size", Int 300 ] ) ]
+                                ; "logseq.property.asset/width", Int64 100L
+                                ; "logseq.property.asset/height", Int64 200L
+                                ; "logseq.property.asset/size", Int64 300L ] ) ]
                       ; mmap
                           [ "block/title", String "annotation with image"
                           ; "build/tags", Set [ kw "logseq.class/Pdf-annotation" ]
@@ -3125,7 +3128,7 @@ let test_validate_import_txs_tx_scope_validates_only_touched_entities () =
   in
   ignore
     (transact_vals conn
-       [ mmap [ "db/id", Int existing_page.id; "not-a-real-attr", Bool true ] ]);
+       [ mmap [ "db/id", Int64 (Int64.of_int existing_page.id); "not-a-real-attr", Bool true ] ]);
   let export_map =
     mmap
       [ ( "pages-and-blocks",
@@ -3187,12 +3190,12 @@ let test_validate_import_txs_tx_scope_rejects_invalid_tx () =
     Ok
       { Sqlite_export.init_tx =
           [ mmap
-              [ "db/id", Int (-1)
+              [ "db/id", Int64 (-1L)
               ; "block/uuid", Uuid (Db_test_util.gen_uuid ())
-              ; "block/title", Int 123
+              ; "block/title", Int64 123L
               ; "block/name", String "invalid-imported-page"
-              ; "block/created-at", Int 1
-              ; "block/updated-at", Int 1
+              ; "block/created-at", Int64 1L
+              ; "block/updated-at", Int64 1L
               ; "block/tags", kw "logseq.class/Page" ] ]
       ; block_props_tx = []
       ; misc_tx = [] }

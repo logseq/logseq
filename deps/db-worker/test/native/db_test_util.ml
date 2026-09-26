@@ -40,7 +40,7 @@ open Datascript
 type edn =
   | Kw of string              (* :foo/bar *)
   | Str of string
-  | Int of int
+  | Int64 of int
   | Flt of float
   | Bool of bool
   | Uuid of string
@@ -52,7 +52,7 @@ type edn =
 let rec edn_to_string = function
   | Kw s -> ":" ^ s
   | Str s -> Printf.sprintf "%S" s
-  | Int n -> string_of_int n
+  | Int64 n -> string_of_int n
   | Flt f ->
       let s = Printf.sprintf "%g" f in
       if String.contains s '.' || String.contains s 'e' then s else s ^ ".0"
@@ -129,7 +129,7 @@ let dissoc' m ks = List.filter (fun (k, _) -> not (List.mem k ks)) m
 
 (* cljs build.cljs current-db-id atom — negative temp ids *)
 let db_id_counter = ref 0
-let new_db_id () = decr db_id_counter; Int !db_id_counter
+let new_db_id () = decr db_id_counter; Int64 !db_id_counter
 
 let order_counter = ref 0
 (* db-order/gen-key — lexicographically increasing, valid fractional-index
@@ -147,7 +147,7 @@ let gen_order_key () =
 
 let time_counter = ref 0
 (* common-util/time-ms — monotonically increasing epoch-ms ints *)
-let time_ms () = incr time_counter; Int (1_700_000_000_000 + !time_counter)
+let time_ms () = incr time_counter; Int64 (1_700_000_000_000 + !time_counter)
 
 let uuid_counter = ref 0
 (* common-uuid/gen-uuid — deterministic, unique, canonical format *)
@@ -1285,7 +1285,7 @@ let build_page_ref ?uuid ?title ?journal () : prop_value =
         (List.filter_map Fun.id
            [ Option.map (fun u -> "block/uuid", Uuid u) uuid;
              Option.map (fun t -> "block/title", Str t) title;
-             Option.map (fun j -> "build/journal", Int j) journal ]) ]
+             Option.map (fun j -> "build/journal", Int64 j) journal ]) ]
 
 (* {:build/property-value :block ...} — a full property-value block *)
 let build_property_value ?uuid ?title ?value ?(properties = []) ?(tags = []) () : prop_value =
@@ -1434,7 +1434,7 @@ let translate_property_value (v : prop_value) (page_uuids : string StringMap.t) 
   | Vec (Kw "build/page" :: Map m :: _) ->
       let page_name =
         match get' m "build/journal", get' m "block/title" with
-        | Some (Int day), _ -> Ldb.journal_title_of_day day "MMM do, yyyy"
+        | Some (Int64 day), _ -> Ldb.journal_title_of_day day "MMM do, yyyy"
         | _, Some (Str t) -> t
         | _ -> failwith "[:build/page ...] requires :block/title or :build/journal"
       in
@@ -1493,7 +1493,7 @@ let page_decl_to_raw_map (p : page_decl) : (string * edn) list =
     [ Option.map (fun t -> "block/title", Str t) p.pg_title;
       Option.map (fun n -> "block/name", Str n) p.pg_name;
       Option.map (fun u -> "block/uuid", Uuid u) p.pg_uuid;
-      Option.map (fun j -> "build/journal", Int j) p.pg_journal ]
+      Option.map (fun j -> "build/journal", Int64 j) p.pg_journal ]
   @ (match p.pg_tags with
      | [] -> []
      | ts -> [ "build/tags", Vec (List.map (fun t -> Kw t) ts) ])
@@ -1505,11 +1505,11 @@ let page_decl_to_raw_map (p : page_decl) : (string * edn) list =
 (* cljs pre-build expand-journal on a page map *)
 let expand_journal_map (m : (string * edn) list) : (string * edn) list =
   match get' m "build/journal" with
-  | Some (Int day) ->
+  | Some (Int64 day) ->
       let title = Ldb.journal_title_of_day day "MMM do, yyyy" in
       merge'
         (dissoc' m [ "build/journal" ])
-        [ "block/journal-day", Int day;
+        [ "block/journal-day", Int64 day;
           "block/title", Str title;
           "block/uuid",
           Uuid (match map_uuid m with Some u -> u | None -> gen_journal_uuid day);
@@ -1536,7 +1536,7 @@ let add_new_pages_from_properties ~(options : create_options)
     List.filter_map
       (fun p ->
         match get' p "build/journal" with
-        | Some (Int j) -> Some (`Journal j)
+        | Some (Int64 j) -> Some (`Journal j)
         | _ ->
             (match map_title p with Some t -> Some (`Title t) | None -> None))
       pages
@@ -1554,7 +1554,7 @@ let add_new_pages_from_properties ~(options : create_options)
       (fun m ->
         let key =
           match get' m "build/journal" with
-          | Some (Int j) -> Some (`Journal j)
+          | Some (Int64 j) -> Some (`Journal j)
           | _ -> (match map_title m with Some t -> Some (`Title t) | None -> None)
         in
         match key with Some k -> not (List.mem k existing) | None -> false)
@@ -1585,7 +1585,7 @@ let add_new_pages_from_refs (pages : (string * edn) list list)
 (* cljs db-property-type/infer-property-type-from-value *)
 let infer_property_type_from_value (v : edn) : string =
   match v with
-  | Int _ | Flt _ -> "number"
+  | Int64 _ | Flt _ -> "number"
   | Bool _ -> "checkbox"
   | Vec [ Kw "build/page"; _ ] -> "node"
   | _ -> "default"
@@ -1773,7 +1773,7 @@ let build_closed_value_block ~block_uuid ~block_type ~value ~property_ident
 
 (* Handle for the entity a pvalue belongs to (cljs new-block) *)
 type new_block =
-  { nb_db_id : edn (* Int tempid | Vec lookup | Kw ident *)
+  { nb_db_id : edn (* Int64 tempid | Vec lookup | Kw ident *)
   ; nb_page : edn option }
 
 (* cljs db-property-build/build-property-value-block *)
@@ -2470,7 +2470,10 @@ let query_one_id (db : db) (q : string) (input : value) : entity option =
   (* first result only — cljs find-* helpers use (ffirst (d/q ...)) *)
   match Datascript.q_string ~inputs:[ Arg_scalar (Result_value input) ] db q with
   | (Result_entity id :: _) :: _ -> Ldb.ent_of_id db id
-  | (Result_value (Int id) :: _) :: _ -> Ldb.ent_of_id db id
+  | (Result_value (Int64 id) :: _) :: _ -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id -> Ldb.ent_of_id db id
+      | None -> None)
   | _ -> None
 
 (* db-test/find-block-by-content — blocks only ([?b :block/page]) *)
@@ -2489,7 +2492,7 @@ let find_page_by_title (db : db) (title : string) : entity option =
 let find_journal_by_journal_day (db : db) (day : int) : entity option =
   query_one_id db
     "[:find [?page ...] :in $ ?journal-day :where [?page :block/journal-day ?journal-day]]"
-    (Int day)
+    (Int64 (Int64.of_int day))
 
 
 (* ---------- pipeline fixture (richer built-ins) ---------- *)
@@ -2521,8 +2524,8 @@ let initial_data_ops : tx_op list =
       One_value (Uuid (Common_uuid.gen_uuid "db-ident-block-uuid" uuid_seed))
     ; "block/name", One_value (String (Ldb.page_name_sanity_lc title))
     ; "block/title", One_value (String title)
-    ; "block/created-at", One_value (Int 1700000000000)
-    ; "block/updated-at", One_value (Int 1700000000000) ]
+    ; "block/created-at", One_value (Int64 1700000000000L)
+    ; "block/updated-at", One_value (Int64 1700000000000L) ]
   in
   let class_ident ?(title = "") ?(extends = []) ?(extra = []) ident =
     let title =
@@ -2572,8 +2575,8 @@ let initial_data_ops : tx_op list =
               One_value
                 (Uuid (Common_uuid.gen_uuid "db-ident-block-uuid" ident)))
           :: ("block/title", One_value (String (name_of ident)))
-          :: ("block/created-at", One_value (Int 1700000000000))
-          :: ("block/updated-at", One_value (Int 1700000000000))
+          :: ("block/created-at", One_value (Int64 1700000000000L))
+          :: ("block/updated-at", One_value (Int64 1700000000000L))
           :: []
       }
   in
@@ -2646,8 +2649,8 @@ let initial_data_ops : tx_op list =
             ; "block/tags",
               One_value (Ref_to (Temp_id "cls-logseq.class/Page"))
             ; "logseq.property/built-in?", One_value (Bool true)
-            ; "block/created-at", One_value (Int 1700000000000)
-            ; "block/updated-at", One_value (Int 1700000000000)
+            ; "block/created-at", One_value (Int64 1700000000000L)
+            ; "block/updated-at", One_value (Int64 1700000000000L)
             ]
         }
     ; property_ident ~typ:"keyword" "logseq.property/type"

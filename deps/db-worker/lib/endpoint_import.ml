@@ -100,7 +100,7 @@ let import_file_payload (v : Datascript.value option) : string option =
          (String.init (List.length vs) (fun i ->
               Char.chr
                 (match List.nth vs i with
-                 | Int n -> n land 0xff
+                 | Int64 n -> Int64.(to_int (logand n 0xffL))
                  | Float f -> int_of_float f land 0xff
                  | _ -> 0)))
      with _ -> None)
@@ -154,7 +154,7 @@ let read_and_copy_import_asset (repo : string) (file : BM.t)
     in
     let size =
       match BM.attr_value file "asset/size" with
-      | Some (Int n) -> n
+      | Some (Int64 n) -> Option.value (Datascript.Util.int64_to_int n) ~default:(String.length payload)
       | Some (Float f) -> int_of_float f
       | _ -> String.length payload
     in
@@ -163,7 +163,7 @@ let read_and_copy_import_asset (repo : string) (file : BM.t)
     let with_edn_content, pdf_annotation = buffer_handler payload in
     let asset_data =
       with_edn_content
-        [ ("size", Int size); ("type", String asset_type)
+        [ ("size", Int64 (Int64.of_int size)); ("type", String asset_type)
         ; ( "path"
           , match bm_get_string file "path" with
             | Some p -> String p
@@ -243,7 +243,7 @@ let options_of_opts (repo : string) (opts : BM.t)
   let getv k = BM.attr_value opts k in
   let int_opt k =
     match getv k with
-    | Some (Int n) -> Some n
+    | Some (Int64 n) -> Datascript.Util.int64_to_int n
     | Some (Float f) -> Some (int_of_float f)
     | _ -> None
   in

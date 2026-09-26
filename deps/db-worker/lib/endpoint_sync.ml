@@ -135,7 +135,7 @@ let conflict_wire_of (c : Sync_client_op.sync_conflict) : Wire.t =
     ; kw "value", Wire.String c.value
     ; ( kw "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; kw "created-at", Wire.Int64 c.created_at ]
+    ; kw "created-at", Ds_wire.wire_int64 c.created_at ]
 
 let () =
   Dispatcher.register "thread-api/db-sync-get-all-block-conflicts"

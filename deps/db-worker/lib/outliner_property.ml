@@ -19,7 +19,8 @@ let macro_url (s : string) : bool =
 (* db-property-type/entity? *)
 let entity_exists db (v : value) : bool =
   let ref_of = function
-    | Ref id | Int id -> Some (Entity_id id)
+    | Ref id -> Some (Entity_id id)
+    | Int64 id -> Option.map (fun id -> Entity_id id) (Datascript.Util.int64_to_int id)
     | Keyword k -> Some (Ident k)
     | Uuid u -> Some (Lookup_ref ("block/uuid", Uuid u))
     | List [ Keyword a; v ] | Vector [ Keyword a; v ] ->
@@ -32,7 +33,8 @@ let entity_exists db (v : value) : bool =
 
 let entity_of_value db (v : value) : entity option =
   match v with
-  | Ref id | Int id -> Ldb.ent_of_id db id
+  | Ref id -> Ldb.ent_of_id db id
+  | Int64 id -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
   | Keyword k -> entity db (Ident k)
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | List [ Keyword a; x ] | Vector [ Keyword a; x ] ->
@@ -73,7 +75,7 @@ let number_entity db v =
   match entity_of_value db v with
   | Some e ->
       (match Ldb.value e "logseq.property/value" with
-       | Some (Int _ | Float _ | Instant _) -> true
+       | Some (Int64 _ | Float _) -> true
        | _ -> false)
   | None -> false
 
@@ -109,7 +111,7 @@ let date_pred db v =
 
 let value_is_string = function String _ -> true | _ -> false
 let value_is_number = function
-  | Int _ | Float _ | Instant _ -> true
+  | Int64 _ | Float _ -> true
   | _ -> false
 let value_is_bool = function Bool _ -> true | _ -> false
 let value_is_keyword = function Keyword _ -> true | _ -> false
@@ -175,8 +177,8 @@ let empty_placeholder_value db (property : Wire.t) (v : value) : bool =
          | Some e ->
              Ldb.ident_of e = Some "logseq.property/empty-placeholder"
          | None -> false)
-    | Int id ->
-        (match Ldb.ent_of_id db id with
+    | Int64 id ->
+        (match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
          | Some e ->
              Ldb.ident_of e = Some "logseq.property/empty-placeholder"
          | None -> false)
@@ -654,7 +656,7 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
           Wire.Map
             [ (kw "db/id", Wire.Int block.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
+               Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m property_id tx_value in
         let m =
@@ -798,7 +800,7 @@ let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list
            (match ident with Some i -> Wire.Keyword i | None -> Wire.Nil))
         ; (kw "db/cardinality", kw cardinality)
         ; (kw "block/updated-at",
-           Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
+           Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
     in
     if ref_type then Cljs_map.assoc m "db/valueType" (kw "db.type/ref") else m
   in
@@ -868,7 +870,7 @@ let update_property conn (db_ident : string) (property : entity)
              (Wire.Map
                 [ (kw "db/ident", kw db_ident)
                 ; (kw "block/updated-at",
-                   Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ])
+                   Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ])
              (Wire.Map
                 (List.map (fun (k, v) -> (Wire.Keyword k, v)) attrs)) ])
     @
@@ -956,7 +958,7 @@ let update_property conn (db_ident : string) (property : entity)
   if tx_data <> [] then
     Db_transact.transact conn tx_data
       [ ("outliner-op", Keyword "update-property")
-      ; ("property-id", Int property.id) ]
+      ; ("property-id", Int64 (Int64.of_int property.id)) ]
     |> ignore;
   property
 
@@ -2179,7 +2181,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
             [ (kw "block/uuid", Wire.Uuid block_id)
             ; (kw "block/closed-value-property", Wire.Int property.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
+               Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m value_key resolved_value in
         let m =
@@ -2235,7 +2237,7 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
         ; Wire.Map
             [ (kw "db/id", Wire.Int property.id)
             ; (kw "block/updated-at",
-               Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
+               Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
   in
   let tx_data' =
     match block with
@@ -2368,7 +2370,7 @@ let upsert_closed_value conn (property_id : string)
                                 (Wire.Map [ (kw "db/id", Wire.Int de.id) ])
                                 [ "block/title", Wire.String desc
                                 ; "block/updated-at",
-                                  Wire.Int64
+                                  Ds_wire.wire_int64
                                     (Time.epoch_ms_to_int64 (Time.now ())) ] ]
                             []
                           |> ignore
@@ -2423,7 +2425,7 @@ let add_existing_values_to_closed_values conn (property_id : string)
                Wire.Map
                  [ (kw "db/id", Wire.Int property_db_id)
                  ; (kw "block/updated-at",
-                    Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
+                    Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
              in
              Db_transact.transact conn (property_tx :: value_tx)
                [ ("outliner-op",
@@ -2463,7 +2465,7 @@ let delete_closed_value conn (property_id : string) (value_block_id : string)
           @ [ Wire.Map
                 [ (kw "db/id", Wire.Int property.id)
                 ; (kw "block/updated-at",
-                   Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
+                   Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
         in
         Db_transact.transact conn tx_data
           [ ("outliner-op", Keyword "delete-closed-value") ]

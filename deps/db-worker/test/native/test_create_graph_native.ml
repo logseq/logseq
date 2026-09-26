@@ -12,7 +12,7 @@
    cljs-vs-OCaml divergences asserted where observable:
    - Ldb.property_value_content only reads String values, so the cljs
      `(= 1 (property-value-content recur-frequency-default))` is asserted
-     as `(= (Int 1) (:logseq.property/value ...))` directly. *)
+     as `(= (Int64 1L) (:logseq.property/value ...))` directly. *)
 
 open Datascript
 
@@ -290,7 +290,7 @@ let () =
      (match Ldb.ref_ent recur "logseq.property/default-value" with
       | Some dv ->
         check "properties config: numeric property created"
-          (Ldb.value dv "logseq.property/value" = Some (Int 1))
+          (Ldb.value dv "logseq.property/value" = Some (Int64 1L))
       | None -> check "properties config: numeric property created" false)
    | None -> check "properties config: numeric property created" false)
 

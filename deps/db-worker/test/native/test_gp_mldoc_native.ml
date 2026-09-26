@@ -94,9 +94,9 @@ let src_test () =
                  ; mmap
                      [ "lines", List [ String ": hello"; String "\n" ]
                      ; "pos_meta",
-                       mmap [ "start_pos", Int 4; "end_pos", Int 12 ]
+                       mmap [ "start_pos", Int64 4L; "end_pos", Int64 12L ]
                      ; "full_content", String "```\n: hello\n```" ] ]
-             ; mmap [ "start_pos", Int 0; "end_pos", Int 15 ] ])));
+             ; mmap [ "start_pos", Int64 0L; "end_pos", Int64 15L ] ])));
   let edn2 = to_edn "\n  ```\n  hello\n  world\n  ```\n" md_config in
   check "Src example with leading whitespace"
     (v_eq_opt
@@ -111,9 +111,9 @@ let src_test () =
                          [ String "  hello"; String "\n"; String "  world"
                          ; String "\n" ]
                      ; "pos_meta",
-                       mmap [ "start_pos", Int 7; "end_pos", Int 25 ]
+                       mmap [ "start_pos", Int64 7L; "end_pos", Int64 25L ]
                      ; "full_content", String "```\nhello\nworld\n```" ] ]
-             ; mmap [ "start_pos", Int 1; "end_pos", Int 29 ] ])))
+             ; mmap [ "start_pos", Int64 1L; "end_pos", Int64 29L ] ])))
 
 (* mldoc-test/get-properties — cljs (->> (->edn x md-config) ffirst second
    (map (fn [[k v ast]] [(keyword k) (text/parse-property k v ast {})]))
@@ -178,9 +178,9 @@ let name_definition_test () =
                          ; "name",
                            List
                              [ Vector [ String "Plain"; String "term" ] ]
-                         ; "indent", Int 0
+                         ; "indent", Int64 0L
                          ; "ordered", Bool false ] ] ]
-             ; mmap [ "start_pos", Int 0; "end_pos", Int 17 ] ])))
+             ; mmap [ "start_pos", Int64 0L; "end_pos", Int64 17L ] ])))
 
 let macro_with_script_markup_test () =
   List.iter

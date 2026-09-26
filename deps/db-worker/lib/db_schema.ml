@@ -137,7 +137,7 @@ let version = { sv_major = 65; sv_minor = Some 33 }
    {:major 10 :minor 1} *)
 let parse_schema_version (v : value) : schema_version =
   match v with
-  | Int n -> { sv_major = n; sv_minor = None }
+  | Int64 n -> { sv_major = Util.int64_to_int_exn "schema-version major" n; sv_minor = None }
   | Float f -> { sv_major = int_of_float f; sv_minor = None }
   | String s ->
       (match String.split_on_char '.' s with
@@ -145,16 +145,18 @@ let parse_schema_version (v : value) : schema_version =
            { sv_major = int_of_string maj; sv_minor = Some (int_of_string min) }
        | [ maj ] -> { sv_major = int_of_string maj; sv_minor = None }
        | _ -> invalid_arg ("Not a schema-version: " ^ s))
-  | Vector [ Int maj ] | List [ Int maj ] ->
-      { sv_major = maj; sv_minor = None }
-  | Vector [ Int maj; Int min ] | List [ Int maj; Int min ] ->
-      { sv_major = maj; sv_minor = Some min }
+  | Vector [ Int64 maj ] | List [ Int64 maj ] ->
+      { sv_major = Util.int64_to_int_exn "schema-version major" maj; sv_minor = None }
+  | Vector [ Int64 maj; Int64 min ] | List [ Int64 maj; Int64 min ] ->
+      { sv_major = Util.int64_to_int_exn "schema-version major" maj
+      ; sv_minor = Some (Util.int64_to_int_exn "schema-version minor" min)
+      }
   | Map kvs ->
       let get name =
         List.find_map
           (fun (k, v) ->
             match k, v with
-            | (Keyword kk | String kk), Int i when kk = name -> Some i
+            | (Keyword kk | String kk), Int64 i when kk = name -> Util.int64_to_int i
             | _ -> None)
           kvs
       in

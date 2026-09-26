@@ -15,7 +15,7 @@ let eavt_scalar (db : db) (eid : entity_id) (a : attr) : value option =
 
 (* cljs valid-revision? — non-negative integer *)
 let valid_revision = function
-  | Int n -> n >= 0
+  | Int64 n -> Int64.compare n 0L >= 0
   | _ -> false
 
 let render_basis_rev (db : db) : int =
@@ -29,7 +29,7 @@ let render_basis_rev (db : db) : int =
 let block_revision (db : db) (eid : entity_id) : value =
   match eavt_scalar db eid "block/tx-id" with
   | Some v -> v
-  | None -> Int 0
+  | None -> Int64 0L
 
 let tagged_with_ident (db : db) (eid : entity_id) (tag_ident : string) : bool =
   datoms db Eavt ~e:eid ~a:"block/tags" ()
@@ -55,8 +55,13 @@ let block_order_list_type (db : db) (eid : entity_id) : string option =
   | Some v ->
       let label =
         match v with
-        | Int n | Ref n -> (
+        | Ref n -> (
             match eavt_scalar db n "block/title" with
+            | Some (String s) -> s
+            | _ -> "")
+        | Int64 n -> (
+            match Option.bind (Datascript.Util.int64_to_int n)
+                    (fun n -> eavt_scalar db n "block/title") with
             | Some (String s) -> s
             | _ -> "")
         | String s -> s
@@ -372,7 +377,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
       ; (kw "block-uuid", Wire.Uuid (Option.value block_uuid ~default:""))
       ; (kw "block-tx-id", Ds_wire.transit_of_value block_tx_id) ];
   let block_tx_id =
-    match block_tx_id with Int n -> n | _ -> assert false
+    match block_tx_id with Int64 n -> n | _ -> assert false
   in
   (* eavt fold *)
   let attrs =
@@ -390,7 +395,8 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
                    (* shallow-ref-identity -> wire map *)
                    let node =
                      match d.v with
-                     | Ref id | Int id -> Some id
+                     | Ref id -> Some id
+                     | Int64 id -> Datascript.Util.int64_to_int id
                      | _ -> None
                    in
                    match node with
@@ -427,7 +433,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
   (* cljs assoc semantics: later keys replace earlier ones *)
   let assoc key value map = (key, value) :: List.remove_assoc key map in
   let block' =
-    assoc (kw "block/tx-id") (Wire.Int block_tx_id)
+    assoc (kw "block/tx-id") (Ds_wire.wire_int64 block_tx_id)
       (assoc
          (kw "block.temp/refs-count")
          (match block_refs_count db entity_id with

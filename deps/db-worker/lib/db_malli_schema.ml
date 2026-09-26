@@ -48,7 +48,8 @@ let mget (k : string) (m : (attr * value) list) : value option =
 (* (d/entity db v) — raw eid (Int/Ref) or db-ident keyword *)
 let ent_of_val (db : db) (v : value) : entity option =
   match v with
-  | Ref id | Int id -> Ldb.ent_of_id db id
+  | Ref id -> Ldb.ent_of_id db id
+  | Int64 id -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
   | Keyword ident -> Ldb.ent_of_ref db (Ident ident)
   | _ -> None
 
@@ -68,9 +69,8 @@ let page_entity_val ctx v =
 let value_of (e : entity) (a : attr) = Ldb.value e a
 
 let is_string_val = function String _ -> true | _ -> false
-(* cljs number? — Instant doubles as the int64 scalar rep for epoch-ms
-   values (exceeds int32 on melange), so it counts as a number here *)
-let is_number_val = function Int _ | Float _ | Instant _ -> true | _ -> false
+(* cljs number? — a Date is not a number *)
+let is_number_val = function Int64 _ | Float _ -> true | _ -> false
 let is_boolean_val = function Bool _ -> true | _ -> false
 let is_keyword_val = function Keyword _ -> true | _ -> false
 let is_map_val = function Map _ -> true | _ -> false
@@ -203,10 +203,14 @@ let empty_placeholder_value (db : db) (property : value) (property_val : value)
   in
   if ref_type then
     (match property_val with
-     | Ref id | Int id ->
-         (match Ldb.ent_of_id db id with
-          | Some e -> Ldb.ident_of e = Some "logseq.property/empty-placeholder"
-          | None -> false)
+     | Ref id -> (
+         match Ldb.ent_of_id db id with
+         | Some e -> Ldb.ident_of e = Some "logseq.property/empty-placeholder"
+         | None -> false)
+     | Int64 id -> (
+         match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
+         | Some e -> Ldb.ident_of e = Some "logseq.property/empty-placeholder"
+         | None -> false)
      | _ -> false)
   else property_val = Keyword "logseq.property/empty-placeholder"
 
@@ -241,7 +245,8 @@ let validate_property_value (ctx : vctx) (opts : vopts) (tuple : value) : bool =
                  List.filter_map
                    (fun cv ->
                      match vget "db/id" cv with
-                     | Some (Int id | Ref id) -> Some id
+                     | Some (Ref id) -> Some id
+                     | Some (Int64 id) -> Datascript.Util.int64_to_int id
                      | _ -> None)
                    closed_values
                in
@@ -249,7 +254,11 @@ let validate_property_value (ctx : vctx) (opts : vopts) (tuple : value) : bool =
                  check v
                  &&
                  match v with
-                 | Ref id | Int id -> List.mem id ids
+                 | Ref id -> List.mem id ids
+                 | Int64 id -> (
+                     match Datascript.Util.int64_to_int id with
+                     | Some id -> List.mem id ids
+                     | None -> false)
                  | _ -> false
              else check
            in
@@ -292,7 +301,7 @@ let property_entity_to_map (property : entity) : value =
       @ [ ( kw "property/closed-values"
           , Vector
               (List.map
-                 (fun (cv : entity) -> Map [ kw "db/id", Int cv.id ])
+                 (fun (cv : entity) -> Map [ kw "db/id", Int64 (Int64.of_int cv.id) ])
                  cvs) ) ]
   in
   Map kvs
@@ -339,9 +348,9 @@ let update_properties_in_ents (db : db) (ents : (attr * value) list list)
                               Some (kw a, v)
                             else None)
                           ent
-                        @ [ kw "page-class-id", Int page_class_id
+                        @ [ kw "page-class-id", Int64 (Int64.of_int page_class_id)
                           ; ( kw "all-page-class-ids"
-                            , Set (List.map (fun id -> Int id) all_page_class_ids) ) ] )
+                            , Set (List.map (fun id -> Int64 (Int64.of_int id)) all_page_class_ids) ) ] )
                   in
                   ( props
                   , m
@@ -365,7 +374,7 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
   List.iter
     (fun (d : datom) ->
       (* cljs datom :v is the raw eid for ref attrs; OCaml keeps Ref. *)
-      let v = match d.v with Ref n -> Int n | v -> v in
+      let v = match d.v with Ref n -> Int64 (Int64.of_int n) | v -> v in
       let m = try Hashtbl.find tbl d.e with Not_found -> [] in
       if m = [] then order := d.e :: !order;
       (* cljs builds sets via (fnil conj #{})/#{existing v} — conj dedups
@@ -447,7 +456,7 @@ let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
 (* malli-schema/datoms->entities *)
 let datoms_to_entities ?entity_fn (datoms : datom list) : ent_map list =
   List.map
-    (fun (eid, m) -> m @ [ ("db/id", Int eid) ])
+    (fun (eid, m) -> m @ [ ("db/id", Int64 (Int64.of_int eid)) ])
     (datoms_to_entity_maps ?entity_fn datoms)
 
 (* ---- :db/ident schemas ---- *)
@@ -586,10 +595,21 @@ let block_tags : schema =
                    ( vget "page-class-id" opts
                    , vget "all-page-class-ids" opts )
                  with
-                 | Some (Int pcid | Ref pcid), Some (Set all) ->
+                 | Some pcid_v, Some (Set all) -> (
+                     let pcid =
+                       match pcid_v with
+                       | Ref id -> Some id
+                       | Int64 id -> Datascript.Util.int64_to_int id
+                       | _ -> None
+                     in
+                     match pcid with
+                     | Some pcid ->
                      let tags =
                        List.filter_map
-                         (function Ref id | Int id -> Some id | _ -> None)
+                         (function
+                           | Ref id -> Some id
+                           | Int64 id -> Datascript.Util.int64_to_int id
+                           | _ -> None)
                          (coll_items v)
                      in
                      if List.mem pcid tags then
@@ -599,11 +619,16 @@ let block_tags : schema =
                               t <> pcid
                               && List.exists
                                    (function
-                                     | Int i | Ref i -> i = t
+                                     | Ref i -> i = t
+                                     | Int64 i -> (
+                                         match Datascript.Util.int64_to_int i with
+                                         | Some i -> i = t
+                                         | None -> false)
                                      | _ -> false)
                                    all)
                             tags)
                      else true
+                     | None -> true)
                  | _ -> true)
             | _ -> true ) ]
 
@@ -841,8 +866,12 @@ let whiteboard_tags (tags : value list) (db : db) : bool =
     (fun t ->
       match t with
       | Keyword k -> k = "logseq.class/Whiteboard"
-      | Ref id | Int id ->
+      | Ref id ->
           (match Ldb.ent_of_id db id with
+           | Some e -> Ldb.ident_of e = Some "logseq.class/Whiteboard"
+           | None -> false)
+      | Int64 id ->
+          (match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
            | Some e -> Ldb.ident_of e = Some "logseq.class/Whiteboard"
            | None -> false)
       | _ -> false)
@@ -876,8 +905,12 @@ let entity_dispatch_key (db : db) (m : (attr * value) list) : string =
           (fun t ->
             match t with
             | Keyword k -> k = ident
-            | Ref id | Int id ->
+            | Ref id ->
                 (match Ldb.ent_of_id db id with
+                 | Some e -> Ldb.ident_of e = Some ident
+                 | None -> false)
+            | Int64 id ->
+                (match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
                  | Some e -> Ldb.ident_of e = Some ident
                  | None -> false)
             | _ -> false)

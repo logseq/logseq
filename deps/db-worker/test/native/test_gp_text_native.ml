@@ -180,7 +180,7 @@ let test_parse_property () =
       String "{\"product process\" true}"
     ; "collapsed", "collapsed", "false", [], Bool false
     ; "created-at", "created-at", "1609233702047", [],
-      Int 1609233702047
+      Int64 1609233702047L
     ; "background-color", "background-color", "#533e7d", [],
       String "#533e7d" ]
 

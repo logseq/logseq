@@ -103,10 +103,19 @@ let edn_text_of_arg = function
 
 (* ---- value <-> transit ---- *)
 
+(* transit has a single ~i integer domain: T.Int and T.Int64 serialize
+   identically and the reader canonicalizes ~i to Int when the value
+   fits an OCaml int — emit that canonical form so in-range ints
+   round-trip through to_string/of_string unchanged *)
+let wire_int64 (n : int64) : Wire.t =
+  match Datascript.Util.int64_to_int n with
+  | Some i -> Wire.Int i
+  | None -> Wire.Int64 n
+
 let rec transit_of_value (v : value) : Wire.t =
   match v with
   | Nil -> Wire.Nil
-  | Int n -> Wire.Int n
+  | Int64 n -> wire_int64 n
   | Float f -> Wire.Float f
   | String s -> Wire.String s
   | Symbol s -> Wire.Symbol s
@@ -137,16 +146,16 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Nil -> Nil
   | Wire.Bool b -> Bool b
   | Wire.String s -> String s
-  | Wire.Int n -> Int n
-  (* epoch-ms and other int64-range numbers stay numeric — cljs writes
-     plain numbers, so Int when they fit `int` (native behavior), Float
-     otherwise. Instant is only for real ~t / db.type/instant values *)
-  | Wire.Int64 n -> Common_util.value_of_ms n
+  | Wire.Int n -> Int64 (Int64.of_int n)
+  (* epoch-ms and other int64-range numbers stay numeric — Int64
+     unconditionally. Instant is only for real ~t / db.type/instant
+     values *)
+  | Wire.Int64 n -> Int64 n
   | Wire.Float f -> Float f
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
   | Wire.Symbol s -> Symbol s
-  | Wire.Big_int s -> Int (int_of_string s)
+  | Wire.Big_int s -> Int64 (Int64.of_string s)
   | Wire.Big_decimal s -> Float (float_of_string s)
   | Wire.Date_ms ms -> Instant ms
   | Wire.Uuid s -> Uuid s
@@ -161,7 +170,7 @@ let rec value_of_transit (t : Wire.t) : value =
 let entity_ref_of_transit (t : Wire.t) : entity_ref =
   match t with
   | Wire.Int n -> Entity_id n
-  | Wire.Int64 n -> Entity_id (Int64.to_int n)
+  | Wire.Int64 n -> Entity_id (Datascript.Util.int64_to_int_exn "entity ref" n)
   | Wire.String s -> Temp_id s
   | Wire.Keyword "db/current-tx" -> CurrentTx
   | Wire.Keyword s -> Ident s
@@ -376,14 +385,14 @@ let query_arg_of_transit (t : Wire.t) : query_arg =
   | t ->
       (match value_of_transit t with
        | Keyword s -> Arg_scalar (Result_attr s)
-       | Int n -> Arg_scalar (Result_entity n)
+       | Int64 n -> Arg_scalar (Result_entity (Datascript.Util.int64_to_int_exn "entity id" n))
        | v -> Arg_scalar (Result_value v))
 
 let rec edn_of_query_form (f : query_form) : string =
   match f with
   | QueryFormNil -> "nil"
   | QueryFormBool b -> if b then "true" else "false"
-  | QueryFormInt n -> string_of_int n
+  | QueryFormInt n -> Int64.to_string n
   | QueryFormFloat x -> Printf.sprintf "%.17g" x
   | QueryFormString s -> Printf.sprintf "\"%s\"" (escape_string s)
   | QueryFormKeyword s -> ":" ^ s
@@ -399,7 +408,7 @@ let rec edn_of_query_form (f : query_form) : string =
 let query_result_of_transit (t : Wire.t) : query_result =
   match value_of_transit t with
   | Keyword s -> Result_attr s
-  | Int n -> Result_entity n
+  | Int64 n -> Result_entity (Datascript.Util.int64_to_int_exn "entity id" n)
   | v -> Result_value v
 
 (* Canonical string key for a wire scalar (ui-request ids, state keys). *)

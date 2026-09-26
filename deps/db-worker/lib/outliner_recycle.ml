@@ -66,7 +66,7 @@ let maybe_assoc (k : attr) (v : value option) (attrs : (attr * tx_value) list) =
 let resolve_entity (db : db) (v : value option) : entity option =
   match v with
   | Some (Ref id) -> Ldb.ent_of_id db id
-  | Some (Int id) -> Ldb.ent_of_id db id
+  | Some (Int64 id) -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
   | Some (Ref_to r) -> entity db r
   | _ -> None
 
@@ -368,7 +368,7 @@ let gc_tx_data db ?(now_ms : float option) () : tx_op list =
     |> List.concat_map
          (List.filter_map (function
             | Result_entity i -> Some i
-            | Result_value (Int i) -> Some i
+            | Result_value (Int64 i) -> Datascript.Util.int64_to_int i
             | _ -> None))
   in
   let ents = List.filter_map (Ldb.ent_of_id db) ids |> List.filter recycled in

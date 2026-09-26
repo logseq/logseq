@@ -277,7 +277,7 @@ let stamp_zero_created_at (conn : conn) =
   let db = db_of conn in
   let zeros =
     datoms db Eavt ~a:"block/created-at" ()
-    |> Seq.filter (fun (d : datom) -> d.v = Int 0)
+    |> Seq.filter (fun (d : datom) -> d.v = Int64 0L)
     |> List.of_seq
   in
   if zeros <> [] then
@@ -452,11 +452,11 @@ let test_global_all_pages_time_filter_keeps_visible_node_links () =
     conn_with_blocks
       ~pages_and_blocks:
         [ pbb "Early"
-            ~extra:[ "block/created-at", Int 1000 ]
+            ~extra:[ "block/created-at", Int64 1000 ]
             ~children:[ blk "See [[Middle]] and [[Late]]" () ]
             ()
-        ; pb "Middle" ~extra:[ "block/created-at", Int 2000 ] ()
-        ; pb "Late" ~extra:[ "block/created-at", Int 3000 ] () ]
+        ; pb "Middle" ~extra:[ "block/created-at", Int64 2000 ] ()
+        ; pb "Late" ~extra:[ "block/created-at", Int64 3000 ] () ]
       ()
   in
   stamp_zero_created_at conn;
@@ -484,15 +484,15 @@ let test_global_tags_and_objects_nodes_include_created_at () =
     conn_with_blocks
       ~pages_and_blocks:
         [ pbb "Timed Objects"
-            ~extra:[ "block/created-at", Int 1000 ]
+            ~extra:[ "block/created-at", Int64 1000 ]
             ~children:
               [ blk "timed object"
                   ~tags:[ "Topic" ]
-                  ~extra:[ "block/created-at", Int 2000 ]
+                  ~extra:[ "block/created-at", Int64 2000 ]
                   () ]
             () ]
       ~classes:
-        [ "Topic", cls ~extra:[ "block/created-at", Int 1500 ] () ]
+        [ "Topic", cls ~extra:[ "block/created-at", Int64 1500 ] () ]
       ()
   in
   let result = global_graph ~view_mode:"tags-and-objects" (db_of conn) in
@@ -684,7 +684,7 @@ let test_tags_and_objects_graph_respects_hidden_recycled_and_excluded_visibility
             ~children:[ blk "hidden page object" ~tags:[ "Topic" ] () ]
             ()
         ; pbb "Recycled Page"
-            ~properties:[ "logseq.property/deleted-at", Int 1712000000000 ]
+            ~properties:[ "logseq.property/deleted-at", Int64 1712000000000 ]
             ~children:[ blk "recycled page object" ~tags:[ "Topic" ] () ]
             ()
         ; pbb "Excluded Page"

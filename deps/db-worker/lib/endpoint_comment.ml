@@ -53,7 +53,7 @@ let block_ref_entity db (v : value) : entity option =
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s when Ldb.is_uuid_string s ->
       entity db (Lookup_ref ("block/uuid", Uuid s))
-  | Int id -> entity db (Entity_id id)
+  | Int64 id -> entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
   | _ -> None
 
 (* :thread-api/get-comment-threads-for-block *)
