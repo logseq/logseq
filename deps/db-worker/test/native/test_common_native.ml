@@ -349,6 +349,26 @@ let test_registry_normalizes_graph_name_whitespace () =
          [ " space name "; " logseq_db_space name "; "logseq_db_ space name " ]
    | _ -> check "upsert-entry returns one entry" false)
 
+(* ---------- root_dir path_resolve ----------
+
+   node-path/resolve parity, including Windows drive-letter and UNC
+   inputs that reach the daemon on win32 (JS daemon fallback). *)
+
+let test_path_resolve () =
+  List.iter
+    (fun (input, want) ->
+      check (Printf.sprintf "path-resolve %S" input)
+        (Root_dir.path_resolve input = want))
+    [ ("/tmp/x", "/tmp/x")
+    ; ("/tmp/x/../y", "/tmp/y")
+    ; ("/a//b/./c", "/a/b/c")
+    ; ("C:\\tmp\\sg-abc", "C:/tmp/sg-abc")
+    ; ("C:/tmp/sg-abc", "C:/tmp/sg-abc")
+    ; ("C:\\", "C:/")
+    ; ("C:/a/../b", "C:/b")
+    ; ("C:/a/../..", "C:/")
+    ; ("\\\\server\\share\\x", "//server/share/x") ]
+
 (* ---------- deps/common graph_test.cljs ----------
 
    The cljs tests write a fixture under tmp/ via fs; the OCaml port uses
@@ -468,6 +488,8 @@ let () =
     ; ( "graph_registry_test"
       , [ Alcotest.test_case "registry-normalizes-graph-name-whitespace"
             `Quick test_registry_normalizes_graph_name_whitespace ] )
+    ; ( "root_dir_test"
+      , [ Alcotest.test_case "path-resolve" `Quick test_path_resolve ] )
     ; ( "graph_test"
       , [ Alcotest.test_case "get-files" `Quick test_get_files
         ; Alcotest.test_case
