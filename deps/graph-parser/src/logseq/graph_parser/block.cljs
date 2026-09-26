@@ -410,10 +410,10 @@
     as there's no chance to introduce timestamps via editing in page
    `skip-existing-page-check?`: if true, allows pages to have the same name"
   [original-page-name db with-timestamp? date-formatter
-   & {:keys [page-uuid class?] :as options}]
+   & {:keys [page-uuid class? db-based?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (page-entity? (d/entity db [:block/uuid (uuid original-page-name)]))))
-    (let [db-based? (entity-plus/db-based-graph? db)
+    (let [db-based? (or db-based? (entity-plus/db-based-graph? db))
           original-page-name (cond-> (string/trim original-page-name)
                                db-based?
                                sanitize-hashtag-name)
@@ -474,7 +474,8 @@
                     tag?
                     (or (contains? structured-tags item) tag?))]
          (when-not macro?
-           (let [m (page-name->map item db true date-formatter {:class? tag?})
+           (let [m (page-name->map item db true date-formatter {:class? tag?
+                                                               :db-based? db-based?})
                  result (cond->> m
                           (and db-based? tag? (not (:db/ident m)))
                           (db-class/build-new-class db))
@@ -485,16 +486,18 @@
              ;; Changing a :block/uuid should be done cautiously here as it can break
              ;; the identity of built-in concepts in db graphs
              (if (and id
-                      (or (when-let [ident (:db/ident result)]
-                            (nil? (d/entity db ident)))
-                          export-to-db-graph?))
+                      (or export-to-db-graph?
+                          (not (and db
+                                    (:db/ident result)
+                                    (d/entity db (:db/ident result))))))
                (assoc result :block/uuid id)
                result))))) col)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags]
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags db-graph-mode?]
                                                                                :or {structured-tags #{}}}]
-  (let [db-based? (and (entity-plus/db-based-graph? db) (not @*export-to-db-graph?))
+  (let [db-based? (and (not @*export-to-db-graph?)
+                       (or db-graph-mode? (entity-plus/db-based-graph? db)))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -718,7 +721,8 @@
         block (-> block
                   (assoc :body body)
                   (with-page-block-refs db date-formatter
-                    (cond-> {} (seq block-tags) (assoc :structured-tags block-tags))))
+                    {:structured-tags block-tags
+                     :db-graph-mode? db-graph-mode?}))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))

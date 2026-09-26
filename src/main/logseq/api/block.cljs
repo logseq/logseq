@@ -63,7 +63,7 @@
     (if (qualified-keyword? property-key)
       property-key
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
-        (keyword plugin-ns (db-ident/normalize-ident-name-part property-name'))))))
+        (keyword plugin-ns (db-ident/normalize-ident-name-part-ascii property-name'))))))
 
 (defn resolve-class-prefix-for-db
   [^js plugin]

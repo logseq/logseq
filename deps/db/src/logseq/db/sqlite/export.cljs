@@ -13,6 +13,7 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
@@ -1062,11 +1063,8 @@
       (walk/postwalk
        (fn [e]
          (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
-           ;; Copied from create-db-ident-from-name since this may be shortlived
            (let [sanitized-kw (keyword (namespace e)
-                                       (->> (string/replace-first (name e) #"^(\d)" "NUM-$1")
-                                            (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
-                                            (apply str)))]
+                                       (db-ident/normalize-ident-name-part (name e)))]
              ;; (when (not= sanitized-kw e) (prn :sanitize e :-> sanitized-kw))
              (if (not= sanitized-kw e) sanitized-kw e))
            e))
