@@ -1144,42 +1144,33 @@
        [] (breakpoint? 640))))
 
 #?(:cljs
-   (do
-     (defn goog-event?
-       [^js e]
-       (and e (fn? (gobj/get e "getBrowserEvent"))))
-
-     (defn goog-event-is-composing?
-       "Check if keydown event is a composing (IME) event.
-        Ignore the IME process by default."
-       ([^js e]
-        (goog-event-is-composing? e false))
-       ([^js e include-process?]
-        (when (goog-event? e)
-          (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
-            (if include-process?
-              (or event-composing?
-                  (= (gobj/get e "keyCode") 229)
-                  (= (gobj/get e "key") "Process"))
-              event-composing?)))))))
+   (defn goog-event?
+     [^js e]
+     (and e (fn? (gobj/get e "getBrowserEvent")))))
 
 #?(:cljs
    (defn native-event-is-composing?
-     "Check if onchange event of Input is a composing (IME) event.
-       Always ignore the IME process."
-     [^js e]
-     (when-let [^js native-event
-                (and e (cond
-                         (goog-event? e)
-                         (.getBrowserEvent e)
+     "Check if a KeyboardEvent (native, React synthetic, or goog-wrapped) is an
+      IME composing event. IME process keys (keyCode 229 / key \"Process\") count
+      as composing unless include-process? is false."
+     ([^js e]
+      (native-event-is-composing? e true))
+     ([^js e include-process?]
+      (when-let [^js native-event
+                 (and e (cond
+                          (goog-event? e)
+                          (.getBrowserEvent e)
 
-                         (js-in "_reactName" e)
-                         (.-nativeEvent e)
+                          (js-in "_reactName" e)
+                          (.-nativeEvent e)
 
-                         :else e))]
-       (or (.-isComposing native-event)
-           (= (gobj/get native-event "keyCode") 229)
-           (= (gobj/get native-event "key") "Process")))))
+                          :else e))]
+        (let [event-composing? (.-isComposing native-event)]
+          (if include-process?
+            (or event-composing?
+                (= (gobj/get native-event "keyCode") 229)
+                (= (gobj/get native-event "key") "Process"))
+            event-composing?))))))
 
 #?(:cljs
    (defn open-url

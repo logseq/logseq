@@ -73,15 +73,6 @@
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
 
-(deftest goog-event-is-composing?-ignores-native-cmdk-events
-  (testing "native addEventListener IME Enter is invisible to goog-event-is-composing?"
-    (let [event (js-obj)]
-      (gobj/set event "key" "Enter")
-      (gobj/set event "keyCode" 229)
-      (gobj/set event "isComposing" true)
-      (is (nil? (util/goog-event-is-composing? event)))
-      (is (nil? (util/goog-event-is-composing? event true))))))
-
 (deftest native-event-is-composing?-detects-ime-process-enter
   (testing "plain native Enter is not composing"
     (let [event (js-obj)]
@@ -95,7 +86,8 @@
       (gobj/set event "key" "Enter")
       (gobj/set event "keyCode" 229)
       (gobj/set event "isComposing" false)
-      (is (true? (util/native-event-is-composing? event)))))
+      (is (true? (util/native-event-is-composing? event)))
+      (is (false? (boolean (util/native-event-is-composing? event false))))))
 
   (testing "IME Process key is composing"
     (let [event (js-obj)]
@@ -109,7 +101,8 @@
       (gobj/set event "key" "Enter")
       (gobj/set event "keyCode" 13)
       (gobj/set event "isComposing" true)
-      (is (true? (util/native-event-is-composing? event))))))
+      (is (true? (util/native-event-is-composing? event)))
+      (is (true? (util/native-event-is-composing? event false))))))
 
 (defn- mock-ls-block
   [{:keys [blockid class-name inner]}]
