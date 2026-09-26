@@ -168,13 +168,31 @@
       (ui/button (t :ui/submit)
                  {:on-click on-submit})]]))
 
+(defn- import-checkbox-field
+  [name label description extra-on-change]
+  (shui/form-field {:name name}
+                   (fn [field]
+                     (shui/form-item
+                      {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                      (shui/form-label label)
+                      (when description
+                        (shui/form-description description))
+                      (shui/form-control
+                       (shui/checkbox {:checked (:value field)
+                                       :on-checked-change (fn [e]
+                                                            ((:onChange field) e)
+                                                            (when extra-on-change (extra-on-change e)))}))))))
+
 (hsx/defc import-file-graph-dialog
-  [initial-name on-submit-fn]
+  [initial-name on-submit-fn {:keys [plain-markdown?]}]
   [:div.border.p-6.rounded.bg-gray-01.mt-4
+   (when plain-markdown?
+     [:p.text-sm.text-muted-foreground.pb-2
+      (t :import/plain-markdown-notice)])
    (let [form-ctx (form-core/use-form
                    {:defaultValues {:graph-name initial-name
                                     :extract-code-snippets? false
-                                    :convert-all-tags? true
+                                    :convert-all-tags? false
                                     :tag-classes ""
                                     :remove-inline-tags? true
                                     :property-classes ""
@@ -188,7 +206,7 @@
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (shui/dialog-close!)
                             (on-submit-fn (js->clj e :keywordize-keys true))))
-         [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state true)]
+         [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state false)]
 
      (shui/form-provider form-ctx
                          [:form
@@ -204,25 +222,16 @@
                                                 (shui/form-description
                                                  [:b.text-red-800 (:message error)])))))
 
-                          (shui/form-field {:name "extract-code-snippets?"}
-                                           (fn [field]
-                                             (shui/form-item
-                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label (t :import/extract-inline-code-snippets))
-                                              (shui/form-control
-                                               (shui/checkbox {:checked (:value field)
-                                                               :on-checked-change (:onChange field)})))))
+                          (import-checkbox-field "extract-code-snippets?"
+                                                 (t :import/extract-inline-code-snippets)
+                                                 (t :import/extract-inline-code-snippets-desc)
+                                                 nil)
 
-                          (shui/form-field {:name "convert-all-tags?"}
-                                           (fn [field]
-                                             (shui/form-item
-                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label (t :import/all-tags))
-                                              (shui/form-control
-                                               (shui/checkbox {:checked (:value field)
-                                                               :on-checked-change (fn [e]
-                                                                                    ((:onChange field) e)
-                                                                                    (set-convert-all-tags-input! (not convert-all-tags-input)))})))))
+                          (import-checkbox-field "convert-all-tags?"
+                                                 (t :import/all-tags)
+                                                 (t :import/all-tags-desc)
+                                                 (fn [_]
+                                                   (set-convert-all-tags-input! (not convert-all-tags-input))))
 
                           (shui/form-field {:name "tag-classes"}
                                            (fn [field _error]
@@ -234,15 +243,10 @@
                                                                   {:placeholder (t :import/tag-classes-placeholder) :disabled convert-all-tags-input})))
                                               (shui/form-description (t :import/tags-case-insensitive)))))
 
-                          (shui/form-field {:name "remove-inline-tags?"}
-                                           (fn [field]
-                                             (shui/form-item
-                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label (t :import/remove-inline-tags))
-                                              (shui/form-description (t :import/default-db-graph-behavior))
-                                              (shui/form-control
-                                               (shui/checkbox {:checked (:value field)
-                                                               :on-checked-change (:onChange field)})))))
+                          (import-checkbox-field "remove-inline-tags?"
+                                                 (t :import/remove-inline-tags)
+                                                 (t :import/default-db-graph-behavior)
+                                                 nil)
 
                           (shui/form-field {:name "property-classes"}
                                            (fn [field _error]
@@ -266,28 +270,284 @@
 
                           (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
+;; Ignored items and validation errors are reported by the import report
+;; dialog; this only covers org files, which are not part of that report.
 (defn- validate-imported-data
-  [{:keys [org-file-count ignored-files-count ignored-assets-count ignored-properties-count validation-error-count]}]
+  [{:keys [org-file-count]}]
   (when (pos? (or org-file-count 0))
     (notification/show! (t :import/org-files-imported org-file-count)
                         :info false))
-  (when (pos? (or ignored-files-count 0))
-    (notification/show! (t :import/ignored-files ignored-files-count)
-                        :info false))
-  (when (pos? (or ignored-assets-count 0))
-    (notification/show! (t :import/ignored-assets ignored-assets-count)
-                        :info false))
-  (when (pos? (or ignored-properties-count 0))
-    (notification/show!
-     [:.mb-2
-      [:.text-lg.mb-2 (t :import/ignored-properties ignored-properties-count)]
-      [:span.text-xs
-       (t :import/ignored-properties-fix)]]
-     :warning false))
-  (if (pos? (or validation-error-count 0))
-    (notification/show! (t :import/invalid-blocks-detected validation-error-count)
-                        :warning false)
-    (log/info :import-valid {:msg "Valid import!"})))
+  (log/info :import-valid {:msg "Valid import!"}))
+
+;;; import report
+
+(defn- import-location-text
+  [location]
+  (cond
+    (map? location) (or (:page location) (:block location) (pr-str location))
+    (nil? location) nil
+    :else (str location)))
+
+(defn- import-reason-text
+  [reason]
+  (let [reason-key (some-> reason str (string/replace #"^:" ""))]
+    (case reason-key
+      "export-failed" (t :import.reason/export-failed)
+      "unsupported-file-format" (t :import.reason/unsupported-file-format)
+      "whiteboard-not-supported" (t :import.reason/whiteboard-not-supported)
+      "skipped-by-file-picker" (t :import.reason/skipped-by-file-picker)
+      "hidden" (t :import.reason/hidden)
+      "alias/self" (t :import.reason/alias-conflict)
+      "alias/source-is-alias" (t :import.reason/alias-conflict)
+      "alias/duplicate-owner" (t :import.reason/alias-conflict)
+      "alias/alias-owns-aliases" (t :import.reason/alias-conflict)
+      "No asset data found for this asset path" (t :import.reason/missing-asset-data)
+      "Some asset links were not updated to block references" (t :import.reason/asset-links-not-updated)
+      (str reason))))
+
+(defn- import-report-items-md
+  [items render-item]
+  (->> items (map render-item) (map #(str "- " %)) (string/join "\n")))
+
+(defn- ignored-item-md
+  [item]
+  (str "`" (:path item) "`"
+       (when-let [reason (:reason item)]
+         (str " — " (import-reason-text reason)))))
+
+(defn- ignored-property-md
+  [{:keys [property location reason schema]}]
+  (str "`" (name property) "`"
+       (when-let [location' (import-location-text location)]
+         (str " — " location'))
+       (when reason
+         (str " (" (import-reason-text reason) ")"))
+       (when schema
+         (str " schema: " schema))))
+
+(defn- validation-error-md
+  [{:keys [title page dispatch-key errors]}]
+  (str title
+       (when page (str " @" page))
+       (when dispatch-key (str " [" (name dispatch-key) "]"))
+       " — " errors))
+
+(defn- build-import-report-md
+  [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
+           validation-errors-detail notifications]}]
+  (str "# " (t :import/report-title) "\n\n"
+       (when (seq ignored-files-detail)
+         (str "## " (t :import/report-ignored-files) "\n\n"
+              (import-report-items-md ignored-files-detail ignored-item-md) "\n\n"))
+       (when (seq ignored-assets-detail)
+         (str "## " (t :import/report-ignored-assets) "\n\n"
+              (import-report-items-md ignored-assets-detail ignored-item-md) "\n\n"))
+       (when (seq ignored-properties-detail)
+         (str "## " (t :import/report-ignored-properties) "\n\n"
+              (import-report-items-md ignored-properties-detail ignored-property-md) "\n\n"))
+       (when (seq validation-errors-detail)
+         (str "## " (t :import/report-validation-errors) "\n\n"
+              (import-report-items-md validation-errors-detail validation-error-md) "\n\n"))
+       (when (seq notifications)
+         (str "## " (t :import/report-errors) "\n\n"
+              (import-report-items-md notifications :msg) "\n\n"))))
+
+(defn- download-text-file!
+  [file-name text]
+  (let [blob (js/Blob. #js [text] #js {:type "text/markdown"})
+        url (js/URL.createObjectURL blob)
+        anchor (js/document.createElement "a")]
+    (set! (.-href anchor) url)
+    (set! (.-download anchor) file-name)
+    (.click anchor)
+    (js/URL.revokeObjectURL url)))
+
+(def ^:private import-report-render-limit 200)
+
+(defn- import-report-section
+  "Renders up to `import-report-render-limit` items; the full list is in the
+  downloaded report."
+  [title items render-item]
+  (when (seq items)
+    [:section.mb-4
+     [:h3.font-medium.mb-1 title]
+     [:ul.list-disc.pl-5.text-sm.flex.flex-col.gap-1
+      (map-indexed (fn [idx item]
+                     [:li {:key idx} (render-item item)])
+                   (take import-report-render-limit items))]
+     (when (> (count items) import-report-render-limit)
+       [:p.text-xs.text-muted-foreground.mt-1
+        (t :import/report-truncated import-report-render-limit (count items))])]))
+
+(defn- ignored-file-item-view
+  [{:keys [path reason]}]
+  [:span
+   [:code path]
+   (when reason (str " — " (import-reason-text reason)))])
+
+(defn- ignored-property-item-view
+  [{:keys [property location reason schema]}]
+  [:span
+   [:code (name property)]
+   (when-let [location' (import-location-text location)]
+     (str " — " location'))
+   (when reason (str " (" (import-reason-text reason) ")"))
+   (when schema (str " " schema))])
+
+(defn- validation-error-item-view
+  [{:keys [title page dispatch-key errors]}]
+  [:span
+   [:code title]
+   (when page (str " @" page))
+   (when dispatch-key (str " [" (name dispatch-key) "]"))
+   (str " — " errors)])
+
+(defn- notification-item-view
+  [{:keys [msg]}]
+  [:span msg])
+
+(hsx/defc import-report-dialog
+  [import-result]
+  (let [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
+                validation-errors-detail notifications]} import-result]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium.pb-2
+        (t :import/report-title)]]]
+     [:div.max-h-96.overflow-y-auto.pr-1
+      (import-report-section (t :import/report-ignored-files)
+                             ignored-files-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-assets)
+                             ignored-assets-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-properties)
+                             ignored-properties-detail
+                             ignored-property-item-view)
+      (import-report-section (t :import/report-validation-errors)
+                             validation-errors-detail
+                             validation-error-item-view)
+      (import-report-section (t :import/report-errors)
+                             notifications
+                             notification-item-view)]
+     [:div.mt-5.sm:mt-4.flex.gap-2
+      (ui/button (t :import/report-download)
+                 {:on-click #(download-text-file! "logseq-import-report.md"
+                                                  (build-import-report-md import-result))})
+      (ui/button (t :ui/close)
+                 {:on-click #(shui/dialog-close!)})]]))
+
+(defn- import-report-needed?
+  [{:keys [ignored-files-count ignored-assets-count ignored-properties-count validation-error-count
+           ignored-files-detail ignored-assets-detail ignored-properties-detail
+           validation-errors-detail notifications]}]
+  (boolean (or (seq ignored-files-detail) (seq ignored-assets-detail)
+               (seq ignored-properties-detail) (seq validation-errors-detail)
+               (seq notifications)
+               (pos? (or ignored-files-count 0)) (pos? (or ignored-assets-count 0))
+               (pos? (or ignored-properties-count 0)) (pos? (or validation-error-count 0)))))
+
+(defn- open-import-report!
+  [import-result]
+  (shui/dialog-open!
+   #(import-report-dialog import-result)
+   {:id :import-report
+    :content-props {:class "w-auto md:max-w-2xl max-h-[80vh] overflow-y-auto"}}))
+
+;;; dry-run scan
+
+(hsx/defc scanning-dialog
+  []
+  (let [{:keys [total current-idx current-page]} (rfx/use-sub [:graph/importing-state])
+        width (when (and total current-idx (pos? total))
+                (js/Math.round (* (.toFixed (/ current-idx total) 2) 100)))
+        process (when (and total current-idx)
+                  (str current-idx "/" total))]
+    [:div.p-5
+     (ui/progress-bar-with-label (or width 0)
+                                 [:div.flex.flex-row.font-bold
+                                  (t :import/scanning)
+                                  (when (seq current-page)
+                                    [:div.hidden.md:flex.flex-row
+                                     [:span.mr-1 ": "]
+                                     [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                                      current-page]])]
+                                 process)]))
+
+(defn- open-scan-dialog!
+  []
+  (shui/dialog-open! scanning-dialog
+                     {:id :import-scan
+                      :content-props
+                      {:onPointerDownOutside #(.preventDefault %)
+                       :onOpenAutoFocus #(.preventDefault %)}}))
+
+(defn- close-scan-dialog!
+  []
+  (state/set-state! :graph/importing-state nil)
+  (shui/dialog-close! :import-scan))
+
+(hsx/defc import-scan-preview-dialog
+  [scan-result on-import on-cancel]
+  (let [{:keys [page-count journal-count block-count org-file-count
+                ignored-files-detail ignored-assets-detail ignored-properties-detail
+                validation-errors-detail notifications]} (or scan-result {})]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium.pb-2
+        (t :import/scan-title)]]]
+     [:div.max-h-96.overflow-y-auto.pr-1
+      (when (or page-count block-count)
+        [:p.text-sm.mb-2
+         (t :import/scan-summary (or page-count 0) (or block-count 0) (or journal-count 0))])
+      (when (pos? (or org-file-count 0))
+        [:p.text-sm.mb-2 (t :import/scan-org-notice org-file-count)])
+      (when (and (empty? ignored-files-detail) (empty? ignored-assets-detail)
+                 (empty? ignored-properties-detail) (empty? validation-errors-detail)
+                 (empty? notifications))
+        [:p.text-sm.text-muted-foreground (t :import/scan-empty)])
+      (import-report-section (t :import/report-ignored-files)
+                             ignored-files-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-assets)
+                             ignored-assets-detail
+                             ignored-file-item-view)
+      (import-report-section (t :import/report-ignored-properties)
+                             ignored-properties-detail
+                             ignored-property-item-view)
+      (import-report-section (t :import/report-validation-errors)
+                             validation-errors-detail
+                             validation-error-item-view)
+      (import-report-section (t :import/report-errors)
+                             notifications
+                             notification-item-view)]
+     [:div.mt-5.sm:mt-4.flex.gap-2
+      (ui/button (t :import/title)
+                 {:on-click on-import})
+      (ui/button (t :ui/cancel)
+                 {:on-click on-cancel})]]))
+
+(defn- <confirm-import-scan!
+  "Opens the scan preview dialog. Resolves true when the user picks Import and
+  false on any other close."
+  [scan-result]
+  (p/create
+   (fn [resolve _reject]
+     (shui/dialog-open!
+      #(import-scan-preview-dialog scan-result
+                                   (fn []
+                                     (resolve true)
+                                     (shui/dialog-close! :import-scan-preview))
+                                   ;; dialog-close! suppresses :on-close, so Cancel
+                                   ;; must resolve the promise itself
+                                   (fn []
+                                     (resolve false)
+                                     (shui/dialog-close! :import-scan-preview)))
+      {:id :import-scan-preview
+       :on-close (fn [_] (resolve false))
+       :content-props {:class "w-auto md:max-w-2xl max-h-[80vh] overflow-y-auto"}}))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
@@ -378,6 +638,8 @@
   []
   (state/set-state! :graph/importing nil)
   (state/set-state! :graph/importing-state nil)
+  (shui/dialog-close! :import-scan)
+  (shui/dialog-close! :import-scan-preview)
   (shui/dialog-close! :import-indicator))
 
 (defn- start-imported-graph-search-index!
@@ -386,12 +648,21 @@
   nil)
 
 (defn- finish-file-graph-import!
-  [repo import-result]
+  [repo import-result client-ignored-files]
   (clear-file-graph-importing-ui!)
-  (when (seq import-result)
-    (doseq [notification (:notifications import-result)]
-      (show-notification notification))
-    (validate-imported-data import-result))
+  (let [client-ignored (->> client-ignored-files
+                            (map #(assoc % :reason :skipped-by-file-picker))
+                            vec)
+        import-result (cond-> import-result
+                        (seq client-ignored)
+                        (-> (update :ignored-files-detail into client-ignored)
+                            (update :ignored-files-count (fnil + 0) (count client-ignored))))]
+    (when (seq import-result)
+      (doseq [notification (:notifications import-result)]
+        (show-notification notification))
+      (validate-imported-data import-result)
+      (when (import-report-needed? import-result)
+        (open-import-report! import-result))))
   (notification/show! (t :import/file-finished) :success)
   (state/pub-event! [:graph/sync-context])
   (state/pub-event! [:graph/ready repo])
@@ -426,7 +697,7 @@
                                   (import-files-finished?))]
     (if keep-imported-graph?
       (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
-        (finish-file-graph-import! current-repo {}))
+        (finish-file-graph-import! current-repo {} nil))
       (do
         (clear-file-graph-importing-ui!)
         (when created-new-graph?
@@ -435,44 +706,61 @@
                               :error)
           (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
         (when (and (not created-new-graph?)
-                   (= :file-graph-import/graph-not-created (:code (ex-data error))))
+                   (contains? #{:file-graph-import/graph-not-created :import-scan/failed}
+                              (:code (ex-data error))))
           (notification/show! (t :import/unexpected-error
                                  (or (.-message error) (str error)))
                               :error))
         nil))))
 
 (defn- import-file-graph
-  [*files
-   {:keys [graph-name] :as user-options}
-   config-file]
-  (let [previous-repo (state/get-current-repo)
+  ([*files user-options config-file client-ignored-files]
+   (import-file-graph *files user-options config-file client-ignored-files nil))
+  ([*files
+    {:keys [graph-name] :as user-options}
+    config-file
+    client-ignored-files
+    {:keys [<confirm-scan]}]
+   (let [previous-repo (state/get-current-repo)
         expected-repo (str config/db-version-prefix graph-name)]
-    (state/set-state! :graph/importing :file-graph)
-    (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
     (start-file-graph-import-session! *files)
-    (open-import-indicator!)
-    (-> (p/let [start-time (t/now)
-                created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
-                repo (or created-repo (state/get-current-repo))]
-          (when-not (= repo expected-repo)
-            (throw (ex-info "File-graph import did not create a new graph"
-                            {:code :file-graph-import/graph-not-created
-                             :expected expected-repo
-                             :repo repo})))
-          (p/let [file-metas (mapv import-file-descriptor *files)
-                  serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
-                  options (build-file-graph-worker-options user-options config/config-default-content)
-                  import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
-                  ;; Import txs do not broadcast renderer deltas. Restore after
-                  ;; import so this client sees pages and refs. Keep importing
-                  ;; set so :graph/restored does not start a second search build.
-                  _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
-            (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-            (finish-file-graph-import! repo import-result)))
+    (-> (p/let [file-metas (mapv import-file-descriptor *files)
+                serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
+                options (build-file-graph-worker-options user-options config/config-default-content)
+                ;; Dry-run the export on a throwaway in-memory conn so the user
+                ;; can see what will be created/skipped before importing
+                _ (open-scan-dialog!)
+                scan-result (-> (state/<invoke-db-worker :thread-api/scan-file-graph
+                                                         serialized-config-file file-metas options)
+                                (p/catch (fn [error]
+                                           (throw (ex-info "Scanning the folder failed"
+                                                           {:code :import-scan/failed}
+                                                           error)))))
+                _ (close-scan-dialog!)
+                proceed? ((or <confirm-scan <confirm-import-scan!) scan-result)]
+          (when proceed?
+            (state/set-state! :graph/importing :file-graph)
+            (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
+            (open-import-indicator!)
+            (p/let [start-time (t/now)
+                    created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
+                    repo (or created-repo (state/get-current-repo))]
+              (when-not (= repo expected-repo)
+                (throw (ex-info "File-graph import did not create a new graph"
+                                {:code :file-graph-import/graph-not-created
+                                 :expected expected-repo
+                                 :repo repo})))
+              (p/let [import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
+                      ;; Import txs do not broadcast renderer deltas. Restore after
+                      ;; import so this client sees pages and refs. Keep importing
+                      ;; set so :graph/restored does not start a second search build.
+                      _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
+                (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+                (finish-file-graph-import! repo import-result client-ignored-files)))))
         (p/catch (fn [error]
                    (abort-file-graph-import! error previous-repo)))
         (p/finally (fn []
-                     (file-graph-import/clear-file-graph-import-session!))))))
+                     (file-graph-import/clear-file-graph-import-session!)))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
@@ -483,19 +771,29 @@
                               "")
         import-graph-fn (or (:import-graph-fn opts)
                             (fn [user-inputs]
-                              (let [files (->> file-objs
-                                              (map #(hash-map :file-object %
+                              (let [all-files (mapv #(hash-map :file-object %
                                                                :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))
                                                                :fs-path (when (util/electron?)
                                                                           (js/window.apis.getFilePath %))
-                                                               :last-modified-at (some-> (.-lastModified %) js/Date.)))
-                                               (remove #(and (not (string/starts-with? (:path %) "assets/"))
-                                                         ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
-                                                             (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
-                                (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
-                                  (import-file-graph files user-inputs config-file)
-                                  (notification/show! (t :import/logseq-config-missing)
-                                                      :error)))))]
+                                                               :last-modified-at (some-> (.-lastModified %) js/Date.))
+                                                    file-objs)
+                                    ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
+                                    client-ignored? (fn [file]
+                                                      (and (not (string/starts-with? (:path file) "assets/"))
+                                                           (ignored-path? original-graph-name (.-webkitRelativePath (:file-object file)))))
+                                    files (vec (remove client-ignored? all-files))
+                                    client-ignored-files (->> all-files
+                                                              (filter client-ignored?)
+                                                              (map #(select-keys % [:path])))]
+                                ;; A folder without logseq/config.edn is imported
+                                ;; as plain Markdown with the default config
+                                (import-file-graph files user-inputs
+                                                   (first (filter #(= (:path %) "logseq/config.edn") files))
+                                                   client-ignored-files))))
+        plain-markdown? (not (some (fn [file-obj]
+                                     (= "logseq/config.edn"
+                                        (path/trim-dir-prefix original-graph-name (.-webkitRelativePath file-obj))))
+                                   file-objs))]
     (shui/dialog-open!
      #(import-file-graph-dialog original-graph-name
                                 (fn [{:keys [graph-name] :as user-inputs}]
@@ -511,7 +809,8 @@
                                       (notification/show! (t :import/graph-name-conflict) :error)
 
                                       :else
-                                      (import-graph-fn (assoc user-inputs :graph-name trimmed-graph-name)))))))))
+                                      (import-graph-fn (assoc user-inputs :graph-name trimmed-graph-name)))))
+                                {:plain-markdown? plain-markdown?}))))
 
 (hsx/defc indicator-progress
   []

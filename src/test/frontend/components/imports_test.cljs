@@ -21,8 +21,8 @@
         checked (atom [])
         notifications (atom [])]
     (with-redefs [shui/dialog-open! (fn [render & _] (render))
-                  imports/import-file-graph-dialog (fn [_ on-submit]
-                                                    (reset! submit on-submit))
+                  imports/import-file-graph-dialog (fn [_ on-submit _opts]
+                                                     (reset! submit on-submit))
                   repo-handler/graph-already-exists? (fn [name]
                                                       (swap! checked conj name)
                                                       (= name existing-graph-name))
@@ -68,7 +68,9 @@
         (is (= #{"Project" "Area"} (get-in options [:user-options :tag-classes])))
         (is (not (contains? options :notify-user)))))))
 
-(deftest compact-import-result-notifies-counts-not-file-lists-test
+(deftest validate-imported-data-notifies-org-files-only-test
+  ;; Ignored items and validation errors are surfaced by the import report
+  ;; dialog instead of count-only toasts.
   (let [validate-imported-data (some-> (resolve 'frontend.components.imports/validate-imported-data)
                                        deref)
         shown (atom [])]
@@ -82,8 +84,8 @@
                                  :ignored-properties-count 4
                                  :validation-error-count 3
                                  :notifications []})
-        (is (= 4 (count @shown)))
-        (is (= #{:info :warning} (set (map second @shown))))))))
+        (is (= 1 (count @shown)))
+        (is (= :info (second (first @shown))))))))
 
 (deftest file-graph-import-initial-ui-state-is-importing-test
   (let [initial-ui-state (some-> (resolve 'frontend.components.imports/file-graph-import-initial-ui-state)
@@ -196,7 +198,8 @@
                       (p/resolved nil))
                     notification/show! (fn [content status & _]
                                          (swap! calls conj [:notify status content]))
-                    shui/dialog-open! (fn [& _] nil)
+                    shui/dialog-open! (fn [_ & [opts]]
+                                        (swap! calls conj [:dialog-open (:id opts)]))
                     shui/dialog-close! (fn [id]
                                          (swap! calls conj [:dialog-close id]))
                     shui-dialog/get-dialog (fn [_] nil)
@@ -206,7 +209,10 @@
                                                  (swap! calls conj [:rerender]))]
       (import-file-graph (or files default-file-graph-files)
                          options
-                         (or config-file default-file-graph-config)))))
+                         (or config-file default-file-graph-config)
+                         nil
+                         ;; Auto-confirm the scan preview in tests
+                         {:<confirm-scan (fn [_] (p/resolved true))}))))
 
 (defn- assert-file-graph-happy-path
   [calls ui expected-repo]
@@ -224,8 +230,8 @@
             "File-graph import sends filesystem paths without file contents.")
     (is (notify-status? calls :error)
         "Worker error notifications from the terminal result are shown.")
-    (is (notify-status? calls :info)
-        "Ignored-file counts from the terminal result are shown.")
+    (is (some #{[:dialog-open :import-report]} calls)
+        "Import report dialog opens when the terminal result has issues.")
     (is (notify-status? calls :success)
         "Import finished is still shown after a partial import.")
     (is (= :file-graph (last (first (filter #(= :restore (first %)) calls))))
