@@ -23,14 +23,40 @@ let expand_home (path : string) : string =
   else path
 
 (* node-path/resolve — lexical resolution to an absolute path against
-   the process cwd ('.'/'..' collapsed, trailing slash dropped). *)
+   the process cwd ('.'/'..' collapsed, trailing slash dropped).
+   Windows drive-letter and UNC paths ('C:\\x', 'C:/x', '\\\\s\\x') stay
+   absolute instead of being prefixed with '/'; backslashes are
+   normalized to '/'. *)
+let is_windows_absolute (s : string) : bool =
+  (String.length s >= 3
+   &&
+   (let c = s.[0] in
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+   && s.[1] = ':' && (s.[2] = '/' || s.[2] = '\\'))
+  || (String.length s >= 2 && s.[0] = '\\' && s.[1] = '\\')
+
 let path_resolve (path : string) : string =
+  let normalize_sep (s : string) =
+    String.map (fun c -> if c = '\\' then '/' else c) s
+  in
+  let unc = String.length path >= 2 && path.[0] = '\\' && path.[1] = '\\' in
+  let path = normalize_sep path in
   let abs =
-    if Filename.is_relative path then
-      Filename.concat (Node_process.cwd ()) path
-    else path
+    if unc || is_windows_absolute path || not (Filename.is_relative path)
+    then path
+    else normalize_sep (Filename.concat (Node_process.cwd ()) path)
   in
   let segs = String.split_on_char '/' abs in
+  let root, segs =
+    match segs with
+    | first :: rest when String.length first = 2 && first.[1] = ':' ->
+        (* drive letter is the root segment; '..' must not pop it *)
+        (Some (first ^ "/"), rest)
+    | "" :: "" :: _ when unc ->
+        (* UNC '\\\\s\\x' normalizes to '//s/x' *)
+        (Some "//", segs)
+    | segs -> (Some "/", segs)
+  in
   let rec go acc = function
     | [] -> List.rev acc
     | "" :: rest -> go acc rest
@@ -41,7 +67,10 @@ let path_resolve (path : string) : string =
          | _ :: acc' -> go acc' rest)
     | s :: rest -> go (s :: acc) rest
   in
-  "/" ^ String.concat "/" (go [] segs)
+  let body = String.concat "/" (go [] segs) in
+  match root with
+  | Some r -> r ^ body
+  | None -> body
 
 let normalize_root_dir (path : string option) : string =
   path_resolve
