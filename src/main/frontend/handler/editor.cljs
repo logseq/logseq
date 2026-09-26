@@ -3289,7 +3289,13 @@
                (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
-          (contains? #{"```" "``````"} value) ; turn this block into a code block
+          ;; turn this block into a code block, but only when the released key
+          ;; can produce backticks: "`" for normal typing, Space/Dead/Process/
+          ;; Unidentified for dead-key and IME commits, where the released key
+          ;; is not the inserted char. This avoids converting an existing block
+          ;; that merely contains the text on an unrelated key release.
+          (and (contains? #{"```" "``````"} value)
+               (contains? #{"`" " " "Dead" "Process" "Unidentified"} k))
           (do
             (state/set-edit-content! (.-id input) "")
             (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
