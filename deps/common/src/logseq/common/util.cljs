@@ -133,9 +133,11 @@
           (path-normalize)))
 
 (defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
+  "Sanitize the query string for a page name (mandate for :block/name).
+  Returns nil for non-string input instead of throwing on `.toLowerCase`."
   [s]
-  (page-name-sanity (string/lower-case s)))
+  (when (string? s)
+    (page-name-sanity (string/lower-case s))))
 
 (defn safe-page-name-sanity-lc
   [s]
