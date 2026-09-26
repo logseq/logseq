@@ -135,8 +135,7 @@
     (b/delete-blocks)                        ; delete b4
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
     (b/delete-blocks)
-    (util/wait-editor-visible)
-    (is (= "b1" (util/get-edit-content)))
+    (util/wait-edit-content "b1")
     (is (= 1 (util/page-blocks-count)))))
 
 (defn delete-end []
@@ -144,8 +143,7 @@
     (b/new-blocks ["b1" "b2" "b3"])
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2b3" (util/get-edit-content)))
+    (util/wait-edit-content "b2b3")
     (is (= 2 (util/page-blocks-count)))))
 
 (defn delete-test-with-children []
@@ -156,8 +154,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
-    (util/wait-editor-visible)
-    (is (= "b1" (util/get-edit-content)))
+    (util/wait-edit-content "b1")
     (is (= 1 (util/page-blocks-count)))))
 
 (deftest create-test-page-and-insert-blocks-test
@@ -258,8 +255,7 @@
     (b/indent)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (is (= ["b2"] (util/get-page-blocks-contents)))))
 
@@ -270,8 +266,7 @@
     (k/arrow-up)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (is (= ["b2" "b3"] (util/get-page-blocks-contents)))))
 
@@ -283,8 +278,7 @@
     (b/indent)
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "" (util/get-edit-content)))
+    (util/wait-edit-content "")
     (is (= 3 (util/page-blocks-count)))))
 
 (deftest delete-concat-test-with-tag
@@ -294,8 +288,7 @@
     (util/set-tag "tag1")
     (k/arrow-up)
     (k/delete)
-    (util/wait-editor-visible)
-    (is (= "b2" (util/get-edit-content)))
+    (util/wait-edit-content "b2")
     (util/exit-edit)
     (assert/assert-is-visible
      ".ls-block a.tag:has-text('tag1')")
@@ -603,7 +596,7 @@
       (move-editor-cursor-to-start!)
       (k/backspace)
       (assert-tree! after-backspace)
-      (is (= "bc" (util/get-edit-content)))
+      (util/wait-edit-content "bc")
       (is (= 1
              (w/eval-js
               "document.querySelector('.editor-wrapper textarea').selectionStart")))
