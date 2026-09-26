@@ -204,4 +204,3 @@ external browser_window_from_web_contents :
 external browser_window_set_visible_on_all_workspaces :
   Browser_window.t -> bool -> unit = "setVisibleOnAllWorkspaces"
   [@@mel.send]
->>>>>>> origin/devin/native-ocaml-electron-port-infra
