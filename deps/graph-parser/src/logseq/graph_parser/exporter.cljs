@@ -2869,9 +2869,11 @@
                                      (map with-file-timestamps blocks)))))
 
               :else
-              (when-not (re-find #"whiteboards/.*\.edn$" (str file))
-                (swap! (:ignored-files import-state) conj
-                       {:path file :reason :unsupported-file-format})))]
+              (swap! (:ignored-files import-state) conj
+                     {:path file
+                      :reason (if (re-find #"whiteboards/.*\.edn$" (str file))
+                                :whiteboard-not-supported
+                                :unsupported-file-format)}))]
     ;; Annotation markdown pages are saved for later as they are dependant on the asset being annotated
     (if (hls-annotation-md-file? file)
       (do
@@ -3204,12 +3206,25 @@
         (update-in [:zotero/settings-v2 "default" :zotero-data-directory] to-abs)
         (update-in [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory] to-abs))))
 
+(defn- default-config->map
+  [default-config]
+  (cond
+    (map? default-config) default-config
+    (and (string? default-config) (not (string/blank? default-config))) (edn/read-string default-config)
+    :else {}))
+
 (defn export-config-file
-  "Exports logseq/config.edn by saving to database and setting any properties related to config"
+  "Exports logseq/config.edn by saving to database and setting any properties related to config.
+   When config-file is nil (e.g. a plain Markdown folder), the default config is used instead."
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
                                         :or {default-config {}
                                              <save-file default-save-file}}]
-  (-> (<read-file config-file)
+  (if (nil? config-file)
+    (let [config (default-config->map default-config)]
+      (-> (<save-file repo-or-conn "logseq/config.edn"
+                      (if (string? default-config) default-config (pr-str config)))
+          (p/then (fn [_] config))))
+    (-> (<read-file config-file)
       (p/then #(p/do!
                 (<save-file repo-or-conn
                             "logseq/config.edn"
@@ -3227,7 +3242,7 @@
                  (notify-user {:msg "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
                                :level :error
                                :ex-data {:error err}})
-                 (edn/read-string default-config)))))
+                 (default-config->map default-config))))))
 
 (defn- export-class-properties
   [conn repo-or-conn]
@@ -3420,13 +3435,18 @@
                            (some-> (get f rpath-key) path/path-normalize))
         logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
         asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
+        doc-file? #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))
         doc-files (->> files
                        (remove #(or (logseq-file? %) (asset-file? %)))
-                       (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))]
+                       (filter doc-file?))]
     {:files files
      :logseq-files (filter logseq-file? files)
      :asset-files (filter asset-file? files)
-     :doc-files doc-files}))
+     :doc-files doc-files
+     ;; Files outside logseq//assets/ that no importer handles, so they can be
+     ;; reported instead of silently dropped
+     :skipped-files (->> files
+                        (remove #(or (logseq-file? %) (asset-file? %) (doc-file? %))))}))
 
 (defn- <export-file-graph-steps
   [repo-or-conn conn config {:keys [files logseq-files asset-files doc-files]}
@@ -3494,6 +3514,9 @@
                             (set/rename-keys {:<save-config-file :<save-file})))
                 partitioned (partition-graph-files *files config rpath-key)
                 doc-options (build-doc-options config options)]
+          (doseq [skipped-file (:skipped-files partitioned)]
+            (swap! (get-in doc-options [:import-state :ignored-files]) conj
+                   {:path (get skipped-file rpath-key) :reason :unsupported-file-format}))
           (<export-file-graph-steps repo-or-conn conn config partitioned
                                     <read-file <read-and-copy-asset doc-options options log-fn))
         (import-profile/with-import-watchdog watchdog)

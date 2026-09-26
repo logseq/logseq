@@ -232,9 +232,46 @@
   {:msg msg
    :level level})
 
+(def ^:private import-details-limit
+  "Max entries per detail list that leave the worker"
+  200)
+
+(defn- truncate-import-text
+  [s limit]
+  (let [s (str s)]
+    (if (> (count s) limit)
+      (str (subs s 0 limit) "...")
+      s)))
+
+(defn- compact-import-location
+  [location]
+  (cond
+    (map? location) (into {} (map (fn [[k v]] [k (truncate-import-text v 200)]) location))
+    (nil? location) nil
+    :else (truncate-import-text location 200)))
+
+(defn- compact-ignored-item
+  "Keep identifying metadata (path/property/location/reason/schema). :value is
+   dropped because it can contain arbitrary user content."
+  [item]
+  (cond-> (update (dissoc item :value) :location compact-import-location)
+    (contains? item :reason)
+    (update :reason #(if (keyword? %) % (str %)))
+    (contains? item :schema)
+    (update :schema #(truncate-import-text (pr-str %) 300))))
+
+(defn- compact-validation-error
+  [{:keys [entity dispatch-key errors]}]
+  {:title (truncate-import-text
+           (or (:block/title entity) (:block/name entity) (:db/ident entity) (:db/id entity))
+           200)
+   :page (some-> (:block/page entity) :block/name)
+   :dispatch-key dispatch-key
+   :errors (truncate-import-text (pr-str errors) 500)})
+
 (defn- compact-import-result
-  "Counts-only summary. File contents, asset bytes, property values, and
-  import indexes must not leave the worker."
+  "Counts plus bounded, value-free detail lists. File contents, asset bytes,
+  property values, and import indexes must not leave the worker."
   [result notifications validation]
   (let [import-state (:import-state result)
         files (:files result)
@@ -255,6 +292,10 @@
      :ignored-assets-count (count ignored-assets)
      :ignored-properties-count (count ignored-props)
      :validation-error-count (count (:errors validation))
+     :ignored-files-detail (mapv compact-ignored-item (take import-details-limit ignored-files))
+     :ignored-assets-detail (mapv compact-ignored-item (take import-details-limit ignored-assets))
+     :ignored-properties-detail (mapv compact-ignored-item (take import-details-limit ignored-props))
+     :validation-errors-detail (mapv compact-validation-error (take import-details-limit (:errors validation)))
      :notifications (mapv compact-error-notification error-notifications)}))
 
 (defn- import-issue-count

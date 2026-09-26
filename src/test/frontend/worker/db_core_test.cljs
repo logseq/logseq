@@ -2619,7 +2619,12 @@
   (is (not (contains? result :files)))
   (is (not (contains? result :import-state)))
   (is (not (contains? result :staged-assets)))
-  (is (not (contains? result :ignored-properties))))
+  (is (not (contains? result :ignored-properties)))
+  (doseq [detail-key [:ignored-files-detail :ignored-assets-detail :ignored-properties-detail]]
+    (is (every? #(not (contains? % :value)) (get result detail-key))
+        (str detail-key " must not leak property values"))
+    (is (every? #(not (contains? % :file/content)) (get result detail-key))
+        (str detail-key " must not leak file contents"))))
 
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
