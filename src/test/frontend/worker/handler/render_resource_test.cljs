@@ -2391,6 +2391,7 @@
                           :block/page [:block/uuid journal-a]
                           :block/parent [:block/uuid journal-a]
                           :block/order "z0"
+                          :block/tags :logseq.class/Task
                           :logseq.property/status :logseq.property/status.doing}])
       (let [resource-key
             [:query {:kind :datalog
