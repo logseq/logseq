@@ -17,9 +17,33 @@ let dev = not prod
 
 (* state.atom {:config, :window/graph window->repo, :window/once-graph-ready} *)
 
+(* :config — mirror of (config/get-config); Electron_main seeds it via
+   set_config once Electron_configs is available. *)
+let config : Js.Json.t ref = ref Js.Json.null
+
+let set_config (value : Js.Json.t) : unit = config := value
+
+let get_config () : Js.Json.t = !config
+
+(* state/set-state! [:config k] v *)
+let set_config_item (key : string) (value : Js.Json.t) : unit =
+  match Js.Json.classify !config with
+  | Js.Json.JSONObject dict -> Js.Dict.set dict key value
+  | _ -> ()
+
 let window_graph : (int, string) Hashtbl.t = Hashtbl.create 8
 
-let once_graph_ready : (unit -> unit) option ref = ref None
+(* :window/once-graph-ready — called with (window, graph-name) on the
+   :graphReady IPC, then cleared. *)
+let once_graph_ready :
+    (Browser_window.t -> string -> unit) option ref =
+  ref None
+
+let set_once_graph_ready f = once_graph_ready := f
+let take_once_graph_ready () =
+  let f = !once_graph_ready in
+  once_graph_ready := None;
+  f
 
 let window_graph_path window =
   match Hashtbl.find_opt window_graph (Browser_window.id window) with
