@@ -16,7 +16,9 @@
     from after that operation, and the checks above hold.
   - after the undos and after the redos: the whole DB passes `validate-db`.
   The visible graph is every live page and block (and some built-in tags and
-  properties) with its title, tags, ordered children and property values.
+  properties) with its title, tags, ordered children, property values, the
+  nodes its text links to (`[[page]]`, `((block))`) and, for a tag, its tag
+  properties.
 
   An operation is data, `[kind i j flag]`; targets are picked by index among
   the live entities, so a failing sequence replays exactly and shrinks. A
@@ -90,17 +92,30 @@
    "logseq/db-test#1296" ["undo-mismatch title rename-page:*"]
    ;; Undo of creating a property named like an existing one leaves it.
    "logseq/db-test#1299" ["undo-mismatch nodes new-property:*"]
+   ;; Undo of deleting a block leaves node property values that pointed at it
+   ;; empty.
+   "logseq/db-test#1302" ["undo-mismatch props delete:*"]
    ;; Undo of deleting a property does not give back its values.
    "logseq/db-test#1304" ["undo-mismatch props delete-page:property"
                           "undo-mismatch children+nodes+props delete-page:property"]
    ;; Undo of deleting a tag leaves its nodes untagged and changes its parents.
    "logseq/db-test#1305" ["undo-mismatch props delete-page:tag"
                           "undo-mismatch props+tags delete-page:tag"
-                          "undo-mismatch tags delete-page:tag"]
+                          "undo-mismatch tags delete-page:tag"
+                          "undo-mismatch children+props+refs+tags+title delete-page:tag"]
    ;; Undo of changing a property to multiple values does nothing.
    "logseq/db-test#1306" ["undo-mismatch props retype:*"]
    ;; Undo of deleting a property with choices sets the property's own value.
-   "logseq/db-test#1309" ["undo-mismatch props delete-page:property"]
+   "logseq/db-test#1309" ["undo-mismatch props delete-page:property"
+                          "undo-mismatch props+tag-props delete-page:property"]
+   ;; Undo of deleting a tag leaves the links to it in text as plain text
+   ;; (the same for a property or a page).
+   "logseq/db-test#1310" ["undo-mismatch children+refs+title delete-page:*"
+                          "undo-mismatch children+props+refs+tags+title delete-page:tag"]
+   ;; Undo of deleting a property removes it from the tags that had it as a
+   ;; tag property.
+   "logseq/db-test#1311" ["undo-mismatch tag-props delete-page:property"
+                          "undo-mismatch props+tag-props delete-page:property"]
    ;; Undo of deleting a parent tag leaves its child tags under Root Tag.
    "logseq/db-test#1312" ["undo-mismatch props delete-page:tag"]})
 
@@ -127,7 +142,8 @@
 
 (defn- initial-graph
   "Pages, nested blocks, a template, a journal, user properties (one with
-  choices) and a tag extending another. Fixed uuids, so every run is alike."
+  choices), a tag extending another and a block linking to a tag. Fixed
+  uuids, so every run is alike."
   []
   (let [id (fn [n] (fixed-uuid "a000" n))]
     (db-test/create-conn-with-blocks
@@ -141,6 +157,7 @@
       :classes {:Topic {:block/title "Topic"
                         :build/class-properties [:rating]}
                 :Movie {:block/title "Movie"
+                        :block/uuid (id 30)
                         :build/class-extends [:Topic]
                         :build/class-properties [:stage]}}
       :pages-and-blocks
@@ -158,7 +175,7 @@
                   :build/tags [:logseq.class/Template]
                   :build/children [{:block/title "tmpl child" :block/uuid (id 11)}]}]}
        {:page {:build/journal 20260925}
-        :blocks [{:block/title "e" :block/uuid (id 12)}]}]})))
+        :blocks [{:block/title (str "e [[" (id 30) "]]") :block/uuid (id 12)}]}]})))
 
 (defonce ^:private *initial-db (atom nil))
 
@@ -436,17 +453,27 @@
       :indent (when-let [targets (pick-2 blocks i j)]
                 (plan (str (selection-shape db targets) (if flag "-indent" "-outdent"))
                       [[:indent-outdent-blocks [(mapv uuid-of targets) flag {}]]]))
+      ;; A link is saved as the editor saves it: the title holds [[uuid]] or
+      ;; ((uuid)), and :block/refs the linked node (a page as the editor's
+      ;; autocomplete gives it), never the block itself.
       :save (when-let [target (pick blocks i)]
               (let [variant (mod j 5)
                     other (pick blocks (+ i j 1))
-                    title (case variant
-                            0 (str "edit " j)
-                            1 "edit [[alpha]]"
-                            2 "edit #Task"
-                            3 (str "edit ((" (uuid-of other) "))")
-                            4 "edit #[[Tag]]")]
-                (plan (str "text-" variant)
-                      [[:save-block [{:block/uuid (uuid-of target) :block/title title} {}]]])))
+                    page (pick pages (quot j 5))
+                    [title refs] (case variant
+                                   0 [(str "edit " j)]
+                                   1 [(str "edit [[" (uuid-of page) "]]")
+                                      [(cond-> (select-keys page [:db/id :block/uuid :block/title :block/name])
+                                         (:db/ident page) (assoc :db/ident (:db/ident page)))]]
+                                   2 ["edit #Task"]
+                                   3 [(str "edit ((" (uuid-of other) "))")
+                                      (when (not= (:db/id other) (:db/id target))
+                                        [{:block/uuid (uuid-of other)}])]
+                                   4 ["edit #[[Tag]]"])]
+                (plan (if (= 1 variant) (str "link-" (node-kind page)) (str "text-" variant))
+                      [[:save-block [(cond-> {:block/uuid (uuid-of target) :block/title title}
+                                       refs (assoc :block/refs refs))
+                                     {}]]])))
       :tag (let [target (pick (if flag (into nodes builtin-nodes) nodes) i)
                  class (pick classes j)]
              (when (and target class)
@@ -672,9 +699,37 @@
        (map (fn [a] [a (value-repr (get e a))]))
        (into (sorted-map))))
 
+(defn- text-links
+  "The nodes e's text links to: the refs of e whose uuid its raw title holds
+  ([[uuid]], ((uuid)), #[[uuid]]). Refs the text no longer holds are left
+  out: the app's worker pipeline, which this test does not run, rebuilds the
+  refs of every block a transaction changes, so an undo of a save drops them
+  there."
+  [db e]
+  (let [ref-ids (map :v (d/datoms db :eavt (:db/id e) :block/refs))]
+    (if (empty? ref-ids)
+      #{}
+      (let [raw-title (or (:block/raw-title e) "")]
+        (into #{}
+              (keep (fn [id]
+                      (let [ref (d/entity db id)]
+                        (when (string/includes? raw-title (str (:block/uuid ref)))
+                          (value-repr ref)))))
+              ref-ids)))))
+
+(defn- tag-properties
+  "The tag properties of e (a tag), as property idents."
+  [db e]
+  (into #{}
+        (map #(value-repr (d/entity db (:v %))))
+        (d/datoms db :eavt (:db/id e) :logseq.property.class/properties)))
+
 (def ^:private visible-graph
   "The live pages and blocks, and the built-in tags and properties, as a
-  user sees them: titles, tags, property values, ordered children."
+  user sees them: titles, tags, property values, tag properties, the nodes
+  the text links to, ordered children. A title shows a link to a page by the
+  page's title, so `watch [[Movie]]` stored as text and a live link read the
+  same; :refs tells them apart."
   (last-2-by-db
    (fn [db]
      (let [nodes (concat (live-blocks db) (user-pages db)
@@ -687,14 +742,19 @@
                      {:title (:block/title e)
                       :tags (tags-of e)
                       :props (shown-properties db e)
+                      :tag-props (tag-properties db e)
+                      :refs (text-links db e)
                       :children (mapv :block/title (live-children db e))}]))
              nodes)))))
+
+(def ^:private visible-fields
+  [:title :tags :props :tag-props :refs :children])
 
 (defn- diff-fields
   "What differs between 2 visible graphs, for signatures: \"nodes\" when a
   node is in only one of them, and the names of the fields that differ on a
-  node in both (title, tags, props, children), sorted, joined by +. A lost
-  reference shows as props or tags, a misplaced block as children."
+  node in both (visible-fields), sorted, joined by +. A lost reference shows
+  as props, tags, tag-props or refs, a misplaced block as children."
   [expected actual]
   (let [fields (reduce (fn [acc k]
                          (let [a (get expected k)
@@ -703,7 +763,7 @@
                              (= a b) acc
                              (or (nil? a) (nil? b)) (conj acc "nodes")
                              :else (into acc (keep (fn [f] (when (not= (get a f) (get b f)) (name f))))
-                                         [:title :tags :props :children]))))
+                                         visible-fields))))
                        (sorted-set)
                        (distinct (concat (keys expected) (keys actual))))]
     (string/join "+" fields)))
@@ -720,7 +780,7 @@
                    (= a b) nil
                    (nil? b) [{:node (:title a) :missing a}]
                    (nil? a) [{:node (:title b) :extra b}]
-                   :else (for [f [:title :tags :props :children]
+                   :else (for [f visible-fields
                                :when (not= (get a f) (get b f))]
                            {:node (:title a) f {:expected (get a f) :actual (get b f)}})))))
        (apply concat)
