@@ -165,9 +165,9 @@ jobs:
           pnpm install --frozen-lockfile
           gulp build
           pnpm cljs:release-electron
-          pnpm db-worker-node:bundle
           opam exec -- pnpm cli:release
           pnpm db-worker:build
+          pnpm db-worker-node:bundle
           pnpm desktop:prepare-runtime-js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
@@ -229,15 +229,66 @@ jobs:
             deps/graph-lifecycle
           include-hidden-files: true
 
+  build-db-worker-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runs-on: ubuntu-22.04
+          - name: linux-arm64
+            runs-on: ubuntu-24.04-arm
+          - name: macos-x64
+            runs-on: macos-15-intel
+          - name: macos-arm64
+            runs-on: macos-14
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+          sparse-checkout: deps/db-worker
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        shell: bash
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Build native db-worker-node
+        working-directory: deps/db-worker
+        shell: bash
+        run: opam exec -- dune build bin/main.exe
+
+      - name: Upload native db-worker binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-worker-bin-${{ matrix.name }}
+          path: deps/db-worker/_build/default/bin/main.exe
+
   build-linux-x64:
     runs-on: ubuntu-22.04
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
         with:
           name: static
           path: .
+
+      - name: Download native db-worker-node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-linux-x64
+          path: static/db-worker-bin
+
+      - name: Mark db-worker binary executable
+        run: chmod +x static/db-worker-bin/main.exe
 
       - name: Retrieve tag version
         id: ref
@@ -288,13 +339,22 @@ jobs:
 
   build-linux-arm64:
     runs-on: ubuntu-22.04
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
         with:
           name: static
           path: .
+
+      - name: Download native db-worker-node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-linux-arm64
+          path: static/db-worker-bin
+
+      - name: Mark db-worker binary executable
+        run: chmod +x static/db-worker-bin/main.exe
 
       - name: Retrieve tag version
         id: ref
@@ -353,6 +413,9 @@ jobs:
         with:
           name: static
           path: .
+
+      - name: Create empty db-worker-bin dir (Windows uses the JS daemon)
+        run: New-Item -ItemType Directory -Force static\db-worker-bin | Out-Null
 
       - name: Retrieve tag version
         id: ref
@@ -428,6 +491,9 @@ jobs:
           name: static
           path: .
 
+      - name: Create empty db-worker-bin dir (Windows uses the JS daemon)
+        run: New-Item -ItemType Directory -Force static\db-worker-bin | Out-Null
+
       - name: Retrieve tag version
         id: ref
         run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
@@ -493,7 +559,7 @@ jobs:
           path: builds
 
   build-macos-x64:
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     runs-on: macos-15-intel
     steps:
       - name: Download The Static Asset
@@ -501,6 +567,15 @@ jobs:
         with:
           name: static
           path: .
+
+      - name: Download native db-worker-node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-macos-x64
+          path: static/db-worker-bin
+
+      - name: Mark db-worker binary executable
+        run: chmod +x static/db-worker-bin/main.exe
 
       - name: Retrieve tag version
         id: ref
@@ -576,7 +651,7 @@ jobs:
           path: builds
 
   build-macos-arm64:
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     runs-on: macos-14
     steps:
       - name: Download The Static Asset
@@ -584,6 +659,15 @@ jobs:
         with:
           name: static
           path: .
+
+      - name: Download native db-worker-node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-macos-arm64
+          path: static/db-worker-bin
+
+      - name: Mark db-worker binary executable
+        run: chmod +x static/db-worker-bin/main.exe
 
       - name: Retrieve tag version
         id: ref

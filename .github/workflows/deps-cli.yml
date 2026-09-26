@@ -119,6 +119,12 @@ jobs:
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
 
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       - name: Build logseq CLI
         run: |
           opam exec -- pnpm cli:release
@@ -179,6 +185,12 @@ jobs:
 
       - name: Fetch CLI pnpm deps
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Build logseq CLI
         run: |

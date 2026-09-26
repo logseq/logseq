@@ -49,17 +49,6 @@
                    ;; :ignore-warnings true
                    }}
 
-  :db-worker-node {:target :node-script
-                   :output-to "static/db-worker-node.js"
-                   :main frontend.worker.db-worker-node/main
-                   :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
-                   :compiler-options {:infer-externs :auto
-                                      :source-map true
-                                      :externs ["datascript/externs.js"
-                                                "externs.js"]
-                                      :warnings {:fn-deprecated false
-                                                 :redef false}}
-                   :closure-defines {goog.debug.LOGGING_ENABLED true}}
 
   :mobile {:target        :browser
            :module-loader true

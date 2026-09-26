@@ -270,6 +270,12 @@ let invoke_binary ~(proxy : proxy) ~(method_str : string)
 let remote_invoke_fn : (string -> string -> string E.t) ref =
   ref Worker_core.invoke
 
+let remote_invoke_binary_fn :
+    (string -> string -> string -> Wire.t E.t) ref =
+  ref
+    (fun method_str repo payload ->
+       Dispatcher.invoke method_str [ Wire.String repo; Wire.Binary payload ])
+
 let assert_ownership_fn : (Graph_lifecycle.runtime -> unit) ref =
   ref Graph_lifecycle.assert_ownership
 
@@ -925,8 +931,7 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                              !remote_invoke_fn method_str args_transit)
                       ; remote_invoke_binary =
                           (fun method_str repo payload ->
-                             Dispatcher.invoke method_str
-                               [ Wire.String repo; Wire.Binary payload ]) }
+                             !remote_invoke_binary_fn method_str repo payload) }
                     in
                     proxy_cell := Some proxy;
                     E.bind (init_worker proxy) (fun _ ->

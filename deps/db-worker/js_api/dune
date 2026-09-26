@@ -1,6 +1,6 @@
 (melange.emit
  (target js_api)
- (modules entry_worker)
+ (modules entry_worker entry_node)
  (module_systems commonjs)
  (libraries
   logseq_db_worker

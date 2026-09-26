@@ -275,12 +275,26 @@ const prepareElectronMaker = async () => {
   cp.execSync('pnpm cljs:release-electron', {
     stdio: 'inherit',
   })
-  cp.execSync('pnpm db-worker-node:bundle', {
-    stdio: 'inherit',
-  })
   cp.execSync('pnpm db-worker:build', {
     stdio: 'inherit',
   })
+  cp.execSync('pnpm db-worker-node:bundle', {
+    stdio: 'inherit',
+  })
+  if (process.platform !== 'win32') {
+    // macOS/Linux ship the native OCaml daemon binary; Windows keeps the
+    // JS daemon bundle staged by db-worker-node:bundle.
+    cp.execSync('pnpm db-worker-node:native', {
+      stdio: 'inherit',
+    })
+    const binDir = path.join(outputPath, 'db-worker-bin')
+    fs.mkdirSync(binDir, { recursive: true })
+    fs.copyFileSync(
+      path.join(__dirname, 'deps/db-worker/_build/default/bin/main.exe'),
+      path.join(binDir, 'main.exe'))
+  } else {
+    fs.mkdirSync(path.join(outputPath, 'db-worker-bin'), { recursive: true })
+  }
   cp.execSync('pnpm cli:release', {
     stdio: 'inherit',
   })

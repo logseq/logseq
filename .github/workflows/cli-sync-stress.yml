@@ -94,6 +94,12 @@ jobs:
       - name: Fetch db-sync pnpm deps
         run: pnpm --dir deps/db-sync install --frozen-lockfile
 
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       - name: Build stress runtime
         run: |
           opam exec -- pnpm cli:release

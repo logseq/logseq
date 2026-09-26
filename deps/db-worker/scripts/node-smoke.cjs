@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Node smoke test for the bundled OCaml db-worker (static/db-worker-ocaml.cjs).
-// Exercises the same path the cljs seam uses:
-//   require bundle -> init() -> registered(name) -> invoke(name, transitArgs)
+// Node smoke test for the Melange-emitted OCaml db-worker entry
+// (_build/default/js_api/js_api/js_api/entry_worker.js, produced by
+// `dune build js_api`). Exercises the library API:
+//   require entry -> init() -> registered(name) -> invoke(name, transitArgs)
 // Args/results are transit-json strings, encoded/decoded with transit-js
 // (same lib + format as cljs-bean write-transit-str/read-transit-str).
 //
@@ -21,7 +22,7 @@ const reader = transit.reader("json");
 
 const bundlePath = path.resolve(
   __dirname,
-  "../../../static/db-worker-ocaml.cjs",
+  "../_build/default/js_api/js_api/js_api/entry_worker.js",
 );
 const worker = require(bundlePath);
 
