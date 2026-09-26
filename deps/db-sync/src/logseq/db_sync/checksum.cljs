@@ -151,6 +151,31 @@
         (.set page-tag-eids-cache db eids)
         eids)))
 
+(defn- entity-datoms
+  "The :eavt datoms of eid, in 1 index read: the checks and tuples below are
+  answered from them, where separate lookups per attribute made index seeks
+  most of the time of a full recompute."
+  [db eid]
+  (when eid
+    (vec (d/datoms db :eavt eid))))
+
+(defn- first-datom
+  "The first datom of attr in datoms (1 entity's :eavt datoms, sorted by
+  attribute), as (first (d/datoms db :eavt eid attr)) gives it."
+  [datoms attr]
+  (some (fn [datom] (when (= attr (:a datom)) datom)) datoms))
+
+(defn- eligible-datoms?
+  "checksum-eligible-entity? of the entity whose :eavt datoms are datoms."
+  [tag-eids datoms]
+  (and (uuid? (:v (first-datom datoms :block/uuid)))
+       (not (:v (first-datom datoms :logseq.property/built-in?)))
+       (or (boolean (some #(and (= :block/tags (:a %))
+                                (contains? tag-eids (:v %)))
+                          datoms))
+           (some? (first-datom datoms :block/page))
+           (some? (first-datom datoms :block/name)))))
+
 (defn- checksum-eligible-entity?
   "A non-built-in entity with a uuid that is a page (ldb/page?) or has
   :block/page or :block/name. Read from datoms rather than through an
@@ -160,24 +185,24 @@
   ([db eid]
    (checksum-eligible-entity? db (page-tag-eids db) eid))
   ([db tag-eids eid]
-   (and (uuid? (:v (first (d/datoms db :eavt eid :block/uuid))))
-        (not (:v (first (d/datoms db :eavt eid :logseq.property/built-in?))))
-        (or (boolean (some #(contains? tag-eids (:v %))
-                           (d/datoms db :eavt eid :block/tags)))
-            (some? (first (d/datoms db :eavt eid :block/page)))
-            (some? (first (d/datoms db :eavt eid :block/name)))))))
+   (eligible-datoms? tag-eids (entity-datoms db eid))))
 
-(defn- entity-checksum-tuples
-  [db eid e2ee?]
-  (when-let [entity-uuid (get-block-uuid db eid)]
+(defn- datoms-checksum-tuples
+  "entity-checksum-tuples of the entity whose :eavt datoms are datoms."
+  [db datoms e2ee?]
+  (when-let [entity-uuid (:v (first-datom datoms :block/uuid))]
     (let [attrs (relevant-attrs e2ee?)]
-      (->> (d/datoms db :eavt eid)
+      (->> datoms
            (keep (fn [{:keys [a v]}]
                    (when (contains? attrs a)
                      [entity-uuid
                       a
                       (normalize-checksum-value db a v)])))
            set))))
+
+(defn- entity-checksum-tuples
+  [db eid e2ee?]
+  (datoms-checksum-tuples db (entity-datoms db eid) e2ee?))
 
 (defn- tuple-digest
   [[entity-uuid attr value]]
@@ -203,8 +228,9 @@
   (let [tag-eids (page-tag-eids db)]
     (->> (d/datoms db :avet :block/uuid)
          (mapcat (fn [{:keys [e]}]
-                   (when (checksum-eligible-entity? db tag-eids e)
-                     (entity-checksum-tuples db e e2ee?)))))))
+                   (let [datoms (entity-datoms db e)]
+                     (when (eligible-datoms? tag-eids datoms)
+                       (datoms-checksum-tuples db datoms e2ee?))))))))
 
 (defn- tx-item-eids
   [db-before db-after tx-item]
