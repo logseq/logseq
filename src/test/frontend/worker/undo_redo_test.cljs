@@ -1243,14 +1243,18 @@
             child-uuid (:block/uuid child)]
         (is (some? child))
         (is (map? (worker-undo-redo/undo test-repo)))
-        (let [deleted (db-test/find-page-by-title @conn "leaf-page")]
-          (is (some? deleted))
-          (is (true? (ldb/recycled? deleted))))
+        (let [deleted (db-test/find-page-by-title @conn "leaf-page")
+              deleted-ns (db-test/find-page-by-title @conn "ns")]
+          (is (true? (ldb/recycled? deleted)))
+          (is (true? (ldb/recycled? deleted-ns))))
         (is (map? (worker-undo-redo/redo test-repo)))
-        (let [restored (db-test/find-page-by-title @conn "leaf-page")]
+        (let [restored (db-test/find-page-by-title @conn "leaf-page")
+              restored-ns (db-test/find-page-by-title @conn "ns")]
           (is (some? restored))
           (is (= child-uuid (:block/uuid restored)))
-          (is (false? (ldb/recycled? restored))))))))
+          (is (false? (ldb/recycled? restored)))
+          (is (false? (ldb/recycled? restored-ns)))
+          (is (= (:db/id restored-ns) (:db/id (:block/parent restored)))))))))
 
 (deftest undo-create-property-with-existing-name-removes-new-property-test
   (testing "undoing a property create that reused an existing name removes the new property"

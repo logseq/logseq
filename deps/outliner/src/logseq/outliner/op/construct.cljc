@@ -266,27 +266,28 @@
 
 (defn- created-page-title-match?
   "Whether `page` is the page that `title` names. A namespaced title like
-  'ns/child' creates the leaf page titled 'child' under 'ns', so match each
-  title part against the page and its :block/parent chain."
+  'ns/child' creates the leaf page titled 'child' under 'ns'; pages link to
+  their parents through :block/parent and class pages through
+  :logseq.property.class/extends, so match each title part against the page
+  and its ancestor chain."
   [page title]
   (let [parts (->> (string/split title #"/")
                    (map string/trim)
                    (remove string/blank?)
                    reverse)]
-    (loop [page page
-           part (first parts)
-           more-parts (rest parts)]
-      (cond
-        (or (nil? page) (nil? part) (not= part (:block/title page)))
-        false
-
-        (empty? more-parts)
-        true
-
-        :else
-        (recur (:block/parent page)
-               (first more-parts)
-               (rest more-parts))))))
+    (letfn [(ancestor-match? [page parts]
+              (cond
+                (nil? page) false
+                (empty? parts) true
+                (not= (first parts) (:block/title page)) false
+                :else (let [rest-parts (rest parts)]
+                        (or (empty? rest-parts)
+                            (boolean
+                             (some #(ancestor-match? % rest-parts)
+                                   (->> (cons (:block/parent page)
+                                              (seq (:logseq.property.class/extends page)))
+                                        (remove nil?))))))))]
+      (ancestor-match? page parts))))
 
 (defn- created-page-uuid-from-tx-data
   [db tx-data title]
@@ -994,18 +995,35 @@
                           :create-page
                           (let [[_title opts] args]
                             (when-let [page-uuid (:uuid opts)]
-                              (let [created-tag-uuids
-                                    (->> (d/entity db-after [:block/uuid page-uuid])
-                                         :block/tags
+                              (let [page (d/entity db-after [:block/uuid page-uuid])
+                                    created-this-tx? (fn [e]
+                                                       (and (ldb/page? e)
+                                                            (not (ldb/built-in? e))
+                                                            (nil? (d/entity db-before (:db/id e)))))
+                                    created-tag-uuids
+                                    (->> (:block/tags page)
                                          (filter (fn [tag]
                                                    (and (ldb/class? tag)
                                                         (not (ldb/built-in? tag))
                                                         (nil? (d/entity db-before (:db/id tag))))))
                                          (map :block/uuid)
+                                         (distinct))
+                                    created-ancestor-uuids
+                                    (->> (tree-seq (constantly true)
+                                                   (fn [e]
+                                                     (->> (cons (:block/parent e)
+                                                                (seq (:logseq.property.class/extends e)))
+                                                          (remove nil?)
+                                                          (filter created-this-tx?)))
+                                                   page)
+                                         rest
+                                         (map :block/uuid)
                                          (distinct))]
-                                (into (mapv (fn [uuid'] [:delete-page [uuid' {}]])
-                                            created-tag-uuids)
-                                      [[:delete-page [page-uuid {}]]]))))
+                                (into (into (mapv (fn [uuid'] [:delete-page [uuid' {}]])
+                                                  created-tag-uuids)
+                                            [[:delete-page [page-uuid {}]]])
+                                      (mapv (fn [uuid'] [:delete-page [uuid' {}]])
+                                            created-ancestor-uuids)))))
 
                           :delete-page
                           (let [[page-uuid _opts] args]
