@@ -26,22 +26,19 @@
              %)
           (:links result))))
 
-(defn- fastest-build
-  [attempts f]
-  (loop [remaining attempts
-         best nil]
-    (if (zero? remaining)
-      best
-      (let [start (.now js/performance)
-            result (f)
-            elapsed (- (.now js/performance) start)
-            sample {:elapsed elapsed
-                    :result result}]
-        (recur (dec remaining)
-               (if (or (nil? best)
-                       (< elapsed (:elapsed best)))
-                 sample
-                 best))))))
+(defn- build-tags-and-objects-graph-counting-entities
+  "Builds the tags-and-objects graph and counts the `d/entity` lookups made
+  while building it."
+  [db]
+  (let [original-entity d/entity
+        lookups (atom 0)]
+    (with-redefs [d/entity (fn [db eid]
+                             (swap! lookups inc)
+                             (original-entity db eid))]
+      (let [result (graph-view/build-graph db {:type :global
+                                               :view-mode :tags-and-objects})]
+        {:result result
+         :entity-lookups @lookups}))))
 
 (deftest global-graph-defaults-to-tags-and-objects
   (let [conn (db-test/create-conn-with-blocks
@@ -364,32 +361,38 @@
     (is (contains? (set (:links result))
                    {:source hub-id :target page-id}))))
 
+(defn- unrelated-pages-graph
+  [page-count]
+  @(db-test/create-conn-with-blocks
+    {:pages-and-blocks
+     (mapv (fn [idx]
+             {:page {:block/title (str "Page " idx)}})
+           (range page-count))}))
+
 (deftest tags-and-objects-graph-skips-large-unrelated-page-set-quickly
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               (mapv (fn [idx]
-                       {:page {:block/title (str "Page " idx)}})
-                     (range 12000))})
-        {:keys [elapsed result]} (fastest-build
-                                  3
-                                  #(graph-view/build-graph @conn {:type :global
-                                                                  :view-mode :tags-and-objects}))]
+  (let [small (build-tags-and-objects-graph-counting-entities (unrelated-pages-graph 12))
+        {:keys [result entity-lookups]} (build-tags-and-objects-graph-counting-entities
+                                         (unrelated-pages-graph 12000))]
     (is (empty? (:nodes result)))
-    (is (< elapsed 1000))))
+    (is (= (:entity-lookups small) entity-lookups)
+        "Pages without a displayed tag must not be looked up as entities")))
+
+(defn- tagged-objects-graph
+  [object-count]
+  @(db-test/create-conn-with-blocks
+    {:pages-and-blocks
+     [{:page {:block/title "Movies"}
+       :blocks (mapv (fn [idx]
+                       {:block/title (str "Movie " idx)
+                        :build/tags [:Movie]})
+                     (range object-count))}]
+     :classes {:Movie {}}}))
 
 (deftest tags-and-objects-graph-builds-large-tagged-set-quickly
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               [{:page {:block/title "Movies"}
-                 :blocks (mapv (fn [idx]
-                                  {:block/title (str "Movie " idx)
-                                   :build/tags [:Movie]})
-                                (range 3885))}]
-               :classes {:Movie {}}})
-        {:keys [elapsed result]} (fastest-build
-                                  3
-                                  #(graph-view/build-graph @conn {:type :global
-                                                                  :view-mode :tags-and-objects}))]
+  (let [small (build-tags-and-objects-graph-counting-entities (tagged-objects-graph 12))
+        {:keys [result entity-lookups]} (build-tags-and-objects-graph-counting-entities
+                                         (tagged-objects-graph 3885))]
     (is (= 3886 (count (:nodes result))))
     (is (= 3885 (count (:links result))))
-    (is (< elapsed 1000))))
+    (is (= (:entity-lookups small) entity-lookups)
+        "Tagged objects are read from datoms, not looked up one entity at a time")))
