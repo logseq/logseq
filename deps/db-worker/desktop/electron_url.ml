@@ -199,19 +199,13 @@ let local_url_handler (win : Browser_window.t) (parsed_url : url)
                   Electron_utils.send_to_window w "redirectWhenExists"
                     [| payload |]
                 in
+                let redirect_f (win' : Browser_window.t)
+                    (graph_name' : string) : unit =
+                  if String.equal graph_name graph_name' then
+                    redirect win'
+                in
                 if open_new_window then
-                  (* redirect-f fires once the new window's graph is
-                     ready; the thunk re-finds the window that has
-                     registered itself on this graph's dir. *)
-                  Electron_state.once_graph_ready :=
-                    Some
-                      (fun () ->
-                        match graph_dir with
-                        | Some dir ->
-                            (match get_graph_all_windows dir with
-                             | w :: _ -> redirect w
-                             | [] -> ())
-                        | None -> ())
+                  Electron_state.once_graph_ready := Some redirect_f
                 else
                   (match window_on_graph with
                    | Some w ->
