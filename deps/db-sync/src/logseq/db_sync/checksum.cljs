@@ -29,14 +29,19 @@
    (djb-step djb code)])
 
 (defn- digest-string
-  [state value]
-  (let [value (or value "")]
+  "Folds the char codes of value into state, as hash-code per char does,
+  with the 2 hashes kept in loop locals: a [fnv djb] vector per char made
+  hashing a large part of a full recompute."
+  [[fnv djb] value]
+  (let [value (or value "")
+        n (.-length value)]
     (loop [idx 0
-           state state]
-      (if (< idx (count value))
-        (recur (inc idx)
-               (hash-code state (.charCodeAt value idx)))
-        state))))
+           fnv fnv
+           djb djb]
+      (if (< idx n)
+        (let [code (.charCodeAt value idx)]
+          (recur (inc idx) (fnv-step fnv code) (djb-step djb code)))
+        [fnv djb]))))
 
 (defn- unsigned-hex
   [n]
@@ -73,8 +78,11 @@
     (not e2ee?) (into #{:block/title :block/name})))
 
 (defn- get-block-uuid
+  "The :block/uuid of entity id eid, read from its datom rather than through
+  an entity: a full recompute asks this for every block, its parent and its
+  page."
   [db eid]
-  (:block/uuid (d/entity db eid)))
+  (:v (first (d/datoms db :eavt eid :block/uuid))))
 
 (defn- parse-uuid-string
   [value]
