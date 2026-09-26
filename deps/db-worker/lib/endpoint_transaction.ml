@@ -29,18 +29,20 @@ let require_conn repo : conn =
 let recycle_gc_kv = "logseq.kv/recycle-last-gc-at"
 
 let maybe_run_recycle_gc (conn : conn) : unit =
-  let now = Int64.to_float (Date_time_util.time_ms ()) in
+  let now = Time.now () in
   let last_gc_at =
     match entity (Conn.db conn) (Ident recycle_gc_kv) with
     | Some e -> (
         match Ldb.value e "kv/value" with
-        | Some (Int64 n) -> Some (Int64.to_float n)
-        | Some (Float f) -> Some f
+        | Some (Int64 n) -> Some (Time.epoch_ms n)
+        | Some (Float f) -> Some (Time.epoch_ms_of_float f)
         | _ -> None)
     | None -> None
   in
   (match last_gc_at with
-   | Some l when now -. l <= Outliner_recycle.gc_interval_ms -> ()
+   | Some l
+     when Time.epoch_ms_to_float now -. Time.epoch_ms_to_float l
+          <= Outliner_recycle.gc_interval_ms -> ()
    | _ ->
        ignore (Outliner_recycle.gc conn ~now_ms:now ());
        ignore
@@ -49,7 +51,7 @@ let maybe_run_recycle_gc (conn : conn) : unit =
                 { db_id = None
                 ; attrs =
                     [ ("db/ident", One_value (Keyword recycle_gc_kv))
-                    ; ("kv/value", One_value (Float now)) ] } ]
+                    ; ("kv/value", One_value (Float (Time.epoch_ms_to_float now))) ] } ]
             ~tx_meta:
               [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] ))
 

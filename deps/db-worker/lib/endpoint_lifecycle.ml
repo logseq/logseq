@@ -177,7 +177,7 @@ let built_in_sync_repair_tx_id = "00000000-0000-4000-8000-652665286528"
 
 (* cljs db-core/built-in-sync-repair-timestamp — fixed so duplicate
    repair txs from multiple clients converge on the same datoms. *)
-let built_in_sync_repair_timestamp = 0L
+let built_in_sync_repair_timestamp = Time.epoch_ms 0L
 
 let built_in_sync_repair_properties =
   [ "logseq.property.repeat/repeat-type"; "logseq.property.comments/blocks" ]

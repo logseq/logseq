@@ -188,7 +188,10 @@ module Fs_stat = struct
     [@@mel.module "fs"]
 end
 
-type file_stat = { mtime_ms : float option; birthtime_ms : float option }
+type file_stat = {
+  mtime_ms : Time.epoch_ms option;
+  birthtime_ms : Time.epoch_ms option;
+}
 
 let stat path =
   match Runtime_env.kind () with
@@ -197,8 +200,8 @@ let stat path =
       (wrap (fun () ->
            let s = Fs_stat.statSync path in
            Some
-             { mtime_ms = Some s##mtimeMs
-             ; birthtime_ms = Some s##birthtimeMs }))
+             { mtime_ms = Some (Time.epoch_ms_of_float s##mtimeMs)
+             ; birthtime_ms = Some (Time.epoch_ms_of_float s##birthtimeMs) }))
       (fun _ -> Db_worker_effect.pure None)
   | _ -> Db_worker_effect.pure None
 

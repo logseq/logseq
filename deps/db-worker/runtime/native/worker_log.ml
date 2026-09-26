@@ -20,7 +20,7 @@ type entry = {
   level : level;
   message : string;
   fields : (string * string) list;
-  time_ms : float;
+  time_ms : Time.epoch_ms;
 }
 
 (* Rolling ring, cap 1000 like worker-state/*log. *)
@@ -35,7 +35,7 @@ let set_entry_sink = function
 
 let log level message fields =
   let entry =
-    { level; message; fields; time_ms = Time.epoch_ms_to_float (Time.now ()) }
+    { level; message; fields; time_ms = Time.now () }
   in
   Queue.add entry ring;
   !entry_sink entry;

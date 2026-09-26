@@ -1114,13 +1114,17 @@ let day_ms = 86400000L
 let week_ms = 604800000L
 
 (* cljs-time t/plus/t/minus for month/year — joda clamped civil add *)
+let utc_ms (c : Time.civil) : int64 =
+  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil Time.utc c)
+
+let utc_civil (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms)
+
 let plus_months (t : int64) (n : int) : int64 =
-  Commands.ms_of_utc_civil
-    (Commands.add_units (Commands.utc_civil_of_ms t) Commands.Month n)
+  utc_ms (Commands.add_units (utc_civil t) Commands.Month n)
 
 let plus_years (t : int64) (n : int) : int64 =
-  Commands.ms_of_utc_civil
-    (Commands.add_units (Commands.utc_civil_of_ms t) Commands.Year n)
+  utc_ms (Commands.add_units (utc_civil t) Commands.Year n)
 
 (* cljs in-minutes/in-hours/... relative to the test's now snapshot *)
 let in_minutes ~(now : int64) (t : int64) : int =
@@ -1137,24 +1141,20 @@ let in_weeks ~(now : int64) (t : int64) : int =
 
 (* cljs t/in-months / t/in-years — whole-unit civil diff *)
 let in_months ~(now : int64) (t : int64) : int =
-  Commands.in_units
-    (Commands.utc_civil_of_ms now)
-    (Commands.utc_civil_of_ms t) Commands.Month
+  Commands.in_units (utc_civil now) (utc_civil t) Commands.Month
 
 let in_years ~(now : int64) (t : int64) : int =
-  Commands.in_units
-    (Commands.utc_civil_of_ms now)
-    (Commands.utc_civil_of_ms t) Commands.Year
+  Commands.in_units (utc_civil now) (utc_civil t) Commands.Year
 
 (* cljs t/day-of-week — consistent weekday index is enough for
    equality assertions *)
 let day_of_week (t : int64) : int =
-  let c = Commands.utc_civil_of_ms t in
-  Commands.days_from_civil c.y c.mo c.d mod 7
+  Int64.to_int (Int64.rem (Int64.div t day_ms) 7L)
 
 let civil_ms y mo d h mi =
-  Commands.ms_of_utc_civil
-    { y; mo; d; h; mi; s = 0; ms = 0 }
+  utc_ms
+    (Time.civil ~year:y ~month:mo ~day:d ~hour:h ~minute:mi ~second:0
+       ~ms:0)
 
 let opt_get_exn = function Some x -> x | None -> failwith "get_next_time"
 
@@ -1470,11 +1470,11 @@ let test_double_plus_far_overdue_minute_is_bounded () =
      result: now + 1 minute, no hang. *)
   let result =
     Commands.repeat_next_timestamp
-      (Commands.utc_civil_of_ms two_years_ago)
+      (utc_civil two_years_ago)
       Commands.Minute 1 double_plus
   in
   check "far-overdue minute: result = now + 1min"
-    (in_minutes ~now (Commands.ms_of_utc_civil result) = 1)
+    (in_minutes ~now (utc_ms result) = 1)
 
 (* cljs tx-add-value — find [:db/add eid attr v] in tx ops *)
 let tx_add_value (txs : tx_op list) (eid : entity_id) (a : attr)

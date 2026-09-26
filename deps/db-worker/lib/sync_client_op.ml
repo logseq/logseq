@@ -270,9 +270,11 @@ let row_to_pending_local_tx (r : Sqlite.row) : local_tx_entry option =
 let pending_tx_select =
   "select tx_id, outliner_op, undo_redo, forward_outliner_ops, inverse_outliner_ops, inferred_outliner_ops, normalized_tx_data, reversed_tx_data from client_ops where kind = 'tx'"
 
-type upsert_result = { created_at : int64; should_inc_pending : bool }
+type upsert_result =
+  { created_at : Time.epoch_ms; should_inc_pending : bool }
 
-let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
+let upsert_local_tx_entry repo ~(tx_id : string)
+    ?(created_at : Time.epoch_ms option) ?(pending = true)
     ?(failed = false) ~outliner_op ~undo_redo ~forward_outliner_ops
     ~inverse_outliner_ops ~inferred_outliner_ops ~normalized_tx_data
     ~reversed_tx_data () : upsert_result =
@@ -289,11 +291,11 @@ let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
   in
   let created_at' =
     match existing with
-    | Some r -> col_int64 r 1
+    | Some r -> Time.epoch_ms (col_int64 r 1)
     | None ->
         (match created_at with
          | Some c -> c
-         | None -> Time.epoch_ms_to_int64 (Time.now ()))
+         | None -> Time.now ())
   in
   let b i = Sqlite.Integer (Int64.of_int (if i then 1 else 0)) in
   run st
@@ -306,7 +308,7 @@ let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
      ^ "forward_outliner_ops = excluded.forward_outliner_ops, inverse_outliner_ops = excluded.inverse_outliner_ops, "
      ^ "inferred_outliner_ops = excluded.inferred_outliner_ops, normalized_tx_data = excluded.normalized_tx_data, "
      ^ "reversed_tx_data = excluded.reversed_tx_data")
-    [ Sqlite.Integer created_at'
+    [ Sqlite.Integer (Time.epoch_ms_to_int64 created_at')
     ; text tx_id
     ; b pending
     ; b failed
@@ -349,7 +351,7 @@ type sync_conflict =
   ; attr : string
   ; value : string
   ; remote_t : int option
-  ; created_at : int64
+  ; created_at : Time.epoch_ms
   }
 
 let add_sync_conflicts repo (conflicts : (string * string * string * int) list) =
@@ -375,7 +377,7 @@ let conflict_row r =
   ; attr = col_text r 2
   ; value = col_text r 3
   ; remote_t = col_int_opt r 4
-  ; created_at = col_int64 r 5
+  ; created_at = Time.epoch_ms (col_int64 r 5)
   }
 
 let get_all_sync_conflicts repo : sync_conflict list =

@@ -776,7 +776,7 @@ let current_time () : string =
 let variable_rules ~current_page_title ~today_day =
   let today_date =
     match today_day with
-    | Some day -> Date_time_util.int_to_local_ms day
+    | Some day -> Date_time_util.local_date_start_ms day
     | None -> Date_time_util.today_ms ()
   in
   let today = journal_name today_date in
@@ -1650,7 +1650,7 @@ type exec_opts =
   { opt_cards : bool
   ; opt_block_attrs : string option
   ; opt_current_page_title : string option
-  ; opt_today_day : int option
+  ; opt_today_day : Time.local_date option
   }
 
 let () = Random.self_init ()

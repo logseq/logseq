@@ -718,6 +718,48 @@ let test_client_id_allowed () =
        { env with cognito_client_id = None } (Some "primary")
      = false)
 
+(* JWT exp claims are seconds; the db-worker compares them against now in
+   epoch-ms. An off-by-1000x bug (comparing seconds to ms raw) marks every
+   live token expired — these pin the seconds->ms normalization at parse. *)
+let test_jwt_exp_seconds_vs_ms () =
+  let old = !Sync_util.parse_jwt_fn in
+  Fun.protect
+    ~finally:(fun () -> Sync_util.parse_jwt_fn := old)
+    (fun () ->
+      let now_s = Sync_state.time_ms () /. 1000. in
+      let stub exp_s =
+        Sync_util.parse_jwt_fn :=
+          fun _ -> Some (Wire.kw_map [ "exp", Wire.Float exp_s ])
+      in
+      stub (now_s +. 7200.);
+      check "live token not expired"
+        (not (Endpoint_user.expired (Some "tok")));
+      check "live token not almost-expired"
+        (not (Endpoint_user.almost_expired_or_expired (Some "tok")));
+      check "jwt_exp_ms is exp seconds * 1000"
+        (Option.map Time.epoch_ms_to_float
+           (Endpoint_user.jwt_exp_ms "tok")
+         = Some ((now_s +. 7200.) *. 1000.));
+      stub (now_s +. 1800.);
+      check "soon-expiring token not expired"
+        (not (Endpoint_user.expired (Some "tok")));
+      check "soon-expiring token almost-expired"
+        (Endpoint_user.almost_expired_or_expired (Some "tok"));
+      stub (now_s -. 60.);
+      check "past-exp token expired" (Endpoint_user.expired (Some "tok"));
+      Sync_util.parse_jwt_fn := (fun _ -> Some (Wire.kw_map []));
+      check "no-exp token expired" (Endpoint_user.expired (Some "tok")))
+
+let test_token_cache_exp_seconds () =
+  let payload exp_s = Wire.kw_map [ "exp", Wire.Float exp_s ] in
+  let now_s = Sync_state.time_ms () /. 1000. in
+  Authorization.cache_token "live" (payload (now_s +. 3600.));
+  Authorization.cache_token "dead" (payload (now_s -. 10.));
+  check "cached live token returned"
+    (Authorization.cached_token "live" (Time.now ()) <> None);
+  check "cached expired token rejected"
+    (Authorization.cached_token "dead" (Time.now ()) = None)
+
 (* logseq.graph-parser.schema.mldoc — validator spot checks over the
    JSON-parsed AST domain *)
 let test_mldoc_schema () =
@@ -932,6 +974,8 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "url?" `Quick test_url;
     Alcotest.test_case "graph-dir" `Quick test_graph_dir;
     Alcotest.test_case "client-id-allowed?" `Quick test_client_id_allowed;
+    Alcotest.test_case "jwt-exp-seconds-vs-ms" `Quick test_jwt_exp_seconds_vs_ms;
+    Alcotest.test_case "token-cache-exp-seconds" `Quick test_token_cache_exp_seconds;
     Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema;
     Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag;
     Alcotest.test_case "get-initial-data" `Quick test_get_initial_data;

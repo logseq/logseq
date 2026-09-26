@@ -15,17 +15,21 @@ let id_token () : string option =
   | Some (Wire.String s) when s <> "" -> Some s
   | _ -> None
 
-(* parse-jwt :exp — JWT exp is seconds; compare in ms like cljs
+(* parse-jwt :exp — JWT exp is seconds; normalized to epoch_ms like cljs
    handler.user does (:exp * 1000). *)
-let jwt_exp_ms (token : string) : float option =
-  Option.map (fun s -> s *. 1000.) (Sync_util.jwt_exp token)
+let jwt_exp_ms (token : string) : Time.epoch_ms option =
+  Option.map (fun s -> Time.epoch_ms_of_float (s *. 1000.))
+    (Sync_util.jwt_exp token)
 
 (* handler.user/almost-expired? — exp < now + 1h *)
 let almost_expired_or_expired (token : string option) : bool =
   match token with
   | Some t ->
       (match jwt_exp_ms t with
-       | Some exp_ms -> exp_ms < Sync_state.time_ms () +. 3_600_000.
+       | Some exp_ms ->
+         Time.compare_epoch_ms exp_ms
+           (Time.epoch_ms_of_float (Sync_state.time_ms () +. 3_600_000.))
+         < 0
        | None -> true)
   | None -> true
 
@@ -33,7 +37,10 @@ let expired (token : string option) : bool =
   match token with
   | Some t ->
       (match jwt_exp_ms t with
-       | Some exp_ms -> exp_ms <= Sync_state.time_ms ()
+       | Some exp_ms ->
+         Time.compare_epoch_ms exp_ms
+           (Time.epoch_ms_of_float (Sync_state.time_ms ()))
+         <= 0
        | None -> true)
   | None -> true
 

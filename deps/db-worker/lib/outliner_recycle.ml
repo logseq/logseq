@@ -143,13 +143,15 @@ let with_delete_cleanup_tx db (tx_data : tx_op list) : tx_op list =
 
 (* recycle-blocks-tx-data *)
 let recycle_blocks_tx_data db (blocks : entity list)
-    ?(deleted_by_uuid : string option) ?(now_ms : float option) () : tx_op list =
+    ?(deleted_by_uuid : string option)
+    ?(now_ms : Time.epoch_ms option) () : tx_op list =
   let { page; page_id; tx_data } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
   (* cljs writes (common-util/time-ms) — keep full ms as a numeric value *)
   let now_ms =
-    Common_util.value_of_ms_float
-      (Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ())))
+    Common_util.value_of_ms
+      (Time.epoch_ms_to_int64
+         (Option.value now_ms ~default:(Time.now ())))
   in
   let prev_order =
     match page with
@@ -194,12 +196,14 @@ let recycle_blocks_tx_data db (blocks : entity list)
 
 (* recycle-page-tx-data *)
 let recycle_page_tx_data db (page : entity)
-    ?(deleted_by_uuid : string option) ?(now_ms : float option) () : tx_op list =
+    ?(deleted_by_uuid : string option)
+    ?(now_ms : Time.epoch_ms option) () : tx_op list =
   let { page = existing; page_id; tx_data = init_tx } = ensure_recycle_page db in
   let deleted_by_ent = Option.bind (deleted_by_id db deleted_by_uuid) (Ldb.ent_of_id db) in
   let now_ms =
-    Common_util.value_of_ms_float
-      (Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ())))
+    Common_util.value_of_ms
+      (Time.epoch_ms_to_int64
+         (Option.value now_ms ~default:(Time.now ())))
   in
   let order =
     match existing with
@@ -353,13 +357,14 @@ let permanently_delete (conn : conn) (root_uuid : string) : bool =
             conn tx_data);
        true)
 
-let gc_tx_data db ?(now_ms : float option) () : tx_op list =
-  let now_ms =
-    Option.value now_ms ~default:(Time.epoch_ms_to_float (Time.now ()))
-  in
+let gc_tx_data db ?(now_ms : Time.epoch_ms option) () : tx_op list =
+  let now_ms = Option.value now_ms ~default:(Time.now ()) in
   (* deleted-at is epoch-ms — keep the cutoff numeric at full precision
      (cljs passes a plain number into the query) *)
-  let cutoff = Common_util.value_of_ms_float (now_ms -. retention_ms) in
+  let cutoff =
+    Common_util.value_of_ms_float
+      (Time.epoch_ms_to_float now_ms -. retention_ms)
+  in
   let ids =
     Datascript.q_string
       ~inputs:[ Arg_scalar (Result_value cutoff) ]
@@ -392,7 +397,7 @@ let gc_tx_data db ?(now_ms : float option) () : tx_op list =
   in
   match ops with [] -> [] | ops -> with_delete_cleanup_tx db ops
 
-let gc (conn : conn) ?(now_ms : float option) () : bool =
+let gc (conn : conn) ?(now_ms : Time.epoch_ms option) () : bool =
   match gc_tx_data (Conn.db conn) ?now_ms () with
   | [] -> false
   | tx_data ->

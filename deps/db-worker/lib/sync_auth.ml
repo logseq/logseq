@@ -34,7 +34,12 @@ let id_token_expired_impl (token : string option) : bool =
   match token with
   | Some t ->
       (match Sync_util.jwt_exp t with
-       | Some exp_s -> exp_s *. 1000. <= Sync_state.time_ms ()
+       | Some exp_s ->
+         (* exp is JWT seconds; compare in ms like cljs *)
+         Time.compare_epoch_ms
+           (Time.epoch_ms_of_float (exp_s *. 1000.))
+           (Time.epoch_ms_of_float (Sync_state.time_ms ()))
+         <= 0
        | None -> true)
   | None -> true
 

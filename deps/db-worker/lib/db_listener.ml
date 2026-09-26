@@ -132,6 +132,11 @@ let perf_wire (data : (string * Wire.t) list) : Wire.t =
 
 let ms_wire (ms : float) : Wire.t = Wire.Float ms
 
+(* elapsed ms between two epoch_ms instants *)
+let elapsed_ms (a : Time.epoch_ms) (b : Time.epoch_ms) : float =
+  Int64.to_float
+    (Int64.sub (Time.epoch_ms_to_int64 a) (Time.epoch_ms_to_int64 b))
+
 (* ---------- renderer-tx-meta ---------- *)
 
 let renderer_tx_meta_keys =
@@ -269,25 +274,25 @@ let build_render_delta (repo : string) (r : tx_report)
 
 type sync_result =
   { sync_tx_report : tx_report
-  ; sync_started_at : float
-  ; sync_pipeline_at : float
-  ; sync_delta_at : float
+  ; sync_started_at : Time.epoch_ms
+  ; sync_pipeline_at : Time.epoch_ms
+  ; sync_delta_at : Time.epoch_ms
   ; sync_payload : Wire.t }
 
 let main_thread_sync_result (repo : string) (conn : conn)
     (r : tx_report) : sync_result option =
   Worker_state.set_db_latest_tx_time repo;
   if publish_render_delta r.tx_meta then begin
-    let started_at = perf_time_ms () in
+    let started_at = Time.now () in
     let render_result = Worker_pipeline.invoke_hooks conn r in
-    let pipeline_at = perf_time_ms () in
+    let pipeline_at = Time.now () in
     let processed = render_result.hooks_tx_report in
     let delta =
       build_render_delta repo processed
         render_result.hooks_affected_keys
         render_result.hooks_deleted_block_uuids
     in
-    let delta_at = perf_time_ms () in
+    let delta_at = Time.now () in
     let route =
       renderer_route_candidates processed.db_after
         render_result.hooks_blocks
@@ -333,8 +338,8 @@ let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
            | Some o -> kw o
            | None -> Wire.Nil )
        ; "tx-count", Wire.Int (List.length s.sync_tx_report.tx_data)
-       ; "pipeline-ms", ms_wire (s.sync_pipeline_at -. s.sync_started_at)
-       ; "delta-ms", ms_wire (s.sync_delta_at -. s.sync_pipeline_at)
+       ; "pipeline-ms", ms_wire (elapsed_ms s.sync_pipeline_at s.sync_started_at)
+       ; "delta-ms", ms_wire (elapsed_ms s.sync_delta_at s.sync_pipeline_at)
        ; "broadcast-ms", ms_wire (perf_time_ms () -. broadcast_at) ])
 
 (* ---------- error reporting ---------- *)

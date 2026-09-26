@@ -444,7 +444,7 @@ let conflict_wire (c : Sync_client_op.sync_conflict) : Wire.t =
     ; (kw "value", Wire.String c.value)
     ; ( kw "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; (kw "created-at", Ds_wire.wire_int64 c.created_at) ]
+    ; (kw "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at)) ]
 
 let remove_nils (kvs : (Wire.t * Wire.t) list) =
   List.filter (fun (_, v) -> v <> Wire.Nil) kvs
@@ -650,7 +650,7 @@ let get_blocks_response repo (requests : Wire.t) : Wire.t option =
           tbl
         else Hashtbl.create 0
       in
-      let now_ms = Time.epoch_ms_to_float (Time.now ()) in
+      let now_ms = Time.now () in
       Wire.Array
         (List.map
            (fun (req, result) ->

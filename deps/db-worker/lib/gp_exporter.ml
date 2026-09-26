@@ -182,11 +182,11 @@ type options =
   ; upstream_properties : (string, BM.t) Hashtbl.t
   ; classes_tx : BM.t list ref
   ; custom_status_tx : BM.t list ref
-  ; journal_created_ats : (string, int64) Hashtbl.t
-  ; current_journal_created_at : int64 option
+  ; journal_created_ats : (string, Time.epoch_ms) Hashtbl.t
+  ; current_journal_created_at : Time.epoch_ms option
   ; preserve_empty_property_block_uuids : (string, unit) Hashtbl.t
-  ; file_created_at : int64 option
-  ; file_updated_at : int64 option
+  ; file_created_at : Time.epoch_ms option
+  ; file_updated_at : Time.epoch_ms option
   (* cljs :extract-options keys that callers merge over the defaults built in
      extract_pages_and_blocks; :db comes from @conn at call time *)
   ; extract_date_formatter : string option
@@ -279,9 +279,10 @@ let log_phase_ms (options : options) (phase : string)
 
 (* ---------- add-missing-timestamps ---------- *)
 
-let add_missing_timestamps ?(file_created_at : int64 option)
-    ?(file_updated_at : int64 option)
-    ?(current_journal_created_at : int64 option) (block : BM.t) : BM.t =
+let add_missing_timestamps ?(file_created_at : Time.epoch_ms option)
+    ?(file_updated_at : Time.epoch_ms option)
+    ?(current_journal_created_at : Time.epoch_ms option) (block : BM.t)
+    : BM.t =
   let file_page =
     match getv block (export_attr "file-page?") with
     | Some (Bool b) -> b
@@ -304,7 +305,7 @@ let add_missing_timestamps ?(file_created_at : int64 option)
     if file_times then pick file_updated_at file_created_at
     else if journal_ref_page then current_journal_created_at
     else if file_updated_at <> None then file_updated_at
-    else Some (Date_time_util.time_ms ())
+    else Some (Time.now ())
   in
   let created_at =
     if file_times then pick file_created_at file_updated_at
@@ -312,7 +313,7 @@ let add_missing_timestamps ?(file_created_at : int64 option)
     else if file_created_at <> None then file_created_at
     else updated_at
   in
-  let msv ms = Common_util.value_of_ms ms in
+  let msv ms = Common_util.value_of_ms (Time.epoch_ms_to_int64 ms) in
   let block =
     if file_times || journal_ref_page || getv block "block/updated-at" = None
     then BM.put block "block/updated-at" (msv (Option.get updated_at))
@@ -1208,7 +1209,7 @@ let deadline_scheduled_date_int (v : value option) : int option =
   | _ -> None
 
 (* deadline-scheduled-time-ms — local-midnight ms + optional :time {:hour :min} *)
-let deadline_scheduled_time_ms (v : value option) : int64 option =
+let deadline_scheduled_time_ms (v : value option) : Time.epoch_ms option =
   match deadline_scheduled_date_int v with
   | None -> None
   | Some date_int ->
@@ -1220,9 +1221,11 @@ let deadline_scheduled_time_ms (v : value option) : int64 option =
        (match get_int time_m "hour" with
         | Some hour ->
           let min = Option.value ~default:0 (get_int time_m "min") in
-          Some (Int64.add base (Int64.of_int (hour * 3600000 + min * 60000)))
-        | None -> Some base)
-     | _ -> Some base)
+          Some
+            (Time.epoch_ms
+               (Int64.add base (Int64.of_int (hour * 3600000 + min * 60000))))
+        | None -> Some (Time.epoch_ms base))
+     | _ -> Some (Time.epoch_ms base))
 
 let repeat_recur_units : (string * string) list =
   [ "Minute", "logseq.property.repeat/recur-unit.minute"
@@ -1456,7 +1459,7 @@ let find_or_create_deadline_scheduled_value (value : value option)
     in
     let time_ms = deadline_scheduled_time_ms value in
     ( (match time_ms with
-       | Some ms -> Some (Common_util.value_of_ms ms)
+       | Some ms -> Some (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
        | None -> None)
     , (match existing_uuid with Some _ -> [] | None -> [ journal_page ]) )
 
@@ -4200,7 +4203,8 @@ let complete_block_tx_data (db : db) (block_src : BM.t)
   let prepared =
     match journal_page_created_at with
     | Some ms ->
-      BM.put block_after_assets "block/created-at" (Common_util.value_of_ms ms)
+      BM.put block_after_assets "block/created-at"
+        (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
     | None -> block_after_assets
   in
   let block' =
@@ -4368,7 +4372,9 @@ let build_new_page_or_class (m : BM.t) (db : db)
     match get_string m "block/name" with
     | Some n ->
       (match Hashtbl.find_opt options.journal_created_ats n with
-       | Some ms -> BM.put m "block/created-at" (Common_util.value_of_ms ms)
+       | Some ms ->
+         BM.put m "block/created-at"
+           (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
        | None -> m)
     | None -> m
   in
@@ -4515,13 +4521,13 @@ let journal_file_title (path : string) : string option =
   | Some m -> m.groups.(1)
   | None -> None
 
-let journal_file_created_at (file : string) : int64 option =
+let journal_file_created_at (file : string) : Time.epoch_ms option =
   match journal_file_title file with
   | Some t ->
     (match
        Date_time_util.journal_title_to_int ~formatters:[ "yyyy_MM_dd" ] t
      with
-     | Some day -> Some (Date_time_util.int_to_local_ms day)
+     | Some day -> Some (Time.epoch_ms (Date_time_util.int_to_local_ms day))
      | None -> None)
   | None -> None
 
@@ -4649,11 +4655,15 @@ let build_existing_page (m : BM.t) (db : db) (page_uuid : string)
     if file_times then
       let m =
         match pick_opt options.file_created_at options.file_updated_at with
-        | Some ms -> BM.put m "block/created-at" (Common_util.value_of_ms ms)
+        | Some ms ->
+          BM.put m "block/created-at"
+            (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
         | None -> m
       in
       match pick_opt options.file_updated_at options.file_created_at with
-      | Some ms -> BM.put m "block/updated-at" (Common_util.value_of_ms ms)
+      | Some ms ->
+        BM.put m "block/updated-at"
+          (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
       | None -> m
     else m
   in
@@ -4887,12 +4897,14 @@ let build_pages_tx (conn : conn) (pages : BM.t list) (blocks : BM.t list)
            let p =
              match apply_file_times, file_page_created_at with
              | true, Some ms ->
-               BM.put p "block/created-at" (Common_util.value_of_ms ms)
+               BM.put p "block/created-at"
+                 (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
              | _ -> p
            in
            (match apply_file_times, file_page_updated_at with
             | true, Some ms ->
-              BM.put p "block/updated-at" (Common_util.value_of_ms ms)
+              BM.put p "block/updated-at"
+                (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
             | _ -> p))
     |> fun ps -> sanitize_page_aliases_for_import ps import_state
   in
@@ -5412,12 +5424,15 @@ let extract_pages_and_blocks (db : db) (file : string) (content : string)
       | Some ms ->
         if options.file_created_at <> None || options.file_updated_at <> None
         then
-          BM.put node "block/created-at" (Common_util.value_of_ms ms)
+          BM.put node "block/created-at"
+            (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
         else node
       | None -> node
     in
     match options.file_updated_at with
-    | Some ms -> BM.put node "block/updated-at" (Common_util.value_of_ms ms)
+    | Some ms ->
+      BM.put node "block/updated-at"
+        (Common_util.value_of_ms (Time.epoch_ms_to_int64 ms))
     | None -> node
   in
   let extract_opts : Gp_block.extract_options =
@@ -5493,7 +5508,8 @@ let extract_pages_and_blocks (db : db) (file : string) (content : string)
     else Some extracted
   | None -> None
 
-let build_journal_created_ats (pages : BM.t list) : (string, int64) Hashtbl.t =
+let build_journal_created_ats (pages : BM.t list)
+    : (string, Time.epoch_ms) Hashtbl.t =
   let tbl = Hashtbl.create 63 in
   List.iter
     (fun p ->
@@ -5501,12 +5517,17 @@ let build_journal_created_ats (pages : BM.t list) : (string, int64) Hashtbl.t =
       | Some (Int64 day) ->
         (match get_string p "block/name" with
          | Some n ->
-           Hashtbl.replace tbl n (Date_time_util.int_to_local_ms (Datascript.Util.int64_to_int_exn "journal-day" day))
+           Hashtbl.replace tbl n
+             (Time.epoch_ms
+                (Date_time_util.int_to_local_ms
+                   (Datascript.Util.int64_to_int_exn "journal-day" day)))
          | None -> ())
       | Some (Float f) ->
         (match get_string p "block/name" with
          | Some n ->
-           Hashtbl.replace tbl n (Date_time_util.int_to_local_ms (int_of_float f))
+           Hashtbl.replace tbl n
+             (Time.epoch_ms
+                (Date_time_util.int_to_local_ms (int_of_float f)))
          | None -> ())
       | _ -> ())
     pages;
@@ -5978,20 +5999,21 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
    >>= fun stat ->
   let file_ts k =
     match getv file k with
-    | Some v -> Common_util.timestamp_ms v
+    | Some v -> Option.map Time.epoch_ms (Common_util.timestamp_ms v)
     | None -> None
   in
-  (* timestamp-ms treats non-positive times (e.g. epoch-0 birthtime) as absent *)
-  let to_i64 f =
+  (* cljs timestamp-ms treats non-positive times (e.g. epoch-0 birthtime)
+     as absent *)
+  let stat_ts f =
     match f with
-    | Some x when x > 0. && Float.is_finite x -> Some (Int64.of_float x)
+    | Some x when Time.compare_epoch_ms x (Time.epoch_ms 0L) > 0 -> Some x
     | _ -> None
   in
   let modified_at =
     pick_opt (file_ts "file-updated-at")
       (pick_opt
          (match stat with
-          | Some s -> to_i64 s.mtime_ms
+          | Some s -> stat_ts s.mtime_ms
           | None -> None)
          (file_ts "last-modified-at"))
   in
@@ -5999,7 +6021,7 @@ let export_doc_file (file : BM.t) (conn : conn) (options : options)
     pick_opt (file_ts "file-created-at")
       (pick_opt
          (match stat with
-          | Some s -> to_i64 s.birthtime_ms
+          | Some s -> stat_ts s.birthtime_ms
           | None -> None)
          modified_at)
   in

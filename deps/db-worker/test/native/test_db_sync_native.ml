@@ -378,7 +378,7 @@ let sync_conflict_rows (db : Sqlite.db) (block_uuid : string)
 (* cljs seed-client-op-txs! — the db-sync/* keys of the tx maps *)
 type seed_tx =
   { s_tx_id : string
-  ; s_created_at : int64 option
+  ; s_created_at : Time.epoch_ms option
   ; s_pending : bool
   ; s_failed : bool
   ; s_outliner_op : string option
@@ -396,7 +396,8 @@ let seed_tx ?created_at ?(pending = true) ?(failed = false)
     ?(inferred = false) ?(tx_data_v = Wire.Array [])
     ?(reversed_tx_data = Wire.Array []) (tx_id : string) : seed_tx =
   { s_tx_id = tx_id
-  ; s_created_at = Option.map Int64.of_int created_at
+  ; s_created_at =
+      Option.map (fun i -> Time.epoch_ms (Int64.of_int i)) created_at
   ; s_pending = pending
   ; s_failed = failed
   ; s_outliner_op = outliner_op

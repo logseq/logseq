@@ -19,7 +19,7 @@ type entry = {
   level : level;
   message : string;
   fields : (string * string) list;
-  time_ms : float;
+  time_ms : Time.epoch_ms;
 }
 
 val entries : unit -> entry list
