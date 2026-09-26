@@ -17,6 +17,12 @@ JavaScript via Melange (browser + Node) and native OCaml.
   addresses)` written by `frontend.worker.db-core/new-sqlite-storage`.
 - Keep original logic faithful; sync-related semantics need extra care.
 - ClojureScript unit tests are translated 1:1 into OCaml tests under `test/`.
+- Do not modify any files under `spec/` during development unless
+  explicitly asked to modify the `.mli` files under `spec/`.
+- Do not modify any dune file during development unless explicitly asked.
+- If development is blocked because the `.mli` definitions under `spec/`
+  are unclear or unreasonable, stop development immediately and report
+  the specific spec issue, suggested changes, and rationale.
 
 ## Layout
 
