@@ -375,10 +375,23 @@
                  (some #(when (title-eq? (:title %) title) %) entities)
                  (when (or loose-leaf-uuid loose-leaf-map-uuid)
                    {:uuid (or loose-leaf-uuid loose-leaf-map-uuid)}))
-        title->uuid (into {}
-                          (map (fn [e] [(common-util/page-name-sanity-lc (:title e)) (:uuid e)])
-                               entities))
-        parent-uuids (mapv title->uuid (if (seq parts) (pop parts) []))]
+        ;; Assign each created ancestor (innermost first) to its segment index
+        ;; by walking the leaf's parent chain, so repeated segment titles like
+        ;; "a/a/leaf" map to their own entities. Stops at the first title
+        ;; mismatch or an ancestor this tx did not create.
+        segments (if (seq parts) (pop parts) [])
+        parent-uuids
+        (let [assignments (loop [e leaf
+                                 idx (dec (count segments))
+                                 acc {}]
+                            (if (or (nil? e) (neg? idx))
+                              acc
+                              (if-let [p (parent-of e)]
+                                (if (title-eq? (:title p) (nth segments idx))
+                                  (recur p (dec idx) (assoc acc idx (:uuid p)))
+                                  acc)
+                                acc)))]
+          (mapv #(get assignments %) (range (count segments))))]
     {:leaf-uuid (:uuid leaf)
      :parent-uuids parent-uuids
      :created-uuids (mapv :uuid entities)}))

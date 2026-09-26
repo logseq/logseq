@@ -59,6 +59,31 @@
               [:recycle-delete-permanently [ns-uuid]]]
              inverse-outliner-ops)))))
 
+(deftest derive-history-outliner-ops-repeated-namespace-segments-test
+  (testing "create-page with repeated segments maps each parent to its own entity"
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          {:keys [tx-data tx-meta]} (outliner-page/create @conn "dup/dup/leaf"
+                                                          {:split-namespace? true})
+          tx-report (d/with @conn tx-data {})
+          db-after (:db-after tx-report)
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn db-after (:tx-data tx-report) tx-meta)
+          leaf (db-test/find-page-by-title db-after "leaf")
+          inner-dup (:block/parent leaf)
+          outer-dup (:block/parent inner-dup)
+          leaf-uuid (:block/uuid leaf)
+          expected [(:block/uuid outer-dup) (:block/uuid inner-dup)]]
+      (is (= leaf-uuid (get-in forward-outliner-ops [0 1 1 :uuid])))
+      (is (= expected (get-in forward-outliner-ops [0 1 1 :parent-uuids])))
+      (is (apply distinct? expected))
+      (is (= #{[:delete-page [leaf-uuid {}]]
+               [:recycle-delete-permanently [leaf-uuid]]
+               [:delete-page [(:block/uuid inner-dup) {}]]
+               [:recycle-delete-permanently [(:block/uuid inner-dup)]]
+               [:delete-page [(:block/uuid outer-dup) {}]]
+               [:recycle-delete-permanently [(:block/uuid outer-dup)]]}
+             (set inverse-outliner-ops))))))
+
 (deftest derive-history-outliner-ops-create-page-with-new-tag-inverse-test
   (testing "create-page that also creates a tag removes the tag on undo (db-test#1300)"
     (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
