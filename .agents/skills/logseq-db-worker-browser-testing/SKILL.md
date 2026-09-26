@@ -83,6 +83,28 @@ Transit arg encoding notes:
 - `["^ "]` (verbose empty map) does NOT decode to an empty `Wire.Map` — it
   decodes to `null`, so `Wire.get`-style reads crash (`reading 'e'`/`'#e'`).
   Always include at least one `"~:key",v` pair in map args.
+- Datalog query strings with escaped quotes (`\"...\"` inside the transit
+  JSON) fail decode with `Transit_core.Json.Decode_error/1`. Prefer queries
+  that avoid string literals entirely, e.g. join on
+  `[?p :block/journal-day 20260926]` instead of `[?b :block/title "x"]`.
+- `thread-api/apply-outliner-ops` op entries are `["~:op-name",[args...]]` —
+  keyword op name + a NESTED args vector (see `op_of_entry` in
+  lib/outliner_op.ml). Flat `["name",arg1,arg2]` fails with
+  `Outliner_op.Invalid_outliner_op`. Example that works:
+  `'["repo",[["~:set-block-property",["~u<uuid>","~:logseq.property/deadline",<ms>]]],["^ ","~:x",0]]'`
+- Uuid args: fused `"~u<uuid>"` string decodes correctly (Wire.Uuid). The
+  verbose tagged form `["~u","<uuid>"]` does NOT decode as a uuid — it lands
+  as an array and fails `arg_ok`/`uuid_of_wire` lookups.
+- `thread-api/get-date-scheduled-or-deadlines` only returns blocks that also
+  carry a non-done `:logseq.property/status` — an empty `[]` on a block that
+  has deadline but no status is correct, not a bug.
+- Block/page uuids for op args: pull them via `thread-api/q`
+  (`[:find ?u :where [?b :block/title ?t] [?b :block/uuid ?u]]`) and slice
+  them out of the returned transit string — never hand-transcribe.
+- To focus the empty first block on a journal page for typing, click the
+  bullet row (~x≈80-130, ~y≈180 in a 1024px window) — clicking the page body
+  does not focus the editor and stray keys hit global shortcuts ('t' opens
+  the Themes modal).
 
 To pump captured strings out of the worker (no clipboard access there), POST to
 a local listener: `(timeout 40 nc -l -p 8799 > out.txt &)` then
