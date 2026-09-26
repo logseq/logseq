@@ -580,6 +580,16 @@
 - Post-fix stress verification: fresh 5000-op and 10000-op stress runs completed with final graph validation passing on all clients and no cardinality-one validation errors.
 - Status: fixed and verified in targeted tests plus fresh stress runs.
 
+### Bookkeeping `updated-at` stamp revalidated a drifted server page and rejected every pending tx
+
+- Date: 2026-09-26
+- Report: rapid block create/remove between nightly desktop (≈ master) and an older webapp produced 33 `tx/reject` failures at a constant remote `:t`, all with reason `db transact failed` and no `missing-block-uuids`.
+- Symptom: every pending tx is rejected by the server with `db transact failed`; the client log drops the server's `error-detail`, so the real error (`DB write failed with invalid data` with malli errors on a page entity) is invisible client-side.
+- Root cause: after `1e07062b83` (`fix: bump page updated-at on insert, move, and delete`), every insert/move/delete tx stamps `:block/updated-at` on its page. Server-side `validate-tx-report` treats every entity with a datom in the tx as changed and revalidates the whole entity map. If the page already has latent invalid state on the server (e.g. missing `:block/title` from older-version drift), every pending tx that touches it fails validation, so the whole queue is rejected one tx at a time while remote `:t` never advances.
+- Fix: `validate-tx-report` now ignores entities whose only changed attrs are bookkeeping timestamps (`:block/created-at`, `:block/updated-at`); the page's invalidity is not introduced by the stamping tx. The client also now forwards the server's `:error-detail` into `:db-sync/tx-rejected` log data so the real error is visible.
+- Regression test: `frontend.worker.db-sync-test/bookkeeping-timestamps-do-not-revalidate-entities-test` — injects a server-side page missing `:block/title`, then verifies pending insert/delete txs apply and only the drifted datom stays divergent.
+- Status: fixed; unit-verified. The drifted attribute itself still needs a repair path (checksum divergence), tracked separately.
+
 ## Recent db-test sync-stuck issue cluster
 
 - Date checked: 2026-07-01
