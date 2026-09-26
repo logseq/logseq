@@ -875,7 +875,8 @@ let get_file_stat_of_dir (dir : string) (path : string)
     (try
        let st = Unix.stat abs in
        Some
-         { File_sys.mtime_ms = Some (st.Unix.st_mtime *. 1000.)
+         { File_sys.mtime_ms =
+           Some (Time.epoch_ms_of_float (st.Unix.st_mtime *. 1000.))
          ; File_sys.birthtime_ms = None }
      with Unix.Unix_error _ -> None)
 
@@ -1970,8 +1971,8 @@ let test_export_doc_files_preserves_filesystem_timestamps () =
   let conn =
     export_in_memory_doc_files [ source_file; file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float created_at)
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms created_at)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "timestamps")) in
@@ -2008,8 +2009,8 @@ let test_export_doc_files_preserves_alias_only_page_file_timestamps () =
   let conn =
     export_in_memory_doc_files [ mention; file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float created_at)
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms created_at)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "sport")) in
@@ -2030,8 +2031,8 @@ let test_export_doc_files_preserves_multi_alias_page_file_timestamps () =
   let conn =
     export_in_memory_doc_files [ mention; file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float created_at)
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms created_at)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "schlaf")) in
@@ -2083,8 +2084,8 @@ let test_export_doc_files_keeps_journal_day_when_journal_has_file_stats () =
   let conn =
     export_in_memory_doc_files [ journal ]
       [ ( journal.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float file_created_at)
-          ; mtime_ms = Some (Int64.to_float file_updated_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms file_created_at)
+          ; mtime_ms = Some (Time.epoch_ms file_updated_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "referenced only")) in
@@ -2102,7 +2103,7 @@ let test_export_doc_files_keeps_journal_page_created_at_on_journal_day () =
     export_in_memory_doc_files [ journal ]
       [ ( journal.im_path,
           { File_sys.birthtime_ms = None
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = find_page_exn db "Mar 8th, 2024" in
@@ -2136,8 +2137,8 @@ let test_export_doc_files_keeps_file_timestamps_when_page_mentions_one_journal (
   let conn =
     export_in_memory_doc_files [ file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float created_at)
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms created_at)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "foo")) in
@@ -2168,8 +2169,8 @@ let test_export_doc_file_ignores_epoch_zero_birthtime () =
   let conn =
     export_in_memory_doc_files [ file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some 0.
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms 0L)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "epoch")) in
@@ -2186,7 +2187,7 @@ let test_export_doc_file_uses_mtime_when_birthtime_missing () =
     export_in_memory_doc_files [ file ]
       [ ( file.im_path,
           { File_sys.birthtime_ms = None
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "mtime-only")) in
@@ -2205,7 +2206,7 @@ let test_export_doc_files_uses_file_mtime_when_journal_mentions_page () =
     export_in_memory_doc_files [ mention; file ]
       [ ( file.im_path,
           { File_sys.birthtime_ms = None
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   let db = Datascript.db conn in
   let page = Option.get (Ldb.get_page db (String "mtime page")) in
@@ -2226,8 +2227,8 @@ let test_export_doc_files_keeps_existing_file_timestamps_when_journal_mentions_p
   let conn =
     export_in_memory_doc_files [ file ]
       [ ( file.im_path,
-          { File_sys.birthtime_ms = Some (Int64.to_float created_at)
-          ; mtime_ms = Some (Int64.to_float modified_at) } ) ]
+          { File_sys.birthtime_ms = Some (Time.epoch_ms created_at)
+          ; mtime_ms = Some (Time.epoch_ms modified_at) } ) ]
   in
   ignore (export_in_memory_doc_files ~conn [ mention ] []);
   let db = Datascript.db conn in

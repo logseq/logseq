@@ -174,7 +174,7 @@ let () =
                      ( kw "data",
                        Wire.Map
                          (List.map (fun (k, v) -> (Wire.String k, Wire.String v)) e.fields) );
-                     (kw "time-ms", Wire.Float e.time_ms);
+                     (kw "time-ms", Wire.Float (Time.epoch_ms_to_float e.time_ms));
                    ])
               entries)))
 

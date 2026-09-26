@@ -92,4 +92,4 @@ val drop_pending_local_tx_count : string -> unit
 (* :db/latest-transact-time per repo — updated by transact + the
    db-listener pipeline on every committed tx *)
 val set_db_latest_tx_time : string -> unit
-val db_latest_tx_time_get : string -> float option
+val db_latest_tx_time_get : string -> Time.epoch_ms option

@@ -1,120 +1,79 @@
 (* frontend.worker.commands — invoke commands based on user settings.
-   cljs-time arithmetic is UTC: the civil helpers here convert epoch ms
-   with days_from_civil/civil_from_days (no timezone offset). *)
+   cljs-time arithmetic is UTC: civil math runs through Time.civil at
+   Time.utc (no timezone offset). *)
 
 open Datascript
 
 (* ---------- UTC civil arithmetic (cljs-time.core on UTC instants) -- *)
 
-let days_from_civil (y : int) (m : int) (d : int) : int =
-  let y = if m <= 2 then y - 1 else y in
-  let era = (if y >= 0 then y else y - 399) / 400 in
-  let yoe = y - era * 400 in
-  let mp = (m + 9) mod 12 in
-  let doy = (153 * mp + 2) / 5 + d - 1 in
-  let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy in
-  era * 146097 + doe - 719468
+let utc_ms (c : Time.civil) : int64 =
+  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil Time.utc c)
 
-let civil_from_days (z : int) : int * int * int =
-  let z = z + 719468 in
-  let era = (if z >= 0 then z else z - 146096) / 146097 in
-  let doe = z - era * 146097 in
-  let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365 in
-  let y = yoe + era * 400 in
-  let doy = doe - (365 * yoe + yoe / 4 - yoe / 100) in
-  let mp = (5 * doy + 2) / 153 in
-  let d = doy - (153 * mp + 2) / 5 + 1 in
-  let m = if mp < 10 then mp + 3 else mp - 9 in
-  ((if m <= 2 then y + 1 else y), m, d)
-
-let days_in_month (y : int) (m : int) : int =
-  match m with
-  | 1 | 3 | 5 | 7 | 8 | 10 | 12 -> 31
-  | 4 | 6 | 9 | 11 -> 30
-  | 2 ->
-      if (y mod 4 = 0 && y mod 100 <> 0) || y mod 400 = 0 then 29 else 28
-  | _ -> invalid_arg "days_in_month"
-
-type ucivil =
-  { y : int; mo : int; d : int; h : int; mi : int; s : int; ms : int }
-
-let utc_civil_of_ms (ms : int64) : ucivil =
-  let days = Int64.div ms 86400000L and rem = Int64.rem ms 86400000L in
-  let rem = if Int64.compare rem 0L < 0 then Int64.add rem 86400000L else rem in
-  let days = if Int64.compare (Int64.rem ms 86400000L) 0L < 0 then Int64.pred days else days in
-  let y, mo, d = civil_from_days (Int64.to_int days) in
-  { y; mo; d
-  ; h = Int64.to_int (Int64.div rem 3600000L)
-  ; mi = Int64.to_int (Int64.div (Int64.rem rem 3600000L) 60000L)
-  ; s = Int64.to_int (Int64.div (Int64.rem rem 60000L) 1000L)
-  ; ms = Int64.to_int (Int64.rem rem 1000L) }
-
-let ms_of_utc_civil (c : ucivil) : int64 =
-  Int64.add
-    (Int64.mul (Int64.of_int (days_from_civil c.y c.mo c.d)) 86400000L)
-    (Int64.of_int
-       (c.h * 3600000 + c.mi * 60000 + c.s * 1000 + c.ms))
+let utc_civil (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms)
 
 type recur_unit = Minute | Hour | Day | Week | Month | Year
 
 (* cljs-time t/plus with joda month/year clamping semantics *)
-let add_units (c : ucivil) (u : recur_unit) (n : int) : ucivil =
+let add_units (c : Time.civil) (u : recur_unit) (n : int) : Time.civil =
+  let y, mo, d, h, mi, s, ms = Time.civil_fields c in
   match u with
   | Month | Year ->
-      let total = (c.y * 12 + (c.mo - 1)) + (if u = Year then n * 12 else n) in
-      let y = total / 12 and mo = total mod 12 + 1 in
-      let y, mo =
-        if total < 0 then
-          let y = (total - 11) / 12 in
-          (y, total - y * 12 + 1)
-        else (y, mo)
-      in
-      let d = min c.d (days_in_month y mo) in
-      { c with y; mo; d }
+      let total = (y * 12 + (mo - 1)) + (if u = Year then n * 12 else n) in
+      let y' = total / 12 and m0 = total mod 12 in
+      let y', m0 = if m0 < 0 then (y' - 1, m0 + 12) else (y', m0) in
+      let mo' = m0 + 1 in
+      let d' = min d (Date_time_util.days_in_month y' mo') in
+      Time.civil ~year:y' ~month:mo' ~day:d' ~hour:h ~minute:mi ~second:s
+        ~ms
   | _ ->
-      let ms =
+      let delta =
         match u with
         | Minute -> Int64.mul (Int64.of_int n) 60000L
         | Hour -> Int64.mul (Int64.of_int n) 3600000L
         | Day -> Int64.mul (Int64.of_int n) 86400000L
         | Week -> Int64.mul (Int64.of_int n) 604800000L
-        | _ -> invalid_arg "unreachable"
+        | Month | Year -> invalid_arg "unreachable"
       in
-      utc_civil_of_ms (Int64.add (ms_of_utc_civil c) ms)
+      utc_civil (Int64.add (utc_ms c) delta)
 
 (* cljs-time t/in-* — whole units between two instants *)
-let in_units (a : ucivil) (b : ucivil) (u : recur_unit) : int =
-  let ms_a = ms_of_utc_civil a and ms_b = ms_of_utc_civil b in
+let in_units (a : Time.civil) (b : Time.civil) (u : recur_unit) : int =
+  let ms_a = utc_ms a and ms_b = utc_ms b in
   match u with
   | Minute -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 60000L)
   | Hour -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 3600000L)
   | Day -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 86400000L)
   | Week -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 604800000L)
   | Month | Year ->
-      let raw = (b.y - a.y) * 12 + (b.mo - a.mo) in
+      let ay, amo, ad, ah, ami, ase, ams = Time.civil_fields a in
+      let by, bmo, bd, bh, bmi, bse, bms = Time.civil_fields b in
+      let tod h mi s ms = h * 3600000 + mi * 60000 + s * 1000 + ms in
+      let raw = (by - ay) * 12 + (bmo - amo) in
       (* a whole month only counts when the day/time doesn't regress *)
       let months =
-        if ms_b >= ms_a && (b.d < a.d || (b.d = a.d
-           && (b.h * 3600000 + b.mi * 60000 + b.s * 1000 + b.ms)
-              < (a.h * 3600000 + a.mi * 60000 + a.s * 1000 + a.ms)))
+        if ms_b >= ms_a
+           && (bd < ad
+               || (bd = ad && tod bh bmi bse bms < tod ah ami ase ams))
         then raw - 1
-        else if ms_b < ms_a && (b.d > a.d || (b.d = a.d
-           && (b.h * 3600000 + b.mi * 60000 + b.s * 1000 + b.ms)
-              > (a.h * 3600000 + a.mi * 60000 + a.s * 1000 + a.ms)))
+        else if ms_b < ms_a
+                && (bd > ad
+                    || (bd = ad && tod bh bmi bse bms > tod ah ami ase ams))
         then raw + 1
         else raw
       in
       if u = Year then months / 12 else months
 
-let utc_now () : ucivil = utc_civil_of_ms (Date_time_util.time_ms ())
+let utc_now () : Time.civil = Time.civil_of_epoch_ms Time.utc (Time.now ())
 
-let ucivil_after (a : ucivil) (b : ucivil) : bool =
-  Int64.compare (ms_of_utc_civil a) (ms_of_utc_civil b) > 0
+let utc_civil_after (a : Time.civil) (b : Time.civil) : bool =
+  Int64.compare (utc_ms a) (utc_ms b) > 0
 
 (* date-time-util/journal-day->ms — yyyymmdd int parsed as UTC date *)
 let journal_day_to_ms (day : int) : int64 =
-  let y = day / 10000 and mo = (day / 100) mod 100 and d = day mod 100 in
-  ms_of_utc_civil { y; mo; d; h = 0; mi = 0; s = 0; ms = 0 }
+  utc_ms
+    (Time.civil ~year:(day / 10000) ~month:((day / 100) mod 100)
+       ~day:(day mod 100) ~hour:0 ~minute:0 ~second:0 ~ms:0)
 
 (* ---------- commands core ---------- *)
 
@@ -280,21 +239,21 @@ let commands : command list =
     ; actions = [ [ "record-property-history" ] ] } ]
 
 (* cljs advance-from-completion — `.+` *)
-let advance_from_completion (u : recur_unit) (frequency : int) : ucivil =
+let advance_from_completion (u : recur_unit) (frequency : int) : Time.civil =
   add_units (utc_now ()) u frequency
 
 (* cljs advance-from-scheduled — `+` *)
-let advance_from_scheduled (datetime : ucivil) (u : recur_unit)
-    (frequency : int) : ucivil =
+let advance_from_scheduled (datetime : Time.civil) (u : recur_unit)
+    (frequency : int) : Time.civil =
   add_units datetime u frequency
 
 (* cljs advance-until-future — `++` *)
-let advance_until_future (datetime : ucivil) (u : recur_unit)
-    (frequency : int) : ucivil =
+let advance_until_future (datetime : Time.civil) (u : recur_unit)
+    (frequency : int) : Time.civil =
   let now = utc_now () in
   let periods =
     max 1
-      (if ucivil_after datetime now then 1
+      (if utc_civil_after datetime now then 1
        else in_units datetime now u)
   in
   let delta_n =
@@ -304,13 +263,13 @@ let advance_until_future (datetime : ucivil) (u : recur_unit)
   in
   let result = add_units datetime u delta_n in
   let rec loop cand =
-    if ucivil_after cand now then cand
+    if utc_civil_after cand now then cand
     else loop (add_units cand u frequency)
   in
   loop result
 
-let repeat_next_timestamp (datetime : ucivil) (u : recur_unit)
-    (frequency : int) (repeat_type : string) : ucivil =
+let repeat_next_timestamp (datetime : Time.civil) (u : recur_unit)
+    (frequency : int) (repeat_type : string) : Time.civil =
   match repeat_type with
   | "logseq.property.repeat/repeat-type.dotted-plus" ->
       advance_from_completion u frequency
@@ -333,8 +292,8 @@ let get_next_time (current_value : int64) (unit : entity)
   match recur_unit with
   | Some u when frequency > 0 ->
       Some
-        (ms_of_utc_civil
-           (repeat_next_timestamp (utc_civil_of_ms current_value) u
+        (utc_ms
+           (repeat_next_timestamp (utc_civil current_value) u
               frequency repeat_type))
   | _ -> None
 

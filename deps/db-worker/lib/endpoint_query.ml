@@ -196,7 +196,11 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
     | Some (Wire.String s) -> Some s
     | _ -> None
   in
-  let today_day = Option.bind (get "today-day") Wire.as_int in
+  let today_day =
+    Option.bind
+      (Option.bind (get "today-day") Wire.as_int)
+      (Time.local_date_of_journal_day (Time.local_tz ()))
+  in
   let require_today_day =
     match get "require-today-day?" with
     | Some (Wire.Bool b) -> b
@@ -223,7 +227,8 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
                 [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
-  | Keyword "today", Some day -> Int64 (Int64.of_int day)
+  | Keyword "today", Some day ->
+      Int64 (Int64.of_int (Time.journal_day_of_local_date day))
   | _ ->
       Db_inputs.resolve_input db resolved_input
         { Db_inputs.current_block_uuid = current_block_uuid
@@ -349,7 +354,10 @@ let query_dsl_query args =
                (Option.bind opts (Wire.get "current-page-title"))
                Wire.as_string
          ; opt_today_day =
-             Option.bind (Option.bind opts (Wire.get "today-day")) Wire.as_int
+             Option.bind
+               (Option.bind (Option.bind opts (Wire.get "today-day"))
+                  Wire.as_int)
+               (Time.local_date_of_journal_day (Time.local_tz ()))
          }
        in
        (match query_string with
@@ -419,7 +427,7 @@ let () = Dispatcher.register "thread-api/query-dsl-custom-query" query_dsl_custo
 
 type history_item =
   { history_id : entity_id
-  ; created_at : int64
+  ; created_at : Time.epoch_ms
   ; status_ident : string option
   ; status_uuid : value option
   ; status_title : value option
@@ -451,9 +459,10 @@ let block_status_history (db : db) (block_id : int) : history_item list =
              (* cljs untyped get: epoch-ms reads back numeric (Int/Float);
                 Instant only for legacy ~t-decoded data *)
              let ms_of = function
-               | Result_value (Int64 n) -> Some n
-               | Result_value (Float f) -> Some (Int64.of_float f)
-               | Result_value (Instant ms) -> Some ms
+               | Result_value (Int64 n) -> Some (Time.epoch_ms n)
+               | Result_value (Float f) ->
+                 Some (Time.epoch_ms (Int64.of_float f))
+               | Result_value (Instant ms) -> Some (Time.epoch_ms ms)
                | _ -> None
              in
              (match (int_of history_id, ms_of created_at, int_of status_id) with
@@ -474,10 +483,12 @@ let block_status_history (db : db) (block_id : int) : history_item list =
                     }
               | _ -> None)
          | _ -> None)
-  |> List.stable_sort (fun a b -> Int64.compare a.created_at b.created_at)
+  |> List.stable_sort (fun a b ->
+         Time.compare_epoch_ms a.created_at b.created_at)
 
 (* task-spent-time — [status-history time-in-seconds] *)
-let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
+let task_spent_time_impl (db : db) (block_id : int) (now_ms : Time.epoch_ms)
+    : Wire.t =
   let doing = "logseq.property/status.doing" in
   let done_ = "logseq.property/status.done" in
   let terminal =
@@ -492,7 +503,11 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
         match items with
         | last_item :: item :: others ->
             if item.status_ident = Some doing && others = [] then
-              int_of_float ((time +. (now_ms -. Int64.to_float item.created_at)) /. 1000.)
+              int_of_float
+                ((time
+                  +. (Time.epoch_ms_to_float now_ms
+                      -. Time.epoch_ms_to_float item.created_at))
+                 /. 1000.)
             else
               let time' =
                 if
@@ -501,7 +516,12 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
                       | Some s -> not (List.mem s terminal)
                       | None -> true)
                      && item.status_ident = Some done_
-                then time +. Int64.to_float (Int64.sub item.created_at last_item.created_at)
+                then
+                  time
+                  +. Int64.to_float
+                       (Int64.sub
+                          (Time.epoch_ms_to_int64 item.created_at)
+                          (Time.epoch_ms_to_int64 last_item.created_at))
                 else time
               in
               loop (item :: others) time'
@@ -511,7 +531,8 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : float) : Wire.t =
       let item_wire (it : history_item) =
         Wire.Map
           [ (kw "db/id", Wire.Int it.history_id)
-          ; (kw "block/created-at", Ds_wire.wire_int64 it.created_at)
+          ; ( kw "block/created-at"
+            , Ds_wire.wire_int64 (Time.epoch_ms_to_int64 it.created_at) )
           ; ( kw "logseq.property.history/property-ident",
               kw "logseq.property/status" )
           ; ( kw "logseq.property.history/ref-value-ident",
@@ -541,8 +562,7 @@ let task_spent_time args =
        Db_worker_effect.pure
          (match block_id with
           | Some id ->
-              task_spent_time_impl (Datascript.db conn) id
-                (Time.epoch_ms_to_float (Time.now ()))
+              task_spent_time_impl (Datascript.db conn) id (Time.now ())
           | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/task-spent-time" task_spent_time

@@ -122,7 +122,7 @@ let fields_to_edn (fields : (string * string) list) : string =
 (* format-glogi-line — `ts [level] [logger] {:event {:fields}}`: cljs
    pr-str's the glogi record message, which is the event map itself. *)
 let format_glogi_line (entry : Worker_log.entry) : string =
-  let ts = Time.iso_string_of_epoch_ms (Time.epoch_ms_of_float entry.time_ms) in
+  let ts = Time.iso_string_of_epoch_ms entry.time_ms in
   let level =
     match entry.level with
     | Worker_log.Trace -> "trace"

@@ -96,6 +96,13 @@ let int_to_local_ms (day : int) : int64 =
     (Time.civil ~year:(day / 10000) ~month:((day / 100) mod 100)
        ~day:(day mod 100) ~hour:0 ~minute:0 ~second:0 ~ms:0)
 
+(* local midnight of a local_date in the date's own tz. *)
+let local_date_start_ms (d : Time.local_date) : int64 =
+  let year, month, day = Time.local_date_fields d in
+  Time.epoch_ms_to_int64
+    (Time.epoch_ms_of_civil (Time.local_date_tz d)
+       (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~ms:0))
+
 (* ---------- journal title parsing ----------
 
    common-util/capitalize-all *)

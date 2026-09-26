@@ -407,13 +407,13 @@ let cli_list_nodes db (opts : Wire.t option) : Wire.t =
      |> List.filter (fun e -> has_all_properties e property_idents)
      |> List.map (fun e -> Wire.Map (minimal_node_item e)))
 
-let parse_time (t : Wire.t option) : float option =
+let parse_time (t : Wire.t option) : Time.epoch_ms option =
   match t with
-  | Some (Wire.Int n) -> Some (float_of_int n)
-  | Some (Wire.Float f) -> Some f
+  | Some (Wire.Int n) -> Some (Time.epoch_ms (Int64.of_int n))
+  | Some (Wire.Float f) -> Some (Time.epoch_ms_of_float f)
   | Some (Wire.String s) ->
       (* cljs (js/Date.parse value) — ISO/US/month-name date strings *)
-      Option.map Int64.to_float (Date_time_util.js_date_parse s)
+      Option.map Time.epoch_ms (Date_time_util.js_date_parse s)
   | _ -> None
 
 let cli_list_pages db (opts : Wire.t option) : Wire.t =
@@ -442,18 +442,20 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
            match created_after with
            | Some ms ->
                (match Ldb.value e "block/created-at" with
-                | Some (Int64 n) -> Int64.to_float n > ms
-                | Some (Instant i) -> Int64.to_float i > ms
-                | Some (Float f) -> f > ms
+                | Some (Int64 n) -> Time.compare_epoch_ms (Time.epoch_ms n) ms > 0
+                | Some (Instant i) -> Time.compare_epoch_ms (Time.epoch_ms i) ms > 0
+                | Some (Float f) ->
+                  Time.compare_epoch_ms (Time.epoch_ms_of_float f) ms > 0
                 | _ -> false)
            | None -> true)
     |> List.filter (fun e ->
            match updated_after with
            | Some ms ->
                (match Ldb.value e "block/updated-at" with
-                | Some (Int64 n) -> Int64.to_float n > ms
-                | Some (Instant i) -> Int64.to_float i > ms
-                | Some (Float f) -> f > ms
+                | Some (Int64 n) -> Time.compare_epoch_ms (Time.epoch_ms n) ms > 0
+                | Some (Instant i) -> Time.compare_epoch_ms (Time.epoch_ms i) ms > 0
+                | Some (Float f) ->
+                  Time.compare_epoch_ms (Time.epoch_ms_of_float f) ms > 0
                 | _ -> false)
            | None -> true)
   in
