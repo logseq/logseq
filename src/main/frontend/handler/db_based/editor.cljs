@@ -14,6 +14,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.op]
@@ -148,21 +149,25 @@
                       true)]
 
     (when file-valid?
-      (p/do!
-       (state/<invoke-db-worker :thread-api/transact
-                                (state/get-current-repo)
-                                [{:file/path path
-                                  :file/content content
-                                  :file/created-at (js/Date.)
-                                  :file/last-modified-at (js/Date.)}]
-                                nil
-                                nil)
-      ;; Post save
-       (cond (= path "logseq/config.edn")
-             (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
-               (state/pub-event! [:shortcut/refresh]))
-             (= path "logseq/custom.css")
-             (ui-handler/add-style-if-exists!))))))
+      (p/let [repo (state/get-current-repo)
+              file-entity (state/<invoke-db-worker :thread-api/pull repo [:db/id] [:file/path path])]
+        (p/do!
+         (state/<invoke-db-worker :thread-api/transact
+                                  repo
+                                  [(cond-> {:file/path path
+                                            :file/content content
+                                            :file/created-at (js/Date.)
+                                            :file/last-modified-at (js/Date.)}
+                                     (nil? file-entity)
+                                     (assoc :block/uuid (common-uuid/gen-uuid :builtin-block-uuid path)))]
+                                  nil
+                                  nil)
+        ;; Post save
+         (cond (= path "logseq/config.edn")
+               (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                 (state/pub-event! [:shortcut/refresh]))
+               (= path "logseq/custom.css")
+               (ui-handler/add-style-if-exists!)))))))
 
 (defn batch-set-heading!
   [block-ids heading]
