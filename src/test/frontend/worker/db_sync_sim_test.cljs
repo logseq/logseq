@@ -40,7 +40,8 @@
 
 (defn- create-remote-conn
   "A client graph that syncs, marked as upload and download mark it. The stored
-  checksum is kept only on such a graph."
+  checksum is kept only on such a graph, and undo and redo replay the semantic
+  ops there, not the datoms of the change."
   []
   (doto (db-test/create-conn)
     (d/transact! [(ldb/kv :logseq.kv/graph-remote? true)])))
@@ -1992,8 +1993,8 @@
           parent-a-uuid (uuid "32222222-2222-2222-2222-222222222222")
           parent-b-uuid (uuid "33333333-3333-3333-3333-333333333333")
           child-uuid (uuid "34444444-4444-4444-4444-444444444444")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2062,8 +2063,8 @@
   (testing "undoing a newly created block syncs the retractEntity to other clients"
     (let [base-uuid (uuid "51111111-1111-1111-1111-111111111111")
           block-uuid (uuid "52222222-2222-2222-2222-222222222222")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2459,7 +2460,7 @@
             gen-uuid #(rng-uuid rng)
             base-uuid (gen-uuid)
             remote-uuid (gen-uuid)
-            conn (db-test/create-conn)
+            conn (create-remote-conn)
             server (make-server)
             history (atom [])
             client {:repo repo-a :conn conn :client (make-client repo-a)
@@ -2620,8 +2621,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2710,8 +2711,8 @@
           gen-uuid #(rng-uuid rng)
           scenario-runs op-runs
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2817,8 +2818,8 @@
             gen-uuid #(rng-uuid rng)
             scenario-runs 90
             base-uuid (gen-uuid)
-            conn-a (db-test/create-conn)
-            conn-b (db-test/create-conn)
+            conn-a (create-remote-conn)
+            conn-b (create-remote-conn)
             ops-a (new-client-ops-db)
             ops-b (new-client-ops-db)
             client-a (make-client repo-a)
