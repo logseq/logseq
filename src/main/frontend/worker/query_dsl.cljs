@@ -16,6 +16,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.query :as db-query]
             [logseq.db.frontend.query-dsl :as shared-query-dsl]
             [logseq.db.frontend.rules :as rules]))
 
@@ -709,7 +710,8 @@ Some bindings in this fn:
      (parse q' db options))))
 
 (def ^:private query-result-watch-attrs
-  #{:block/uuid :block/title :block/name :block/parent})
+  #{:block/uuid :block/title :block/name :block/parent
+    :logseq.property/deleted-at})
 
 (def ^:private attr-watch-safe-rules
   #{:between :block-content :page})
@@ -795,7 +797,7 @@ Some bindings in this fn:
                    query*)]
       (when-let [query' (some-> query* (query-wrapper {:blocks? true
                                                        :block-attrs block-attrs}))]
-        (-> (d/q query' db rules)
+        (-> (d/q query' (db-query/without-recycled db) rules)
             query-result-tuples
             (sample-results (some-> sample deref)))))))
 
@@ -806,7 +808,7 @@ Some bindings in this fn:
           {query* :query :keys [blocks? rules]} (parse query-string db {})]
       (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                        :block-attrs block-attrs}))]
-        (query-result-tuples (d/q query' db rules))))))
+        (query-result-tuples (d/q query' (db-query/without-recycled db) rules))))))
 
 (comment
   (parse "(and [[foo]] [[bar]])" nil {}))
