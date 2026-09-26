@@ -631,21 +631,22 @@
                      (and (or (nil? start-order) (pos? (compare order start-order)))
                           (or (nil? end-order) (neg? (compare order end-order)))))]
     (if (and keep-block-order? (every? :block/order blocks))
-      (if (every? at-target? (map :block/order (filter top-level? blocks)))
-        (map :block/order blocks)
-        ;; The kept orders of the top-level blocks no longer fall next to the
-        ;; target, e.g. undo restoring deleted blocks after a sibling moved
-        ;; away and back got a new order: order them at the target and keep
-        ;; the orders of their children.
-        (let [top-level-orders (db-order/gen-n-keys (count (filter top-level? blocks))
-                                                    start-order end-order)]
-          (first
-           (reduce (fn [[orders top-level-orders] block]
-                     (if (top-level? block)
-                       [(conj orders (first top-level-orders)) (rest top-level-orders)]
-                       [(conj orders (:block/order block)) top-level-orders]))
-                   [[] top-level-orders]
-                   blocks))))
+      (let [top-level-blocks (filter top-level? blocks)]
+        (if (every? at-target? (map :block/order top-level-blocks))
+          (map :block/order blocks)
+          ;; The kept orders of the top-level blocks no longer fall next to the
+          ;; target, e.g. undo restoring deleted blocks after a sibling moved
+          ;; away and back got a new order: order them at the target and keep
+          ;; the orders of their children.
+          (let [top-level-orders (db-order/gen-n-keys (count top-level-blocks)
+                                                      start-order end-order)]
+            (first
+             (reduce (fn [[orders top-level-orders] block]
+                       (if (top-level? block)
+                         [(conj orders (first top-level-orders)) (rest top-level-orders)]
+                         [(conj orders (:block/order block)) top-level-orders]))
+                     [[] top-level-orders]
+                     blocks)))))
       (db-order/gen-n-keys (count blocks) start-order end-order))))
 
 (defn- update-property-ref-when-paste
