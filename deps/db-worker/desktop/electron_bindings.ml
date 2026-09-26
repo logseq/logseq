@@ -174,3 +174,34 @@ external process_env : unit -> string Js.Dict.t = "env"
 
 external process_resources_path : string = "resourcesPath"
   [@@mel.scope "process"]
+
+(* Appended externals — port of the remaining electron main modules. *)
+
+module Session = struct
+  type t
+
+  external from_partition : string -> t = "fromPartition"
+    [@@mel.module "electron"] [@@mel.scope "session"]
+  external set_proxy : t -> 'a -> unit Js.Promise.t = "setProxy"
+    [@@mel.send]
+  external force_reload_proxy_config : t -> unit Js.Promise.t
+    = "forceReloadProxyConfig" [@@mel.send]
+  external resolve_proxy : t -> string -> string Js.Promise.t
+    = "resolveProxy" [@@mel.send]
+end
+
+external web_contents_session : Web_contents.t -> Session.t = "session"
+  [@@mel.get]
+
+external browser_window_get_focused_window : unit -> Browser_window.t Js.Null.t
+  = "getFocusedWindow"
+  [@@mel.module "electron"] [@@mel.scope "BrowserWindow"]
+
+external browser_window_from_web_contents :
+  Web_contents.t -> Browser_window.t Js.Null.t = "fromWebContents"
+  [@@mel.module "electron"] [@@mel.scope "BrowserWindow"]
+
+external browser_window_set_visible_on_all_workspaces :
+  Browser_window.t -> bool -> unit = "setVisibleOnAllWorkspaces"
+  [@@mel.send]
+>>>>>>> origin/devin/native-ocaml-electron-port-infra
