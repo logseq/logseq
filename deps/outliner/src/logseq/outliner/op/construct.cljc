@@ -859,17 +859,25 @@
                (every? some? restore-ops))
       (seq restore-ops))))
 
-(defn- consecutive-siblings?
-  "Whether the top-level blocks among `ids` are adjacent siblings in order,
-  the only selection that moving the other way puts back where it was."
-  [db ids]
+(defn- opposite-move-restores?
+  "Whether moving `ids` the other way undoes moving them up (`up?`) or down:
+  the top-level blocks among `ids` are adjacent siblings in order, and a
+  sibling on the side they move to keeps them under their parent. A move
+  past the first or last child takes the blocks into another parent, and
+  the opposite move need not bring them back: moving a, b up in `P(Q(a, b))`
+  gives `P(a, b, Q)`, and moving them down again gives `P(Q, a, b)`."
+  [db ids up?]
   (let [blocks (mapv #(block-entity db %) ids)
         selected-ids (set (keep :db/id blocks))
         top-level-blocks (remove #(contains? selected-ids (:db/id (:block/parent %))) blocks)]
     (and (every? some? blocks)
+         (seq top-level-blocks)
          (every? (fn [[left right]]
                    (= (:db/id left) (:db/id (ldb/get-left-sibling right))))
-                 (partition 2 1 top-level-blocks)))))
+                 (partition 2 1 top-level-blocks))
+         (some? (if up?
+                  (ldb/get-left-sibling (first top-level-blocks))
+                  (ldb/get-right-sibling (last top-level-blocks)))))))
 
 (defn- page-top-level-blocks
   [page]
@@ -1007,9 +1015,11 @@
                           :move-blocks-up-down
                           (let [[ids up?] args]
                             ;; Moving blocks that aren't adjacent siblings
-                            ;; gathers them next to each other, so moving
-                            ;; them back the other way can't restore them.
-                            (if (consecutive-siblings? db-before ids)
+                            ;; gathers them next to each other, and moving
+                            ;; blocks past their parent's first or last child
+                            ;; changes their parent, so moving them back the
+                            ;; other way can't always restore them.
+                            (if (opposite-move-restores? db-before ids up?)
                               [:move-blocks-up-down
                                [(stable-id-coll db-before ids)
                                 (not up?)]]
