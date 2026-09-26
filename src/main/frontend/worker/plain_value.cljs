@@ -43,9 +43,9 @@
         (:logseq.property.asset/resize-metadata entity)
         (assoc :logseq.property.asset/resize-metadata
                (:logseq.property.asset/resize-metadata entity))
-        (:logseq.property.asset/external-url entity)
+        (db-property/asset-external-url entity)
         (assoc :logseq.property.asset/external-url
-               (:logseq.property.asset/external-url entity))
+               (db-property/asset-external-url entity))
         (:db/ident entity)
         (assoc :db/ident (:db/ident entity))))
     {:db/id value}))

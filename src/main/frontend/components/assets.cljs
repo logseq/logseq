@@ -17,6 +17,7 @@
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
+   [logseq.db.frontend.property :as db-property]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [medley.core :as medley]
@@ -233,7 +234,13 @@
                    (let [^js form-data (js/FormData. (.-currentTarget e))
                          repo (state/get-current-repo)
                          title (.get form-data "title")
-                         src (.get form-data "src")
+                         src (util/trim-safe (.get form-data "src"))
+                         ;; Local file paths (e.g. picked via "Select from disk")
+                         ;; are stored as file:// URIs so they are valid :url values
+                         src (if (or (string/blank? src)
+                                     (try (js/URL. src) true (catch :default _ false)))
+                               src
+                               (str "file://" (js/encodeURI src)))
                          err-handle (fn [^js e]
                                       (js/console.error e)
                                       (notification/show! (str e)))]
@@ -288,7 +295,7 @@
                      (shui/dialog-close!))]
      (if asset-block
        [:div.pb-2.-mt-2
-        (let [url (:logseq.property.asset/external-url asset-block)
+        (let [url (db-property/asset-external-url asset-block)
               title (:block/title asset-block)]
           (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))]
 

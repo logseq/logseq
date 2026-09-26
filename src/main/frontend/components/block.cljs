@@ -86,6 +86,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
@@ -529,7 +530,7 @@
 
 (defn- open-pdf-file
   [e block href]
-  (let [href (if-let [url (:logseq.property.asset/external-url block)]
+  (let [href (if-let [url (db-property/asset-external-url block)]
                (if (string/starts-with? url "zotero://")
                  (pdf-assets/get-zotero-local-pdf-path (:logseq.property.asset/external-file-name block) :id (last (string/split url #"/")))
                  url)
@@ -635,7 +636,7 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                 ext-url (:logseq.property.asset/external-url asset-block)
+                                 ext-url (db-property/asset-external-url asset-block)
                                  remote-ext-url? (and (not (string/blank? ext-url))
                                                       (path/protocol-url? ext-url)
                                                       (not (common-config/local-protocol-asset? ext-url)))
@@ -1207,11 +1208,11 @@
         ;; plugin-sandboxed assets (./assets/storages/<plugin-id>/...)
         ;; resolve correctly; <make-asset-url handles both remote URLs
         ;; and graph-root-relative paths.
-        href (or (:logseq.property.asset/external-url block)
+        href (or (db-property/asset-external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
         _ (hooks/use-effect!
            (fn []
-             (let [external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
+             (let [external-url? (not (string/blank? (db-property/asset-external-url block)))
                    path (path/path-join common-config/local-assets-dir file)]
                (p/let [result (if (or external-url? config/publishing?)
                                 ;; publishing doesn't have window.pfs defined

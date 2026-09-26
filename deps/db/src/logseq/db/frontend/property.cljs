@@ -557,7 +557,7 @@
                                            :public? false}
                                   :queryable? true}
      :logseq.property.asset/external-url {:title "External URL"
-                                          :schema {:type :string
+                                          :schema {:type :url
                                                    :hide? false
                                                    :public? true}
                                           :queryable? true}
@@ -840,6 +840,23 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
+(defn scalar-property-value
+  "Returns a user-visible scalar for a property value that may be a raw
+   string/number or a ref entity/map."
+  [value]
+  (cond
+    (or (nil? value) (string? value) (number? value) (boolean? value) (keyword? value))
+    value
+    :else
+    (property-value-content value)))
+
+(defn asset-external-url
+  "Returns the External URL string from a block, whether stored as a raw
+   string or as a :url property-value entity/map."
+  [block]
+  (when-let [value (:logseq.property.asset/external-url block)]
+    (scalar-property-value value)))
+
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
@@ -965,7 +982,9 @@
   "Get the property value by a built-in property's db-ident from coll"
   [block db-ident]
   (let [val (get block db-ident)]
-    (if (built-in-has-ref-value? db-ident) (property-value-content val) val)))
+    (if (built-in-has-ref-value? db-ident)
+      (scalar-property-value val)
+      val)))
 
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
