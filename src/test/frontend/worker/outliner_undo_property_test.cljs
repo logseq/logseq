@@ -38,7 +38,10 @@
       -n frontend.worker.outliner-undo-property-test
   Env: FUZZ_N sequences, FUZZ_SEED, FUZZ_MAX_OPS operations per sequence,
   FUZZ_KINDS / FUZZ_SKIP_KINDS (comma-separated operation kinds, e.g.
-  \"move,up-down\"), FUZZ_KNOWN_FILE (more known signatures, 1 per line),
+  \"move,up-down\"), FUZZ_KNOWN_FILE (more known signatures, 1 per line; a
+  line \"*\" counts every violation as known, so the run lists every
+  signature it meets), FUZZ_IGNORE_KNOWN (drop the known-bugs list, so a
+  hit of a listed signature fails again),
   FUZZ_DEBUG (trace every step), FUZZ_REPLAY (run 1 sequence, e.g.
   FUZZ_REPLAY='[[:up-down 0 38 false]]'). With FUZZ_N or FUZZ_SEED set, the
   test prints its time and the known signatures it hit, each with its
@@ -836,11 +839,12 @@
 ;;; The property
 
 (defn- known-signatures
-  "The patterns of known-bugs, and the lines of the file FUZZ_KNOWN_FILE names."
+  "The patterns of known-bugs (none with FUZZ_IGNORE_KNOWN set), and the
+  lines of the file FUZZ_KNOWN_FILE names."
   []
   (let [f (env "FUZZ_KNOWN_FILE")
         fs (js/require "fs")]
-    (into (set (apply concat (vals known-bugs)))
+    (into (if (env "FUZZ_IGNORE_KNOWN") #{} (set (apply concat (vals known-bugs))))
           (when (and f (.existsSync fs f))
             (remove string/blank? (string/split-lines (.readFileSync fs f "utf8")))))))
 
