@@ -270,6 +270,12 @@ jobs:
       - name: Fetch deps/db pnpm deps
         run: pnpm --dir deps/db install --frozen-lockfile --ignore-workspace
 
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       - name: Build logseq CLI runtime
         run: |
           opam exec -- pnpm cli:release

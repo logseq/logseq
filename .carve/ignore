@@ -32,8 +32,8 @@ frontend.db.model/get-all-classes
 frontend.ui/_emoji-init-data
 ;; Used by shadow.cljs
 frontend.worker.db-worker/init
-;; Used by shadow.cljs (node entrypoint)
-frontend.worker.db-worker-node/main
 ;; defonce
 mobile.components.popup/native-sheet-listener
 mobile.bottom-tabs/add-tab-listeners!
+;; Appended to by worker logging; read via :thread-api/mobile-logs
+frontend.worker.state/log-append!

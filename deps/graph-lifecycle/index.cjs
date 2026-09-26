@@ -684,7 +684,7 @@ async function cancelStartup(ctx, record) {
     writeJSON(ctx.stateFile, current);
   });
 }
-async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
+async function startGraph({ storage, repo, script, binary, owner = 'cli', createEmpty = false, generation, extraArgs = [], env: extraEnv = {} }) {
   const ctx = context(storage, repo);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
@@ -703,14 +703,21 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       for (const target of targets) await terminate(ctx, target, false);
       await cleanup(ctx, current, targets);
       const ticket = id();
-      const args = [script, '--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
+      const workerArgs = ['--repo', `logseq_db_${ctx.repo}`, '--root-dir', ctx.root, '--graphs-dir', ctx.graphsDir, '--lifecycle-dir', ctx.lifecycleDir, '--owner-source', owner,
         '--admission-ticket', ticket, '--graph-generation', current.generation];
-      if (createEmpty) args.push('--create-empty-db');
-      args.push(...extraArgs);
-      const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+      if (createEmpty) workerArgs.push('--create-empty-db');
+      workerArgs.push(...extraArgs);
+      // A native binary is spawned directly; the JS daemon needs the
+      // node runtime (process.execPath, ELECTRON_RUN_AS_NODE).
+      const env = { ...process.env, ...extraEnv };
+      if (!binary) env.ELECTRON_RUN_AS_NODE = '1';
       if (owner === 'electron' && !extraArgs.includes('--embedding-endpoint')) delete env.LOGSEQ_EMBEDDINGS_URL;
-      const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
-        stdio: 'ignore', env });
+      if (binary && !fs.existsSync(binary)) {
+        fail(`db-worker-node native binary not found: ${binary}. Build with \`pnpm db-worker-node:native\`.`, 'server-start-failed');
+      }
+      const child = cp.spawn(binary || process.execPath, binary ? workerArgs : [script, ...workerArgs],
+        { detached: owner !== 'electron',
+          stdio: 'ignore', env });
       child.on('error', () => {}); // Readiness or the missing PID reports spawn failure.
       const pid = child.pid;
       if (!pid || !pidExists(pid)) fail('Worker failed to spawn', 'server-start-failed');

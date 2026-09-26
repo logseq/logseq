@@ -1,6 +1,8 @@
-// Bundles the Melange-emitted CommonJS tree into the two files the
+// Bundles the Melange-emitted CommonJS tree into the files the
 // app loads:
-//   --mode node    -> static/db-worker-ocaml.cjs   (require'd by db-worker-node)
+//   --mode node    -> static/db-worker-node.js (the standalone daemon
+//                     entry spawned by graph-lifecycle; calls
+//                     Db_worker_node.main on load — see js_api/entry_node.ml)
 //   --mode browser -> static/js/db-worker.js (the worker script the
 //                     UI thread spawns; installs the Comlink surface
 //                     on load — see js_api/entry_worker.ml)
@@ -10,9 +12,14 @@ import { builtinModules } from "node:module";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-const entry = resolve(
+const browserEntry = resolve(
   import.meta.dirname,
   "_build/default/js_api/js_api/js_api/entry_worker.js",
+);
+
+const nodeEntry = resolve(
+  import.meta.dirname,
+  "_build/default/js_api/js_api/js_api/entry_node.js",
 );
 
 const nodeBuiltins = [
@@ -30,9 +37,9 @@ export default defineConfig(({ mode }) => {
     return {
       build: {
         lib: {
-          entry,
+          entry: nodeEntry,
           formats: ["cjs"],
-          fileName: () => "db-worker-ocaml.cjs",
+          fileName: () => "db-worker-node.js",
         },
         outDir: resolve(import.meta.dirname, "../../static"),
         emptyOutDir: false,
@@ -57,7 +64,7 @@ export default defineConfig(({ mode }) => {
     base: "./",
     build: {
       lib: {
-        entry,
+        entry: browserEntry,
         formats: ["iife"],
         name: "LogseqDbWorker",
         fileName: () => "db-worker.js",
