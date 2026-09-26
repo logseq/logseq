@@ -114,11 +114,31 @@
       (conj (lookup-ref db-after [:block/uuid uuid-value])))))
 
 (defn- normalize-checksum-value
-  [db attr value]
+  "value, with a parent or page entity id replaced by its uuid, read by
+  uuid-of (an eid -> uuid function)."
+  [uuid-of attr value]
   (case attr
-    :block/parent (get-block-uuid db value)
-    :block/page (get-block-uuid db value)
+    :block/parent (uuid-of value)
+    :block/page (uuid-of value)
     value))
+
+(defn- block-uuid-reader
+  "An eid -> :block/uuid function over a map filled by 1 walk of the
+  :block/uuid index, for a full recompute, which asks the uuid of every
+  block's parent and page. Keeps the first datom per entity, the one
+  get-block-uuid reads (the index orders an entity's values alike)."
+  [db]
+  (let [uuids (js/Map.)]
+    (reduce (fn [_ datom]
+              (let [e (:e datom)]
+                (when-not (.has uuids e)
+                  (.set uuids e (:v datom)))))
+            nil
+            (d/datoms db :avet :block/uuid))
+    (fn [eid]
+      (let [block-uuid (.get uuids eid)]
+        (when-not (undefined? block-uuid)
+          block-uuid)))))
 
 (defn- entity-values
   [db eid e2ee?]
@@ -188,8 +208,9 @@
    (eligible-datoms? tag-eids (entity-datoms db eid))))
 
 (defn- datoms-checksum-tuples
-  "entity-checksum-tuples of the entity whose :eavt datoms are datoms."
-  [db datoms e2ee?]
+  "entity-checksum-tuples of the entity whose :eavt datoms are datoms, with
+  parent and page uuids read by uuid-of."
+  [uuid-of datoms e2ee?]
   (when-let [entity-uuid (:v (first-datom datoms :block/uuid))]
     (let [attrs (relevant-attrs e2ee?)]
       (->> datoms
@@ -197,12 +218,12 @@
                    (when (contains? attrs a)
                      [entity-uuid
                       a
-                      (normalize-checksum-value db a v)])))
+                      (normalize-checksum-value uuid-of a v)])))
            set))))
 
 (defn- entity-checksum-tuples
   [db eid e2ee?]
-  (datoms-checksum-tuples db (entity-datoms db eid) e2ee?))
+  (datoms-checksum-tuples #(get-block-uuid db %) (entity-datoms db eid) e2ee?))
 
 (defn- tuple-digest
   [[entity-uuid attr value]]
@@ -225,12 +246,13 @@
 
 (defn- db-checksum-tuples
   [db e2ee?]
-  (let [tag-eids (page-tag-eids db)]
+  (let [tag-eids (page-tag-eids db)
+        uuid-of (block-uuid-reader db)]
     (->> (d/datoms db :avet :block/uuid)
          (mapcat (fn [{:keys [e]}]
                    (let [datoms (entity-datoms db e)]
                      (when (eligible-datoms? tag-eids datoms)
-                       (datoms-checksum-tuples db datoms e2ee?))))))))
+                       (datoms-checksum-tuples uuid-of datoms e2ee?))))))))
 
 (defn- tx-item-eids
   [db-before db-after tx-item]
