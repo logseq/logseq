@@ -745,6 +745,41 @@
         (is (= (sync-checksum/recompute-checksum @conn)
                (sync-checksum/recompute-checksum @server-conn)))))))
 
+(deftest bookkeeping-timestamps-do-not-revalidate-entities-test
+  (testing "an entity that is already invalid on the server must not fail txs
+            that only stamp it with :block/updated-at/:block/created-at"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          server-conn (d/conn-from-db @conn)
+          new-uuid (random-uuid)
+          server-page (db-test/find-page-by-title @server-conn "page 1")]
+      ;; Corrupt the shared page on the server: strip a required attr
+      ;; bypassing validation (simulating drift accumulated by old versions).
+      (d/transact! server-conn [[:db/retract (:db/id server-page) :block/title]])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid new-uuid :block/title "rapid insert"}]
+                                        (:db/id child1)
+                                        {:sibling? true :keep-uuid? true}]]
+                       [:delete-blocks [[(:block/uuid child2)] {}]]]
+                      local-tx-meta)
+          (let [prepared (sync-apply/prepare-upload-tx-entries
+                          conn (sync-apply/pending-txs test-repo))]
+            (is (seq (:tx-entries prepared)))
+            (doseq [{:keys [tx-data outliner-op]} (:tx-entries prepared)]
+              (is (true? (try (#'sync-handler/apply-tx-entry!
+                               server-conn {:tx (sqlite-util/write-transit-str tx-data)
+                                            :outliner-op outliner-op})
+                              (catch :default e (ex-message e))))))
+            ;; the page itself stays divergent (server missing :block/title),
+            ;; everything else converges
+            (let [local-datoms (set (d/datoms @conn :eavt))
+                  server-datoms (set (d/datoms @server-conn :eavt))]
+              (is (= #{} (set/difference server-datoms local-datoms)))
+              (is (= #{[(:db/id server-page) :block/title "page 1"]}
+                     (set (map (juxt :e :a :v)
+                               (set/difference local-datoms server-datoms))))))))))))
+
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
          (let [fetch-calls (atom [])
