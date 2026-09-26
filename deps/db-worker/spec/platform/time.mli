@@ -14,17 +14,14 @@
      adjustments (cljs: performance.now / Date.now monotonic source).
    - [local_date]: a calendar day (year/month/day) observed in a
      timezone. block/journal-day (yyyymmdd) is its storage encoding.
-   - [localtime]: a civil timestamp's local fields down to the minute
-     (cljs: Date getters).
-   - [civil]: localtime plus second/ms — the full civil field tuple used
-     for cljs-time/goog.date-compatible arithmetic; out-of-range fields
+   - [civil]: the full local civil field tuple (year..ms) used for
+     cljs-time/goog.date-compatible arithmetic; out-of-range fields
      roll over on conversion like Date setters. *)
 
 type epoch_ms
 type monotonic_ms
 type tz
 type local_date
-type localtime
 type civil
 
 (* ---- timezones ---- *)
@@ -72,18 +69,6 @@ val equal_local_date : local_date -> local_date -> bool
 (** Ordering is on the civil fields (year, month, day); equality
     additionally requires the same timezone. *)
 
-(* ---- localtime ---- *)
-
-val localtime :
-  year:int -> month:int -> day:int -> hour:int -> minute:int -> localtime
-(** Field tuple matching clock/localtime_ms. *)
-
-val localtime_fields : localtime -> int * int * int * int * int
-(** (year, month, day, hour, minute). *)
-
-val compare_localtime : localtime -> localtime -> int
-val equal_localtime : localtime -> localtime -> bool
-
 (* ---- civil ---- *)
 
 val civil :
@@ -98,7 +83,7 @@ val civil_fields : civil -> int * int * int * int * int * int * int
 val compare_civil : civil -> civil -> int
 val equal_civil : civil -> civil -> bool
 
-(* ---- epoch_ms <-> civil/localtime/local_date ---- *)
+(* ---- epoch_ms <-> civil/local_date ---- *)
 
 val civil_of_epoch_ms : tz -> epoch_ms -> civil
 (** Local-timezone civil fields of an instant (cljs: Date getters). *)
@@ -106,9 +91,6 @@ val civil_of_epoch_ms : tz -> epoch_ms -> civil
 val epoch_ms_of_civil : tz -> civil -> epoch_ms
 (** Epoch ms of a civil time read in [tz]; out-of-range fields roll
     over (cljs: Date setters). *)
-
-val localtime_of_epoch_ms : tz -> epoch_ms -> localtime
-val epoch_ms_of_localtime : tz -> localtime -> epoch_ms
 
 val local_date_of_epoch_ms : tz -> epoch_ms -> local_date
 (** The civil date an instant falls on in [tz]. *)
